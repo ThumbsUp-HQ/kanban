@@ -75,6 +75,10 @@ markers = [
     "container: docker container integration test",
 ]
 
+[tool.coverage.run]
+concurrency = ["greenlet", "thread"]
+branch = true
+
 [tool.importlinter]
 root_packages = ["agent", "mcp", "kanban", "database"]
 

@@ -191,4 +191,5 @@ async def test_tool_handler_error_scenarios(
         assert res_crash["isError"] is True
         text_crash = res_crash["content"][0]["text"]
         assert "code: INTERNAL" in text_crash
-        assert "Unexpected database failure" in text_crash
+        assert "Internal tool execution error" in text_crash
+        assert "Unexpected database failure" not in text_crash

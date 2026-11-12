@@ -1,0 +1,42 @@
+{
+  "resolve_200_success": {
+    "status": 200,
+    "body": {
+      "id": "5a9c9c60-61d3-4acc-a17c-97e925da73cd",
+      "kind": "project",
+      "key": "KAN",
+      "title": "Kanban Core"
+    }
+  },
+  "resolve_404_not_found": {
+    "status": 404,
+    "body": {
+      "type": "urn:kanban:problem:NOT_FOUND",
+      "title": "Not Found",
+      "status": 404,
+      "code": "NOT_FOUND",
+      "request_id": "9ae46b49b4aa4528a719fc93243cc7e5"
+    }
+  },
+  "resolve_409_ambiguous_identifier": {
+    "status": 409,
+    "body": {
+      "type": "urn:kanban:problem:AMBIGUOUS_IDENTIFIER",
+      "title": "Ambiguous Identifier",
+      "status": 409,
+      "code": "AMBIGUOUS_IDENTIFIER",
+      "detail": "Reference 'bug' matched multiple candidates for kind 'label'",
+      "request_id": "83646ff9b9234ab9bc872111b85ec262",
+      "candidates": [
+        {
+          "key": "Bug",
+          "title": "Bug"
+        },
+        {
+          "key": "bug",
+          "title": "bug"
+        }
+      ]
+    }
+  }
+}

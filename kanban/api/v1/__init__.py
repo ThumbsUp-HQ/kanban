@@ -5,12 +5,14 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from kanban.api.v1.health import router as health_router
+from kanban.api.v1.resolve import router as resolve_router
 
 
 def build_v1_router() -> APIRouter:
     """Build and compose the canonical v1 API router tree."""
     v1 = APIRouter()
     v1.include_router(health_router)
+    v1.include_router(resolve_router)
     return v1
 
 
