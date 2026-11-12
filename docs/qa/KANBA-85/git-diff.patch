@@ -1,0 +1,3652 @@
+diff --git a/database/GEMINI.md b/database/GEMINI.md
+index 2003981..e59cc9f 100644
+--- a/database/GEMINI.md
++++ b/database/GEMINI.md
+@@ -17,7 +17,7 @@ None. This is the foundational leaf module in the workspace dependency hierarchy
+ - Test harness execution isolates probe entities within kb_harness schema, which must be ignored by production RLS catalog assertions.
+ 
+ ## Outbound Contracts
+-- database.models: 38 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions), custom LtreeType, and 5 PostgreSQL StrEnums.
++- database.models: 39 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions, comment reactions), custom LtreeType, and 5 PostgreSQL StrEnums.
+ - database.session: RLSContext, bind_rls_context, RLSSessionFactory, create_rls_engine, and fail-closed security exceptions (RLSContextError, UnboundRLSSessionError, RLSRoleViolationError).
+ - database.repositories: BaseRepository generic base providing type-safe CRUD operations, bounded pagination (1..500), and mandatory RLS session verification.
+ - database.outbox: OutboxEnvelope, enqueue_outbox_event, topic_matches, RealtimeBroker, PgNotifyBroker, ValkeyBroker, and OutboxRelay (run via `python -m database.outbox.relay`).
+diff --git a/database/migrations/sql/p3_05_comment_threads_reactions.down.sql b/database/migrations/sql/p3_05_comment_threads_reactions.down.sql
+new file mode 100644
+index 0000000..0406c8f
+--- /dev/null
++++ b/database/migrations/sql/p3_05_comment_threads_reactions.down.sql
+@@ -0,0 +1,7 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++DROP POLICY IF EXISTS comment_reactions_delete_rls ON comment_reactions;
++DROP POLICY IF EXISTS comment_reactions_insert_rls ON comment_reactions;
++DROP POLICY IF EXISTS comment_reactions_select_rls ON comment_reactions;
++DROP TABLE IF EXISTS comment_reactions CASCADE;
+diff --git a/database/migrations/sql/p3_05_comment_threads_reactions.up.sql b/database/migrations/sql/p3_05_comment_threads_reactions.up.sql
+new file mode 100644
+index 0000000..3905d24
+--- /dev/null
++++ b/database/migrations/sql/p3_05_comment_threads_reactions.up.sql
+@@ -0,0 +1,54 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Table: comment_reactions
++CREATE TABLE comment_reactions (
++    comment_id   UUID NOT NULL REFERENCES issue_comments(id) ON DELETE CASCADE,
++    principal_id UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
++    emoji        TEXT NOT NULL,
++    created_at   TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    PRIMARY KEY (comment_id, principal_id, emoji)
++);
++
++CREATE INDEX comment_reactions_comment_idx ON comment_reactions (comment_id);
++CREATE INDEX comment_reactions_principal_idx ON comment_reactions (principal_id);
++
++-- 2. Grants
++GRANT SELECT, INSERT, UPDATE, DELETE ON comment_reactions TO kanban_app;
++GRANT SELECT ON comment_reactions TO app_rls_reader;
++
++-- 3. Row-Level Security
++ALTER TABLE comment_reactions ENABLE ROW LEVEL SECURITY;
++ALTER TABLE comment_reactions FORCE ROW LEVEL SECURITY;
++
++CREATE POLICY comment_reactions_select_rls ON comment_reactions
++    FOR SELECT USING (
++        EXISTS (
++            SELECT 1 FROM issue_comments ic
++            WHERE ic.id = comment_reactions.comment_id
++              AND ic.workspace_id = app_current_workspace_id()
++              AND app_has_object_capability(ic.issue_id, 1)
++        )
++    );
++
++CREATE POLICY comment_reactions_insert_rls ON comment_reactions
++    FOR INSERT WITH CHECK (
++        principal_id = COALESCE(NULLIF(current_setting('app.principal_id', true), '')::uuid, app_current_principal_id())
++        AND EXISTS (
++            SELECT 1 FROM issue_comments ic
++            WHERE ic.id = comment_reactions.comment_id
++              AND ic.workspace_id = app_current_workspace_id()
++              AND app_has_object_capability(ic.issue_id, 1)
++        )
++    );
++
++CREATE POLICY comment_reactions_delete_rls ON comment_reactions
++    FOR DELETE USING (
++        principal_id = COALESCE(NULLIF(current_setting('app.principal_id', true), '')::uuid, app_current_principal_id())
++        AND EXISTS (
++            SELECT 1 FROM issue_comments ic
++            WHERE ic.id = comment_reactions.comment_id
++              AND ic.workspace_id = app_current_workspace_id()
++              AND app_has_object_capability(ic.issue_id, 1)
++        )
++    );
+diff --git a/database/migrations/versions/p3_05_comment_threads_reactions.py b/database/migrations/versions/p3_05_comment_threads_reactions.py
+new file mode 100644
+index 0000000..ad5cdc7
+--- /dev/null
++++ b/database/migrations/versions/p3_05_comment_threads_reactions.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Threaded comments, reactions, permalinks and access-checked mentions (KB-P3-05).
++
++Revision ID: p3_05_comment_threads_reactions
++Revises: p2_02_sessions
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p3_05_comment_threads_reactions"
++down_revision: str | None = "p2_02_sessions"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply comment reactions table, RLS policies, and grants."""
++    execute_sql_file("p3_05_comment_threads_reactions.up.sql")
++
++
++def downgrade() -> None:
++    """Revert comment reactions table, RLS policies, and grants."""
++    execute_sql_file("p3_05_comment_threads_reactions.down.sql")
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index 4c7d7b2..8e9de68 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -13,6 +13,7 @@ from database.models.base import (
+ )
+ from database.models.embeddings import ObjectEmbedding
+ from database.models.issues import (
++    CommentReaction,
+     Issue,
+     IssueAssignee,
+     IssueComment,
+@@ -56,6 +57,7 @@ __all__ = [
+     "ActivityRecord",
+     "AuthProviderCard",
+     "Base",
++    "CommentReaction",
+     "Cycle",
+     "Doc",
+     "EffectiveResourceAccess",
+diff --git a/database/models/issues.py b/database/models/issues.py
+index e583f75..4058dcd 100644
+--- a/database/models/issues.py
++++ b/database/models/issues.py
+@@ -199,3 +199,20 @@ class IssueComment(Base):
+     )
+     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
++
++
++class CommentReaction(Base):
++    """Emoji reaction on an issue comment (KB-P3-05)."""
++
++    __tablename__ = "comment_reactions"
++
++    comment_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("issue_comments.id", ondelete="CASCADE"), primary_key=True
++    )
++    principal_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("principals.id", ondelete="CASCADE"), primary_key=True
++    )
++    emoji: Mapped[str] = mapped_column(String, primary_key=True)
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
+diff --git a/database/tests/test_p1_17_models.py b/database/tests/test_p1_17_models.py
+index a14637c..a3ea0b3 100644
+--- a/database/tests/test_p1_17_models.py
++++ b/database/tests/test_p1_17_models.py
+@@ -52,9 +52,10 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
+     pg_tables = {row[0] for row in result.all()}
+     orm_tables = set(Base.metadata.tables.keys())
+ 
+-    # Exact set equality across all tables (incl. embeddings, auth cards, rate limits, sessions)
++    # Exact set equality across all tables
++    # (incl. embeddings, auth cards, rate limits, sessions, comment reactions)
+     assert orm_tables == pg_tables
+-    assert len(orm_tables) == 38
++    assert len(orm_tables) == 39
+ 
+ 
+ async def _setup_test_project_spine(
+diff --git a/docs/qa/KANBA-85/api-specialist-review.md b/docs/qa/KANBA-85/api-specialist-review.md
+new file mode 100644
+index 0000000..96be7c5
+--- /dev/null
++++ b/docs/qa/KANBA-85/api-specialist-review.md
+@@ -0,0 +1,90 @@
++# API Specialist Gate Final Audit: APPROVED for KANBA-85 (KB-P3-05)
++
++- Auditor: arch-reviewer (Swarm Systems/Backend Architect & API Specialist Gate)
++- Worktree: `/tmp/kb-wt-KANBA-85`
++- Branch: `feat/KANBA-85`
++- Ticket: `KANBA-85` (`KB-P3-05`: `[Phase 3 / API] Threaded comments, reactions, permalinks & access-checked @mentions`)
++
++---
++
++### 1. Executive Summary & Verification Matrix
++A forensic backend architecture and API Specialist Gate audit was conducted for `KANBA-85` in `/tmp/kb-wt-KANBA-85`. `KB-P3-05` delivers the core discussion layer for issues, featuring canonical Markdown comments, depth-1 reply threading, keyset cursor pagination, ETag concurrency, soft delete, an 8-emoji reaction engine, and access-checked `@mention` resolution with zero silent ACL widening. All 6 REST endpoints, DDL/RLS policies, regex mention filters, and activity event emissions were evaluated against Spec Sections 7.2 (8k), 5.1, 3.4, and Section 5.4.
++
++| Verification Dimension | Specification Target | Observed Status | Verdict |
++| :--- | :--- | :--- | :--- |
++| **REST Router & Mounting** | 6 endpoints mounted on `build_v1_router()` | Mounted on `build_v1_router()` via `comments_router` in `kanban/api/v1/comments.py` | PASS |
++| **Timing Equalization** | 25.0ms timing floor on all endpoints | All 6 endpoints wrapped in `async with timing_floor(floor_ms=25.0):` | PASS |
++| **Database DDL & RLS** | `comment_reactions` with FORCE RLS | DDL has `ENABLE` and `FORCE ROW LEVEL SECURITY`, delegating to issue `VIEW` | PASS |
++| **Mention Parsing Filter** | Ignore code fences, inline code, link URLs | `extract_mentions` strips ```, ~~~, `, and markdown/raw URLs before matching | PASS |
++| **Mention Cap & Error** | Max 50 distinct handles per comment | Exceeding 50 handles raises RFC 7807 `422 TOO_MANY_MENTIONS` | PASS |
++| **Mention Anti-Enumeration** | Nonexistent / cross-workspace handles silent | Ignored and kept as plain text with zero warning or enumeration leak | PASS |
++| **Access Gate (409 Warning)** | Warn before mentioning unauthorized users | Emits RFC 7807 `409 MENTION_ACCESS_WARNING` with `unauthorized_mentions` | PASS |
++| **Zero Silent Widening** | Bypass via `acknowledge_mentions` without ACL | Emits `201` with `unnotified_mentions`; zero rows inserted into `resource_acl_entries` | PASS |
++| **Threading Constrained** | Max reply depth 1, max 200 inlined replies | Depth > 1 returns `422 INVALID_PARENT_COMMENT`; inlines up to 200 replies | PASS |
++| **Keyset Pagination** | URL-safe base64 `created_at` + `id` cursor | Keyset navigation enforced; malformed cursors return `422 INVALID_CURSOR` | PASS |
++| **ETag Concurrency** | If-Match required for updates | Missing header returns `428`; mismatched sha256 returns `412 PRECONDITION_FAILED` | PASS |
++| **Soft-Delete Preservation** | Preserve thread hierarchy on delete | Sets `deleted_at`, returns `deleted: true`, nulls body/sha, keeps replies | PASS |
++| **Emoji Reaction Allowlist** | 8 canonical emojis with NFC normalization | Allowlist enforced (`👍 👎 😄 🎉 😕 ❤️ 🚀 👀`); non-allowlist returns `422` | PASS |
++| **Copyable Permalinks** | Deep permalink fragment format | Emits `/projects/{proj}/issues/{key}#comment-{uuid}` | PASS |
++| **Activity Ledger** | Emits CREATED, EDITED, DELETED, ACKNOWLEDGED | Emitted under category `COMMENT`; reactions emit zero rows (no noise) | PASS |
++| **Unit Test Coverage** | Mandatory Feature Tests (>=95%) | 13/13 passed in 6.15s; 96.72% branch+line coverage across target modules | PASS |
++| **Build & Lint Cleanliness** | Zero-Tolerance Quality Mandate | Ruff clean, Ruff format clean, Mypy strict clean (234 files), Lint-imports clean | PASS |
++
++---
++
++### 2. Forensic Architectural Analysis
++
++1. **REST Router Mounting & Timing Equalization:**
++   - Mounted in `kanban/api/v1/comments.py` and composed in `kanban/api/v1/__init__.py:build_v1_router()`:
++     * `GET /api/v1/issues/{issue_ref}/comments`
++     * `POST /api/v1/issues/{issue_ref}/comments`
++     * `PATCH /api/v1/comments/{comment_id}`
++     * `DELETE /api/v1/comments/{comment_id}`
++     * `PUT /api/v1/comments/{comment_id}/reactions/{emoji}`
++     * `DELETE /api/v1/comments/{comment_id}/reactions/{emoji}`
++   - Every single endpoint is wrapped with `async with timing_floor(floor_ms=25.0):`, ensuring timing side-channels during author lookups, capability evaluations, and soft-delete updates are completely suppressed.
++
++2. **Database DDL & Row-Level Security (`comment_reactions`):**
++   - Migration `p3_05_comment_threads_reactions` creates `comment_reactions` with composite primary key `(comment_id, principal_id, emoji)`.
++   - Enforces `ALTER TABLE comment_reactions ENABLE ROW LEVEL SECURITY;` and `ALTER TABLE comment_reactions FORCE ROW LEVEL SECURITY;`.
++   - `SELECT`, `INSERT`, and `DELETE` policies delegate directly to the parent issue's `VIEW` capability via `app_has_object_capability(ic.issue_id, 1)` and verify that `principal_id` matches the authenticated caller's session.
++   - Foreign key constraint to `issue_comments(id) ON DELETE CASCADE` ensures clean referential cleanup.
++
++3. **Mention Extraction & Anti-Enumeration Boundary (Spec S3.4):**
++   - In `kanban/services/mentions.py`, `extract_mentions()` strips fenced code blocks (` ``` ` and `~~~`), inline code spans (` ` `), markdown link targets (`[text](url)` -> `[text]`), and raw URLs before executing regex matching.
++   - Regex `(?<![\w@])@([a-z0-9][a-z0-9_.-]{0,38})` extracts distinct handles. Bounded by `MAX_DISTINCT_MENTIONS = 50`; exceeding 50 handles aborts with `422 TOO_MANY_MENTIONS`.
++   - In `resolve_mentions()`:
++     * Nonexistent handles or handles belonging to users in external workspaces are ignored and left as plain text. No warning is returned, and no enumeration signal is leaked.
++     * For users inside the caller's workspace boundary lacking `Capability.VIEW` on the target issue, the service halts execution and returns RFC 7807 `409 MENTION_ACCESS_WARNING` with the structured list of `unauthorized_mentions`.
++     * If the client re-submits the request with `acknowledge_mentions` containing those user IDs, the comment is created (`201`), returning the acknowledged users in `unnotified_mentions`.
++     * **Zero Silent Widening:** `resource_acl_entries` is never modified. The mentioned user receives zero access to the issue.
++
++4. **Threading & Keyset Cursor Pagination:**
++   - Threading is strictly limited to depth 1 (`parent_comment_id` must point to an active top-level comment on the same issue). Attempts to reply to a reply or an invalid parent return `422 INVALID_PARENT_COMMENT`.
++   - `list_comments()` fetches top-level comments ordered by `created_at ASC, id ASC`, inlining up to 200 replies per top-level comment.
++   - Paginates via opaque base64-encoded `created_at|id` cursors. Malformed cursor strings fail gracefully with `422 INVALID_CURSOR`.
++
++5. **Concurrency Control & Soft Delete:**
++   - Edits require `If-Match: "<hex body_sha256>"`. Missing `If-Match` returns RFC 7807 `428 PRECONDITION_REQUIRED`. Mismatched SHA-256 returns `412 PRECONDITION_FAILED`.
++   - Deletion is a soft delete setting `deleted_at = clock_timestamp()`. `serialize_comment()` masks soft-deleted comments: `deleted: true`, `body_markdown: None`, `body_sha256: None`, while preserving the reply thread underneath.
++
++6. **Emoji Reaction Allowlist & Idempotency:**
++   - Emojis in URL paths are URL-decoded and NFC-normalized.
++   - Strictly validated against the 8-emoji canonical allowlist (`👍`, `👎`, `😄`, `🎉`, `😕`, `❤️`, `🚀`, `👀`). Unauthorized emojis trigger `422 EMOJI_NOT_ALLOWED`.
++   - `PUT` and `DELETE` reaction endpoints are fully idempotent, returning aggregated reaction counts and caller state (`reacted_by_me`). Reactions emit zero activity ledger records to avoid event log bloat.
++
++7. **Permalinks & Activity Ledger:**
++   - Every comment response includes a canonical copyable permalink (`/projects/{proj}/issues/{key}#comment-{uuid}`).
++   - Emits structured activity events under category `COMMENT`: `COMMENT_CREATED`, `COMMENT_EDITED`, `COMMENT_DELETED`, and `MENTION_ACCESS_ACKNOWLEDGED`.
++
++---
++
++### 3. Formatting & Typography Compliance
++- Strictly plain ASCII hyphens `-` used throughout. Zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) detected.
++
++---
++
++### 4. Gate Sign-Off
++I have completed the backend architecture and API Specialist Gate audit for `KANBA-85`. All REST contracts, timing floors, RLS policies, mention security barriers, concurrency controls, and pagination mechanisms are satisfied.
++
++Verdict: APPROVED
+\ No newline at end of file
+diff --git a/docs/qa/KANBA-85/build-check.txt b/docs/qa/KANBA-85/build-check.txt
+new file mode 100644
+index 0000000..50c2d45
+--- /dev/null
++++ b/docs/qa/KANBA-85/build-check.txt
+@@ -0,0 +1,33 @@
++=== uv run ruff check kanban database ===
++All checks passed!
++=== uv run ruff format --check . ===
++634 files already formatted
++=== uv run mypy --strict kanban database ===
++Success: no issues found in 234 source files
++=== uv run lint-imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 321 files, 706 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++mcp forbidden from importing database KEPT
++
++Contracts: 2 kept, 0 broken.
++=== uv run python -m scripts.check_no_dashes --all ===
++=== make license ===
++uv run python -m scripts.license_gate
++SUMMARY python=110 node=1 violations=0
+diff --git a/docs/qa/KANBA-85/contract-sample.json b/docs/qa/KANBA-85/contract-sample.json
+new file mode 100644
+index 0000000..06f2dc8
+--- /dev/null
++++ b/docs/qa/KANBA-85/contract-sample.json
+@@ -0,0 +1,382 @@
++{
++  "ticket": "KANBA-85",
++  "exchanges": [
++    {
++      "name": "create_comment_201",
++      "request": {
++        "method": "POST",
++        "path": "/api/v1/issues/COMM-1/comments",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "110",
++          "content-type": "application/json"
++        },
++        "body": {
++          "body_markdown": "This is a **top-level** comment with markdown and @alice mention.",
++          "parent_comment_id": null
++        }
++      },
++      "response": {
++        "status": 201,
++        "headers": {
++          "content-length": "780",
++          "content-type": "application/json",
++          "location": "/projects/COMM/issues/COMM-1#comment-01a1ced9-f8e3-7844-bdd5-66f9bd05c71a",
++          "etag": "\"0e33e8fedbe08aee3983d6094053fa200890e322350b71a10dfa3dbb6bbdd31b\"",
++          "x-request-id": "467a51ac742d4d51b7a2f201b0fd1e58",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "id": "01a1ced9-f8e3-7844-bdd5-66f9bd05c71a",
++          "issue_id": "01a1ced9-f85e-74b0-a0ec-33a99d5ded74",
++          "parent_comment_id": null,
++          "author_id": "01a1ced9-f7bf-7fd6-aaa5-3a4fbdb7d504",
++          "author": {
++            "id": "01a1ced9-f7bf-7fd6-aaa5-3a4fbdb7d504",
++            "handle": "@alice",
++            "display_name": "Alice"
++          },
++          "body_markdown": "This is a **top-level** comment with markdown and @alice mention.",
++          "body_sha256": "0e33e8fedbe08aee3983d6094053fa200890e322350b71a10dfa3dbb6bbdd31b",
++          "permalink": "/projects/COMM/issues/COMM-1#comment-01a1ced9-f8e3-7844-bdd5-66f9bd05c71a",
++          "created_at": "2026-11-12T08:22:33.955294Z",
++          "edited_at": null,
++          "deleted": false,
++          "reactions": [],
++          "replies": [],
++          "replies_next_cursor": null,
++          "mentions": [
++            {
++              "handle": "alice",
++              "principal_id": "01a1ced9-f7bf-7fd6-aaa5-3a4fbdb7d504",
++              "has_access": true
++            }
++          ],
++          "unnotified_mentions": []
++        }
++      }
++    },
++    {
++      "name": "create_reply_201",
++      "request": {
++        "method": "POST",
++        "path": "/api/v1/issues/COMM-1/comments",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "122",
++          "content-type": "application/json"
++        },
++        "body": {
++          "body_markdown": "This is a depth-1 reply to the top comment.",
++          "parent_comment_id": "01a1ced9-f8e3-7844-bdd5-66f9bd05c71a"
++        }
++      },
++      "response": {
++        "status": 201,
++        "headers": {
++          "content-length": "702",
++          "content-type": "application/json",
++          "location": "/projects/COMM/issues/COMM-1#comment-01a1ced9-f902-793c-bed7-b29f99699cc8",
++          "etag": "\"0da18bc1658d3f1da1584ec4e2d1fe917bea11785093f7072c85b5a0cbe90a8f\"",
++          "x-request-id": "8c29437f262345219e0345aa43b70b02",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "id": "01a1ced9-f902-793c-bed7-b29f99699cc8",
++          "issue_id": "01a1ced9-f85e-74b0-a0ec-33a99d5ded74",
++          "parent_comment_id": "01a1ced9-f8e3-7844-bdd5-66f9bd05c71a",
++          "author_id": "01a1ced9-f7bf-7fd6-aaa5-3a4fbdb7d504",
++          "author": {
++            "id": "01a1ced9-f7bf-7fd6-aaa5-3a4fbdb7d504",
++            "handle": "@alice",
++            "display_name": "Alice"
++          },
++          "body_markdown": "This is a depth-1 reply to the top comment.",
++          "body_sha256": "0da18bc1658d3f1da1584ec4e2d1fe917bea11785093f7072c85b5a0cbe90a8f",
++          "permalink": "/projects/COMM/issues/COMM-1#comment-01a1ced9-f902-793c-bed7-b29f99699cc8",
++          "created_at": "2026-11-12T08:22:33.986614Z",
++          "edited_at": null,
++          "deleted": false,
++          "reactions": [],
++          "replies": [],
++          "replies_next_cursor": null,
++          "mentions": [],
++          "unnotified_mentions": []
++        }
++      }
++    },
++    {
++      "name": "mention_access_warning_409",
++      "request": {
++        "method": "POST",
++        "path": "/api/v1/issues/PRIV-1/comments",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "67",
++          "content-type": "application/json"
++        },
++        "body": {
++          "body_markdown": "Hey @maya please review this confidential spec."
++        }
++      },
++      "response": {
++        "status": 409,
++        "headers": {
++          "x-request-id": "55f49c32ac8d4d31b8d5222e55d73198",
++          "content-length": "375",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "https://kanban/problems/mention-access-warning",
++          "title": "Mentioned users cannot see this issue",
++          "status": 409,
++          "code": "MENTION_ACCESS_WARNING",
++          "detail": "Resubmit with acknowledge_mentions to post without granting access.",
++          "request_id": "55f49c32ac8d4d31b8d5222e55d73198",
++          "unauthorized_mentions": [
++            {
++              "handle": "maya",
++              "principal_id": "01a1ced9-f970-7164-917f-49d913e552f3"
++            }
++          ]
++        }
++      }
++    },
++    {
++      "name": "acknowledged_mention_201",
++      "request": {
++        "method": "POST",
++        "path": "/api/v1/issues/PRIV-1/comments",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "131",
++          "content-type": "application/json"
++        },
++        "body": {
++          "body_markdown": "Hey @maya please review this confidential spec.",
++          "acknowledge_mentions": [
++            "01a1ced9-f970-7164-917f-49d913e552f3"
++          ]
++        }
++      },
++      "response": {
++        "status": 201,
++        "headers": {
++          "content-length": "764",
++          "content-type": "application/json",
++          "location": "/projects/PRIV/issues/PRIV-1#comment-01a1ced9-fa46-74e9-a0fd-705de3c7a2cd",
++          "etag": "\"3a74527a1fbb3510676bc90e5719b2ecd6c4dbfd05f0f66dcc79874f06346ad2\"",
++          "x-request-id": "72dd86ee39c44d68a3fc28f04485ed4f",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "id": "01a1ced9-fa46-74e9-a0fd-705de3c7a2cd",
++          "issue_id": "01a1ced9-f9be-7b92-9c84-4d2079099cbb",
++          "parent_comment_id": null,
++          "author_id": "01a1ced9-f969-7c75-943f-731c98e87214",
++          "author": {
++            "id": "01a1ced9-f969-7c75-943f-731c98e87214",
++            "handle": "@admin2",
++            "display_name": "Admin2"
++          },
++          "body_markdown": "Hey @maya please review this confidential spec.",
++          "body_sha256": "3a74527a1fbb3510676bc90e5719b2ecd6c4dbfd05f0f66dcc79874f06346ad2",
++          "permalink": "/projects/PRIV/issues/PRIV-1#comment-01a1ced9-fa46-74e9-a0fd-705de3c7a2cd",
++          "created_at": "2026-11-12T08:22:34.310608Z",
++          "edited_at": null,
++          "deleted": false,
++          "reactions": [],
++          "replies": [],
++          "replies_next_cursor": null,
++          "mentions": [],
++          "unnotified_mentions": [
++            {
++              "handle": "maya",
++              "principal_id": "01a1ced9-f970-7164-917f-49d913e552f3",
++              "has_access": false
++            }
++          ]
++        }
++      }
++    },
++    {
++      "name": "edit_comment_412",
++      "request": {
++        "method": "PATCH",
++        "path": "/api/v1/comments/01a1ceda-0512-7e61-b547-19e130796fec",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "if-match": "\"deadbeef12345678\"",
++          "cookie": "<redacted>",
++          "content-length": "46",
++          "content-type": "application/json"
++        },
++        "body": {
++          "body_markdown": "Alice stale update attempt"
++        }
++      },
++      "response": {
++        "status": 412,
++        "headers": {
++          "x-request-id": "926f803946b241e5a2250ea2ce9c2f46",
++          "content-length": "307",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:PRECONDITION_FAILED",
++          "title": "Precondition Failed",
++          "status": 412,
++          "code": "PRECONDITION_FAILED",
++          "detail": "Comment was modified by another request.",
++          "request_id": "926f803946b241e5a2250ea2ce9c2f46",
++          "current_etag": "\"36690bac71e6ef2e8a4317213b817cf52668a59b58956d3233dba5bb4fb952fb\""
++        }
++      }
++    },
++    {
++      "name": "get_unreadable_comment_404",
++      "request": {
++        "method": "GET",
++        "path": "/api/v1/issues/CONC-1/comments",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 404,
++        "headers": {
++          "x-request-id": "f233628d44224a558a84841f412679e8",
++          "content-length": "139",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:NOT_FOUND",
++          "title": "Not Found",
++          "status": 404,
++          "code": "NOT_FOUND",
++          "request_id": "f233628d44224a558a84841f412679e8"
++        }
++      }
++    },
++    {
++      "name": "put_reaction_200",
++      "request": {
++        "method": "PUT",
++        "path": "/api/v1/comments/01a1ceda-071e-7fa2-8d18-b18d48f2a438/reactions/%F0%9F%9A%80",
++        "headers": {
++          "host": "test",
++          "content-length": "0",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "47",
++          "content-type": "application/json",
++          "x-request-id": "5db0b25e4bf543feb79c2d5f3930c74b",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "emoji": "\ud83d\ude80",
++          "count": 1,
++          "reacted_by_me": true
++        }
++      }
++    }
++  ]
++}
+diff --git a/docs/qa/KANBA-85/git-diff.patch b/docs/qa/KANBA-85/git-diff.patch
+new file mode 100644
+index 0000000..e99d3ae
+--- /dev/null
++++ b/docs/qa/KANBA-85/git-diff.patch
+@@ -0,0 +1,170 @@
++diff --git a/database/GEMINI.md b/database/GEMINI.md
++index 2003981..e59cc9f 100644
++--- a/database/GEMINI.md
+++++ b/database/GEMINI.md
++@@ -17,7 +17,7 @@ None. This is the foundational leaf module in the workspace dependency hierarchy
++ - Test harness execution isolates probe entities within kb_harness schema, which must be ignored by production RLS catalog assertions.
++ 
++ ## Outbound Contracts
++-- database.models: 38 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions), custom LtreeType, and 5 PostgreSQL StrEnums.
+++- database.models: 39 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions, comment reactions), custom LtreeType, and 5 PostgreSQL StrEnums.
++ - database.session: RLSContext, bind_rls_context, RLSSessionFactory, create_rls_engine, and fail-closed security exceptions (RLSContextError, UnboundRLSSessionError, RLSRoleViolationError).
++ - database.repositories: BaseRepository generic base providing type-safe CRUD operations, bounded pagination (1..500), and mandatory RLS session verification.
++ - database.outbox: OutboxEnvelope, enqueue_outbox_event, topic_matches, RealtimeBroker, PgNotifyBroker, ValkeyBroker, and OutboxRelay (run via `python -m database.outbox.relay`).
++diff --git a/database/models/__init__.py b/database/models/__init__.py
++index 4c7d7b2..8e9de68 100644
++--- a/database/models/__init__.py
+++++ b/database/models/__init__.py
++@@ -13,6 +13,7 @@ from database.models.base import (
++ )
++ from database.models.embeddings import ObjectEmbedding
++ from database.models.issues import (
+++    CommentReaction,
++     Issue,
++     IssueAssignee,
++     IssueComment,
++@@ -56,6 +57,7 @@ __all__ = [
++     "ActivityRecord",
++     "AuthProviderCard",
++     "Base",
+++    "CommentReaction",
++     "Cycle",
++     "Doc",
++     "EffectiveResourceAccess",
++diff --git a/database/models/issues.py b/database/models/issues.py
++index e583f75..4058dcd 100644
++--- a/database/models/issues.py
+++++ b/database/models/issues.py
++@@ -199,3 +199,20 @@ class IssueComment(Base):
++     )
++     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
++     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+++
+++
+++class CommentReaction(Base):
+++    """Emoji reaction on an issue comment (KB-P3-05)."""
+++
+++    __tablename__ = "comment_reactions"
+++
+++    comment_id: Mapped[uuid.UUID] = mapped_column(
+++        ForeignKey("issue_comments.id", ondelete="CASCADE"), primary_key=True
+++    )
+++    principal_id: Mapped[uuid.UUID] = mapped_column(
+++        ForeignKey("principals.id", ondelete="CASCADE"), primary_key=True
+++    )
+++    emoji: Mapped[str] = mapped_column(String, primary_key=True)
+++    created_at: Mapped[datetime] = mapped_column(
+++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+++    )
++diff --git a/database/tests/test_p1_17_models.py b/database/tests/test_p1_17_models.py
++index a14637c..a3ea0b3 100644
++--- a/database/tests/test_p1_17_models.py
+++++ b/database/tests/test_p1_17_models.py
++@@ -52,9 +52,10 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
++     pg_tables = {row[0] for row in result.all()}
++     orm_tables = set(Base.metadata.tables.keys())
++ 
++-    # Exact set equality across all tables (incl. embeddings, auth cards, rate limits, sessions)
+++    # Exact set equality across all tables
+++    # (incl. embeddings, auth cards, rate limits, sessions, comment reactions)
++     assert orm_tables == pg_tables
++-    assert len(orm_tables) == 38
+++    assert len(orm_tables) == 39
++ 
++ 
++ async def _setup_test_project_spine(
++diff --git a/kanban/api/problems.py b/kanban/api/problems.py
++index 2e9eb8a..cf938bc 100644
++--- a/kanban/api/problems.py
+++++ b/kanban/api/problems.py
++@@ -57,6 +57,10 @@ class Problem(BaseModel):
++         default=None,
++         description="Candidate suggestions when identifier resolution is ambiguous",
++     )
+++    unauthorized_mentions: list[dict[str, str]] | None = Field(
+++        default=None,
+++        description="List of mentioned users who lack access to the resource",
+++    )
++ 
++ 
++ class ProblemException(Exception):  # noqa: N818
++@@ -74,6 +78,8 @@ class ProblemException(Exception):  # noqa: N818
++         field: str | None = None,
++         *,
++         candidates: list[dict[str, str]] | None = None,
+++        unauthorized_mentions: list[dict[str, str]] | None = None,
+++        type_uri: str | None = None,
++     ) -> None:
++         """Initialize problem exception with error code, status, and optional details."""
++         if not _CODE_REGEX.match(code):
++@@ -89,6 +95,8 @@ class ProblemException(Exception):  # noqa: N818
++         self.current_etag = current_etag
++         self.field = field
++         self.candidates = candidates
+++        self.unauthorized_mentions = unauthorized_mentions
+++        self.type_uri = type_uri
++ 
++ 
++ def not_found() -> NoReturn:
++@@ -113,7 +121,7 @@ async def problem_exception_handler(
++     del request
++     req_id = get_request_id()
++     problem = Problem(
++-        type=f"urn:kanban:problem:{exc.code}",
+++        type=exc.type_uri or f"urn:kanban:problem:{exc.code}",
++         title=exc.title,
++         status=exc.status,
++         code=exc.code,
++@@ -123,6 +131,7 @@ async def problem_exception_handler(
++         current_etag=exc.current_etag,
++         field=exc.field,
++         candidates=exc.candidates,
+++        unauthorized_mentions=exc.unauthorized_mentions,
++     )
++     response_headers = {"x-request-id": req_id}
++     if exc.headers:
++diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
++index 85f8b3b..040641f 100644
++--- a/kanban/api/v1/__init__.py
+++++ b/kanban/api/v1/__init__.py
++@@ -5,6 +5,7 @@ from __future__ import annotations
++ from fastapi import APIRouter
++ 
++ from kanban.api.v1.auth_session import router as auth_session_router
+++from kanban.api.v1.comments import router as comments_router
++ from kanban.api.v1.health import router as health_router
++ from kanban.api.v1.issues import router as issues_router
++ from kanban.api.v1.media_proxy import router as media_proxy_router
++@@ -22,5 +23,6 @@ def build_v1_router() -> APIRouter:
++     v1.include_router(projects_router)
++     v1.include_router(issues_router)
++     v1.include_router(resolve_router)
+++    v1.include_router(comments_router)
++     v1.include_router(auth_session_router)
++     return v1
++diff --git a/kanban/services/activity.py b/kanban/services/activity.py
++index 02a5c5a..4477e32 100644
++--- a/kanban/services/activity.py
+++++ b/kanban/services/activity.py
++@@ -66,6 +66,10 @@ class ActivityEventType(StrEnum):
++     ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
++     ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
++     ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
+++    COMMENT_CREATED = "COMMENT_CREATED"
+++    COMMENT_EDITED = "COMMENT_EDITED"
+++    COMMENT_DELETED = "COMMENT_DELETED"
+++    MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
++ 
++ 
++ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
++@@ -78,6 +82,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
++         ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
++         ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
++         ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
+++        ActivityEventType.COMMENT_CREATED: ActivityCategory.COMMENT,
+++        ActivityEventType.COMMENT_EDITED: ActivityCategory.COMMENT,
+++        ActivityEventType.COMMENT_DELETED: ActivityCategory.COMMENT,
+++        ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
++     }
++ )
++ 
+diff --git a/docs/qa/KANBA-85/message-to-reality-checker.md b/docs/qa/KANBA-85/message-to-reality-checker.md
+new file mode 100644
+index 0000000..4a8b474
+--- /dev/null
++++ b/docs/qa/KANBA-85/message-to-reality-checker.md
+@@ -0,0 +1,44 @@
++# Message to Reality-Checker: KANBA-85 (KB-P3-05)
++
++## Overview
++- **Ticket**: KANBA-85 (`KB-P3-05`: `[Phase 3 / API] Threaded comments, reactions, permalinks & access-checked @mentions`)
++- **Status**: Ready for Forensic QA Audit
++- **Branch**: `feat/KANBA-85` in worktree `/tmp/kb-wt-KANBA-85`
++
++## Schema and Migration Analysis (KB-P1-09 vs. KB-P3-05)
++Per Scoped Technical Actions item 2:
++> "Add `issue_comments.parent_comment_id UUID REFERENCES issue_comments(id)`, `edited_at TIMESTAMPTZ`, `deleted_at TIMESTAMPTZ` only if KB-P1-09 did not create them (record which columns were added in message-to-reality-checker.md)."
++
++### Forensic Audit of `issue_comments` Columns
++Inspection of `database/migrations/sql/p1_09_prose_tables.up.sql` confirmed that KB-P1-09 already created all 10 canonical columns:
++1. `id` UUID PRIMARY KEY DEFAULT uuidv7()
++2. `workspace_id` UUID NOT NULL REFERENCES workspaces(id)
++3. `issue_id` UUID NOT NULL REFERENCES issues(id)
++4. `parent_comment_id` UUID REFERENCES issue_comments(id) [Already created by KB-P1-09]
++5. `author_id` UUID NOT NULL REFERENCES principals(id)
++6. `body_markdown` TEXT NOT NULL CHECK (octet_length between 1 and 262144)
++7. `body_sha256` BYTEA GENERATED ALWAYS AS (digest(body_markdown, 'sha256')) STORED
++8. `created_at` TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++9. `edited_at` TIMESTAMPTZ [Already created by KB-P1-09]
++10. `deleted_at` TIMESTAMPTZ [Already created by KB-P1-09]
++
++Therefore, migration `p3_05_comment_threads_reactions`:
++- Did **not** add any columns to `issue_comments` because `parent_comment_id`, `edited_at`, and `deleted_at` were already established by KB-P1-09.
++- Created `comment_reactions(comment_id, principal_id, emoji, created_at)` with `ENABLE` + `FORCE ROW LEVEL SECURITY`.
++- Configured RLS policies `comment_reactions_select_rls`, `comment_reactions_insert_rls`, `comment_reactions_delete_rls` delegating to parent issue `VIEW` capability with write check on `principal_id`.
++- Granted permissions to `kanban_app` (SELECT, INSERT, UPDATE, DELETE) and `app_rls_reader` (SELECT).
++
++## Implemented API Endpoints (Mounted under `/api/v1`)
++1. `GET /api/v1/issues/{issue_ref}/comments?cursor=&limit=` (VIEW required, keyset pagination, nested replies up to 200)
++2. `POST /api/v1/issues/{issue_ref}/comments` (COMMENT required, 201 + ETag + Location permalink, mention access warning gate)
++3. `PATCH /api/v1/comments/{comment_id}` (Author-only, 200 + ETag, If-Match required, mention access warning gate)
++4. `DELETE /api/v1/comments/{comment_id}` (Author or project ADMIN, 204 soft-delete)
++5. `PUT /api/v1/comments/{comment_id}/reactions/{emoji}` (COMMENT required, 200 idempotent, NFC 8-emoji allowlist)
++6. `DELETE /api/v1/comments/{comment_id}/reactions/{emoji}` (COMMENT required, 204 idempotent)
++
++## Quality and Verification Summary
++- **Unit Tests**: 11/11 passed across `kanban/tests/api/test_comments.py` and `kanban/tests/services/test_mentions.py`.
++- **Test Coverage**: 96.86% line + branch coverage (exceeds >= 95% threshold).
++- **Anti-Enumeration & Zero ACL Widening**: Mentions never insert rows into `resource_acl_entries`. Unreadable entities return 404.
++- **Contract Samples**: 7 verified exchanges in `docs/qa/KANBA-85/contract-sample.json`.
++- **Schema Dump**: Verified in `docs/qa/KANBA-85/schema-dump.sql`.
+diff --git a/docs/qa/KANBA-85/schema-dump.sql b/docs/qa/KANBA-85/schema-dump.sql
+new file mode 100644
+index 0000000..a33b7e6
+--- /dev/null
++++ b/docs/qa/KANBA-85/schema-dump.sql
+@@ -0,0 +1,265 @@
++--
++-- PostgreSQL database dump
++--
++
++\restrict UuShv7voSWalR45dOd8opCZniCPZ8pjBcelnxF9IbNWTyCnhodFZi1f98MgtETA
++
++-- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
++-- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
++
++SET statement_timeout = 0;
++SET lock_timeout = 0;
++SET idle_in_transaction_session_timeout = 0;
++SET client_encoding = 'UTF8';
++SET standard_conforming_strings = on;
++SELECT pg_catalog.set_config('search_path', '', false);
++SET check_function_bodies = false;
++SET xmloption = content;
++SET client_min_messages = warning;
++SET row_security = off;
++
++SET default_tablespace = '';
++
++SET default_table_access_method = heap;
++
++--
++-- Name: comment_reactions; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.comment_reactions (
++    comment_id uuid NOT NULL,
++    principal_id uuid NOT NULL,
++    emoji text NOT NULL,
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL
++);
++
++ALTER TABLE ONLY public.comment_reactions FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.comment_reactions OWNER TO kanban_migrator;
++
++--
++-- Name: issue_comments; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.issue_comments (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    workspace_id uuid NOT NULL,
++    issue_id uuid NOT NULL,
++    parent_comment_id uuid,
++    author_id uuid NOT NULL,
++    body_markdown text NOT NULL,
++    body_sha256 bytea GENERATED ALWAYS AS (public.digest(body_markdown, 'sha256'::text)) STORED,
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    edited_at timestamp with time zone,
++    deleted_at timestamp with time zone,
++    CONSTRAINT issue_comments_body_markdown_check CHECK (((octet_length(body_markdown) >= 1) AND (octet_length(body_markdown) <= 262144)))
++);
++
++ALTER TABLE ONLY public.issue_comments FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.issue_comments OWNER TO kanban_migrator;
++
++--
++-- Name: comment_reactions comment_reactions_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.comment_reactions
++    ADD CONSTRAINT comment_reactions_pkey PRIMARY KEY (comment_id, principal_id, emoji);
++
++
++--
++-- Name: issue_comments issue_comments_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_comments
++    ADD CONSTRAINT issue_comments_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: comment_reactions_comment_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX comment_reactions_comment_idx ON public.comment_reactions USING btree (comment_id);
++
++
++--
++-- Name: comment_reactions_principal_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX comment_reactions_principal_idx ON public.comment_reactions USING btree (principal_id);
++
++
++--
++-- Name: issue_comments_author_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issue_comments_author_idx ON public.issue_comments USING btree (author_id);
++
++
++--
++-- Name: issue_comments_issue_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issue_comments_issue_idx ON public.issue_comments USING btree (issue_id);
++
++
++--
++-- Name: issue_comments_parent_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issue_comments_parent_idx ON public.issue_comments USING btree (parent_comment_id) WHERE (parent_comment_id IS NOT NULL);
++
++
++--
++-- Name: issue_comments_workspace_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issue_comments_workspace_idx ON public.issue_comments USING btree (workspace_id);
++
++
++--
++-- Name: issue_comments issue_comments_workspace_biu_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER issue_comments_workspace_biu_trg BEFORE INSERT OR UPDATE ON public.issue_comments FOR EACH ROW EXECUTE FUNCTION public.issue_comments_workspace_biu();
++
++
++--
++-- Name: comment_reactions comment_reactions_comment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.comment_reactions
++    ADD CONSTRAINT comment_reactions_comment_id_fkey FOREIGN KEY (comment_id) REFERENCES public.issue_comments(id) ON DELETE CASCADE;
++
++
++--
++-- Name: comment_reactions comment_reactions_principal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.comment_reactions
++    ADD CONSTRAINT comment_reactions_principal_id_fkey FOREIGN KEY (principal_id) REFERENCES public.principals(id) ON DELETE CASCADE;
++
++
++--
++-- Name: issue_comments issue_comments_author_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_comments
++    ADD CONSTRAINT issue_comments_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.principals(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: issue_comments issue_comments_issue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_comments
++    ADD CONSTRAINT issue_comments_issue_id_fkey FOREIGN KEY (issue_id) REFERENCES public.issues(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: issue_comments issue_comments_parent_comment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_comments
++    ADD CONSTRAINT issue_comments_parent_comment_id_fkey FOREIGN KEY (parent_comment_id) REFERENCES public.issue_comments(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: issue_comments issue_comments_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_comments
++    ADD CONSTRAINT issue_comments_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: comment_reactions; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.comment_reactions ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: comment_reactions comment_reactions_delete_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY comment_reactions_delete_rls ON public.comment_reactions FOR DELETE USING (((principal_id = COALESCE((NULLIF(current_setting('app.principal_id'::text, true), ''::text))::uuid, public.app_current_principal_id())) AND (EXISTS ( SELECT 1
++   FROM public.issue_comments ic
++  WHERE ((ic.id = comment_reactions.comment_id) AND (ic.workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(ic.issue_id, 1))))));
++
++
++--
++-- Name: comment_reactions comment_reactions_insert_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY comment_reactions_insert_rls ON public.comment_reactions FOR INSERT WITH CHECK (((principal_id = COALESCE((NULLIF(current_setting('app.principal_id'::text, true), ''::text))::uuid, public.app_current_principal_id())) AND (EXISTS ( SELECT 1
++   FROM public.issue_comments ic
++  WHERE ((ic.id = comment_reactions.comment_id) AND (ic.workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(ic.issue_id, 1))))));
++
++
++--
++-- Name: comment_reactions comment_reactions_select_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY comment_reactions_select_rls ON public.comment_reactions FOR SELECT USING ((EXISTS ( SELECT 1
++   FROM public.issue_comments ic
++  WHERE ((ic.id = comment_reactions.comment_id) AND (ic.workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(ic.issue_id, 1)))));
++
++
++--
++-- Name: issue_comments; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.issue_comments ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: issue_comments issue_comments_delete_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY issue_comments_delete_rls ON public.issue_comments FOR DELETE USING (((workspace_id = public.app_current_workspace_id()) AND (((author_id = public.app_current_principal_id()) AND public.app_has_object_capability(issue_id, 2)) OR public.app_has_object_capability(issue_id, 64))));
++
++
++--
++-- Name: issue_comments issue_comments_insert_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY issue_comments_insert_rls ON public.issue_comments FOR INSERT WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND (author_id = public.app_current_principal_id()) AND public.app_has_object_capability(issue_id, 2)));
++
++
++--
++-- Name: issue_comments issue_comments_select_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY issue_comments_select_rls ON public.issue_comments FOR SELECT USING (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(issue_id, 1)));
++
++
++--
++-- Name: issue_comments issue_comments_update_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY issue_comments_update_rls ON public.issue_comments FOR UPDATE USING (((workspace_id = public.app_current_workspace_id()) AND (((author_id = public.app_current_principal_id()) AND public.app_has_object_capability(issue_id, 2)) OR public.app_has_object_capability(issue_id, 64)))) WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND (((author_id = public.app_current_principal_id()) AND public.app_has_object_capability(issue_id, 2)) OR public.app_has_object_capability(issue_id, 64))));
++
++
++--
++-- Name: TABLE comment_reactions; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.comment_reactions TO kanban_app;
++GRANT SELECT ON TABLE public.comment_reactions TO app_rls_reader;
++
++
++--
++-- Name: TABLE issue_comments; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.issue_comments TO kanban_app;
++GRANT SELECT ON TABLE public.issue_comments TO app_rls_reader;
++
++
++--
++-- PostgreSQL database dump complete
++--
++
++\unrestrict UuShv7voSWalR45dOd8opCZniCPZ8pjBcelnxF9IbNWTyCnhodFZi1f98MgtETA
++
+diff --git a/docs/qa/KANBA-85/ui-specialist-review.md b/docs/qa/KANBA-85/ui-specialist-review.md
+new file mode 100644
+index 0000000..5bb5ab9
+--- /dev/null
++++ b/docs/qa/KANBA-85/ui-specialist-review.md
+@@ -0,0 +1,85 @@
++# UI Specialist Gate Final Audit: APPROVED for KANBA-85 (KB-P3-05)
++
++- Auditor: ui-specialist (UI & UX Architecture Specialist Gate)
++- Worktree: `/tmp/kb-wt-KANBA-85`
++- Branch: `feat/KANBA-85`
++- Ticket: `KANBA-85` (`KB-P3-05`: `[Phase 3 / API] Threaded comments, reactions, permalinks & access-checked @mentions`)
++
++---
++
++### 1. Executive Summary & Verification Matrix
++A comprehensive frontend contract, UX ergonomics, and schema serialization audit was conducted for `KANBA-85` in `/tmp/kb-wt-KANBA-85`. While `KB-P3-05` is a backend REST API and discussion service ticket without direct frontend screenshots (Screenshots: N/A - Non-UI Ticket per KB-P3-05 specification), it defines the core data contracts and interactive state machines for the Issue Activity Stream (`KB-P3-36`), Comment Editor with Sparkle completion (`KB-P5-08`), Mention Access Confirmation Modal, Emoji Reaction Picker, and Deep Permalinks. All request/response schemas, keyset cursor pagination models, discrete RFC 7807 problem details, soft-delete rendering models, and anti-enumeration invariants were forensically evaluated against S7.2 (8k), S5.1, S3.4, and Section 5.4 architecture specifications.
++
++| Verification Dimension | Specification Target | Observed Status | Verdict |
++| :--- | :--- | :--- | :--- |
++| **Mention Access Warning Modal** | Discrete `409 MENTION_ACCESS_WARNING` payload | Emits machine-readable `unauthorized_mentions` with handles and IDs for UI confirmation | PASS |
++| **Mention Bypass & Zero Widening**| Resubmit with `acknowledge_mentions` bypass | Returns `201` with `unnotified_mentions`; zero modification to `resource_acl_entries` | PASS |
++| **Anti-Enumeration Invariants** | Unresolvable / cross-workspace handles silent | Left as plain text with zero warning and zero enumeration leak to caller | PASS |
++| **Threaded Comment Structure** | Depth-1 replies with inlined grouping | Up to 200 inlined replies per top-level comment; rejects depth > 1 (`422`) | PASS |
++| **Keyset Cursor Pagination** | Opaque base64 created_at + id cursor | Enforces deterministic keyset navigation; malformed cursor returns `422 INVALID_CURSOR` | PASS |
++| **Optimistic Concurrency (ETag)**| `If-Match` ETag concurrency on edits | Stale edits return `412 PRECONDITION_FAILED`; missing header returns `428` | PASS |
++| **Soft-Delete Degradation** | Preserve thread hierarchy on delete | Soft-deletes with `deleted: true`, nulls body/sha, and preserves nested replies | PASS |
++| **Emoji Reaction Ergonomics** | Canonical 8-emoji allowlist with NFC norm | Idempotent `PUT`/`DELETE` returning `{emoji, count, reacted_by_me}`; non-allowlist returns `422` | PASS |
++| **Permalinks** | Copyable deep-link fragment | Emits `/projects/{proj}/issues/{key}#comment-{uuid}` for clipboard integration | PASS |
++| **Unit Test Coverage** | Mandatory Feature Tests (>=95%) | 13/13 passed in 5.98s; 96.72% branch + line coverage across API and service modules | PASS |
++| **Build, Typecheck & Quality** | Zero-Tolerance Quality Mandate | Ruff clean, Ruff format clean (634 files), Mypy strict clean (234 files), Lint-imports clean (2 kept, 0 broken) | PASS |
++
++---
++
++### 2. Frontend Contract & UX Ergonomics Audit
++
++1. **Pre-Send Mention Access Warning Modal (`409 MENTION_ACCESS_WARNING`):**
++   - When a user drafts a comment mentioning a colleague who lacks `VIEW` permissions on the issue (e.g. `@maya`), the API returns:
++     ```json
++     {
++       "type": "https://kanban/problems/mention-access-warning",
++       "title": "Mentioned users cannot see this issue",
++       "status": 409,
++       "code": "MENTION_ACCESS_WARNING",
++       "detail": "Resubmit with acknowledge_mentions to post without granting access.",
++       "unauthorized_mentions": [
++         {
++           "handle": "maya",
++           "principal_id": "01a1ced9-f970-7164-917f-49d913e552f3"
++         }
++       ]
++     }
++     ```
++   - *UX Impact:*
++     * Rather than failing cryptically or silently leaking confidential issues, the SPA catches `409 MENTION_ACCESS_WARNING` and presents a clear, actionable confirmation modal:
++       "The following mentioned user cannot see this issue: @maya. They will not be notified and will not be granted access to this issue. Do you want to post anyway?"
++     * The modal provides two buttons: "Edit Comment" and "Post Anyway".
++     * If the user confirms "Post Anyway", the client simply re-posts with `acknowledge_mentions: ["01a1ced9-f970-7164-917f-49d913e552f3"]`.
++     * The comment posts successfully with `unnotified_mentions` documented in the response, while `resource_acl_entries` remains completely untouched.
++     * Mentions outside the workspace boundary or non-existent usernames remain plain text without warning, preventing attackers from probing valid usernames.
++
++2. **Threaded Discussion Ergonomics & Pagination:**
++   - Single-level nesting (`parent_comment_id`) prevents chaotic, infinitely nested comment trees.
++   - The top-level comment schema inlines up to 200 replies directly inside `replies: list[CommentResponse]`. If replies exceed 200, `replies_next_cursor` is provided for on-demand lazy loading ("Load more replies").
++   - `CommentList` utilizes opaque URL-safe keyset cursors (`created_at|id`) with max 100 items per page (default 50). This guarantees stable, zero-shift infinite scroll even as new comments are submitted in real-time.
++
++3. **Concurrency & Safe Editing (`If-Match` ETag):**
++   - Comment edits require the `If-Match` HTTP header matching the comment's `body_sha256`.
++   - If a concurrent edit occurred (e.g. edited from another browser tab or device), the server rejects the collision with `412 PRECONDITION_FAILED` and provides `current_etag`.
++   - *UX Impact:* The comment editor can notify the user of concurrent modifications and offer a diff view, preventing silent data loss.
++
++4. **Soft-Delete Degradation:**
++   - Deleting a comment sets `deleted_at` while preserving the thread structure.
++   - The serializer returns `deleted: true` with `body_markdown: null` and `body_sha256: null`.
++   - *UX Impact:* The frontend renders a subtle placeholder card ("This comment was deleted") while preserving the reply tree beneath it, ensuring that child conversations do not become orphaned or visually detached.
++
++5. **Emoji Reactions Strip & Toggle State:**
++   - Strictly validates against the 8 canonical emojis (`👍`, `👎`, `😄`, `🎉`, `😕`, `❤️`, `🚀`, `👀`) with NFC normalization.
++   - Reaction responses return `{emoji, count, reacted_by_me}`, enabling instant UI chip toggling and optimistic counter increments/decrements.
++
++---
++
++### 3. Formatting & Typography Compliance
++- Strictly plain ASCII hyphens `-` used throughout. Zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) detected.
++
++---
++
++### 4. Gate Sign-Off
++I have written this audit to `/tmp/kb-wt-KANBA-85/docs/qa/KANBA-85/ui-specialist-review.md`. Please commit it to your branch `feat/KANBA-85` along with your changes and `git-diff.patch`.
++
++Verdict: APPROVED
+diff --git a/docs/qa/KANBA-85/unit-test-results.txt b/docs/qa/KANBA-85/unit-test-results.txt
+new file mode 100644
+index 0000000..f8e42ed
+--- /dev/null
++++ b/docs/qa/KANBA-85/unit-test-results.txt
+@@ -0,0 +1,23 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
++rootdir: /tmp/kb-wt-KANBA-85
++configfile: pyproject.toml
++plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, anyio-4.16.0, xdist-3.8.0, platformdirs-4.14.5
++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
++collected 13 items
++
++kanban/tests/api/test_comments.py ...........                            [ 84%]
++kanban/tests/services/test_mentions.py ..                                [100%]
++
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                          Stmts   Miss Branch BrPart  Cover   Missing
++-------------------------------------------------------------------------
++kanban/api/v1/comments.py        41      0      0      0   100%
++kanban/services/comments.py     253      5     80      7    96%   333, 342->341, 461, 601, 618->exit, 648, 707
++kanban/services/mentions.py      86      1     28      3    96%   73, 98->100, 102->93
++-------------------------------------------------------------------------
++TOTAL                           380      6    108     10    97%
++Required test coverage of 95% reached. Total coverage: 96.72%
++============================== 13 passed in 6.28s ==============================
+diff --git a/kanban/api/problems.py b/kanban/api/problems.py
+index 2e9eb8a..cf938bc 100644
+--- a/kanban/api/problems.py
++++ b/kanban/api/problems.py
+@@ -57,6 +57,10 @@ class Problem(BaseModel):
+         default=None,
+         description="Candidate suggestions when identifier resolution is ambiguous",
+     )
++    unauthorized_mentions: list[dict[str, str]] | None = Field(
++        default=None,
++        description="List of mentioned users who lack access to the resource",
++    )
+ 
+ 
+ class ProblemException(Exception):  # noqa: N818
+@@ -74,6 +78,8 @@ class ProblemException(Exception):  # noqa: N818
+         field: str | None = None,
+         *,
+         candidates: list[dict[str, str]] | None = None,
++        unauthorized_mentions: list[dict[str, str]] | None = None,
++        type_uri: str | None = None,
+     ) -> None:
+         """Initialize problem exception with error code, status, and optional details."""
+         if not _CODE_REGEX.match(code):
+@@ -89,6 +95,8 @@ class ProblemException(Exception):  # noqa: N818
+         self.current_etag = current_etag
+         self.field = field
+         self.candidates = candidates
++        self.unauthorized_mentions = unauthorized_mentions
++        self.type_uri = type_uri
+ 
+ 
+ def not_found() -> NoReturn:
+@@ -113,7 +121,7 @@ async def problem_exception_handler(
+     del request
+     req_id = get_request_id()
+     problem = Problem(
+-        type=f"urn:kanban:problem:{exc.code}",
++        type=exc.type_uri or f"urn:kanban:problem:{exc.code}",
+         title=exc.title,
+         status=exc.status,
+         code=exc.code,
+@@ -123,6 +131,7 @@ async def problem_exception_handler(
+         current_etag=exc.current_etag,
+         field=exc.field,
+         candidates=exc.candidates,
++        unauthorized_mentions=exc.unauthorized_mentions,
+     )
+     response_headers = {"x-request-id": req_id}
+     if exc.headers:
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 85f8b3b..040641f 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ from fastapi import APIRouter
+ 
+ from kanban.api.v1.auth_session import router as auth_session_router
++from kanban.api.v1.comments import router as comments_router
+ from kanban.api.v1.health import router as health_router
+ from kanban.api.v1.issues import router as issues_router
+ from kanban.api.v1.media_proxy import router as media_proxy_router
+@@ -22,5 +23,6 @@ def build_v1_router() -> APIRouter:
+     v1.include_router(projects_router)
+     v1.include_router(issues_router)
+     v1.include_router(resolve_router)
++    v1.include_router(comments_router)
+     v1.include_router(auth_session_router)
+     return v1
+diff --git a/kanban/api/v1/comments.py b/kanban/api/v1/comments.py
+new file mode 100644
+index 0000000..645e567
+--- /dev/null
++++ b/kanban/api/v1/comments.py
+@@ -0,0 +1,166 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""REST endpoints for threaded comments, reactions, and access-checked mentions (KB-P3-05)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003  # Runtime import required for FastAPI path parameter parsing
++from typing import Annotated, Final
++
++from fastapi import APIRouter, Depends, Header, Query, Response, status
++from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime dependency for FastAPI
++
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.timing import timing_floor
++from kanban.api.v1.schemas.comments import (
++    CommentCreate,
++    CommentList,
++    CommentPatch,
++    CommentResponse,
++    ReactionResponse,
++)
++from kanban.services import comments as svc
++
++__all__ = [
++    "comments_router",
++    "router",
++]
++
++router: Final[APIRouter] = APIRouter(tags=["comments"])
++comments_router: Final[APIRouter] = router
++
++
++@router.get(
++    "/issues/{issue_ref}/comments",
++    response_model=CommentList,
++    summary="List comments on an issue with nested replies",
++)
++async def list_issue_comments(
++    issue_ref: str,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++    cursor: Annotated[str | None, Query(max_length=128)] = None,
++    limit: Annotated[int, Query(ge=1, le=100)] = 50,
++) -> CommentList:
++    """Return top-level comments ordered created_at ASC with up to 200 inlined replies."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.list_comments(
++            session=session,
++            caller=caller,
++            issue_ref=issue_ref,
++            cursor=cursor,
++            limit=limit,
++        )
++
++
++@router.post(
++    "/issues/{issue_ref}/comments",
++    response_model=CommentResponse,
++    status_code=status.HTTP_201_CREATED,
++    summary="Create a top-level comment or depth-1 reply on an issue",
++)
++async def create_issue_comment(
++    issue_ref: str,
++    body: CommentCreate,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++    response: Response,
++) -> CommentResponse:
++    """Create comment after normalization, check mention access, and emit activity."""
++    async with timing_floor(floor_ms=25.0):
++        result, etag = await svc.create_comment(
++            session=session,
++            caller=caller,
++            issue_ref=issue_ref,
++            body=body,
++        )
++        response.headers["Location"] = result.permalink
++        response.headers["ETag"] = etag
++        return result
++
++
++@router.patch(
++    "/comments/{comment_id}",
++    response_model=CommentResponse,
++    summary="Update comment body under ETag concurrency control",
++)
++async def update_comment(  # noqa: PLR0913, PLR0917
++    comment_id: uuid.UUID,
++    body: CommentPatch,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++    response: Response,
++    if_match: Annotated[str | None, Header()] = None,
++) -> CommentResponse:
++    """Author-only edit verifying If-Match ETag and mention access warning gate."""
++    async with timing_floor(floor_ms=25.0):
++        result, new_etag = await svc.update_comment(
++            session=session,
++            caller=caller,
++            comment_id=comment_id,
++            body=body,
++            if_match=if_match,
++        )
++        response.headers["ETag"] = new_etag
++        return result
++
++
++@router.delete(
++    "/comments/{comment_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Soft-delete a comment (author or project admin)",
++)
++async def delete_comment(
++    comment_id: uuid.UUID,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++) -> None:
++    """Soft-delete comment setting deleted_at and emitting activity."""
++    async with timing_floor(floor_ms=25.0):
++        await svc.delete_comment(
++            session=session,
++            caller=caller,
++            comment_id=comment_id,
++        )
++
++
++@router.put(
++    "/comments/{comment_id}/reactions/{emoji}",
++    response_model=ReactionResponse,
++    summary="Add an emoji reaction to a comment",
++)
++async def add_reaction(
++    comment_id: uuid.UUID,
++    emoji: str,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++) -> ReactionResponse:
++    """Idempotently add an allowlisted emoji reaction to a visible comment."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.add_reaction(
++            session=session,
++            caller=caller,
++            comment_id=comment_id,
++            emoji=emoji,
++        )
++
++
++@router.delete(
++    "/comments/{comment_id}/reactions/{emoji}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Remove an emoji reaction from a comment",
++)
++async def delete_reaction(
++    comment_id: uuid.UUID,
++    emoji: str,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++) -> None:
++    """Idempotently remove an emoji reaction from a visible comment."""
++    async with timing_floor(floor_ms=25.0):
++        await svc.delete_reaction(
++            session=session,
++            caller=caller,
++            comment_id=comment_id,
++            emoji=emoji,
++        )
+diff --git a/kanban/api/v1/schemas/comments.py b/kanban/api/v1/schemas/comments.py
+new file mode 100644
+index 0000000..0f5302c
+--- /dev/null
++++ b/kanban/api/v1/schemas/comments.py
+@@ -0,0 +1,136 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comment request and response schemas (S7.2 8k, S5.1, S3.4)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003  # Runtime import required for Pydantic v2 type evaluation
++from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic v2 type evaluation
++
++from pydantic import BaseModel, ConfigDict, Field
++
++__all__ = [
++    "AuthorSummary",
++    "CommentCreate",
++    "CommentList",
++    "CommentPatch",
++    "CommentResponse",
++    "MentionSummary",
++    "ReactionResponse",
++    "ReactionSummary",
++]
++
++
++class ReactionSummary(BaseModel):
++    """Aggregated reaction count and caller participation."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    emoji: str = Field(description="NFC-normalized reaction emoji")
++    count: int = Field(ge=0, description="Total count of reactions with this emoji")
++    reacted_by_me: bool = Field(default=False, description="Whether caller reacted with this emoji")
++
++
++ReactionResponse = ReactionSummary
++
++
++class MentionSummary(BaseModel):
++    """Mentioned user handle and capability status."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    handle: str = Field(description="Normalized handle prefixed with or without @")
++    principal_id: uuid.UUID = Field(description="User principal identifier")
++    has_access: bool = Field(
++        description="Whether the mentioned user holds VIEW capability on the issue"
++    )
++
++
++class AuthorSummary(BaseModel):
++    """Comment author display metadata."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID = Field(description="Author principal identifier")
++    handle: str = Field(description="Author handle")
++    display_name: str = Field(description="Author display name")
++
++
++class CommentCreate(BaseModel):
++    """Payload for POST /api/v1/issues/{issue_ref}/comments."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    body_markdown: str = Field(description="Comment body markdown (normalized on ingestion)")
++    parent_comment_id: uuid.UUID | None = Field(
++        default=None, description="Optional parent comment ID for depth-1 replies"
++    )
++    acknowledge_mentions: list[uuid.UUID] = Field(
++        default_factory=list,
++        description="Explicit acknowledgement of unauthorized mentioned principals to bypass 409",
++    )
++
++
++class CommentPatch(BaseModel):
++    """Payload for PATCH /api/v1/comments/{comment_id}."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    body_markdown: str = Field(description="Updated comment body markdown")
++    acknowledge_mentions: list[uuid.UUID] = Field(
++        default_factory=list,
++        description="Explicit acknowledgement of unauthorized mentioned principals to bypass 409",
++    )
++
++
++class CommentResponse(BaseModel):
++    """Canonical representation of an issue comment or reply."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID = Field(description="Comment identifier")
++    issue_id: uuid.UUID = Field(description="Parent issue identifier")
++    parent_comment_id: uuid.UUID | None = Field(
++        default=None, description="Parent comment identifier if a reply"
++    )
++    author_id: uuid.UUID = Field(description="Comment author principal identifier")
++    author: AuthorSummary = Field(description="Author display details")
++    body_markdown: str | None = Field(
++        default=None, description="Comment body markdown (None if deleted)"
++    )
++    body_sha256: str | None = Field(
++        default=None, description="SHA-256 hex digest of normalized body (None if deleted)"
++    )
++    permalink: str = Field(description="Copyable deep-link URL fragment")
++    created_at: datetime = Field(description="Creation timestamp")
++    edited_at: datetime | None = Field(default=None, description="Last edited timestamp")
++    deleted: bool = Field(default=False, description="Whether the comment has been soft-deleted")
++    reactions: list[ReactionSummary] = Field(
++        default_factory=list, description="Aggregated emoji reactions"
++    )
++    replies: list[CommentResponse] = Field(
++        default_factory=list, description="Nested depth-1 replies (max 200 inlined)"
++    )
++    replies_next_cursor: str | None = Field(
++        default=None, description="Cursor for additional replies if exceeding 200"
++    )
++    mentions: list[MentionSummary] = Field(
++        default_factory=list, description="Resolved in-boundary mentions with access"
++    )
++    unnotified_mentions: list[MentionSummary] = Field(
++        default_factory=list, description="Acknowledged mentions without access"
++    )
++
++
++CommentResponse.model_rebuild()
++
++
++class CommentList(BaseModel):
++    """Keyset-paginated list of top-level comments."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    items: list[CommentResponse] = Field(description="Top-level comments with inlined replies")
++    next_cursor: str | None = Field(
++        default=None, description="Opaque cursor for next page of comments"
++    )
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index 02a5c5a..4477e32 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -66,6 +66,10 @@ class ActivityEventType(StrEnum):
+     ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
+     ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
+     ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
++    COMMENT_CREATED = "COMMENT_CREATED"
++    COMMENT_EDITED = "COMMENT_EDITED"
++    COMMENT_DELETED = "COMMENT_DELETED"
++    MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -78,6 +82,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
+         ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
+         ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
++        ActivityEventType.COMMENT_CREATED: ActivityCategory.COMMENT,
++        ActivityEventType.COMMENT_EDITED: ActivityCategory.COMMENT,
++        ActivityEventType.COMMENT_DELETED: ActivityCategory.COMMENT,
++        ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
+     }
+ )
+ 
+diff --git a/kanban/services/comments.py b/kanban/services/comments.py
+new file mode 100644
+index 0000000..1f0e453
+--- /dev/null
++++ b/kanban/services/comments.py
+@@ -0,0 +1,728 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comment service for threaded comments, reactions, permalinks and mentions (KB-P3-05)."""
++
++from __future__ import annotations
++
++import base64
++import hashlib
++import unicodedata
++import urllib.parse
++import uuid
++from datetime import UTC, datetime
++from typing import TYPE_CHECKING, Final
++
++from sqlalchemy import delete, func, select
++from sqlalchemy.dialects.postgresql import insert
++
++from database.models.issues import CommentReaction, Issue, IssueComment
++from database.models.principals import Principal
++from database.models.projects import Project
++from database.models.spine import ObjectRecord
++from kanban.api.problems import ProblemException, not_found
++from kanban.api.v1.schemas.comments import (
++    AuthorSummary,
++    CommentCreate,
++    CommentList,
++    CommentPatch,
++    CommentResponse,
++    MentionSummary,
++    ReactionResponse,
++    ReactionSummary,
++)
++from kanban.content import ContentNormalizeError, normalize_to_markdown
++from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
++from kanban.services.activity import ActivityEventType, record_activity
++from kanban.services.issue_keys import resolve_issue_ref
++from kanban.services.mentions import extract_mentions, resolve_mentions
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.api.deps import PrincipalContext
++
++__all__ = [
++    "ALLOWED_EMOJIS",
++    "MAX_COMMENT_BYTES",
++    "MIN_COMMENT_BYTES",
++    "add_reaction",
++    "create_comment",
++    "delete_comment",
++    "delete_reaction",
++    "list_comments",
++    "update_comment",
++]
++
++MIN_COMMENT_BYTES: Final[int] = 1
++MAX_COMMENT_BYTES: Final[int] = 262144
++MAX_INLINED_REPLIES: Final[int] = 200
++CURSOR_PARTS_COUNT: Final[int] = 2
++
++# Canonical 8 reaction emojis normalized with NFC
++_RAW_EMOJIS: Final[tuple[str, ...]] = ("👍", "👎", "😄", "🎉", "😕", "❤️", "🚀", "👀")
++ALLOWED_EMOJIS: Final[frozenset[str]] = frozenset(
++    unicodedata.normalize("NFC", e) for e in _RAW_EMOJIS
++)
++
++
++def _normalize_emoji(raw: str) -> str:
++    """URL-decode and normalize emoji to NFC, verifying against allowlist."""
++    decoded = urllib.parse.unquote(raw)
++    normalized = unicodedata.normalize("NFC", decoded)
++    # Special-case red heart without variation selector (U+2764 -> U+2764 U+FE0F)
++    if normalized == "\u2764":
++        normalized = "\u2764\ufe0f"
++
++    if normalized not in ALLOWED_EMOJIS:
++        raise ProblemException(
++            code="EMOJI_NOT_ALLOWED",
++            status=422,
++            title="Emoji Not Allowed",
++            detail=f"Emoji {decoded!r} is not in the allowed reaction set.",
++        )
++    return normalized
++
++
++def _normalize_comment_body(raw: str) -> str:
++    """Normalize body to canonical Markdown and enforce 1..262144 byte bounds."""
++    try:
++        normalized = normalize_to_markdown(raw)
++    except ContentNormalizeError as exc:
++        raise ProblemException(
++            code="COMMENT_LENGTH" if exc.code == "CONTENT_TOO_LARGE" else "INVALID_CONTENT",
++            status=422,
++            title="Invalid Content",
++        ) from exc
++    except UnicodeEncodeError as exc:
++        raise ProblemException(code="INVALID_CONTENT", status=422, title="Invalid Content") from exc
++
++    byte_len = len(normalized.encode("utf-8"))
++    if byte_len < MIN_COMMENT_BYTES or byte_len > MAX_COMMENT_BYTES:
++        err_detail = (
++            f"Comment body must be between {MIN_COMMENT_BYTES} and {MAX_COMMENT_BYTES} bytes."
++        )
++        raise ProblemException(
++            code="COMMENT_LENGTH",
++            status=422,
++            title="Comment Length",
++            detail=err_detail,
++        )
++    return normalized
++
++
++def _encode_cursor(ts: datetime, cid: uuid.UUID) -> str:
++    """Encode created_at and id into an opaque URL-safe keyset cursor."""
++    raw = f"{ts.isoformat()}|{cid}"
++    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
++
++
++def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
++    """Decode an opaque URL-safe keyset cursor, raising 422 INVALID_CURSOR on malformed data."""
++    try:
++        raw_bytes = base64.urlsafe_b64decode(cursor.encode("ascii"))
++        raw = raw_bytes.decode("utf-8")
++        parts = raw.split("|", 1)
++        if len(parts) == CURSOR_PARTS_COUNT:
++            ts = datetime.fromisoformat(parts[0])
++            cid = uuid.UUID(parts[1])
++            return ts, cid
++    except Exception as exc:
++        raise ProblemException(
++            code="INVALID_CURSOR",
++            status=422,
++            title="Invalid Cursor",
++            detail="The provided pagination cursor is invalid.",
++        ) from exc
++    raise ProblemException(
++        code="INVALID_CURSOR",
++        status=422,
++        title="Invalid Cursor",
++        detail="The provided pagination cursor is invalid.",
++    )
++
++
++async def _resolve_authors(
++    session: AsyncSession, author_ids: set[uuid.UUID]
++) -> dict[uuid.UUID, AuthorSummary]:
++    """Batch-resolve author principals and handles."""
++    if not author_ids:
++        return {}
++
++    stmt = (
++        select(Principal, ObjectRecord.canonical_key)
++        .outerjoin(ObjectRecord, ObjectRecord.id == Principal.id)
++        .where(Principal.id.in_(author_ids))
++    )
++    rows = (await session.execute(stmt)).all()
++    result: dict[uuid.UUID, AuthorSummary] = {}
++    for p, ckey in rows:
++        handle = f"@{ckey.lstrip('@')}" if ckey else f"@{p.display_name.lower().replace(' ', '')}"
++        result[p.id] = AuthorSummary(id=p.id, handle=handle, display_name=p.display_name)
++    return result
++
++
++async def _batch_reactions(
++    session: AsyncSession, comment_ids: set[uuid.UUID], caller_id: uuid.UUID
++) -> dict[uuid.UUID, list[ReactionSummary]]:
++    """Batch-aggregate emoji reactions for a collection of comments."""
++    if not comment_ids:
++        return {}
++
++    stmt = (
++        select(
++            CommentReaction.comment_id,
++            CommentReaction.emoji,
++            func.count().label("reaction_count"),
++            func.bool_or(CommentReaction.principal_id == caller_id).label("reacted_by_me"),
++        )
++        .where(CommentReaction.comment_id.in_(comment_ids))
++        .group_by(CommentReaction.comment_id, CommentReaction.emoji)
++    )
++    rows = (await session.execute(stmt)).all()
++
++    result: dict[uuid.UUID, list[ReactionSummary]] = {cid: [] for cid in comment_ids}
++    for cid, emoji, count, reacted_by_me in rows:
++        result[cid].append(
++            ReactionSummary(
++                emoji=emoji,
++                count=count,
++                reacted_by_me=bool(reacted_by_me),
++            )
++        )
++    return result
++
++
++def _build_permalink(project_identifier: str, issue_seq: int, comment_id: uuid.UUID) -> str:
++    """Format canonical permalink fragment."""
++    frag = f"{project_identifier}-{issue_seq}#comment-{comment_id}"
++    return f"/projects/{project_identifier}/issues/{frag}"
++
++
++async def create_comment(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_ref: str,
++    body: CommentCreate,
++) -> tuple[CommentResponse, str]:
++    """Create a top-level comment or depth-1 reply, enforce mention access, and emit activity."""
++    issue = await resolve_issue_ref(session, caller, issue_ref)
++    await require_capability(session, caller, issue.id, Capability.COMMENT)
++
++    project = await session.get(Project, issue.project_id)
++    if project is None:  # pragma: no cover
++        not_found()
++
++    # Threading validation: parent must be non-deleted top-level comment on the same issue
++    if body.parent_comment_id is not None:
++        parent = await session.get(IssueComment, body.parent_comment_id)
++        if (
++            parent is None
++            or parent.issue_id != issue.id
++            or parent.deleted_at is not None
++            or parent.parent_comment_id is not None
++        ):
++            raise ProblemException(
++                code="INVALID_PARENT_COMMENT",
++                status=422,
++                title="Invalid Parent Comment",
++                detail="Parent comment must be a non-deleted top-level comment on the same issue.",
++            )
++
++    normalized_body = _normalize_comment_body(body.body_markdown)
++    extracted_handles = extract_mentions(normalized_body)
++
++    authorized_mentions, unnotified_mentions, newly_acked_pids = await resolve_mentions(
++        session,
++        caller,
++        issue.id,
++        extracted_handles,
++        acknowledge_mentions=body.acknowledge_mentions,
++    )
++
++    comment = IssueComment(
++        workspace_id=caller.workspace_id,
++        issue_id=issue.id,
++        parent_comment_id=body.parent_comment_id,
++        author_id=caller.principal_id,
++        body_markdown=normalized_body,
++    )
++    session.add(comment)
++    await session.flush()
++    await session.refresh(comment)
++
++    body_sha256_hex = (
++        comment.body_sha256.hex()
++        if comment.body_sha256 is not None
++        else hashlib.sha256(normalized_body.encode("utf-8")).hexdigest()
++    )
++    etag = f'"{body_sha256_hex}"'
++
++    # Emit COMMENT_CREATED activity
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=issue.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.COMMENT_CREATED,
++        payload={
++            "comment_id": str(comment.id),
++            "parent_comment_id": str(comment.parent_comment_id)
++            if comment.parent_comment_id
++            else None,
++            "body_sha256": body_sha256_hex,
++            "mentioned_principal_ids": [str(m.principal_id) for m in authorized_mentions],
++        },
++    )
++
++    # Emit MENTION_ACCESS_ACKNOWLEDGED activity if unauthorized mentions were bypassed
++    if newly_acked_pids:
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=issue.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED,
++            payload={
++                "comment_id": str(comment.id),
++                "principal_ids": [str(p) for p in newly_acked_pids],
++            },
++        )
++
++    # Author details
++    authors = await _resolve_authors(session, {caller.principal_id})
++    author_summary = authors.get(
++        caller.principal_id,
++        AuthorSummary(id=caller.principal_id, handle="", display_name=""),
++    )
++
++    permalink = _build_permalink(project.identifier, issue.sequence_id, comment.id)
++
++    response = CommentResponse(
++        id=comment.id,
++        issue_id=issue.id,
++        parent_comment_id=comment.parent_comment_id,
++        author_id=caller.principal_id,
++        author=author_summary,
++        body_markdown=normalized_body,
++        body_sha256=body_sha256_hex,
++        permalink=permalink,
++        created_at=comment.created_at,
++        edited_at=comment.edited_at,
++        deleted=False,
++        reactions=[],
++        replies=[],
++        replies_next_cursor=None,
++        mentions=[
++            MentionSummary(handle=m.handle, principal_id=m.principal_id, has_access=m.has_access)
++            for m in authorized_mentions
++        ],
++        unnotified_mentions=[
++            MentionSummary(handle=m.handle, principal_id=m.principal_id, has_access=m.has_access)
++            for m in unnotified_mentions
++        ],
++    )
++    return response, etag
++
++
++async def _fetch_replies(
++    session: AsyncSession, top_level_ids: list[uuid.UUID]
++) -> dict[uuid.UUID, list[IssueComment]]:
++    """Fetch and group depth-1 replies by parent comment ID."""
++    replies_by_parent: dict[uuid.UUID, list[IssueComment]] = {cid: [] for cid in top_level_ids}
++    if not top_level_ids:
++        return replies_by_parent
++
++    replies_stmt = (
++        select(IssueComment)
++        .where(IssueComment.parent_comment_id.in_(top_level_ids))
++        .order_by(IssueComment.created_at.asc(), IssueComment.id.asc())
++    )
++    all_replies = (await session.execute(replies_stmt)).scalars().all()
++    for r in all_replies:
++        if r.parent_comment_id in replies_by_parent:
++            replies_by_parent[r.parent_comment_id].append(r)
++    return replies_by_parent
++
++
++async def list_comments(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_ref: str,
++    cursor: str | None = None,
++    limit: int = 50,
++) -> CommentList:
++    """List top-level comments with nested depth-1 replies using keyset pagination."""
++    issue = await resolve_issue_ref(session, caller, issue_ref)
++    await require_capability(session, caller, issue.id, Capability.VIEW)
++
++    project = await session.get(Project, issue.project_id)
++    if project is None:  # pragma: no cover
++        not_found()
++
++    clamped_limit = max(1, min(limit, 100))
++
++    # Query top-level comments
++    stmt = (
++        select(IssueComment)
++        .where(
++            IssueComment.issue_id == issue.id,
++            IssueComment.parent_comment_id.is_(None),
++        )
++        .order_by(IssueComment.created_at.asc(), IssueComment.id.asc())
++    )
++
++    if cursor is not None:
++        cursor_ts, cursor_id = _decode_cursor(cursor)
++        stmt = stmt.where(
++            (IssueComment.created_at > cursor_ts)
++            | ((IssueComment.created_at == cursor_ts) & (IssueComment.id > cursor_id))
++        )
++
++    stmt = stmt.limit(clamped_limit + 1)
++    top_level_rows = list((await session.execute(stmt)).scalars().all())
++
++    next_cursor: str | None = None
++    if len(top_level_rows) > clamped_limit:
++        last_item = top_level_rows[clamped_limit - 1]
++        next_cursor = _encode_cursor(last_item.created_at, last_item.id)
++        top_level_rows = top_level_rows[:clamped_limit]
++
++    top_level_ids = [c.id for c in top_level_rows]
++    replies_by_parent = await _fetch_replies(session, top_level_ids)
++
++    # Collect all comment IDs and authors for batch resolution
++    all_comments = list(top_level_rows)
++    for r_list in replies_by_parent.values():
++        all_comments.extend(r_list)
++
++    all_ids = {c.id for c in all_comments}
++    author_ids = {c.author_id for c in all_comments}
++
++    authors_map = await _resolve_authors(session, author_ids)
++    reactions_map = await _batch_reactions(session, all_ids, caller.principal_id)
++
++    def _to_response(c: IssueComment) -> CommentResponse:
++        is_deleted = c.deleted_at is not None
++        sha_hex = c.body_sha256.hex() if c.body_sha256 is not None and not is_deleted else None
++        body_text = None if is_deleted else c.body_markdown
++        author = authors_map.get(
++            c.author_id,
++            AuthorSummary(id=c.author_id, handle="", display_name="Deleted" if is_deleted else ""),
++        )
++        permalink = _build_permalink(project.identifier, issue.sequence_id, c.id)
++        return CommentResponse(
++            id=c.id,
++            issue_id=c.issue_id,
++            parent_comment_id=c.parent_comment_id,
++            author_id=c.author_id,
++            author=author,
++            body_markdown=body_text,
++            body_sha256=sha_hex,
++            permalink=permalink,
++            created_at=c.created_at,
++            edited_at=c.edited_at,
++            deleted=is_deleted,
++            reactions=reactions_map.get(c.id, []),
++            replies=[],
++            replies_next_cursor=None,
++            mentions=[],
++            unnotified_mentions=[],
++        )
++
++    items: list[CommentResponse] = []
++    for top_c in top_level_rows:
++        resp = _to_response(top_c)
++        child_replies = replies_by_parent.get(top_c.id, [])
++        # Inline up to MAX_INLINED_REPLIES replies
++        inlined = child_replies[:MAX_INLINED_REPLIES]
++        resp.replies = [_to_response(r) for r in inlined]
++        if len(child_replies) > MAX_INLINED_REPLIES:
++            last_reply = child_replies[MAX_INLINED_REPLIES - 1]
++            resp.replies_next_cursor = _encode_cursor(last_reply.created_at, last_reply.id)
++        items.append(resp)
++
++    return CommentList(items=items, next_cursor=next_cursor)
++
++
++async def update_comment(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    comment_id: uuid.UUID,
++    body: CommentPatch,
++    if_match: str | None,
++) -> tuple[CommentResponse, str]:
++    """Edit comment body under ETag concurrency check and emit activity."""
++    comment = await session.get(IssueComment, comment_id)
++    if comment is None:
++        not_found()
++
++    issue = await session.get(Issue, comment.issue_id)
++    if issue is None:
++        not_found()
++
++    # Anti-enumeration check
++    caps = await evaluate_capabilities(session, caller, issue.id)
++    if Capability.VIEW not in caps:
++        not_found()
++
++    if comment.author_id != caller.principal_id:
++        raise ProblemException(
++            code="NOT_COMMENT_AUTHOR",
++            status=403,
++            title="Not Comment Author",
++            detail="Only the author can edit this comment.",
++        )
++
++    if comment.deleted_at is not None:
++        raise ProblemException(
++            code="COMMENT_DELETED",
++            status=409,
++            title="Comment Deleted",
++            detail="Cannot edit a deleted comment.",
++        )
++
++    if if_match is None:
++        raise ProblemException(
++            code="PRECONDITION_REQUIRED",
++            status=428,
++            title="Precondition Required",
++            detail="If-Match header is required for comment modification.",
++        )
++
++    old_sha256 = (
++        comment.body_sha256.hex()
++        if comment.body_sha256 is not None
++        else hashlib.sha256(comment.body_markdown.encode("utf-8")).hexdigest()
++    )
++    if if_match.strip('"') != old_sha256:
++        raise ProblemException(
++            code="PRECONDITION_FAILED",
++            status=412,
++            title="Precondition Failed",
++            detail="Comment was modified by another request.",
++            current_etag=f'"{old_sha256}"',
++        )
++
++    project = await session.get(Project, issue.project_id)
++    if project is None:  # pragma: no cover
++        not_found()
++
++    normalized_body = _normalize_comment_body(body.body_markdown)
++    extracted_handles = extract_mentions(normalized_body)
++
++    authorized_mentions, unnotified_mentions, newly_acked_pids = await resolve_mentions(
++        session,
++        caller,
++        issue.id,
++        extracted_handles,
++        acknowledge_mentions=body.acknowledge_mentions,
++    )
++
++    new_sha256 = hashlib.sha256(normalized_body.encode("utf-8")).hexdigest()
++    comment.body_markdown = normalized_body
++    comment.edited_at = datetime.now(UTC)
++    await session.flush()
++    await session.refresh(comment)
++
++    # Emit COMMENT_EDITED activity
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=issue.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.COMMENT_EDITED,
++        payload={
++            "comment_id": str(comment.id),
++            "old_sha256": old_sha256,
++            "new_sha256": new_sha256,
++        },
++    )
++
++    if newly_acked_pids:
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=issue.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED,
++            payload={
++                "comment_id": str(comment.id),
++                "principal_ids": [str(p) for p in newly_acked_pids],
++            },
++        )
++
++    authors = await _resolve_authors(session, {comment.author_id})
++    author_summary = authors.get(
++        comment.author_id,
++        AuthorSummary(id=comment.author_id, handle="", display_name=""),
++    )
++    reactions_map = await _batch_reactions(session, {comment.id}, caller.principal_id)
++    permalink = _build_permalink(project.identifier, issue.sequence_id, comment.id)
++
++    response = CommentResponse(
++        id=comment.id,
++        issue_id=issue.id,
++        parent_comment_id=comment.parent_comment_id,
++        author_id=comment.author_id,
++        author=author_summary,
++        body_markdown=normalized_body,
++        body_sha256=new_sha256,
++        permalink=permalink,
++        created_at=comment.created_at,
++        edited_at=comment.edited_at,
++        deleted=False,
++        reactions=reactions_map.get(comment.id, []),
++        replies=[],
++        replies_next_cursor=None,
++        mentions=[
++            MentionSummary(handle=m.handle, principal_id=m.principal_id, has_access=m.has_access)
++            for m in authorized_mentions
++        ],
++        unnotified_mentions=[
++            MentionSummary(handle=m.handle, principal_id=m.principal_id, has_access=m.has_access)
++            for m in unnotified_mentions
++        ],
++    )
++    return response, f'"{new_sha256}"'
++
++
++async def delete_comment(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    comment_id: uuid.UUID,
++) -> None:
++    """Soft-delete a comment (author or project ADMIN) and emit activity."""
++    comment = await session.get(IssueComment, comment_id)
++    if comment is None:
++        not_found()
++
++    issue = await session.get(Issue, comment.issue_id)
++    if issue is None:
++        not_found()
++
++    caps = await evaluate_capabilities(session, caller, issue.id)
++    if Capability.VIEW not in caps:
++        not_found()
++
++    is_author = comment.author_id == caller.principal_id
++    is_admin = Capability.ADMIN in caps
++
++    if not (is_author or is_admin):
++        raise ProblemException(
++            code="INSUFFICIENT_CAPABILITY",
++            status=403,
++            title="Forbidden",
++            detail="Only the author or a project admin can delete this comment.",
++        )
++
++    if comment.deleted_at is None:
++        comment.deleted_at = datetime.now(UTC)
++        await session.flush()
++
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=issue.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.COMMENT_DELETED,
++            payload={
++                "comment_id": str(comment.id),
++                "deleted_by": str(caller.principal_id),
++            },
++        )
++
++
++async def add_reaction(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    comment_id: uuid.UUID,
++    emoji: str,
++) -> ReactionResponse:
++    """Add emoji reaction to comment (idempotent, requires COMMENT capability)."""
++    comment = await session.get(IssueComment, comment_id)
++    if comment is None:
++        not_found()
++
++    issue = await session.get(Issue, comment.issue_id)
++    if issue is None:
++        not_found()
++
++    caps = await evaluate_capabilities(session, caller, issue.id)
++    if Capability.VIEW not in caps:
++        not_found()
++    if Capability.COMMENT not in caps:
++        raise ProblemException(
++            code="INSUFFICIENT_CAPABILITY",
++            status=403,
++            title="Insufficient Capability",
++            detail="Caller requires COMMENT capability on the issue to add reactions.",
++        )
++
++    normalized_emoji = _normalize_emoji(emoji)
++
++    # Upsert reaction
++    stmt = (
++        insert(CommentReaction)
++        .values(
++            comment_id=comment.id,
++            principal_id=caller.principal_id,
++            emoji=normalized_emoji,
++        )
++        .on_conflict_do_nothing(index_elements=["comment_id", "principal_id", "emoji"])
++    )
++    await session.execute(stmt)
++    await session.flush()
++
++    # Query total count for this emoji
++    count_stmt = (
++        select(func.count())
++        .select_from(CommentReaction)
++        .where(
++            CommentReaction.comment_id == comment.id,
++            CommentReaction.emoji == normalized_emoji,
++        )
++    )
++    total_count = (await session.execute(count_stmt)).scalar() or 0
++
++    return ReactionResponse(
++        emoji=normalized_emoji,
++        count=total_count,
++        reacted_by_me=True,
++    )
++
++
++async def delete_reaction(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    comment_id: uuid.UUID,
++    emoji: str,
++) -> None:
++    """Remove emoji reaction from comment (idempotent, requires COMMENT capability)."""
++    comment = await session.get(IssueComment, comment_id)
++    if comment is None:
++        not_found()
++
++    issue = await session.get(Issue, comment.issue_id)
++    if issue is None:
++        not_found()
++
++    caps = await evaluate_capabilities(session, caller, issue.id)
++    if Capability.VIEW not in caps:
++        not_found()
++    if Capability.COMMENT not in caps:
++        raise ProblemException(
++            code="INSUFFICIENT_CAPABILITY",
++            status=403,
++            title="Insufficient Capability",
++            detail="Caller requires COMMENT capability on the issue to remove reactions.",
++        )
++
++    normalized_emoji = _normalize_emoji(emoji)
++
++    del_stmt = delete(CommentReaction).where(
++        CommentReaction.comment_id == comment.id,
++        CommentReaction.principal_id == caller.principal_id,
++        CommentReaction.emoji == normalized_emoji,
++    )
++    await session.execute(del_stmt)
++    await session.flush()
+diff --git a/kanban/services/mentions.py b/kanban/services/mentions.py
+new file mode 100644
+index 0000000..f2add2e
+--- /dev/null
++++ b/kanban/services/mentions.py
+@@ -0,0 +1,194 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Mention extraction and access-checked mention resolution service (S7.2 8k, S3.4)."""
++
++from __future__ import annotations
++
++import re
++import uuid  # noqa: TC003  # Runtime import required for Pydantic / type annotations
++from dataclasses import dataclass
++from typing import TYPE_CHECKING, Final
++
++from sqlalchemy import select
++
++from database.models.principals import Principal, User
++from database.models.spine import ObjectRecord
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.security.permissions import Capability, evaluate_capabilities
++
++if TYPE_CHECKING:
++    from collections.abc import Sequence
++
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++__all__ = [
++    "MAX_DISTINCT_MENTIONS",
++    "ResolvedMention",
++    "extract_mentions",
++    "resolve_mentions",
++]
++
++MAX_DISTINCT_MENTIONS: Final[int] = 50
++
++_MENTION_RE: Final[re.Pattern[str]] = re.compile(
++    r"(?<![\w@])@([a-z0-9][a-z0-9_.-]{0,38})", re.IGNORECASE
++)
++_FENCE_RE: Final[re.Pattern[str]] = re.compile(r"(```[\s\S]*?```|~~~[\s\S]*?~~~)")
++_INLINE_CODE_RE: Final[re.Pattern[str]] = re.compile(r"(`+[\s\S]*?`+)")
++_MD_LINK_URL_RE: Final[re.Pattern[str]] = re.compile(r"\[([^\]]*)\]\(([^)]*)\)")
++_URL_RE: Final[re.Pattern[str]] = re.compile(r"https?://[^\s)\]]+")
++
++
++@dataclass(frozen=True, slots=True)
++class ResolvedMention:
++    """Resolved mention entry with access capability verification."""
++
++    handle: str
++    principal_id: uuid.UUID
++    has_access: bool
++
++
++def extract_mentions(markdown: str) -> list[str]:
++    """Extract distinct mention handles outside code fences, inline spans, and link URLs.
++
++    Enforces maximum of 50 distinct handles per comment, raising 422 TOO_MANY_MENTIONS
++    if the threshold is exceeded.
++    """
++    # 1. Strip fenced code blocks (``` and ~~~)
++    text = _FENCE_RE.sub(" ", markdown)
++    # 2. Strip inline code spans (`...`)
++    text = _INLINE_CODE_RE.sub(" ", text)
++    # 3. Strip markdown link URLs [text](url) -> keep [text], drop url
++    text = _MD_LINK_URL_RE.sub(r"[\1]", text)
++    # 4. Strip raw and autolink URLs
++    text = _URL_RE.sub(" ", text)
++
++    seen: set[str] = set()
++    distinct_handles: list[str] = []
++
++    for match in _MENTION_RE.finditer(text):
++        handle = match.group(1).rstrip(".-").lower()
++        if not handle:
++            continue
++        if handle not in seen:
++            seen.add(handle)
++            distinct_handles.append(handle)
++
++    if len(distinct_handles) > MAX_DISTINCT_MENTIONS:
++        raise ProblemException(
++            code="TOO_MANY_MENTIONS",
++            status=422,
++            title="Too Many Mentions",
++            detail=f"A comment may not mention more than {MAX_DISTINCT_MENTIONS} distinct handles.",
++        )
++
++    return distinct_handles
++
++
++def _build_candidate_map(
++    rows: Sequence[tuple[Principal, User, str | None]],
++) -> dict[str, tuple[uuid.UUID, str]]:
++    candidates_by_handle: dict[str, tuple[uuid.UUID, str]] = {}
++    for p, u, ckey in rows:
++        canonical_handle = (
++            ckey.lstrip("@").lower() if ckey else p.display_name.lower().replace(" ", "")
++        )
++        p_id = p.id
++        if ckey:
++            candidates_by_handle[ckey.lstrip("@").lower()] = (p_id, canonical_handle)
++        display_clean = p.display_name.lower().replace(" ", "")
++        candidates_by_handle.setdefault(display_clean, (p_id, canonical_handle))
++        if u.email:
++            email_prefix = u.email.split("@")[0].lower()
++            candidates_by_handle.setdefault(email_prefix, (p_id, canonical_handle))
++    return candidates_by_handle
++
++
++async def resolve_mentions(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_id: uuid.UUID,
++    handles: Sequence[str],
++    acknowledge_mentions: Sequence[uuid.UUID] = (),
++) -> tuple[list[ResolvedMention], list[ResolvedMention], list[uuid.UUID]]:
++    """Resolve handles within caller's workspace visibility boundary and enforce access gate.
++
++    - Handles outside workspace boundary or nonexistent are ignored (zero enumeration signal).
++    - In-boundary principals lacking VIEW on the issue trigger 409 MENTION_ACCESS_WARNING
++      unless acknowledged in acknowledge_mentions.
++    - Mentions never modify resource_acl_entries.
++
++    Returns:
++        (authorized_mentions, unnotified_mentions, newly_acknowledged_principal_ids)
++
++    """
++    if not handles:
++        return [], [], []
++
++    # Query all active user principals in caller's workspace
++    stmt = (
++        select(Principal, User, ObjectRecord.canonical_key)
++        .join(User, Principal.id == User.id)
++        .outerjoin(ObjectRecord, ObjectRecord.id == Principal.id)
++        .where(
++            Principal.workspace_id == caller.workspace_id,
++            Principal.status == "ACTIVE",
++        )
++    )
++    rows = (await session.execute(stmt)).all()
++    candidates_by_handle = _build_candidate_map(rows)  # type: ignore[arg-type]
++
++    ack_set: set[uuid.UUID] = set(acknowledge_mentions)
++    unauthorized_list: list[dict[str, str]] = []
++    authorized_mentions: list[ResolvedMention] = []
++    unnotified_mentions: list[ResolvedMention] = []
++    newly_acknowledged_pids: list[uuid.UUID] = []
++
++    seen_resolved_pids: set[uuid.UUID] = set()
++
++    for raw_handle in handles:
++        lookup_key = raw_handle.lstrip("@").lower()
++        match = candidates_by_handle.get(lookup_key)
++        if match is None:
++            # Handle not found in caller's workspace boundary: leave as plain text
++            continue
++
++        p_id, canonical_handle = match
++        if p_id in seen_resolved_pids:
++            continue
++        seen_resolved_pids.add(p_id)
++
++        # Check VIEW capability on target issue
++        user_ctx = PrincipalContext(
++            principal_id=p_id,
++            workspace_id=caller.workspace_id,
++            token_scopes=("session",),
++            aal_level=1,
++        )
++        caps = await evaluate_capabilities(session, user_ctx, issue_id)
++        has_view = Capability.VIEW in caps
++
++        if has_view:
++            authorized_mentions.append(
++                ResolvedMention(handle=canonical_handle, principal_id=p_id, has_access=True)
++            )
++        elif p_id in ack_set:
++            unnotified_mentions.append(
++                ResolvedMention(handle=canonical_handle, principal_id=p_id, has_access=False)
++            )
++            newly_acknowledged_pids.append(p_id)
++        else:
++            unauthorized_list.append({"handle": canonical_handle, "principal_id": str(p_id)})
++
++    if unauthorized_list:
++        raise ProblemException(
++            type_uri="https://kanban/problems/mention-access-warning",
++            code="MENTION_ACCESS_WARNING",
++            status=409,
++            title="Mentioned users cannot see this issue",
++            detail="Resubmit with acknowledge_mentions to post without granting access.",
++            unauthorized_mentions=unauthorized_list,
++        )
++
++    return authorized_mentions, unnotified_mentions, newly_acknowledged_pids
+diff --git a/kanban/tests/api/test_comments.py b/kanban/tests/api/test_comments.py
+new file mode 100644
+index 0000000..cd8ad27
+--- /dev/null
++++ b/kanban/tests/api/test_comments.py
+@@ -0,0 +1,797 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit and integration tests for comments API (KB-P3-05 / S7.2 8k)."""
++
++from __future__ import annotations
++
++import base64
++import hashlib
++import uuid
++from typing import TYPE_CHECKING, Any
++from unittest.mock import patch
++
++import pytest
++from sqlalchemy import text
++
++from kanban.api.problems import ProblemException
++from kanban.api.v1.schemas.comments import CommentPatch
++from kanban.content import ContentNormalizeError
++from kanban.security.permissions import Capability
++from kanban.services.comments import (
++    _batch_reactions,
++    _decode_cursor,
++    _normalize_comment_body,
++    _resolve_authors,
++)
++from kanban.services.comments import (
++    add_reaction as svc_add_rx,
++)
++from kanban.services.comments import (
++    delete_comment as svc_del_com,
++)
++from kanban.services.comments import (
++    delete_reaction as svc_del_rx,
++)
++from kanban.services.comments import (
++    update_comment as svc_upd_com,
++)
++from kanban.tests.security.helpers import (
++    add_acl_entry,
++    create_user,
++    create_workspace,
++    rebuild_era,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++    from kanban.tests.contract import ContractRecorder
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _count(env: ApiEnv, sql: str, **params: Any) -> int:  # noqa: ANN401
++    """Return a scalar count from the committed seed session."""
++    await env.seed.rollback()
++    return int((await env.seed.execute(text(sql), params)).scalar_one())
++
++
++async def test_case_1_positive_comments_replies_permalinks_and_activity(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test Case 1: Post top comment and reply; verify nesting, permalinks and activity."""
++    admin = await make_user("alice", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("COMM", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # 1. Create target issue
++    issue_resp = await client.post(
++        "/api/v1/projects/COMM/issues",
++        json={"summary": "Threading and Comments Issue", "priority": "none"},
++    )
++    assert issue_resp.status_code == 201, issue_resp.text
++    issue_data = issue_resp.json()
++    issue_key = issue_data["key"]
++    issue_id = issue_data["id"]
++
++    # 2. Post top-level comment
++    top_md = "This is a **top-level** comment with markdown and @alice mention."
++    expected_top_sha = hashlib.sha256(top_md.encode("utf-8")).hexdigest()
++    resp_top = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": top_md, "parent_comment_id": None},
++    )
++    contract_recorder.record("create_comment_201", resp_top.request, resp_top)
++    assert resp_top.status_code == 201, resp_top.text
++    top_comment = resp_top.json()
++    assert top_comment["body_markdown"] == top_md
++    assert top_comment["parent_comment_id"] is None
++    assert top_comment["author_id"] == str(admin.id)
++    assert resp_top.headers["ETag"] == f'"{expected_top_sha}"'
++    assert resp_top.headers["Location"].startswith(f"/projects/COMM/issues/{issue_key}#comment-")
++    assert top_comment["permalink"].startswith(f"/projects/COMM/issues/{issue_key}#comment-")
++    assert top_comment["deleted"] is False
++
++    top_cid = top_comment["id"]
++
++    # 3. Post reply to the top-level comment
++    reply_md = "This is a depth-1 reply to the top comment."
++    expected_reply_sha = hashlib.sha256(reply_md.encode("utf-8")).hexdigest()
++    resp_reply = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": reply_md, "parent_comment_id": top_cid},
++    )
++    contract_recorder.record("create_reply_201", resp_reply.request, resp_reply)
++    assert resp_reply.status_code == 201, resp_reply.text
++    reply_comment = resp_reply.json()
++    assert reply_comment["body_markdown"] == reply_md
++    assert reply_comment["parent_comment_id"] == top_cid
++    assert resp_reply.headers["ETag"] == f'"{expected_reply_sha}"'
++
++    # 4. List comments and verify nesting
++    resp_list = await client.get(f"/api/v1/issues/{issue_key}/comments")
++    assert resp_list.status_code == 200, resp_list.text
++    list_body = resp_list.json()
++    assert len(list_body["items"]) == 1
++    listed_top = list_body["items"][0]
++    assert listed_top["id"] == top_cid
++    assert len(listed_top["replies"]) == 1
++    listed_reply = listed_top["replies"][0]
++    assert listed_reply["id"] == reply_comment["id"]
++    assert listed_reply["parent_comment_id"] == top_cid
++
++    # 5. Verify COMMENT_CREATED activity rows written
++    sql_act = (
++        "SELECT count(*) FROM activity_records "
++        "WHERE object_id = :oid AND event_type = 'COMMENT_CREATED'"
++    )
++    activity_count = await _count(api_env, sql_act, oid=issue_id)
++    assert activity_count == 2
++
++
++async def test_case_2_mention_access_warning_and_acknowledgement(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test Case 2: Mention without VIEW gives 409; ack gives 201; 0 ACL widening."""
++    admin = await make_user("admin2", workspace_role="WORKSPACE_ADMIN")
++    maya = await make_user("maya")
++
++    # Project restricted to admin only (maya has no role and no ACL entry)
++    _ = await make_project("PRIV", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    issue_resp = await client.post(
++        "/api/v1/projects/PRIV/issues",
++        json={"summary": "Top Secret Issue", "priority": "none"},
++    )
++    assert issue_resp.status_code == 201, issue_resp.text
++    issue_key = issue_resp.json()["key"]
++
++    # 1. Mention Maya (in workspace, but lacks VIEW) -> 409 MENTION_ACCESS_WARNING
++    warning_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "Hey @maya please review this confidential spec."},
++    )
++    contract_recorder.record("mention_access_warning_409", warning_resp.request, warning_resp)
++    assert warning_resp.status_code == 409, warning_resp.text
++    problem = warning_resp.json()
++    assert problem["code"] == "MENTION_ACCESS_WARNING"
++    assert problem["type"] == "https://kanban/problems/mention-access-warning"
++    assert "unauthorized_mentions" in problem
++    assert any(
++        u["handle"] == "maya" and u["principal_id"] == str(maya.id)
++        for u in problem["unauthorized_mentions"]
++    )
++
++    # Count ACL entries before resubmitting
++    acl_count_before = await _count(api_env, "SELECT count(*) FROM resource_acl_entries")
++
++    # 2. Resubmit with acknowledge_mentions containing Maya's principal_id -> 201 Created
++    ack_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={
++            "body_markdown": "Hey @maya please review this confidential spec.",
++            "acknowledge_mentions": [str(maya.id)],
++        },
++    )
++    contract_recorder.record("acknowledged_mention_201", ack_resp.request, ack_resp)
++    assert ack_resp.status_code == 201, ack_resp.text
++    ack_body = ack_resp.json()
++    assert any(
++        u["handle"] == "maya" and u["principal_id"] == str(maya.id)
++        for u in ack_body["unnotified_mentions"]
++    )
++
++    # 3. Assert resource_acl_entries count remains strictly unchanged (zero silent widening!)
++    acl_count_after = await _count(api_env, "SELECT count(*) FROM resource_acl_entries")
++    assert acl_count_before == acl_count_after
++
++
++async def test_case_3_mention_enumeration_defense(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 3: External and nonexistent handles return 201 with zero enumeration."""
++    ws2_id = await create_workspace(api_env.seed, name="External WS")
++    _ = await create_user(
++        api_env.seed, ws2_id, handle="@external_user", display_name="External User"
++    )
++    await api_env.seed.commit()
++
++    admin = await make_user("admin3", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("ENUM", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    issue_resp = await client.post(
++        "/api/v1/projects/ENUM/issues",
++        json={"summary": "Enumeration Defense Test", "priority": "none"},
++    )
++    issue_key = issue_resp.json()["key"]
++
++    # Mention external handle and ghost handle
++    resp = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "Hello @external_user and @ghost_phantom_handle, welcome."},
++    )
++    assert resp.status_code == 201, resp.text
++    body = resp.json()
++    # Zero mentions resolved and zero unnotified mentions
++    assert len(body["mentions"]) == 0
++    assert len(body["unnotified_mentions"]) == 0
++
++
++async def test_case_4_mention_parser_and_capacity_rules(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 4: Parser exclusions (code fence, inline code, URL, email) and 51 handles 422."""
++    admin = await make_user("admin4", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("PARSE", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    issue_resp = await client.post(
++        "/api/v1/projects/PARSE/issues",
++        json={"summary": "Parser Test", "priority": "none"},
++    )
++    issue_key = issue_resp.json()["key"]
++
++    # 1. Mention inside code fence, inline code, URL, and email -> should NOT be extracted
++    md_tricky = """
++    ```
++    @admin4 in code fence
++    ```
++    `@admin4` in inline code
++    Check out https://x/@admin4
++    And email is test@admin4.com
++    """
++    resp = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": md_tricky},
++    )
++    assert resp.status_code == 201, resp.text
++    assert len(resp.json()["mentions"]) == 0
++
++    # 2. 51 distinct handles -> 422 TOO_MANY_MENTIONS
++    fifty_one_handles = " ".join(f"@user{i}" for i in range(51))
++    resp_51 = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": fifty_one_handles},
++    )
++    assert resp_51.status_code == 422
++    assert resp_51.json()["code"] == "TOO_MANY_MENTIONS"
++
++
++async def test_case_5_sanitization_boundary_and_threading_depth(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 5: Script stripped; 262144 vs 262145 bytes; depth > 1 rejected with 422."""
++    admin = await make_user("admin5", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("BOUND", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    issue_resp = await client.post(
++        "/api/v1/projects/BOUND/issues",
++        json={"summary": "Boundary Test", "priority": "none"},
++    )
++    issue_key = issue_resp.json()["key"]
++
++    # 1. Hostile <script> tag is stripped by normalizer
++    xss_body = "Hello <script>alert(1)</script>world"
++    resp_xss = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": xss_body},
++    )
++    assert resp_xss.status_code == 201
++    assert "<script>" not in resp_xss.json()["body_markdown"]
++
++    # 2. 262144 bytes succeeds
++    max_body = "A" * 262144
++    resp_max = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": max_body},
++    )
++    assert resp_max.status_code == 201
++
++    # 3. 262145 bytes returns 422 COMMENT_LENGTH
++    oversized = "A" * 262145
++    resp_over = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": oversized},
++    )
++    assert resp_over.status_code == 422
++    assert resp_over.json()["code"] == "COMMENT_LENGTH"
++
++    # 4. Reply to a reply returns 422 INVALID_PARENT_COMMENT (max depth 1)
++    resp_top = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "Top level comment"},
++    )
++    top_id = resp_top.json()["id"]
++
++    resp_r1 = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "Depth 1 reply", "parent_comment_id": top_id},
++    )
++    r1_id = resp_r1.json()["id"]
++
++    resp_r2 = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "Depth 2 reply (invalid)", "parent_comment_id": r1_id},
++    )
++    assert resp_r2.status_code == 422
++    assert resp_r2.json()["code"] == "INVALID_PARENT_COMMENT"
++
++
++async def test_case_6_concurrency_auth_and_soft_delete(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test Case 6: Edit by non-author 403; stale ETag 412; missing If-Match 428."""
++    alice = await make_user("alice6", workspace_role="WORKSPACE_MEMBER")
++    bob = await make_user("bob6", workspace_role="WORKSPACE_MEMBER")
++    stranger = await make_user("stranger6", workspace_role="WORKSPACE_GUEST")
++
++    _ = await make_project(
++        "CONC",
++        created_by=alice,
++        roles={alice: "PROJECT_ADMIN", bob: "MEMBER"},
++    )
++
++    client = as_principal(alice)
++    issue_resp = await client.post(
++        "/api/v1/projects/CONC/issues",
++        json={"summary": "Concurrency Test Issue", "priority": "none"},
++    )
++    assert issue_resp.status_code == 201, issue_resp.text
++    issue_key = issue_resp.json()["key"]
++
++    # Alice posts comment
++    post_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "Alice original comment"},
++    )
++    assert post_resp.status_code == 201, post_resp.text
++    cid = post_resp.json()["id"]
++    correct_etag = post_resp.headers["ETag"]
++
++    # 1. Edit by Bob (non-author) -> 403 NOT_COMMENT_AUTHOR
++    client_bob = as_principal(bob)
++    resp_bob_edit = await client_bob.patch(
++        f"/api/v1/comments/{cid}",
++        headers={"If-Match": correct_etag},
++        json={"body_markdown": "Bob hijack attempt"},
++    )
++    assert resp_bob_edit.status_code == 403
++    assert resp_bob_edit.json()["code"] == "NOT_COMMENT_AUTHOR"
++
++    # 2. Missing If-Match -> 428 PRECONDITION_REQUIRED
++    client_alice = as_principal(alice)
++    resp_missing = await client_alice.patch(
++        f"/api/v1/comments/{cid}",
++        json={"body_markdown": "Alice update attempt without header"},
++    )
++    assert resp_missing.status_code == 428
++    assert resp_missing.json()["code"] == "PRECONDITION_REQUIRED"
++
++    # 3. Stale ETag -> 412 PRECONDITION_FAILED
++    resp_stale = await client_alice.patch(
++        f"/api/v1/comments/{cid}",
++        headers={"If-Match": '"deadbeef12345678"'},
++        json={"body_markdown": "Alice stale update attempt"},
++    )
++    contract_recorder.record("edit_comment_412", resp_stale.request, resp_stale)
++    assert resp_stale.status_code == 412
++    assert resp_stale.json()["code"] == "PRECONDITION_FAILED"
++
++    # 4. Valid edit by Alice
++    resp_ok = await client_alice.patch(
++        f"/api/v1/comments/{cid}",
++        headers={"If-Match": correct_etag},
++        json={"body_markdown": "Alice edited comment content"},
++    )
++    assert resp_ok.status_code == 200
++    assert resp_ok.json()["body_markdown"] == "Alice edited comment content"
++    new_etag = resp_ok.headers["ETag"]
++    assert new_etag != correct_etag
++
++    # 5. Non-viewer stranger GET comments -> 404 NOT_FOUND
++    client_stranger = as_principal(stranger)
++    resp_unreadable = await client_stranger.get(f"/api/v1/issues/{issue_key}/comments")
++    contract_recorder.record("get_unreadable_comment_404", resp_unreadable.request, resp_unreadable)
++    assert resp_unreadable.status_code == 404
++
++    # 6. Soft delete by Alice
++    client_alice = as_principal(alice)
++    resp_del = await client_alice.delete(f"/api/v1/comments/{cid}")
++    assert resp_del.status_code == 204
++
++    # List returns {"id", "deleted": true} with no body
++    resp_list = await client_alice.get(f"/api/v1/issues/{issue_key}/comments")
++    assert resp_list.status_code == 200
++    del_comment = resp_list.json()["items"][0]
++    assert del_comment["id"] == cid
++    assert del_comment["deleted"] is True
++    assert del_comment["body_markdown"] is None
++
++    # Patch on deleted comment returns 409 COMMENT_DELETED
++    resp_edit_del = await client_alice.patch(
++        f"/api/v1/comments/{cid}",
++        headers={"If-Match": new_etag},
++        json={"body_markdown": "Trying to edit deleted comment"},
++    )
++    assert resp_edit_del.status_code == 409
++    assert resp_edit_del.json()["code"] == "COMMENT_DELETED"
++
++
++async def test_case_7_reactions_allowlist_idempotency_and_security(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test Case 7: PUT rocket twice gives count 1; invalid emoji 422; unreadable gives 404."""
++    user1 = await make_user("user1", workspace_role="WORKSPACE_MEMBER")
++    user2 = await make_user("user2", workspace_role="WORKSPACE_MEMBER")
++    stranger = await make_user("stranger7", workspace_role="WORKSPACE_GUEST")
++
++    _ = await make_project(
++        "REACT",
++        created_by=user1,
++        roles={user1: "PROJECT_ADMIN", user2: "MEMBER"},
++    )
++    client1 = as_principal(user1)
++
++    issue_resp = await client1.post(
++        "/api/v1/projects/REACT/issues",
++        json={"summary": "Reactions Test Issue", "priority": "none"},
++    )
++    assert issue_resp.status_code == 201, issue_resp.text
++    issue_key = issue_resp.json()["key"]
++
++    post_resp = await client1.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "React to this comment!"},
++    )
++    assert post_resp.status_code == 201, post_resp.text
++    cid = post_resp.json()["id"]
++
++    # 1. PUT 🚀 reaction
++    resp_r1 = await client1.put(f"/api/v1/comments/{cid}/reactions/%F0%9F%9A%80")
++    contract_recorder.record("put_reaction_200", resp_r1.request, resp_r1)
++    assert resp_r1.status_code == 200, resp_r1.text
++    body_r1 = resp_r1.json()
++    assert body_r1["emoji"] == "🚀"
++    assert body_r1["count"] == 1
++    assert body_r1["reacted_by_me"] is True
++
++    # 2. PUT 🚀 again (idempotent) yields count: 1
++    resp_r2 = await client1.put(f"/api/v1/comments/{cid}/reactions/%F0%9F%9A%80")
++    assert resp_r2.status_code == 200
++    assert resp_r2.json()["count"] == 1
++
++    # 3. User 2 also reacts 🚀 -> count: 2
++    client2 = as_principal(user2)
++    resp_u2 = await client2.put(f"/api/v1/comments/{cid}/reactions/%F0%9F%9A%80")
++    assert resp_u2.status_code == 200
++    assert resp_u2.json()["count"] == 2
++
++    # 4. User 1 removes reaction
++    client1 = as_principal(user1)
++    del_resp = await client1.delete(f"/api/v1/comments/{cid}/reactions/%F0%9F%9A%80")
++    assert del_resp.status_code == 204
++
++    # User 1 lists comments -> reactions show count: 1, reacted_by_me: False
++    list_resp = await client1.get(f"/api/v1/issues/{issue_key}/comments")
++    reactions = list_resp.json()["items"][0]["reactions"]
++    assert len(reactions) == 1
++    assert reactions[0]["emoji"] == "🚀"
++    assert reactions[0]["count"] == 1
++    assert reactions[0]["reacted_by_me"] is False
++
++    # 5. PUT 💩 (disallowed emoji) returns 422 EMOJI_NOT_ALLOWED
++    resp_bad = await client1.put(f"/api/v1/comments/{cid}/reactions/%F0%9F%92%A9")
++    assert resp_bad.status_code == 422
++    assert resp_bad.json()["code"] == "EMOJI_NOT_ALLOWED"
++
++    # 6. Reacting on unreadable issue returns 404
++    client_stranger = as_principal(stranger)
++    resp_unreadable = await client_stranger.put(f"/api/v1/comments/{cid}/reactions/%F0%9F%9A%80")
++    assert resp_unreadable.status_code == 404
++
++
++async def test_comments_pagination_and_cursors(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test pagination cursors, limit clamping, and malformed cursor handling."""
++    admin = await make_user("admin_pg", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("CPG", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    issue_resp = await client.post(
++        "/api/v1/projects/CPG/issues",
++        json={"summary": "Pagination Test Issue", "priority": "none"},
++    )
++    issue_key = issue_resp.json()["key"]
++
++    # Post 3 comments
++    _ = (
++        await client.post(
++            f"/api/v1/issues/{issue_key}/comments", json={"body_markdown": "Comment 1"}
++        )
++    ).json()["id"]
++    _ = (
++        await client.post(
++            f"/api/v1/issues/{issue_key}/comments", json={"body_markdown": "Comment 2"}
++        )
++    ).json()["id"]
++    c3 = (
++        await client.post(
++            f"/api/v1/issues/{issue_key}/comments", json={"body_markdown": "Comment 3"}
++        )
++    ).json()["id"]
++
++    # Fetch with limit=2 -> next_cursor must be present
++    p1_resp = await client.get(f"/api/v1/issues/{issue_key}/comments?limit=2")
++    assert p1_resp.status_code == 200
++    p1 = p1_resp.json()
++    assert len(p1["items"]) == 2
++    assert p1["next_cursor"] is not None
++
++    # Fetch page 2 using next_cursor
++    p2_resp = await client.get(
++        f"/api/v1/issues/{issue_key}/comments?limit=2&cursor={p1['next_cursor']}"
++    )
++    assert p2_resp.status_code == 200
++    p2 = p2_resp.json()
++    assert len(p2["items"]) == 1
++    assert p2["items"][0]["id"] == c3
++    assert p2["next_cursor"] is None
++
++    # Invalid cursor returns 422 INVALID_CURSOR
++    bad_cursor_resp = await client.get(
++        f"/api/v1/issues/{issue_key}/comments?cursor=bad-cursor-string"
++    )
++    assert bad_cursor_resp.status_code == 422
++    assert bad_cursor_resp.json()["code"] == "INVALID_CURSOR"
++
++
++async def test_comments_permissions_and_edge_cases(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test red heart normalize, missing objects, view-only roles, and ack mentions on edit."""
++    admin = await make_user("admin_cov", workspace_role="WORKSPACE_ADMIN")
++    viewer = await make_user("viewer_cov")
++    _ = await make_project(
++        "COV",
++        created_by=admin,
++        roles={admin: "PROJECT_ADMIN", viewer: "VIEWER"},
++    )
++    client_admin = as_principal(admin)
++
++    # 1. Create issue
++    issue_resp = await client_admin.post(
++        "/api/v1/projects/COV/issues",
++        json={"summary": "Coverage Issue", "priority": "none"},
++    )
++    issue_data = issue_resp.json()
++    issue_key = issue_data["key"]
++    issue_id_cov = uuid.UUID(issue_data["id"])
++
++    # Deny COMMENT capability explicitly for viewer
++    await add_acl_entry(
++        api_env.seed,
++        api_env.workspace_id,
++        issue_id_cov,
++        viewer.id,
++        effect="DENY",
++        capability_mask=Capability.COMMENT,
++    )
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++    await api_env.seed.commit()
++
++    # Post comment
++    c1 = (
++        await client_admin.post(
++            f"/api/v1/issues/{issue_key}/comments", json={"body_markdown": "Comment 1"}
++        )
++    ).json()["id"]
++
++    # Red heart without variation selector normalize
++    heart_resp = await client_admin.put(f"/api/v1/comments/{c1}/reactions/%E2%9D%A4")
++    assert heart_resp.status_code == 200
++    assert heart_resp.json()["emoji"] == "❤️"
++
++    # View-only caller attempts write operations -> 403 INSUFFICIENT_CAPABILITY
++    client_viewer = as_principal(viewer)
++    post_as_viewer = await client_viewer.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "Viewer comment attempt"},
++    )
++    assert post_as_viewer.status_code == 403
++
++    react_as_viewer = await client_viewer.put(f"/api/v1/comments/{c1}/reactions/%F0%9F%9A%80")
++    assert react_as_viewer.status_code == 403
++
++    del_react_as_viewer = await client_viewer.delete(
++        f"/api/v1/comments/{c1}/reactions/%F0%9F%9A%80"
++    )
++    assert del_react_as_viewer.status_code == 403
++
++    # Delete comment as viewer (not author, not admin) returns 403
++    del_as_viewer = await client_viewer.delete(f"/api/v1/comments/{c1}")
++    assert del_as_viewer.status_code == 403
++
++    # Non-existent comment IDs return 404
++    client_admin = as_principal(admin)
++    random_cid = uuid.uuid4()
++    assert (
++        await client_admin.patch(
++            f"/api/v1/comments/{random_cid}",
++            headers={"If-Match": '"x"'},
++            json={"body_markdown": "test"},
++        )
++    ).status_code == 404
++    assert (await client_admin.delete(f"/api/v1/comments/{random_cid}")).status_code == 404
++    assert (
++        await client_admin.put(f"/api/v1/comments/{random_cid}/reactions/%F0%9F%9A%80")
++    ).status_code == 404
++    assert (
++        await client_admin.delete(f"/api/v1/comments/{random_cid}/reactions/%F0%9F%9A%80")
++    ).status_code == 404
++
++    # Edit comment adding newly acknowledged mention
++    maya = await make_user("maya_cov")
++    c1_etag = (await client_admin.get(f"/api/v1/issues/{issue_key}/comments")).json()["items"][0][
++        "body_sha256"
++    ]
++    edit_ack_resp = await client_admin.patch(
++        f"/api/v1/comments/{c1}",
++        headers={"If-Match": f'"{c1_etag}"'},
++        json={
++            "body_markdown": "Updated comment with @maya_cov mention",
++            "acknowledge_mentions": [str(maya.id)],
++        },
++    )
++    assert edit_ack_resp.status_code == 200
++    assert any(m["handle"] == "maya_cov" for m in edit_ack_resp.json()["unnotified_mentions"])
++
++
++async def test_comments_service_internal_branches(
++    api_env: ApiEnv,
++) -> None:
++    """Cover internal fallbacks, normalization errors, empty batch queries, and cursor branches."""
++    # 1. Empty sets on batch functions
++    assert await _resolve_authors(api_env.seed, set()) == {}
++    assert await _batch_reactions(api_env.seed, set(), uuid.uuid4()) == {}
++
++    # 2. _decode_cursor with malformed separator
++    no_pipe = base64.urlsafe_b64encode(b"noparts").decode("ascii")
++    with pytest.raises(ProblemException) as exc1:
++        _decode_cursor(no_pipe)
++    assert exc1.value.code == "INVALID_CURSOR"
++
++    # 3. _normalize_comment_body exception mapping
++    with patch(
++        "kanban.services.comments.normalize_to_markdown",
++        side_effect=ContentNormalizeError("CONTENT_TOO_LARGE", "Too large"),
++    ):
++        with pytest.raises(ProblemException) as exc2:
++            _normalize_comment_body("test")
++        assert exc2.value.code == "COMMENT_LENGTH"
++
++    with patch(
++        "kanban.services.comments.normalize_to_markdown",
++        side_effect=ContentNormalizeError("OTHER_ERR", "Invalid"),
++    ):
++        with pytest.raises(ProblemException) as exc3:
++            _normalize_comment_body("test")
++        assert exc3.value.code == "INVALID_CONTENT"
++
++    with patch(
++        "kanban.services.comments.normalize_to_markdown",
++        side_effect=UnicodeEncodeError("utf-8", "test", 0, 1, "reason"),
++    ):
++        with pytest.raises(ProblemException) as exc4:
++            _normalize_comment_body("test")
++        assert exc4.value.code == "INVALID_CONTENT"
++
++
++async def test_comments_service_reply_pagination_and_anti_enumeration(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Cover replies pagination > 200 and caller anti-enumeration 404s."""
++    user = await make_user("replier")
++    _ = await make_project("REP", created_by=user, roles={user: "PROJECT_ADMIN"})
++    client = as_principal(user)
++    issue_resp = await client.post(
++        "/api/v1/projects/REP/issues", json={"summary": "200 replies issue"}
++    )
++    issue_key = issue_resp.json()["key"]
++    issue_id = uuid.UUID(issue_resp.json()["id"])
++    parent_id = uuid.UUID(
++        (
++            await client.post(
++                f"/api/v1/issues/{issue_key}/comments", json={"body_markdown": "Parent"}
++            )
++        ).json()["id"]
++    )
++
++    insert_sql = (
++        "INSERT INTO issue_comments "
++        "(id, workspace_id, issue_id, parent_comment_id, author_id, body_markdown) "
++        "SELECT uuidv7(), :ws, :iid, :pid, :aid, 'reply ' || g "
++        "FROM generate_series(1, 205) g"
++    )
++    await api_env.seed.execute(
++        text(insert_sql),
++        {"ws": api_env.workspace_id, "iid": issue_id, "pid": parent_id, "aid": user.id},
++    )
++    await api_env.seed.commit()
++
++    list_with_200 = await client.get(f"/api/v1/issues/{issue_key}/comments")
++    assert list_with_200.status_code == 200
++    top = list_with_200.json()["items"][0]
++    assert len(top["replies"]) == 200
++    assert top["replies_next_cursor"] is not None
++
++    # Service anti-enumeration 404 when issue is unreadable to caller
++    stranger = await make_user("stranger_cov", workspace_role="WORKSPACE_GUEST")
++    as_principal(stranger)  # sets resolver.principal
++    stranger_ctx = api_env.resolver.principal
++    assert stranger_ctx is not None
++
++    # Query valid comment
++    c_row = (
++        await api_env.seed.execute(
++            text("SELECT id FROM issue_comments WHERE issue_id = :iid LIMIT 1"), {"iid": issue_id}
++        )
++    ).scalar_one()
++
++    # Stranger has no VIEW on REP project
++    with pytest.raises(ProblemException) as exc_upd:
++        await svc_upd_com(
++            api_env.seed,
++            stranger_ctx,
++            c_row,
++            CommentPatch(body_markdown="x"),
++            if_match='"x"',
++        )
++    assert exc_upd.value.status == 404
++
++    with pytest.raises(ProblemException) as exc_del:
++        await svc_del_com(api_env.seed, stranger_ctx, c_row)
++    assert exc_del.value.status == 404
++
++    with pytest.raises(ProblemException) as exc_rx_add:
++        await svc_add_rx(api_env.seed, stranger_ctx, c_row, "🚀")
++    assert exc_rx_add.value.status == 404
++
++    with pytest.raises(ProblemException) as exc_rx_del:
++        await svc_del_rx(api_env.seed, stranger_ctx, c_row, "🚀")
++    assert exc_rx_del.value.status == 404
+diff --git a/kanban/tests/services/test_mentions.py b/kanban/tests/services/test_mentions.py
+new file mode 100644
+index 0000000..1f206fe
+--- /dev/null
++++ b/kanban/tests/services/test_mentions.py
+@@ -0,0 +1,177 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for mention extraction and mention access resolution (S7.2 8k, S3.4)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++import pytest
++
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.security.permissions import Capability
++from kanban.services.mentions import extract_mentions, resolve_mentions
++from kanban.tests.security.helpers import (
++    add_acl_entry,
++    create_project,
++    create_registered_object,
++    create_user,
++    create_workspace,
++    rebuild_era,
++)
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++def test_extract_mentions_parser_and_boundary_rules() -> None:
++    """Test Case 4 parser rules: code fences, inline code, URLs, emails, and 51 handles."""
++    # 1. Negative extractions inside fenced code, inline code, URLs, and emails
++    md = """
++    # Updates
++
++    Here is a mention @alice and another @bob.
++
++    ```python
++    # Code fence should not extract @fence_user
++    x = "@fence_user"
++    ```
++
++    ~~~
++    @tilde_fence_user
++    ~~~
++
++    Here is inline code `@inline_user` and double backtick ``@double_inline``.
++
++    Check out https://github.com/@url_user/repo and [link text](https://example.com/@link_dest_user).
++    Also an autolink <https://test.com/@autolink_user>.
++    And my email is contact@domain_user.com or test.user@company.org.
++
++    And here is a link with a mention in its label: [@link_label_user](https://example.com).
++    """
++
++    handles = extract_mentions(md)
++    assert "alice" in handles
++    assert "bob" in handles
++    assert "link_label_user" in handles
++
++    # Verify excluded handles
++    assert "fence_user" not in handles
++    assert "tilde_fence_user" not in handles
++    assert "inline_user" not in handles
++    assert "double_inline" not in handles
++    assert "url_user" not in handles
++    assert "link_dest_user" not in handles
++    assert "autolink_user" not in handles
++    assert "domain_user" not in handles
++    assert "company" not in handles
++
++    # 2. Deduplication preserving distinct count
++    dup_md = "@charlie @charlie @charlie"
++    assert extract_mentions(dup_md) == ["charlie"]
++
++    # 3. 50 distinct handles succeeds
++    fifty_handles = " ".join(f"@user{i}" for i in range(50))
++    extracted_50 = extract_mentions(fifty_handles)
++    assert len(extracted_50) == 50
++
++    # 4. 51 distinct handles raises 422 TOO_MANY_MENTIONS
++    fifty_one_handles = " ".join(f"@user{i}" for i in range(51))
++    with pytest.raises(ProblemException) as exc_info:
++        extract_mentions(fifty_one_handles)
++    assert exc_info.value.code == "TOO_MANY_MENTIONS"
++    assert exc_info.value.status == 422
++
++    # 5. Empty handles stripped by punctuation
++    assert extract_mentions("Empty @. and @- handle") == []
++
++
++@pytest.mark.asyncio
++async def test_resolve_mentions_access_boundaries_and_enumeration(db_session: AsyncSession) -> None:
++    """Test resolution: access warning 409, acknowledgement bypass, and zero enumeration."""
++    ws1_id = await create_workspace(db_session, name="Workspace 1")
++    ws2_id = await create_workspace(db_session, name="Workspace 2")
++
++    # Users in Workspace 1
++    adam_id = await create_user(db_session, ws1_id, handle="@adam", display_name="Adam Outler")
++    maya_id = await create_user(db_session, ws1_id, handle="@maya", display_name="Maya Lin")
++
++    # User in Workspace 2 (outside boundary)
++    _ = await create_user(db_session, ws2_id, handle="@other", display_name="Other User")
++
++    # Project and Issue in Workspace 1
++    proj_id = await create_project(
++        db_session, ws1_id, identifier="KAN", name="Kanban Core", created_by_id=adam_id
++    )
++    issue_id = await create_registered_object(
++        db_session,
++        ws1_id,
++        kind="issue",
++        key="KAN-1",
++        title="Issue 1",
++        project_id=proj_id,
++        created_by_id=adam_id,
++    )
++
++    # Grant VIEW capability to Adam on the issue
++    await add_acl_entry(
++        db_session, ws1_id, issue_id, adam_id, effect="ALLOW", capability_mask=Capability.VIEW
++    )
++    await rebuild_era(db_session, ws1_id)
++
++    caller_ctx = PrincipalContext(
++        principal_id=adam_id,
++        workspace_id=ws1_id,
++        token_scopes=("session",),
++        aal_level=1,
++    )
++
++    # 1. Mention Adam (has access) -> authorized (deduplicating duplicate handles)
++    auth, unnotified, newly_acked = await resolve_mentions(
++        db_session, caller_ctx, issue_id, ["adam", "adamoutler"]
++    )
++    assert len(auth) == 1
++    assert auth[0].handle == "adam"
++    assert auth[0].principal_id == adam_id
++    assert auth[0].has_access is True
++    assert len(unnotified) == 0
++    assert len(newly_acked) == 0
++
++    # 2. Mention Maya (in workspace, but lacks VIEW) -> raises 409 MENTION_ACCESS_WARNING
++    with pytest.raises(ProblemException) as exc_info:
++        await resolve_mentions(db_session, caller_ctx, issue_id, ["maya"])
++    exc = exc_info.value
++    assert exc.code == "MENTION_ACCESS_WARNING"
++    assert exc.status == 409
++    assert exc.unauthorized_mentions is not None
++    assert (
++        len(
++            exc.unnotified_mentions
++            if hasattr(exc, "unnotified_mentions")
++            else exc.unauthorized_mentions
++        )
++        == 1
++    )
++    unauth = exc.unauthorized_mentions[0]
++    assert unauth["handle"] == "maya"
++    assert unauth["principal_id"] == str(maya_id)
++
++    # 3. Mention Maya with acknowledgement -> returns in unnotified_mentions
++    auth, unnotified, newly_acked = await resolve_mentions(
++        db_session, caller_ctx, issue_id, ["maya"], acknowledge_mentions=[maya_id]
++    )
++    assert len(auth) == 0
++    assert len(unnotified) == 1
++    assert unnotified[0].handle == "maya"
++    assert unnotified[0].principal_id == maya_id
++    assert unnotified[0].has_access is False
++    assert newly_acked == [maya_id]
++
++    # 4. Anti-enumeration: external and nonexistent users yield empty (zero signal)
++    auth_ext, unnot_ext, newly_ext = await resolve_mentions(
++        db_session, caller_ctx, issue_id, ["other", "nonexistent_ghost"]
++    )
++    assert len(auth_ext) == 0
++    assert len(unnot_ext) == 0
++    assert len(newly_ext) == 0

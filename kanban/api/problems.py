@@ -57,6 +57,10 @@ class Problem(BaseModel):
         default=None,
         description="Candidate suggestions when identifier resolution is ambiguous",
     )
+    unauthorized_mentions: list[dict[str, str]] | None = Field(
+        default=None,
+        description="List of mentioned users who lack access to the resource",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -74,6 +78,8 @@ class ProblemException(Exception):  # noqa: N818
         field: str | None = None,
         *,
         candidates: list[dict[str, str]] | None = None,
+        unauthorized_mentions: list[dict[str, str]] | None = None,
+        type_uri: str | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -89,6 +95,8 @@ class ProblemException(Exception):  # noqa: N818
         self.current_etag = current_etag
         self.field = field
         self.candidates = candidates
+        self.unauthorized_mentions = unauthorized_mentions
+        self.type_uri = type_uri
 
 
 def not_found() -> NoReturn:
@@ -113,7 +121,7 @@ async def problem_exception_handler(
     del request
     req_id = get_request_id()
     problem = Problem(
-        type=f"urn:kanban:problem:{exc.code}",
+        type=exc.type_uri or f"urn:kanban:problem:{exc.code}",
         title=exc.title,
         status=exc.status,
         code=exc.code,
@@ -123,6 +131,7 @@ async def problem_exception_handler(
         current_etag=exc.current_etag,
         field=exc.field,
         candidates=exc.candidates,
+        unauthorized_mentions=exc.unauthorized_mentions,
     )
     response_headers = {"x-request-id": req_id}
     if exc.headers:

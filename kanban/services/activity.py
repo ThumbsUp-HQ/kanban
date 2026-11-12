@@ -66,6 +66,10 @@ class ActivityEventType(StrEnum):
     ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
     ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
     ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
+    COMMENT_CREATED = "COMMENT_CREATED"
+    COMMENT_EDITED = "COMMENT_EDITED"
+    COMMENT_DELETED = "COMMENT_DELETED"
+    MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -78,6 +82,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.COMMENT_CREATED: ActivityCategory.COMMENT,
+        ActivityEventType.COMMENT_EDITED: ActivityCategory.COMMENT,
+        ActivityEventType.COMMENT_DELETED: ActivityCategory.COMMENT,
+        ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
     }
 )
 

@@ -13,6 +13,7 @@ from database.models.base import (
 )
 from database.models.embeddings import ObjectEmbedding
 from database.models.issues import (
+    CommentReaction,
     Issue,
     IssueAssignee,
     IssueComment,
@@ -56,6 +57,7 @@ __all__ = [
     "ActivityRecord",
     "AuthProviderCard",
     "Base",
+    "CommentReaction",
     "Cycle",
     "Doc",
     "EffectiveResourceAccess",

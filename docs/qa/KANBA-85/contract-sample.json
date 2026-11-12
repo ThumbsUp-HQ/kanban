@@ -1,0 +1,382 @@
+{
+  "ticket": "KANBA-85",
+  "exchanges": [
+    {
+      "name": "create_comment_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/COMM-1/comments",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "110",
+          "content-type": "application/json"
+        },
+        "body": {
+          "body_markdown": "This is a **top-level** comment with markdown and @alice mention.",
+          "parent_comment_id": null
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "780",
+          "content-type": "application/json",
+          "location": "/projects/COMM/issues/COMM-1#comment-01a1ced9-f8e3-7844-bdd5-66f9bd05c71a",
+          "etag": "\"0e33e8fedbe08aee3983d6094053fa200890e322350b71a10dfa3dbb6bbdd31b\"",
+          "x-request-id": "467a51ac742d4d51b7a2f201b0fd1e58",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ced9-f8e3-7844-bdd5-66f9bd05c71a",
+          "issue_id": "01a1ced9-f85e-74b0-a0ec-33a99d5ded74",
+          "parent_comment_id": null,
+          "author_id": "01a1ced9-f7bf-7fd6-aaa5-3a4fbdb7d504",
+          "author": {
+            "id": "01a1ced9-f7bf-7fd6-aaa5-3a4fbdb7d504",
+            "handle": "@alice",
+            "display_name": "Alice"
+          },
+          "body_markdown": "This is a **top-level** comment with markdown and @alice mention.",
+          "body_sha256": "0e33e8fedbe08aee3983d6094053fa200890e322350b71a10dfa3dbb6bbdd31b",
+          "permalink": "/projects/COMM/issues/COMM-1#comment-01a1ced9-f8e3-7844-bdd5-66f9bd05c71a",
+          "created_at": "2026-11-12T08:22:33.955294Z",
+          "edited_at": null,
+          "deleted": false,
+          "reactions": [],
+          "replies": [],
+          "replies_next_cursor": null,
+          "mentions": [
+            {
+              "handle": "alice",
+              "principal_id": "01a1ced9-f7bf-7fd6-aaa5-3a4fbdb7d504",
+              "has_access": true
+            }
+          ],
+          "unnotified_mentions": []
+        }
+      }
+    },
+    {
+      "name": "create_reply_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/COMM-1/comments",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "122",
+          "content-type": "application/json"
+        },
+        "body": {
+          "body_markdown": "This is a depth-1 reply to the top comment.",
+          "parent_comment_id": "01a1ced9-f8e3-7844-bdd5-66f9bd05c71a"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "702",
+          "content-type": "application/json",
+          "location": "/projects/COMM/issues/COMM-1#comment-01a1ced9-f902-793c-bed7-b29f99699cc8",
+          "etag": "\"0da18bc1658d3f1da1584ec4e2d1fe917bea11785093f7072c85b5a0cbe90a8f\"",
+          "x-request-id": "8c29437f262345219e0345aa43b70b02",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ced9-f902-793c-bed7-b29f99699cc8",
+          "issue_id": "01a1ced9-f85e-74b0-a0ec-33a99d5ded74",
+          "parent_comment_id": "01a1ced9-f8e3-7844-bdd5-66f9bd05c71a",
+          "author_id": "01a1ced9-f7bf-7fd6-aaa5-3a4fbdb7d504",
+          "author": {
+            "id": "01a1ced9-f7bf-7fd6-aaa5-3a4fbdb7d504",
+            "handle": "@alice",
+            "display_name": "Alice"
+          },
+          "body_markdown": "This is a depth-1 reply to the top comment.",
+          "body_sha256": "0da18bc1658d3f1da1584ec4e2d1fe917bea11785093f7072c85b5a0cbe90a8f",
+          "permalink": "/projects/COMM/issues/COMM-1#comment-01a1ced9-f902-793c-bed7-b29f99699cc8",
+          "created_at": "2026-11-12T08:22:33.986614Z",
+          "edited_at": null,
+          "deleted": false,
+          "reactions": [],
+          "replies": [],
+          "replies_next_cursor": null,
+          "mentions": [],
+          "unnotified_mentions": []
+        }
+      }
+    },
+    {
+      "name": "mention_access_warning_409",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/PRIV-1/comments",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "67",
+          "content-type": "application/json"
+        },
+        "body": {
+          "body_markdown": "Hey @maya please review this confidential spec."
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "x-request-id": "55f49c32ac8d4d31b8d5222e55d73198",
+          "content-length": "375",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "https://kanban/problems/mention-access-warning",
+          "title": "Mentioned users cannot see this issue",
+          "status": 409,
+          "code": "MENTION_ACCESS_WARNING",
+          "detail": "Resubmit with acknowledge_mentions to post without granting access.",
+          "request_id": "55f49c32ac8d4d31b8d5222e55d73198",
+          "unauthorized_mentions": [
+            {
+              "handle": "maya",
+              "principal_id": "01a1ced9-f970-7164-917f-49d913e552f3"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "acknowledged_mention_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/PRIV-1/comments",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "131",
+          "content-type": "application/json"
+        },
+        "body": {
+          "body_markdown": "Hey @maya please review this confidential spec.",
+          "acknowledge_mentions": [
+            "01a1ced9-f970-7164-917f-49d913e552f3"
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "764",
+          "content-type": "application/json",
+          "location": "/projects/PRIV/issues/PRIV-1#comment-01a1ced9-fa46-74e9-a0fd-705de3c7a2cd",
+          "etag": "\"3a74527a1fbb3510676bc90e5719b2ecd6c4dbfd05f0f66dcc79874f06346ad2\"",
+          "x-request-id": "72dd86ee39c44d68a3fc28f04485ed4f",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ced9-fa46-74e9-a0fd-705de3c7a2cd",
+          "issue_id": "01a1ced9-f9be-7b92-9c84-4d2079099cbb",
+          "parent_comment_id": null,
+          "author_id": "01a1ced9-f969-7c75-943f-731c98e87214",
+          "author": {
+            "id": "01a1ced9-f969-7c75-943f-731c98e87214",
+            "handle": "@admin2",
+            "display_name": "Admin2"
+          },
+          "body_markdown": "Hey @maya please review this confidential spec.",
+          "body_sha256": "3a74527a1fbb3510676bc90e5719b2ecd6c4dbfd05f0f66dcc79874f06346ad2",
+          "permalink": "/projects/PRIV/issues/PRIV-1#comment-01a1ced9-fa46-74e9-a0fd-705de3c7a2cd",
+          "created_at": "2026-11-12T08:22:34.310608Z",
+          "edited_at": null,
+          "deleted": false,
+          "reactions": [],
+          "replies": [],
+          "replies_next_cursor": null,
+          "mentions": [],
+          "unnotified_mentions": [
+            {
+              "handle": "maya",
+              "principal_id": "01a1ced9-f970-7164-917f-49d913e552f3",
+              "has_access": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "edit_comment_412",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/comments/01a1ceda-0512-7e61-b547-19e130796fec",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "if-match": "\"deadbeef12345678\"",
+          "cookie": "<redacted>",
+          "content-length": "46",
+          "content-type": "application/json"
+        },
+        "body": {
+          "body_markdown": "Alice stale update attempt"
+        }
+      },
+      "response": {
+        "status": 412,
+        "headers": {
+          "x-request-id": "926f803946b241e5a2250ea2ce9c2f46",
+          "content-length": "307",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:PRECONDITION_FAILED",
+          "title": "Precondition Failed",
+          "status": 412,
+          "code": "PRECONDITION_FAILED",
+          "detail": "Comment was modified by another request.",
+          "request_id": "926f803946b241e5a2250ea2ce9c2f46",
+          "current_etag": "\"36690bac71e6ef2e8a4317213b817cf52668a59b58956d3233dba5bb4fb952fb\""
+        }
+      }
+    },
+    {
+      "name": "get_unreadable_comment_404",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/issues/CONC-1/comments",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "f233628d44224a558a84841f412679e8",
+          "content-length": "139",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "request_id": "f233628d44224a558a84841f412679e8"
+        }
+      }
+    },
+    {
+      "name": "put_reaction_200",
+      "request": {
+        "method": "PUT",
+        "path": "/api/v1/comments/01a1ceda-071e-7fa2-8d18-b18d48f2a438/reactions/%F0%9F%9A%80",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "47",
+          "content-type": "application/json",
+          "x-request-id": "5db0b25e4bf543feb79c2d5f3930c74b",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "emoji": "\ud83d\ude80",
+          "count": 1,
+          "reacted_by_me": true
+        }
+      }
+    }
+  ]
+}
