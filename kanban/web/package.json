@@ -15,7 +15,9 @@
     "check:api": "node scripts/gen-api.mjs && git diff --exit-code src/api/schema.gen.ts openapi.json"
   },
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "4.0.0",
     "@tanstack/react-query": "5.67.1",
+    "@tanstack/react-virtual": "3.14.26",
     "beautiful-mermaid": "1.1.3",
     "dompurify": "3.4.17",
     "hast-util-from-dom": "5.0.1",
