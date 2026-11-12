@@ -529,17 +529,19 @@ async def serialize_issue(
         .all()
     )
 
-    module_ids = list(
-        (
-            await session.execute(
-                select(IssueModule.module_id)
-                .where(IssueModule.issue_id == issue.id)
-                .order_by(IssueModule.module_id)
+    module_ids: list[uuid.UUID] | None = None
+    if project.modules_enabled:
+        module_ids = list(
+            (
+                await session.execute(
+                    select(IssueModule.module_id)
+                    .where(IssueModule.issue_id == issue.id)
+                    .order_by(IssueModule.module_id)
+                )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
 
     manifest = await build_access_manifest(session, caller, issue.id)
     caps = await evaluate_capabilities(session, caller, issue.id)

@@ -87,6 +87,12 @@ class ActivityEventType(StrEnum):
     LABEL_UPDATED = "LABEL_UPDATED"
     LABEL_DELETED = "LABEL_DELETED"
     ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
+    MODULE_CREATED = "MODULE_CREATED"
+    MODULE_UPDATED = "MODULE_UPDATED"
+    MODULE_DELETED = "MODULE_DELETED"
+    ISSUE_MODULES_CHANGED = "ISSUE_MODULES_CHANGED"
+    ISSUE_MODULE_ADDED = "ISSUE_MODULE_ADDED"
+    ISSUE_MODULE_REMOVED = "ISSUE_MODULE_REMOVED"
     LOCAL_ADMIN_LOGIN_SUCCEEDED = "LOCAL_ADMIN_LOGIN_SUCCEEDED"
     LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
     ASSIGNEE_ADDED = "ASSIGNEE_ADDED"
@@ -141,6 +147,12 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.LABEL_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.LABEL_DELETED: ActivityCategory.HISTORY,
         ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
+        ActivityEventType.MODULE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.MODULE_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.MODULE_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MODULES_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MODULE_ADDED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MODULE_REMOVED: ActivityCategory.HISTORY,
         ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
         ActivityEventType.ASSIGNEE_ADDED: ActivityCategory.HISTORY,
