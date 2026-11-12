@@ -4,6 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from kanban.security.envelope import (
+    EnvelopeDecryptError,
+    EnvelopeInputError,
+    KekProvider,
+    SealedSecret,
+    StaticKekProvider,
+    UnknownKekError,
+    open_card_secret,
+    rewrap_dek,
+    seal_card_secret,
+)
 from kanban.security.headers import CSP_POLICY, SecurityHeadersMiddleware
 from kanban.security.scrubber import (
     ScrubFinding,
@@ -23,16 +34,25 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CSP_POLICY",
+    "EnvelopeDecryptError",
+    "EnvelopeInputError",
+    "KekProvider",
     "KeyMaterial",
     "KeyMaterialError",
     "ScrubFinding",
     "ScrubResult",
+    "SealedSecret",
     "SecretKind",
     "SecurityHeadersMiddleware",
+    "StaticKekProvider",
+    "UnknownKekError",
     "derive_subkey",
     "load_key_material",
+    "open_card_secret",
     "outbound_secret_scrubber",
+    "rewrap_dek",
     "scrub_text",
+    "seal_card_secret",
 ]
 
 
