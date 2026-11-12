@@ -79,6 +79,11 @@ class ReportMetrics(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     route_trace: tuple[dict[str, Any], ...] = ()
+    iterations: int | None = None
+    p50_latency_ms: float | None = None
+    p90_latency_ms: float | None = None
+    p95_latency_ms: float | None = None
+    p99_latency_ms: float | None = None
 
 
 class SchemaStatus(BaseModel):
@@ -97,13 +102,16 @@ class ValidationReport(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["kb-cli-validation-report/v1"] = "kb-cli-validation-report/v1"
+    schema_version: Literal["kb-cli-validation-report/v1", "kb-sparkle-report/v1"] = (
+        "kb-cli-validation-report/v1"
+    )
     command: str
     rendered_context: str
     tool_trace: tuple[ToolCallStep, ...] = ()
     metrics: ReportMetrics
     schema_status: SchemaStatus
     qa_verdict: object = None
+    sparkle_details: dict[str, Any] | None = None
 
 
 def _render_tool_trace(
@@ -170,17 +178,25 @@ def render_report(
     lines.extend(_render_tool_trace(report.tool_trace, verbose_tools=verbose_tools))
 
     ttft_str = f"{report.metrics.ttft_ms:.1f}ms" if report.metrics.ttft_ms is not None else "N/A"
-    lines.extend(
-        [
-            "",
-            "=== 3. LATENCY & TOKENS ===",
-            (
-                f"TTFT: {ttft_str} | Total: {report.metrics.total_latency_ms:.1f}ms | "
-                f"Tokens: {report.metrics.prompt_tokens} in, {report.metrics.completion_tokens} out"
-            ),
-            "",
-        ]
+    latency_line = (
+        f"TTFT: {ttft_str} | Total: {report.metrics.total_latency_ms:.1f}ms | "
+        f"Tokens: {report.metrics.prompt_tokens} in, {report.metrics.completion_tokens} out"
     )
+    latency_section = ["", "=== 3. LATENCY & TOKENS ===", latency_line]
+    if report.metrics.p95_latency_ms is not None:
+        latency_section.extend(
+            [
+                f"Iterations: {report.metrics.iterations or 1}",
+                (
+                    f"Percentiles: p50={report.metrics.p50_latency_ms:.2f}ms | "
+                    f"p90={(report.metrics.p90_latency_ms or 0.0):.2f}ms | "
+                    f"p95={report.metrics.p95_latency_ms:.2f}ms | "
+                    f"p99={(report.metrics.p99_latency_ms or 0.0):.2f}ms"
+                ),
+            ]
+        )
+    latency_section.append("")
+    lines.extend(latency_section)
     lines.extend(_render_schema_section(report.schema_status, report.qa_verdict))
 
     if report.metrics.route_trace:

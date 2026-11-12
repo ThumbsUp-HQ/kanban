@@ -1,0 +1,18 @@
+..................                                                       [100%]
+=============================== warnings summary ===============================
+agent/tests/cli/test_validate_sparkle.py::test_case_6_fault_ttft_timeout_and_db_unreachable
+  /tmp/kb-wt-KANBA-80/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                     Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------------
+agent/cli_commands/validate_sparkle.py     264      1     70      5    98%   469, 564->580, 567->570, 570->580, 576->580
+------------------------------------------------------------------------------------
+TOTAL                                      264      1     70      5    98%
+Required test coverage of 95% reached. Total coverage: 98.20%
+18 passed, 1 warning in 6.40s
+Exit code: 0
