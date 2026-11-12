@@ -1,0 +1,291 @@
+{
+  "ticket": "KANBA-125",
+  "spec_sections": ["7.1", "7.2 8j", "7.2 8k", "6.1", "6.2", "5.1", "3.4"],
+  "exchanges": [
+    {
+      "name": "get_activity_tab_all_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/issues/KAN-142/activity?tab=all",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache"
+        },
+        "body": {
+          "tab": "all",
+          "counts": {
+            "all": 7,
+            "comments": 4,
+            "history": 1,
+            "gates": 2
+          },
+          "items": [
+            {
+              "id": "01930001-0000-7000-8000-000000000001",
+              "category": "AGENT_GATE",
+              "event_type": "GATE_APPROVED",
+              "actor": {
+                "id": "01930000-0000-7000-8000-000000000002",
+                "type": "AGENT",
+                "slug": "sec-review",
+                "display_name": "sec-review (cli: agy -p)"
+              },
+              "created_at": "2026-11-11T19:00:00Z",
+              "payload": {
+                "hook_name": "sec-review",
+                "harness": "cli: agy -p",
+                "repo_mount_ro": true,
+                "from_state": "In Review",
+                "to_state": "Done",
+                "execution_latency_ms": 812,
+                "verdict_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "row_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "id": "01930001-0000-7000-8000-000000000002",
+              "category": "AGENT_GATE",
+              "event_type": "GATE_VETOED",
+              "actor": {
+                "id": "01930000-0000-7000-8000-000000000003",
+                "type": "AGENT",
+                "slug": "qa-gate",
+                "display_name": "qa-gate (codex -p)"
+              },
+              "created_at": "2026-11-11T18:45:00Z",
+              "payload": {
+                "hook_name": "qa-gate",
+                "harness": "codex -p",
+                "repo_mount_ro": true,
+                "reason": "Vetoed: 3 visual regression tests failed on tablet viewport.\nMissing annotated screenshot for modal sheet.",
+                "audit_comment_id": "c1111111-1111-1111-1111-111111111111"
+              }
+            },
+            {
+              "id": "01930001-0000-7000-8000-000000000003",
+              "category": "HISTORY",
+              "event_type": "CREATOR_OVERRIDDEN",
+              "actor": {
+                "id": "01930000-0000-7000-8000-000000000001",
+                "type": "USER",
+                "handle": "adam",
+                "display_name": "Adam Outler"
+              },
+              "created_at": "2026-11-11T18:30:00Z",
+              "payload": {
+                "old_created_by": "@system",
+                "new_created_by": "@adam",
+                "reason": "Administrative creator reconciliation for audit ledger",
+                "row_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0"
+              },
+              "row_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0"
+            }
+          ],
+          "next_cursor": null
+        }
+      }
+    },
+    {
+      "name": "post_comment_unauthorized_mention_409",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/KAN-142/comments",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "body": {
+          "body_markdown": "Please check with @maya on this."
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "Content-Type": "application/problem+json"
+        },
+        "body": {
+          "type": "https://kanban.hackedyour.info/problems/mention-access-warning",
+          "title": "Mention Access Warning",
+          "status": 409,
+          "code": "MENTION_ACCESS_WARNING",
+          "detail": "@maya cannot view this issue. Posting will NOT grant access or send a notification to @maya.",
+          "unauthorized_mentions": [
+            {
+              "handle": "maya",
+              "principal_id": "01930000-0000-7000-8000-000000000009"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "post_comment_acknowledged_mention_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/KAN-142/comments",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "body": {
+          "body_markdown": "Please check with @maya on this.",
+          "acknowledge_mentions": [
+            "01930000-0000-7000-8000-000000000009"
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "Content-Type": "application/json",
+          "ETag": "\"etag-comment-ack-1\""
+        },
+        "body": {
+          "id": "c3333333-3333-3333-3333-333333333333",
+          "issue_id": "11111111-1111-1111-1111-111111111111",
+          "parent_comment_id": null,
+          "author_id": "01930000-0000-7000-8000-000000000001",
+          "author": {
+            "id": "01930000-0000-7000-8000-000000000001",
+            "handle": "adam",
+            "display_name": "Adam Outler"
+          },
+          "body_markdown": "Please check with @maya on this.",
+          "body_sha256": "4b5c6d7e8f90123456789abcdef0123456789abcdef0123456789abcdef01234",
+          "permalink": "/projects/KAN/issues?peek=KAN-142#comment-c3333333-3333-3333-3333-333333333333",
+          "created_at": "2026-11-12T10:00:00Z",
+          "edited_at": null,
+          "deleted": false,
+          "etag": "\"etag-comment-ack-1\"",
+          "reactions": [],
+          "replies": [],
+          "unnotified_mentions": [
+            {
+              "handle": "maya",
+              "principal_id": "01930000-0000-7000-8000-000000000009",
+              "has_access": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "patch_comment_concurrency_conflict_412",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/comments/c1111111-1111-1111-1111-111111111111",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "If-Match": "\"etag-comment-stale\""
+        },
+        "body": {
+          "body_markdown": "Concurrent edit attempt"
+        }
+      },
+      "response": {
+        "status": 412,
+        "headers": {
+          "Content-Type": "application/problem+json"
+        },
+        "body": {
+          "type": "https://kanban.hackedyour.info/problems/precondition-failed",
+          "title": "Precondition Failed",
+          "status": 412,
+          "code": "PRECONDITION_FAILED",
+          "detail": "This comment was edited elsewhere. Copy your changes and reload."
+        }
+      }
+    },
+    {
+      "name": "patch_comment_success_200",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/comments/c1111111-1111-1111-1111-111111111111",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "If-Match": "\"etag-comment-1\""
+        },
+        "body": {
+          "body_markdown": "Audit findings: updated body with latest verification proof."
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json",
+          "ETag": "\"etag-comment-1-v2\""
+        },
+        "body": {
+          "id": "c1111111-1111-1111-1111-111111111111",
+          "issue_id": "11111111-1111-1111-1111-111111111111",
+          "parent_comment_id": null,
+          "author_id": "01930000-0000-7000-8000-000000000001",
+          "author": {
+            "id": "01930000-0000-7000-8000-000000000001",
+            "handle": "adam",
+            "display_name": "Adam Outler"
+          },
+          "body_markdown": "Audit findings: updated body with latest verification proof.",
+          "body_sha256": "5c6d7e8f90123456789abcdef0123456789abcdef0123456789abcdef012345a",
+          "permalink": "/projects/KAN/issues?peek=KAN-142#comment-c1111111-1111-1111-1111-111111111111",
+          "created_at": "2026-11-11T18:00:00Z",
+          "edited_at": "2026-11-12T10:05:00Z",
+          "deleted": false,
+          "etag": "\"etag-comment-1-v2\"",
+          "reactions": [
+            {
+              "emoji": "🚀",
+              "count": 3,
+              "reacted_by_me": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "put_reaction_allowlist_rocket_200",
+      "request": {
+        "method": "PUT",
+        "path": "/api/v1/comments/c1111111-1111-1111-1111-111111111111/reactions/%F0%9F%9A%80",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "emoji": "🚀",
+          "count": 4,
+          "reacted_by_me": true
+        }
+      }
+    },
+    {
+      "name": "delete_reaction_allowlist_rocket_204",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/comments/c1111111-1111-1111-1111-111111111111/reactions/%F0%9F%9A%80",
+        "headers": {},
+        "body": null
+      },
+      "response": {
+        "status": 204,
+        "headers": {},
+        "body": null
+      }
+    }
+  ]
+}

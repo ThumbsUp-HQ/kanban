@@ -42,8 +42,12 @@ export async function testGuardFixture(
       if (text.startsWith('The source list for the Content Security Policy directive')) {
         return;
       }
-      // Ignore expected 404 resource errors from negative test fixtures
-      if (text.includes('Failed to load resource: the server responded with a status of 404')) {
+      // Ignore expected 404, 409, 412 resource errors from negative test fixtures
+      if (
+        text.includes('Failed to load resource: the server responded with a status of 404') ||
+        text.includes('Failed to load resource: the server responded with a status of 409') ||
+        text.includes('Failed to load resource: the server responded with a status of 412')
+      ) {
         return;
       }
       consoleErrors.push(text);

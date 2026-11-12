@@ -16,6 +16,7 @@ export class ApiProblem extends Error {
   readonly title: string | undefined;
   readonly detail: string | undefined;
   readonly instance: string | undefined;
+  readonly data: unknown;
 
   constructor(status: number, data?: unknown) {
     const obj: Record<string, unknown> =
@@ -33,6 +34,7 @@ export class ApiProblem extends Error {
     this.title = title;
     this.detail = detail;
     this.instance = pickString(obj, 'instance');
+    this.data = data;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
