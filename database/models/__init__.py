@@ -10,6 +10,7 @@ from database.models.base import (
     RbacRole,
     ViewLayout,
 )
+from database.models.embeddings import ObjectEmbedding
 from database.models.issues import (
     Issue,
     IssueAssignee,
@@ -68,6 +69,7 @@ __all__ = [
     "LinkTypeMatrix",
     "LtreeType",
     "Module",
+    "ObjectEmbedding",
     "ObjectKind",
     "ObjectLink",
     "ObjectRecord",
