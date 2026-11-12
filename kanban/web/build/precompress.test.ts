@@ -68,6 +68,7 @@ describe('precompress build plugin', () => {
       const jsContent = Buffer.alloc(2048, 'x');
       const jsFilePath = join(testDir, 'bundle.js');
       writeFileSync(jsFilePath, jsContent);
+      writeFileSync(join(testDir, 'another.js'), jsContent);
 
       const plugin = precompress(testDir);
       if (typeof plugin.closeBundle === 'function') {
@@ -92,8 +93,9 @@ describe('precompress build plugin', () => {
         string,
         string
       >;
-      expect(Object.keys(manifestContent)).toEqual(['bundle.js']);
+      expect(Object.keys(manifestContent)).toEqual(['another.js', 'bundle.js']);
       expect(manifestContent['bundle.js']).toBe(sriHash(jsContent));
+      expect(manifestContent['another.js']).toBe(sriHash(jsContent));
     });
 
     it('skips existing .br, .gz, and sri-manifest.json on subsequent runs', () => {

@@ -6,10 +6,15 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}',
+      'build/**/*.{test,spec}.ts',
+      'e2e/support/**/*.unit.test.ts',
+    ],
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.{ts,tsx}', 'build/**/*.ts'],
-      exclude: ['src/main.tsx', '**/*.test.*'],
+      include: ['src/**/*.{ts,tsx}', 'build/**/*.ts', 'e2e/support/**/*.ts'],
+      exclude: ['src/main.tsx', '**/*.test.*', '**/*.spec.*'],
       thresholds: {
         lines: 95,
         functions: 95,

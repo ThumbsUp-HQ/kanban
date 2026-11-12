@@ -1,0 +1,91 @@
+[
+  {
+    "key": "KAN-100",
+    "summary": "Security Architecture Epic",
+    "state": "In Progress",
+    "priority": "high",
+    "assignees": ["@adam"],
+    "created_by": "@adam"
+  },
+  {
+    "key": "KAN-142",
+    "summary": "Harden Multi-Card OIDC & LDAPS Auth Studio",
+    "state": "In Progress",
+    "priority": "urgent",
+    "assignees": ["@adam"],
+    "agent": "codex",
+    "free_text": "Ext: SecAudit",
+    "created_by": "@maya",
+    "creator_overridden": true,
+    "start": "2026-11-11",
+    "due": "2026-11-18",
+    "module": "Auth Core",
+    "cycle": "Cycle 4: Sec",
+    "parent": "KAN-100",
+    "labels": ["security"],
+    "sub_issues": ["KAN-143", "KAN-145"]
+  },
+  {
+    "key": "KAN-143",
+    "summary": "Verify LDAPS certificate pinning",
+    "state": "In Progress",
+    "priority": "high",
+    "parent": "KAN-142"
+  },
+  {
+    "key": "KAN-145",
+    "summary": "Implement break-glass admin lockout guard",
+    "state": "In Progress",
+    "priority": "urgent",
+    "parent": "KAN-142"
+  },
+  {
+    "key": "KAN-101",
+    "summary": "Design token review for dark mode",
+    "state": "Backlog",
+    "priority": "low"
+  },
+  {
+    "key": "KAN-102",
+    "summary": "Evaluate SVG allowlist filters",
+    "state": "Backlog",
+    "priority": "medium"
+  },
+  {
+    "key": "KAN-103",
+    "summary": "Initial Postgres 16 template DB setup",
+    "state": "Todo",
+    "priority": "high"
+  },
+  {
+    "key": "KAN-104",
+    "summary": "Verify SAVEPOINT transaction isolation",
+    "state": "Todo",
+    "priority": "medium"
+  },
+  {
+    "key": "KAN-105",
+    "summary": "Review MCP scoped token permission gates",
+    "state": "In Review",
+    "priority": "high",
+    "gate_status": "pending"
+  },
+  {
+    "key": "KAN-106",
+    "summary": "Cross-origin sandbox payload check <img src=x onerror=alert(1)>",
+    "state": "In Review",
+    "priority": "medium"
+  },
+  {
+    "key": "KAN-107",
+    "summary": "Precompress Vite build plugin implementation",
+    "state": "Done",
+    "priority": "medium"
+  },
+  {
+    "key": "KAN-108",
+    "summary": "Deprecated legacy mock server",
+    "state": "Canceled",
+    "priority": "none"
+  }
+]

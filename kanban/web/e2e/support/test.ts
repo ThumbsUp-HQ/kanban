@@ -1,0 +1,125 @@
+import { test as baseTest, expect } from '@playwright/test';
+import { mockApi, loadFixture, type MockRecorder } from './mockApi';
+import type { Page } from '@playwright/test';
+
+declare global {
+  interface Window {
+    __cspViolations?: { violatedDirective: string; blockedURI: string }[];
+  }
+}
+
+export interface TestFixtures {
+  mockRecorder: MockRecorder;
+}
+
+/**
+ * Auto-fixture function that sets up CSP violation listeners,
+ * error collectors, off-origin request blocking, and default API mocks.
+ */
+export async function testGuardFixture(
+  { page }: { page: Page },
+  use: (r: MockRecorder) => Promise<void>,
+): Promise<void> {
+  // 1. Register CSP violation listener before any scripts run
+  await page.addInitScript(() => {
+    window.__cspViolations = [];
+    document.addEventListener('securitypolicyviolation', (e) => {
+      window.__cspViolations?.push({
+        violatedDirective: e.violatedDirective,
+        blockedURI: e.blockedURI,
+      });
+    });
+  });
+
+  // 2. Track console errors and unhandled page errors
+  const consoleErrors: string[] = [];
+  const pageErrors: Error[] = [];
+
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      const text = msg.text();
+      // Ignore browser CSP parser warnings for S5.4 MIME-scoped data: sources
+      if (text.startsWith('The source list for the Content Security Policy directive')) {
+        return;
+      }
+      consoleErrors.push(text);
+    }
+  });
+
+  page.on('pageerror', (err) => {
+    pageErrors.push(err);
+  });
+
+  // 3. Block all off-origin network requests
+  const offOriginRequests: string[] = [];
+  await page.route('**', (route) => {
+    const urlStr = route.request().url();
+    if (
+      urlStr.startsWith('http://127.0.0.1:4173') ||
+      urlStr.startsWith('http://localhost:4173')
+    ) {
+      return route.continue();
+    }
+    offOriginRequests.push(urlStr);
+    return route.abort();
+  });
+
+  // 4. Default API mock handlers
+  const recorder = await mockApi(page, {
+    'GET /api/v1/me': loadFixture('me-adam'),
+    'GET /api/v1/system/status': loadFixture('system-status-prod'),
+  });
+
+  // Run test
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  await use(recorder);
+
+  // 5. Post-test assertions verifying zero violations
+  let cspViolations: { violatedDirective: string; blockedURI: string }[] = [];
+  try {
+    cspViolations = await page.evaluate(() => window.__cspViolations ?? []);
+  } catch {
+    // Page was closed before evaluation
+  }
+
+  const issues: string[] = [];
+  if (cspViolations.length > 0) {
+    issues.push(
+      `CSP violations detected (${String(cspViolations.length)}): ${cspViolations
+        .map((v) => `${v.violatedDirective} (${v.blockedURI})`)
+        .join(', ')}`,
+    );
+  }
+  if (consoleErrors.length > 0) {
+    issues.push(
+      `Console errors detected (${String(consoleErrors.length)}): ${consoleErrors.join('; ')}`,
+    );
+  }
+  if (pageErrors.length > 0) {
+    issues.push(
+      `Page errors detected (${String(pageErrors.length)}): ${pageErrors.map((e) => e.message).join('; ')}`,
+    );
+  }
+  if (offOriginRequests.length > 0) {
+    issues.push(
+      `Off-origin requests blocked (${String(offOriginRequests.length)}): ${offOriginRequests.join(', ')}`,
+    );
+  }
+  if (recorder.unmatchedCalls.length > 0) {
+    issues.push(
+      `Unmatched API calls detected (${String(recorder.unmatchedCalls.length)}): ${recorder.unmatchedCalls
+        .map((c) => `${c.method} ${c.path}`)
+        .join(', ')}`,
+    );
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Test guard verification failure:\n${issues.join('\n')}`);
+  }
+}
+
+export const test = baseTest.extend<TestFixtures>({
+  mockRecorder: [testGuardFixture, { auto: true }],
+});
+
+export { expect };

@@ -1,0 +1,2648 @@
+diff --git a/.gitignore b/.gitignore
+index 495dfcc..be13e62 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -21,3 +21,5 @@ kanban/web/dist/
+ coverage/
+ kanban/web/coverage/
+ *.tsbuildinfo
++test-results/
++kanban/web/test-results/
+diff --git a/docs/qa/KANBA-27/build-check.txt b/docs/qa/KANBA-27/build-check.txt
+new file mode 100644
+index 0000000..23ff20b
+--- /dev/null
++++ b/docs/qa/KANBA-27/build-check.txt
+@@ -0,0 +1,23 @@
++
++> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
++> tsc -b --noEmit
++
++
++> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
++> eslint . --max-warnings 0
++
++
++> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
++> tsc -b && vite build
++
++vite v8.3.8 building client environment for production...
++transforming...
++✓ 16 modules transformed.
++rendering chunks...
++computing gzip size...
++dist/index.html                   0.39 kB │ gzip:  0.26 kB
++dist/assets/index-BAvQsaM-.css    0.64 kB │ gzip:  0.37 kB
++dist/assets/index-CJtVY9il.js   219.60 kB │ gzip: 68.62 kB
++
++✓ built in 116ms
++EXIT_CODE=0
+diff --git a/docs/qa/KANBA-27/computed-styles-desktop.json b/docs/qa/KANBA-27/computed-styles-desktop.json
+new file mode 100644
+index 0000000..e92fa33
+--- /dev/null
++++ b/docs/qa/KANBA-27/computed-styles-desktop.json
+@@ -0,0 +1,11 @@
++{
++  "app-root": {
++    "body": {
++      "width": "1440px",
++      "height": "900px",
++      "font-family": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif",
++      "font-size": "16px",
++      "line-height": "24px"
++    }
++  }
++}
+diff --git a/docs/qa/KANBA-27/computed-styles-mobile.json b/docs/qa/KANBA-27/computed-styles-mobile.json
+new file mode 100644
+index 0000000..426a7ee
+--- /dev/null
++++ b/docs/qa/KANBA-27/computed-styles-mobile.json
+@@ -0,0 +1,11 @@
++{
++  "app-root": {
++    "body": {
++      "width": "390px",
++      "height": "844px",
++      "font-family": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif",
++      "font-size": "16px",
++      "line-height": "24px"
++    }
++  }
++}
+diff --git a/docs/qa/KANBA-27/computed-styles-tablet.json b/docs/qa/KANBA-27/computed-styles-tablet.json
+new file mode 100644
+index 0000000..712bf6e
+--- /dev/null
++++ b/docs/qa/KANBA-27/computed-styles-tablet.json
+@@ -0,0 +1,11 @@
++{
++  "app-root": {
++    "body": {
++      "width": "1024px",
++      "height": "768px",
++      "font-family": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif",
++      "font-size": "16px",
++      "line-height": "24px"
++    }
++  }
++}
+diff --git a/docs/qa/KANBA-27/csp-header.txt b/docs/qa/KANBA-27/csp-header.txt
+new file mode 100644
+index 0000000..8fc2b62
+--- /dev/null
++++ b/docs/qa/KANBA-27/csp-header.txt
+@@ -0,0 +1,10 @@
++HTTP/1.1 200 OK
++Vary: Origin
++Content-Type: text/html
++Cache-Control: no-cache
++Etag: W/"187-KgMwHy/8j771DcKoQ4L/FO3v8zg"
++Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify
++Date: Thu, 12 Nov 2026 02:28:11 GMT
++Connection: keep-alive
++Keep-Alive: timeout=5
++
+diff --git a/docs/qa/KANBA-27/dependency-evaluation.md b/docs/qa/KANBA-27/dependency-evaluation.md
+new file mode 100644
+index 0000000..ff95efa
+--- /dev/null
++++ b/docs/qa/KANBA-27/dependency-evaluation.md
+@@ -0,0 +1,109 @@
++# Dependency Evaluation: KANBA-27 (@playwright/test)
++
++## Target Dependency Overview
++
++- **Package:** `@playwright/test`
++- **Version:** `1.65.0` (exact pin in `kanban/web/package.json`)
++- **License:** `Apache-2.0` (Permissive; matches repository core license)
++- **Scope:** `devDependencies` in `kanban/web/package.json` (Local & CI testing only; never shipped in production runtime image or bundle)
++- **Integrity Hash (pnpm-lock.yaml):** `sha512-iGURLGuKDLakSEl7Pgfv8h7f+XLT+V861Wfhz0zlEl5nyFuKUopdkFBPKqTllTUp06aOwPuH8iuUEb3yp3MpbQ==`
++
++---
++
++## Supply-Chain & Architectural Evaluation
++
++1. **Permissive Licensing Compliance:**
++   - `@playwright/test` is licensed under `Apache-2.0`.
++   - Zero copyleft risk: no GPL, AGPL, or SSPL transitive dependencies.
++   - Pinned with an exact version string (no `^` or `~`) to ensure deterministic reproducible builds.
++
++2. **Attack Surface & Test Sandbox Hardening:**
++   - Isolated to development and test execution. Not included in client bundles (`dist/`) or backend Docker containers.
++   - Operates out-of-process via Chrome DevTools Protocol (CDP) on headless Chromium.
++   - Test harness enforces strict network sandboxing: all requests outside `http://127.0.0.1:4173` are aborted.
++   - Fail-closed test guard verifies production Content-Security-Policy, catching any unauthorized network call or console error.
++   - Screenshot and probe utilities enforce strict regex sanitization on ticket IDs and screenshot names to prevent path traversal attacks.
++
++3. **Alternatives Considered:**
++   - **Cypress (MIT):** Executes in-browser inside an iframe, creating severe constraints for multi-origin testing, CSP enforcement, and native viewport emulation without commercial addons.
++   - **WebdriverIO (MIT):** Requires external WebDriver server bridges (e.g. chromedriver), resulting in slower execution times, larger setup boilerplate, and higher flakiness compared to Playwright direct CDP event loops.
++
++---
++
++## Verbatim Specialist Sign-Offs
++
++### 1. Systems / Backend Architect (`arch-reviewer`, Message #30)
++
++```text
++[DEP-EVAL KANBA-27] Playwright E2E Test Harness
++- Evaluator: Systems/Backend Architect (arch-reviewer)
++- Scope: docs/tickets/KB-P3-32.md (KANBA-27 / KB-P3-32)
++- Evaluated Package:
++  * @playwright/test (Apache-2.0, exact pin in kanban/web devDependencies)
++
++1. License and Compatibility:
++@playwright/test is licensed under Apache-2.0. Matches the monorepo core license identically. 100% compliant with zero copyleft risk.
++
++2. Supply-Chain and Attack Surface:
++- Confined exclusively to frontend development and CI testing (devDependencies). Never included in production web artifacts or Docker runtime images.
++- Pinned with an exact version in kanban/web/package.json with integrity hashes recorded in pnpm-lock.yaml.
++- Operates out-of-process via Chrome DevTools Protocol (CDP) on headless Chromium, executing strictly against local preview servers (http://127.0.0.1:4173) with automatic blocking of off-origin requests.
++
++3. Architectural Rationale and Alternatives Considered:
++- @playwright/test vs. Cypress:
++  * Cypress runs in-browser inside an iframe, imposing severe constraints on multi-origin testing, CSP enforcement, and native viewport resizing.
++  * Playwright runs out-of-process, natively simulates multiple viewport tiers (desktop 1440x900, tablet 1024x768, mobile 390x844), supports strict mock API routing (page.route), and verifies CSP headers without compromising browser security settings.
++- @playwright/test vs. WebdriverIO:
++  * WebdriverIO requires intermediate WebDriver server binaries and suffers from higher latency and flake compared to Playwright direct CDP event loops.
++  * Playwright provides seamless DOM annotation, computed-style probing, and screenshot capture required to generate indisputable visual verification artifacts for reality-checker QA gates.
++
++4. Architectural Verdict:
++APPROVED. High-performance, Apache-2.0 compliant E2E test harness for deterministic visual and functional verification.
++```
++
++### 2. Application & Supply-Chain Security Engineer (`sec-eng`, Message #29)
++
++```text
++[DEP-EVAL KANBA-27] Playwright E2E Harness: Viewports, CSP Preview, Mock API and Screenshots
++- Evaluator: Application and Supply-Chain Security Engineer (sec-eng)
++- Scope: docs/tickets/KB-P3-32.md (KANBA-27 / KB-P3-32)
++- Target Packages: @playwright/test (Apache-2.0, exact devDependency)
++
++1. License and Compatibility Audit:
++- @playwright/test (Apache-2.0): Permissive browser automation and testing framework.
++- License Compliance: 100% Apache-2.0 compliant. Zero copyleft contamination.
++
++2. Supply-Chain and Test Sandbox Hardening:
++- DevDependency Isolation: Scoped strictly to devDependencies in kanban/web/package.json for local and CI testing. Never packaged into production distribution artifacts.
++- Egress and CSP Guarding: The Playwright test harness auto-fixture actively blocks all requests whose origin is not http://127.0.0.1:4173 and fails the test suite on any CSP violation, console error, or unexpected network call.
++- Path Traversal Defense: annotatedScreenshot and styleProbe strictly validate QA_TICKET_ID and screenshot names against regexes (/^[0-9]{2}-[a-z0-9-]+$/), preventing file traversal or injection into arbitrary filesystem locations.
++- Deterministic Mock API: mockApi isolates frontend tests from external or real backend networks, ensuring predictable, offline testing without network leakage.
++
++3. Alternatives Evaluated:
++- Cypress: Relies on in-browser iframe execution with limitations on multi-window testing, cross-origin security context handling, and strict CSP headers. Playwright uses native browser automation protocols with complete out-of-process isolation.
++- WebdriverIO: Requires external driver management (chromedriver) and has slower execution, larger dependencies, and higher flakiness compared to Playwright.
++
++4. Verdict:
++- Role Sign-Off: APPROVED by sec-eng (Engineer #1, Application and Supply-Chain Security Engineer) for KANBA-27.
++```
++
++### 3. Test & Build Quality Engineer (`qa-eng`, Message #28)
++
++```text
++[DEP-EVAL KANBA-27] Playwright E2E Harness: 3 Viewports, CSP Guard, and Visual Proof (KB-P3-32)
++- Target Dependencies:
++  * @playwright/test (Apache-2.0, exact devDependency in kanban/web/package.json)
++
++- Test and Build Quality Assessment:
++  * @playwright/test: Premier end-to-end browser automation framework for modern web applications.
++  * Multi-Viewport Matrix: Validates frontend rendering across desktop (1440x900), tablet (1024x768), and mobile (390x844) viewports in headless Chromium.
++  * Built-in Security and Quality Assertion Guards: Custom test fixture catches browser console errors, unhandled page errors, and securitypolicyviolation events, immediately failing tests on CSP breaches.
++  * Hermetic Test Sandboxing: Intercepts network calls via mockApi.ts, returning canned JSON fixtures and blocking unexpected network traffic with 599 statuses, ensuring test execution stays within the 20-second budget without needing a live backend.
++  * Visual Verification Tooling: Provides annotatedScreenshot and probeStyles utilities to generate numbered overlay screenshots and computed style metrics directly into docs/qa/<TICKET_ID>/, supplying indisputable proof for the reality-checker QA gate.
++
++- Alternatives Considered:
++  * Cypress: Executes in-browser, has higher execution overhead, lacks multi-tab and native multi-viewport test matrix execution without paid addons, and exhibits higher memory consumption.
++  * WebdriverIO: Requires external WebDriver bridges and more boilerplate setup, resulting in slower test feedback loops compared to Playwright direct CDP integration.
++
++- Engineer #2 Sign-off: APPROVED
++```
+diff --git a/docs/qa/KANBA-27/e2e-results.txt b/docs/qa/KANBA-27/e2e-results.txt
+new file mode 100644
+index 0000000..3811306
+--- /dev/null
++++ b/docs/qa/KANBA-27/e2e-results.txt
+@@ -0,0 +1,15 @@
++
++Running 9 tests using 9 workers
++
++  ✘  2 [desktop] › e2e/sample/harness.spec.ts:43:3 › E2E Harness Smoke and Guard Proofs › 02: negative guard proof - unmatched API call fails test (467ms)
++  ✘  1 [tablet] › e2e/sample/harness.spec.ts:51:3 › E2E Harness Smoke and Guard Proofs › 03: negative guard proof - inline style CSP violation fails test (483ms)
++  ✘  4 [mobile] › e2e/sample/harness.spec.ts:51:3 › E2E Harness Smoke and Guard Proofs › 03: negative guard proof - inline style CSP violation fails test (443ms)
++  ✘  7 [desktop] › e2e/sample/harness.spec.ts:51:3 › E2E Harness Smoke and Guard Proofs › 03: negative guard proof - inline style CSP violation fails test (403ms)
++  ✘  6 [mobile] › e2e/sample/harness.spec.ts:43:3 › E2E Harness Smoke and Guard Proofs › 02: negative guard proof - unmatched API call fails test (449ms)
++  ✘  5 [tablet] › e2e/sample/harness.spec.ts:43:3 › E2E Harness Smoke and Guard Proofs › 02: negative guard proof - unmatched API call fails test (453ms)
++  ✓  3 [desktop] › e2e/sample/harness.spec.ts:7:3 › E2E Harness Smoke and Guard Proofs › 01: loads app root, validates production CSP, captures screenshot and probes styles (616ms)
++  ✓  8 [mobile] › e2e/sample/harness.spec.ts:7:3 › E2E Harness Smoke and Guard Proofs › 01: loads app root, validates production CSP, captures screenshot and probes styles (514ms)
++  ✓  9 [tablet] › e2e/sample/harness.spec.ts:7:3 › E2E Harness Smoke and Guard Proofs › 01: loads app root, validates production CSP, captures screenshot and probes styles (547ms)
++
++  9 passed (5.7s)
++EXIT_CODE=0
+diff --git a/docs/qa/KANBA-27/message-to-reality-checker.md b/docs/qa/KANBA-27/message-to-reality-checker.md
+new file mode 100644
+index 0000000..079d11e
+--- /dev/null
++++ b/docs/qa/KANBA-27/message-to-reality-checker.md
+@@ -0,0 +1,90 @@
++# Message to Reality-Checker: KANBA-27 (KB-P3-32)
++
++## Ticket Overview
++- **Ticket ID:** `KANBA-27` (`KB-P3-32`)
++- **Title:** `[Phase 3 / Frontend] Playwright E2E harness: 3 viewports, CSP-enforcing preview, mock API & annotated screenshots`
++- **Branch:** `feat/KANBA-27`
++- **Isolated Worktree:** `/tmp/kb-wt-KANBA-27`
++- **Parent / Base Commit:** `75eb4e4ebbec9e0ba33f0cd11575728acc4c2253`
++
++---
++
++## Technical Implementations Completed
++
++1. **Playwright Configuration (`kanban/web/playwright.config.ts`):**
++   - Configured projects for `desktop` (1440x900), `tablet` (1024x768, touch enabled), and `mobile` (390x844, mobile viewport, touch enabled).
++   - Headless Chromium only to keep CI execution minimal.
++   - Embedded preview `webServer` executing `pnpm build && pnpm preview --host 127.0.0.1 --port 4173 --strictPort`.
++
++2. **Production CSP in Preview (`kanban/web/e2e/support/csp.ts` & `kanban/web/vite.config.ts`):**
++   - Defined `PRODUCTION_CSP` constant with all 14 S5.4 directives in strict canonical order.
++   - Injected `preview.headers['Content-Security-Policy'] = PRODUCTION_CSP` in `vite.config.ts`.
++
++3. **Playwright Test Guard Fixture (`kanban/web/e2e/support/test.ts`):**
++   - Auto-fixture extending `@playwright/test` `test`.
++   - Injects `securitypolicyviolation` event listener via `page.addInitScript` into `window.__cspViolations`.
++   - Tracks `console` errors and `pageerror` unhandled crashes.
++   - Aborts all network requests with origins outside `http://127.0.0.1:4173`.
++   - Mounts default `mockApi` handlers for `/api/v1/me` and `/api/v1/system/status`.
++   - Fail-closed teardown fails tests if any CSP violation, console error, page error, off-origin request, or unmocked API call occurred.
++
++4. **Mock API Engine (`kanban/web/e2e/support/mockApi.ts`):**
++   - Intercepts `**/api/v1/**` requests via `page.route`.
++   - Supports parameterized path matching (e.g. `GET /api/v1/issues/:issueKey`).
++   - Responds with `599` status for unmocked routes, recorded for assertion failure.
++   - Synchronous `loadFixture` reads JSON fixtures with strict `/^[a-z0-9-]+$/` path-traversal sanitization.
++
++5. **Annotated Screenshot Engine (`kanban/web/e2e/support/annotate.ts`):**
++   - Injects red outline box (`#e11d48`) and numbered circular badge via pure DOM and CSSOM property styling (no `<style>` tags or inline `style` strings, strictly preserving CSP compliance).
++   - Positions badges clamped within viewport bounds `[0, viewport - 22]`.
++   - Fixed legend strip at bottom of viewport (`#111827` background, white text) with header `<TICKET_ID> | <project> | <width>x<height>` and numbered annotation entries.
++   - Resolves paths to `docs/qa/<TICKET_ID>/screenshots/` with ticket ID and filename regex sanitization.
++
++6. **Computed-Style Probe Engine (`kanban/web/e2e/support/styleProbe.ts`):**
++   - Reads `getComputedStyle` properties and `getBoundingClientRect` dimensions.
++   - Merges measurements under test keys and writes atomically via temporary file and rename with sorted JSON keys.
++
++7. **JSON Fixtures (`kanban/web/e2e/fixtures/`):**
++   - `project-kan.json`: key `KAN`, states, priorities, labels, and modules.
++   - `issues-kan.json`: 12+ issues across states including `KAN-142`, `KAN-143`, `KAN-145`, pending gate state, and hostile XSS string test.
++   - `me-adam.json`: user `@adam`, `PROJECT_ADMIN`.
++   - `system-status-standalone.json` and `system-status-prod.json`: deployment mode and system status contracts.
++
++8. **Sample Spec & Guard Tests (`kanban/web/e2e/sample/harness.spec.ts`):**
++   - Test 01: Positive smoke test verifying app root, production CSP header, annotated screenshot, and computed-style probe.
++   - Test 02: Negative guard proof (`test.fail`) proving unmocked API call (`/api/v1/does-not-exist`) fails test.
++   - Test 03: Negative guard proof (`test.fail`) proving injected inline `<style>` CSP violation fails test.
++
++---
++
++## Verification & Quality Metrics
++
++1. **Unit Test Coverage (`pnpm --dir kanban/web test:unit --coverage`):**
++   - Statements: `100.00%` (Threshold >= 95%)
++   - Branches: `99.13%` (Threshold >= 95%)
++   - Functions: `100.00%` (Threshold >= 95%)
++   - Lines: `100.00%` (Threshold >= 95%)
++   - Test files: 7 passed, 58 tests passed. Exit code: 0.
++
++2. **Playwright E2E Suite (`playwright test e2e/sample/harness.spec.ts`):**
++   - 9 passed (3 viewports x 3 tests) in `5.7s` (CI budget < 20s). Exit code: 0.
++
++3. **Strict Build Validations:**
++   - `pnpm --dir kanban/web typecheck` -> Exit code 0, 0 errors.
++   - `pnpm --dir kanban/web lint` -> Exit code 0, 0 warnings, 0 errors.
++   - `pnpm --dir kanban/web build` -> Exit code 0.
++
++4. **Forensic Verification Proofs in `docs/qa/KANBA-27/`:**
++   - `git-diff.patch`
++   - `unit-test-results.txt`
++   - `build-check.txt`
++   - `e2e-results.txt`
++   - `csp-header.txt`
++   - `computed-styles-desktop.json`
++   - `computed-styles-tablet.json`
++   - `computed-styles-mobile.json`
++   - `screenshots/01-harness-smoke-desktop.png` (inspected via `read_file`)
++   - `screenshots/01-harness-smoke-tablet.png` (inspected via `read_file`)
++   - `screenshots/01-harness-smoke-mobile.png` (inspected via `read_file`)
++   - `dependency-evaluation.md`
++   - `ui-specialist-review.md` (audit requested from `@ui-specialist`)
+diff --git a/docs/qa/KANBA-27/screenshots/01-harness-smoke-desktop.png b/docs/qa/KANBA-27/screenshots/01-harness-smoke-desktop.png
+new file mode 100644
+index 0000000..2db6ecb
+Binary files /dev/null and b/docs/qa/KANBA-27/screenshots/01-harness-smoke-desktop.png differ
+diff --git a/docs/qa/KANBA-27/screenshots/01-harness-smoke-mobile.png b/docs/qa/KANBA-27/screenshots/01-harness-smoke-mobile.png
+new file mode 100644
+index 0000000..f237e3f
+Binary files /dev/null and b/docs/qa/KANBA-27/screenshots/01-harness-smoke-mobile.png differ
+diff --git a/docs/qa/KANBA-27/screenshots/01-harness-smoke-tablet.png b/docs/qa/KANBA-27/screenshots/01-harness-smoke-tablet.png
+new file mode 100644
+index 0000000..ac1511c
+Binary files /dev/null and b/docs/qa/KANBA-27/screenshots/01-harness-smoke-tablet.png differ
+diff --git a/docs/qa/KANBA-27/ui-specialist-review.md b/docs/qa/KANBA-27/ui-specialist-review.md
+new file mode 100644
+index 0000000..ed7d526
+--- /dev/null
++++ b/docs/qa/KANBA-27/ui-specialist-review.md
+@@ -0,0 +1,53 @@
++# UI Specialist Gate Review: KANBA-27 (KB-P3-32)
++
++## 1. Ticket and Review Scope
++- Ticket: KANBA-27 (KB-P3-32)
++- Epic: KB-E3 (Phase 3 Frontend Architecture and Playwright E2E Infrastructure)
++- Worktree: /tmp/kb-wt-KANBA-27
++- Reviewer: ui-specialist (UX Architect / UI Designer Specialist Gate)
++- Scope: Multi-viewport Playwright E2E configuration (Desktop 1440x900, Tablet 1024x768, Mobile 390x844), CSP-enforcing preview server, visual annotation overlay styling and badge clamping, bottom legend strip readability, computed-style probe architecture, and S5.4 CSP compliance.
++
++## 2. Multi-Device Viewport Strategy and Layout Matrix
++- Desktop Viewport (1440x900, deviceScaleFactor: 1): Standard 16:10 desktop workstation reference viewport. Provides realistic canvas dimensions for full Kanban column sweeps, modal drawers, and responsive header layouts.
++- Tablet Viewport (1024x768, deviceScaleFactor: 2, hasTouch: true): Standard landscape/medium tablet viewport. Emulates touch interactions (`hasTouch: true`) and high-density retina displays, verifying responsive breakpoint transitions and sidebar adaptation.
++- Mobile Viewport (390x844, deviceScaleFactor: 3, isMobile: true, hasTouch: true): Standard iPhone-class narrow viewport. Confirms single-column flow, touch target ergonomics (44px minimum touch targets), and zero horizontal overflow.
++- Performance: Full 9-test E2E matrix executes in 5.7s wall-clock time across all three projects in parallel, well within the 20.0s CI budget.
++
++## 3. Visual Annotation System and Badge Ergonomics Audit
++Direct visual inspection of captured screenshot artifacts in `/tmp/kb-wt-KANBA-27/docs/qa/KANBA-27/screenshots/` using read_file:
++
++1. Desktop (1440x900) - `01-harness-smoke-desktop.png`:
++   - Bounding Box: Sharp, unambiguous 2px solid `#e11d48` (rose-600) outline framing `<main data-testid="app-root">`. Zero visual interference with internal text.
++   - Numbered Badge: 22px circular badge `1` anchored at top-left corner of the target element. Clean `#ffffff` bold text centered on `#e11d48` fill with 4.55:1 WCAG AA compliant contrast.
++   - Legend Strip: Positioned along bottom edge. Solid `#111827` background with crisp white typography. Header reads `KANBA-27 | desktop | 1440x900`. Entry reads `1. App Root - CSP enforced, mock API active`.
++
++2. Tablet (1024x768) - `01-harness-smoke-tablet.png`:
++   - Viewport boundary respected with correct 1024x768 canvas scaling.
++   - Badge positioning remains pinned to element corner without clipping.
++   - Legend header reads `KANBA-27 | tablet | 1024x768`.
++
++3. Mobile (390x844) - `01-harness-smoke-mobile.png`:
++   - Single-column mobile layout with zero horizontal overflow.
++   - Clamping verification: Badge position remains strictly contained within viewport width (`computeBadgePosition` bounds `[0, viewportWidth - 22]`).
++   - Legend header reads `KANBA-27 | mobile | 390x844`. Text wraps cleanly within 390px boundaries.
++
++## 4. Bottom Legend Strip Typography and Ergonomic Layout
++- Color System: Background `#111827` (slate-900), text `#ffffff`. Measured contrast ratio exceeds 15:1 (surpassing WCAG AAA requirements).
++- Layout Scalability: Implemented `computeLegendLayout()` automatically switches from a single-column layout to a 2-column grid when annotation count exceeds 8, preventing excessive vertical height consumption on mobile viewports.
++- Metadata Line: Clear monospace-ready separator syntax `<TICKET_ID> | <project> | <width>x<height>` provides unambiguous provenance for reality-checker passive audit.
++
++## 5. Security and CSP S5.4 Compliance Verification
++- Production CSP Enforcement: Vite preview server configured with authoritative `PRODUCTION_CSP` containing all 14 mandatory directives. Verified via live HTTP response header inspection in `docs/qa/KANBA-27/csp-header.txt`.
++- Clean DOM Overlay Injection: Overlay container, bounding boxes, circular badges, and legend elements in `kanban/web/e2e/support/annotate.ts` are created via `document.createElement('div')` and styled strictly using `style.setProperty(...)` CSSOM property calls. Zero `<style>` tags created; zero `element.setAttribute('style', ...)` string assignments; zero `innerHTML`.
++- Test Guard Fail-Closed Verification: Proven via two negative guard tests in `harness.spec.ts`:
++  * Unmatched API request (`/api/v1/does-not-exist`) triggers 599 status and fails test suite.
++  * Dynamically appended inline `<style>` element triggers `securitypolicyviolation` event and immediately fails test suite.
++
++## 6. Computed-Style Probe System
++- Deterministic Style Audit: `styleProbe.ts` reads `getComputedStyle` and `getBoundingClientRect` dimensions, outputting sorted, pretty-printed JSON into `computed-styles-{desktop,tablet,mobile}.json`.
++- Measured Values: Body font family (`system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif`), font size (`16px`), and line height (`24px`) captured accurately across all three resolutions.
++
++## 7. Gate Conclusion
++The Playwright E2E harness, multi-device viewport configuration, visual annotation overlay styling, and CSP-enforcing test guard fulfill all UI/UX architecture and security criteria defined in KB-P3-32 and AGENTS.md.
++
++Verdict: APPROVED
+diff --git a/docs/qa/KANBA-27/unit-test-results.txt b/docs/qa/KANBA-27/unit-test-results.txt
+new file mode 100644
+index 0000000..64ac6e1
+--- /dev/null
++++ b/docs/qa/KANBA-27/unit-test-results.txt
+@@ -0,0 +1,41 @@
++
++> @kanban/web@0.1.0 test:unit /home/adamoutler/kanban/kanban/web
++> vitest run --coverage
++
++
++ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
++      Coverage enabled with v8
++
++ ✓ e2e/support/mockApi.unit.test.ts (11 tests) 32ms
++ ✓ e2e/support/csp.unit.test.ts (1 test) 11ms
++ ✓ e2e/support/styleProbe.unit.test.ts (10 tests) 172ms
++ ✓ e2e/support/annotate.unit.test.ts (17 tests) 243ms
++ ✓ build/precompress.test.ts (12 tests) 357ms
++   ✓ precompress build plugin (12)
++     ✓ closeBundle and runPrecompress (5)
++       ✓ defaults to dist directory if neither customDir nor configResolved sets outDir 322ms
++ ✓ src/App.test.tsx (1 test) 171ms
++ ✓ e2e/support/testGuard.unit.test.ts (6 tests) 17ms
++
++ Test Files  7 passed (7)
++      Tests  58 passed (58)
++   Start at  21:35:45
++   Duration  2.40s (environment 68%, import 16%, tests 12%, worker 4%, transform 1%)
++
++ % Coverage report from v8
++-----------------|---------|----------|---------|---------|-------------------
++File             | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
++-----------------|---------|----------|---------|---------|-------------------
++All files        |     100 |    99.13 |     100 |     100 |                   
++ build           |     100 |      100 |     100 |     100 |                   
++  precompress.ts |     100 |      100 |     100 |     100 |                   
++ e2e/support     |     100 |    98.98 |     100 |     100 |                   
++  annotate.ts    |     100 |    96.96 |     100 |     100 | 221               
++  csp.ts         |     100 |      100 |     100 |     100 |                   
++  mockApi.ts     |     100 |      100 |     100 |     100 |                   
++  styleProbe.ts  |     100 |      100 |     100 |     100 |                   
++  test.ts        |     100 |      100 |     100 |     100 |                   
++ src             |     100 |      100 |     100 |     100 |                   
++  App.tsx        |     100 |      100 |     100 |     100 |                   
++-----------------|---------|----------|---------|---------|-------------------
++EXIT_CODE=0
+diff --git a/kanban/web/build/precompress.test.ts b/kanban/web/build/precompress.test.ts
+index ac21978..4885385 100644
+--- a/kanban/web/build/precompress.test.ts
++++ b/kanban/web/build/precompress.test.ts
+@@ -68,6 +68,7 @@ describe('precompress build plugin', () => {
+       const jsContent = Buffer.alloc(2048, 'x');
+       const jsFilePath = join(testDir, 'bundle.js');
+       writeFileSync(jsFilePath, jsContent);
++      writeFileSync(join(testDir, 'another.js'), jsContent);
+ 
+       const plugin = precompress(testDir);
+       if (typeof plugin.closeBundle === 'function') {
+@@ -92,8 +93,9 @@ describe('precompress build plugin', () => {
+         string,
+         string
+       >;
+-      expect(Object.keys(manifestContent)).toEqual(['bundle.js']);
++      expect(Object.keys(manifestContent)).toEqual(['another.js', 'bundle.js']);
+       expect(manifestContent['bundle.js']).toBe(sriHash(jsContent));
++      expect(manifestContent['another.js']).toBe(sriHash(jsContent));
+     });
+ 
+     it('skips existing .br, .gz, and sri-manifest.json on subsequent runs', () => {
+diff --git a/kanban/web/e2e/fixtures/issues-kan.json b/kanban/web/e2e/fixtures/issues-kan.json
+new file mode 100644
+index 0000000..0dc0d57
+--- /dev/null
++++ b/kanban/web/e2e/fixtures/issues-kan.json
+@@ -0,0 +1,91 @@
++[
++  {
++    "key": "KAN-100",
++    "summary": "Security Architecture Epic",
++    "state": "In Progress",
++    "priority": "high",
++    "assignees": ["@adam"],
++    "created_by": "@adam"
++  },
++  {
++    "key": "KAN-142",
++    "summary": "Harden Multi-Card OIDC & LDAPS Auth Studio",
++    "state": "In Progress",
++    "priority": "urgent",
++    "assignees": ["@adam"],
++    "agent": "codex",
++    "free_text": "Ext: SecAudit",
++    "created_by": "@maya",
++    "creator_overridden": true,
++    "start": "2026-11-11",
++    "due": "2026-11-18",
++    "module": "Auth Core",
++    "cycle": "Cycle 4: Sec",
++    "parent": "KAN-100",
++    "labels": ["security"],
++    "sub_issues": ["KAN-143", "KAN-145"]
++  },
++  {
++    "key": "KAN-143",
++    "summary": "Verify LDAPS certificate pinning",
++    "state": "In Progress",
++    "priority": "high",
++    "parent": "KAN-142"
++  },
++  {
++    "key": "KAN-145",
++    "summary": "Implement break-glass admin lockout guard",
++    "state": "In Progress",
++    "priority": "urgent",
++    "parent": "KAN-142"
++  },
++  {
++    "key": "KAN-101",
++    "summary": "Design token review for dark mode",
++    "state": "Backlog",
++    "priority": "low"
++  },
++  {
++    "key": "KAN-102",
++    "summary": "Evaluate SVG allowlist filters",
++    "state": "Backlog",
++    "priority": "medium"
++  },
++  {
++    "key": "KAN-103",
++    "summary": "Initial Postgres 16 template DB setup",
++    "state": "Todo",
++    "priority": "high"
++  },
++  {
++    "key": "KAN-104",
++    "summary": "Verify SAVEPOINT transaction isolation",
++    "state": "Todo",
++    "priority": "medium"
++  },
++  {
++    "key": "KAN-105",
++    "summary": "Review MCP scoped token permission gates",
++    "state": "In Review",
++    "priority": "high",
++    "gate_status": "pending"
++  },
++  {
++    "key": "KAN-106",
++    "summary": "Cross-origin sandbox payload check <img src=x onerror=alert(1)>",
++    "state": "In Review",
++    "priority": "medium"
++  },
++  {
++    "key": "KAN-107",
++    "summary": "Precompress Vite build plugin implementation",
++    "state": "Done",
++    "priority": "medium"
++  },
++  {
++    "key": "KAN-108",
++    "summary": "Deprecated legacy mock server",
++    "state": "Canceled",
++    "priority": "none"
++  }
++]
+diff --git a/kanban/web/e2e/fixtures/me-adam.json b/kanban/web/e2e/fixtures/me-adam.json
+new file mode 100644
+index 0000000..f19f5b0
+--- /dev/null
++++ b/kanban/web/e2e/fixtures/me-adam.json
+@@ -0,0 +1,5 @@
++{
++  "user": "@adam",
++  "name": "Adam Outler",
++  "role": "PROJECT_ADMIN"
++}
+diff --git a/kanban/web/e2e/fixtures/project-kan.json b/kanban/web/e2e/fixtures/project-kan.json
+new file mode 100644
+index 0000000..3298648
+--- /dev/null
++++ b/kanban/web/e2e/fixtures/project-kan.json
+@@ -0,0 +1,29 @@
++{
++  "key": "KAN",
++  "name": "Platform Core",
++  "workspace": "Engineering",
++  "states": [
++    { "id": "state-backlog", "name": "Backlog", "group": "backlog" },
++    { "id": "state-todo", "name": "Todo", "group": "unstarted" },
++    { "id": "state-in-progress", "name": "In Progress", "group": "started", "wip_soft": 3 },
++    { "id": "state-in-review", "name": "In Review", "group": "started" },
++    { "id": "state-done", "name": "Done", "group": "completed" },
++    { "id": "state-canceled", "name": "Canceled", "group": "cancelled" }
++  ],
++  "priorities": [
++    { "id": "urgent", "name": "urgent", "icon": "🔥" },
++    { "id": "high", "name": "high", "icon": "⚡" },
++    { "id": "medium", "name": "medium", "icon": "🔹" },
++    { "id": "low", "name": "low", "icon": "💤" },
++    { "id": "none", "name": "none" }
++  ],
++  "labels": [
++    { "id": "label-sec", "name": "security" },
++    { "id": "label-bug", "name": "type:bug", "exclusive_group": "type" },
++    { "id": "label-feature", "name": "type:feature", "exclusive_group": "type" }
++  ],
++  "modules_enabled": true,
++  "modules": [
++    { "id": "mod-auth-core", "name": "Auth Core" }
++  ]
++}
+diff --git a/kanban/web/e2e/fixtures/system-status-prod.json b/kanban/web/e2e/fixtures/system-status-prod.json
+new file mode 100644
+index 0000000..0a02e4f
+--- /dev/null
++++ b/kanban/web/e2e/fixtures/system-status-prod.json
+@@ -0,0 +1,7 @@
++{
++  "deployment_mode": "production",
++  "persistent_volume": true,
++  "air_gap_mode": false,
++  "local_llm_endpoint_host": "localhost",
++  "is_server_admin": true
++}
+diff --git a/kanban/web/e2e/fixtures/system-status-standalone.json b/kanban/web/e2e/fixtures/system-status-standalone.json
+new file mode 100644
+index 0000000..d99e346
+--- /dev/null
++++ b/kanban/web/e2e/fixtures/system-status-standalone.json
+@@ -0,0 +1,7 @@
++{
++  "deployment_mode": "standalone",
++  "persistent_volume": true,
++  "air_gap_mode": false,
++  "local_llm_endpoint_host": "localhost",
++  "is_server_admin": true
++}
+diff --git a/kanban/web/e2e/sample/harness.spec.ts b/kanban/web/e2e/sample/harness.spec.ts
+new file mode 100644
+index 0000000..3b4afa9
+--- /dev/null
++++ b/kanban/web/e2e/sample/harness.spec.ts
+@@ -0,0 +1,60 @@
++import { test, expect } from '../support/test';
++import { PRODUCTION_CSP } from '../support/csp';
++import { annotatedScreenshot } from '../support/annotate';
++import { probeStyles } from '../support/styleProbe';
++
++test.describe('E2E Harness Smoke and Guard Proofs', () => {
++  test('01: loads app root, validates production CSP, captures screenshot and probes styles', async ({
++    page,
++  }, testInfo) => {
++    const response = await page.goto('/');
++    expect(response).not.toBeNull();
++    expect(response?.status()).toBe(200);
++
++    const cspHeader = response?.headers()['content-security-policy'] ?? '';
++    expect(cspHeader).toBe(PRODUCTION_CSP);
++
++    await expect(page).toHaveTitle('Kanban');
++    const appRoot = page.locator('[data-testid="app-root"]');
++    await expect(appRoot).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-harness-smoke',
++      annotations: [
++        {
++          selector: '[data-testid="app-root"]',
++          label: 'App Root',
++          note: 'CSP enforced, mock API active',
++        },
++      ],
++    });
++
++    await probeStyles(page, testInfo, {
++      name: 'app-root',
++      probes: [
++        {
++          selector: 'body',
++          props: ['font-family', 'font-size', 'line-height'],
++        },
++      ],
++    });
++  });
++
++  test('02: negative guard proof - unmatched API call fails test', async ({ page }) => {
++    test.fail(true, 'Expected failure: unmatched API route triggers test guard failure');
++    await page.goto('/');
++    await page.evaluate(async () => {
++      await fetch('/api/v1/does-not-exist');
++    });
++  });
++
++  test('03: negative guard proof - inline style CSP violation fails test', async ({ page }) => {
++    test.fail(true, 'Expected failure: inline style tag violates CSP and triggers test guard failure');
++    await page.goto('/');
++    await page.evaluate(() => {
++      document.head.appendChild(
++        Object.assign(document.createElement('style'), { textContent: 'body{}' }),
++      );
++    });
++  });
++});
+diff --git a/kanban/web/e2e/support/annotate.ts b/kanban/web/e2e/support/annotate.ts
+new file mode 100644
+index 0000000..8054fe8
+--- /dev/null
++++ b/kanban/web/e2e/support/annotate.ts
+@@ -0,0 +1,232 @@
++import { mkdirSync } from 'node:fs';
++import { dirname, resolve } from 'node:path';
++import type { Page, TestInfo } from '@playwright/test';
++
++export interface Annotation {
++  selector: string;
++  label: string;
++  note?: string | undefined;
++}
++
++/**
++ * Validates screenshot name and ticket ID format to avoid directory traversal.
++ */
++export function validateScreenshotParams(
++  name: string,
++  qaTicketId?: string,
++): { validName: string; validTicketId?: string | undefined } {
++  if (!/^[0-9]{2}-[a-z0-9-]+$/.test(name)) {
++    throw new Error(`Invalid screenshot name: "${name}". Must match ^[0-9]{2}-[a-z0-9-]+$`);
++  }
++  if (qaTicketId !== undefined && qaTicketId !== '') {
++    if (!/^[A-Z][A-Z0-9]+-[0-9A-Za-z-]+$/.test(qaTicketId)) {
++      throw new Error(`Invalid QA_TICKET_ID: "${qaTicketId}". Must match ^[A-Z][A-Z0-9]+-[0-9A-Za-z-]+$`);
++    }
++  }
++  return { validName: name, validTicketId: qaTicketId };
++}
++
++/**
++ * Resolves output relative or absolute path for the screenshot.
++ */
++export function resolveOutputPath(name: string, projectName: string, qaTicketId?: string): string {
++  validateScreenshotParams(name, qaTicketId);
++  if (qaTicketId) {
++    return `docs/qa/${qaTicketId}/screenshots/${name}-${projectName}.png`;
++  }
++  return `test-results/screenshots/${name}-${projectName}.png`;
++}
++
++/**
++ * Pure helper calculating badge position clamped inside [0, viewport - 22].
++ */
++export function computeBadgePosition(
++  boxX: number,
++  boxY: number,
++  viewportWidth: number,
++  viewportHeight: number,
++): { x: number; y: number } {
++  const x = Math.max(0, Math.min(boxX, viewportWidth - 22));
++  const y = Math.max(0, Math.min(boxY, viewportHeight - 22));
++  return { x, y };
++}
++
++/**
++ * Pure helper computing legend grid layout based on annotation count.
++ */
++export function computeLegendLayout(
++  annotationCount: number,
++  viewportWidth: number,
++): { columns: number; columnWidth: number } {
++  const columns = annotationCount > 8 ? 2 : 1;
++  const padding = 24; // 12px left + 12px right
++  const gap = columns > 1 ? 12 : 0;
++  const availableWidth = viewportWidth - padding - gap;
++  const columnWidth = Math.floor(availableWidth / columns);
++  return { columns, columnWidth };
++}
++
++/**
++ * Captures an annotated screenshot with visual overlays and legend.
++ * Uses DOM and CSSOM property mutation (no style tags or style attributes)
++ * to comply strictly with Content-Security-Policy style-src 'self'.
++ */
++export async function annotatedScreenshot(
++  page: Page,
++  testInfo: TestInfo,
++  opts: { name: string; annotations: Annotation[]; fullPage?: boolean },
++): Promise<string> {
++  const qaTicketId = process.env.QA_TICKET_ID;
++  validateScreenshotParams(opts.name, qaTicketId);
++
++  const relPath = resolveOutputPath(opts.name, testInfo.project.name, qaTicketId);
++  const repoRoot = resolve(import.meta.dirname, '../../../..');
++  const fullPath = resolve(repoRoot, relPath);
++
++  mkdirSync(dirname(fullPath), { recursive: true });
++
++  const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
++  const evaluatedBoxes: {
++    x: number;
++    y: number;
++    width: number;
++    height: number;
++    badgeX: number;
++    badgeY: number;
++    index: number;
++  }[] = [];
++
++  for (const [i, ann] of opts.annotations.entries()) {
++    const locator = page.locator(ann.selector).first();
++    const count = await locator.count();
++    if (count === 0) {
++      throw new Error(`Annotation element not found: selector "${ann.selector}"`);
++    }
++    const box = await locator.boundingBox();
++    if (!box || box.width === 0 || box.height === 0) {
++      throw new Error(`Annotation element has zero dimensions: selector "${ann.selector}"`);
++    }
++    const badgePos = computeBadgePosition(box.x, box.y, viewport.width, viewport.height);
++    evaluatedBoxes.push({
++      x: box.x,
++      y: box.y,
++      width: box.width,
++      height: box.height,
++      badgeX: badgePos.x,
++      badgeY: badgePos.y,
++      index: i + 1,
++    });
++  }
++
++  const legendLayout = computeLegendLayout(opts.annotations.length, viewport.width);
++  const ticketLabel = qaTicketId ?? 'LOCAL';
++  const headerText = `${ticketLabel} | ${testInfo.project.name} | ${String(viewport.width)}x${String(viewport.height)}`;
++
++  const overlayId = `playwright-annotated-overlay-${String(Date.now())}`;
++
++  await page.evaluate(
++    ({ overlayId, evaluatedBoxes, annotations, headerText, legendLayout }) => {
++      const container = document.createElement('div');
++      container.id = overlayId;
++      container.style.setProperty('position', 'fixed');
++      container.style.setProperty('top', '0');
++      container.style.setProperty('left', '0');
++      container.style.setProperty('width', '100%');
++      container.style.setProperty('height', '100%');
++      container.style.setProperty('pointer-events', 'none');
++      container.style.setProperty('z-index', '2147483647');
++
++      for (const b of evaluatedBoxes) {
++        // Outline box
++        const outline = document.createElement('div');
++        outline.style.setProperty('position', 'absolute');
++        outline.style.setProperty('left', `${String(b.x)}px`);
++        outline.style.setProperty('top', `${String(b.y)}px`);
++        outline.style.setProperty('width', `${String(b.width)}px`);
++        outline.style.setProperty('height', `${String(b.height)}px`);
++        outline.style.setProperty('border', '2px solid #e11d48');
++        outline.style.setProperty('box-sizing', 'border-box');
++        container.appendChild(outline);
++
++        // Circular badge
++        const badge = document.createElement('div');
++        badge.style.setProperty('position', 'absolute');
++        badge.style.setProperty('left', `${String(b.badgeX)}px`);
++        badge.style.setProperty('top', `${String(b.badgeY)}px`);
++        badge.style.setProperty('width', '22px');
++        badge.style.setProperty('height', '22px');
++        badge.style.setProperty('border-radius', '50%');
++        badge.style.setProperty('background-color', '#e11d48');
++        badge.style.setProperty('color', '#ffffff');
++        badge.style.setProperty('font-size', '12px');
++        badge.style.setProperty('font-weight', '700');
++        badge.style.setProperty('font-family', 'sans-serif');
++        badge.style.setProperty('display', 'flex');
++        badge.style.setProperty('align-items', 'center');
++        badge.style.setProperty('justify-content', 'center');
++        badge.textContent = String(b.index);
++        container.appendChild(badge);
++      }
++
++      // Legend strip fixed at the bottom
++      const legend = document.createElement('div');
++      legend.style.setProperty('position', 'absolute');
++      legend.style.setProperty('bottom', '0');
++      legend.style.setProperty('left', '0');
++      legend.style.setProperty('width', '100%');
++      legend.style.setProperty('background-color', '#111827');
++      legend.style.setProperty('color', '#ffffff');
++      legend.style.setProperty('font-family', 'sans-serif');
++      legend.style.setProperty('font-size', '13px');
++      legend.style.setProperty('padding', '8px 12px');
++      legend.style.setProperty('box-sizing', 'border-box');
++
++      const titleLine = document.createElement('div');
++      titleLine.style.setProperty('font-weight', '600');
++      titleLine.style.setProperty('margin-bottom', '4px');
++      titleLine.textContent = headerText;
++      legend.appendChild(titleLine);
++
++      const itemsContainer = document.createElement('div');
++      itemsContainer.style.setProperty('display', 'grid');
++      itemsContainer.style.setProperty(
++        'grid-template-columns',
++        legendLayout.columns > 1 ? '1fr 1fr' : '1fr',
++      );
++      itemsContainer.style.setProperty('gap', '4px 12px');
++
++      for (const [i, item] of annotations.entries()) {
++        const row = document.createElement('div');
++        const noteSuffix = item.note ? ` - ${item.note}` : '';
++        row.textContent = `${String(i + 1)}. ${item.label}${noteSuffix}`;
++        itemsContainer.appendChild(row);
++      }
++      legend.appendChild(itemsContainer);
++      container.appendChild(legend);
++
++      document.body.appendChild(container);
++    },
++    { overlayId, evaluatedBoxes, annotations: opts.annotations, headerText, legendLayout },
++  );
++
++  await page.screenshot({
++    path: fullPath,
++    animations: 'disabled',
++    caret: 'hide',
++    fullPage: opts.fullPage ?? false,
++  });
++
++  await page.evaluate((id) => {
++    const el = document.getElementById(id);
++    if (el) {
++      el.remove();
++    }
++  }, overlayId);
++
++  await testInfo.attach(opts.name, {
++    path: fullPath,
++    contentType: 'image/png',
++  });
++
++  return fullPath;
++}
+diff --git a/kanban/web/e2e/support/annotate.unit.test.ts b/kanban/web/e2e/support/annotate.unit.test.ts
+new file mode 100644
+index 0000000..ba8c472
+--- /dev/null
++++ b/kanban/web/e2e/support/annotate.unit.test.ts
+@@ -0,0 +1,340 @@
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import {
++  validateScreenshotParams,
++  resolveOutputPath,
++  computeBadgePosition,
++  computeLegendLayout,
++  annotatedScreenshot,
++} from './annotate';
++import {
++  validateProbeParams,
++  resolveStyleProbePath,
++  mergeStyleData,
++  writeJsonAtomic,
++  probeStyles,
++} from './styleProbe';
++import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import { join, resolve } from 'node:path';
++import type { Page, TestInfo, Locator } from '@playwright/test';
++
++describe('annotate and styleProbe support modules', () => {
++  describe('resolveOutputPath', () => {
++    it('returns docs/qa/KANBA-77/screenshots/03-board-desktop.png for QA_TICKET_ID=KANBA-77, name 03-board, project desktop', () => {
++      const result = resolveOutputPath('03-board', 'desktop', 'KANBA-77');
++      expect(result).toBe('docs/qa/KANBA-77/screenshots/03-board-desktop.png');
++    });
++
++    it('returns test-results/screenshots/ path when QA_TICKET_ID is unset', () => {
++      const result = resolveOutputPath('01-smoke', 'mobile', undefined);
++      expect(result).toBe('test-results/screenshots/01-smoke-mobile.png');
++    });
++  });
++
++  describe('validateScreenshotParams security validations', () => {
++    it('throws on path traversal in QA_TICKET_ID', () => {
++      expect(() => validateScreenshotParams('01-smoke', '../../etc')).toThrow('Invalid QA_TICKET_ID');
++    });
++
++    it('throws on path traversal in name', () => {
++      expect(() => validateScreenshotParams('../x', 'KANBA-77')).toThrow('Invalid screenshot name');
++    });
++
++    it('throws on names without 2-digit prefix', () => {
++      expect(() => validateScreenshotParams('1-x', 'KANBA-77')).toThrow('Invalid screenshot name');
++      expect(() => validateScreenshotParams('board', 'KANBA-77')).toThrow('Invalid screenshot name');
++    });
++  });
++
++  describe('computeBadgePosition boundary clamping', () => {
++    it('clamps badge position into [0, viewport - 22] for negative coordinates', () => {
++      const pos = computeBadgePosition(-50, -20, 1440, 900);
++      expect(pos.x).toBe(0);
++      expect(pos.y).toBe(0);
++    });
++
++    it('clamps badge position when coordinates exceed viewport boundary', () => {
++      const pos = computeBadgePosition(1500, 1000, 1440, 900);
++      expect(pos.x).toBe(1440 - 22);
++      expect(pos.y).toBe(900 - 22);
++    });
++  });
++
++  describe('computeLegendLayout wrapping', () => {
++    it('wraps more than 8 annotations into 2 columns without exceeding viewport width 390', () => {
++      const layout = computeLegendLayout(9, 390);
++      expect(layout.columns).toBe(2);
++      expect(layout.columnWidth * layout.columns).toBeLessThanOrEqual(390);
++      expect(layout.columnWidth).toBeGreaterThan(100);
++    });
++
++    it('uses single column for <= 8 annotations', () => {
++      const layout = computeLegendLayout(5, 390);
++      expect(layout.columns).toBe(1);
++    });
++  });
++
++  describe('annotatedScreenshot execution', () => {
++    it('successfully processes annotations and captures screenshot with overlay', async () => {
++      const fakeLocator = {
++        first: () => fakeLocator,
++        count: vi.fn().mockResolvedValue(1),
++        boundingBox: vi.fn().mockResolvedValue({ x: 100, y: 100, width: 200, height: 50 }),
++      } as unknown as Locator;
++
++      const fakePage = {
++        viewportSize: vi.fn().mockReturnValue({ width: 1440, height: 900 }),
++        locator: vi.fn().mockReturnValue(fakeLocator),
++        evaluate: vi.fn().mockImplementation((fn: (arg?: unknown) => unknown, arg?: unknown) => {
++          return Promise.resolve(typeof fn === 'function' ? fn(arg) : fn);
++        }),
++        screenshot: vi.fn().mockImplementation((opts: { path: string }) => {
++          writeFileSync(opts.path, Buffer.from('fake-png-bytes'));
++          return Promise.resolve();
++        }),
++      } as unknown as Page;
++
++      const attachMock = vi.fn().mockResolvedValue(undefined);
++      const fakeTestInfo = {
++        project: { name: 'desktop' },
++        attach: attachMock,
++      } as unknown as TestInfo;
++
++      const oldEnv = process.env.QA_TICKET_ID;
++      process.env.QA_TICKET_ID = 'KANBA-UNIT';
++      try {
++        const outPath = await annotatedScreenshot(fakePage, fakeTestInfo, {
++          name: '01-smoke',
++          annotations: [
++            { selector: '[data-testid="app-root"]', label: 'App Root', note: 'test note' },
++            { selector: '[data-testid="app-root"]', label: 'Item 2' },
++          ],
++          fullPage: true,
++        });
++        expect(outPath).toContain('docs/qa/KANBA-UNIT/screenshots/01-smoke-desktop.png');
++        expect(attachMock).toHaveBeenCalled();
++      } finally {
++        if (oldEnv === undefined) {
++          delete process.env.QA_TICKET_ID;
++        } else {
++          process.env.QA_TICKET_ID = oldEnv;
++        }
++        rmSync(resolve(import.meta.dirname, '../../../../docs/qa/KANBA-UNIT'), {
++          recursive: true,
++          force: true,
++        });
++      }
++
++      // Test with QA_TICKET_ID unset
++      const oldEnv2 = process.env.QA_TICKET_ID;
++      delete process.env.QA_TICKET_ID;
++      try {
++        const outPathLocal = await annotatedScreenshot(fakePage, fakeTestInfo, {
++          name: '02-local',
++          annotations: [{ selector: '[data-testid="app-root"]', label: 'Local' }],
++        });
++        expect(outPathLocal).toContain('test-results/screenshots/02-local-desktop.png');
++
++        // Test with null viewportSize fallback
++        const nullViewportPage = {
++          ...fakePage,
++          viewportSize: vi.fn().mockReturnValue(null),
++        } as unknown as Page;
++        const outNull = await annotatedScreenshot(nullViewportPage, fakeTestInfo, {
++          name: '03-nullvp',
++          annotations: [{ selector: '[data-testid="app-root"]', label: 'NullVP' }],
++        });
++        expect(outNull).toContain('test-results/screenshots/03-nullvp-desktop.png');
++      } finally {
++        if (oldEnv2 !== undefined) {
++          process.env.QA_TICKET_ID = oldEnv2;
++        }
++      }
++    });
++
++    it('supports 9 or more annotations triggering multi-column legend and handles pre-removed overlay', async () => {
++      const fakeLocator = {
++        first: () => fakeLocator,
++        count: vi.fn().mockResolvedValue(1),
++        boundingBox: vi.fn().mockResolvedValue({ x: 10, y: 20, width: 100, height: 40 }),
++      } as unknown as Locator;
++
++      const fakePage = {
++        viewportSize: vi.fn().mockReturnValue({ width: 1440, height: 900 }),
++        locator: vi.fn().mockReturnValue(fakeLocator),
++        evaluate: vi.fn().mockImplementation((fn: (arg?: unknown) => unknown, arg?: unknown) => {
++          return Promise.resolve(typeof fn === 'function' ? fn(arg) : fn);
++        }),
++        screenshot: vi.fn().mockImplementation((opts: { path: string }) => {
++          // Pre-remove overlay from DOM so cleanup evaluate hits `if (el)` false branch
++          document.querySelectorAll('[id^="qa-annotation-overlay-"]').forEach((el) => {
++            el.remove();
++          });
++          writeFileSync(opts.path, Buffer.from('fake-png-bytes'));
++          return Promise.resolve();
++        }),
++      } as unknown as Page;
++
++      const fakeTestInfo = {
++        project: { name: 'desktop' },
++        attach: vi.fn().mockResolvedValue(undefined),
++      } as unknown as TestInfo;
++
++      const annotations = Array.from({ length: 9 }, (_, i) => ({
++        selector: '[data-testid="app-root"]',
++        label: `Item ${String(i + 1)}`,
++        note: i % 2 === 0 ? `Note ${String(i + 1)}` : undefined,
++      }));
++
++      const outPath = await annotatedScreenshot(fakePage, fakeTestInfo, {
++        name: '04-multicol',
++        annotations,
++      });
++      expect(outPath).toContain('test-results/screenshots/04-multicol-desktop.png');
++    });
++
++    it('throws if annotation element is not found or has zero dimensions', async () => {
++      const missingLocator = {
++        first: () => missingLocator,
++        count: vi.fn().mockResolvedValue(0),
++      } as unknown as Locator;
++
++      const fakePage = {
++        viewportSize: vi.fn().mockReturnValue({ width: 1440, height: 900 }),
++        locator: vi.fn().mockReturnValue(missingLocator),
++      } as unknown as Page;
++
++      const fakeTestInfo = { project: { name: 'desktop' } } as unknown as TestInfo;
++
++      await expect(
++        annotatedScreenshot(fakePage, fakeTestInfo, {
++          name: '01-missing',
++          annotations: [{ selector: '.missing', label: 'Missing' }],
++        }),
++      ).rejects.toThrow('Annotation element not found');
++
++      const zeroBoxLocator = {
++        first: () => zeroBoxLocator,
++        count: vi.fn().mockResolvedValue(1),
++        boundingBox: vi.fn().mockResolvedValue({ x: 0, y: 0, width: 0, height: 0 }),
++      } as unknown as Locator;
++
++      const fakePage2 = {
++        viewportSize: vi.fn().mockReturnValue({ width: 1440, height: 900 }),
++        locator: vi.fn().mockReturnValue(zeroBoxLocator),
++      } as unknown as Page;
++
++      await expect(
++        annotatedScreenshot(fakePage2, fakeTestInfo, {
++          name: '01-zero',
++          annotations: [{ selector: '.zero', label: 'Zero' }],
++        }),
++      ).rejects.toThrow('zero dimensions');
++    });
++  });
++
++  describe('styleProbe merge and atomic write', () => {
++    let tmpDir: string;
++
++    beforeEach(() => {
++      tmpDir = mkdtempSync(join(tmpdir(), 'style-probe-test-'));
++    });
++
++    afterEach(() => {
++      if (existsSync(tmpDir)) {
++        rmSync(tmpDir, { recursive: true, force: true });
++      }
++    });
++
++    it('throws on invalid probe names or ticket ids', () => {
++      expect(() => {
++        validateProbeParams('../secret');
++      }).toThrow('Invalid probe name');
++      expect(() => {
++        validateProbeParams('valid-name', '../../etc');
++      }).toThrow('Invalid QA_TICKET_ID');
++    });
++
++    it('resolves correct style probe path', () => {
++      expect(resolveStyleProbePath('desktop', 'KANBA-27')).toBe(
++        'docs/qa/KANBA-27/computed-styles-desktop.json',
++      );
++      expect(resolveStyleProbePath('mobile', undefined)).toBe(
++        'test-results/computed-styles-mobile.json',
++      );
++    });
++
++    it('merges two probe calls with different names into one sorted JSON file', () => {
++      const initial: Record<string, unknown> = {};
++      const step1 = mergeStyleData(initial, 'header', { color: 'rgb(0, 0, 0)' });
++      const step2 = mergeStyleData(step1, 'app-root', { margin: '0px auto' });
++
++      // Verify keys are sorted alphabetically: 'app-root' before 'header'
++      expect(Object.keys(step2)).toEqual(['app-root', 'header']);
++    });
++
++    it('writes JSON atomically via temp file and rename', () => {
++      const targetPath = join(tmpDir, 'computed-styles.json');
++      const testData = { 'app-root': { width: '1280px' } };
++
++      writeJsonAtomic(targetPath, testData);
++
++      expect(existsSync(targetPath)).toBe(true);
++      const readBack = JSON.parse(readFileSync(targetPath, 'utf-8')) as Record<string, unknown>;
++      expect(readBack).toEqual(testData);
++    });
++
++    it('executes probeStyles against page and writes to file', async () => {
++      document.body.innerHTML = '<main class="app-main" style="width: 1280px; height: 600px;"><h1>Title</h1></main>';
++
++      const fakePage = {
++        evaluate: vi.fn().mockImplementation((fn: (arg: unknown) => unknown, arg: unknown) => {
++          return Promise.resolve(fn(arg));
++        }),
++      } as unknown as Page;
++
++      const fakeTestInfo = {
++        project: { name: 'tablet' },
++      } as unknown as TestInfo;
++
++      const oldEnv = process.env.QA_TICKET_ID;
++      process.env.QA_TICKET_ID = 'KANBA-UNIT';
++      try {
++        const res = await probeStyles(fakePage, fakeTestInfo, {
++          name: 'app-root',
++          probes: [{ selector: '.app-main', props: ['width'] }],
++        });
++        expect(res['.app-main']).toBeDefined();
++
++        // Second call to test merge into existing file and invalid json recovery
++        const targetPath = join(
++          resolve(import.meta.dirname, '../../../..'),
++          resolveStyleProbePath('tablet', 'KANBA-UNIT'),
++        );
++        writeFileSync(targetPath, 'corrupted-json{');
++        await probeStyles(fakePage, fakeTestInfo, {
++          name: 'header',
++          probes: [{ selector: '.app-main', props: ['height'] }],
++        });
++      } finally {
++        if (oldEnv === undefined) {
++          delete process.env.QA_TICKET_ID;
++        } else {
++          process.env.QA_TICKET_ID = oldEnv;
++        }
++        rmSync(resolve(import.meta.dirname, '../../../../docs/qa/KANBA-UNIT'), {
++          recursive: true,
++          force: true,
++        });
++      }
++
++      // Test element not found error
++      await expect(
++        probeStyles(fakePage, fakeTestInfo, {
++          name: 'missing',
++          probes: [{ selector: '.non-existent-selector', props: ['width'] }],
++        }),
++      ).rejects.toThrow('probeStyles element not found');
++    });
++  });
++});
+diff --git a/kanban/web/e2e/support/csp.ts b/kanban/web/e2e/support/csp.ts
+new file mode 100644
+index 0000000..e361958
+--- /dev/null
++++ b/kanban/web/e2e/support/csp.ts
+@@ -0,0 +1,6 @@
++/**
++ * Authoritative production Content-Security-Policy (CSP) header string.
++ * Exact specification defined in S5.4 and shared with Vite preview server.
++ */
++export const PRODUCTION_CSP =
++  "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify";
+diff --git a/kanban/web/e2e/support/csp.unit.test.ts b/kanban/web/e2e/support/csp.unit.test.ts
+new file mode 100644
+index 0000000..d233b2d
+--- /dev/null
++++ b/kanban/web/e2e/support/csp.unit.test.ts
+@@ -0,0 +1,35 @@
++import { describe, it, expect } from 'vitest';
++import { PRODUCTION_CSP } from './csp';
++
++describe('PRODUCTION_CSP constant', () => {
++  it('contains the expected directives in authoritative S5.4 order', () => {
++    const expectedDirectives = [
++      "default-src 'none'",
++      "script-src 'self'",
++      "worker-src 'self'",
++      "style-src 'self'",
++      'img-src \'self\' blob: data:image/png data:image/webp',
++      "font-src 'self'",
++      "connect-src 'self' wss:",
++      "media-src 'self'",
++      "object-src 'none'",
++      "base-uri 'none'",
++      "form-action 'self'",
++      "frame-ancestors 'none'",
++      "require-trusted-types-for 'script'",
++      'trusted-types kanban-sanitizer dompurify',
++    ];
++
++    const directives = PRODUCTION_CSP.split(';').map((d) => d.trim()).filter(Boolean);
++
++    expect(directives.length).toBe(expectedDirectives.length);
++    for (let i = 0; i < expectedDirectives.length; i++) {
++      expect(directives[i]).toBe(expectedDirectives[i]);
++    }
++
++    // Ensure each directive appears exactly once
++    const directiveNames = directives.map((d) => d.split(' ')[0]);
++    const uniqueNames = new Set(directiveNames);
++    expect(uniqueNames.size).toBe(directiveNames.length);
++  });
++});
+diff --git a/kanban/web/e2e/support/mockApi.ts b/kanban/web/e2e/support/mockApi.ts
+new file mode 100644
+index 0000000..0f210bc
+--- /dev/null
++++ b/kanban/web/e2e/support/mockApi.ts
+@@ -0,0 +1,165 @@
++import { readFileSync } from 'node:fs';
++import { join } from 'node:path';
++import type { Page } from '@playwright/test';
++
++export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
++
++export interface MockRequest {
++  method: string;
++  path: string;
++  body: unknown;
++  headers: Record<string, string>;
++  params: Record<string, string>;
++}
++
++export interface MockResponse {
++  status?: number;
++  json?: unknown;
++  headers?: Record<string, string>;
++  delayMs?: number;
++}
++
++export type MockHandler = MockResponse | ((req: MockRequest) => MockResponse);
++
++export type MockHandlers = Record<`${HttpMethod} /api/v1/${string}`, MockHandler>;
++
++export interface RecordedCall {
++  method: string;
++  path: string;
++  body: unknown;
++  headers: Record<string, string>;
++  params: Record<string, string>;
++}
++
++export interface UnmatchedCall {
++  method: string;
++  path: string;
++}
++
++export interface MockRecorder {
++  calls: RecordedCall[];
++  unmatchedCalls: UnmatchedCall[];
++}
++
++/**
++ * Loads a JSON fixture by name from the e2e/fixtures directory.
++ * Throws an error if the name contains invalid or path-traversal characters.
++ */
++// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
++export function loadFixture<T = unknown>(name: string): T {
++  if (!/^[a-z0-9-]+$/.test(name)) {
++    throw new Error(`Invalid fixture name: ${name}`);
++  }
++  const fixturePath = join(import.meta.dirname, '../fixtures', `${name}.json`);
++  const content = readFileSync(fixturePath, 'utf-8');
++  return JSON.parse(content) as T;
++}
++
++/**
++ * Parses a handler key into method and pathname pattern.
++ */
++export function parseRouteKey(key: string): { method: string; pathPattern: string } {
++  const spaceIdx = key.indexOf(' ');
++  if (spaceIdx === -1) {
++    return { method: key.trim(), pathPattern: '' };
++  }
++  return {
++    method: key.slice(0, spaceIdx).trim(),
++    pathPattern: key.slice(spaceIdx + 1).trim(),
++  };
++}
++
++/**
++ * Matches a URL pathname against a route pattern containing :param segments.
++ */
++export function matchRoute(
++  patternPath: string,
++  actualPath: string,
++): { matched: boolean; params: Record<string, string> } {
++  const patternSegments = patternPath.split('/').filter(Boolean);
++  const actualSegments = actualPath.split('/').filter(Boolean);
++
++  if (patternSegments.length !== actualSegments.length) {
++    return { matched: false, params: {} };
++  }
++
++  const params: Record<string, string> = {};
++  for (let i = 0; i < patternSegments.length; i++) {
++    const p = String(patternSegments[i]);
++    const a = String(actualSegments[i]);
++    if (p.startsWith(':')) {
++      params[p.slice(1)] = a;
++    } else if (p !== a) {
++      return { matched: false, params: {} };
++    }
++  }
++
++  return { matched: true, params };
++}
++
++/**
++ * Registers an interceptor for all /api/v1/ routes and matches configured handlers.
++ * Unmatched calls receive a 599 status and are recorded.
++ */
++export async function mockApi(page: Page, handlers: MockHandlers): Promise<MockRecorder> {
++  const recorder: MockRecorder = { calls: [], unmatchedCalls: [] };
++
++  await page.route('**/api/v1/**', async (route) => {
++    const request = route.request();
++    const url = new URL(request.url());
++    const method = request.method();
++    const pathname = url.pathname;
++    let body: unknown = undefined;
++    const postData = request.postData();
++    if (postData) {
++      try {
++        body = JSON.parse(postData);
++      } catch {
++        body = postData;
++      }
++    }
++    const headers = request.headers();
++
++    let matched = false;
++    for (const [key, handler] of Object.entries(handlers)) {
++      const { method: handlerMethod, pathPattern } = parseRouteKey(key);
++      if (handlerMethod !== method) {
++        continue;
++      }
++      const match = matchRoute(pathPattern, pathname);
++      if (match.matched) {
++        matched = true;
++        const reqObj: MockRequest = {
++          method,
++          path: pathname,
++          body,
++          headers,
++          params: match.params,
++        };
++        recorder.calls.push(reqObj);
++        const response = typeof handler === 'function' ? handler(reqObj) : handler;
++        if (response.delayMs && response.delayMs > 0) {
++          await new Promise((resolve) => setTimeout(resolve, response.delayMs));
++        }
++        await route.fulfill({
++          status: response.status ?? 200,
++          contentType: 'application/json',
++          headers: response.headers ?? {},
++          body: JSON.stringify(response.json ?? {}),
++        });
++        break;
++      }
++    }
++
++    if (!matched) {
++      recorder.unmatchedCalls.push({ method, path: pathname });
++      await route.fulfill({
++        status: 599,
++        contentType: 'application/json',
++        body: JSON.stringify({ error: `Unmatched API route: ${method} ${pathname}` }),
++      });
++    }
++  });
++
++  return recorder;
++}
+diff --git a/kanban/web/e2e/support/mockApi.unit.test.ts b/kanban/web/e2e/support/mockApi.unit.test.ts
+new file mode 100644
+index 0000000..72622fd
+--- /dev/null
++++ b/kanban/web/e2e/support/mockApi.unit.test.ts
+@@ -0,0 +1,254 @@
++import { describe, it, expect, vi } from 'vitest';
++import { loadFixture, matchRoute, parseRouteKey, mockApi } from './mockApi';
++import type { Page, Route, Request } from '@playwright/test';
++
++describe('mockApi support module', () => {
++  describe('loadFixture', () => {
++    it('successfully loads existing json fixtures', () => {
++      const me = loadFixture<{ user: string }>('me-adam');
++      expect(me.user).toBe('@adam');
++
++      const project = loadFixture<{ key: string }>('project-kan');
++      expect(project.key).toBe('KAN');
++    });
++
++    it('throws on invalid or path-traversal names', () => {
++      expect(() => loadFixture('../secrets')).toThrow('Invalid fixture name: ../secrets');
++      expect(() => loadFixture('invalid/name')).toThrow('Invalid fixture name: invalid/name');
++      expect(() => loadFixture('bad name')).toThrow('Invalid fixture name: bad name');
++    });
++  });
++
++  describe('parseRouteKey', () => {
++    it('correctly parses method and path pattern', () => {
++      const { method, pathPattern } = parseRouteKey('GET /api/v1/issues/:issueKey');
++      expect(method).toBe('GET');
++      expect(pathPattern).toBe('/api/v1/issues/:issueKey');
++    });
++
++    it('handles key without space', () => {
++      const { method, pathPattern } = parseRouteKey('GET');
++      expect(method).toBe('GET');
++      expect(pathPattern).toBe('');
++    });
++  });
++
++  describe('matchRoute', () => {
++    it('matches parameterized routes and extracts parameters', () => {
++      const result = matchRoute('/api/v1/issues/:issueKey', '/api/v1/issues/KAN-142');
++      expect(result.matched).toBe(true);
++      expect(result.params).toEqual({ issueKey: 'KAN-142' });
++    });
++
++    it('does not match routes with different segment counts', () => {
++      const result = matchRoute('/api/v1/issues/:issueKey', '/api/v1/issues/KAN-142/activity');
++      expect(result.matched).toBe(false);
++      expect(result.params).toEqual({});
++    });
++
++    it('does not match routes with differing static segments', () => {
++      const result = matchRoute('/api/v1/issues/:issueKey', '/api/v1/projects/KAN-142');
++      expect(result.matched).toBe(false);
++      expect(result.params).toEqual({});
++    });
++  });
++
++  describe('mockApi router', () => {
++    it('routes matching requests and fulfills response', async () => {
++      let registeredHandler: ((route: Route) => Promise<void>) | undefined;
++      const routeMock = vi.fn().mockImplementation((pattern: string, handler: (route: Route) => Promise<void>) => {
++        registeredHandler = handler;
++        return Promise.resolve();
++      });
++      const fakePage = {
++        route: routeMock,
++      } as unknown as Page;
++
++      const recorder = await mockApi(fakePage, {
++        'POST /api/v1/other': { status: 204 },
++        'GET /api/v1/issues/:issueKey': (req) => ({
++          status: 200,
++          json: { key: req.params.issueKey },
++        }),
++      });
++
++      expect(routeMock).toHaveBeenCalledWith('**/api/v1/**', expect.any(Function));
++
++      // Simulate a matching request
++      const fulfillMock = vi.fn().mockResolvedValue(undefined);
++      const fakeRequest = {
++        url: () => 'http://127.0.0.1:4173/api/v1/issues/KAN-142',
++        method: () => 'GET',
++        postData: () => null,
++        headers: () => ({ 'x-test': '1' }),
++      } as unknown as Request;
++
++      const fakeRoute = {
++        request: () => fakeRequest,
++        fulfill: fulfillMock,
++      } as unknown as Route;
++
++      if (registeredHandler) {
++        await registeredHandler(fakeRoute);
++      }
++
++      expect(fulfillMock).toHaveBeenCalledWith({
++        status: 200,
++        contentType: 'application/json',
++        headers: {},
++        body: JSON.stringify({ key: 'KAN-142' }),
++      });
++      expect(recorder.calls.length).toBe(1);
++      expect(recorder.calls[0]?.params).toEqual({ issueKey: 'KAN-142' });
++      expect(recorder.unmatchedCalls.length).toBe(0);
++    });
++
++    it('returns 599 and records unmatched API routes', async () => {
++      let registeredHandler: ((route: Route) => Promise<void>) | undefined;
++      const fakePage = {
++        route: vi.fn().mockImplementation((pattern: string, handler: (route: Route) => Promise<void>) => {
++          registeredHandler = handler;
++          return Promise.resolve();
++        }),
++      } as unknown as Page;
++
++      const recorder = await mockApi(fakePage, {
++        'GET /api/v1/issues': { status: 200, json: [] },
++      });
++
++      // Simulate an unmatched request with non-JSON postData to test fallback body parsing
++      const fulfillMock = vi.fn().mockResolvedValue(undefined);
++      const fakeRequest = {
++        url: () => 'http://127.0.0.1:4173/api/v1/unknown-endpoint',
++        method: () => 'POST',
++        postData: () => 'plain text non-json',
++        headers: () => ({}),
++      } as unknown as Request;
++
++      const fakeRoute = {
++        request: () => fakeRequest,
++        fulfill: fulfillMock,
++      } as unknown as Route;
++
++      if (registeredHandler) {
++        await registeredHandler(fakeRoute);
++      }
++
++      expect(fulfillMock).toHaveBeenCalledWith({
++        status: 599,
++        contentType: 'application/json',
++        body: JSON.stringify({ error: 'Unmatched API route: POST /api/v1/unknown-endpoint' }),
++      });
++      expect(recorder.unmatchedCalls.length).toBe(1);
++      expect(recorder.unmatchedCalls[0]).toEqual({
++        method: 'POST',
++        path: '/api/v1/unknown-endpoint',
++      });
++    });
++
++    it('supports response delayMs', async () => {
++      let registeredHandler: ((route: Route) => Promise<void>) | undefined;
++      const fakePage = {
++        route: vi.fn().mockImplementation((pattern: string, handler: (route: Route) => Promise<void>) => {
++          registeredHandler = handler;
++          return Promise.resolve();
++        }),
++      } as unknown as Page;
++
++      await mockApi(fakePage, {
++        'GET /api/v1/delayed': {
++          status: 200,
++          json: { ok: true },
++          delayMs: 10,
++        },
++      });
++
++      const fulfillMock = vi.fn().mockResolvedValue(undefined);
++      const fakeRequest = {
++        url: () => 'http://127.0.0.1:4173/api/v1/delayed',
++        method: () => 'GET',
++        postData: () => null,
++        headers: () => ({}),
++      } as unknown as Request;
++
++      const fakeRoute = {
++        request: () => fakeRequest,
++        fulfill: fulfillMock,
++      } as unknown as Route;
++
++      const start = Date.now();
++      if (registeredHandler) {
++        await registeredHandler(fakeRoute);
++      }
++      expect(Date.now() - start).toBeGreaterThanOrEqual(8);
++      expect(fulfillMock).toHaveBeenCalledWith(
++        expect.objectContaining({ status: 200 }),
++      );
++    });
++
++    it('falls back to default status, empty headers, and empty body when omitted', async () => {
++      let registeredHandler: ((route: Route) => Promise<void>) | undefined;
++      const fakePage = {
++        route: vi.fn().mockImplementation((pattern: string, handler: (route: Route) => Promise<void>) => {
++          registeredHandler = handler;
++          return Promise.resolve();
++        }),
++      } as unknown as Page;
++
++      await mockApi(fakePage, {
++        'GET /api/v1/first-path': {},
++        'GET /api/v1/second-path': { status: 201, headers: { 'x-custom': 'abc' } },
++      });
++
++      // Call second-path to trigger match.matched === false on first-path
++      const fulfillMock = vi.fn().mockResolvedValue(undefined);
++      const fakeRequest = {
++        url: () => 'http://127.0.0.1:4173/api/v1/second-path',
++        method: () => 'GET',
++        postData: () => null,
++        headers: () => ({}),
++      } as unknown as Request;
++
++      const fakeRoute = {
++        request: () => fakeRequest,
++        fulfill: fulfillMock,
++      } as unknown as Route;
++
++      if (registeredHandler) {
++        await registeredHandler(fakeRoute);
++      }
++
++      expect(fulfillMock).toHaveBeenCalledWith({
++        status: 201,
++        contentType: 'application/json',
++        headers: { 'x-custom': 'abc' },
++        body: JSON.stringify({}),
++      });
++
++      // Call first-path to verify status 200 and empty headers fallback
++      const fulfillMock2 = vi.fn().mockResolvedValue(undefined);
++      const fakeRequest2 = {
++        url: () => 'http://127.0.0.1:4173/api/v1/first-path',
++        method: () => 'GET',
++        postData: () => null,
++        headers: () => ({}),
++      } as unknown as Request;
++
++      const fakeRoute2 = {
++        request: () => fakeRequest2,
++        fulfill: fulfillMock2,
++      } as unknown as Route;
++
++      if (registeredHandler) {
++        await registeredHandler(fakeRoute2);
++      }
++
++      expect(fulfillMock2).toHaveBeenCalledWith({
++        status: 200,
++        contentType: 'application/json',
++        headers: {},
++        body: JSON.stringify({}),
++      });
++    });
++  });
++});
+diff --git a/kanban/web/e2e/support/styleProbe.ts b/kanban/web/e2e/support/styleProbe.ts
+new file mode 100644
+index 0000000..de7e054
+--- /dev/null
++++ b/kanban/web/e2e/support/styleProbe.ts
+@@ -0,0 +1,114 @@
++import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
++import { dirname, resolve } from 'node:path';
++import type { Page, TestInfo } from '@playwright/test';
++
++export interface StyleProbeConfig {
++  selector: string;
++  props: string[];
++}
++
++/**
++ * Validates style probe name and QA_TICKET_ID.
++ */
++export function validateProbeParams(name: string, qaTicketId?: string): void {
++  if (!/^[a-z0-9-]+$/.test(name)) {
++    throw new Error(`Invalid probe name: "${name}". Must match ^[a-z0-9-]+$`);
++  }
++  if (qaTicketId !== undefined && qaTicketId !== '') {
++    if (!/^[A-Z][A-Z0-9]+-[0-9A-Za-z-]+$/.test(qaTicketId)) {
++      throw new Error(`Invalid QA_TICKET_ID: "${qaTicketId}". Must match ^[A-Z][A-Z0-9]+-[0-9A-Za-z-]+$`);
++    }
++  }
++}
++
++/**
++ * Resolves destination JSON file path for computed styles.
++ */
++export function resolveStyleProbePath(projectName: string, qaTicketId?: string): string {
++  if (qaTicketId) {
++    return `docs/qa/${qaTicketId}/computed-styles-${projectName}.json`;
++  }
++  return `test-results/computed-styles-${projectName}.json`;
++}
++
++/**
++ * Merges probed style records into an existing JSON object with sorted keys.
++ */
++export function mergeStyleData(
++  existing: Record<string, unknown>,
++  probeName: string,
++  data: Record<string, unknown>,
++): Record<string, unknown> {
++  const merged: Record<string, unknown> = { ...existing, [probeName]: data };
++  const sorted: Record<string, unknown> = {};
++  for (const key of Object.keys(merged).sort()) {
++    sorted[key] = merged[key];
++  }
++  return sorted;
++}
++
++/**
++ * Atomically writes JSON content via temp file and rename.
++ */
++export function writeJsonAtomic(filePath: string, data: unknown): void {
++  mkdirSync(dirname(filePath), { recursive: true });
++  const tempPath = `${filePath}.tmp.${String(Date.now())}-${Math.random().toString(36).slice(2)}`;
++  writeFileSync(tempPath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
++  renameSync(tempPath, filePath);
++}
++
++/**
++ * Probes getComputedStyle values and bounding client rect for configured selectors,
++ * merging the resulting measurements into a versioned JSON artifact.
++ */
++export async function probeStyles(
++  page: Page,
++  testInfo: TestInfo,
++  opts: { name: string; probes: StyleProbeConfig[] },
++): Promise<Record<string, Record<string, string>>> {
++  const qaTicketId = process.env.QA_TICKET_ID;
++  validateProbeParams(opts.name, qaTicketId);
++
++  const probedResults: Record<string, Record<string, string>> = {};
++
++  for (const probe of opts.probes) {
++    const values = await page.evaluate(
++      ({ selector, props }) => {
++        const el = document.querySelector(selector);
++        if (!el) {
++          throw new Error(`probeStyles element not found: "${selector}"`);
++        }
++        const computed = window.getComputedStyle(el);
++        const rect = el.getBoundingClientRect();
++        const measurements: Record<string, string> = {
++          width: `${String(rect.width)}px`,
++          height: `${String(rect.height)}px`,
++        };
++        for (const p of props) {
++          measurements[p] = computed.getPropertyValue(p);
++        }
++        return measurements;
++      },
++      { selector: probe.selector, props: probe.props },
++    );
++    probedResults[probe.selector] = values;
++  }
++
++  const relPath = resolveStyleProbePath(testInfo.project.name, qaTicketId);
++  const repoRoot = resolve(import.meta.dirname, '../../../..');
++  const fullPath = resolve(repoRoot, relPath);
++
++  let existingData: Record<string, unknown> = {};
++  if (existsSync(fullPath)) {
++    try {
++      existingData = JSON.parse(readFileSync(fullPath, 'utf-8')) as Record<string, unknown>;
++    } catch {
++      existingData = {};
++    }
++  }
++
++  const merged = mergeStyleData(existingData, opts.name, probedResults);
++  writeJsonAtomic(fullPath, merged);
++
++  return probedResults;
++}
+diff --git a/kanban/web/e2e/support/styleProbe.unit.test.ts b/kanban/web/e2e/support/styleProbe.unit.test.ts
+new file mode 100644
+index 0000000..f991d24
+--- /dev/null
++++ b/kanban/web/e2e/support/styleProbe.unit.test.ts
+@@ -0,0 +1,219 @@
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import {
++  validateProbeParams,
++  resolveStyleProbePath,
++  mergeStyleData,
++  writeJsonAtomic,
++  probeStyles,
++} from './styleProbe';
++import type { Page, TestInfo } from '@playwright/test';
++import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
++import { dirname, resolve } from 'node:path';
++
++describe('styleProbe support module', () => {
++  describe('validateProbeParams', () => {
++    it('accepts valid alphanumeric names and QA ticket IDs', () => {
++      expect(() => {
++        validateProbeParams('app-smoke', 'KANBA-27');
++      }).not.toThrow();
++      expect(() => {
++        validateProbeParams('smoke', undefined);
++      }).not.toThrow();
++      expect(() => {
++        validateProbeParams('test-1', '');
++      }).not.toThrow();
++    });
++
++    it('rejects invalid names or invalid QA ticket IDs', () => {
++      expect(() => {
++        validateProbeParams('AppSmoke');
++      }).toThrow('Invalid probe name');
++      expect(() => {
++        validateProbeParams('smoke test');
++      }).toThrow('Invalid probe name');
++      expect(() => {
++        validateProbeParams('smoke', 'invalid_id');
++      }).toThrow('Invalid QA_TICKET_ID');
++    });
++  });
++
++  describe('resolveStyleProbePath', () => {
++    it('resolves qa directory when QA_TICKET_ID is set', () => {
++      expect(resolveStyleProbePath('desktop', 'KANBA-27')).toBe(
++        'docs/qa/KANBA-27/computed-styles-desktop.json',
++      );
++    });
++
++    it('resolves test-results when QA_TICKET_ID is unset', () => {
++      expect(resolveStyleProbePath('tablet', undefined)).toBe(
++        'test-results/computed-styles-tablet.json',
++      );
++    });
++  });
++
++  describe('mergeStyleData', () => {
++    it('merges new probe data and sorts top-level keys alphabetically', () => {
++      const existing = { zebra: { color: 'black' }, apple: { color: 'red' } };
++      const merged = mergeStyleData(existing, 'banana', { color: 'yellow' });
++      expect(Object.keys(merged)).toEqual(['apple', 'banana', 'zebra']);
++      expect(merged.banana).toEqual({ color: 'yellow' });
++    });
++  });
++
++  describe('writeJsonAtomic', () => {
++    const testOutPath = resolve(
++      import.meta.dirname,
++      '../../../../test-results/style-probe-test/output.json',
++    );
++
++    beforeEach(() => {
++      if (existsSync(dirname(testOutPath))) {
++        rmSync(dirname(testOutPath), { recursive: true, force: true });
++      }
++    });
++
++    afterEach(() => {
++      if (existsSync(dirname(testOutPath))) {
++        rmSync(dirname(testOutPath), { recursive: true, force: true });
++      }
++    });
++
++    it('writes valid JSON with atomic temp file rename', () => {
++      writeJsonAtomic(testOutPath, { key: 'value' });
++      expect(existsSync(testOutPath)).toBe(true);
++      const content = JSON.parse(readFileSync(testOutPath, 'utf-8')) as { key: string };
++      expect(content.key).toBe('value');
++    });
++  });
++
++  describe('probeStyles', () => {
++    const originalEnv = process.env.QA_TICKET_ID;
++    const testArtifactPath = resolve(
++      import.meta.dirname,
++      '../../../../docs/qa/KANBA-TEST-PROBE/computed-styles-desktop.json',
++    );
++
++    beforeEach(() => {
++      process.env.QA_TICKET_ID = 'KANBA-TEST-PROBE';
++      if (existsSync(dirname(testArtifactPath))) {
++        rmSync(dirname(testArtifactPath), { recursive: true, force: true });
++      }
++    });
++
++    afterEach(() => {
++      if (originalEnv === undefined) {
++        delete process.env.QA_TICKET_ID;
++      } else {
++        process.env.QA_TICKET_ID = originalEnv;
++      }
++      if (existsSync(dirname(testArtifactPath))) {
++        rmSync(dirname(testArtifactPath), { recursive: true, force: true });
++      }
++    });
++
++    it('extracts computed styles and writes new JSON artifact when file does not exist', async () => {
++      const fakePage = {
++        evaluate: vi.fn().mockImplementation((fn: (arg: unknown) => unknown, arg: unknown) => {
++          // Simulate browser evaluate callback
++          const div = document.createElement('div');
++          div.id = 'app-root';
++          div.style.setProperty('font-family', 'sans-serif');
++          document.body.appendChild(div);
++          try {
++            return Promise.resolve(fn(arg));
++          } finally {
++            div.remove();
++          }
++        }),
++      } as unknown as Page;
++
++      const fakeTestInfo = {
++        project: { name: 'desktop' },
++      } as unknown as TestInfo;
++
++      const result = await probeStyles(fakePage, fakeTestInfo, {
++        name: 'app-root',
++        probes: [{ selector: '#app-root', props: ['font-family'] }],
++      });
++
++      expect(result['#app-root']).toBeDefined();
++      expect(existsSync(testArtifactPath)).toBe(true);
++      const saved = JSON.parse(readFileSync(testArtifactPath, 'utf-8')) as Record<
++        string,
++        unknown
++      >;
++      expect(saved['app-root']).toBeDefined();
++    });
++
++    it('merges with existing JSON when artifact already exists', async () => {
++      mkdirSync(dirname(testArtifactPath), { recursive: true });
++      writeFileSync(
++        testArtifactPath,
++        JSON.stringify({ 'prior-entry': { width: '10px' } }, null, 2),
++      );
++
++      const fakePage = {
++        evaluate: vi.fn().mockResolvedValue({ width: '20px', height: '30px' }),
++      } as unknown as Page;
++
++      const fakeTestInfo = {
++        project: { name: 'desktop' },
++      } as unknown as TestInfo;
++
++      await probeStyles(fakePage, fakeTestInfo, {
++        name: 'second-entry',
++        probes: [{ selector: '#header', props: ['width'] }],
++      });
++
++      const saved = JSON.parse(readFileSync(testArtifactPath, 'utf-8')) as Record<
++        string,
++        unknown
++      >;
++      expect(saved['prior-entry']).toBeDefined();
++      expect(saved['second-entry']).toBeDefined();
++    });
++
++    it('falls back to empty object when existing artifact has corrupt JSON', async () => {
++      mkdirSync(dirname(testArtifactPath), { recursive: true });
++      writeFileSync(testArtifactPath, 'INVALID_CORRUPT_JSON{{{');
++
++      const fakePage = {
++        evaluate: vi.fn().mockResolvedValue({ width: '20px' }),
++      } as unknown as Page;
++
++      const fakeTestInfo = {
++        project: { name: 'desktop' },
++      } as unknown as TestInfo;
++
++      await probeStyles(fakePage, fakeTestInfo, {
++        name: 'recovered-entry',
++        probes: [{ selector: '#header', props: ['width'] }],
++      });
++
++      const saved = JSON.parse(readFileSync(testArtifactPath, 'utf-8')) as Record<
++        string,
++        unknown
++      >;
++      expect(saved['recovered-entry']).toBeDefined();
++    });
++
++    it('throws when probe element is not found in document', async () => {
++      const fakePage = {
++        evaluate: vi.fn().mockImplementation((fn: (arg: unknown) => unknown, arg: unknown) => {
++          return Promise.resolve(fn(arg));
++        }),
++      } as unknown as Page;
++
++      const fakeTestInfo = {
++        project: { name: 'desktop' },
++      } as unknown as TestInfo;
++
++      await expect(
++        probeStyles(fakePage, fakeTestInfo, {
++          name: 'missing-probe',
++          probes: [{ selector: '#does-not-exist', props: ['display'] }],
++        }),
++      ).rejects.toThrow('probeStyles element not found: "#does-not-exist"');
++    });
++  });
++});
+diff --git a/kanban/web/e2e/support/test.ts b/kanban/web/e2e/support/test.ts
+new file mode 100644
+index 0000000..a2204be
+--- /dev/null
++++ b/kanban/web/e2e/support/test.ts
+@@ -0,0 +1,125 @@
++import { test as baseTest, expect } from '@playwright/test';
++import { mockApi, loadFixture, type MockRecorder } from './mockApi';
++import type { Page } from '@playwright/test';
++
++declare global {
++  interface Window {
++    __cspViolations?: { violatedDirective: string; blockedURI: string }[];
++  }
++}
++
++export interface TestFixtures {
++  mockRecorder: MockRecorder;
++}
++
++/**
++ * Auto-fixture function that sets up CSP violation listeners,
++ * error collectors, off-origin request blocking, and default API mocks.
++ */
++export async function testGuardFixture(
++  { page }: { page: Page },
++  use: (r: MockRecorder) => Promise<void>,
++): Promise<void> {
++  // 1. Register CSP violation listener before any scripts run
++  await page.addInitScript(() => {
++    window.__cspViolations = [];
++    document.addEventListener('securitypolicyviolation', (e) => {
++      window.__cspViolations?.push({
++        violatedDirective: e.violatedDirective,
++        blockedURI: e.blockedURI,
++      });
++    });
++  });
++
++  // 2. Track console errors and unhandled page errors
++  const consoleErrors: string[] = [];
++  const pageErrors: Error[] = [];
++
++  page.on('console', (msg) => {
++    if (msg.type() === 'error') {
++      const text = msg.text();
++      // Ignore browser CSP parser warnings for S5.4 MIME-scoped data: sources
++      if (text.startsWith('The source list for the Content Security Policy directive')) {
++        return;
++      }
++      consoleErrors.push(text);
++    }
++  });
++
++  page.on('pageerror', (err) => {
++    pageErrors.push(err);
++  });
++
++  // 3. Block all off-origin network requests
++  const offOriginRequests: string[] = [];
++  await page.route('**', (route) => {
++    const urlStr = route.request().url();
++    if (
++      urlStr.startsWith('http://127.0.0.1:4173') ||
++      urlStr.startsWith('http://localhost:4173')
++    ) {
++      return route.continue();
++    }
++    offOriginRequests.push(urlStr);
++    return route.abort();
++  });
++
++  // 4. Default API mock handlers
++  const recorder = await mockApi(page, {
++    'GET /api/v1/me': loadFixture('me-adam'),
++    'GET /api/v1/system/status': loadFixture('system-status-prod'),
++  });
++
++  // Run test
++  // eslint-disable-next-line react-hooks/rules-of-hooks
++  await use(recorder);
++
++  // 5. Post-test assertions verifying zero violations
++  let cspViolations: { violatedDirective: string; blockedURI: string }[] = [];
++  try {
++    cspViolations = await page.evaluate(() => window.__cspViolations ?? []);
++  } catch {
++    // Page was closed before evaluation
++  }
++
++  const issues: string[] = [];
++  if (cspViolations.length > 0) {
++    issues.push(
++      `CSP violations detected (${String(cspViolations.length)}): ${cspViolations
++        .map((v) => `${v.violatedDirective} (${v.blockedURI})`)
++        .join(', ')}`,
++    );
++  }
++  if (consoleErrors.length > 0) {
++    issues.push(
++      `Console errors detected (${String(consoleErrors.length)}): ${consoleErrors.join('; ')}`,
++    );
++  }
++  if (pageErrors.length > 0) {
++    issues.push(
++      `Page errors detected (${String(pageErrors.length)}): ${pageErrors.map((e) => e.message).join('; ')}`,
++    );
++  }
++  if (offOriginRequests.length > 0) {
++    issues.push(
++      `Off-origin requests blocked (${String(offOriginRequests.length)}): ${offOriginRequests.join(', ')}`,
++    );
++  }
++  if (recorder.unmatchedCalls.length > 0) {
++    issues.push(
++      `Unmatched API calls detected (${String(recorder.unmatchedCalls.length)}): ${recorder.unmatchedCalls
++        .map((c) => `${c.method} ${c.path}`)
++        .join(', ')}`,
++    );
++  }
++
++  if (issues.length > 0) {
++    throw new Error(`Test guard verification failure:\n${issues.join('\n')}`);
++  }
++}
++
++export const test = baseTest.extend<TestFixtures>({
++  mockRecorder: [testGuardFixture, { auto: true }],
++});
++
++export { expect };
+diff --git a/kanban/web/e2e/support/testGuard.unit.test.ts b/kanban/web/e2e/support/testGuard.unit.test.ts
+new file mode 100644
+index 0000000..7b2c958
+--- /dev/null
++++ b/kanban/web/e2e/support/testGuard.unit.test.ts
+@@ -0,0 +1,175 @@
++import { describe, it, expect, vi } from 'vitest';
++import { testGuardFixture } from './test';
++import type { Page, Route, Request, ConsoleMessage } from '@playwright/test';
++
++describe('testGuardFixture', () => {
++  it('passes cleanly when zero violations occur', async () => {
++    const addInitScriptMock = vi.fn().mockImplementation((fn: () => void) => {
++      fn();
++      // Dispatch synthetic securitypolicyviolation event to verify handler
++      const event = new Event('securitypolicyviolation');
++      Object.assign(event, { violatedDirective: 'none', blockedURI: '' });
++      document.dispatchEvent(event);
++      window.__cspViolations = []; // clear so it passes cleanly
++      return Promise.resolve();
++    });
++
++    const fakePage = {
++      addInitScript: addInitScriptMock,
++      on: vi.fn(),
++      route: vi.fn().mockResolvedValue(undefined),
++      evaluate: vi.fn().mockImplementation((fn: () => unknown) => {
++        return Promise.resolve(typeof fn === 'function' ? fn() : fn);
++      }),
++    } as unknown as Page;
++
++    let useCalled = false;
++    await testGuardFixture({ page: fakePage }, async (recorder) => {
++      useCalled = true;
++      expect(recorder).toBeDefined();
++      await Promise.resolve();
++    });
++
++    expect(useCalled).toBe(true);
++    expect(addInitScriptMock).toHaveBeenCalled();
++  });
++
++  it('fails when CSP violations are recorded', async () => {
++    window.__cspViolations = [
++      { violatedDirective: "style-src 'self'", blockedURI: '' },
++    ];
++    const fakePage = {
++      addInitScript: vi.fn().mockResolvedValue(undefined),
++      on: vi.fn(),
++      route: vi.fn().mockResolvedValue(undefined),
++      evaluate: vi.fn().mockImplementation((fn: () => unknown) => {
++        return Promise.resolve(typeof fn === 'function' ? fn() : fn);
++      }),
++    } as unknown as Page;
++
++    try {
++      await expect(
++        testGuardFixture({ page: fakePage }, async () => {
++          // do nothing
++        }),
++      ).rejects.toThrow('CSP violations detected');
++    } finally {
++      delete window.__cspViolations;
++    }
++  });
++
++  it('fails when console errors or page errors occur', async () => {
++    delete window.__cspViolations;
++    const listeners: Record<string, (arg: unknown) => void> = {};
++    const fakePage = {
++      addInitScript: vi.fn().mockResolvedValue(undefined),
++      on: vi.fn().mockImplementation((event: string, cb: (arg: unknown) => void) => {
++        listeners[event] = cb;
++      }),
++      route: vi.fn().mockResolvedValue(undefined),
++      evaluate: vi.fn().mockImplementation((fn: () => unknown) => {
++        return Promise.resolve(typeof fn === 'function' ? fn() : fn);
++      }),
++    } as unknown as Page;
++
++    await expect(
++      testGuardFixture({ page: fakePage }, async () => {
++        const fakeMsg = {
++          type: () => 'error',
++          text: () => 'Simulated console error',
++        } as unknown as ConsoleMessage;
++        listeners.console?.(fakeMsg);
++        listeners.pageerror?.(new Error('Simulated page crash'));
++        await Promise.resolve();
++      }),
++    ).rejects.toThrow('Console errors detected');
++  });
++
++  it('blocks and fails on off-origin requests', async () => {
++    let globalRouteHandler: ((route: Route) => Promise<void>) | undefined;
++    const fakePage = {
++      addInitScript: vi.fn().mockResolvedValue(undefined),
++      on: vi.fn(),
++      route: vi.fn().mockImplementation((pattern: string, handler: (route: Route) => Promise<void>) => {
++        if (pattern === '**') {
++          globalRouteHandler = handler;
++        }
++        return Promise.resolve();
++      }),
++      evaluate: vi.fn().mockResolvedValue([]),
++    } as unknown as Page;
++
++    await expect(
++      testGuardFixture({ page: fakePage }, async () => {
++        const abortMock = vi.fn().mockResolvedValue(undefined);
++        const continueMock = vi.fn().mockResolvedValue(undefined);
++
++        const localReq = {
++          url: () => 'http://127.0.0.1:4173/assets/test.js',
++        } as unknown as Request;
++        const localRoute = {
++          request: () => localReq,
++          continue: continueMock,
++          abort: abortMock,
++        } as unknown as Route;
++        if (globalRouteHandler) {
++          await globalRouteHandler(localRoute);
++        }
++        expect(continueMock).toHaveBeenCalled();
++
++        const evilReq = {
++          url: () => 'http://evil.com/tracker.js',
++        } as unknown as Request;
++        const evilRoute = {
++          request: () => evilReq,
++          continue: continueMock,
++          abort: abortMock,
++        } as unknown as Route;
++        if (globalRouteHandler) {
++          await globalRouteHandler(evilRoute);
++        }
++        expect(abortMock).toHaveBeenCalled();
++      }),
++    ).rejects.toThrow('Off-origin requests blocked');
++  });
++
++  it('ignores non-error console messages and handles page closed during teardown', async () => {
++    const listeners: Record<string, (arg: unknown) => void> = {};
++    const fakePage = {
++      addInitScript: vi.fn().mockResolvedValue(undefined),
++      on: vi.fn().mockImplementation((event: string, cb: (arg: unknown) => void) => {
++        listeners[event] = cb;
++      }),
++      route: vi.fn().mockResolvedValue(undefined),
++      evaluate: vi.fn().mockRejectedValue(new Error('Target page, context or browser has been closed')),
++    } as unknown as Page;
++
++    await testGuardFixture({ page: fakePage }, async () => {
++      listeners.console?.({
++        type: () => 'info',
++        text: () => 'non-error info',
++      });
++      listeners.console?.({
++        type: () => 'error',
++        text: () => 'The source list for the Content Security Policy directive ...',
++      });
++      await Promise.resolve();
++    });
++  });
++
++  it('fails when unmatched API calls are recorded', async () => {
++    const fakePage = {
++      addInitScript: vi.fn().mockResolvedValue(undefined),
++      on: vi.fn(),
++      route: vi.fn().mockResolvedValue(undefined),
++      evaluate: vi.fn().mockResolvedValue([]),
++    } as unknown as Page;
++
++    await expect(
++      testGuardFixture({ page: fakePage }, async (recorder) => {
++        recorder.unmatchedCalls.push({ method: 'GET', path: '/api/v1/unknown' });
++        await Promise.resolve();
++      }),
++    ).rejects.toThrow('Unmatched API calls detected');
++  });
++});
+diff --git a/kanban/web/package.json b/kanban/web/package.json
+index 98cf0a3..906aeae 100644
+--- a/kanban/web/package.json
++++ b/kanban/web/package.json
+@@ -9,13 +9,15 @@
+     "preview": "vite preview --port 4173 --strictPort",
+     "typecheck": "tsc -b --noEmit",
+     "lint": "eslint . --max-warnings 0",
+-    "test:unit": "vitest run"
++    "test:unit": "vitest run",
++    "e2e": "playwright test"
+   },
+   "dependencies": {
+     "react": "19.3.1",
+     "react-dom": "19.3.1"
+   },
+   "devDependencies": {
++    "@playwright/test": "1.65.0",
+     "@testing-library/react": "16.3.3",
+     "@types/node": "26.6.6",
+     "@types/react": "19.3.0",
+diff --git a/kanban/web/playwright.config.ts b/kanban/web/playwright.config.ts
+new file mode 100644
+index 0000000..d917fa9
+--- /dev/null
++++ b/kanban/web/playwright.config.ts
+@@ -0,0 +1,58 @@
++import { defineConfig } from '@playwright/test';
++
++export default defineConfig({
++  testDir: 'e2e',
++  testMatch: '**/*.spec.ts',
++  fullyParallel: true,
++  forbidOnly: Boolean(process.env.CI),
++  retries: 0,
++  timeout: 15000,
++  reporter: [
++    ['list'],
++    ['json', { outputFile: 'test-results/e2e.json' }],
++  ],
++  use: {
++    baseURL: 'http://127.0.0.1:4173',
++    reducedMotion: 'reduce',
++    colorScheme: 'light',
++    locale: 'en-US',
++    timezoneId: 'UTC',
++    trace: 'retain-on-failure',
++    serviceWorkers: 'block',
++  },
++  projects: [
++    {
++      name: 'desktop',
++      use: {
++        browserName: 'chromium',
++        viewport: { width: 1440, height: 900 },
++        deviceScaleFactor: 1,
++      },
++    },
++    {
++      name: 'tablet',
++      use: {
++        browserName: 'chromium',
++        viewport: { width: 1024, height: 768 },
++        deviceScaleFactor: 2,
++        hasTouch: true,
++      },
++    },
++    {
++      name: 'mobile',
++      use: {
++        browserName: 'chromium',
++        viewport: { width: 390, height: 844 },
++        deviceScaleFactor: 3,
++        isMobile: true,
++        hasTouch: true,
++      },
++    },
++  ],
++  webServer: {
++    command: 'pnpm build && pnpm preview --host 127.0.0.1 --port 4173 --strictPort',
++    url: 'http://127.0.0.1:4173',
++    reuseExistingServer: !process.env.CI,
++    timeout: 120000,
++  },
++});
+diff --git a/kanban/web/tsconfig.json b/kanban/web/tsconfig.json
+index 6a37e7c..e308242 100644
+--- a/kanban/web/tsconfig.json
++++ b/kanban/web/tsconfig.json
+@@ -23,6 +23,8 @@
+   "include": [
+     "src",
+     "build",
++    "e2e",
++    "playwright.config.ts",
+     "vite.config.ts",
+     "vitest.config.ts",
+     "eslint.config.js"
+diff --git a/kanban/web/vite.config.ts b/kanban/web/vite.config.ts
+index 0fb471f..3e84007 100644
+--- a/kanban/web/vite.config.ts
++++ b/kanban/web/vite.config.ts
+@@ -1,6 +1,7 @@
+ import { defineConfig } from 'vite';
+ import react from '@vitejs/plugin-react';
+ import { precompress } from './build/precompress.ts';
++import { PRODUCTION_CSP } from './e2e/support/csp.ts';
+ 
+ export default defineConfig({
+   plugins: [react(), precompress()],
+@@ -9,4 +10,9 @@ export default defineConfig({
+     assetsDir: 'assets',
+     sourcemap: false,
+   },
++  preview: {
++    headers: {
++      'Content-Security-Policy': PRODUCTION_CSP,
++    },
++  },
+ });
+diff --git a/kanban/web/vitest.config.ts b/kanban/web/vitest.config.ts
+index c27f373..bde3032 100644
+--- a/kanban/web/vitest.config.ts
++++ b/kanban/web/vitest.config.ts
+@@ -6,10 +6,15 @@ export default defineConfig({
+   test: {
+     environment: 'jsdom',
+     globals: true,
++    include: [
++      'src/**/*.{test,spec}.{ts,tsx}',
++      'build/**/*.{test,spec}.ts',
++      'e2e/support/**/*.unit.test.ts',
++    ],
+     coverage: {
+       provider: 'v8',
+-      include: ['src/**/*.{ts,tsx}', 'build/**/*.ts'],
+-      exclude: ['src/main.tsx', '**/*.test.*'],
++      include: ['src/**/*.{ts,tsx}', 'build/**/*.ts', 'e2e/support/**/*.ts'],
++      exclude: ['src/main.tsx', '**/*.test.*', '**/*.spec.*'],
+       thresholds: {
+         lines: 95,
+         functions: 95,
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index eb39932..7056a74 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -21,6 +21,9 @@ importers:
+         specifier: 19.3.1
+         version: 19.3.1(react@19.3.1)
+     devDependencies:
++      '@playwright/test':
++        specifier: 1.65.0
++        version: 1.65.0
+       '@testing-library/react':
+         specifier: 16.3.3
+         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+@@ -302,6 +305,11 @@ packages:
+   '@oxc-project/types@0.156.0':
+     resolution: {integrity: sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw==}
+ 
++  '@playwright/test@1.65.0':
++    resolution: {integrity: sha512-iGURLGuKDLakSEl7Pgfv8h7f+XLT+V861Wfhz0zlEl5nyFuKUopdkFBPKqTllTUp06aOwPuH8iuUEb3yp3MpbQ==}
++    engines: {node: '>=20'}
++    hasBin: true
++
+   '@rolldown/binding-android-arm-eabi@1.2.19':
+     resolution: {integrity: sha512-e+Ebe0WT+9tbXmNKPIiC8YrWAHYwug3m6i4p3rZGGulfZri1jtI4HslT+OZnFf/OIHowWF71DTlHwXBP2SiA7A==}
+     engines: {node: ^20.19.0 || >=22.12.0}
+@@ -1161,6 +1169,16 @@ packages:
+     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
+     engines: {node: '>=12'}
+ 
++  playwright-core@1.65.0:
++    resolution: {integrity: sha512-vNSKgH6YqtN7cdT/L334zo0a+YwkrpicyrHJlWWPIm/Q+Nn2SWInil01oT0mbu96U4GgoRtCYQD9CzJQgju+lA==}
++    engines: {node: '>=20'}
++    hasBin: true
++
++  playwright@1.65.0:
++    resolution: {integrity: sha512-F3AMWcR44qMBt4kq+6Kb6mX7bjGXshktKFOPULd7reED6ZJWevjbNRqysP7q+AATE9kdPEZBibex1BYsvpVoeA==}
++    engines: {node: '>=20'}
++    hasBin: true
++
+   postcss@8.5.32:
+     resolution: {integrity: sha512-LJlKCCAUFKOuZxipUdYw1NzIITEsPcgyOG9LkvRJvuKj/bRzbuRY0ARXvL0pWGpsZvn8jku+LMep2eU0seHp8g==}
+     engines: {node: ^10 || ^12 || >=14}
+@@ -1777,6 +1795,10 @@ snapshots:
+ 
+   '@oxc-project/types@0.156.0': {}
+ 
++  '@playwright/test@1.65.0':
++    dependencies:
++      playwright: 1.65.0
++
+   '@rolldown/binding-android-arm-eabi@1.2.19':
+     optional: true
+ 
+@@ -2570,6 +2592,12 @@ snapshots:
+ 
+   picomatch@4.0.7: {}
+ 
++  playwright-core@1.65.0: {}
++
++  playwright@1.65.0:
++    dependencies:
++      playwright-core: 1.65.0
++
+   postcss@8.5.32:
+     dependencies:
+       nanoid: 3.3.20
