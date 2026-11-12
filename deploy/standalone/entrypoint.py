@@ -195,12 +195,18 @@ def bootstrap_database(
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_rls_reader') THEN
         CREATE ROLE app_rls_reader LOGIN;
       END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kb_infra_owner') THEN
+        CREATE ROLE kb_infra_owner NOLOGIN NOINHERIT NOBYPASSRLS;
+      END IF;
     END
     $$;
     ALTER ROLE kanban_migrator NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS;
     ALTER ROLE kanban_app      NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
     ALTER ROLE app_rls_reader  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
     ALTER ROLE app_rls_reader  SET default_transaction_read_only = on;
+    ALTER ROLE kb_infra_owner  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+    GRANT kb_infra_owner TO kanban_migrator;
+    GRANT USAGE, CREATE ON SCHEMA public TO kb_infra_owner;
     """
     run_psql_script(role_sql, dbname="postgres", run_dir=run_dir)
 

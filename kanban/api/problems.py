@@ -50,13 +50,14 @@ class Problem(BaseModel):
 class ProblemException(Exception):  # noqa: N818
     """Application exception mapped directly to an RFC 7807 Problem document."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917 - Extended with response headers
         self,
         code: str,
         status: int,
         title: str,
         detail: str | None = None,
         errors: list[FieldError] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -68,6 +69,7 @@ class ProblemException(Exception):  # noqa: N818
         self.title = title
         self.detail = detail
         self.errors = errors
+        self.headers = headers
 
 
 def not_found() -> NoReturn:
@@ -100,11 +102,14 @@ async def problem_exception_handler(
         request_id=req_id,
         errors=exc.errors,
     )
+    response_headers = {"x-request-id": req_id}
+    if exc.headers:
+        response_headers.update(exc.headers)
     return JSONResponse(
         status_code=exc.status,
         content=problem.model_dump(exclude_none=True),
         media_type=PROBLEM_MEDIA_TYPE,
-        headers={"x-request-id": req_id},
+        headers=response_headers,
     )
 
 
@@ -175,11 +180,14 @@ async def starlette_http_exception_handler(
         detail=detail,
         request_id=req_id,
     )
+    response_headers = {"x-request-id": req_id}
+    if exc.headers:
+        response_headers.update(exc.headers)
     return JSONResponse(
         status_code=exc.status_code,
         content=problem.model_dump(exclude_none=True),
         media_type=PROBLEM_MEDIA_TYPE,
-        headers={"x-request-id": req_id},
+        headers=response_headers,
     )
 
 
