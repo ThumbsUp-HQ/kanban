@@ -127,6 +127,13 @@ class ActivityEventType(StrEnum):
     CREATOR_OVERRIDDEN = "CREATOR_OVERRIDDEN"
     MCP_KEY_MINTED = "MCP_KEY_MINTED"
     MCP_KEY_REVOKED = "MCP_KEY_REVOKED"
+    STICKY_CREATED = "STICKY_CREATED"
+    STICKY_UPDATED = "STICKY_UPDATED"
+    STICKY_RECOLORED = "STICKY_RECOLORED"
+    STICKY_PROMOTION_SNOOZED = "STICKY_PROMOTION_SNOOZED"
+    STICKY_PROMOTED_TO_DOC = "STICKY_PROMOTED_TO_DOC"
+    STICKY_UNARCHIVED_COPY = "STICKY_UNARCHIVED_COPY"
+    STICKY_TRASHED = "STICKY_TRASHED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -200,6 +207,13 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.CREATOR_OVERRIDDEN: ActivityCategory.HISTORY,
         ActivityEventType.MCP_KEY_MINTED: ActivityCategory.SYSTEM,
         ActivityEventType.MCP_KEY_REVOKED: ActivityCategory.SYSTEM,
+        ActivityEventType.STICKY_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_RECOLORED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_PROMOTION_SNOOZED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_PROMOTED_TO_DOC: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_UNARCHIVED_COPY: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_TRASHED: ActivityCategory.HISTORY,
     }
 )
 

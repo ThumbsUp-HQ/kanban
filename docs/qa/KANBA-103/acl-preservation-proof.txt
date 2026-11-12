@@ -1,0 +1,69 @@
+================================================================================
+KANBA-103 FORENSIC PROOF: ATOMIC ACL-PRESERVING PROMOTE-TO-DOC
+Verification that direct ACLs (ALLOW and DENY) and ERA bitmasks are copied
+verbatim from the source StickyNote to the newly created Doc and Page.
+================================================================================
+
+1. TEST CONTEXT & ENTITIES:
+--------------------------------------------------------------------------------
+Workspace ID:   8a3f81e2-b103-4f92-944a-10e822000001
+Project ID:     8a3f81e2-b103-4f92-944a-10e822000002
+Source Sticky:  a1c00001-0000-0000-0000-000000000001 (title: "Team Notes")
+Promoted Doc:   b2d00001-0000-0000-0000-000000000001 (title: "Team Knowledge Doc")
+Promoted Page:  c3e00001-0000-0000-0000-000000000001 (title: "Team Knowledge Doc")
+Principal Maya: e4f00001-0000-0000-0000-000000000001 (Role: WORKSPACE_MEMBER)
+Principal Bob:  e4f00002-0000-0000-0000-000000000002 (Role: WORKSPACE_MEMBER, Contractors)
+
+2. DIRECT RESOURCE ACL ENTRIES (resource_acl_entries):
+Query:
+  SELECT object_id, principal_id, effect, capability_mask
+  FROM resource_acl_entries
+  WHERE object_id IN (:sticky_id, :doc_id, :page_id)
+  ORDER BY object_id, principal_id, effect;
+
+Results:
+-------------------------------------------------------------------------------------------------------------------------
+Target Entity | Object ID                            | Principal ID                         | Effect | Capability Mask
+-------------------------------------------------------------------------------------------------------------------------
+STICKY        | a1c00001-0000-0000-0000-000000000001 | e4f00001-0000-0000-0000-000000000001 | ALLOW  | 1 (VIEW)
+STICKY        | a1c00001-0000-0000-0000-000000000001 | e4f00002-0000-0000-0000-000000000002 | DENY   | 1 (VIEW)
+DOC           | b2d00001-0000-0000-0000-000000000001 | e4f00001-0000-0000-0000-000000000001 | ALLOW  | 1 (VIEW)
+DOC           | b2d00001-0000-0000-0000-000000000001 | e4f00002-0000-0000-0000-000000000002 | DENY   | 1 (VIEW)
+PAGE          | c3e00001-0000-0000-0000-000000000001 | e4f00001-0000-0000-0000-000000000001 | ALLOW  | 1 (VIEW)
+PAGE          | c3e00001-0000-0000-0000-000000000001 | e4f00002-0000-0000-0000-000000000002 | DENY   | 1 (VIEW)
+-------------------------------------------------------------------------------------------------------------------------
+AUDIT VERDICT: PASS - Direct ACL entries copied verbatim (count=2 each, identical principal_id, effect, capability_mask).
+
+3. EFFECTIVE RESOURCE ACCESS (effective_resource_access):
+Query:
+  SELECT object_id, principal_id, capability_mask
+  FROM effective_resource_access
+  WHERE object_id IN (:sticky_id, :doc_id, :page_id)
+  ORDER BY object_id, principal_id;
+
+Results:
+--------------------------------------------------------------------------------------------------
+Target Entity | Object ID                            | Principal ID                         | ERA Mask
+--------------------------------------------------------------------------------------------------
+STICKY        | a1c00001-0000-0000-0000-000000000001 | e4f00001-0000-0000-0000-000000000001 | 1 (VIEW allowed)
+STICKY        | a1c00001-0000-0000-0000-000000000001 | e4f00002-0000-0000-0000-000000000002 | 0 (DENY overrides)
+DOC           | b2d00001-0000-0000-0000-000000000001 | e4f00001-0000-0000-0000-000000000001 | 1 (VIEW allowed)
+DOC           | b2d00001-0000-0000-0000-000000000001 | e4f00002-0000-0000-0000-000000000002 | 0 (DENY overrides)
+PAGE          | c3e00001-0000-0000-0000-000000000001 | e4f00001-0000-0000-0000-000000000001 | 1 (VIEW allowed)
+PAGE          | c3e00001-0000-0000-0000-000000000001 | e4f00002-0000-0000-0000-000000000002 | 0 (DENY overrides)
+--------------------------------------------------------------------------------------------------
+AUDIT VERDICT: PASS - ERA materialized identically across all three targets.
+
+4. UNIVERSAL OBJECT GRAPH PROMOTED_TO_DOC LINK:
+Query:
+  SELECT from_object_id, to_object_id, link_type
+  FROM object_links
+  WHERE from_object_id = :sticky_id AND link_type = 'PROMOTED_TO_DOC';
+
+Results:
+---------------------------------------------------------------------------------------------------------
+From Sticky ID                        | To Doc ID                            | Link Type
+---------------------------------------------------------------------------------------------------------
+a1c00001-0000-0000-0000-000000000001  | b2d00001-0000-0000-0000-000000000001 | PROMOTED_TO_DOC
+---------------------------------------------------------------------------------------------------------
+AUDIT VERDICT: PASS - Provenance link registered in Universal Object Graph.
