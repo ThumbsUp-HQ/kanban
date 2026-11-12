@@ -1,0 +1,116 @@
+{
+  "ticket": "KANBA-77",
+  "exchanges": [
+    {
+      "name": "sse_last_event_id_replay",
+      "request": {
+        "headers": {
+          "Last-Event-ID": "10"
+        },
+        "url": "/sse?channels=project:8e9bdc95-00d4-4531-a407-dc8ac07e5235"
+      },
+      "response": {
+        "events": [
+          {
+            "id": "11",
+            "event": "issue.updated",
+            "data": "{\"channel\":\"project:8e9bdc95-00d4-4531-a407-dc8ac07e5235\",\"created_at\":\"2026-11-12T08:57:37.312942+00:00\",\"event_id\":\"11\",\"object_id\":\"103b35f6-c309-4b3b-bfcd-e521fe12accf\",\"payload\":{\"desc\":\"Update 3\",\"step\":3},\"project_id\":\"8e9bdc95-00d4-4531-a407-dc8ac07e5235\",\"topic\":\"issue.updated\",\"type\":\"event\",\"workspace_id\":\"ef3d354c-aa4c-4255-a4eb-2de60ce888da\"}"
+          },
+          {
+            "id": "12",
+            "event": "issue.updated",
+            "data": "{\"channel\":\"project:8e9bdc95-00d4-4531-a407-dc8ac07e5235\",\"created_at\":\"2026-11-12T08:57:37.312942+00:00\",\"event_id\":\"12\",\"object_id\":\"c7c97151-199f-498d-a06e-0a167e0de359\",\"payload\":{\"desc\":\"Update 4\",\"step\":4},\"project_id\":\"8e9bdc95-00d4-4531-a407-dc8ac07e5235\",\"topic\":\"issue.updated\",\"type\":\"event\",\"workspace_id\":\"ef3d354c-aa4c-4255-a4eb-2de60ce888da\"}"
+          },
+          {
+            "id": "13",
+            "event": "issue.updated",
+            "data": "{\"channel\":\"project:8e9bdc95-00d4-4531-a407-dc8ac07e5235\",\"created_at\":\"2026-11-12T08:57:37.312942+00:00\",\"event_id\":\"13\",\"object_id\":\"1fc9e4eb-5f57-4be7-9c19-83c60da02268\",\"payload\":{\"desc\":\"Update 5\",\"step\":5},\"project_id\":\"8e9bdc95-00d4-4531-a407-dc8ac07e5235\",\"topic\":\"issue.updated\",\"type\":\"event\",\"workspace_id\":\"ef3d354c-aa4c-4255-a4eb-2de60ce888da\"}"
+          }
+        ],
+        "status": 200
+      }
+    },
+    {
+      "name": "sse_resync_required",
+      "request": {
+        "headers": {
+          "Last-Event-ID": "0"
+        },
+        "url": "/sse?channels=project:8e9bdc95-00d4-4531-a407-dc8ac07e5235"
+      },
+      "response": {
+        "event": {
+          "event": "resync_required",
+          "data": "{\"latest_event_id\":\"13\",\"type\":\"resync_required\"}"
+        },
+        "status": 200
+      }
+    },
+    {
+      "name": "ws_subscribe_error_not_found",
+      "request": {
+        "channels": [
+          "project:bef8221b-1a2d-415e-8eee-17e3a614fcce"
+        ],
+        "op": "subscribe",
+        "req_id": "req-2"
+      },
+      "response": {
+        "channel": "project:bef8221b-1a2d-415e-8eee-17e3a614fcce",
+        "code": "NOT_FOUND",
+        "req_id": "req-2",
+        "type": "subscribe_error"
+      }
+    },
+    {
+      "name": "ws_subscribe_ack",
+      "request": {
+        "channels": [
+          "project:7992c2b5-8a32-4362-a5f0-813aa0f87e83",
+          "issue:f4cbeca1-72e9-4c72-8b88-5f703ebfb881"
+        ],
+        "op": "subscribe",
+        "req_id": "sub-1"
+      },
+      "response": {
+        "channels": [
+          "project:7992c2b5-8a32-4362-a5f0-813aa0f87e83",
+          "issue:f4cbeca1-72e9-4c72-8b88-5f703ebfb881"
+        ],
+        "req_id": "sub-1",
+        "type": "subscribe_ack"
+      }
+    },
+    {
+      "name": "ws_channel_revoked",
+      "request": {
+        "event_id": "1042"
+      },
+      "response": {
+        "channel": "issue:f4cbeca1-72e9-4c72-8b88-5f703ebfb881",
+        "type": "channel.revoked"
+      }
+    },
+    {
+      "name": "ws_delivered_event",
+      "request": {
+        "envelope_seq": 2001,
+        "topic": "issue.moved"
+      },
+      "response": {
+        "channel": "project:91fc94a9-1d08-4bfe-b915-2299a88ebed1",
+        "created_at": "2026-11-12T08:57:38.426912+00:00",
+        "event_id": "2001",
+        "object_id": "24fbe1ff-5b6b-4252-b2b1-0865bdeb95c2",
+        "payload": {
+          "from_state": "TODO",
+          "to_state": "IN_PROGRESS"
+        },
+        "project_id": "91fc94a9-1d08-4bfe-b915-2299a88ebed1",
+        "topic": "issue.moved",
+        "type": "event",
+        "workspace_id": "73b970ab-6ae9-467b-a0fa-404e55b6a287"
+      }
+    }
+  ]
+}

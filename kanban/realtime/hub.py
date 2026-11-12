@@ -1,0 +1,596 @@
+# Copyright 2026 Kanban Platform Contributors
+# Apache-2.0 License. See LICENSE for details.
+"""Realtime WebSocket & SSE connection hub with delivery-time RLS filtering (KB-P3-16)."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+import logging
+import re
+import uuid
+from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
+
+from sqlalchemy import text
+
+from database.session import RLSContext
+from kanban.realtime.replay import OutboxReplayer
+from kanban.realtime.rls_filter import (
+    authorize_event_recipients,
+)
+from kanban.security.permissions import Capability
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from fastapi import WebSocket
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from database.outbox.broker import OutboxEnvelope, RealtimeBroker
+    from database.session import RLSSessionFactory
+    from kanban.auth.sessions.service import SessionService
+
+logger = logging.getLogger("kanban.realtime.hub")
+
+MAX_CONNECTIONS_PER_PRINCIPAL: Final[int] = 16
+MAX_CHANNELS_PER_CONNECTION: Final[int] = 64
+MAX_INBOUND_FRAME_BYTES: Final[int] = 4096
+DEFAULT_PING_INTERVAL_S: Final[float] = 25.0
+DEFAULT_SESSION_CHECK_INTERVAL_S: Final[float] = 60.0
+
+WS_CLOSE_UNAUTHENTICATED: Final[int] = 4401
+WS_CLOSE_ORIGIN_MISMATCH: Final[int] = 4403
+WS_CLOSE_FRAME_TOO_LARGE: Final[int] = 4413
+WS_CLOSE_CONNECTION_LIMIT: Final[int] = 4429
+WS_CLOSE_DRAINING: Final[int] = 1001
+
+_CHANNEL_REGEX = re.compile(
+    r"^(?P<kind>workspace|project|issue|doc):(?P<id>[0-9a-fA-F-]{36}|[0-9a-fA-F]{32})$"
+)
+
+
+@runtime_checkable
+class RealtimeConnection(Protocol):
+    """Abstract protocol for active realtime connections (WebSocket or SSE)."""
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    principal_id: uuid.UUID
+    session_id: uuid.UUID
+    token_sha256: bytes | None
+    subscribed_channels: set[str]
+
+    async def send_json(self, data: dict[str, Any]) -> None:
+        """Send JSON payload to the client."""
+        ...
+
+    async def send_event(self, envelope: OutboxEnvelope, channel: str) -> None:
+        """Deliver domain event frame to the client."""
+        ...
+
+    async def close(self, code: int, reason: str = "") -> None:
+        """Close connection with code and reason."""
+        ...
+
+
+@dataclass(slots=True)
+class WebSocketConnection:
+    """Manages an active WebSocket client session."""
+
+    id: uuid.UUID
+    websocket: WebSocket
+    workspace_id: uuid.UUID
+    principal_id: uuid.UUID
+    session_id: uuid.UUID
+    token_sha256: bytes | None = None
+    subscribed_channels: set[str] = field(default_factory=set)
+    connected_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_pong_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    async def send_json(self, data: dict[str, Any]) -> None:
+        """Send serialized JSON message frame over WebSocket."""
+        raw = json.dumps(data, separators=(",", ":"), sort_keys=True)
+        await self.websocket.send_text(raw)
+
+    async def send_event(self, envelope: OutboxEnvelope, channel: str) -> None:
+        """Format and send domain event frame."""
+        frame = {
+            "channel": channel,
+            "created_at": envelope.created_at.isoformat(),
+            "event_id": str(envelope.seq),
+            "object_id": str(envelope.object_id) if envelope.object_id is not None else None,
+            "payload": envelope.payload,
+            "project_id": str(envelope.project_id) if envelope.project_id is not None else None,
+            "topic": envelope.topic,
+            "type": "event",
+            "workspace_id": str(envelope.workspace_id),
+        }
+        await self.send_json(frame)
+
+    async def close(self, code: int, reason: str = "") -> None:
+        """Close underlying WebSocket."""
+        with contextlib.suppress(Exception):
+            await self.websocket.close(code=code, reason=reason)
+
+
+@dataclass(slots=True)
+class SSEConnection:
+    """Manages an active Server-Sent Events client stream."""
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    principal_id: uuid.UUID
+    session_id: uuid.UUID
+    token_sha256: bytes | None = None
+    subscribed_channels: set[str] = field(default_factory=set)
+    queue: asyncio.Queue[str | None] = field(default_factory=lambda: asyncio.Queue(maxsize=1024))
+    connected_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    async def send_json(self, data: dict[str, Any]) -> None:
+        """Format arbitrary JSON as an SSE event message frame."""
+        msg_type = data.get("type", "message")
+        raw = json.dumps(data, separators=(",", ":"), sort_keys=True)
+        frame = f"event: {msg_type}\ndata: {raw}\n\n"
+        with contextlib.suppress(asyncio.QueueFull):
+            self.queue.put_nowait(frame)
+
+    async def send_event(self, envelope: OutboxEnvelope, channel: str) -> None:
+        """Format OutboxEnvelope as canonical SSE message frame."""
+        body = {
+            "channel": channel,
+            "created_at": envelope.created_at.isoformat(),
+            "event_id": str(envelope.seq),
+            "object_id": str(envelope.object_id) if envelope.object_id is not None else None,
+            "payload": envelope.payload,
+            "project_id": str(envelope.project_id) if envelope.project_id is not None else None,
+            "topic": envelope.topic,
+            "type": "event",
+            "workspace_id": str(envelope.workspace_id),
+        }
+        raw = json.dumps(body, separators=(",", ":"), sort_keys=True)
+        frame = f"id: {envelope.seq}\nevent: {envelope.topic}\ndata: {raw}\n\n"
+        with contextlib.suppress(asyncio.QueueFull):
+            self.queue.put_nowait(frame)
+
+    async def send_heartbeat(self) -> None:
+        """Send SSE heartbeat comment."""
+        with contextlib.suppress(asyncio.QueueFull):
+            self.queue.put_nowait(": heartbeat\n\n")
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        """Signal end of SSE event stream."""
+        del code, reason
+        with contextlib.suppress(asyncio.QueueFull):
+            self.queue.put_nowait(None)
+
+
+class RealtimeHub:
+    """Subscription manager and fanout hub coordinating WebSocket and SSE connections."""
+
+    def __init__(
+        self,
+        broker: RealtimeBroker | None = None,
+        session_factory: RLSSessionFactory | None = None,
+        session_service: SessionService | None = None,
+        *,
+        ping_interval_s: float = DEFAULT_PING_INTERVAL_S,
+        session_check_interval_s: float = DEFAULT_SESSION_CHECK_INTERVAL_S,
+    ) -> None:
+        """Initialize realtime hub with broker, session dependencies, and interval timers."""
+        self._broker = broker
+        self._session_factory = session_factory
+        self._session_service = session_service
+        self._ping_interval_s = ping_interval_s
+        self._session_check_interval_s = session_check_interval_s
+
+        self._connections: dict[uuid.UUID, RealtimeConnection] = {}
+        self._user_connections: dict[tuple[uuid.UUID, uuid.UUID], set[uuid.UUID]] = defaultdict(set)
+        self._lock = asyncio.Lock()
+        self._replayer = OutboxReplayer()
+
+        self._listener_task: asyncio.Task[None] | None = None
+        self._ping_task: asyncio.Task[None] | None = None
+        self._session_check_task: asyncio.Task[None] | None = None
+
+        self._running = False
+        self._draining = False
+
+    @property
+    def replayer(self) -> OutboxReplayer:
+        """The underlying outbox replayer service."""
+        return self._replayer
+
+    @property
+    def active_connection_count(self) -> int:
+        """Current number of active registered connections."""
+        return len(self._connections)
+
+    async def start(self) -> None:
+        """Start background listener, heartbeat ping, and session expiration loops."""
+        async with self._lock:
+            if self._running:
+                return
+            self._running = True
+            self._draining = False
+
+            if self._broker is not None:
+                self._listener_task = asyncio.create_task(
+                    self._broker_listener_loop(), name="realtime-broker-listener"
+                )
+            self._ping_task = asyncio.create_task(self._heartbeat_loop(), name="realtime-heartbeat")
+            self._session_check_task = asyncio.create_task(
+                self._session_recheck_loop(), name="realtime-session-recheck"
+            )
+
+    async def drain(self, timeout_seconds: float = 3.0) -> None:
+        """Gracefully notify and disconnect all clients within timeout ceiling."""
+        async with self._lock:
+            self._draining = True
+            self._running = False
+
+            tasks_to_cancel = [
+                t
+                for t in (self._listener_task, self._ping_task, self._session_check_task)
+                if t is not None
+            ]
+            for t in tasks_to_cancel:
+                t.cancel()
+
+            # Broadcast server.draining frame to all active connections
+            active_conns = list(self._connections.values())
+
+        draining_payload = {"type": "server.draining", "retry_ms": 1000}
+        for conn in active_conns:
+            with contextlib.suppress(Exception):
+                await conn.send_json(draining_payload)
+                await conn.close(code=WS_CLOSE_DRAINING, reason="server.draining")
+
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                for t in tasks_to_cancel:
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await t
+        except TimeoutError:
+            logger.warning("RealtimeHub drain timed out after %.1fs", timeout_seconds)
+
+        async with self._lock:
+            self._connections.clear()
+            self._user_connections.clear()
+
+    async def register_connection(self, conn: RealtimeConnection) -> bool:
+        """Register active connection. Returns False if concurrent connection cap is reached."""
+        async with self._lock:
+            if self._draining:
+                return False
+
+            key = (conn.workspace_id, conn.principal_id)
+            current_user_conns = self._user_connections[key]
+            if len(current_user_conns) >= MAX_CONNECTIONS_PER_PRINCIPAL:
+                return False
+
+            self._connections[conn.id] = conn
+            current_user_conns.add(conn.id)
+            return True
+
+    async def unregister_connection(self, conn_id: uuid.UUID) -> None:
+        """Remove connection and release capacity slot."""
+        async with self._lock:
+            conn = self._connections.pop(conn_id, None)
+            if conn is not None:
+                key = (conn.workspace_id, conn.principal_id)
+                self._user_connections[key].discard(conn_id)
+                if not self._user_connections[key]:
+                    self._user_connections.pop(key, None)
+
+    def get_connection(self, conn_id: uuid.UUID) -> RealtimeConnection | None:
+        """Lookup active connection by ID."""
+        return self._connections.get(conn_id)
+
+    def get_user_connections(
+        self, workspace_id: uuid.UUID, principal_id: uuid.UUID
+    ) -> list[RealtimeConnection]:
+        """Lookup all active connections belonging to a principal."""
+        conn_ids = self._user_connections.get((workspace_id, principal_id), set())
+        return [self._connections[cid] for cid in conn_ids if cid in self._connections]
+
+    async def check_channel_viewable(
+        self,
+        session: AsyncSession,
+        workspace_id: uuid.UUID,
+        principal_id: uuid.UUID,
+        channel: str,
+    ) -> bool:
+        """Evaluate VIEW permission on target channel, preventing enumeration."""
+        match = _CHANNEL_REGEX.match(channel)
+        if not match:
+            return False
+
+        kind = match.group("kind")
+        try:
+            obj_id = uuid.UUID(match.group("id"))
+        except ValueError:
+            return False
+
+        if kind == "workspace":
+            return obj_id == workspace_id
+
+        stmt = text(
+            "SELECT allow_mask, deny_mask "
+            "FROM effective_resource_access "
+            "WHERE object_id = :obj_id "
+            "  AND workspace_id = :ws_id "
+            "  AND principal_id = :p_id"
+        )
+        res = await session.execute(
+            stmt,
+            {
+                "obj_id": obj_id,
+                "ws_id": workspace_id,
+                "p_id": principal_id,
+            },
+        )
+        row = res.mappings().first()
+        if not row:
+            return False
+
+        allow = int(row["allow_mask"])
+        deny = int(row["deny_mask"])
+        view_bit = Capability.VIEW.value
+        return (allow & view_bit) == view_bit and (deny & view_bit) == 0
+
+    async def handle_subscribe(
+        self,
+        session: AsyncSession,
+        conn: RealtimeConnection,
+        req_id: str,
+        channels: Sequence[str],
+        last_event_id: str | None = None,
+    ) -> None:
+        """Handle client subscribe request, validating limits and anti-enumeration permissions."""
+        successful_channels: list[str] = []
+
+        for ch in channels:
+            if len(conn.subscribed_channels) >= MAX_CHANNELS_PER_CONNECTION:
+                await conn.send_json(
+                    {
+                        "code": "CHANNEL_LIMIT_EXCEEDED",
+                        "channel": ch,
+                        "req_id": req_id,
+                        "type": "subscribe_error",
+                    }
+                )
+                continue
+
+            can_view = await self.check_channel_viewable(
+                session, conn.workspace_id, conn.principal_id, ch
+            )
+            if not can_view:
+                await conn.send_json(
+                    {
+                        "code": "NOT_FOUND",
+                        "channel": ch,
+                        "req_id": req_id,
+                        "type": "subscribe_error",
+                    }
+                )
+                continue
+
+            conn.subscribed_channels.add(ch)
+            successful_channels.append(ch)
+
+        if successful_channels:
+            await conn.send_json(
+                {
+                    "channels": successful_channels,
+                    "req_id": req_id,
+                    "type": "subscribe_ack",
+                }
+            )
+
+        if last_event_id is not None and successful_channels:
+            replay_res = await self._replayer.replay_events(
+                session,
+                workspace_id=conn.workspace_id,
+                principal_id=conn.principal_id,
+                channels=successful_channels,
+                last_event_id=last_event_id,
+            )
+            if replay_res.resync_required:
+                await conn.send_json(
+                    {
+                        "latest_event_id": replay_res.latest_event_id,
+                        "type": "resync_required",
+                    }
+                )
+            else:
+                for event in replay_res.events:
+                    await conn.send_json(event.to_dict())
+
+    async def handle_unsubscribe(
+        self,
+        conn: RealtimeConnection,
+        req_id: str,
+        channels: Sequence[str],
+    ) -> None:
+        """Handle client unsubscribe request."""
+        unsubscribed: list[str] = []
+        for ch in channels:
+            if ch in conn.subscribed_channels:
+                conn.subscribed_channels.remove(ch)
+                unsubscribed.append(ch)
+
+        await conn.send_json(
+            {
+                "channels": unsubscribed,
+                "req_id": req_id,
+                "type": "unsubscribe_ack",
+            }
+        )
+
+    async def handle_security_event(self, envelope: OutboxEnvelope) -> None:
+        """Close matching connections within <= 250ms on security revocation events."""
+        target_session_id_raw = envelope.payload.get("session_id")
+        target_principal_id_raw = envelope.payload.get("principal_id")
+
+        target_session_id = uuid.UUID(str(target_session_id_raw)) if target_session_id_raw else None
+        target_principal_id = (
+            uuid.UUID(str(target_principal_id_raw)) if target_principal_id_raw else None
+        )
+
+        async with self._lock:
+            matched_conns: list[RealtimeConnection] = [
+                conn
+                for conn in self._connections.values()
+                if (target_session_id is not None and conn.session_id == target_session_id)
+                or (target_principal_id is not None and conn.principal_id == target_principal_id)
+            ]
+
+        for conn in matched_conns:
+            await conn.close(code=WS_CLOSE_UNAUTHENTICATED, reason="SESSION_REVOKED")
+            await self.unregister_connection(conn.id)
+
+    async def _resolve_candidate_connections(
+        self, envelope: OutboxEnvelope
+    ) -> list[tuple[RealtimeConnection, str]]:
+        """Identify active connections subscribed to matching channels for this envelope."""
+        ws_chan = f"workspace:{envelope.workspace_id}"
+        proj_chan = f"project:{envelope.project_id}" if envelope.project_id is not None else None
+        issue_chan = f"issue:{envelope.object_id}" if envelope.object_id is not None else None
+        doc_chan = f"doc:{envelope.object_id}" if envelope.object_id is not None else None
+
+        candidates: list[tuple[RealtimeConnection, str]] = []
+        async with self._lock:
+            all_conns = list(self._connections.values())
+
+        for conn in all_conns:
+            if conn.workspace_id != envelope.workspace_id:
+                continue
+
+            matching_chan: str | None = None
+            if issue_chan and issue_chan in conn.subscribed_channels:
+                matching_chan = issue_chan
+            elif doc_chan and doc_chan in conn.subscribed_channels:
+                matching_chan = doc_chan
+            elif proj_chan and proj_chan in conn.subscribed_channels:
+                matching_chan = proj_chan
+            elif ws_chan in conn.subscribed_channels:
+                matching_chan = ws_chan
+
+            if matching_chan is not None:
+                candidates.append((conn, matching_chan))
+
+        return candidates
+
+    async def dispatch_envelope(self, session: AsyncSession, envelope: OutboxEnvelope) -> None:
+        """Route outbox envelope through delivery-time RLS filter to subscribed connections."""
+        if envelope.topic in ("security.session_revoked", "security.principal_deactivated"):
+            await self.handle_security_event(envelope)
+            return
+
+        candidates = await self._resolve_candidate_connections(envelope)
+        if not candidates:
+            return
+
+        candidate_principals = {conn.principal_id for conn, _ in candidates}
+        authorized_principals = await authorize_event_recipients(
+            session, envelope, candidate_principals
+        )
+
+        issue_chan = f"issue:{envelope.object_id}" if envelope.object_id is not None else None
+        doc_chan = f"doc:{envelope.object_id}" if envelope.object_id is not None else None
+
+        for conn, matching_chan in candidates:
+            if conn.principal_id in authorized_principals:
+                # Recipient holds active VIEW permission on target object
+                await conn.send_event(envelope, matching_chan)
+            # Recipient lost VIEW permission (mid-session revocation)
+            # If subscribed directly to object, revoke subscription and notify with zero payload
+            elif issue_chan and issue_chan in conn.subscribed_channels:
+                conn.subscribed_channels.remove(issue_chan)
+                await conn.send_json({"type": "channel.revoked", "channel": issue_chan})
+            elif doc_chan and doc_chan in conn.subscribed_channels:
+                conn.subscribed_channels.remove(doc_chan)
+                await conn.send_json({"type": "channel.revoked", "channel": doc_chan})
+                # If subscribed to project channel, silently omit delivery (do not drop project)
+
+    async def _broker_listener_loop(self) -> None:
+        """Background loop reading from RealtimeBroker and dispatching envelopes."""
+        if self._broker is None:
+            return
+
+        while self._running and not self._draining:
+            try:
+                async for envelope in self._broker.subscribe("*"):
+                    if self._session_factory is not None:
+                        ctx = RLSContext(
+                            principal_id=uuid.UUID(int=0),
+                            workspace_id=envelope.workspace_id,
+                            token_scopes=("realtime",),
+                            aal_level=1,
+                        )
+                        async with self._session_factory.session(ctx) as session:
+                            await self.dispatch_envelope(session, envelope)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("Error in realtime broker listener loop; reconnecting...")
+                await asyncio.sleep(0.5)
+
+    async def _heartbeat_loop(self) -> None:
+        """Periodic server heartbeat ping (25s)."""
+        while self._running and not self._draining:
+            try:
+                await asyncio.sleep(self._ping_interval_s)
+                async with self._lock:
+                    active_conns = list(self._connections.values())
+
+                for conn in active_conns:
+                    if isinstance(conn, WebSocketConnection):
+                        with contextlib.suppress(Exception):
+                            await conn.send_json({"type": "ping"})
+                    elif isinstance(conn, SSEConnection):
+                        with contextlib.suppress(Exception):
+                            await conn.send_heartbeat()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("Error in realtime heartbeat loop")
+
+    async def _session_recheck_loop(self) -> None:
+        """Periodic session idle and absolute expiration recheck (60s)."""
+        while self._running and not self._draining:
+            try:
+                await asyncio.sleep(self._session_check_interval_s)
+                if self._session_factory is None or self._session_service is None:
+                    continue
+
+                async with self._lock:
+                    active_conns = list(self._connections.values())
+
+                # Recheck sessions via SessionService
+                for conn in active_conns:
+                    if conn.token_sha256 is None:
+                        continue
+
+                    ctx = RLSContext(
+                        principal_id=conn.principal_id,
+                        workspace_id=conn.workspace_id,
+                        token_scopes=("session",),
+                        aal_level=1,
+                    )
+                    async with self._session_factory.session(ctx) as session:
+                        user_session = await self._session_service.resolve_session(
+                            session, conn.token_sha256
+                        )
+
+                    if user_session is None or user_session.mfa_pending:
+                        await conn.close(code=WS_CLOSE_UNAUTHENTICATED, reason="SESSION_EXPIRED")
+                        await self.unregister_connection(conn.id)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("Error in realtime session recheck loop")
