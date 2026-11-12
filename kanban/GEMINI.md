@@ -14,6 +14,10 @@ Core web application, static asset server, and API service layer for the Kanban 
 - Timing equalization engine (`kanban.api.timing.TimingFloor`, `timing_floor`, `load_or_404`) enforcing a 25.0ms timing floor and indistinguishable 404 responses for non-existent and RLS-hidden objects.
 - Multi-Card Auth Studio envelope encryption (`kanban.security.envelope`) using AES-256-GCM, per-card DEK wrapping, and AAD context binding.
 - Multi-Card Auth repository and schemas (`kanban.auth.cards`) interacting with `kb_auth` database boundary.
+- Permission evaluator, OBO intersection and anti-enumeration access manifest (`kanban.security.permissions`, `kanban.security.access_manifest`, `GET /api/v1/objects/{id}/access`).
+- Shared activity helper (`kanban.services.activity`): `record_activity` (16384 byte payload cap, hash-chained `append_activity`, SAVEPOINT-scoped fail-closed listeners), `ActivityEventType` + `EVENT_CATEGORY`, `emit_ephemeral_event`. Payloads carry `sha256` digests, never Markdown bodies.
+- Project API (`kanban.api.v1.projects`, `kanban.services.projects`, `kanban.api.v1.schemas.projects`): create/list/get/patch projects and `PUT .../module-defaults`, all under the RLS request transaction with jitter-equalized 404s.
+- Test harness: `kanban.tests.contract.ContractRecorder` (`KB_CONTRACT_OUT`, `KB_TICKET_ID`, credential header redaction) and `kanban/tests/api/conftest.py` fixtures `api_env`, `as_principal`, `make_user`, `make_project`, `make_module`, `contract_recorder`.
 
 ## Depends On
 - `database` (`kanban-database` package for PostgreSQL data layer, ORM models, and `RLSSessionFactory`).

@@ -1,0 +1,438 @@
+"""Project API tests: CRUD, authorization discipline, module rules and contract capture."""
+
+from __future__ import annotations
+
+import uuid
+from typing import TYPE_CHECKING, Any
+
+import pytest
+from sqlalchemy import text
+
+from kanban.content import ContentNormalizeError
+from kanban.services.projects import decode_cursor, encode_cursor
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    import httpx
+
+    from kanban.tests.api.conftest import ApiEnv, SeededUser
+    from kanban.tests.contract import ContractRecorder
+
+pytestmark = pytest.mark.committed_db
+
+_VOLATILE_KEYS = frozenset({"request_id", "instance"})
+
+
+def _strip(body: dict[str, Any]) -> dict[str, Any]:
+    """Remove request-scoped members before comparing problem documents."""
+    return {k: v for k, v in body.items() if k not in _VOLATILE_KEYS}
+
+
+async def _count(env: ApiEnv, sql: str, **params: Any) -> int:  # noqa: ANN401
+    """Return a scalar count from the committed seed session."""
+    await env.seed.rollback()
+    return int((await env.seed.execute(text(sql), params)).scalar_one())
+
+
+async def test_case_1_admin_create_seeds_defaults_and_activity(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    contract_recorder: ContractRecorder,
+) -> None:
+    """Case 1: POST 201 + Location, 5 states, 5 priorities (None default), 1 PROJECT_CREATED."""
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    client = as_principal(admin)
+
+    resp = await client.post(
+        "/api/v1/projects",
+        json={"identifier": "KAN", "name": "  Platform Core  ", "description_markdown": "Hello"},
+    )
+    contract_recorder.record("create_project_201", resp.request, resp)
+    assert resp.status_code == 201, resp.text
+    assert resp.headers["Location"] == "/api/v1/projects/KAN"
+    body = resp.json()
+    assert body["identifier"] == "KAN"
+    assert body["name"] == "Platform Core"
+    assert body["modules_enabled"] is False
+    assert body["default_module_ids"] == []
+    assert body["auto_archive_days"] is None
+    assert {"VIEW", "EDIT", "ADMIN"} <= set(body["capabilities"])
+    assert body["access_manifest"]["inherited_scope"]["kind"] == "workspace"
+
+    pid = body["id"]
+    assert (
+        await _count(api_env, "SELECT count(*) FROM workflow_states WHERE project_id = :p", p=pid)
+        == 5
+    )
+    assert (
+        await _count(
+            api_env, "SELECT count(*) FROM project_priorities WHERE project_id = :p", p=pid
+        )
+        == 5
+    )
+    default_slug = (
+        await api_env.seed.execute(
+            text("SELECT slug FROM project_priorities WHERE project_id = :p AND is_default"),
+            {"p": pid},
+        )
+    ).scalar_one()
+    assert default_slug == "none"
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM activity_records WHERE object_id = :p"
+            " AND event_type = 'PROJECT_CREATED' AND payload = CAST(:pl AS jsonb)",
+            p=pid,
+            pl='{"identifier": "KAN"}',
+        )
+        == 1
+    )
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM role_bindings WHERE project_id = :p AND role = 'PROJECT_ADMIN'",
+            p=pid,
+        )
+        == 1
+    )
+
+    get_resp = await client.get("/api/v1/projects/KAN")
+    contract_recorder.record("get_project_200", get_resp.request, get_resp)
+    assert get_resp.status_code == 200
+    assert get_resp.json()["id"] == pid
+    by_uuid = await client.get(f"/api/v1/projects/{pid}")
+    assert by_uuid.status_code == 200
+
+
+async def test_case_2_unreadable_404_and_viewer_patch_403(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    contract_recorder: ContractRecorder,
+) -> None:
+    """Case 2: unreadable == absent (byte-identical body); VIEW-only PATCH is 403."""
+    del api_env
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    viewer = await make_user("viewer")
+    outsider = await make_user("outsider")
+    await make_project("SEC", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    await make_project("OPEN", created_by=admin, roles={viewer: "VIEWER"})
+
+    unreadable = await as_principal(outsider).get("/api/v1/projects/SEC")
+    absent = await as_principal(outsider).get("/api/v1/projects/NOPE")
+    contract_recorder.record("get_unreadable_404", unreadable.request, unreadable)
+    assert unreadable.status_code == absent.status_code == 404
+    assert _strip(unreadable.json()) == _strip(absent.json())
+    assert unreadable.content.replace(unreadable.json()["request_id"].encode(), b"") == (
+        absent.content.replace(absent.json()["request_id"].encode(), b"")
+    )
+    malformed = await as_principal(outsider).get("/api/v1/projects/not-a-ref!")
+    assert malformed.status_code == 404
+    assert _strip(malformed.json()) == _strip(absent.json())
+
+    patch = await as_principal(viewer).patch("/api/v1/projects/OPEN", json={"name": "Renamed"})
+    contract_recorder.record("patch_as_viewer_403", patch.request, patch)
+    assert patch.status_code == 403
+    assert patch.json()["code"] == "INSUFFICIENT_CAPABILITY"
+
+    hidden_patch = await as_principal(outsider).patch("/api/v1/projects/SEC", json={"name": "X"})
+    assert hidden_patch.status_code == 404
+
+
+async def test_case_3_validation_and_conflict(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    contract_recorder: ContractRecorder,
+) -> None:
+    """Case 3: bad identifiers 422, duplicate 409, unknown key 422."""
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    client = as_principal(admin)
+    for bad in ("kan", "K", "KANBANPROJECT1"):
+        resp = await client.post("/api/v1/projects", json={"identifier": bad, "name": "N"})
+        if bad == "kan":
+            contract_recorder.record("create_invalid_identifier_422", resp.request, resp)
+        assert resp.status_code == 422
+        assert resp.json()["code"] == "VALIDATION_FAILED"
+
+    first = await client.post("/api/v1/projects", json={"identifier": "DUP", "name": "One"})
+    assert first.status_code == 201
+    second = await client.post("/api/v1/projects", json={"identifier": "DUP", "name": "Two"})
+    contract_recorder.record("create_duplicate_409", second.request, second)
+    assert second.status_code == 409
+    assert second.json()["code"] == "PROJECT_IDENTIFIER_TAKEN"
+
+    unknown = await client.post(
+        "/api/v1/projects", json={"identifier": "UNK", "name": "N", "extra_key": 1}
+    )
+    assert unknown.status_code == 422
+    blank = await client.post("/api/v1/projects", json={"identifier": "BLK", "name": "   "})
+    assert blank.status_code == 422
+    long_name = await client.post("/api/v1/projects", json={"identifier": "LNG", "name": "x" * 121})
+    assert long_name.status_code == 422
+
+
+async def test_case_4_boundaries(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Case 4: auto_archive_days 0/366 rejected, 1/365 accepted; limit 0/101 rejected."""
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    client = as_principal(admin)
+    for bad in (0, 366):
+        resp = await client.post(
+            "/api/v1/projects", json={"identifier": "BAD", "name": "N", "auto_archive_days": bad}
+        )
+        assert resp.status_code == 422
+    for ident, good in (("LOW", 1), ("HIGH", 365)):
+        resp = await client.post(
+            "/api/v1/projects", json={"identifier": ident, "name": "N", "auto_archive_days": good}
+        )
+        assert resp.status_code == 201
+        assert resp.json()["auto_archive_days"] == good
+    for bad_limit in (0, 101):
+        resp = await client.get(f"/api/v1/projects?limit={bad_limit}")
+        assert resp.status_code == 422
+
+
+async def test_case_5_module_rules(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_module: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    contract_recorder: ContractRecorder,
+) -> None:
+    """Case 5: MODULES_DISABLED, MODULE_NOT_IN_PROJECT, MODULES_IN_USE, success path."""
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    client = as_principal(admin)
+    a = (await client.post("/api/v1/projects", json={"identifier": "MODA", "name": "A"})).json()
+    b = (await client.post("/api/v1/projects", json={"identifier": "MODB", "name": "B"})).json()
+
+    disabled = await client.put(
+        "/api/v1/projects/MODA/module-defaults", json={"module_ids": [str(uuid.uuid4())]}
+    )
+    assert disabled.status_code == 422
+    assert disabled.json()["code"] == "MODULES_DISABLED"
+
+    for ident in ("MODA", "MODB"):
+        enabled = await client.patch(f"/api/v1/projects/{ident}", json={"modules_enabled": True})
+        assert enabled.status_code == 200
+        assert enabled.json()["modules_enabled"] is True
+
+    mod_a = await make_module(uuid.UUID(a["id"]), "alpha", created_by=admin)
+    mod_b = await make_module(uuid.UUID(b["id"]), "beta", created_by=admin)
+
+    foreign = await client.put(
+        "/api/v1/projects/MODA/module-defaults", json={"module_ids": [str(mod_b)]}
+    )
+    assert foreign.status_code == 422
+    assert foreign.json()["code"] == "MODULE_NOT_IN_PROJECT"
+
+    ok = await client.put(
+        "/api/v1/projects/MODA/module-defaults", json={"module_ids": [str(mod_a)]}
+    )
+    contract_recorder.record("put_module_defaults_200", ok.request, ok)
+    assert ok.status_code == 200
+    assert ok.json()["default_module_ids"] == [str(mod_a)]
+
+    dup = await client.put(
+        "/api/v1/projects/MODA/module-defaults", json={"module_ids": [str(mod_a), str(mod_a)]}
+    )
+    assert dup.status_code == 422
+    too_many = await client.put(
+        "/api/v1/projects/MODA/module-defaults",
+        json={"module_ids": [str(uuid.uuid4()) for _ in range(21)]},
+    )
+    assert too_many.status_code == 422
+
+    cleared = await client.put("/api/v1/projects/MODA/module-defaults", json={"module_ids": []})
+    assert cleared.status_code == 200
+    assert cleared.json()["default_module_ids"] == []
+
+    in_use = await client.patch("/api/v1/projects/MODA", json={"modules_enabled": False})
+    assert in_use.status_code == 409
+    assert in_use.json()["code"] == "MODULES_IN_USE"
+
+
+async def test_patch_semantics_and_activity(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """PATCH changes fields, records hashed description diffs, and rejects identifier edits."""
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    client = as_principal(admin)
+    created = (
+        await client.post(
+            "/api/v1/projects",
+            json={"identifier": "PAT", "name": "Old", "description_markdown": "old body"},
+        )
+    ).json()
+
+    changed = await client.patch(
+        "/api/v1/projects/PAT",
+        json={"name": "New", "description_markdown": "new body", "auto_archive_days": 30},
+    )
+    assert changed.status_code == 200
+    assert changed.json()["name"] == "New"
+    assert changed.json()["auto_archive_days"] == 30
+
+    row = (
+        await api_env.seed.execute(
+            text(
+                "SELECT payload FROM activity_records WHERE object_id = :p"
+                " AND event_type = 'PROJECT_UPDATED'"
+            ),
+            {"p": created["id"]},
+        )
+    ).scalar_one()
+    changes = row["changes"]
+    assert changes["name"] == {"old": "Old", "new": "New"}
+    assert set(changes["description_markdown"]) == {"old_sha256", "new_sha256"}
+    assert "new body" not in str(row)
+
+    noop = await client.patch("/api/v1/projects/PAT", json={"name": "New"})
+    assert noop.status_code == 200
+    cleared = await client.patch("/api/v1/projects/PAT", json={"auto_archive_days": None})
+    assert cleared.json()["auto_archive_days"] is None
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM activity_records WHERE object_id = :p"
+            " AND event_type = 'PROJECT_UPDATED'",
+            p=created["id"],
+        )
+        == 2
+    )
+
+    immutable = await client.patch("/api/v1/projects/PAT", json={"identifier": "ZZZ"})
+    assert immutable.status_code == 422
+    assert immutable.json()["code"] == "IDENTIFIER_IMMUTABLE"
+    bad_key = await client.patch("/api/v1/projects/PAT", json={"nope": 1})
+    assert bad_key.status_code == 422
+
+
+async def test_description_too_large(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Oversized descriptions map to 422 DESCRIPTION_TOO_LARGE (create and patch)."""
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    client = as_principal(admin)
+    huge = "a" * 600_000
+    resp = await client.post(
+        "/api/v1/projects", json={"identifier": "BIG", "name": "N", "description_markdown": huge}
+    )
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "DESCRIPTION_TOO_LARGE"
+    way_too_big = "b" * 2_200_000
+    resp = await client.post(
+        "/api/v1/projects",
+        json={"identifier": "BIG", "name": "N", "description_markdown": way_too_big},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "DESCRIPTION_TOO_LARGE"
+    surrogate = await client.post(
+        "/api/v1/projects",
+        content=b'{"identifier": "BAD", "name": "N", "description_markdown": "x\\ud800y"}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert surrogate.status_code == 422
+
+
+async def test_create_authorization(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Non-admins, narrow token scopes and OBO agents cannot create projects."""
+    member = await make_user("member", workspace_role="WORKSPACE_MEMBER")
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    payload = {"identifier": "NOPE", "name": "N"}
+
+    denied = await as_principal(member).post("/api/v1/projects", json=payload)
+    assert denied.status_code == 403
+    assert denied.json()["code"] == "INSUFFICIENT_CAPABILITY"
+
+    narrow = await as_principal(admin, scopes=("write",)).post("/api/v1/projects", json=payload)
+    assert narrow.status_code == 403
+
+    obo = await as_principal(admin, agent_principal_id=admin.id).post(
+        "/api/v1/projects", json=payload
+    )
+    assert obo.status_code == 403
+
+    unauth = await as_principal(admin).get("/api/v1/projects/NOPE")
+    assert unauth.status_code == 404
+
+
+async def test_list_pagination_and_cursor(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Keyset pagination returns stable pages, hides unreadable projects and rejects bad cursors."""
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    outsider = await make_user("outsider")
+    client = as_principal(admin)
+    for ident in ("AAA", "BBB", "CCC"):
+        assert (
+            await client.post("/api/v1/projects", json={"identifier": ident, "name": ident})
+        ).status_code == 201
+
+    page1 = (await client.get("/api/v1/projects?limit=2")).json()
+    assert [p["identifier"] for p in page1["items"]] == ["AAA", "BBB"]
+    assert page1["next_cursor"] is not None
+    page2 = (await client.get(f"/api/v1/projects?limit=2&cursor={page1['next_cursor']}")).json()
+    assert [p["identifier"] for p in page2["items"]] == ["CCC"]
+    assert page2["next_cursor"] is None
+
+    hidden = (await as_principal(outsider).get("/api/v1/projects")).json()
+    assert hidden == {"items": [], "next_cursor": None}
+
+    as_principal(admin)
+    for bad in ("!!!notbase64", "bm9wZQ", "a" * 65):
+        resp = await client.get(f"/api/v1/projects?cursor={bad}")
+        assert resp.status_code == 422
+        if bad != "a" * 65:
+            assert resp.json()["code"] == "INVALID_CURSOR"
+
+
+def test_cursor_round_trip_and_rejection() -> None:
+    """Cursor helpers round-trip identifiers and reject non-identifier payloads."""
+    assert decode_cursor(encode_cursor("KAN")) == "KAN"
+    assert "=" not in encode_cursor("KAN")
+    with pytest.raises(Exception, match="Invalid Cursor"):
+        decode_cursor("bm9wZQ")
+
+
+async def test_patch_unchanged_description_and_module_toggle(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No-op description patches record nothing; modules can toggle off when none exist."""
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    client = as_principal(admin)
+    await client.post(
+        "/api/v1/projects",
+        json={
+            "identifier": "TOG",
+            "name": "N",
+            "description_markdown": "same",
+            "modules_enabled": True,
+        },
+    )
+    same = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "same"})
+    assert same.status_code == 200
+    off = await client.patch("/api/v1/projects/TOG", json={"modules_enabled": False})
+    assert off.status_code == 200
+    assert off.json()["modules_enabled"] is False
+
+    def _boom(_raw: str) -> str:
+        msg = "INVALID_UTF8_SURROGATE"
+        raise ContentNormalizeError(msg)
+
+    monkeypatch.setattr("kanban.services.projects.normalize_to_markdown", _boom)
+    bad = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "x"})
+    assert bad.status_code == 422
+    assert bad.json()["code"] == "INVALID_CONTENT"
