@@ -51,7 +51,8 @@ class ActivityCategory(StrEnum):
 
     COMMENT = "COMMENT"
     HISTORY = "HISTORY"
-    GATE = "GATE"
+    AGENT_GATE = "AGENT_GATE"
+    GATE = "AGENT_GATE"
     SYSTEM = "SYSTEM"
 
 
@@ -139,6 +140,13 @@ class ActivityEventType(StrEnum):
     WEBAUTHN_DELETED = "WEBAUTHN_DELETED"
     WEBAUTHN_SIGN_COUNT_REGRESSION = "WEBAUTHN_SIGN_COUNT_REGRESSION"
     ISSUE_COPIED = "ISSUE_COPIED"
+    SYNC_HOOK_REJECTED = "SYNC_HOOK_REJECTED"
+    HOOK_FAIL_OPEN_WARN = "HOOK_FAIL_OPEN_WARN"
+    GATE_PENDING = "GATE_PENDING"
+    GATE_APPROVED = "GATE_APPROVED"
+    GATE_REJECTED = "GATE_REJECTED"
+    GATE_TIMED_OUT = "GATE_TIMED_OUT"
+    GATE_CANCELLED = "GATE_CANCELLED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -224,6 +232,13 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.WEBAUTHN_DELETED: ActivityCategory.SYSTEM,
         ActivityEventType.WEBAUTHN_SIGN_COUNT_REGRESSION: ActivityCategory.SYSTEM,
         ActivityEventType.ISSUE_COPIED: ActivityCategory.HISTORY,
+        ActivityEventType.SYNC_HOOK_REJECTED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.HOOK_FAIL_OPEN_WARN: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_PENDING: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_APPROVED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_REJECTED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_TIMED_OUT: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_CANCELLED: ActivityCategory.AGENT_GATE,
     }
 )
 
