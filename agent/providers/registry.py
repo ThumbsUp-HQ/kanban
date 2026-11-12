@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent.providers.ollama import OllamaProvider, OllamaSettings
+from agent.providers.openai_provider import OpenAIProvider, OpenAISettings
 from agent.testing.fixtures import Cassette, FixtureLLMProvider
 
 if TYPE_CHECKING:
@@ -32,6 +33,14 @@ def build_provider(
         if isinstance(settings, dict):
             return OllamaProvider(OllamaSettings.model_validate(settings), transport=transport)
         msg = "Settings for ollama provider must be OllamaSettings or dict"
+        raise TypeError(msg)
+
+    if kind == "openai":
+        if isinstance(settings, OpenAISettings):
+            return OpenAIProvider(settings, transport=transport)
+        if isinstance(settings, dict):
+            return OpenAIProvider(OpenAISettings.model_validate(settings), transport=transport)
+        msg = "Settings for openai provider must be OpenAISettings or dict"
         raise TypeError(msg)
 
     if kind == "fixture":
