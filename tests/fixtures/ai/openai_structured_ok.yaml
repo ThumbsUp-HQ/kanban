@@ -1,0 +1,28 @@
+cassette_version: 1
+matcher: {}
+http_exchanges:
+  - request:
+      method: POST
+      path: /v1/chat/completions
+      json_contains:
+        model: gpt-4o-mini
+        store: false
+    response:
+      status: 200
+      headers:
+        content-type: application/json
+      json_body:
+        id: chatcmpl-struct-1
+        object: chat.completion
+        created: 1700000000
+        model: gpt-4o-mini
+        choices:
+          - index: 0
+            message:
+              role: assistant
+              content: '{"echo": "Hello Sparkle", "ok": true}'
+            finish_reason: stop
+        usage:
+          prompt_tokens: 15
+          completion_tokens: 8
+          total_tokens: 23

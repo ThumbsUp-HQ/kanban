@@ -1,0 +1,25 @@
+cassette_version: 1
+matcher: {}
+http_exchanges:
+  - request:
+      method: POST
+      path: /v1/embeddings
+      json_contains:
+        model: text-embedding-3-small
+    response:
+      status: 200
+      headers:
+        content-type: application/json
+      json_body:
+        object: list
+        data:
+          - object: embedding
+            index: 0
+            embedding: [0.1, 0.2, 0.3]
+          - object: embedding
+            index: 1
+            embedding: [0.4, 0.5, 0.6]
+        model: text-embedding-3-small
+        usage:
+          prompt_tokens: 8
+          total_tokens: 8

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -26,6 +27,7 @@ from agent.providers.base import (
 )
 from agent.providers.gemini import GeminiSettings
 from agent.providers.ollama import OllamaSettings
+from agent.providers.openai_provider import OpenAISettings
 from agent.providers.registry import build_provider
 from agent.testing.fixtures import (
     FixtureLLMProvider,
@@ -166,6 +168,30 @@ def _resolve_gemini_provider(
     return provider, prompt, model, metadata
 
 
+def _resolve_openai_provider(
+    args: argparse.Namespace,
+    prompt: str,
+    model: str,
+    metadata: dict[str, str],
+) -> tuple[LLMProvider, str, str, dict[str, str]]:
+    base_url_str = getattr(args, "base_url", None)
+    base_url = HttpUrl(base_url_str) if base_url_str else None
+    transport: httpx.AsyncBaseTransport | None = None
+    http_cassette = getattr(args, "http_cassette", None)
+    if http_cassette:
+        transport = CassetteTransport(Path(http_cassette))
+
+    api_key_str = os.environ.get("OPENAI_API_KEY", "sk-placeholder-test-key-00000000000000000000")
+    settings = OpenAISettings(
+        api_key=SecretStr(api_key_str),
+        base_url=base_url,
+        model_allowlist=(args.model, "gpt-4o-mini", "gpt-4.1", "o3-mini", "text-embedding-3-small"),
+    )
+    provider = build_provider("openai", settings, transport=transport)
+    return provider, prompt, model, metadata
+    return provider, prompt, model, metadata
+
+
 def _resolve_provider_and_params(
     args: argparse.Namespace,
 ) -> tuple[LLMProvider, str, str, dict[str, str]]:
@@ -175,6 +201,8 @@ def _resolve_provider_and_params(
 
     if args.provider == "ollama":
         return _resolve_ollama_provider(args, prompt, model, metadata)
+    if args.provider == "openai":
+        return _resolve_openai_provider(args, prompt, model, metadata)
 
     if args.provider == "gemini":
         return _resolve_gemini_provider(args, prompt, model, metadata)
