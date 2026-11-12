@@ -514,10 +514,10 @@ index 0000000..a3f934d
 +        return results
 diff --git a/agent/embeddings/onnx_embedder.py b/agent/embeddings/onnx_embedder.py
 new file mode 100644
-index 0000000..5b81865
+index 0000000..838c183
 --- /dev/null
 +++ b/agent/embeddings/onnx_embedder.py
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,180 @@
 +"""Int8 ONNX bge-small-en-v1.5 embedding engine with cryptographic integrity pinning."""
 +
 +from __future__ import annotations
@@ -572,9 +572,7 @@ index 0000000..5b81865
 +        self._semaphore = asyncio.Semaphore(2)
 +
 +        if self._model_dir is not None:
-+            self._verify_assets(
-+                self._model_dir, expected_model_sha256, expected_tokenizer_sha256
-+            )
++            self._verify_assets(self._model_dir, expected_model_sha256, expected_tokenizer_sha256)
 +
 +        self._tokenizer = self._setup_tokenizer(tokenizer)
 +        self._session = self._setup_session(inference_session)
@@ -607,10 +605,7 @@ index 0000000..5b81865
 +            raise EmbedderIntegrityError(msg)
 +
 +        if tok_sha != expected_tok_sha:
-+            msg = (
-+                f"tokenizer.json integrity mismatch: expected {expected_tok_sha}, "
-+                f"got {tok_sha}"
-+            )
++            msg = f"tokenizer.json integrity mismatch: expected {expected_tok_sha}, got {tok_sha}"
 +            raise EmbedderIntegrityError(msg)
 +
 +    def _setup_tokenizer(self, custom_tok: object | None) -> object:
@@ -838,10 +833,10 @@ index 0000000..4be36f9
 +    assert "Vector dimension mismatch: expected 384, got 383" in str(exc_info.value)
 diff --git a/agent/tests/embeddings/test_indexer.py b/agent/tests/embeddings/test_indexer.py
 new file mode 100644
-index 0000000..ff7dfc4
+index 0000000..16f2d5d
 --- /dev/null
 +++ b/agent/tests/embeddings/test_indexer.py
-@@ -0,0 +1,855 @@
+@@ -0,0 +1,861 @@
 +"""Unit and integration tests for EmbeddingIndexer, idempotency, and fault handling."""
 +
 +from __future__ import annotations
@@ -984,8 +979,7 @@ index 0000000..ff7dfc4
 +
 +    state_id = await session.scalar(
 +        text(
-+            "SELECT id FROM workflow_states "
-+            "WHERE project_id = :pid AND is_default = true LIMIT 1"
++            "SELECT id FROM workflow_states WHERE project_id = :pid AND is_default = true LIMIT 1"
 +        ),
 +        {"pid": proj_id},
 +    )
@@ -1031,8 +1025,7 @@ index 0000000..ff7dfc4
 +
 +    state_id = await session.scalar(
 +        text(
-+            "SELECT id FROM workflow_states "
-+            "WHERE project_id = :pid AND is_default = true LIMIT 1"
++            "SELECT id FROM workflow_states WHERE project_id = :pid AND is_default = true LIMIT 1"
 +        ),
 +        {"pid": proj_id},
 +    )
@@ -1368,14 +1361,18 @@ index 0000000..ff7dfc4
 +
 +    # Verify exactly 64 chunks stored in DB with indices 0 to 63
 +    chunks = (
-+        await db_session.execute(
-+            text(
-+                "SELECT chunk_index FROM object_embeddings "
-+                "WHERE object_id = :id ORDER BY chunk_index ASC"
-+            ),
-+            {"id": doc_id},
++        (
++            await db_session.execute(
++                text(
++                    "SELECT chunk_index FROM object_embeddings "
++                    "WHERE object_id = :id ORDER BY chunk_index ASC"
++                ),
++                {"id": doc_id},
++            )
 +        )
-+    ).scalars().all()
++        .scalars()
++        .all()
++    )
 +
 +    assert len(chunks) == 64
 +    assert chunks[0] == 0
@@ -1424,14 +1421,18 @@ index 0000000..ff7dfc4
 +
 +    # Verify remaining chunks are only indices 0 and 1
 +    chunks = (
-+        await db_session.execute(
-+            text(
-+                "SELECT chunk_index FROM object_embeddings "
-+                "WHERE object_id = :id ORDER BY chunk_index ASC"
-+            ),
-+            {"id": doc_id},
++        (
++            await db_session.execute(
++                text(
++                    "SELECT chunk_index FROM object_embeddings "
++                    "WHERE object_id = :id ORDER BY chunk_index ASC"
++                ),
++                {"id": doc_id},
++            )
 +        )
-+    ).scalars().all()
++        .scalars()
++        .all()
++    )
 +
 +    assert len(chunks) == 2
 +    assert chunks == [0, 1]
@@ -3274,10 +3275,10 @@ index 0000000..753d2f7
 +  dimension: 384
 +  seed: 42
 diff --git a/uv.lock b/uv.lock
-index 4693635..27f50b8 100644
+index 57d359d..e03fbe7 100644
 --- a/uv.lock
 +++ b/uv.lock
-@@ -385,6 +385,23 @@ wheels = [
+@@ -394,6 +394,23 @@ wheels = [
      { url = "https://files.pythonhosted.org/packages/ef/90/5d0096a325aa0f83ba7a3968bfb485b67e32c947bdf9cd0fcb4b485be718/filelock-4.2.10-py3-none-any.whl", hash = "sha256:9479aaeb4db20b5a53e3da28493edd24720b66b8a0b84030aa56ccdf243d6857", size = 218040 },
  ]
  
@@ -3301,7 +3302,7 @@ index 4693635..27f50b8 100644
  [[package]]
  name = "google-auth"
  version = "2.62.2"
-@@ -490,6 +507,22 @@ wheels = [
+@@ -512,6 +529,22 @@ wheels = [
      { url = "https://files.pythonhosted.org/packages/32/64/4afe5dd77b2939a93e8c9513f8082dbd049ecba9c1484a379a0f6ae29d6b/hatchling-1.33.0-py3-none-any.whl", hash = "sha256:415290b84f464d2884303fca8974d38e7b85579069fab02a15db0828fbb1446d", size = 78750 },
  ]
  
@@ -3322,9 +3323,9 @@ index 4693635..27f50b8 100644
 +]
 +
  [[package]]
- name = "httpcore"
- version = "1.0.9"
-@@ -578,6 +611,26 @@ wheels = [
+ name = "hpack"
+ version = "4.2.0"
+@@ -609,6 +642,26 @@ wheels = [
      { url = "https://files.pythonhosted.org/packages/9b/43/832f631d32e4f1211caa2ba368317739fe71f0b8530e4c9d15dc454bac2a/httpx2_jsfetch-1.0-py3-none-any.whl", hash = "sha256:cb916b707601e69a07721aabc8f3f6659be3a6893bc1ff5c6f9e02241df2da32", size = 6382 },
  ]
  
@@ -3349,9 +3350,9 @@ index 4693635..27f50b8 100644
 +]
 +
  [[package]]
- name = "identify"
- version = "2.6.20"
-@@ -684,9 +737,12 @@ dependencies = [
+ name = "hyperframe"
+ version = "6.1.0"
+@@ -724,9 +777,12 @@ dependencies = [
      { name = "httpx" },
      { name = "jsonschema" },
      { name = "kanban-mcp" },
@@ -3364,7 +3365,7 @@ index 4693635..27f50b8 100644
  ]
  
  [package.metadata]
-@@ -695,9 +751,12 @@ requires-dist = [
+@@ -735,9 +791,12 @@ requires-dist = [
      { name = "httpx", specifier = "==0.28.1" },
      { name = "jsonschema", specifier = "==4.26.0" },
      { name = "kanban-mcp", editable = "mcp" },
@@ -3377,7 +3378,7 @@ index 4693635..27f50b8 100644
  ]
  
  [[package]]
-@@ -730,6 +789,7 @@ source = { editable = "database" }
+@@ -774,6 +833,7 @@ source = { editable = "database" }
  dependencies = [
      { name = "alembic" },
      { name = "asyncpg" },
@@ -3385,7 +3386,7 @@ index 4693635..27f50b8 100644
      { name = "sqlalchemy", extra = ["asyncio"] },
  ]
  
-@@ -737,6 +797,7 @@ dependencies = [
+@@ -781,6 +841,7 @@ dependencies = [
  requires-dist = [
      { name = "alembic", specifier = "==1.20.1" },
      { name = "asyncpg", specifier = "==0.30.0" },
@@ -3393,7 +3394,7 @@ index 4693635..27f50b8 100644
      { name = "sqlalchemy", extras = ["asyncio"], specifier = "==2.0.38" },
  ]
  
-@@ -925,6 +986,43 @@ wheels = [
+@@ -1009,6 +1070,43 @@ wheels = [
      { url = "https://files.pythonhosted.org/packages/2d/6a/8a9ac7d5e2f7cf53c459bfef90ebc17a2f8cd54b665af96799d4c534840e/nodeenv-1.12.0-py3-none-any.whl", hash = "sha256:80644d65c10cc2be12e3e4b54b3367ff288c7ad24ae75c2dcc65454fc7449d4d", size = 39442 },
  ]
  
@@ -3437,7 +3438,7 @@ index 4693635..27f50b8 100644
  [[package]]
  name = "openai"
  version = "3.49.0"
-@@ -972,6 +1070,15 @@ wheels = [
+@@ -1056,6 +1154,15 @@ wheels = [
      { url = "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl", hash = "sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189", size = 57328 },
  ]
  
@@ -3453,7 +3454,7 @@ index 4693635..27f50b8 100644
  [[package]]
  name = "pip-licenses"
  version = "5.5.5"
-@@ -1030,6 +1137,21 @@ wheels = [
+@@ -1114,6 +1221,21 @@ wheels = [
      { url = "https://files.pythonhosted.org/packages/fe/be/2e6798ace5cc036f5d05d36b7b2fd85346f1a708c87060890b070d0ec607/prettytable-3.18.0-py3-none-any.whl", hash = "sha256:b3346e0e6f79180833aebaac088ae926340586cf6d7d991b9eb125b65f72313a", size = 37357 },
  ]
  
@@ -3475,7 +3476,7 @@ index 4693635..27f50b8 100644
  [[package]]
  name = "pyasn1"
  version = "0.6.5"
-@@ -1398,6 +1520,33 @@ wheels = [
+@@ -1482,6 +1604,33 @@ wheels = [
      { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926 },
  ]
  
@@ -3509,7 +3510,7 @@ index 4693635..27f50b8 100644
  [[package]]
  name = "tomlkit"
  version = "0.15.2"
-@@ -1407,6 +1556,18 @@ wheels = [
+@@ -1491,6 +1640,18 @@ wheels = [
      { url = "https://files.pythonhosted.org/packages/da/46/7d84138a60a8bd796825b2d38ebe92d0d16501ca57d501b7c5d677401bbc/tomlkit-0.15.2-py3-none-any.whl", hash = "sha256:05562412163a3037b94497385fb7f9204c637bc605af7a48199e41cf2272f437", size = 52225 },
  ]
  

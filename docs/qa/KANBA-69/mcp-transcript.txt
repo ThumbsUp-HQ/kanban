@@ -1,0 +1,60 @@
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+MCP-Protocol-Version: 2025-06-18
+Content-Length: 158
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 5zKnnIY_zicRangzFqNZQkhONuCqI66_CzhVNHxXX3c
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+MCP-Protocol-Version: 2025-06-18
+mcp-session-id: 5zKnnIY_zicRangzFqNZQkhONuCqI66_CzhVNHxXX3c
+Content-Length: 123
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping_agent","arguments":{"action":"help","project":"KAN"}}}
+
+HTTP/1.1 200 OK
+content-length: 173
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"tool: ping_agent\nproject: KAN\nparams: {action: ping | help | echo, message: str}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+MCP-Protocol-Version: 2025-06-18
+mcp-session-id: 5zKnnIY_zicRangzFqNZQkhONuCqI66_CzhVNHxXX3c
+Content-Length: 121
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"test_ambiguous_tool","arguments":{"action":"ambiguous"}}}
+
+HTTP/1.1 200 OK
+content-length: 315
+content-type: application/json
+
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"error:\n  code: AMBIGUOUS_IDENTIFIER\n  message: Reference 'bug' matched multiple candidates for kind 'label'\n  hint: Specify exact UUID or qualified identifier\n  candidates: [{key: Bug, title: Bug}, {key: bug, title: bug}]\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------

@@ -5,5 +5,10 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE EXTENSION IF NOT EXISTS vector;
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-GRANT USAGE, CREATE ON SCHEMA public TO kanban_migrator;
+GRANT USAGE, CREATE ON SCHEMA public TO kanban_migrator WITH GRANT OPTION;
 GRANT USAGE ON SCHEMA public TO kanban_app, app_rls_reader;
+
+DO $$
+BEGIN
+  EXECUTE format('GRANT CREATE ON DATABASE %I TO kanban_migrator', current_database());
+END $$;

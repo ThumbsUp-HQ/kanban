@@ -140,8 +140,7 @@ async def _setup_indexer_env(
 
     state_id = await session.scalar(
         text(
-            "SELECT id FROM workflow_states "
-            "WHERE project_id = :pid AND is_default = true LIMIT 1"
+            "SELECT id FROM workflow_states WHERE project_id = :pid AND is_default = true LIMIT 1"
         ),
         {"pid": proj_id},
     )
@@ -187,8 +186,7 @@ async def _create_test_issue(
 
     state_id = await session.scalar(
         text(
-            "SELECT id FROM workflow_states "
-            "WHERE project_id = :pid AND is_default = true LIMIT 1"
+            "SELECT id FROM workflow_states WHERE project_id = :pid AND is_default = true LIMIT 1"
         ),
         {"pid": proj_id},
     )
@@ -524,14 +522,18 @@ async def test_case_08_boundary_65_chunks_capped_at_64(
 
     # Verify exactly 64 chunks stored in DB with indices 0 to 63
     chunks = (
-        await db_session.execute(
-            text(
-                "SELECT chunk_index FROM object_embeddings "
-                "WHERE object_id = :id ORDER BY chunk_index ASC"
-            ),
-            {"id": doc_id},
+        (
+            await db_session.execute(
+                text(
+                    "SELECT chunk_index FROM object_embeddings "
+                    "WHERE object_id = :id ORDER BY chunk_index ASC"
+                ),
+                {"id": doc_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     assert len(chunks) == 64
     assert chunks[0] == 0
@@ -580,14 +582,18 @@ async def test_case_08_boundary_document_shrinking_prunes_chunks(
 
     # Verify remaining chunks are only indices 0 and 1
     chunks = (
-        await db_session.execute(
-            text(
-                "SELECT chunk_index FROM object_embeddings "
-                "WHERE object_id = :id ORDER BY chunk_index ASC"
-            ),
-            {"id": doc_id},
+        (
+            await db_session.execute(
+                text(
+                    "SELECT chunk_index FROM object_embeddings "
+                    "WHERE object_id = :id ORDER BY chunk_index ASC"
+                ),
+                {"id": doc_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     assert len(chunks) == 2
     assert chunks == [0, 1]

@@ -52,9 +52,7 @@ class OnnxBgeSmallEmbedder(Embedder):
         self._semaphore = asyncio.Semaphore(2)
 
         if self._model_dir is not None:
-            self._verify_assets(
-                self._model_dir, expected_model_sha256, expected_tokenizer_sha256
-            )
+            self._verify_assets(self._model_dir, expected_model_sha256, expected_tokenizer_sha256)
 
         self._tokenizer = self._setup_tokenizer(tokenizer)
         self._session = self._setup_session(inference_session)
@@ -87,10 +85,7 @@ class OnnxBgeSmallEmbedder(Embedder):
             raise EmbedderIntegrityError(msg)
 
         if tok_sha != expected_tok_sha:
-            msg = (
-                f"tokenizer.json integrity mismatch: expected {expected_tok_sha}, "
-                f"got {tok_sha}"
-            )
+            msg = f"tokenizer.json integrity mismatch: expected {expected_tok_sha}, got {tok_sha}"
             raise EmbedderIntegrityError(msg)
 
     def _setup_tokenizer(self, custom_tok: object | None) -> object:

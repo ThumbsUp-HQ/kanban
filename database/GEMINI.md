@@ -17,7 +17,7 @@ None. This is the foundational leaf module in the workspace dependency hierarchy
 - Test harness execution isolates probe entities within kb_harness schema, which must be ignored by production RLS catalog assertions.
 
 ## Outbound Contracts
-- database.models: 34 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox), custom LtreeType, and 5 PostgreSQL StrEnums.
+- database.models: 37 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit), custom LtreeType, and 5 PostgreSQL StrEnums.
 - database.session: RLSContext, bind_rls_context, RLSSessionFactory, create_rls_engine, and fail-closed security exceptions (RLSContextError, UnboundRLSSessionError, RLSRoleViolationError).
 - database.repositories: BaseRepository generic base providing type-safe CRUD operations, bounded pagination (1..500), and mandatory RLS session verification.
 - database.outbox: OutboxEnvelope, enqueue_outbox_event, topic_matches, RealtimeBroker, PgNotifyBroker, ValkeyBroker, and OutboxRelay (run via `python -m database.outbox.relay`).

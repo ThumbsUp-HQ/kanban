@@ -1,0 +1,17 @@
+...................................                                      [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                           Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------
+kanban/resolve/__init__.py         3      0      0      0   100%
+kanban/resolve/service.py        201      2     86      3    98%   209-210, 383->385, 400->403
+mcp/bench/token_benchmark.py      42      1      8      1    96%   73
+mcp/help.py                       48      1     18      5    91%   52->57, 64->69, 103->112, 110, 115->118
+mcp/lod.py                       149      4     92      4    96%   36->41, 195-198, 202->201, 225
+mcp/resolver.py                   37      0      6      0   100%
+mcp/yaml_out.py                   66      0     30      0   100%
+--------------------------------------------------------------------------
+TOTAL                            546      8    240     13    97%
+Required test coverage of 95% reached. Total coverage: 97.07%
+35 passed in 2.25s

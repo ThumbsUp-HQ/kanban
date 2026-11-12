@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Final
+from typing import Any, Final
 
-import yaml
+from mcp.yaml_out import dump_yaml
 
 __all__ = [
     "KbMcpError",
@@ -28,6 +28,7 @@ class McpErrorCode(StrEnum):
     UPSTREAM_UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
     UPSTREAM_ERROR = "UPSTREAM_ERROR"
     INTERNAL = "INTERNAL"
+    MODULES_DISABLED = "MODULES_DISABLED"
 
 
 class KbMcpError(Exception):
@@ -39,20 +40,24 @@ class KbMcpError(Exception):
         message: str,
         *,
         hint: str | None = None,
+        candidates: list[dict[str, str]] | None = None,
     ) -> None:
-        """Initialize KbMcpError with code, human-readable message, and optional hint."""
+        """Initialize KbMcpError with code, human-readable message, optional hint and candidates."""
         enum_code = McpErrorCode(code)
         super().__init__(f"[{enum_code.value}] {message}")
         self.code: Final[McpErrorCode] = enum_code
         self.message: Final[str] = message
         self.hint: Final[str | None] = hint
+        self.candidates: Final[list[dict[str, str]] | None] = candidates
 
     def to_yaml(self) -> str:
-        """Serialize error payload strictly containing code, message, and optional hint."""
-        payload: dict[str, str] = {
+        """Serialize error payload containing code, message, optional hint and candidates."""
+        payload: dict[str, Any] = {
             "code": self.code.value,
             "message": self.message,
         }
         if self.hint:
             payload["hint"] = self.hint
-        return yaml.safe_dump({"error": payload}, sort_keys=False)
+        if self.candidates:
+            payload["candidates"] = self.candidates
+        return dump_yaml({"error": payload}, strip_nulls=True)

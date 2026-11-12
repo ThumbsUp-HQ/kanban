@@ -1,0 +1,17 @@
+................................                                         [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                     Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------------
+kanban/security/client_ip.py                88      0     42      0   100%
+kanban/security/ratelimit/__init__.py       12      0      0      0   100%
+kanban/security/ratelimit/base.py           57      0     12      0   100%
+kanban/security/ratelimit/decorator.py      61      0     24      1    99%   114->117
+kanban/security/ratelimit/pg.py             66      0     28      0   100%
+kanban/security/ratelimit/valkey.py         33      0      8      0   100%
+------------------------------------------------------------------------------------
+TOTAL                                      317      0    114      1    99%
+Required test coverage of 95% reached. Total coverage: 99.77%
+32 passed in 0.68s
+EXIT_CODE=0
