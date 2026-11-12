@@ -1,0 +1,45 @@
+/**
+ * Floating Sanitized Paste Status Pill (KB-P3-46, S5.2, S6.2).
+ * Bottom-right absolute floating status slot with zero layout shift.
+ */
+
+.sanitized-paste-pill-slot {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.sanitized-paste-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background-color: var(--bg-surface-elevated, #ffffff);
+  border: 1px solid var(--border-default, #e2e8f0);
+  border-radius: 9999px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, sans-serif);
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  color: var(--fg-secondary, #475569);
+  user-select: none;
+  animation: sanitized-pill-fade-in 180ms ease-out;
+}
+
+.sanitized-paste-pill__label {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+@keyframes sanitized-pill-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
