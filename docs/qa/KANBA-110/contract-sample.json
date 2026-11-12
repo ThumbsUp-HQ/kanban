@@ -1,0 +1,277 @@
+{
+  "ticket": "KANBA-110",
+  "exchanges": [
+    {
+      "name": "unified_search_key_boost_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/search?q=KAN-142",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "389",
+          "content-type": "application/json",
+          "x-request-id": "edaa8ed65bb341b1b3b627e2f8fb1415",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "total": 1,
+          "executed_mode": "lexical",
+          "items": [
+            {
+              "kind": "issue",
+              "id": "418447b3-f49d-4341-a801-259d953cb812",
+              "key": "KAN-142",
+              "title": "Harden OIDC authentication with PKCE",
+              "project_identifier": "KAN",
+              "anchor": null,
+              "snippet": "All OAuth 2.1 client flows must implement PKCE S256 verification.",
+              "match_spans": [],
+              "score": 100.0,
+              "summary": "Harden OIDC authentication with PKCE"
+            }
+          ],
+          "next_cursor": null
+        }
+      }
+    },
+    {
+      "name": "knowledge_search_anchor_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/search/knowledge",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "48",
+          "content-type": "application/json"
+        },
+        "body": {
+          "query": "PKCE",
+          "kinds": [
+            "doc",
+            "page",
+            "sticky"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "441",
+          "content-type": "application/json",
+          "x-request-id": "c114a173d9f341b6955f47d59dba72e0",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "total": 1,
+          "executed_mode": "lexical",
+          "items": [
+            {
+              "kind": "doc",
+              "id": "39f03671-b4f0-4b98-9c71-c395f9c015c7",
+              "key": null,
+              "title": "Auth Studio Architecture",
+              "project_identifier": "KAN",
+              "anchor": "#pkce-s256",
+              "snippet": "# Auth Studio\nOverview of the authentication studio subsystem.\n\n## PKCE (S256)\nDetailed protocol specifications for PKCE with S256 challenge.\n",
+              "match_spans": [
+                [
+                  67,
+                  71
+                ],
+                [
+                  116,
+                  120
+                ]
+              ],
+              "score": 0.3333333358168602
+            }
+          ],
+          "next_cursor": null
+        }
+      }
+    },
+    {
+      "name": "search_issues_with_filters_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/search/issues",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "121",
+          "content-type": "application/json"
+        },
+        "body": {
+          "query": "OIDC",
+          "project": "FLT",
+          "filters": {
+            "state_groups": [
+              "started"
+            ],
+            "assignee_ids": [
+              "me"
+            ]
+          },
+          "mode": "lexical",
+          "limit": 20
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "347",
+          "content-type": "application/json",
+          "x-request-id": "2647dcb5774741818a98e6c03816b653",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "total": 1,
+          "executed_mode": "lexical",
+          "items": [
+            {
+              "kind": "issue",
+              "id": "3b960727-992c-494b-8e1b-c4ac051bf5b9",
+              "key": "FLT-1",
+              "title": "OIDC implementation",
+              "summary": "OIDC implementation",
+              "project_identifier": "FLT",
+              "anchor": null,
+              "snippet": "Implement OIDC authentication protocol.",
+              "match_spans": [
+                [
+                  10,
+                  14
+                ]
+              ],
+              "score": 0.6874999850988388
+            }
+          ],
+          "next_cursor": null
+        }
+      }
+    },
+    {
+      "name": "search_rls_zero_leak_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/search?q=ULTRASECRET-991",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "67",
+          "content-type": "application/json",
+          "x-request-id": "adc3d39fd0dd4a8b86ebe6afc165ac25",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "total": 0,
+          "executed_mode": "lexical",
+          "items": [],
+          "next_cursor": null
+        }
+      }
+    },
+    {
+      "name": "search_unreadable_project_404",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/search?q=test&project=SEC",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "a5c0ca9881814034aa750f967b1947bb",
+          "content-length": "139",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "request_id": "a5c0ca9881814034aa750f967b1947bb"
+        }
+      }
+    }
+  ]
+}

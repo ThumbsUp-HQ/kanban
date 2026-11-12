@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     text,
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.models.base import Base, LtreeType, ObjectKind, object_kind_pg_enum
@@ -50,6 +51,16 @@ class Doc(Base):
     )
     hierarchy_path: Mapped[str] = mapped_column(LtreeType, nullable=False)
     version_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    search_tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "(setweight(to_tsvector('english'::regconfig, "
+            "COALESCE(title, ''::text)), 'A'::\"char\") "
+            "|| setweight(build_markdown_tsvector(body_markdown), 'B'::\"char\"))",
+            persisted=True,
+        ),
+        nullable=True,
+    )
 
 
 class Page(Base):
@@ -86,6 +97,16 @@ class Page(Base):
     )
     hierarchy_path: Mapped[str] = mapped_column(LtreeType, nullable=False)
     version_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    search_tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "(setweight(to_tsvector('english'::regconfig, "
+            "COALESCE(title, ''::text)), 'A'::\"char\") "
+            "|| setweight(build_markdown_tsvector(body_markdown), 'B'::\"char\"))",
+            persisted=True,
+        ),
+        nullable=True,
+    )
     sort_rank: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'a0'"))
 
 
@@ -153,3 +174,11 @@ class Sticky(Base):
         ForeignKey("docs.id", ondelete="SET NULL"), nullable=True
     )
     sort_rank: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'a0'"))
+    search_tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "build_markdown_tsvector(body_markdown)",
+            persisted=True,
+        ),
+        nullable=True,
+    )
