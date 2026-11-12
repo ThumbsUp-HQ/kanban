@@ -101,6 +101,11 @@ class ActivityEventType(StrEnum):
     MFA_FAILED = "MFA_FAILED"
     RECOVERY_CODE_USED = "RECOVERY_CODE_USED"
     RECOVERY_CODES_REGENERATED = "RECOVERY_CODES_REGENERATED"
+    ISSUE_RANK_MOVED = "ISSUE_RANK_MOVED"
+    ISSUE_MOVED = "ISSUE_MOVED"
+    WIP_HARD_LIMIT_OVERRIDDEN = "WIP_HARD_LIMIT_OVERRIDDEN"
+    WIP_LIMIT_OVERRIDDEN = "WIP_LIMIT_OVERRIDDEN"
+    BOARD_COLUMN_REBALANCED = "BOARD_COLUMN_REBALANCED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -148,6 +153,11 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.MFA_FAILED: ActivityCategory.SYSTEM,
         ActivityEventType.RECOVERY_CODE_USED: ActivityCategory.SYSTEM,
         ActivityEventType.RECOVERY_CODES_REGENERATED: ActivityCategory.SYSTEM,
+        ActivityEventType.ISSUE_RANK_MOVED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MOVED: ActivityCategory.HISTORY,
+        ActivityEventType.WIP_HARD_LIMIT_OVERRIDDEN: ActivityCategory.HISTORY,
+        ActivityEventType.WIP_LIMIT_OVERRIDDEN: ActivityCategory.HISTORY,
+        ActivityEventType.BOARD_COLUMN_REBALANCED: ActivityCategory.HISTORY,
     }
 )
 

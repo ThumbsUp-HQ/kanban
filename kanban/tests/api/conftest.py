@@ -207,12 +207,14 @@ def as_principal(api_env: ApiEnv) -> Callable[..., httpx.AsyncClient]:
         user: SeededUser,
         *,
         scopes: tuple[str, ...] = ("session",),
+        aal_level: int = 1,
         agent_principal_id: uuid.UUID | None = None,
     ) -> httpx.AsyncClient:
         api_env.resolver.principal = PrincipalContext(
             principal_id=user.id,
             workspace_id=user.workspace_id,
             token_scopes=scopes,
+            aal_level=aal_level,
             agent_principal_id=agent_principal_id,
         )
         return api_env.client

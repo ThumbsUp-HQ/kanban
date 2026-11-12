@@ -100,7 +100,9 @@ def to_base62(num: int) -> str:
 
 def initial_board_rank(sequence_id: int) -> str:
     """Compute the initial deterministic board rank token for sequence_id."""
-    return "a" + to_base62(sequence_id).rjust(6, "0")
+    from kanban.services.board_rank import allocate_initial_board_rank  # noqa: PLC0415
+
+    return allocate_initial_board_rank(sequence_id)
 
 
 def encode_issue_cursor(sequence_id: int) -> str:
