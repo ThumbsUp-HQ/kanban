@@ -1,0 +1,65 @@
+/**
+ * Sparkle Completion Styles (KB-P5-08, S9.1, S9.3).
+ * Zero layout shift, strict CSP style-src 'self' compatibility, and prefers-reduced-motion support.
+ */
+
+.sparkle-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  z-index: 50;
+  pointer-events: auto;
+  font-size: 13px;
+  line-height: 18px;
+  border-radius: 4px;
+  animation: sparkle-pulse 1.15s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+  box-sizing: border-box;
+}
+
+.sparkle-badge--visible {
+  display: flex;
+}
+
+@keyframes sparkle-pulse {
+  from {
+    opacity: 0.38;
+  }
+  to {
+    opacity: 1.0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sparkle-badge {
+    animation: none;
+    opacity: 1;
+    box-shadow: 0 0 8px var(--color-sparkle-glow, rgba(234, 179, 8, 0.6));
+  }
+}
+
+.sparkle-ghost {
+  pointer-events: none;
+  opacity: 0.45;
+  user-select: none;
+  color: var(--color-ghost-text, #888888);
+}
+
+.sparkle-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}

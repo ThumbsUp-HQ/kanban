@@ -1,0 +1,20 @@
+{
+  "name": "sparkle_stream_timeout",
+  "status_code": 200,
+  "headers": {
+    "content-type": "text/event-stream",
+    "cache-control": "no-store",
+    "x-accel-buffering": "no"
+  },
+  "events": [
+    {
+      "event": "done",
+      "data": {
+        "status": "timeout",
+        "ttft_ms": 150,
+        "total_ms": 205
+      }
+    }
+  ],
+  "raw": "event: done\ndata: {\"status\": \"timeout\", \"ttft_ms\": 150, \"total_ms\": 205}\n\n"
+}

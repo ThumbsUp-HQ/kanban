@@ -21,6 +21,7 @@ import {
   type EditorSurfaceKind,
 } from './editorSurfaceFactory';
 import { createMediaNodeViews } from './media/MediaNodeViews';
+import { SparkleOverlayPortal } from './sparkle/SparkleOverlayPortal';
 import { EmojiHint } from '../components/emoji/EmojiHint';
 import './MarkdownEditor.css';
 
@@ -28,12 +29,15 @@ export interface MarkdownEditorProps {
   surface: EditorSurfaceKind;
   value: string;
   onChange: (nextMarkdown: string) => void;
-  onBlur?: (currentMarkdown: string) => void;
-  readOnly?: boolean;
-  maxBytes?: number;
-  placeholder?: string;
+  onBlur?: ((currentMarkdown: string) => void) | undefined;
+  readOnly?: boolean | undefined;
+  maxBytes?: number | undefined;
+  placeholder?: string | undefined;
   ariaLabel: string;
-  testId?: string;
+  testId?: string | undefined;
+  projectId?: string | undefined;
+  objectId?: string | null | undefined;
+  enableSparkle?: boolean | undefined;
 }
 
 const DEFAULT_MAX_BYTES: Record<EditorSurfaceKind, number> = {
@@ -53,14 +57,30 @@ export function MarkdownEditor({
   maxBytes,
   ariaLabel,
   testId = 'markdown-editor',
+  projectId,
+  objectId,
+  enableSparkle,
 }: MarkdownEditorProps): JSX.Element {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const [viewInstance, setViewInstance] = useState<EditorView | null>(null);
   const originalSourceRef = useRef<string>(value);
   const lastSerializedRef = useRef<string>(value);
 
   const [isRawMode, setIsRawMode] = useState(false);
   const [rawText, setRawText] = useState(value);
+
+  const valueRef = useRef(value);
+  const rawTextRef = useRef(rawText);
+  const onChangeRef = useRef(onChange);
+  const onBlurRef = useRef(onBlur);
+
+  useEffect(() => {
+    valueRef.current = value;
+    rawTextRef.current = rawText;
+    onChangeRef.current = onChange;
+    onBlurRef.current = onBlur;
+  });
 
   const effectiveMaxBytes = maxBytes ?? DEFAULT_MAX_BYTES[surface];
   const currentBytes = getUtf8ByteLength(isRawMode ? rawText : value);
@@ -73,21 +93,21 @@ export function MarkdownEditor({
     setIsRawMode((prev) => {
       if (prev) {
         // Raw -> WYSIWYG: notify parent with current raw text and transition to WYSIWYG
-        lastSerializedRef.current = rawText;
-        onChange(rawText);
+        lastSerializedRef.current = rawTextRef.current;
+        onChangeRef.current(rawTextRef.current);
         return false;
       } else {
         // WYSIWYG -> Raw: serialize current ProseMirror doc
         const currentView = viewRef.current;
         const currentMarkdown = currentView
           ? serializeMarkdown(currentView.state.doc, originalSourceRef.current)
-          : value;
+          : valueRef.current;
         setRawText(currentMarkdown);
         lastSerializedRef.current = currentMarkdown;
         return true;
       }
     });
-  }, [value, rawText, onChange]);
+  }, []);
 
   // Initialize and mount ProseMirror EditorView
   useEffect(() => {
@@ -105,6 +125,9 @@ export function MarkdownEditor({
       schema: editorSchema,
       plugins: createEditorPlugins(surface, {
         onToggleRaw: handleToggleRaw,
+        projectId,
+        objectId,
+        enableSparkle,
       }),
     });
 
@@ -130,13 +153,13 @@ export function MarkdownEditor({
             originalSourceRef.current,
           );
           lastSerializedRef.current = serialized;
-          onChange(serialized);
+          onChangeRef.current(serialized);
         }
       },
       handleDOMEvents: {
         blur: () => {
-          if (onBlur) {
-            onBlur(lastSerializedRef.current);
+          if (onBlurRef.current) {
+            onBlurRef.current(lastSerializedRef.current);
           }
           return false;
         },
@@ -144,12 +167,14 @@ export function MarkdownEditor({
     });
 
     viewRef.current = view;
+    setViewInstance(view);
 
     return () => {
       view.destroy();
       viewRef.current = null;
+      setViewInstance(null);
     };
-  }, [surface, isRawMode, ariaLabel, readOnly, handleToggleRaw, onChange, onBlur]);
+  }, [surface, isRawMode, ariaLabel, readOnly, handleToggleRaw, projectId, objectId, enableSparkle]);
 
   // Synchronize external value changes with ProseMirror state when in WYSIWYG mode
   useEffect(() => {
@@ -167,13 +192,16 @@ export function MarkdownEditor({
         schema: editorSchema,
         plugins: createEditorPlugins(surface, {
           onToggleRaw: handleToggleRaw,
+          projectId,
+          objectId,
+          enableSparkle,
         }),
       });
 
       const tr = newState.tr.setMeta('skipSourceSliceDirty', true);
       viewRef.current.updateState(newState.apply(tr));
     }
-  }, [value, isRawMode, surface, handleToggleRaw]);
+  }, [value, isRawMode, surface, handleToggleRaw, projectId, objectId, enableSparkle]);
 
   // Handle Raw Textarea changes
   const handleRawChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
@@ -235,7 +263,10 @@ export function MarkdownEditor({
           data-testid={`${testId}-raw`}
         />
       ) : (
-        <div ref={mountRef} className="kb-editor__surface" data-testid={`${testId}-wysiwyg`} />
+        <>
+          <div ref={mountRef} className="kb-editor__surface" data-testid={`${testId}-wysiwyg`} />
+          <SparkleOverlayPortal view={viewInstance} testId={`${testId}-sparkle`} />
+        </>
       )}
 
       {/* Byte Limit Live Warning */}
