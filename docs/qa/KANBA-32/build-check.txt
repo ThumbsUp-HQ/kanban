@@ -1,0 +1,30 @@
+=== TYPECHECK (pnpm typecheck / tsc -b --noEmit) ===
+
+> @kanban/web@0.1.0 typecheck /tmp/kb-wt-KANBA-32/kanban/web
+> tsc -b --noEmit
+
+Exit code: 0
+
+=== LINT (pnpm lint / eslint . --max-warnings 0) ===
+
+> @kanban/web@0.1.0 lint /tmp/kb-wt-KANBA-32/kanban/web
+> eslint . --max-warnings 0
+
+Exit code: 0
+
+=== BUILD (pnpm build / vite build) ===
+
+> @kanban/web@0.1.0 build /tmp/kb-wt-KANBA-32/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 28 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.39 kB │ gzip:  0.26 kB
+dist/assets/index-C1STIyb7.css   12.58 kB │ gzip:  2.98 kB
+dist/assets/index-by-ir1AK.js   243.16 kB │ gzip: 76.01 kB
+
+✓ built in 132ms
+Exit code: 0

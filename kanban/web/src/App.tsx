@@ -1,9 +1,10 @@
 import type { JSX } from 'react';
 import { TokenStory } from './dev/TokenStory';
+import { EmojiStory } from './dev/EmojiStory';
 import './App.css';
 
 /**
- * Checks whether the development TokenStory page is enabled.
+ * Checks whether development story pages are enabled.
  */
 export function isStoryEnabled(devMode: boolean, storyEnv?: string): boolean {
   if (devMode) {
@@ -17,10 +18,14 @@ export function App(): JSX.Element {
     import.meta.env.DEV,
     import.meta.env.VITE_ENABLE_STORY,
   );
-  const isStoryRoute = window.location.pathname === '/__dev/tokens';
 
-  if (isEnabled && isStoryRoute) {
-    return <TokenStory />;
+  if (isEnabled) {
+    if (window.location.pathname === '/__dev/tokens') {
+      return <TokenStory />;
+    }
+    if (window.location.pathname === '/__dev/emoji') {
+      return <EmojiStory />;
+    }
   }
 
   return (
