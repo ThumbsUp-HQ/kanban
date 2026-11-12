@@ -40,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     # Initialize default state dependencies
+    app.state.settings = settings
     app.state.principal_resolver = DenyAllResolver()
     app.state.session_factory = None
 

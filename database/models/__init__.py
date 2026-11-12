@@ -7,6 +7,8 @@ from database.models.auth import (
     RecoveryCode,
     TotpFactor,
     UserSession,
+    WebauthnChallenge,
+    WebauthnCredential,
 )
 from database.models.base import (
     Base,
@@ -104,6 +106,8 @@ __all__ = [
     "UserSession",
     "View",
     "ViewLayout",
+    "WebauthnChallenge",
+    "WebauthnCredential",
     "WorkflowState",
     "Workspace",
 ]

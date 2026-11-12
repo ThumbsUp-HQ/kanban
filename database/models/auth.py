@@ -220,3 +220,68 @@ class RecoveryCode(Base):
     def __str__(self) -> str:
         """Sanitized string representation matching repr."""
         return self.__repr__()
+
+
+class WebauthnCredential(Base):
+    """FIDO2 / WebAuthn passkey credential (KB-P2-05b)."""
+
+    __tablename__ = "webauthn_credentials"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), nullable=False
+    )
+    credential_id: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, unique=True)
+    public_key: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    sign_count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    aaguid: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    transports: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default=text("'{}'")
+    )
+    nickname: Mapped[str | None] = mapped_column(Text, nullable=True)
+    suspect_clone_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self) -> str:
+        """Sanitized representation omitting public key and raw credential bytes."""
+        return (
+            f"<WebauthnCredential id={self.id} principal_id={self.principal_id} "
+            f"sign_count={self.sign_count} nickname={self.nickname!r} "
+            f"suspect_clone={self.suspect_clone_at is not None}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()
+
+
+class WebauthnChallenge(Base):
+    """Server-side single-use WebAuthn challenge (KB-P2-05b)."""
+
+    __tablename__ = "webauthn_challenges"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    purpose: Mapped[str] = mapped_column(Text, nullable=False)
+    challenge: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self) -> str:
+        """Sanitized representation omitting raw challenge bytes."""
+        return (
+            f"<WebauthnChallenge id={self.id} session_id={self.session_id} "
+            f"purpose={self.purpose!r} expires_at={self.expires_at} "
+            f"consumed={self.consumed_at is not None}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()

@@ -1,0 +1,41 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-97/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-97
+configfile: pyproject.toml
+plugins: asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, anyio-4.16.0, xdist-3.8.0, platformdirs-4.14.5
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 21 items
+
+kanban/tests/auth/test_webauthn.py::test_case_1_positive_lifecycle PASSED [  4%]
+kanban/tests/auth/test_webauthn.py::test_case_2_security_phishing_origin PASSED [  9%]
+kanban/tests/auth/test_webauthn.py::test_case_3_security_rp_id_hash PASSED [ 14%]
+kanban/tests/auth/test_webauthn.py::test_case_4_security_uv_missing PASSED [ 19%]
+kanban/tests/auth/test_webauthn.py::test_case_5_challenge_replay_and_expiry_and_session_binding PASSED [ 23%]
+kanban/tests/auth/test_webauthn.py::test_case_6_security_credential_substitution PASSED [ 28%]
+kanban/tests/auth/test_webauthn.py::test_case_7_security_clone_detection PASSED [ 33%]
+kanban/tests/auth/test_webauthn.py::test_case_8_security_type_confusion PASSED [ 38%]
+kanban/tests/auth/test_webauthn.py::test_case_9_boundary_credential_limit_and_nickname_length PASSED [ 42%]
+kanban/tests/auth/test_webauthn.py::test_case_10_deletion_invariants PASSED [ 47%]
+kanban/tests/auth/test_webauthn.py::test_case_11_configuration_validation PASSED [ 52%]
+kanban/tests/auth/test_webauthn.py::test_helpers_fallback_branches PASSED [ 57%]
+kanban/tests/auth/test_webauthn.py::test_auth_webauthn_endpoint_guard_branches PASSED [ 61%]
+kanban/tests/auth/test_webauthn.py::test_auth_webauthn_authorization_and_validation_branches PASSED [ 66%]
+kanban/tests/auth/test_webauthn.py::test_auth_webauthn_service_direct_edge_cases PASSED [ 71%]
+database/tests/migrations/test_p2_05b_migration.py::test_25b_webauthn_credentials_migration_lifecycle PASSED [ 76%]
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 80%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 85%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 90%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 95%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+kanban/api/v1/auth_webauthn.py     212      0     58      0   100%
+kanban/auth/mfa/webauthn.py        189     14     44      2    93%   99-100, 119-121, 145, 358-359, 526-527, 551-552, 646-647
+----------------------------------------------------------------------------
+TOTAL                              401     14    102      2    97%
+Required test coverage of 95% reached. Total coverage: 96.82%
+============================== 21 passed in 5.26s ==============================

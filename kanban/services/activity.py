@@ -67,6 +67,10 @@ class ActivityEventType(StrEnum):
     MFA_FAILED = "MFA_FAILED"
     RECOVERY_CODE_USED = "RECOVERY_CODE_USED"
     RECOVERY_CODES_REGENERATED = "RECOVERY_CODES_REGENERATED"
+    WEBAUTHN_REGISTERED = "WEBAUTHN_REGISTERED"
+    WEBAUTHN_VERIFIED = "WEBAUTHN_VERIFIED"
+    WEBAUTHN_DELETED = "WEBAUTHN_DELETED"
+    WEBAUTHN_SIGN_COUNT_REGRESSION = "WEBAUTHN_SIGN_COUNT_REGRESSION"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -80,6 +84,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.MFA_FAILED: ActivityCategory.SYSTEM,
         ActivityEventType.RECOVERY_CODE_USED: ActivityCategory.SYSTEM,
         ActivityEventType.RECOVERY_CODES_REGENERATED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_REGISTERED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_VERIFIED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_DELETED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_SIGN_COUNT_REGRESSION: ActivityCategory.SYSTEM,
     }
 )
 
