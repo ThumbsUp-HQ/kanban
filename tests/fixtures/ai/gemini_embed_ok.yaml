@@ -1,0 +1,14 @@
+cassette_version: 1
+matcher: {}
+http_exchanges:
+  - request:
+      method: POST
+      path: /v1/models/text-embedding-004:batchEmbedContents
+    response:
+      status: 200
+      headers:
+        content-type: application/json
+      json_body:
+        embeddings:
+          - values: [0.01, 0.02, 0.03, 0.04]
+          - values: [0.05, 0.06, 0.07, 0.08]

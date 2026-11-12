@@ -1,0 +1,55 @@
+Success: no issues found in 27 source files
+All checks passed!
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 97 files, 108 dependencies.
+------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+342 files already formatted
+uv run mypy
+Success: no issues found in 145 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 97 files, 108 dependencies.
+------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+uv run python -m scripts.license_gate
+SUMMARY python=90 node=1 violations=0
+Exit code: 0

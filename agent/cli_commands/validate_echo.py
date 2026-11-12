@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, HttpUrl
+from pydantic import BaseModel, ConfigDict, HttpUrl, SecretStr
 
 from agent.cli_report import (
     ContextScrubber,
@@ -24,6 +24,7 @@ from agent.providers.base import (
     LLMProvider,
     StructuredRequest,
 )
+from agent.providers.gemini import GeminiSettings
 from agent.providers.ollama import OllamaSettings
 from agent.providers.registry import build_provider
 from agent.testing.fixtures import (
@@ -144,6 +145,27 @@ def _resolve_fixture_provider(
     return provider, prompt, model, metadata
 
 
+def _resolve_gemini_provider(
+    args: argparse.Namespace,
+    prompt: str,
+    model: str,
+    metadata: dict[str, str],
+) -> tuple[LLMProvider, str, str, dict[str, str]]:
+    transport: httpx.AsyncBaseTransport | None = None
+    http_cassette = getattr(args, "http_cassette", None)
+    if http_cassette:
+        transport = CassetteTransport(Path(http_cassette))
+
+    api_key_str = getattr(args, "api_key", None) or "fake-gemini-key-for-test"
+    settings = GeminiSettings(
+        mode="ai_studio_paid",
+        api_key=SecretStr(api_key_str),
+        model_allowlist=(args.model, "gemini-2.5-flash", "gemini-2.5-pro", "text-embedding-004"),
+    )
+    provider = build_provider("gemini", settings, transport=transport)
+    return provider, prompt, model, metadata
+
+
 def _resolve_provider_and_params(
     args: argparse.Namespace,
 ) -> tuple[LLMProvider, str, str, dict[str, str]]:
@@ -153,6 +175,9 @@ def _resolve_provider_and_params(
 
     if args.provider == "ollama":
         return _resolve_ollama_provider(args, prompt, model, metadata)
+
+    if args.provider == "gemini":
+        return _resolve_gemini_provider(args, prompt, model, metadata)
 
     return _resolve_fixture_provider(args, prompt, model, metadata)
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent.providers.gemini import GeminiProvider, GeminiSettings
 from agent.providers.ollama import OllamaProvider, OllamaSettings
 from agent.testing.fixtures import Cassette, FixtureLLMProvider
 
@@ -32,6 +33,14 @@ def build_provider(
         if isinstance(settings, dict):
             return OllamaProvider(OllamaSettings.model_validate(settings), transport=transport)
         msg = "Settings for ollama provider must be OllamaSettings or dict"
+        raise TypeError(msg)
+
+    if kind == "gemini":
+        if isinstance(settings, GeminiSettings):
+            return GeminiProvider(settings, transport=transport)
+        if isinstance(settings, dict):
+            return GeminiProvider(GeminiSettings.model_validate(settings), transport=transport)
+        msg = "Settings for gemini provider must be GeminiSettings or dict"
         raise TypeError(msg)
 
     if kind == "fixture":

@@ -61,7 +61,7 @@ def get_registered_subcommands() -> Mapping[str, SubcommandSpec]:
 def add_common_agent_flags(
     parser: argparse.ArgumentParser,
     *,
-    available_providers: Sequence[str] = ("fixture", "ollama"),
+    available_providers: Sequence[str] = ("fixture", "ollama", "gemini"),
 ) -> None:
     """Add standard provider, model, cassette, and reporting flags to a parser."""
     parser.add_argument(

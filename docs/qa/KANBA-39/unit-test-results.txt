@@ -1,0 +1,22 @@
+..........................                                               [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/google/genai/types.py:18270
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/google/genai/types.py:18270: SyntaxWarning: invalid escape sequence '\/'
+    description="""Output only. The original name of the uploaded file, taken from the `Content-Disposition` header on upload. Between 1 and 255 characters. Control characters and the characters `<>:"|?*\/` are not accepted.""",
+
+.venv/lib/python3.12/site-packages/google/genai/types.py:18308
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/google/genai/types.py:18308: SyntaxWarning: invalid escape sequence '\/'
+    """Output only. The original name of the uploaded file, taken from the `Content-Disposition` header on upload. Between 1 and 255 characters. Control characters and the characters `<>:"|?*\/` are not accepted."""
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                        Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------
+agent/providers/gemini.py     212      2     84      6    97%   242->exit, 263->262, 266, 274->277, 359->358, 362
+-----------------------------------------------------------------------
+TOTAL                         212      2     84      6    97%
+Required test coverage of 95% reached. Total coverage: 97.30%
+26 passed, 2 warnings in 3.12s
+Exit code: 0
