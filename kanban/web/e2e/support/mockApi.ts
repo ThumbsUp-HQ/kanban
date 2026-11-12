@@ -147,11 +147,25 @@ export async function mockApi(page: Page, handlers: MockHandlers): Promise<MockR
           response.contentType ??
           response.headers?.['content-type'] ??
           'application/json';
+        const isPlainObject =
+          typeof response === 'object' &&
+          !('json' in response) &&
+          !('body' in response) &&
+          !('status' in response);
+        const resolvedBody =
+          response.body ??
+          JSON.stringify(
+            response.json !== undefined
+              ? response.json
+              : isPlainObject
+                ? response
+                : {},
+          );
         await route.fulfill({
           status: response.status ?? 200,
           contentType,
           headers: response.headers ?? {},
-          body: response.body ?? JSON.stringify(response.json ?? {}),
+          body: resolvedBody,
         });
         break;
       }
