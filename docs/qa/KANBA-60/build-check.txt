@@ -1,0 +1,37 @@
+=== 1. ruff check . ===
+All checks passed!
+
+=== 2. ruff format --check . ===
+433 files already formatted
+
+=== 3. mypy --strict kanban ===
+Success: no issues found in 37 source files
+
+=== 4. lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 166 files, 246 dependencies.
+-------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+
+=== 5. scripts/license_gate.py ===
+SUMMARY python=95 node=1 violations=0
+
+=== 6. Banned bleach audit ===
+PASS: Zero bleach occurrences found.
