@@ -1,0 +1,34 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /tmp/kb-wt-KANBA-88
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 14 items
+
+kanban/tests/api/test_cycles.py::test_case_1_positive_crud_and_status_filtering PASSED [  7%]
+kanban/tests/api/test_cycles.py::test_case_2_status_transitions_and_concurrency PASSED [ 14%]
+kanban/tests/api/test_cycles.py::test_case_3_completed_immutability_and_delete PASSED [ 21%]
+kanban/tests/api/test_cycles.py::test_case_4_rollover_on_complete PASSED [ 28%]
+kanban/tests/api/test_cycles.py::test_case_5_rollover_error_handling PASSED [ 35%]
+kanban/tests/api/test_cycles.py::test_case_6_issue_membership_put_and_delete PASSED [ 42%]
+kanban/tests/api/test_cycles.py::test_case_7_security_permissions PASSED [ 50%]
+kanban/tests/api/test_cycles.py::test_case_8_boundaries_and_feature_toggle PASSED [ 57%]
+kanban/tests/api/test_cycles.py::test_case_9_not_found_branches_and_conflicts PASSED [ 64%]
+kanban/tests/services/test_burndown.py::test_burndown_date_order_and_range_too_long PASSED [ 71%]
+kanban/tests/services/test_burndown.py::test_burndown_seeded_activity_progression PASSED [ 78%]
+kanban/tests/services/test_burndown.py::test_burndown_empty_cycle_and_fallbacks PASSED [ 85%]
+kanban/tests/services/test_burndown.py::test_burndown_rls_isolation PASSED [ 92%]
+kanban/tests/services/test_burndown.py::test_evaluate_issue_at_cutoff_edge_cases PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                          Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------
+kanban/api/v1/cycles.py          54      0      0      0   100%
+kanban/services/burndown.py     121      3     44      3    96%   174-175, 180, 235->238
+kanban/services/cycles.py       207      0     78      8    97%   232->235, 251->254, 321->324, 385->388, 511->514, 547->550, 564->572, 613->616
+-------------------------------------------------------------------------
+TOTAL                           382      3    122     11    97%
+============================== 14 passed in 6.19s ==============================
