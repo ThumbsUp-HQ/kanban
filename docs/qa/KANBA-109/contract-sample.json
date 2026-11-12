@@ -1,0 +1,109 @@
+{
+  "setup_status_uninitialized": {
+    "request": {
+      "method": "GET",
+      "url": "/api/v1/setup/status"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "initialized": false
+      }
+    }
+  },
+  "setup_claim_success": {
+    "request": {
+      "method": "POST",
+      "url": "/api/v1/setup/claim",
+      "headers": {
+        "X-CSRF-Token": "<pre-session-csrf-token>"
+      },
+      "body": {
+        "token": "kb_setup_REDACTED_ENTROPY_32_BYTES_SAMPLE",
+        "username": "rootadmin",
+        "display_name": "Root Administrator",
+        "email": "root@kanban.example",
+        "password": "<REDACTED_PASSWORD_MIN_14_CHARS>"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "set-cookie": [
+          "__Host-kb_session=...; Path=/; HttpOnly; Secure; SameSite=Lax",
+          "__Host-kb_csrf=...; Path=/; Secure; SameSite=Strict"
+        ]
+      },
+      "body": {
+        "status": "enrollment_required",
+        "principal_id": "01931f6d-74ac-7a32-8419-74d6c4ebf941",
+        "enrollment_id": "01931f6d-74ac-7a32-8419-74d6c4ebf942"
+      }
+    }
+  },
+  "setup_status_initialized": {
+    "request": {
+      "method": "GET",
+      "url": "/api/v1/setup/status"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "initialized": true
+      }
+    }
+  },
+  "setup_claim_invalid_token": {
+    "request": {
+      "method": "POST",
+      "url": "/api/v1/setup/claim",
+      "headers": {
+        "X-CSRF-Token": "<csrf-token>"
+      },
+      "body": {
+        "token": "kb_setup_invalid_or_expired_or_already_consumed",
+        "username": "rootadmin",
+        "display_name": "Root Administrator",
+        "password": "SecurePassword1234!"
+      }
+    },
+    "response": {
+      "status": 401,
+      "body": {
+        "type": "about:blank",
+        "title": "Setup Token Invalid",
+        "status": 401,
+        "detail": "The setup token is invalid, expired, or has already been used.",
+        "code": "SETUP_TOKEN_INVALID"
+      }
+    }
+  },
+  "setup_claim_rate_limited": {
+    "request": {
+      "method": "POST",
+      "url": "/api/v1/setup/claim",
+      "headers": {
+        "X-CSRF-Token": "<csrf-token>"
+      },
+      "body": {
+        "token": "kb_setup_rate_limited_token",
+        "username": "rootadmin",
+        "display_name": "Root Administrator",
+        "password": "SecurePassword1234!"
+      }
+    },
+    "response": {
+      "status": 429,
+      "headers": {
+        "Retry-After": "3600"
+      },
+      "body": {
+        "type": "about:blank",
+        "title": "Rate Limit Exceeded",
+        "status": 429,
+        "detail": "Rate limit exceeded for policy 'setup_claim_ip'",
+        "code": "RATE_LIMITED"
+      }
+    }
+  }
+}

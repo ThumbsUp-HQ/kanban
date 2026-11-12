@@ -411,7 +411,9 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
             "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
             "  AND c.relname NOT IN ("
             "    'alembic_version', 'link_type_matrix', 'auth_provider_cards', "
-            "    'rate_limit_buckets', 'local_admin_credentials', 'sessions'"
+            "    'rate_limit_buckets', 'local_admin_credentials', 'sessions', "
+            "    'oidc_auth_requests', 'totp_factors', 'recovery_codes', "
+            "    'webauthn_credentials', 'webauthn_challenges', 'setup_claim_tokens'"
             "  ) "
             "ORDER BY c.relname"
         )

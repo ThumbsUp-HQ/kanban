@@ -6,6 +6,7 @@ pre-compressed single page application static assets, and security middleware.
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
@@ -27,11 +28,14 @@ from kanban.api.sse import handle_sse_endpoint
 from kanban.api.v1 import build_v1_router
 from kanban.api.ws import handle_ws_connection
 from kanban.auth.sessions.csrf import CsrfMiddleware
+from kanban.auth.setup import mint_setup_token_if_uninitialized
 from kanban.jobs import JobScheduler
 from kanban.jobs import registry as jobs_registry
 from kanban.security.headers import SecurityHeadersMiddleware
 from kanban.settings import Settings
 from kanban.web_static import PrecompressedSPAStaticApp
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -52,6 +56,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     session_target = getattr(app.state, "session_factory", None)
     should_run = getattr(app.state, "enable_background_jobs", False)
+
+    if session_target is not None:
+        try:
+            key_material = getattr(app.state, "key_material", None)
+            app_settings = getattr(app.state, "settings", None)
+            await mint_setup_token_if_uninitialized(
+                session_target,
+                key_material=key_material,
+                settings=app_settings,
+            )
+        except Exception:
+            logger.debug("First-boot setup token check bypassed or failed", exc_info=True)
 
     if should_run and session_target is not None:
         await scheduler.start(session_target)

@@ -128,6 +128,7 @@ class ActivityEventType(StrEnum):
     WEBAUTHN_VERIFIED = "WEBAUTHN_VERIFIED"
     WEBAUTHN_DELETED = "WEBAUTHN_DELETED"
     WEBAUTHN_SIGN_COUNT_REGRESSION = "WEBAUTHN_SIGN_COUNT_REGRESSION"
+    FIRST_BOOT_SETUP_CLAIMED = "FIRST_BOOT_SETUP_CLAIMED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -202,6 +203,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.WEBAUTHN_VERIFIED: ActivityCategory.SYSTEM,
         ActivityEventType.WEBAUTHN_DELETED: ActivityCategory.SYSTEM,
         ActivityEventType.WEBAUTHN_SIGN_COUNT_REGRESSION: ActivityCategory.SYSTEM,
+        ActivityEventType.FIRST_BOOT_SETUP_CLAIMED: ActivityCategory.SYSTEM,
     }
 )
 

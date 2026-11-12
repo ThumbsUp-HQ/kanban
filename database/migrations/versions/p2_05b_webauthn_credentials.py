@@ -13,7 +13,7 @@ from database.migrations.sqlfile import execute_sql_file
 
 # revision identifiers, used by Alembic.
 revision: str = "p2_05b_webauthn_credentials"
-down_revision: str | None = "p2_05a_mfa_totp_recovery"
+down_revision: str | None = "p3_10b_modules"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

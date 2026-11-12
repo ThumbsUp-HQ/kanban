@@ -322,3 +322,32 @@ class WebauthnChallenge(Base):
     def __str__(self) -> str:
         """Sanitized string representation matching repr."""
         return self.__repr__()
+
+
+class SetupClaimToken(Base):
+    """Single-use 256-bit first-boot setup claim token hashed at rest (KB-P2-12)."""
+
+    __tablename__ = "setup_claim_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    token_hmac: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consumed_by_principal_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
+    )
+
+    def __repr__(self) -> str:
+        """Sanitized representation omitting sensitive token HMAC bytes."""
+        return (
+            f"<SetupClaimToken id={self.id} expires_at={self.expires_at} "
+            f"consumed={self.consumed_at is not None} revoked={self.revoked_at is not None}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()
