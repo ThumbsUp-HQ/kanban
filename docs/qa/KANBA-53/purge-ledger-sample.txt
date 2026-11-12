@@ -1,0 +1,60 @@
+=== PURGE_INVALID_OBJECT_LINKS RETURN ROWS ===
+{'purged_audit_id': UUID('01a1ce0b-162c-72b9-a48d-537d8de9cd55'), 'purged_link_id': UUID('01a1ce0b-1628-791f-811e-529bb1096711'), 'activity_id': UUID('01a1ce0b-163a-7065-87eb-43f93eb85942')}
+{'purged_audit_id': UUID('01a1ce0b-1633-7773-bc1a-f35428a9bce7'), 'purged_link_id': UUID('01a1ce0b-1629-7868-8b24-0319f1688462'), 'activity_id': UUID('01a1ce0b-163c-7818-b25c-8b3ccfcd5518')}
+
+=== SURVIVING INVALID_OBJECT_LINK_AUDITS ROWS ===
+{'id': UUID('01a1ce0b-162c-72b9-a48d-537d8de9cd55'), 'link_id': UUID('01a1ce0b-1628-791f-811e-529bb1096711'), 'reason': 'ARCHIVED_POLICY_VIOLATION', 'detected_at': datetime.datetime(2026, 11, 12, 4, 36, 35, 498670, tzinfo=datetime.timezone.utc), 'purged_at': datetime.datetime(2026, 11, 12, 4, 36, 35, 513900, tzinfo=datetime.timezone.utc), 'purged_by_id': UUID('dab2e0d4-fb45-4d89-8594-6a7e99ff31ab'), 'purge_reason': 'Cleanup archived blockers'}
+{'id': UUID('01a1ce0b-1633-7773-bc1a-f35428a9bce7'), 'link_id': UUID('01a1ce0b-1629-7868-8b24-0319f1688462'), 'reason': 'DANGLING_SOURCE', 'detected_at': datetime.datetime(2026, 11, 12, 4, 36, 35, 506296, tzinfo=datetime.timezone.utc), 'purged_at': datetime.datetime(2026, 11, 12, 4, 36, 35, 516134, tzinfo=datetime.timezone.utc), 'purged_by_id': UUID('dab2e0d4-fb45-4d89-8594-6a7e99ff31ab'), 'purge_reason': 'Cleanup archived blockers'}
+
+=== ACTIVITY_RECORDS (INVALID_OBJECT_LINK_PURGED) ===
+{
+  "id": "01a1ce0b-163a-7065-87eb-43f93eb85942",
+  "workspace_id": "01a1ce0b-160a-7a8e-b5ce-7d4ec57a99f8",
+  "chain_seq": 1,
+  "event_type": "INVALID_OBJECT_LINK_PURGED",
+  "actor_id": "dab2e0d4-fb45-4d89-8594-6a7e99ff31ab",
+  "object_id": "01a1ce0b-161c-78b1-815a-4d6a6746ec47",
+  "object_type": "issue",
+  "payload": {
+    "link_id": "01a1ce0b-1628-791f-811e-529bb1096711",
+    "reasons": [
+      "ARCHIVED_POLICY_VIOLATION"
+    ],
+    "audit_ids": [
+      "01a1ce0b-162c-72b9-a48d-537d8de9cd55"
+    ],
+    "purge_reason": "Cleanup archived blockers",
+    "source_key_snapshot": "PRJ-1",
+    "target_key_snapshot": "PRJ-2"
+  },
+  "recorded_at": "2026-11-12 04:36:35.514697+00:00",
+  "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "row_hash": "fa9e3fe8fe6467d707250ae26c2bdb7dab10fc8a6245acbd740c7e7b5e194dfb"
+}
+{
+  "id": "01a1ce0b-163c-7818-b25c-8b3ccfcd5518",
+  "workspace_id": "01a1ce0b-160a-7a8e-b5ce-7d4ec57a99f8",
+  "chain_seq": 2,
+  "event_type": "INVALID_OBJECT_LINK_PURGED",
+  "actor_id": "dab2e0d4-fb45-4d89-8594-6a7e99ff31ab",
+  "object_id": "01a1ce0b-1627-7d68-9b71-c452c63bfbc7",
+  "object_type": "issue",
+  "payload": {
+    "link_id": "01a1ce0b-1629-7868-8b24-0319f1688462",
+    "reasons": [
+      "DANGLING_SOURCE"
+    ],
+    "audit_ids": [
+      "01a1ce0b-1633-7773-bc1a-f35428a9bce7"
+    ],
+    "purge_reason": "Cleanup archived blockers",
+    "source_key_snapshot": "PRJ-DNG",
+    "target_key_snapshot": "PRJ-3"
+  },
+  "recorded_at": "2026-11-12 04:36:35.516411+00:00",
+  "prev_hash": "fa9e3fe8fe6467d707250ae26c2bdb7dab10fc8a6245acbd740c7e7b5e194dfb",
+  "row_hash": "47ffea5c6746aace288c46419a57fdb165cde793fc9a89dea28cec62ccbf19f5"
+}
+
+=== VERIFY_ACTIVITY_CHAIN ===
+{'is_valid': True, 'checked_rows': 2, 'first_broken_seq': None}
