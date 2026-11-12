@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -69,6 +69,10 @@ class Problem(BaseModel):
         default=None,
         description="Count of open sub-issues hidden by RLS",
     )
+    current_preview: dict[str, Any] | None = Field(
+        default=None,
+        description="Fresh blast radius preview when precondition 412 BLAST_RADIUS_CHANGED fails",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -89,6 +93,7 @@ class ProblemException(Exception):  # noqa: N818
         state_group: str | None = None,
         open_subissue_keys: list[str] | None = None,
         hidden_open_count: int | None = None,
+        current_preview: dict[str, Any] | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -107,6 +112,7 @@ class ProblemException(Exception):  # noqa: N818
         self.state_group = state_group
         self.open_subissue_keys = open_subissue_keys
         self.hidden_open_count = hidden_open_count
+        self.current_preview = current_preview
 
 
 def not_found() -> NoReturn:
@@ -144,6 +150,7 @@ async def problem_exception_handler(
         state_group=exc.state_group,
         open_subissue_keys=exc.open_subissue_keys,
         hidden_open_count=exc.hidden_open_count,
+        current_preview=exc.current_preview,
     )
     response_headers = {"x-request-id": req_id}
     if exc.headers:

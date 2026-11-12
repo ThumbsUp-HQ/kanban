@@ -91,6 +91,9 @@ class ActivityEventType(StrEnum):
     LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
     ISSUE_ARCHIVED = "ISSUE_ARCHIVED"
     ISSUE_UNARCHIVED = "ISSUE_UNARCHIVED"
+    ISSUE_TRASHED = "ISSUE_TRASHED"
+    ISSUE_RESTORED = "ISSUE_RESTORED"
+    ISSUE_PURGED = "ISSUE_PURGED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -128,6 +131,9 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
         ActivityEventType.ISSUE_ARCHIVED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_UNARCHIVED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_TRASHED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_RESTORED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_PURGED: ActivityCategory.HISTORY,
     }
 )
 

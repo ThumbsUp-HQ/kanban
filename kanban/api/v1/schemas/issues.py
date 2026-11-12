@@ -182,6 +182,7 @@ class IssueResponse(BaseModel):
     capabilities: list[str]
     archived_at: datetime | None = None
     archive_eligibility: ArchiveEligibility
+    note: str | None = None
 
 
 class IssueList(BaseModel):

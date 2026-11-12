@@ -12,6 +12,7 @@ from kanban.api.v1.auth_session import router as auth_session_router
 from kanban.api.v1.docs import router as docs_router
 from kanban.api.v1.health import router as health_router
 from kanban.api.v1.issue_archive import router as archive_router
+from kanban.api.v1.issue_delete import router as issue_delete_router
 from kanban.api.v1.issues import router as issues_router
 from kanban.api.v1.media_proxy import router as media_proxy_router
 from kanban.api.v1.objects_access import router as objects_access_router
@@ -37,4 +38,5 @@ def build_v1_router() -> APIRouter:
     v1.include_router(agent_definitions_router)
     v1.include_router(attachments_router)
     v1.include_router(archive_router)
+    v1.include_router(issue_delete_router)
     return v1

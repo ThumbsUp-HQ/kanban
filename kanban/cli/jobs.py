@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from kanban.jobs.auto_archive import run_auto_archive
+from kanban.jobs.trash_purge import run_trash_purge
 
 if TYPE_CHECKING:
     import argparse
@@ -67,6 +68,44 @@ def handle_run_auto_archive(args: argparse.Namespace) -> int:
     return asyncio.run(_run())
 
 
+def handle_run_trash_purge(args: argparse.Namespace) -> int:
+    """Execute trash retention purge pass from CLI args."""
+    now: datetime | None = None
+    if getattr(args, "now", None):
+        try:
+            now = datetime.fromisoformat(args.now)
+            if now.tzinfo is None:
+                now = now.replace(tzinfo=UTC)
+        except ValueError as err:
+            sys.stderr.write(f"Invalid --now timestamp: {err}\n")
+            return 2
+
+    dsn = _get_engine_dsn()
+    engine = create_async_engine(dsn)
+
+    async def _run() -> int:
+        try:
+            report = await run_trash_purge(engine, now=now)
+            sys.stdout.write(json.dumps(report.to_dict(), indent=2) + "\n")
+        except Exception as err:  # noqa: BLE001
+            sys.stderr.write(f"Trash-purge failed: {err}\n")
+            return 1
+        else:
+            return 0
+        finally:
+            await engine.dispose()
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is not None and loop.is_running():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(lambda: asyncio.run(_run())).result()
+    return asyncio.run(_run())
+
+
 def register_jobs_subparsers(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -93,4 +132,19 @@ def register_jobs_subparsers(
     auto_archive_parser.set_defaults(
         func=handle_run_auto_archive,
         handler=handle_run_auto_archive,
+    )
+
+    trash_purge_parser = run_subs.add_parser(
+        "trash-purge",
+        help="Run periodic trash retention purge pass for expired issues",
+    )
+    trash_purge_parser.add_argument(
+        "--now",
+        type=str,
+        default=None,
+        help="Optional ISO-8601 reference timestamp (e.g. 2026-11-11T00:00:00Z)",
+    )
+    trash_purge_parser.set_defaults(
+        func=handle_run_trash_purge,
+        handler=handle_run_trash_purge,
     )

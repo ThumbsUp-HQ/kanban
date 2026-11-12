@@ -1,0 +1,13 @@
+..............                                                           [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                              Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------
+kanban/api/v1/issue_delete.py        33      0      0      0   100%
+kanban/jobs/trash_purge.py          143      3     44      4    96%   133, 285->288, 315->303, 361-362
+kanban/services/issue_delete.py     133      1     30      5    96%   240, 309->313, 311->313, 314->322, 316->322
+-----------------------------------------------------------------------------
+TOTAL                               309      4     74      9    97%
+Required test coverage of 95% reached. Total coverage: 96.61%
+14 passed in 5.38s

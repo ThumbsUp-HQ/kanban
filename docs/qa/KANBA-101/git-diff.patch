@@ -1,0 +1,2768 @@
+diff --git a/docs/qa/KANBA-101/build-check.txt b/docs/qa/KANBA-101/build-check.txt
+new file mode 100644
+index 0000000..c18f89b
+--- /dev/null
++++ b/docs/qa/KANBA-101/build-check.txt
+@@ -0,0 +1,33 @@
++=== 1. ruff check kanban database ===
++All checks passed!
++=== 2. ruff format --check . ===
++742 files already formatted
++=== 3. mypy --strict kanban ===
++Success: no issues found in 193 source files
++=== 4. lint-imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 398 files, 952 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++mcp forbidden from importing database KEPT
++
++Contracts: 2 kept, 0 broken.
++=== 5. check_no_dashes --all ===
++=== 6. make license ===
++uv run python -m scripts.license_gate
++SUMMARY python=112 node=1 violations=0
+diff --git a/docs/qa/KANBA-101/cli-run.txt b/docs/qa/KANBA-101/cli-run.txt
+new file mode 100644
+index 0000000..cf77222
+--- /dev/null
++++ b/docs/qa/KANBA-101/cli-run.txt
+@@ -0,0 +1,5 @@
++{
++  "issues_purged": 0,
++  "links_purged": 0,
++  "batches": 0
++}
+diff --git a/docs/qa/KANBA-101/contract-sample.json b/docs/qa/KANBA-101/contract-sample.json
+new file mode 100644
+index 0000000..3deb8d5
+--- /dev/null
++++ b/docs/qa/KANBA-101/contract-sample.json
+@@ -0,0 +1,400 @@
++{
++  "ticket": "KANBA-101",
++  "exchanges": [
++    {
++      "name": "get_delete_preview_200",
++      "request": {
++        "method": "GET",
++        "path": "/api/v1/issues/DEL-1/delete-preview",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "294",
++          "content-type": "application/json",
++          "x-request-id": "9a9c433ab2ae4fda9575a8b4f2338cad",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "issue_key": "DEL-1",
++          "sub_issues_unparented": 2,
++          "inbound_links_flagged": 3,
++          "outbound_links": 0,
++          "comments": 0,
++          "attachments": 0,
++          "summary_text": "2 sub-issues unparented, 3 inbound object_links flagged",
++          "blast_hash": "206175ffc5ea0e298fbe0a37642fb29650c4350564254639928976c669517af6",
++          "retention_days": 30
++        }
++      }
++    },
++    {
++      "name": "delete_issue_200",
++      "request": {
++        "method": "DELETE",
++        "path": "/api/v1/issues/DEL-1",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "kb-blast-hash": "206175ffc5ea0e298fbe0a37642fb29650c4350564254639928976c669517af6",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "108",
++          "content-type": "application/json",
++          "x-request-id": "5eaf65705a4d4e4e9ae153afdfce5dc2",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "issue_key": "DEL-1",
++          "deleted_at": "2026-11-12T09:25:02.832848Z",
++          "purge_after": "2026-12-12T09:25:02.832848Z"
++        }
++      }
++    },
++    {
++      "name": "list_trash_200",
++      "request": {
++        "method": "GET",
++        "path": "/api/v1/projects/DEL/trash",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "442",
++          "content-type": "application/json",
++          "x-request-id": "400275551bbb49eeb06e954d1b1ee738",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "items": [
++            {
++              "id": "01a1cf13-2bcb-7d0c-8fc6-602803f27050",
++              "key": "DEL-1",
++              "summary": "Parent Issue to Delete",
++              "deleted_at": "2026-11-12T09:25:02.832848Z",
++              "purge_after": "2026-12-12T09:25:02.832848Z",
++              "state": {
++                "id": "01a1cf13-2b4f-782f-9185-51a6eadff21e",
++                "name": "Backlog",
++                "group": "backlog"
++              },
++              "priority": {
++                "slug": "none",
++                "label": "None",
++                "emoji": null
++              },
++              "capabilities": [
++                "VIEW",
++                "COMMENT",
++                "EDIT",
++                "TRANSITION",
++                "LINK",
++                "SHARE",
++                "ADMIN",
++                "DELETE"
++              ]
++            }
++          ],
++          "next_cursor": null
++        }
++      }
++    },
++    {
++      "name": "delete_missing_hash_428",
++      "request": {
++        "method": "DELETE",
++        "path": "/api/v1/issues/CNC-1",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 428,
++        "headers": {
++          "x-request-id": "a25cdc8e5ac6498780864d0d0a168266",
++          "content-length": "234",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:BLAST_HASH_REQUIRED",
++          "title": "Blast Hash Required",
++          "status": 428,
++          "code": "BLAST_HASH_REQUIRED",
++          "detail": "Header 'Kb-Blast-Hash' is required to delete an issue",
++          "request_id": "a25cdc8e5ac6498780864d0d0a168266"
++        }
++      }
++    },
++    {
++      "name": "delete_blast_radius_changed_412",
++      "request": {
++        "method": "DELETE",
++        "path": "/api/v1/issues/CNC-1",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "kb-blast-hash": "fae8f2424cb26091e45e4bea688884b9b65d0444b3f25b44885e6164f375d00e",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 412,
++        "headers": {
++          "x-request-id": "709c5ee9ceb7477e8d38050cb5e10e5b",
++          "content-length": "563",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:BLAST_RADIUS_CHANGED",
++          "title": "Blast Radius Changed",
++          "status": 412,
++          "code": "BLAST_RADIUS_CHANGED",
++          "detail": "The issue blast radius has changed since the preview was generated",
++          "request_id": "709c5ee9ceb7477e8d38050cb5e10e5b",
++          "current_preview": {
++            "issue_key": "CNC-1",
++            "sub_issues_unparented": 0,
++            "inbound_links_flagged": 4,
++            "outbound_links": 0,
++            "comments": 0,
++            "attachments": 0,
++            "summary_text": "0 sub-issues unparented, 4 inbound object_links flagged",
++            "blast_hash": "ca06c87019c3beccec97c338be16fb4f79ce71a9fde3ddaf72a0191041ff7056",
++            "retention_days": 30
++          }
++        }
++      }
++    },
++    {
++      "name": "restore_issue_200",
++      "request": {
++        "method": "POST",
++        "path": "/api/v1/issues/RES-1/restore",
++        "headers": {
++          "host": "test",
++          "content-length": "0",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "1402",
++          "content-type": "application/json",
++          "x-request-id": "9d341b6706f54f17863fbff609683e7b",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "id": "01a1cf13-30e0-790a-8716-e1a23902f0e6",
++          "key": "RES-1",
++          "summary": "Restorable Parent",
++          "description_markdown": "",
++          "description_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
++          "state": {
++            "id": "01a1cf13-30ac-7adf-a71d-ce5274285df8",
++            "name": "Backlog",
++            "group": "backlog"
++          },
++          "priority": {
++            "slug": "none",
++            "label": "None",
++            "emoji": null
++          },
++          "start_date": null,
++          "due_date": null,
++          "cycle_id": null,
++          "parent": null,
++          "labels": [],
++          "module_ids": [],
++          "board_rank": "a000001",
++          "created_by_id": "01a1cf13-30a5-730e-bc17-1b2bcf3904d6",
++          "access_manifest": {
++            "pill_label": "Project",
++            "explicit_grant_count": 0,
++            "inherited_scope": {
++              "kind": "project",
++              "scope_label": "Project: RES",
++              "workspace_id": "01a1cf13-30a1-7021-a950-82e7fe5982c8",
++              "workspace_name": "Engineering",
++              "project_id": "01a1cf13-30ab-7c6d-8594-c298274dce2a",
++              "project_key": "RES",
++              "project_name": "RES project"
++            },
++            "users": [
++              {
++                "principal_id": "01a1cf13-30a5-730e-bc17-1b2bcf3904d6",
++                "handle": "@res_admin",
++                "display_name": "Res_Admin",
++                "capabilities": [
++                  "VIEW",
++                  "COMMENT",
++                  "EDIT",
++                  "TRANSITION",
++                  "LINK",
++                  "SHARE",
++                  "ADMIN",
++                  "DELETE"
++                ],
++                "grant_source": "project_owner"
++              }
++            ],
++            "groups": [],
++            "agents": [],
++            "deny_overrides": [],
++            "redacted_entries": [],
++            "redacted_count": 0
++          },
++          "capabilities": [
++            "VIEW",
++            "COMMENT",
++            "EDIT",
++            "TRANSITION",
++            "LINK",
++            "SHARE",
++            "ADMIN",
++            "DELETE"
++          ],
++          "archived_at": null,
++          "archive_eligibility": {
++            "allowed": false,
++            "reason": "Only completed or canceled work items can be archived"
++          },
++          "note": "sub-issues remain unparented"
++        }
++      }
++    },
++    {
++      "name": "restore_retention_expired_409",
++      "request": {
++        "method": "POST",
++        "path": "/api/v1/issues/RES-1/restore",
++        "headers": {
++          "host": "test",
++          "content-length": "0",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 409,
++        "headers": {
++          "x-request-id": "043c67708e9e4cb9a12a5970689e115a",
++          "content-length": "232",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:RETENTION_EXPIRED",
++          "title": "Retention Expired",
++          "status": 409,
++          "code": "RETENTION_EXPIRED",
++          "detail": "Issue retention window has expired and cannot be restored",
++          "request_id": "043c67708e9e4cb9a12a5970689e115a"
++        }
++      }
++    }
++  ]
++}
+diff --git a/docs/qa/KANBA-101/unit-test-results.txt b/docs/qa/KANBA-101/unit-test-results.txt
+new file mode 100644
+index 0000000..3a54e59
+--- /dev/null
++++ b/docs/qa/KANBA-101/unit-test-results.txt
+@@ -0,0 +1,13 @@
++..............                                                           [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                              Stmts   Miss Branch BrPart  Cover   Missing
++-----------------------------------------------------------------------------
++kanban/api/v1/issue_delete.py        33      0      0      0   100%
++kanban/jobs/trash_purge.py          143      3     44      4    96%   133, 285->288, 315->303, 361-362
++kanban/services/issue_delete.py     133      1     30      5    96%   240, 309->313, 311->313, 314->322, 316->322
++-----------------------------------------------------------------------------
++TOTAL                               309      4     74      9    97%
++Required test coverage of 95% reached. Total coverage: 96.61%
++14 passed in 5.38s
+diff --git a/kanban/api/problems.py b/kanban/api/problems.py
+index 40a47ca..15083d0 100644
+--- a/kanban/api/problems.py
++++ b/kanban/api/problems.py
+@@ -4,7 +4,7 @@ from __future__ import annotations
+ 
+ import logging
+ import re
+-from typing import TYPE_CHECKING, NoReturn
++from typing import TYPE_CHECKING, Any, NoReturn
+ 
+ from fastapi.responses import JSONResponse
+ from pydantic import BaseModel, Field
+@@ -69,6 +69,10 @@ class Problem(BaseModel):
+         default=None,
+         description="Count of open sub-issues hidden by RLS",
+     )
++    current_preview: dict[str, Any] | None = Field(
++        default=None,
++        description="Fresh blast radius preview when precondition 412 BLAST_RADIUS_CHANGED fails",
++    )
+ 
+ 
+ class ProblemException(Exception):  # noqa: N818
+@@ -89,6 +93,7 @@ class ProblemException(Exception):  # noqa: N818
+         state_group: str | None = None,
+         open_subissue_keys: list[str] | None = None,
+         hidden_open_count: int | None = None,
++        current_preview: dict[str, Any] | None = None,
+     ) -> None:
+         """Initialize problem exception with error code, status, and optional details."""
+         if not _CODE_REGEX.match(code):
+@@ -107,6 +112,7 @@ class ProblemException(Exception):  # noqa: N818
+         self.state_group = state_group
+         self.open_subissue_keys = open_subissue_keys
+         self.hidden_open_count = hidden_open_count
++        self.current_preview = current_preview
+ 
+ 
+ def not_found() -> NoReturn:
+@@ -144,6 +150,7 @@ async def problem_exception_handler(
+         state_group=exc.state_group,
+         open_subissue_keys=exc.open_subissue_keys,
+         hidden_open_count=exc.hidden_open_count,
++        current_preview=exc.current_preview,
+     )
+     response_headers = {"x-request-id": req_id}
+     if exc.headers:
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 96a214e..b6a23cf 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -12,6 +12,7 @@ from kanban.api.v1.auth_session import router as auth_session_router
+ from kanban.api.v1.docs import router as docs_router
+ from kanban.api.v1.health import router as health_router
+ from kanban.api.v1.issue_archive import router as archive_router
++from kanban.api.v1.issue_delete import router as issue_delete_router
+ from kanban.api.v1.issues import router as issues_router
+ from kanban.api.v1.media_proxy import router as media_proxy_router
+ from kanban.api.v1.objects_access import router as objects_access_router
+@@ -37,4 +38,5 @@ def build_v1_router() -> APIRouter:
+     v1.include_router(agent_definitions_router)
+     v1.include_router(attachments_router)
+     v1.include_router(archive_router)
++    v1.include_router(issue_delete_router)
+     return v1
+diff --git a/kanban/api/v1/issue_delete.py b/kanban/api/v1/issue_delete.py
+new file mode 100644
+index 0000000..9e97fee
+--- /dev/null
++++ b/kanban/api/v1/issue_delete.py
+@@ -0,0 +1,101 @@
++"""Issue delete preview, soft trash, trash listing, and restore endpoints (S7.2 8q)."""
++
++from __future__ import annotations
++
++from typing import Annotated
++
++from fastapi import APIRouter, Depends, Header, Query
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.timing import timing_floor
++from kanban.api.v1.schemas.issue_delete import (
++    BlastRadiusResponse,
++    IssueDeleteResponse,
++    TrashedIssueList,
++)
++from kanban.api.v1.schemas.issues import IssueResponse
++from kanban.security.permissions import Capability, require_capability
++from kanban.services import issue_delete as svc
++from kanban.services.issue_keys import resolve_issue_ref
++
++router = APIRouter(tags=["issues"])
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++@router.get(
++    "/issues/{issue_ref}/delete-preview",
++    response_model=BlastRadiusResponse,
++    summary="Get issue delete blast radius preview",
++)
++async def delete_preview(
++    issue_ref: str,
++    caller: Caller,
++    session: Session,
++) -> BlastRadiusResponse:
++    """Return blast radius preview for deleting an issue (requires DELETE capability)."""
++    async with timing_floor(floor_ms=25.0):
++        issue = await resolve_issue_ref(session, caller, issue_ref)
++        await require_capability(session, caller, issue.id, Capability.DELETE)
++        blast = await svc.compute_blast_radius(session, issue.id)
++        return BlastRadiusResponse(
++            issue_key=blast.issue_key,
++            sub_issues_unparented=blast.sub_issues_unparented,
++            inbound_links_flagged=blast.inbound_links_flagged,
++            outbound_links=blast.outbound_links,
++            comments=blast.comments,
++            attachments=blast.attachments,
++            summary_text=blast.summary_text,
++            blast_hash=blast.blast_hash,
++            retention_days=blast.retention_days,
++        )
++
++
++@router.delete(
++    "/issues/{issue_ref}",
++    response_model=IssueDeleteResponse,
++    summary="Soft-delete an issue into trash",
++)
++async def delete_issue(
++    issue_ref: str,
++    caller: Caller,
++    session: Session,
++    kb_blast_hash: Annotated[str | None, Header(alias="Kb-Blast-Hash")] = None,
++) -> IssueDeleteResponse:
++    """Soft-delete an issue into trash guarded by blast-radius hash concurrency check."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.trash_issue(session, caller, issue_ref, kb_blast_hash)
++
++
++@router.get(
++    "/projects/{project_ref}/trash",
++    response_model=TrashedIssueList,
++    summary="List issues in project trash",
++)
++async def list_trash(
++    project_ref: str,
++    caller: Caller,
++    session: Session,
++    cursor: str | None = None,
++    limit: Annotated[int, Query(ge=1, le=100)] = 50,
++) -> TrashedIssueList:
++    """List soft-deleted issues in project trash where caller has DELETE capability."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.list_trash(session, caller, project_ref, cursor=cursor, limit=limit)
++
++
++@router.post(
++    "/issues/{issue_ref}/restore",
++    response_model=IssueResponse,
++    summary="Restore an issue from trash",
++)
++async def restore_issue(
++    issue_ref: str,
++    caller: Caller,
++    session: Session,
++) -> IssueResponse:
++    """Restore a soft-deleted issue from trash back into active state."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.restore_issue(session, caller, issue_ref)
+diff --git a/kanban/api/v1/schemas/issue_delete.py b/kanban/api/v1/schemas/issue_delete.py
+new file mode 100644
+index 0000000..1d2df4b
+--- /dev/null
++++ b/kanban/api/v1/schemas/issue_delete.py
+@@ -0,0 +1,70 @@
++"""Pydantic schemas for issue delete preview, trash, and restore endpoints (S7.2 8q, S12.3)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003  # Required at runtime by Pydantic
++from datetime import datetime  # noqa: TC003  # Required at runtime by Pydantic
++
++from pydantic import BaseModel, ConfigDict, Field
++
++from kanban.api.v1.schemas.issues import (
++    PrioritySummary,  # noqa: TC001  # Required at runtime by Pydantic
++    StateSummary,  # noqa: TC001  # Required at runtime by Pydantic
++)
++
++__all__ = [
++    "BlastRadiusResponse",
++    "IssueDeleteResponse",
++    "TrashedIssueItem",
++    "TrashedIssueList",
++]
++
++
++class BlastRadiusResponse(BaseModel):
++    """Blast radius preview summary driving delete confirmation (S7.2 8q)."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    issue_key: str
++    sub_issues_unparented: int
++    inbound_links_flagged: int
++    outbound_links: int
++    comments: int
++    attachments: int
++    summary_text: str
++    blast_hash: str
++    retention_days: int
++
++
++class IssueDeleteResponse(BaseModel):
++    """Response returned upon successful soft-delete into trash."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    issue_key: str
++    deleted_at: datetime
++    purge_after: datetime
++
++
++class TrashedIssueItem(BaseModel):
++    """Item representation in the project trash bin."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID
++    key: str
++    summary: str
++    deleted_at: datetime
++    purge_after: datetime
++    state: StateSummary | None = None
++    priority: PrioritySummary | None = None
++    capabilities: list[str] = Field(default_factory=list)
++
++
++class TrashedIssueList(BaseModel):
++    """Keyset-paginated listing of trashed issues."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    items: list[TrashedIssueItem]
++    next_cursor: str | None = None
+diff --git a/kanban/api/v1/schemas/issues.py b/kanban/api/v1/schemas/issues.py
+index 018b1c1..3276152 100644
+--- a/kanban/api/v1/schemas/issues.py
++++ b/kanban/api/v1/schemas/issues.py
+@@ -182,6 +182,7 @@ class IssueResponse(BaseModel):
+     capabilities: list[str]
+     archived_at: datetime | None = None
+     archive_eligibility: ArchiveEligibility
++    note: str | None = None
+ 
+ 
+ class IssueList(BaseModel):
+diff --git a/kanban/api/v1/trash.py b/kanban/api/v1/trash.py
+new file mode 100644
+index 0000000..c8c52cd
+--- /dev/null
++++ b/kanban/api/v1/trash.py
+@@ -0,0 +1,17 @@
++"""Alias for kanban.api.v1.issue_delete providing trash and restore router."""
++
++from kanban.api.v1.issue_delete import (
++    delete_issue,
++    delete_preview,
++    list_trash,
++    restore_issue,
++    router,
++)
++
++__all__ = [
++    "delete_issue",
++    "delete_preview",
++    "list_trash",
++    "restore_issue",
++    "router",
++]
+diff --git a/kanban/cli/jobs.py b/kanban/cli/jobs.py
+index 3279b7a..d13c377 100644
+--- a/kanban/cli/jobs.py
++++ b/kanban/cli/jobs.py
+@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
+ from sqlalchemy.ext.asyncio import create_async_engine
+ 
+ from kanban.jobs.auto_archive import run_auto_archive
++from kanban.jobs.trash_purge import run_trash_purge
+ 
+ if TYPE_CHECKING:
+     import argparse
+@@ -67,6 +68,44 @@ def handle_run_auto_archive(args: argparse.Namespace) -> int:
+     return asyncio.run(_run())
+ 
+ 
++def handle_run_trash_purge(args: argparse.Namespace) -> int:
++    """Execute trash retention purge pass from CLI args."""
++    now: datetime | None = None
++    if getattr(args, "now", None):
++        try:
++            now = datetime.fromisoformat(args.now)
++            if now.tzinfo is None:
++                now = now.replace(tzinfo=UTC)
++        except ValueError as err:
++            sys.stderr.write(f"Invalid --now timestamp: {err}\n")
++            return 2
++
++    dsn = _get_engine_dsn()
++    engine = create_async_engine(dsn)
++
++    async def _run() -> int:
++        try:
++            report = await run_trash_purge(engine, now=now)
++            sys.stdout.write(json.dumps(report.to_dict(), indent=2) + "\n")
++        except Exception as err:  # noqa: BLE001
++            sys.stderr.write(f"Trash-purge failed: {err}\n")
++            return 1
++        else:
++            return 0
++        finally:
++            await engine.dispose()
++
++    try:
++        loop = asyncio.get_running_loop()
++    except RuntimeError:
++        loop = None
++
++    if loop is not None and loop.is_running():
++        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
++            return pool.submit(lambda: asyncio.run(_run())).result()
++    return asyncio.run(_run())
++
++
+ def register_jobs_subparsers(
+     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+ ) -> None:
+@@ -94,3 +133,18 @@ def register_jobs_subparsers(
+         func=handle_run_auto_archive,
+         handler=handle_run_auto_archive,
+     )
++
++    trash_purge_parser = run_subs.add_parser(
++        "trash-purge",
++        help="Run periodic trash retention purge pass for expired issues",
++    )
++    trash_purge_parser.add_argument(
++        "--now",
++        type=str,
++        default=None,
++        help="Optional ISO-8601 reference timestamp (e.g. 2026-11-11T00:00:00Z)",
++    )
++    trash_purge_parser.set_defaults(
++        func=handle_run_trash_purge,
++        handler=handle_run_trash_purge,
++    )
+diff --git a/kanban/jobs/__init__.py b/kanban/jobs/__init__.py
+index cb00a94..5b3b266 100644
+--- a/kanban/jobs/__init__.py
++++ b/kanban/jobs/__init__.py
+@@ -14,6 +14,11 @@ from kanban.jobs.auto_archive import (
+     run_auto_archive,
+     run_auto_archive_pass,
+ )
++from kanban.jobs.trash_purge import (
++    PurgeReport,
++    run_trash_purge,
++    run_trash_purge_pass,
++)
+ 
+ if TYPE_CHECKING:
+     from collections.abc import AsyncIterator, Callable
+@@ -67,6 +72,11 @@ registry.register(
+     interval_seconds=3600.0,
+     func=run_auto_archive,
+ )
++registry.register(
++    name="trash_purge",
++    interval_seconds=3600.0,
++    func=run_trash_purge,
++)
+ 
+ 
+ class JobScheduler:
+@@ -141,8 +151,11 @@ __all__ = [
+     "JobDefinition",
+     "JobRegistry",
+     "JobScheduler",
++    "PurgeReport",
+     "lifespan",
+     "registry",
+     "run_auto_archive",
+     "run_auto_archive_pass",
++    "run_trash_purge",
++    "run_trash_purge_pass",
+ ]
+diff --git a/kanban/jobs/trash_purge.py b/kanban/jobs/trash_purge.py
+new file mode 100644
+index 0000000..9f1b1ad
+--- /dev/null
++++ b/kanban/jobs/trash_purge.py
+@@ -0,0 +1,436 @@
++"""Periodic trash retention purge background job with advisory lock concurrency guard.
++
++Follows S7.2 8q and S12.3.
++"""
++
++from __future__ import annotations
++
++import contextlib
++import logging
++import os
++import uuid
++from dataclasses import dataclass
++from datetime import UTC, datetime, timedelta
++from typing import Any, Final
++
++from sqlalchemy import delete, select, text, update
++from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
++
++from database.models import (
++    Attachment,
++    Issue,
++    IssueAssignee,
++    IssueComment,
++    IssueLabel,
++    IssueModule,
++    IssueSubscription,
++    ObjectRecord,
++    Principal,
++    Project,
++    Workspace,
++)
++from database.session import RLSContext, RLSSessionFactory, bind_rls_context, create_rls_engine
++from kanban.services.activity import ActivityEventType, record_activity
++from kanban.settings import get_settings
++
++logger = logging.getLogger(__name__)
++
++TRASH_PURGE_ADVISORY_LOCK_KEY: Final[str] = "kanban.trash_purge"
++
++
++@dataclass(frozen=True, slots=True)
++class PurgeReport:
++    """Execution summary report for trash purge job."""
++
++    issues_purged: int
++    links_purged: int
++    batches: int
++
++    def to_dict(self) -> dict[str, int]:
++        """Convert report to dictionary for JSON output."""
++        return {
++            "issues_purged": self.issues_purged,
++            "links_purged": self.links_purged,
++            "batches": self.batches,
++        }
++
++
++def _extract_engine(
++    target: AsyncEngine | RLSSessionFactory | async_sessionmaker[AsyncSession] | Any,  # noqa: ANN401
++) -> AsyncEngine:
++    """Extract AsyncEngine from supported target types."""
++    if isinstance(target, RLSSessionFactory):
++        return target._engine  # noqa: SLF001
++    if isinstance(target, AsyncEngine):
++        return target
++    raw_bind: Any = getattr(target, "kw", {}).get("bind", getattr(target, "_bind", None))
++    if isinstance(raw_bind, AsyncEngine):
++        return raw_bind
++    msg = f"Cannot extract AsyncEngine from target {type(target)}"
++    raise TypeError(msg)
++
++
++async def _process_trash_purge_batch(  # noqa: PLR0915
++    session: AsyncSession,
++    now: datetime,
++    *,
++    batch_size: int,
++    commit_batches: bool,
++) -> tuple[int, int, bool]:
++    """Process a single batch of expired trashed issues.
++
++    Returns (issues_purged_in_batch, links_purged_in_batch, has_more).
++    """
++    retention_days = get_settings().trash_retention_days
++    threshold = now - timedelta(days=retention_days)
++
++    # 1. Find batch of expired issues ordered deterministically
++    stmt = (
++        select(
++            Issue.id,
++            Issue.project_id,
++            Issue.workspace_id,
++            Issue.sequence_id,
++            Project.identifier,
++        )
++        .join(ObjectRecord, ObjectRecord.id == Issue.id)
++        .join(Project, Project.id == Issue.project_id)
++        .where(
++            ObjectRecord.deleted_at.is_not(None),
++            ObjectRecord.deleted_at <= threshold,
++        )
++        .order_by(ObjectRecord.deleted_at.asc(), Issue.id.asc())
++        .limit(batch_size)
++    )
++    expired_rows = (await session.execute(stmt)).all()
++    if not expired_rows:
++        return 0, 0, False
++
++    # Group by workspace_id
++    ws_issues: dict[uuid.UUID, list[tuple[uuid.UUID, uuid.UUID, int, str]]] = {}
++    for issue_id, proj_id, ws_id, seq_id, proj_ident in expired_rows:
++        ws_issues.setdefault(ws_id, []).append((issue_id, proj_id, seq_id, proj_ident))
++
++    batch_issues_purged = 0
++    batch_links_purged = 0
++
++    for ws_id, items in ws_issues.items():
++        # Sync workspace trash_retention_days to match settings
++        await session.execute(
++            update(Workspace)
++            .where(Workspace.id == ws_id)
++            .values(trash_retention_days=retention_days)
++        )
++
++        # 2. Resolve or create system service principal for this workspace
++        sp_stmt = select(Principal.id).where(
++            Principal.workspace_id == ws_id,
++            Principal.principal_type == "SERVICE_PRINCIPAL",
++            Principal.display_name == "system:trash-purge",
++        )
++        sp_row = (await session.execute(sp_stmt)).first()
++        if sp_row is not None:
++            sp_id = sp_row[0]
++        else:
++            sp_id = uuid.uuid4()
++            await session.execute(
++                text(
++                    "INSERT INTO principals (id, workspace_id, principal_type, display_name) "
++                    "VALUES (:id, :ws_id, 'SERVICE_PRINCIPAL', 'system:trash-purge') "
++                    "ON CONFLICT DO NOTHING"
++                ),
++                {"id": sp_id, "ws_id": ws_id},
++            )
++
++        # Grant WORKSPACE_ADMIN role binding so RLS permits access
++        await session.execute(
++            text(
++                "INSERT INTO role_bindings "
++                "(workspace_id, principal_id, role, scope_type, project_id) "
++                "VALUES (:ws_id, :sp_id, 'WORKSPACE_ADMIN', 'workspace', NULL) "
++                "ON CONFLICT DO NOTHING"
++            ),
++            {"ws_id": ws_id, "sp_id": sp_id},
++        )
++
++        # Bind RLS context
++        rls_ctx = RLSContext(
++            principal_id=sp_id,
++            workspace_id=ws_id,
++            token_scopes=("session",),
++            aal_level=1,
++        )
++        await bind_rls_context(session, rls_ctx)
++
++        # 3. Count links touching each issue before purge
++        issue_link_counts: dict[uuid.UUID, int] = {}
++        for issue_id, _, _, _ in items:
++            c_res = await session.execute(
++                text(
++                    "SELECT count(*) FROM object_links WHERE source_id = :oid OR target_id = :oid"
++                ),
++                {"oid": issue_id},
++            )
++            issue_link_counts[issue_id] = int(c_res.scalar_one())
++
++        # 4. Run audit_object_links to detect invalid links
++        audit_res = (
++            await session.execute(
++                text("SELECT audit_id, link_id, reason FROM audit_object_links(:ws_id, :now)"),
++                {"ws_id": ws_id, "now": now},
++            )
++        ).all()
++        detected_audit_ids = [row[0] for row in audit_res if row[0] is not None]
++
++        # Also collect any open audit rows in this workspace
++        open_audits_res = (
++            (
++                await session.execute(
++                    text(
++                        "SELECT id FROM invalid_object_link_audits "
++                        "WHERE workspace_id = :ws_id AND purged_at IS NULL AND resolved_at IS NULL"
++                    ),
++                    {"ws_id": ws_id},
++                )
++            )
++            .scalars()
++            .all()
++        )
++
++        all_audits = sorted(set(detected_audit_ids + list(open_audits_res)))
++
++        # 5. Call purge_invalid_object_links for all open audit ids
++        if all_audits:
++            for chunk_start in range(0, len(all_audits), 500):
++                chunk = all_audits[chunk_start : chunk_start + 500]
++                purge_res = (
++                    await session.execute(
++                        text(
++                            "SELECT * FROM purge_invalid_object_links("
++                            ":audit_ids, :actor_id, 'TRASH_RETENTION_EXPIRED')"
++                        ),
++                        {"audit_ids": chunk, "actor_id": sp_id},
++                    )
++                ).all()
++                purged_links = {r[1] for r in purge_res if r[1] is not None}
++                batch_links_purged += len(purged_links)
++
++        # 6. Delete dependent rows and the issues + objects rows
++        for issue_id, proj_id, seq_id, proj_ident in items:
++            purged_for_issue = issue_link_counts.get(issue_id, 0)
++            issue_key = f"{proj_ident}-{seq_id}"
++
++            # Delete issue comments
++            await session.execute(delete(IssueComment).where(IssueComment.issue_id == issue_id))
++
++            # Delete issue assignees
++            await session.execute(delete(IssueAssignee).where(IssueAssignee.issue_id == issue_id))
++
++            # Delete issue labels
++            await session.execute(delete(IssueLabel).where(IssueLabel.issue_id == issue_id))
++
++            # Delete issue modules
++            await session.execute(delete(IssueModule).where(IssueModule.issue_id == issue_id))
++
++            # Delete issue subscriptions
++            await session.execute(
++                delete(IssueSubscription).where(IssueSubscription.issue_id == issue_id)
++            )
++
++            # Clear attachments.issue_id
++            await session.execute(
++                update(Attachment).where(Attachment.issue_id == issue_id).values(issue_id=None)
++            )
++
++            # Clear parent_issue_id on direct children
++            await session.execute(
++                update(Issue).where(Issue.parent_issue_id == issue_id).values(parent_issue_id=None)
++            )
++
++            # Clear ACL entries, effective access, and embeddings
++            await session.execute(
++                text("DELETE FROM resource_acl_entries WHERE object_id = :oid"),
++                {"oid": issue_id},
++            )
++            await session.execute(
++                text("DELETE FROM effective_resource_access WHERE object_id = :oid"),
++                {"oid": issue_id},
++            )
++            await session.execute(
++                text("DELETE FROM object_embeddings WHERE object_id = :oid"),
++                {"oid": issue_id},
++            )
++
++            # Delete issues row
++            await session.execute(delete(Issue).where(Issue.id == issue_id))
++
++            # Delete objects row
++            await session.execute(delete(ObjectRecord).where(ObjectRecord.id == issue_id))
++
++            # Emit ISSUE_PURGED activity event against the project object
++            await record_activity(
++                session=session,
++                workspace_id=ws_id,
++                object_id=proj_id,
++                actor_principal_id=sp_id,
++                event_type=ActivityEventType.ISSUE_PURGED,
++                payload={
++                    "issue_key": issue_key,
++                    "purged_link_count": purged_for_issue,
++                },
++            )
++
++            batch_issues_purged += 1
++
++    if commit_batches:
++        await session.commit()
++
++    return batch_issues_purged, batch_links_purged, len(expired_rows) >= batch_size
++
++
++async def _run_pass_with_session(
++    session: AsyncSession,
++    now: datetime,
++    *,
++    batch_size: int,
++    commit_batches: bool,
++) -> PurgeReport:
++    """Execute trash purge loop on an existing session."""
++    total_issues = 0
++    total_links = 0
++    total_batches = 0
++
++    while True:
++        p_issues, p_links, has_more = await _process_trash_purge_batch(
++            session,
++            now,
++            batch_size=batch_size,
++            commit_batches=commit_batches,
++        )
++        if p_issues == 0:
++            break
++        total_issues += p_issues
++        total_links += p_links
++        total_batches += 1
++        if not has_more:
++            break
++
++    return PurgeReport(
++        issues_purged=total_issues,
++        links_purged=total_links,
++        batches=total_batches,
++    )
++
++
++async def run_trash_purge(
++    target_or_now: (
++        AsyncEngine
++        | RLSSessionFactory
++        | async_sessionmaker[AsyncSession]
++        | AsyncSession
++        | datetime
++        | None
++    ) = None,
++    now: datetime | None = None,
++    *,
++    batch_size: int = 100,
++    commit_batches: bool | None = None,
++) -> PurgeReport:
++    """Execute periodic trash retention purge pass for expired issues.
++
++    Guarded by PostgreSQL single-runner advisory lock hashtext('kanban.trash_purge').
++    """
++    if isinstance(target_or_now, datetime):
++        now = target_or_now
++        target = None
++    else:
++        target = target_or_now
++
++    if now is None:
++        now = datetime.now(UTC)
++    elif now.tzinfo is None:
++        now = now.replace(tzinfo=UTC)
++
++    if target is None:
++        dsn = (
++            os.environ.get("KANBAN_DATABASE_URL")
++            or os.environ.get("DATABASE_URL")
++            or getattr(get_settings(), "database_url", None)
++        )
++        if not dsn:
++            msg = "Target engine or KANBAN_DATABASE_URL must be provided"
++            raise ValueError(msg)
++        target = create_rls_engine(str(dsn))
++
++    if isinstance(target, AsyncSession):
++        locked = bool(
++            (
++                await target.execute(
++                    text("SELECT pg_try_advisory_lock(hashtext(:k))"),
++                    {"k": TRASH_PURGE_ADVISORY_LOCK_KEY},
++                )
++            ).scalar()
++        )
++        if not locked:
++            logger.info("Trash purge advisory lock held by another worker; skipping run.")
++            return PurgeReport(issues_purged=0, links_purged=0, batches=0)
++
++        should_commit = commit_batches if commit_batches is not None else False
++        try:
++            return await _run_pass_with_session(
++                target,
++                now,
++                batch_size=batch_size,
++                commit_batches=should_commit,
++            )
++        finally:
++            with contextlib.suppress(Exception):
++                await target.execute(
++                    text("SELECT pg_advisory_unlock(hashtext(:k))"),
++                    {"k": TRASH_PURGE_ADVISORY_LOCK_KEY},
++                )
++
++    engine = _extract_engine(target)
++    should_commit = commit_batches if commit_batches is not None else True
++    async with AsyncSession(engine) as session:
++        locked = bool(
++            (
++                await session.execute(
++                    text("SELECT pg_try_advisory_lock(hashtext(:k))"),
++                    {"k": TRASH_PURGE_ADVISORY_LOCK_KEY},
++                )
++            ).scalar()
++        )
++        if not locked:
++            logger.info("Trash purge advisory lock held by another worker; skipping run.")
++            return PurgeReport(issues_purged=0, links_purged=0, batches=0)
++        try:
++            return await _run_pass_with_session(
++                session,
++                now,
++                batch_size=batch_size,
++                commit_batches=should_commit,
++            )
++        finally:
++            with contextlib.suppress(Exception):
++                await session.execute(
++                    text("SELECT pg_advisory_unlock(hashtext(:k))"),
++                    {"k": TRASH_PURGE_ADVISORY_LOCK_KEY},
++                )
++
++
++async def run_trash_purge_pass(
++    target: AsyncEngine | RLSSessionFactory | async_sessionmaker[AsyncSession] | AsyncSession,
++    now: datetime | None = None,
++    *,
++    batch_size: int = 100,
++    commit_batches: bool | None = None,
++) -> int:
++    """Periodic trash purge pass returning total count of purged issues."""
++    report = await run_trash_purge(
++        target,
++        now=now,
++        batch_size=batch_size,
++        commit_batches=commit_batches,
++    )
++    return report.issues_purged
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index 74fb7c1..9975dd4 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -91,6 +91,9 @@ class ActivityEventType(StrEnum):
+     LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
+     ISSUE_ARCHIVED = "ISSUE_ARCHIVED"
+     ISSUE_UNARCHIVED = "ISSUE_UNARCHIVED"
++    ISSUE_TRASHED = "ISSUE_TRASHED"
++    ISSUE_RESTORED = "ISSUE_RESTORED"
++    ISSUE_PURGED = "ISSUE_PURGED"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -128,6 +131,9 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
+         ActivityEventType.ISSUE_ARCHIVED: ActivityCategory.HISTORY,
+         ActivityEventType.ISSUE_UNARCHIVED: ActivityCategory.HISTORY,
++        ActivityEventType.ISSUE_TRASHED: ActivityCategory.HISTORY,
++        ActivityEventType.ISSUE_RESTORED: ActivityCategory.HISTORY,
++        ActivityEventType.ISSUE_PURGED: ActivityCategory.HISTORY,
+     }
+ )
+ 
+diff --git a/kanban/services/issue_delete.py b/kanban/services/issue_delete.py
+new file mode 100644
+index 0000000..95ac9cc
+--- /dev/null
++++ b/kanban/services/issue_delete.py
+@@ -0,0 +1,382 @@
++"""Issue deletion, blast radius calculation, trash, and restore service (S7.2 8q, S12.3)."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++from dataclasses import dataclass
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING
++
++from sqlalchemy import func, select, update
++
++from database.models import (
++    Attachment,
++    Issue,
++    IssueComment,
++    ObjectLink,
++    ObjectRecord,
++    Project,
++    ProjectPriority,
++    WorkflowState,
++)
++from kanban.api.problems import ProblemException, not_found
++from kanban.api.v1.schemas.issue_delete import (
++    IssueDeleteResponse,
++    TrashedIssueItem,
++    TrashedIssueList,
++)
++from kanban.api.v1.schemas.issues import IssueResponse, PrioritySummary, StateSummary
++from kanban.security.permissions import (
++    Capability,
++    capabilities_to_names,
++    evaluate_capabilities,
++    require_capability,
++)
++from kanban.services.activity import ActivityEventType, record_activity
++from kanban.services.issue_keys import resolve_issue_ref
++from kanban.services.issues import decode_issue_cursor, encode_issue_cursor, serialize_issue
++from kanban.services.projects import get_project_or_404
++from kanban.settings import get_settings
++
++if TYPE_CHECKING:
++    import uuid
++
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.api.deps import PrincipalContext
++
++__all__ = [
++    "BlastRadius",
++    "compute_blast_radius",
++    "list_trash",
++    "restore_issue",
++    "trash_issue",
++]
++
++
++@dataclass(frozen=True, slots=True)
++class BlastRadius:
++    """Computed blast radius for an issue delete preview."""
++
++    issue_id: uuid.UUID
++    issue_key: str
++    sub_issues_unparented: int
++    inbound_links_flagged: int
++    outbound_links: int
++    comments: int
++    attachments: int
++    summary_text: str
++    blast_hash: str
++    retention_days: int
++    child_ids: tuple[uuid.UUID, ...]
++    inbound_link_ids: tuple[uuid.UUID, ...]
++    outbound_link_ids: tuple[uuid.UUID, ...]
++
++
++async def compute_blast_radius(
++    session: AsyncSession,
++    issue_id: uuid.UUID,
++    *,
++    for_update: bool = False,
++) -> BlastRadius:
++    """Compute the blast radius preview and deterministic SHA-256 blast hash.
++
++    Counts:
++        - sub_issues_unparented: direct children (parent_issue_id = issue_id)
++        - inbound_links_flagged: ACTIVE object_links with target_id = issue_id
++        - outbound_links: ACTIVE object_links with source_id = issue_id
++        - comments: issue_comments count
++        - attachments: attachments count
++    """
++    if for_update:
++        issue_stmt = (
++            select(Issue, Project.identifier)
++            .join(Project, Project.id == Issue.project_id)
++            .where(Issue.id == issue_id)
++            .with_for_update(of=Issue)
++        )
++    else:
++        issue_stmt = (
++            select(Issue, Project.identifier)
++            .join(Project, Project.id == Issue.project_id)
++            .where(Issue.id == issue_id)
++        )
++    row = (await session.execute(issue_stmt)).first()
++    if row is None:
++        not_found()
++    issue, proj_ident = row
++    issue_key = f"{proj_ident}-{issue.sequence_id}"
++
++    obj = await session.get(ObjectRecord, issue_id)
++    if obj is None or obj.deleted_at is not None:
++        not_found()
++
++    desc_sha = issue.description_sha256.hex().lower() if issue.description_sha256 else ""
++
++    child_stmt = (
++        select(Issue.id)
++        .join(ObjectRecord, ObjectRecord.id == Issue.id)
++        .where(
++            Issue.parent_issue_id == issue_id,
++            ObjectRecord.deleted_at.is_(None),
++        )
++        .order_by(Issue.id)
++    )
++    child_ids = tuple((await session.execute(child_stmt)).scalars().all())
++
++    inbound_stmt = (
++        select(ObjectLink.id)
++        .where(
++            ObjectLink.target_id == issue_id,
++            ObjectLink.link_state == "ACTIVE",
++        )
++        .order_by(ObjectLink.id)
++    )
++    inbound_link_ids = tuple((await session.execute(inbound_stmt)).scalars().all())
++
++    outbound_stmt = (
++        select(ObjectLink.id)
++        .where(
++            ObjectLink.source_id == issue_id,
++            ObjectLink.link_state == "ACTIVE",
++        )
++        .order_by(ObjectLink.id)
++    )
++    outbound_link_ids = tuple((await session.execute(outbound_stmt)).scalars().all())
++
++    comment_stmt = select(func.count(IssueComment.id)).where(IssueComment.issue_id == issue_id)
++    comment_count = int((await session.execute(comment_stmt)).scalar_one())
++
++    attachment_stmt = select(func.count(Attachment.id)).where(Attachment.issue_id == issue_id)
++    attachment_count = int((await session.execute(attachment_stmt)).scalar_one())
++
++    retention_days = get_settings().trash_retention_days
++
++    # Canonical JSON for blast hash:
++    # {issue_id, description_sha256, sorted child ids, sorted inbound link ids,
++    #  sorted outbound link ids, comment count, attachment count}
++    canonical_dict = {
++        "attachment_count": attachment_count,
++        "child_ids": sorted([str(cid) for cid in child_ids]),
++        "comment_count": comment_count,
++        "description_sha256": desc_sha,
++        "inbound_link_ids": sorted([str(lid) for lid in inbound_link_ids]),
++        "issue_id": str(issue_id),
++        "outbound_link_ids": sorted([str(lid) for lid in outbound_link_ids]),
++    }
++    canonical_json = json.dumps(canonical_dict, sort_keys=True, separators=(",", ":"))
++    blast_hash = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest().lower()
++
++    sub_issues_unparented = len(child_ids)
++    inbound_links_flagged = len(inbound_link_ids)
++    outbound_links = len(outbound_link_ids)
++
++    sub_plural = "s" if sub_issues_unparented != 1 else ""
++    in_plural = "s" if inbound_links_flagged != 1 else ""
++    sub_part = f"{sub_issues_unparented} sub-issue{sub_plural} unparented"
++    in_part = f"{inbound_links_flagged} inbound object_link{in_plural} flagged"
++    summary_text = f"{sub_part}, {in_part}"
++
++    return BlastRadius(
++        issue_id=issue_id,
++        issue_key=issue_key,
++        sub_issues_unparented=sub_issues_unparented,
++        inbound_links_flagged=inbound_links_flagged,
++        outbound_links=outbound_links,
++        comments=comment_count,
++        attachments=attachment_count,
++        summary_text=summary_text,
++        blast_hash=blast_hash,
++        retention_days=retention_days,
++        child_ids=child_ids,
++        inbound_link_ids=inbound_link_ids,
++        outbound_link_ids=outbound_link_ids,
++    )
++
++
++async def trash_issue(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_ref: str,
++    blast_hash_header: str | None,
++) -> IssueDeleteResponse:
++    """Soft-delete an issue into trash after validating blast radius concurrency."""
++    if not blast_hash_header or not blast_hash_header.strip():
++        raise ProblemException(
++            code="BLAST_HASH_REQUIRED",
++            status=428,
++            title="Blast Hash Required",
++            detail="Header 'Kb-Blast-Hash' is required to delete an issue",
++        )
++
++    issue = await resolve_issue_ref(session, caller, issue_ref)
++    await require_capability(session, caller, issue.id, Capability.DELETE)
++
++    blast = await compute_blast_radius(session, issue.id, for_update=True)
++    if blast_hash_header.strip().lower() != blast.blast_hash.lower():
++        current_preview = {
++            "issue_key": blast.issue_key,
++            "sub_issues_unparented": blast.sub_issues_unparented,
++            "inbound_links_flagged": blast.inbound_links_flagged,
++            "outbound_links": blast.outbound_links,
++            "comments": blast.comments,
++            "attachments": blast.attachments,
++            "summary_text": blast.summary_text,
++            "blast_hash": blast.blast_hash,
++            "retention_days": blast.retention_days,
++        }
++        raise ProblemException(
++            code="BLAST_RADIUS_CHANGED",
++            status=412,
++            title="Blast Radius Changed",
++            detail="The issue blast radius has changed since the preview was generated",
++            current_preview=current_preview,
++        )
++
++    now_ts = datetime.now(UTC)
++    obj = await session.get(ObjectRecord, issue.id)
++    if obj is None:
++        not_found()
++    obj.deleted_at = now_ts
++
++    # Direct children get parent_issue_id = NULL
++    await session.execute(
++        update(Issue).where(Issue.parent_issue_id == issue.id).values(parent_issue_id=None)
++    )
++
++    await record_activity(
++        session=session,
++        workspace_id=issue.workspace_id,
++        object_id=issue.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.ISSUE_TRASHED,
++        payload={
++            "blast_hash": blast.blast_hash,
++            "unparented_child_ids": [str(cid) for cid in blast.child_ids],
++            "inbound_links_flagged": blast.inbound_links_flagged,
++        },
++    )
++
++    purge_after = now_ts + timedelta(days=blast.retention_days)
++    return IssueDeleteResponse(
++        issue_key=blast.issue_key,
++        deleted_at=now_ts,
++        purge_after=purge_after,
++    )
++
++
++async def list_trash(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    *,
++    cursor: str | None,
++    limit: int,
++) -> TrashedIssueList:
++    """List soft-deleted issues in project trash where caller holds DELETE capability."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.VIEW)
++
++    stmt = (
++        select(Issue, ObjectRecord.deleted_at)
++        .join(ObjectRecord, ObjectRecord.id == Issue.id)
++        .where(
++            Issue.workspace_id == caller.workspace_id,
++            Issue.project_id == project.id,
++            ObjectRecord.deleted_at.is_not(None),
++        )
++    )
++
++    if cursor is not None:
++        last_seq = decode_issue_cursor(cursor)
++        stmt = stmt.where(Issue.sequence_id < last_seq)
++
++    stmt = stmt.order_by(Issue.sequence_id.desc()).limit(limit + 1)
++    rows = (await session.execute(stmt)).all()
++
++    retention_days = get_settings().trash_retention_days
++    items: list[TrashedIssueItem] = []
++    has_more = len(rows) > limit
++    page_rows = rows[:limit]
++
++    for issue, deleted_at in page_rows:
++        caps = await evaluate_capabilities(session, caller, issue.id)
++        if Capability.DELETE not in caps:
++            continue
++        purge_after = deleted_at + timedelta(days=retention_days)
++        state_summary: StateSummary | None = None
++        if issue.state_id is not None:
++            state = await session.get(WorkflowState, issue.state_id)
++            if state is not None:
++                state_summary = StateSummary(id=state.id, name=state.name, group=state.state_group)
++        priority_summary: PrioritySummary | None = None
++        if issue.priority_id is not None:
++            priority = await session.get(ProjectPriority, issue.priority_id)
++            if priority is not None:
++                priority_summary = PrioritySummary(
++                    slug=priority.slug,
++                    label=priority.label,
++                    emoji=priority.emoji,
++                )
++        items.append(
++            TrashedIssueItem(
++                id=issue.id,
++                key=f"{project.identifier}-{issue.sequence_id}",
++                summary=issue.summary,
++                deleted_at=deleted_at,
++                purge_after=purge_after,
++                state=state_summary,
++                priority=priority_summary,
++                capabilities=capabilities_to_names(caps),
++            )
++        )
++
++    next_cursor = (
++        encode_issue_cursor(page_rows[-1][0].sequence_id) if has_more and page_rows else None
++    )
++    return TrashedIssueList(items=items, next_cursor=next_cursor)
++
++
++async def restore_issue(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_ref: str,
++) -> IssueResponse:
++    """Restore a soft-deleted issue from trash back to active state."""
++    issue = await resolve_issue_ref(session, caller, issue_ref, include_deleted=True)
++    await require_capability(session, caller, issue.id, Capability.DELETE)
++
++    obj = await session.get(ObjectRecord, issue.id)
++    if obj is None or obj.deleted_at is None:
++        raise ProblemException(
++            code="NOT_IN_TRASH",
++            status=409,
++            title="Not in Trash",
++            detail="Issue is not in trash",
++        )
++
++    retention_days = get_settings().trash_retention_days
++    now_ts = datetime.now(UTC)
++    if obj.deleted_at + timedelta(days=retention_days) < now_ts:
++        raise ProblemException(
++            code="RETENTION_EXPIRED",
++            status=409,
++            title="Retention Expired",
++            detail="Issue retention window has expired and cannot be restored",
++        )
++
++    obj.deleted_at = None
++
++    await record_activity(
++        session=session,
++        workspace_id=issue.workspace_id,
++        object_id=issue.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.ISSUE_RESTORED,
++        payload={},
++    )
++
++    resp = await serialize_issue(session, caller, issue)
++    resp.note = "sub-issues remain unparented"
++    return resp
+diff --git a/kanban/services/issue_keys.py b/kanban/services/issue_keys.py
+index 4caaaf4..c4f0a68 100644
+--- a/kanban/services/issue_keys.py
++++ b/kanban/services/issue_keys.py
+@@ -26,7 +26,11 @@ _ISSUE_KEY_RE: Final[re.Pattern[str]] = re.compile(ISSUE_KEY_PATTERN)
+ 
+ 
+ async def resolve_issue_ref(
+-    session: AsyncSession, caller: PrincipalContext, issue_ref: str
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_ref: str,
++    *,
++    include_deleted: bool = False,
+ ) -> Issue:
+     """Resolve an issue reference through RLS or raise the canonical 404.
+ 
+@@ -39,17 +43,16 @@ async def resolve_issue_ref(
+ 
+     Raises:
+         ProblemException: 404 NOT_FOUND if the issue does not exist, belongs to another
+-        workspace, has been soft-deleted, or the caller lacks VIEW capability.
++        workspace, has been soft-deleted (when include_deleted=False), or the caller lacks VIEW.
+ 
+     """
+     stmt = (
+         select(Issue)
+         .join(ObjectRecord, ObjectRecord.id == Issue.id)
+-        .where(
+-            Issue.workspace_id == caller.workspace_id,
+-            ObjectRecord.deleted_at.is_(None),
+-        )
++        .where(Issue.workspace_id == caller.workspace_id)
+     )
++    if not include_deleted:
++        stmt = stmt.where(ObjectRecord.deleted_at.is_(None))
+ 
+     if _ISSUE_KEY_RE.fullmatch(issue_ref):
+         ident, seq_str = issue_ref.rsplit("-", 1)
+diff --git a/kanban/services/trash.py b/kanban/services/trash.py
+new file mode 100644
+index 0000000..df7b72a
+--- /dev/null
++++ b/kanban/services/trash.py
+@@ -0,0 +1,17 @@
++"""Alias for kanban.services.issue_delete providing trash and restore functionality."""
++
++from kanban.services.issue_delete import (
++    BlastRadius,
++    compute_blast_radius,
++    list_trash,
++    restore_issue,
++    trash_issue,
++)
++
++__all__ = [
++    "BlastRadius",
++    "compute_blast_radius",
++    "list_trash",
++    "restore_issue",
++    "trash_issue",
++]
+diff --git a/kanban/settings.py b/kanban/settings.py
+index ce08e67..6828c9b 100644
+--- a/kanban/settings.py
++++ b/kanban/settings.py
+@@ -2,12 +2,17 @@
+ 
+ from __future__ import annotations
+ 
++from functools import lru_cache
+ from pathlib import Path
+-from typing import Literal
++from typing import Final, Literal
+ 
+-from pydantic import field_validator
++from pydantic import AliasChoices, Field, field_validator
+ from pydantic_settings import BaseSettings, SettingsConfigDict
+ 
++__all__ = ["MAX_TRASH_RETENTION_DAYS", "Settings", "get_settings"]
++
++MAX_TRASH_RETENTION_DAYS: Final[int] = 365
++
+ 
+ class Settings(BaseSettings):
+     """Platform configuration loaded from environment variables with KB_ prefix."""
+@@ -22,6 +27,30 @@ class Settings(BaseSettings):
+     web_dist: Path = Path("kanban/web/dist")
+     standalone_cleartext_hosts: frozenset[str] = frozenset({"localhost", "127.0.0.1", "[::1]"})
+     hsts_max_age: int = 63072000
++    database_url: str | None = Field(
++        default=None,
++        validation_alias=AliasChoices(
++            "KANBAN_DATABASE_URL",
++            "KB_DATABASE_URL",
++            "DATABASE_URL",
++        ),
++    )
++    trash_retention_days: int = Field(
++        default=30,
++        validation_alias=AliasChoices(
++            "KANBAN_TRASH_RETENTION_DAYS",
++            "KB_TRASH_RETENTION_DAYS",
++            "TRASH_RETENTION_DAYS",
++        ),
++    )
++
++    @field_validator("trash_retention_days")
++    @classmethod
++    def _validate_trash_retention_days(cls, v: int) -> int:
++        if not (1 <= v <= MAX_TRASH_RETENTION_DAYS):
++            msg = f"trash_retention_days must be between 1 and {MAX_TRASH_RETENTION_DAYS}, got {v}"
++            raise ValueError(msg)
++        return v
+ 
+     @field_validator("standalone_cleartext_hosts", mode="before")
+     @classmethod
+@@ -36,3 +65,9 @@ class Settings(BaseSettings):
+             entries = {str(s).strip().lower() for s in v if str(s).strip()}
+             return frozenset(defaults | entries)
+         return frozenset(defaults)
++
++
++@lru_cache
++def get_settings() -> Settings:
++    """Return cached platform Settings instance."""
++    return Settings()
+diff --git a/kanban/tests/api/test_issue_delete.py b/kanban/tests/api/test_issue_delete.py
+new file mode 100644
+index 0000000..6eb1761
+--- /dev/null
++++ b/kanban/tests/api/test_issue_delete.py
+@@ -0,0 +1,546 @@
++"""Unit tests for issue delete preview, soft trash, and restore endpoints (S7.2 8q; KB-P3-09b)."""
++
++from __future__ import annotations
++
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING
++
++import pytest
++from pydantic import ValidationError
++from sqlalchemy import select, text
++
++from database.models import (
++    ActivityRecord,
++    Issue,
++    LinkKind,
++    ObjectKind,
++    ObjectLink,
++)
++from kanban.api.problems import ProblemException
++from kanban.services.issue_delete import compute_blast_radius
++from kanban.settings import Settings
++from kanban.tests.security.helpers import (
++    add_role_binding,
++    rebuild_era,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++    from kanban.tests.contract import ContractRecorder
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _make_link(  # noqa: PLR0913, PLR0917
++    seed: AsyncSession,
++    ws_id: uuid.UUID,
++    source_id: uuid.UUID,
++    source_key: str,
++    target_id: uuid.UUID,
++    target_key: str,
++    creator_id: uuid.UUID,
++    link_type: LinkKind = LinkKind.RELATES_TO,
++) -> uuid.UUID:
++    """Create an ACTIVE object_link directly in the seed session."""
++    link_id = uuid.uuid4()
++    link = ObjectLink(
++        id=link_id,
++        workspace_id=ws_id,
++        source_id=source_id,
++        source_type=ObjectKind.ISSUE,
++        target_id=target_id,
++        target_type=ObjectKind.ISSUE,
++        link_type=link_type,
++        link_state="ACTIVE",
++        source_key_snapshot=source_key,
++        target_key_snapshot=target_key,
++        created_by_id=creator_id,
++    )
++    seed.add(link)
++    await seed.commit()
++    return link_id
++
++
++async def test_case_1_positive_delete_preview_and_soft_trash(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 1: Positive delete preview returns counts and hash; DELETE soft-trashes."""
++    admin = await make_user("del_admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("DEL", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # 1. Create target parent issue
++    resp_parent = await client.post(
++        "/api/v1/projects/DEL/issues",
++        json={"summary": "Parent Issue to Delete", "description_markdown": "Parent description"},
++    )
++    assert resp_parent.status_code == 201
++    parent_key = resp_parent.json()["key"]
++    parent_id = uuid.UUID(resp_parent.json()["id"])
++
++    # 2. Create 2 child issues
++    resp_c1 = await client.post(
++        "/api/v1/projects/DEL/issues",
++        json={"summary": "Child 1", "parent": parent_key},
++    )
++    assert resp_c1.status_code == 201
++    child1_id = uuid.UUID(resp_c1.json()["id"])
++
++    resp_c2 = await client.post(
++        "/api/v1/projects/DEL/issues",
++        json={"summary": "Child 2", "parent": parent_key},
++    )
++    assert resp_c2.status_code == 201
++    child2_id = uuid.UUID(resp_c2.json()["id"])
++
++    # 3. Create 3 other issues to form inbound links
++    inbound_keys: list[str] = []
++    inbound_ids: list[uuid.UUID] = []
++    for i in range(3):
++        r = await client.post(
++            "/api/v1/projects/DEL/issues",
++            json={"summary": f"Inbound Source {i + 1}"},
++        )
++        assert r.status_code == 201
++        inbound_keys.append(r.json()["key"])
++        inbound_ids.append(uuid.UUID(r.json()["id"]))
++
++    for src_id, src_key in zip(inbound_ids, inbound_keys, strict=True):
++        await _make_link(
++            seed=api_env.seed,
++            ws_id=api_env.workspace_id,
++            source_id=src_id,
++            source_key=src_key,
++            target_id=parent_id,
++            target_key=parent_key,
++            creator_id=admin.id,
++        )
++
++    # 4. GET /api/v1/issues/{issue_ref}/delete-preview
++    preview_resp = await client.get(f"/api/v1/issues/{parent_key}/delete-preview")
++    contract_recorder.record("get_delete_preview_200", preview_resp.request, preview_resp)
++    assert preview_resp.status_code == 200
++    preview_data = preview_resp.json()
++    assert preview_data["issue_key"] == parent_key
++    assert preview_data["sub_issues_unparented"] == 2
++    assert preview_data["inbound_links_flagged"] == 3
++    assert preview_data["outbound_links"] == 0
++    assert preview_data["summary_text"] == "2 sub-issues unparented, 3 inbound object_links flagged"
++    blast_hash = preview_data["blast_hash"]
++    assert len(blast_hash) == 64
++    assert preview_data["retention_days"] == 30
++
++    # 5. DELETE /api/v1/issues/{issue_ref} with Kb-Blast-Hash header
++    delete_resp = await client.delete(
++        f"/api/v1/issues/{parent_key}",
++        headers={"Kb-Blast-Hash": blast_hash},
++    )
++    contract_recorder.record("delete_issue_200", delete_resp.request, delete_resp)
++    assert delete_resp.status_code == 200
++    del_data = delete_resp.json()
++    assert del_data["issue_key"] == parent_key
++    assert del_data["deleted_at"] is not None
++    assert del_data["purge_after"] is not None
++
++    # 6. Verify children unparented (parent_issue_id = NULL)
++    await api_env.seed.rollback()
++    c1_row = (
++        await api_env.seed.execute(select(Issue.parent_issue_id).where(Issue.id == child1_id))
++    ).scalar_one_or_none()
++    c2_row = (
++        await api_env.seed.execute(select(Issue.parent_issue_id).where(Issue.id == child2_id))
++    ).scalar_one_or_none()
++    assert c1_row is None
++    assert c2_row is None
++
++    # 7. Verify ISSUE_TRASHED activity record
++    act_row = (
++        await api_env.seed.execute(
++            select(ActivityRecord.payload).where(
++                ActivityRecord.object_id == parent_id,
++                ActivityRecord.event_type == "ISSUE_TRASHED",
++            )
++        )
++    ).scalar_one_or_none()
++    assert act_row is not None
++    assert act_row["blast_hash"] == blast_hash
++    assert str(child1_id) in act_row["unparented_child_ids"]
++    assert str(child2_id) in act_row["unparented_child_ids"]
++    assert act_row["inbound_links_flagged"] == 3
++
++    # 8. Verify issue appears in trash
++    trash_resp = await client.get("/api/v1/projects/DEL/trash")
++    contract_recorder.record("list_trash_200", trash_resp.request, trash_resp)
++    assert trash_resp.status_code == 200
++    trash_data = trash_resp.json()
++    trash_keys = [item["key"] for item in trash_data["items"]]
++    assert parent_key in trash_keys
++
++    # 9. Verify normal read paths 404 on deleted issue
++    get_resp = await client.get(f"/api/v1/issues/{parent_key}")
++    assert get_resp.status_code == 404
++
++
++async def test_case_2_concurrency_and_missing_hash(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 2: 428 on missing hash; 412 with fresh current_preview on concurrency blast change."""
++    admin = await make_user("cnc_admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("CNC", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # 1. Create issue
++    resp = await client.post(
++        "/api/v1/projects/CNC/issues",
++        json={"summary": "Concurrency Target"},
++    )
++    assert resp.status_code == 201
++    target_key = resp.json()["key"]
++    target_id = uuid.UUID(resp.json()["id"])
++
++    # 2. Add 3 inbound links
++    link_sources: list[uuid.UUID] = []
++    link_keys: list[str] = []
++    for i in range(3):
++        r = await client.post(
++            "/api/v1/projects/CNC/issues",
++            json={"summary": f"CNC Source {i + 1}"},
++        )
++        assert r.status_code == 201
++        link_keys.append(r.json()["key"])
++        link_sources.append(uuid.UUID(r.json()["id"]))
++
++    for src_id, src_key in zip(link_sources, link_keys, strict=True):
++        await _make_link(
++            seed=api_env.seed,
++            ws_id=api_env.workspace_id,
++            source_id=src_id,
++            source_key=src_key,
++            target_id=target_id,
++            target_key=target_key,
++            creator_id=admin.id,
++        )
++
++    # 3. Missing header returns 428 BLAST_HASH_REQUIRED
++    missing_resp = await client.delete(f"/api/v1/issues/{target_key}")
++    contract_recorder.record("delete_missing_hash_428", missing_resp.request, missing_resp)
++    assert missing_resp.status_code == 428
++    assert missing_resp.json()["code"] == "BLAST_HASH_REQUIRED"
++
++    # 4. Generate preview with 3 inbound links
++    preview_resp = await client.get(f"/api/v1/issues/{target_key}/delete-preview")
++    assert preview_resp.status_code == 200
++    stale_hash = preview_resp.json()["blast_hash"]
++    assert preview_resp.json()["inbound_links_flagged"] == 3
++
++    # 5. Add 4th inbound link concurrently
++    r4 = await client.post(
++        "/api/v1/projects/CNC/issues",
++        json={"summary": "CNC Source 4"},
++    )
++    assert r4.status_code == 201
++    await _make_link(
++        seed=api_env.seed,
++        ws_id=api_env.workspace_id,
++        source_id=uuid.UUID(r4.json()["id"]),
++        source_key=r4.json()["key"],
++        target_id=target_id,
++        target_key=target_key,
++        creator_id=admin.id,
++    )
++
++    # 6. DELETE with stale blast hash returns 412 BLAST_RADIUS_CHANGED
++    mismatch_resp = await client.delete(
++        f"/api/v1/issues/{target_key}",
++        headers={"Kb-Blast-Hash": stale_hash},
++    )
++    contract_recorder.record(
++        "delete_blast_radius_changed_412", mismatch_resp.request, mismatch_resp
++    )
++    assert mismatch_resp.status_code == 412
++    err_body = mismatch_resp.json()
++    assert err_body["code"] == "BLAST_RADIUS_CHANGED"
++    assert "current_preview" in err_body
++    assert err_body["current_preview"]["inbound_links_flagged"] == 4
++
++
++async def test_case_3_security_non_viewer_and_edit_only_and_masked_child(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Case 3: Non-viewer 404, edit-only 403, and masked child in preview."""
++    admin = await make_user("sec_admin", workspace_role="WORKSPACE_ADMIN")
++    editor = await make_user("sec_editor")
++    outsider = await make_user("sec_outsider")
++
++    proj_pub_id = await make_project("SECPUB", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    await make_project("SECSEC", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++
++    # Grant editor only MEMBER (EDIT capability, but not DELETE or PROJECT_ADMIN) on SECPUB
++    await add_role_binding(
++        api_env.seed,
++        api_env.workspace_id,
++        editor.id,
++        role="MEMBER",
++        scope_type="project",
++        project_id=proj_pub_id,
++    )
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++    await api_env.seed.commit()
++
++    # Admin creates issue in SECPUB
++    client_admin = as_principal(admin)
++    resp_pub = await client_admin.post(
++        "/api/v1/projects/SECPUB/issues",
++        json={"summary": "Public Issue with Secret Child"},
++    )
++    assert resp_pub.status_code == 201
++    pub_key = resp_pub.json()["key"]
++
++    # Admin creates child issue in SECPUB
++    resp_child = await client_admin.post(
++        "/api/v1/projects/SECPUB/issues",
++        json={"summary": "Confidential Child", "parent": pub_key},
++    )
++    assert resp_child.status_code == 201
++    sec_child_key = resp_child.json()["key"]
++
++    # 1. Non-viewer preview -> 404 NOT_FOUND
++    client_outsider = as_principal(outsider)
++    r_unreadable = await client_outsider.get(f"/api/v1/issues/{pub_key}/delete-preview")
++    assert r_unreadable.status_code == 404
++    assert r_unreadable.json()["code"] == "NOT_FOUND"
++
++    # 2. EDIT-only user DELETE -> 403 INSUFFICIENT_CAPABILITY
++    client_editor = as_principal(editor)
++    r_edit_delete = await client_editor.delete(
++        f"/api/v1/issues/{pub_key}",
++        headers={"Kb-Blast-Hash": "a" * 64},
++    )
++    assert r_edit_delete.status_code == 403
++    assert r_edit_delete.json()["code"] == "INSUFFICIENT_CAPABILITY"
++
++    # 3. Preview counts child without leaking its key or identifiers
++    r_preview = await as_principal(admin).get(f"/api/v1/issues/{pub_key}/delete-preview")
++    assert r_preview.status_code == 200
++    p_data = r_preview.json()
++    assert p_data["sub_issues_unparented"] == 1
++    # Verify child key (e.g. SECPUB-2) is NEVER in the response body
++    assert sec_child_key not in r_preview.text
++
++
++async def test_case_4_restore_and_retention_expired(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 4: Restore within retention succeeds with note; restore after expiration returns 409."""
++    admin = await make_user("res_admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("RES", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # 1. Create parent issue and child
++    resp_p = await client.post(
++        "/api/v1/projects/RES/issues",
++        json={"summary": "Restorable Parent"},
++    )
++    assert resp_p.status_code == 201
++    p_key = resp_p.json()["key"]
++    p_id = uuid.UUID(resp_p.json()["id"])
++
++    resp_c = await client.post(
++        "/api/v1/projects/RES/issues",
++        json={"summary": "Child will unparent", "parent": p_key},
++    )
++    assert resp_c.status_code == 201
++    c_id = uuid.UUID(resp_c.json()["id"])
++
++    # 2. Attempt restore when not in trash -> 409 NOT_IN_TRASH
++    r_not_trash = await client.post(f"/api/v1/issues/{p_key}/restore")
++    assert r_not_trash.status_code == 409
++    assert r_not_trash.json()["code"] == "NOT_IN_TRASH"
++
++    # 3. Soft-delete issue
++    p_preview = (await client.get(f"/api/v1/issues/{p_key}/delete-preview")).json()
++    del_resp = await client.delete(
++        f"/api/v1/issues/{p_key}",
++        headers={"Kb-Blast-Hash": p_preview["blast_hash"]},
++    )
++    assert del_resp.status_code == 200
++
++    # 4. Restore within retention -> 200 with note
++    restore_resp = await client.post(f"/api/v1/issues/{p_key}/restore")
++    contract_recorder.record("restore_issue_200", restore_resp.request, restore_resp)
++    assert restore_resp.status_code == 200
++    res_body = restore_resp.json()
++    assert res_body["key"] == p_key
++    assert res_body.get("note") == "sub-issues remain unparented"
++
++    # Verify child remains unparented
++    await api_env.seed.rollback()
++    c_parent = (
++        await api_env.seed.execute(select(Issue.parent_issue_id).where(Issue.id == c_id))
++    ).scalar_one_or_none()
++    assert c_parent is None
++
++    # Verify ISSUE_RESTORED activity record
++    act_res = (
++        await api_env.seed.execute(
++            select(ActivityRecord.event_type).where(
++                ActivityRecord.object_id == p_id,
++                ActivityRecord.event_type == "ISSUE_RESTORED",
++            )
++        )
++    ).scalar_one_or_none()
++    assert act_res == "ISSUE_RESTORED"
++
++    # 5. Soft-delete again and advance deleted_at beyond retention window (31 days ago)
++    p2_preview = (await client.get(f"/api/v1/issues/{p_key}/delete-preview")).json()
++    await client.delete(
++        f"/api/v1/issues/{p_key}",
++        headers={"Kb-Blast-Hash": p2_preview["blast_hash"]},
++    )
++
++    expired_ts = datetime.now(UTC) - timedelta(days=31)
++    await api_env.seed.execute(
++        text("UPDATE objects SET deleted_at = :ts WHERE id = :oid"),
++        {"ts": expired_ts, "oid": p_id},
++    )
++    await api_env.seed.commit()
++
++    # 6. Attempt restore on expired issue -> 409 RETENTION_EXPIRED
++    expired_resp = await client.post(f"/api/v1/issues/{p_key}/restore")
++    contract_recorder.record("restore_retention_expired_409", expired_resp.request, expired_resp)
++    assert expired_resp.status_code == 409
++    assert expired_resp.json()["code"] == "RETENTION_EXPIRED"
++
++
++def test_case_6_settings_retention_days_validation() -> None:
++    """Case 6: Settings boundary validation for trash_retention_days."""
++    # Valid boundaries: 1 and 365
++    s1 = Settings(trash_retention_days=1)
++    assert s1.trash_retention_days == 1
++
++    s365 = Settings(trash_retention_days=365)
++    assert s365.trash_retention_days == 365
++
++    # Invalid values: 0 and 366
++    with pytest.raises(ValidationError):
++        Settings(trash_retention_days=0)
++
++    with pytest.raises(ValidationError):
++        Settings(trash_retention_days=366)
++
++
++async def test_list_trash_pagination_and_filtering(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test trash list keyset pagination and filtering items without DELETE capability."""
++    admin = await make_user("tr_admin", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("tr_member")
++    proj_id = await make_project("TRSH", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++
++    # Grant member only VIEWER on TRSH
++    await add_role_binding(
++        api_env.seed,
++        api_env.workspace_id,
++        member.id,
++        role="VIEWER",
++        scope_type="project",
++        project_id=proj_id,
++    )
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++    await api_env.seed.commit()
++
++    client = as_principal(admin)
++    # Create 3 issues and trash them
++    keys = []
++    for i in range(3):
++        r = await client.post(
++            "/api/v1/projects/TRSH/issues", json={"summary": f"Trash Item {i + 1}"}
++        )
++        assert r.status_code == 201
++        keys.append(r.json()["key"])
++
++    for k in keys:
++        prev = (await client.get(f"/api/v1/issues/{k}/delete-preview")).json()
++        del_r = await client.delete(
++            f"/api/v1/issues/{k}", headers={"Kb-Blast-Hash": prev["blast_hash"]}
++        )
++        assert del_r.status_code == 200
++
++    # 1. Page with limit=2
++    p1 = await client.get("/api/v1/projects/TRSH/trash?limit=2")
++    assert p1.status_code == 200
++    d1 = p1.json()
++    assert len(d1["items"]) == 2
++    assert d1["next_cursor"] is not None
++
++    # 2. Page 2 with cursor
++    p2 = await client.get(f"/api/v1/projects/TRSH/trash?limit=2&cursor={d1['next_cursor']}")
++    assert p2.status_code == 200
++    d2 = p2.json()
++    assert len(d2["items"]) == 1
++    assert d2["next_cursor"] is None
++
++    # 3. Member who lacks DELETE capability on issues sees empty list
++    client_member = as_principal(member)
++    p_mem = await client_member.get("/api/v1/projects/TRSH/trash")
++    assert p_mem.status_code == 200
++    assert len(p_mem.json()["items"]) == 0
++
++
++async def test_compute_blast_radius_and_restore_error_branches(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test 404 on missing/deleted issue in compute_blast_radius and restore."""
++    admin = await make_user("err_admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("ERR", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # 1. Non-existent UUID in compute_blast_radius -> 404
++    fake_id = uuid.uuid4()
++    with pytest.raises(ProblemException) as exc_info:
++        await compute_blast_radius(api_env.seed, fake_id)
++    assert exc_info.value.status == 404
++
++    # 2. Non-existent issue restore -> 404
++    r_restore = await client.post("/api/v1/issues/ERR-99999/restore")
++    assert r_restore.status_code == 404
++
++    # 3. Soft-deleted issue in compute_blast_radius -> 404
++    r = await client.post("/api/v1/projects/ERR/issues", json={"summary": "To Be Deleted"})
++    assert r.status_code == 201
++    err_key = r.json()["key"]
++    err_id = uuid.UUID(r.json()["id"])
++
++    prev = (await client.get(f"/api/v1/issues/{err_key}/delete-preview")).json()
++    await client.delete(f"/api/v1/issues/{err_key}", headers={"Kb-Blast-Hash": prev["blast_hash"]})
++
++    with pytest.raises(ProblemException) as exc_info2:
++        await compute_blast_radius(api_env.seed, err_id)
++    assert exc_info2.value.status == 404
+diff --git a/kanban/tests/jobs/test_trash_purge.py b/kanban/tests/jobs/test_trash_purge.py
+new file mode 100644
+index 0000000..6363013
+--- /dev/null
++++ b/kanban/tests/jobs/test_trash_purge.py
+@@ -0,0 +1,354 @@
++"""Unit tests for periodic trash retention purge background job and CLI (S7.2 8q; KB-P3-09b)."""
++
++from __future__ import annotations
++
++import json
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import select, text
++from sqlalchemy.ext.asyncio import (
++    AsyncEngine,
++    async_sessionmaker,
++)
++from sqlalchemy.ext.asyncio import (
++    AsyncSession as AsyncSessionCls,
++)
++
++from database.models import (
++    ActivityRecord,
++    Issue,
++    LinkKind,
++    ObjectKind,
++    ObjectLink,
++    ObjectRecord,
++)
++from database.session import RLSSessionFactory
++from kanban.cli.ctl import main as ctl_main
++from kanban.jobs import (
++    PurgeReport,
++    registry,
++    run_trash_purge,
++    run_trash_purge_pass,
++)
++from kanban.jobs.trash_purge import _extract_engine
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _make_link(  # noqa: PLR0913, PLR0917
++    seed: AsyncSession,
++    ws_id: uuid.UUID,
++    source_id: uuid.UUID,
++    source_key: str,
++    target_id: uuid.UUID,
++    target_key: str,
++    creator_id: uuid.UUID,
++    link_type: LinkKind = LinkKind.RELATES_TO,
++) -> uuid.UUID:
++    """Create an ACTIVE object_link directly in the seed session."""
++    link_id = uuid.uuid4()
++    link = ObjectLink(
++        id=link_id,
++        workspace_id=ws_id,
++        source_id=source_id,
++        source_type=ObjectKind.ISSUE,
++        target_id=target_id,
++        target_type=ObjectKind.ISSUE,
++        link_type=link_type,
++        link_state="ACTIVE",
++        source_key_snapshot=source_key,
++        target_key_snapshot=target_key,
++        created_by_id=creator_id,
++    )
++    seed.add(link)
++    await seed.commit()
++    return link_id
++
++
++async def test_case_5_trash_purge_expired_vs_unexpired(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Case 5: Issue trashed 31d ago with links is purged via audited purge; 29d issue remains."""
++    admin = await make_user("purge_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("PURGE", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # 1. Create target issue 1 (to be expired at 31 days ago)
++    r1 = await client.post(
++        "/api/v1/projects/PURGE/issues",
++        json={"summary": "Expired Issue 31d"},
++    )
++    assert r1.status_code == 201
++    i1_key = r1.json()["key"]
++    i1_id = uuid.UUID(r1.json()["id"])
++
++    # 2. Create target issue 2 (to be unexpired at 29 days ago)
++    r2 = await client.post(
++        "/api/v1/projects/PURGE/issues",
++        json={"summary": "Unexpired Issue 29d"},
++    )
++    assert r2.status_code == 201
++    i2_key = r2.json()["key"]
++    i2_id = uuid.UUID(r2.json()["id"])
++
++    # 3. Create a bystander issue to link with both
++    r3 = await client.post(
++        "/api/v1/projects/PURGE/issues",
++        json={"summary": "Bystander Issue"},
++    )
++    assert r3.status_code == 201
++    i3_key = r3.json()["key"]
++    i3_id = uuid.UUID(r3.json()["id"])
++
++    # Add active links to both issues
++    await _make_link(
++        seed=api_env.seed,
++        ws_id=api_env.workspace_id,
++        source_id=i3_id,
++        source_key=i3_key,
++        target_id=i1_id,
++        target_key=i1_key,
++        creator_id=admin.id,
++    )
++    await _make_link(
++        seed=api_env.seed,
++        ws_id=api_env.workspace_id,
++        source_id=i3_id,
++        source_key=i3_key,
++        target_id=i2_id,
++        target_key=i2_key,
++        creator_id=admin.id,
++    )
++
++    now = datetime.now(UTC)
++    t31 = now - timedelta(days=31)
++    t29 = now - timedelta(days=29)
++
++    # Soft-delete i1 at 31 days ago, i2 at 29 days ago
++    await api_env.seed.execute(
++        text("UPDATE objects SET deleted_at = :ts WHERE id = :oid"),
++        {"ts": t31, "oid": i1_id},
++    )
++    await api_env.seed.execute(
++        text("UPDATE objects SET deleted_at = :ts WHERE id = :oid"),
++        {"ts": t29, "oid": i2_id},
++    )
++    await api_env.seed.commit()
++
++    # 4. Run trash purge job
++    engine = api_env.seed.bind
++    assert isinstance(engine, AsyncEngine)
++    report = await run_trash_purge(engine, now=now, batch_size=10)
++
++    assert report.issues_purged >= 1
++    assert report.links_purged >= 1
++
++    # 5. Verify i1 is completely removed from issues and objects
++    await api_env.seed.rollback()
++    i1_exists_issue = (
++        await api_env.seed.execute(select(Issue.id).where(Issue.id == i1_id))
++    ).first()
++    i1_exists_obj = (
++        await api_env.seed.execute(select(ObjectRecord.id).where(ObjectRecord.id == i1_id))
++    ).first()
++    assert i1_exists_issue is None
++    assert i1_exists_obj is None
++
++    # 6. Verify i2 (29 days ago) remains in issues and objects
++    i2_exists_issue = (
++        await api_env.seed.execute(select(Issue.id).where(Issue.id == i2_id))
++    ).first()
++    i2_exists_obj = (
++        await api_env.seed.execute(select(ObjectRecord.id).where(ObjectRecord.id == i2_id))
++    ).first()
++    assert i2_exists_issue is not None
++    assert i2_exists_obj is not None
++
++    # 7. Verify INVALID_OBJECT_LINK_PURGED activity row exists
++    link_purged_act = (
++        await api_env.seed.execute(
++            select(ActivityRecord.id).where(
++                ActivityRecord.event_type == "INVALID_OBJECT_LINK_PURGED"
++            )
++        )
++    ).first()
++    assert link_purged_act is not None
++
++    # 8. Verify ISSUE_PURGED activity row exists against the project object
++    issue_purged_act = (
++        await api_env.seed.execute(
++            select(ActivityRecord.payload).where(
++                ActivityRecord.object_id == proj_id,
++                ActivityRecord.event_type == "ISSUE_PURGED",
++            )
++        )
++    ).scalar_one_or_none()
++    assert issue_purged_act is not None
++    assert issue_purged_act["issue_key"] == i1_key
++    assert issue_purged_act["purged_link_count"] >= 1
++
++
++async def test_case_5_advisory_lock_concurrency(
++    api_env: ApiEnv,
++) -> None:
++    """Case 5: Single-runner advisory lock prevents concurrent execution."""
++    # Acquire advisory lock manually
++    locked = bool(
++        (
++            await api_env.seed.execute(
++                text("SELECT pg_try_advisory_lock(hashtext('kanban.trash_purge'))")
++            )
++        ).scalar()
++    )
++    assert locked is True
++
++    try:
++        engine = api_env.seed.bind
++        assert isinstance(engine, AsyncEngine)
++
++        # Attempt trash purge while lock is held (engine target)
++        report = await run_trash_purge(engine, batch_size=10)
++        assert report.issues_purged == 0
++        assert report.links_purged == 0
++        assert report.batches == 0
++
++        # Attempt trash purge while lock is held (second session target on engine)
++        async with AsyncSessionCls(engine) as second_sess:
++            report_sess = await run_trash_purge(second_sess, batch_size=10)
++            assert report_sess.issues_purged == 0
++            assert report_sess.links_purged == 0
++            assert report_sess.batches == 0
++
++        # Also verify run_trash_purge_pass returns 0
++        count = await run_trash_purge_pass(engine, batch_size=10)
++        assert count == 0
++    finally:
++        # Release the advisory lock
++        unlock_res = await api_env.seed.execute(
++            text("SELECT pg_advisory_unlock(hashtext('kanban.trash_purge'))")
++        )
++        assert unlock_res.scalar() is True
++
++
++async def test_case_5_cli(
++    api_env: ApiEnv,
++    capsys: pytest.CaptureFixture[str],
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Case 5: kanban-ctl jobs run trash-purge --now exits 0 and prints JSON report."""
++    engine = api_env.seed.bind
++    assert isinstance(engine, AsyncEngine)
++    dsn = str(engine.url)
++    monkeypatch.setenv("KANBAN_DATABASE_URL", dsn)
++
++    # 1. Successful run with valid ISO timestamp
++    exit_code = ctl_main(["jobs", "run", "trash-purge", "--now", "2026-11-12T00:00:00Z"])
++    assert exit_code == 0
++    captured = capsys.readouterr()
++    report = json.loads(captured.out)
++    assert "issues_purged" in report
++    assert "links_purged" in report
++    assert "batches" in report
++
++    # 2. Invalid ISO timestamp returns exit code 2
++    err_code = ctl_main(["jobs", "run", "trash-purge", "--now", "invalid-date"])
++    assert err_code == 2
++    err_captured = capsys.readouterr()
++    assert "Invalid --now timestamp" in err_captured.err
++
++    # 3. DB failure returns exit code 1
++    fail_dsn = "postgresql+asyncpg://kanban_test@/nonexistent_db?host=/tmp/nonexistent"
++    monkeypatch.setenv("KANBAN_DATABASE_URL", fail_dsn)
++    fail_code = ctl_main(["jobs", "run", "trash-purge"])
++    assert fail_code == 1
++    fail_captured = capsys.readouterr()
++    assert "Trash-purge failed" in fail_captured.err
++
++
++def test_registry_registration() -> None:
++    """Verify trash_purge is registered in global registry."""
++    job_def = registry.get("trash_purge")
++    assert job_def is not None
++    assert job_def.name == "trash_purge"
++    assert job_def.interval_seconds == 3600.0
++
++
++async def test_purge_engine_targets_and_type_error(api_env: ApiEnv) -> None:
++    """Test _extract_engine with RLSSessionFactory, async_sessionmaker and TypeError."""
++    engine = api_env.seed.bind
++    assert isinstance(engine, AsyncEngine)
++
++    # 1. RLSSessionFactory target
++    factory = RLSSessionFactory(engine)
++    assert _extract_engine(factory) is engine
++
++    # 2. async_sessionmaker target
++    maker = async_sessionmaker(engine)
++    assert _extract_engine(maker) is engine
++
++    # 3. Invalid target raises TypeError
++    with pytest.raises(TypeError, match="Cannot extract AsyncEngine"):
++        _extract_engine(12345)
++
++
++async def test_purge_issue_without_links_and_naive_datetime(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test purging an issue that has no links (covers empty audits branch) and naive datetime."""
++    admin = await make_user("nolink_admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("NOLNK", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # Create issue with no links
++    r = await client.post("/api/v1/projects/NOLNK/issues", json={"summary": "No Links Issue"})
++    assert r.status_code == 201
++    i_id = uuid.UUID(r.json()["id"])
++
++    # Trash it at 35 days ago
++    t35 = datetime.now(UTC) - timedelta(days=35)
++    await api_env.seed.execute(
++        text("UPDATE objects SET deleted_at = :ts WHERE id = :oid"),
++        {"ts": t35, "oid": i_id},
++    )
++    await api_env.seed.commit()
++
++    # Run trash purge with session target and commit_batches=True, and naive datetime
++    naive_now = datetime.now(UTC).replace(tzinfo=None)
++    rep = await run_trash_purge(api_env.seed, now=naive_now, commit_batches=True)
++    assert rep.issues_purged >= 1
++    assert rep.links_purged == 0
++
++
++async def test_purge_target_none_and_existing_sp(
++    api_env: ApiEnv, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Test passing datetime as first positional arg with target None and existing SP."""
++    engine = api_env.seed.bind
++    assert isinstance(engine, AsyncEngine)
++    monkeypatch.setenv("KANBAN_DATABASE_URL", str(engine.url))
++
++    # 1. Target is None, now passed as first arg
++    now = datetime.now(UTC)
++    rep1 = await run_trash_purge(now)
++    assert isinstance(rep1, PurgeReport)
++
++    # 2. Second run on session where system:trash-purge SP already exists (line 129)
++    rep2 = await run_trash_purge(api_env.seed, now=now)
++    assert isinstance(rep2, PurgeReport)
