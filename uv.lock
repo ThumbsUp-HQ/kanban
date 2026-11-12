@@ -417,6 +417,7 @@ name = "kanban-agent"
 version = "0.0.0"
 source = { editable = "agent" }
 dependencies = [
+    { name = "httpx" },
     { name = "jsonschema" },
     { name = "kanban-mcp" },
     { name = "pydantic" },
@@ -425,6 +426,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = "==0.28.1" },
     { name = "jsonschema", specifier = "==4.26.0" },
     { name = "kanban-mcp", editable = "mcp" },
     { name = "pydantic", specifier = "==2.14.3" },

@@ -1,0 +1,16 @@
+........................................................................ [ 73%]
+..........................                                               [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+agent/providers/net_guard.py        75      1     46      1    98%   50
+agent/providers/ollama.py          271     10     66      3    96%   83-84, 203->208, 231-232, 313-314, 387-388, 440-441
+agent/providers/registry.py         21      0     10      0   100%
+agent/testing/http_cassette.py     108      1     50      3    97%   43->exit, 82->exit, 161
+----------------------------------------------------------------------------
+TOTAL                              475     12    172      7    97%
+Required test coverage of 95% reached. Total coverage: 97.06%
+98 passed in 0.82s
+EXIT_CODE: 0

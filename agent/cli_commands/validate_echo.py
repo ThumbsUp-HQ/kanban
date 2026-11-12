@@ -1,13 +1,14 @@
 # Copyright 2026 Kanban Platform Contributors
-"""Demo command validate-echo testing CLI report rendering against FixtureLLMProvider."""
+"""Demo command validate-echo testing CLI report rendering against LLM providers."""
 
 from __future__ import annotations
 
+import ipaddress
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, HttpUrl
 
 from agent.cli_report import (
     ContextScrubber,
@@ -20,15 +21,21 @@ from agent.cli_report import (
 )
 from agent.providers.base import (
     CompletionRequest,
+    LLMProvider,
     StructuredRequest,
 )
+from agent.providers.ollama import OllamaSettings
+from agent.providers.registry import build_provider
 from agent.testing.fixtures import (
     FixtureLLMProvider,
     load_cassette,
 )
+from agent.testing.http_cassette import CassetteTransport
 
 if TYPE_CHECKING:
     import argparse
+
+    import httpx
 
 __all__ = [
     "EchoVerdict",
@@ -73,13 +80,40 @@ def configure_validate_echo_parser(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _resolve_provider_and_params(
+def _resolve_ollama_provider(
     args: argparse.Namespace,
-) -> tuple[FixtureLLMProvider, str, str, dict[str, str]]:
-    prompt = str(args.prompt)
-    model = str(args.model)
-    metadata: dict[str, str] = {}
+    prompt: str,
+    model: str,
+    metadata: dict[str, str],
+) -> tuple[LLMProvider, str, str, dict[str, str]]:
+    base_url_str = getattr(args, "base_url", None) or "http://127.0.0.1:11434"
+    transport: httpx.AsyncBaseTransport | None = None
+    http_cassette = getattr(args, "http_cassette", None)
+    if http_cassette:
+        transport = CassetteTransport(Path(http_cassette))
 
+    allowed_cidrs = (
+        ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"),
+        ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("::1/128"),
+    )
+    settings = OllamaSettings(
+        base_url=HttpUrl(base_url_str),
+        allowed_ollama_cidrs=allowed_cidrs,
+        model_allowlist=(args.model, "qwen2.5-coder:7b", "llama3.3", "fixture-echo-v1"),
+    )
+    provider = build_provider("ollama", settings, transport=transport)
+    return provider, prompt, model, metadata
+
+
+def _resolve_fixture_provider(
+    args: argparse.Namespace,
+    prompt: str,
+    model: str,
+    metadata: dict[str, str],
+) -> tuple[LLMProvider, str, str, dict[str, str]]:
     cassette_path: Path | None = None
     if getattr(args, "cassette", None):
         cassette_path = Path(args.cassette)
@@ -110,8 +144,21 @@ def _resolve_provider_and_params(
     return provider, prompt, model, metadata
 
 
+def _resolve_provider_and_params(
+    args: argparse.Namespace,
+) -> tuple[LLMProvider, str, str, dict[str, str]]:
+    prompt = str(args.prompt)
+    model = str(args.model)
+    metadata: dict[str, str] = {}
+
+    if args.provider == "ollama":
+        return _resolve_ollama_provider(args, prompt, model, metadata)
+
+    return _resolve_fixture_provider(args, prompt, model, metadata)
+
+
 async def _stream_echo(
-    provider: FixtureLLMProvider,
+    provider: LLMProvider,
     req: CompletionRequest,
     rendered_context: str,
     t0: float,
@@ -166,7 +213,7 @@ async def _stream_echo(
 
 
 async def _structured_echo(
-    provider: FixtureLLMProvider,
+    provider: LLMProvider,
     req_struct: StructuredRequest[EchoVerdict],
     rendered_context: str,
     t0: float,

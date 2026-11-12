@@ -1,0 +1,29 @@
+=== Command (a) ===
+=== 1. RENDERED CONTEXT ===
+Hello Sparkle
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 0.6ms | Total: 0.7ms | Tokens: 12 in, 8 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok
+EXIT_CODE: 0
+
+=== Command (b) ===
+=== 1. RENDERED CONTEXT ===
+Hello Sparkle
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 0.1ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: failed
+Error Code: OLLAMA_METADATA_DENIED
+Detail: [OLLAMA_METADATA_DENIED] Host '169.254.169.254' resolves to hard-denied metadata or link-local network
+EXIT_CODE: 2

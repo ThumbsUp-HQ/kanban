@@ -1,0 +1,14 @@
+cassette_version: 1
+matcher: {}
+http_exchanges:
+  - request:
+      method: POST
+      path: /api/embed
+    response:
+      status: 200
+      headers:
+        content-type: application/json
+      json_body:
+        embeddings:
+          - [0.1, 0.2, 0.3, 0.4]
+          - [0.5, 0.6, 0.7, 0.8]
