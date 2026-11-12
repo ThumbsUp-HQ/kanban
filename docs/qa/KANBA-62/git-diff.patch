@@ -1,3 +1,108 @@
+diff --git a/docs/qa/KANBA-62/api-specialist-review.md b/docs/qa/KANBA-62/api-specialist-review.md
+new file mode 100644
+index 0000000..0c81c11
+--- /dev/null
++++ b/docs/qa/KANBA-62/api-specialist-review.md
+@@ -0,0 +1,99 @@
++# API Specialist Gate Independent Forensic Audit: KANBA-62 (KB-P4-01)
++
++- Ticket: `KANBA-62` (`KB-P4-01`)
++- Title: MCP server skeleton: 3 isolated Streamable HTTP mounts + internal kanban-api client
++- Epic: `KB-E4` (Phase 4 Model Context Protocol)
++- Auditor: `arch-reviewer` (Swarm Systems/Backend Architect & API Specialist Gate Auditor)
++- Date: 2026-11-12
++- Worktree: `/tmp/kb-wt-KANBA-62` on branch `feat/KANBA-62` (commit `b17d5d2`)
++- Scope: Independent forensic audit of the Streamable HTTP JSON-RPC 2.0 wire protocol (`2025-06-18`), 3-surface registry isolation (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`), internal HTTP/2 mTLS client (`KanbanApiClient`), RFC 7807 problem details mapping to canonical `McpErrorCode`, body/response limit guards, transcript token redaction, and import linter boundaries.
++
++---
++
++### 1. Executive Summary & Verification Matrix
++
++An independent forensic API and systems architecture audit of `KANBA-62` (`KB-P4-01`) was conducted across `mcp/` source code, configuration settings, test suites, live HTTP exchange transcripts, and dependency supply chains.
++
++The implementation satisfies all architectural, security, and protocol requirements of `docs/tickets/KB-P4-01.md` and `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` (S11.1, S2.3, S2.4, S2.1).
++
++| Verification Dimension | Specification Target | Observed Status | Verdict |
++| :--- | :--- | :--- | :--- |
++| **Streamable HTTP Spec** | `MCP-Protocol-Version: 2025-06-18` | Implemented in `mcp/protocol.py`; unsupported versions rejected with HTTP 400 | PASS |
++| **Surface Mount Isolation** | 3 independent mounts: `/mcp/agent`, `/mcp/docs`, `/mcp/admin` | Discrete `ToolRegistry` instances per mount; startup `freeze()`; cross-surface tool discovery/call blocked | PASS |
++| **JSON-RPC Methods** | `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call` | All 5 standard methods handled; unknown methods return `-32601`; notifications return HTTP 204 | PASS |
++| **Negative Constraints** | Standalone SSE streams (HTTP 405), batching (HTTP 400) | GET returns HTTP 405 with `Allow: POST, DELETE`; array batching returns HTTP 400 | PASS |
++| **Request Body Guard** | Max 1 MiB (`1,048,576` bytes) | Capped at 1 MiB; bodies >= 1,048,577 bytes return HTTP 413 | PASS |
++| **Session Lifecycle & Store** | `Mcp-Session-Id` header, idle TTL 3600s, max 10,000 sessions | `InMemorySessionStore` with LRU eviction and idle expiration; DELETE returns HTTP 204; stale/unknown ID returns HTTP 404 | PASS |
++| **DNS-Rebinding Defense** | Origin header validation | Checks incoming `Origin` against `allowed_origins`; HTTP 403 on disallowed origin | PASS |
++| **Internal Client Transport** | `KanbanApiClient` (HTTP/2 mTLS + standalone ASGITransport) | mTLS verification with client cert/key; plaintext `http://` strictly rejected in mTLS mode | PASS |
++| **Client Timeout Budgets** | Connect 2.0s, read 10.0s, write 10.0s, pool 2.0s | Enforced via `httpx.Timeout(connect=2.0, read=10.0, write=10.0, pool=2.0)` | PASS |
++| **Response Size Guard** | Max 8 MiB streamed response | Streamed chunks tracked; aborted with `UPSTREAM_ERROR` if > 8 MiB | PASS |
++| **Identity Forwarding** | `X-KB-Subject-Token` and `X-KB-MCP-Session` headers | Propagated on every outbound call to `kanban-api`; no forged principal assertion | PASS |
++| **RFC 7807 Error Mapping** | Upstream problems mapped to canonical `McpErrorCode`s | 404 -> NOT_FOUND, 409 -> CONFLICT_ETAG / VALIDATION_FAILED, 412 -> CONFLICT_ETAG, 422 -> VALIDATION_FAILED, 429 -> RATE_LIMITED, 5xx -> UPSTREAM_UNAVAILABLE | PASS |
++| **Structured Tool Error** | `{"content": [{"type": "text", "text": "<yaml>"}], "isError": true}` | Emits `error: {code: <McpErrorCode>, message: ..., hint: ...}`; zero traceback disclosure | PASS |
++| **Transcript Redaction** | Redact `Authorization`, `X-KB-Subject-Token`, `kb_*` tokens | `conftest.py` regex replaces tokens with `<prefix>***REDACTED***`; verified in `mcp-transcript.txt` | PASS |
++| **Zero PyPI MCP SDK** | Exclude PyPI `mcp` SDK to avoid namespace collision | Verified: zero `mcp` package in `uv.lock`; pure-native protocol engine | PASS |
++| **Import Boundary Gate** | `mcp/` forbidden from importing `database/` | `lint-imports` contract KEPT (2 kept, 0 broken); zero database imports | PASS |
++| **Test Coverage & Quality** | Mandatory Feature Tests (>=95% coverage) | 19/19 tests passing in 1.00s; 98% line+branch coverage across `mcp`; zero lint/type errors | PASS |
++
++---
++
++### 2. Detailed Wire Contract & Architectural Review
++
++#### A. Protocol Engine (`mcp/protocol.py`)
++1. **JSON-RPC 2.0 Conformance:**
++   - Validates `jsonrpc == "2.0"`. Malformed JSON returns `-32700 Parse error`. Missing method or invalid request returns `-32600 Invalid Request`.
++   - Batch requests (`isinstance(payload, list)`) are rejected immediately with HTTP 400 per Streamable HTTP 2025-06-18 specifications.
++   - Handled methods:
++     - `initialize`: Returns `protocolVersion: "2025-06-18"`, `capabilities: {tools: {listChanged: false}}`, `serverInfo: {name: "kanban-mcp-<surface>", version: "0.0.0"}`, and sets header `Mcp-Session-Id: <32-byte-token-urlsafe>`. Note: name adheres strictly to ASCII identifiers per brand directive.
++     - `notifications/initialized`: Notification (null `id`) returns HTTP 204.
++     - `ping`: Returns empty result `{}` with request `id`.
++     - `tools/list`: Returns registered tools (`name`, `description`, `inputSchema`) for the surface.
++     - `tools/call`: Validates `name` and `arguments` object. Resolves tool from the frozen surface registry. Formats successful output as YAML text inside `content: [{type: "text", text: ...}]` with `isError: false`. Captures exceptions and formats them as structured `KbMcpError` YAML payloads with `isError: true`.
++2. **Session Store (`InMemorySessionStore`):**
++   - Cryptographically random session IDs via `secrets.token_urlsafe(32)`.
++   - LRU eviction: capacity capped at `10,000` sessions using `collections.OrderedDict`. On 10,001st session, oldest inactive session is popped.
++   - Idle TTL expiration: default `3600.0s`. Tested with frozen clock at `3600s + 1` confirming expired sessions return None.
++   - Session termination: `DELETE /mcp/{surface}` with valid `Mcp-Session-Id` removes session and returns HTTP 204. Re-invocation returns HTTP 404.
++
++#### B. Surface Isolation & Registry (`mcp/registry.py` & `mcp/app.py`)
++1. **Physical Surface Separation:**
++   - Three separate mounts: `/mcp/agent`, `/mcp/docs`, and `/mcp/admin`.
++   - Three separate `ToolRegistry` instances bound to `Surface.AGENT`, `Surface.DOCS`, and `Surface.ADMIN`.
++   - `ToolRegistry.register` strictly validates `spec.surface == self.surface`, raising `ValueError` on cross-surface registration.
++   - `ToolRegistry.freeze()` locks each registry during `create_mcp_app` startup; mutations after freeze raise `RuntimeError`.
++   - Cross-surface invocation: invoking `ping_admin` on `/mcp/agent` returns `isError: true` with `McpErrorCode.NOT_FOUND` and a helpful suggestion to use the proper surface mount.
++
++#### C. Internal Client (`mcp/internal_client.py`)
++1. **Security & Transport Guards:**
++   - Evaluates base URL: in `mtls` mode, any plaintext `http://` URL raises `ValueError` at client instantiation.
++   - mTLS configured with client certificate, client private key, and internal CA bundle.
++   - In `standalone_inprocess` mode, leverages `httpx.ASGITransport(app=kanban_app)` avoiding local TCP sockets and cleartext loopback exposure.
++   - Strict connection and read timeouts: connect `2.0s`, read `10.0s`, write `10.0s`, pool `2.0s`.
++   - Response streaming limit: buffers response chunks iteratively and aborts with `KbMcpError(McpErrorCode.UPSTREAM_ERROR)` if accumulated size exceeds 8 MiB (`8,388,608` bytes).
++2. **Error Translation:**
++   - Correctly maps RFC 7807 problem payloads and HTTP statuses to canonical `McpErrorCode` enum members:
++     - `404` -> `McpErrorCode.NOT_FOUND`
++     - `409` (with type ending in `etag-mismatch`) -> `McpErrorCode.CONFLICT_ETAG`
++     - `409` (other) -> `McpErrorCode.VALIDATION_FAILED`
++     - `412` -> `McpErrorCode.CONFLICT_ETAG`
++     - `422` -> `McpErrorCode.VALIDATION_FAILED`
++     - `429` -> `McpErrorCode.RATE_LIMITED`
++     - `>= 500` / `httpx.TransportError` -> `McpErrorCode.UPSTREAM_UNAVAILABLE`
++
++#### D. Supply Chain & Module Boundaries
++1. **No PyPI `mcp` SDK Collision:**
++   - `uv.lock` contains zero `mcp` package entries. Workspace package `mcp` is cleanly preserved.
++   - `httpx` (`0.28.1`, BSD-3-Clause) and `h2` (`4.4.1`, MIT) are cryptographically pinned with sha256 hashes.
++   - `make license` passes with 0 violations.
++2. **Zero Database Exposure:**
++   - `mcp/` contains zero database connections, zero PostgreSQL credentials, and zero direct imports from `database/`.
++   - `uv run lint-imports` validates the forbidden contract `mcp -> database` with 0 broken contracts.
++
++---
++
++### 3. Verdict
++
++The implementation of `KANBA-62` (`KB-P4-01`) is robust, security-hardened, fully compliant with Streamable HTTP JSON-RPC 2.0 standards, and completely meets all criteria set forth in the ticket specification.
++
++**Gate Verdict:** **`APPROVED`**
 diff --git a/docs/qa/KANBA-62/build-check.txt b/docs/qa/KANBA-62/build-check.txt
 new file mode 100644
 index 0000000..45bdc10
@@ -1015,6 +1120,115 @@ index 0000000..5029d81
 +- `docs/qa/KANBA-62/api-specialist-review.md`
 +- `docs/qa/KANBA-62/ui-specialist-review.md`
 +- `docs/qa/KANBA-62/message-to-reality-checker.md`
+diff --git a/docs/qa/KANBA-62/ui-specialist-review.md b/docs/qa/KANBA-62/ui-specialist-review.md
+new file mode 100644
+index 0000000..7f76730
+--- /dev/null
++++ b/docs/qa/KANBA-62/ui-specialist-review.md
+@@ -0,0 +1,103 @@
++# UI Specialist Gate Review: KANBA-62 (KB-P4-01)
++
++- Ticket: `KANBA-62` (`KB-P4-01`)
++- Title: MCP server skeleton: 3 isolated Streamable HTTP mounts + internal kanban-api client
++- Epic: `KB-E4` (Phase 4 Model Context Protocol Server & Surface Registries)
++- Worktree: `/tmp/kb-wt-KANBA-62`
++- Branch: `feat/KANBA-62`
++- Auditor: `ui-specialist` (Swarm UI & UX Architecture Specialist Gate Auditor)
++- Date: 2026-11-12
++- Scope: Independent specialist audit of MCP protocol error presentation, YAML output serialization ergonomics, consumer UX for autonomous AI agents and technical humans, surface isolation clarity, and absence of raw tracebacks.
++- Screenshots: N/A (Non-UI backend service ticket).
++
++---
++
++### 1. Executive Summary & Verification Matrix
++A forensic audit of the MCP server skeleton implementation was conducted, focusing on the external interface ergonomics, structured YAML serialization, error recovery affordances, and cognitive clarity across the three isolated surface endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`). The implementation delivers clean, predictable, token-efficient YAML responses that maximize readability and operational safety for both autonomous coding agents and human operators.
++
++| Evaluation Dimension | Design Target | Observed Implementation | Verdict |
++| :--- | :--- | :--- | :--- |
++| **Response Format & Serialization** | Clean YAML text content blocks | Returns `{"content": [{"type": "text", "text": "<yaml>"}], "isError": false}` | PASS |
++| **Key Ordering & Token Economy** | Natural human/agent cognitive hierarchy | `yaml.safe_dump(res, sort_keys=False)` preserves intentional field ordering | PASS |
++| **Error Model & Recovery Hints** | Structured YAML with actionable hints | Structured `error` block containing `code`, `message`, and optional `hint` | PASS |
++| **Suppression of Raw Tracebacks** | Zero internal implementation leakage | Catches `Exception`, sanitizes to `INTERNAL`, never leaks Python tracebacks | PASS |
++| **Surface Isolation Ergonomics** | Distinct surfaces for distinct personas | Clear separation of `/mcp/agent`, `/mcp/docs`, `/mcp/admin`; fails closed | PASS |
++| **Session Diagnostics** | Transparent session lifecycle | 32-byte URL-safe session token, clear 404 re-initialization messages | PASS |
++| **Unit Test Coverage** | Mandatory Feature Tests (>=95%) | 19/19 passed in 1.07s; 97.73% overall branch + statement coverage | PASS |
++| **Build & Lint Cleanliness** | Zero-Tolerance Quality Mandate | Ruff check clean, ruff format clean, mypy --strict clean, lint-imports clean | PASS |
++
++---
++
++### 2. YAML Response Serialization & Consumer Ergonomics
++1. **Token Efficiency & Readability:**
++   - The protocol handler formats tool invocation results directly as YAML:
++     ```json
++     {
++       "jsonrpc": "2.0",
++       "id": 4,
++       "result": {
++         "content": [
++           {
++             "type": "text",
++             "text": "ok: true\nsurface: agent\n"
++           }
++         ],
++         "isError": false
++       }
++     }
++     ```
++   - Rationale: For LLM agent consumers (Gemini, Claude, Codex), YAML eliminates redundant quotes, commas, and nested brace noise typical of JSON. This minimizes context window token consumption while preserving visual structure for human operators reading tool logs or CLI traces.
++2. **Semantic Key Ordering (`sort_keys=False`):**
++   - Verified in `mcp/protocol.py` line 400: `yaml.safe_dump(res, sort_keys=False)` and `mcp/errors.py` line 58.
++   - Preserves logical key sequences (e.g. `code` -> `message` -> `hint` or `id` -> `title` -> `status` -> `description`) rather than imposing alphabetical sorting, which disrupts human reading flow and reduces LLM comprehension speed.
++
++---
++
++### 3. Structured Error Presentation & Agent Recovery Affordances
++1. **Canonical Error Payload (`mcp/errors.py`):**
++   - Tool-level errors return `isError: true` with a compact, structured YAML body:
++     ```yaml
++     error:
++       code: NOT_FOUND
++       message: Tool 'ping_admin' not found on surface 'agent'
++       hint: Verify tool name or switch to appropriate MCP surface endpoint
++     ```
++   - Three-part structure:
++     * `code`: Fixed string enum (`McpErrorCode`) for reliable programmatic branching by agent planners.
++     * `message`: Direct, human-intelligible description of the failure condition.
++     * `hint`: Optional, contextual recovery guidance that tells the agent or user exactly how to resolve the error.
++2. **Elimination of Python Tracebacks:**
++   - Handled cleanly in `mcp/protocol.py` lines 425-438.
++   - Unexpected exceptions are caught, sanitized into `McpErrorCode.INTERNAL`, and wrapped in the standardized YAML structure.
++   - Zero stack traces, file paths, or internal execution contexts escape across the wire, closing prompt-injection vectors and maintaining professional UX.
++
++---
++
++### 4. Surface Isolation Cognitive Clarity
++1. **Surface Partitioning:**
++   - Three distinct mounts:
++     * `/mcp/agent`: Day-to-day Kanban ticketing, task workflows, issue management.
++     * `/mcp/docs`: Documentation, knowledge graph, stickies, pages.
++     * `/mcp/admin`: High-privilege administrative tools with destructive 2-stage confirmation.
++2. **Fail-Closed Cross-Surface Calls:**
++   - When a client connected to `/mcp/agent` attempts to call an admin tool (`ping_admin`), the server returns:
++     * HTTP 200 JSON-RPC result with `isError: true`.
++     * Structured error with `code: NOT_FOUND`.
++     * Clear message: `Tool 'ping_admin' not found on surface 'agent'`.
++     * Actionable recovery hint: `Verify tool name or switch to appropriate MCP surface endpoint`.
++   - This prevents ambiguity between authentication failure and non-existent tools, guiding the agent to connect to the correct mount.
++
++---
++
++### 5. Transcript & Redaction Verification
++- Verified in `docs/qa/KANBA-62/mcp-transcript.txt`:
++  * All raw exchanges across all 3 mounts (`initialize`, `ping`, `tools/list`, `tools/call ping_agent`, `tools/call ping_docs`, `tools/call ping_admin`) format cleanly.
++  * Cross-surface rejection is proven and documented.
++  * Sensitive headers (`authorization`, `x-kb-subject-token`) and credentials matching `kb_*` tokens are rigorously redacted to `***REDACTED***`.
++
++---
++
++### 6. Specialist Verdict
++The MCP server skeleton delivers clean, token-efficient, and highly legible YAML responses paired with robust, hint-driven error structures that optimize agent decision-making and human inspection. The architecture fully satisfies S2.3, S2.4, S11.1, and KB-P4-01.
++
++Verdict: APPROVED
 diff --git a/docs/qa/KANBA-62/unit-test-results.txt b/docs/qa/KANBA-62/unit-test-results.txt
 new file mode 100644
 index 0000000..f0023ea
