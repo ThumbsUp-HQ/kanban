@@ -1,0 +1,25 @@
+# Version control and environments
+.git
+.venv
+node_modules
+**/__pycache__
+*.pyc
+*.pyo
+
+# QA, reports, and logs
+docs/qa
+ci-logs
+reports
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Secrets and credentials
+.env*
+*.pem
+*.key
+keyring.json
+
+# Local artifacts
+dist
+build

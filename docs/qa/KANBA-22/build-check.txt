@@ -1,0 +1,40 @@
+=== 1. docker build --target runtime-slim -t kanban:runtime-slim . ===
+Exit Code: 0
+
+=== 2. docker build -t kanban:latest . ===
+Exit Code: 0
+
+=== 3. docker run --rm -i hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d < Dockerfile ===
+Exit Code: 0
+
+=== 4. make check ===
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+229 files already formatted
+uv run mypy
+Success: no issues found in 39 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 30 files, 18 dependencies.
+-----------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+Exit Code: 0
