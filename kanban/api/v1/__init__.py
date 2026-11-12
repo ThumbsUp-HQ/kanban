@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from kanban.api.v1.agent_definitions import router as agent_definitions_router
+from kanban.api.v1.assignees import router as assignees_router
 from kanban.api.v1.attachments import router as attachments_router
 from kanban.api.v1.auth_local import router as auth_local_router
 from kanban.api.v1.auth_oidc import router as auth_oidc_router
@@ -28,6 +29,7 @@ def build_v1_router() -> APIRouter:
     v1.include_router(projects_router)
     v1.include_router(project_config_router)
     v1.include_router(issues_router)
+    v1.include_router(assignees_router)
     v1.include_router(resolve_router)
     v1.include_router(auth_session_router)
     v1.include_router(auth_local_router)
