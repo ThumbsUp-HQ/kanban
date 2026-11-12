@@ -11,7 +11,7 @@ EXPECTED_TABLES = {"projects", "workflow_states", "project_priorities", "project
 async def test_08_projects_migration_lifecycle() -> None:
     """Verify p1_04 upgrade creates 4 tables + FK, downgrade removes them, and re-upgrade works."""
     async with MigrationHarness() as harness:
-        assert harness.previous_of("p1_04_projects") == "p1_02_objects_spine"
+        assert harness.previous_of("p1_04_projects") == "p1_03_principals"
 
         # 1. Upgrade to p1_04_projects
         await harness.upgrade("p1_04_projects")

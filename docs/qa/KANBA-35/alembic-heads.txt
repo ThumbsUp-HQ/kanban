@@ -1,0 +1,6 @@
+p1_11_object_links (head)
+p1_04_projects -> p1_11_object_links (head), Object links, link_kind enum, and link_type_matrix allowlist.
+p1_03_principals -> p1_04_projects, Projects, workflow_states, project_priorities, and project_labels.
+p1_02_objects_spine -> p1_03_principals, Principals, users, groups, and cycle-safe principal_group_closure.
+p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
+<base> -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
