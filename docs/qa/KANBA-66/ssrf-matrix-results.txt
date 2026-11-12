@@ -1,0 +1,22 @@
+KANBA-66 / KB-P2-16 SSRF Blocked IP Matrix Verification (S5.4, S10.2)
+====================================================================
+
+| Category | Resolved Address | Expected | Result | Code | Socket Connects |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| Single-Record Block | `127.0.0.1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `10.0.0.1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `172.16.5.4` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `192.168.1.1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `169.254.169.254` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `100.64.0.1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `0.0.0.0` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `::1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `fe80::1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `fc00::1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `fd12:3456::1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `::ffff:127.0.0.1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `::ffff:169.254.169.254` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Single-Record Block | `64:ff9b::a9fe:a9fe` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+| Multi-Record Mixed | `[93.184.216.34, 10.0.0.5]` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
+
+All non-public, loopback, private, IMDS, and mixed DNS responses were rejected with 403 MEDIA_HOST_BLOCKED and zero TCP connections.

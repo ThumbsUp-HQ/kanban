@@ -104,34 +104,37 @@ class SecurityHeadersMiddleware:
         # Wrap send to inject security headers
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
-                raw_headers: list[tuple[bytes, bytes]] = [
-                    (name, value)
-                    for name, value in message.get("headers", [])
-                    if name.lower() not in _SECURITY_HEADER_NAMES
-                ]
-
-                # Append canonical security headers
-                raw_headers.append((b"content-security-policy", CSP_POLICY.encode("latin1")))
-                raw_headers.append((b"x-content-type-options", b"nosniff"))
-                raw_headers.append((b"referrer-policy", b"no-referrer"))
-                raw_headers.append((b"x-frame-options", b"DENY"))
-                raw_headers.append((b"cross-origin-opener-policy", b"same-origin"))
-                raw_headers.append((b"cross-origin-resource-policy", b"same-origin"))
-                raw_headers.append(
-                    (b"permissions-policy", b"camera=(), microphone=(), geolocation=()")
-                )
-
-                if self.settings.deployment_mode == "production":
-                    hsts_value = f"max-age={self.settings.hsts_max_age}; includeSubDomains".encode(
-                        "latin1"
-                    )
-                    raw_headers.append((b"strict-transport-security", hsts_value))
-
-                message["headers"] = raw_headers
-
+                message["headers"] = self._inject_security_headers(message.get("headers", []))
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
+
+    def _inject_security_headers(
+        self, existing_headers: list[tuple[bytes, bytes]]
+    ) -> list[tuple[bytes, bytes]]:
+        """Construct canonical security headers while preserving route-specific CSP."""
+        custom_csp: bytes | None = None
+        raw_headers: list[tuple[bytes, bytes]] = []
+        for name, value in existing_headers:
+            if name.lower() == b"content-security-policy":
+                custom_csp = value
+            elif name.lower() not in _SECURITY_HEADER_NAMES:
+                raw_headers.append((name, value))
+
+        csp_val = custom_csp if custom_csp is not None else CSP_POLICY.encode("latin1")
+        raw_headers.append((b"content-security-policy", csp_val))
+        raw_headers.append((b"x-content-type-options", b"nosniff"))
+        raw_headers.append((b"referrer-policy", b"no-referrer"))
+        raw_headers.append((b"x-frame-options", b"DENY"))
+        raw_headers.append((b"cross-origin-opener-policy", b"same-origin"))
+        raw_headers.append((b"cross-origin-resource-policy", b"same-origin"))
+        raw_headers.append((b"permissions-policy", b"camera=(), microphone=(), geolocation=()"))
+
+        if self.settings.deployment_mode == "production":
+            hsts_value = f"max-age={self.settings.hsts_max_age}; includeSubDomains".encode("latin1")
+            raw_headers.append((b"strict-transport-security", hsts_value))
+
+        return raw_headers
 
     async def _send_problem(
         self,
