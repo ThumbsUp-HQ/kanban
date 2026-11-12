@@ -1,0 +1,2244 @@
+diff --git a/docs/qa/KANBA-23/api-specialist-review.md b/docs/qa/KANBA-23/api-specialist-review.md
+new file mode 100644
+index 0000000..709bda9
+--- /dev/null
++++ b/docs/qa/KANBA-23/api-specialist-review.md
+@@ -0,0 +1,44 @@
++# API Specialist Gate Review: KANBA-23 (KB-P0-10)
++
++- Ticket: KANBA-23 (KB-P0-10: ASGI app factory, PrecompressedSPAStaticApp & security headers)
++- Auditor: Systems/Backend Architect & API Specialist (@arch-reviewer)
++- Worktree Audited: /tmp/kb-wt-KANBA-23 on branch feat/KANBA-23
++- Authoritative Specification: docs/tickets/KB-P0-10.md
++- Verification Artifact: docs/qa/KANBA-23/contract-sample.txt
++
++---
++
++## 1. API Route Contracts and Problem Details (RFC 9457)
++- GET /api/v1/health: Correctly mounts on APIRouter with prefix /api and returns HTTP 200 {"status": "ok"} with application/json.
++- Unknown /api/* routes: Intercepted by wildcard fallback route returning HTTP 404 with application/problem+json and exact payload {"type": "about:blank", "title": "Not Found", "status": 404}.
++- WebSocket /ws: Rejection gate correctly intercepts incoming WebSocket connections and closes with WebSocket status code 1008 prior to calling accept().
++- GET /sse: Placeholder returns HTTP 501 application/problem+json with title "Not Implemented".
++- MCP Placeholders (/mcp/agent, /mcp/docs, /mcp/admin and subpaths): Returns HTTP 501 application/problem+json across all HTTP methods.
++- Layering Isolation: kanban/ does not import mcp/. Verified via import-linter contract (1 kept, 0 broken). Real MCP routes will be composed at root in later phases.
++
++## 2. PrecompressedSPAStaticApp and Path Traversal Defense
++- Safe Path Parsing: Rigorously verifies unquoted paths. Immediately rejects null bytes (\x00), backslashes (\\), and relative path segments (..) with HTTP 404.
++- Symlink and Root Confinement: Resolves paths with Path.resolve(strict=True) and verifies is_relative_to(dist_dir.resolve()). Any symlink pointing outside dist/ safely fails with HTTP 404.
++- Bounded Reads: Enforces 64 KiB chunked streaming and immediately aborts with HTTP 404 on files exceeding 50 MiB.
++- HTTP Methods: Only GET and HEAD are permitted; other HTTP methods correctly return HTTP 405 Method Not Allowed with Allow: GET, HEAD header.
++- Content Negotiation & Caching:
++  * Efficient parsing of Accept-Encoding with q-values.
++  * Correct variant selection: serves .br (Brotli) when accepted, falls back to .gz (Gzip), and defaults to identity.
++  * Cache-Control headers: /assets/* correctly receives public, max-age=31536000, immutable. Root index.html and SPA fallback routes correctly receive no-cache.
++  * Strong ETags and Revalidation: Deterministic ETag format "<sha256-hex-16>-<encoding>". If-None-Match headers accurately trigger HTTP 304 Not Modified with empty body.
++
++## 3. Security Headers Middleware and Host Protection
++- Content-Security-Policy: CSP_POLICY in kanban/security/headers.py is byte-identical to the canonical Section 5.4 policy string. Verified in live curl captures across all routes.
++- Hardening Headers: Consistently stamps X-Content-Type-Options: nosniff, Referrer-Policy: no-referrer, X-Frame-Options: DENY, Cross-Origin-Opener-Policy: same-origin, Cross-Origin-Resource-Policy: same-origin, and Permissions-Policy: camera=(), microphone=(), geolocation=(). Overwrites existing headers to prevent header injection or duplication.
++- Transport Security (HSTS): Strict-Transport-Security: max-age=63072000; includeSubDomains is stamped exclusively when deployment_mode == "production" and correctly omitted in standalone mode.
++- Standalone Cleartext Host Gate: Correctly checks request Host header when scheme is HTTP in standalone mode. Allowed loopback hosts (localhost, 127.0.0.1, [::1]) pass; non-whitelisted remote IPs (e.g. 192.168.1.20:18000) are blocked with HTTP 403 Forbidden and RFC 9457 problem detail CLEARTEXT_HTTP_BLOCKED.
++
++## 4. Live Verification Evidence Audit
++- Audited contract-sample.txt: Live uvicorn captures against built kanban/web/dist confirm byte-for-byte fidelity with all 5 required contract scenarios.
++- Unit Test Suite: 27 passed in 0.67s with 96.39% branch and line coverage (exceeding 95% threshold).
++- Code Quality: make check clean (ruff, mypy strict in 48 source files, import-linter, check_no_dashes).
++
++---
++
++## Final Verdict
++Verdict: APPROVED. The implementation of the ASGI factory, static file server, and security middleware satisfies all architectural and security invariants of KB-P0-10.
+diff --git a/docs/qa/KANBA-23/build-check.txt b/docs/qa/KANBA-23/build-check.txt
+new file mode 100644
+index 0000000..fac6a76
+--- /dev/null
++++ b/docs/qa/KANBA-23/build-check.txt
+@@ -0,0 +1,30 @@
++uv run ruff check .
++All checks passed!
++uv run ruff format --check .
++235 files already formatted
++uv run mypy
++Success: no issues found in 48 source files
++uv run lint-imports
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 37 files, 32 dependencies.
++-----------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++uv run python -m scripts.check_no_dashes --all
++Exit code: 0
+diff --git a/docs/qa/KANBA-23/contract-sample.txt b/docs/qa/KANBA-23/contract-sample.txt
+new file mode 100644
+index 0000000..f789dfd
+--- /dev/null
++++ b/docs/qa/KANBA-23/contract-sample.txt
+@@ -0,0 +1,145 @@
++=== 1. GET / (Accept-Encoding: br) ===
++*   Trying 127.0.0.1:18000...
++* Established connection to 127.0.0.1 (127.0.0.1 port 18000) from 127.0.0.1 port 58646 
++* using HTTP/1.x
++> GET / HTTP/1.1
++> Host: 127.0.0.1:18000
++> User-Agent: curl/8.18.0
++> Accept: */*
++> Accept-Encoding: br
++> 
++* Request completely sent off
++< HTTP/1.1 200 OK
++< date: Thu, 12 Nov 2026 02:23:01 GMT
++< server: uvicorn
++< content-type: text/html; charset=utf-8
++< content-length: 391
++< etag: "6eedb01c969c9007-identity"
++< vary: Accept-Encoding
++< cache-control: no-cache
++< content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
++< x-content-type-options: nosniff
++< referrer-policy: no-referrer
++< x-frame-options: DENY
++< cross-origin-opener-policy: same-origin
++< cross-origin-resource-policy: same-origin
++< permissions-policy: camera=(), microphone=(), geolocation=()
++< strict-transport-security: max-age=63072000; includeSubDomains
++< 
++{ [391 bytes data]
++* Connection #0 to host 127.0.0.1:18000 left intact
++
++=== 2. GET /assets/index-CJtVY9il.js (Accept-Encoding: gzip) ===
++*   Trying 127.0.0.1:18000...
++* Established connection to 127.0.0.1 (127.0.0.1 port 18000) from 127.0.0.1 port 58656 
++* using HTTP/1.x
++> GET /assets/index-CJtVY9il.js HTTP/1.1
++> Host: 127.0.0.1:18000
++> User-Agent: curl/8.18.0
++> Accept: */*
++> Accept-Encoding: gzip
++> 
++* Request completely sent off
++< HTTP/1.1 200 OK
++< date: Thu, 12 Nov 2026 02:23:01 GMT
++< server: uvicorn
++< content-type: text/javascript; charset=utf-8
++< content-length: 67727
++< etag: "8f4b6a4c6db8f937-gzip"
++< vary: Accept-Encoding
++< cache-control: public, max-age=31536000, immutable
++< content-encoding: gzip
++< content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
++< x-content-type-options: nosniff
++< referrer-policy: no-referrer
++< x-frame-options: DENY
++< cross-origin-opener-policy: same-origin
++< cross-origin-resource-policy: same-origin
++< permissions-policy: camera=(), microphone=(), geolocation=()
++< strict-transport-security: max-age=63072000; includeSubDomains
++< 
++{ [32768 bytes data]
++* Connection #0 to host 127.0.0.1:18000 left intact
++
++=== 3. GET /api/v1/health ===
++*   Trying 127.0.0.1:18000...
++* Established connection to 127.0.0.1 (127.0.0.1 port 18000) from 127.0.0.1 port 58666 
++* using HTTP/1.x
++> GET /api/v1/health HTTP/1.1
++> Host: 127.0.0.1:18000
++> User-Agent: curl/8.18.0
++> Accept: */*
++> 
++* Request completely sent off
++< HTTP/1.1 200 OK
++< date: Thu, 12 Nov 2026 02:23:01 GMT
++< server: uvicorn
++< content-length: 15
++< content-type: application/json
++< content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
++< x-content-type-options: nosniff
++< referrer-policy: no-referrer
++< x-frame-options: DENY
++< cross-origin-opener-policy: same-origin
++< cross-origin-resource-policy: same-origin
++< permissions-policy: camera=(), microphone=(), geolocation=()
++< strict-transport-security: max-age=63072000; includeSubDomains
++< 
++{ [15 bytes data]
++* Connection #0 to host 127.0.0.1:18000 left intact
++{"status":"ok"}
++
++=== 4. GET /mcp/admin ===
++*   Trying 127.0.0.1:18000...
++* Established connection to 127.0.0.1 (127.0.0.1 port 18000) from 127.0.0.1 port 58678 
++* using HTTP/1.x
++> GET /mcp/admin HTTP/1.1
++> Host: 127.0.0.1:18000
++> User-Agent: curl/8.18.0
++> Accept: */*
++> 
++* Request completely sent off
++< HTTP/1.1 501 Not Implemented
++< date: Thu, 12 Nov 2026 02:23:01 GMT
++< server: uvicorn
++< content-length: 61
++< content-type: application/problem+json
++< content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
++< x-content-type-options: nosniff
++< referrer-policy: no-referrer
++< x-frame-options: DENY
++< cross-origin-opener-policy: same-origin
++< cross-origin-resource-policy: same-origin
++< permissions-policy: camera=(), microphone=(), geolocation=()
++< strict-transport-security: max-age=63072000; includeSubDomains
++< 
++{ [61 bytes data]
++* Connection #0 to host 127.0.0.1:18000 left intact
++{"type":"about:blank","title":"Not Implemented","status":501}
++
++=== 5. GET / in standalone mode with Host: 192.168.1.20:18000 ===
++*   Trying 127.0.0.1:18000...
++* Established connection to 127.0.0.1 (127.0.0.1 port 18000) from 127.0.0.1 port 52838 
++* using HTTP/1.x
++> GET / HTTP/1.1
++> Host: 192.168.1.20:18000
++> User-Agent: curl/8.18.0
++> Accept: */*
++> 
++* Request completely sent off
++< HTTP/1.1 403 Forbidden
++< date: Thu, 12 Nov 2026 02:23:03 GMT
++< server: uvicorn
++< content-type: application/problem+json
++< content-length: 226
++< content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
++< x-content-type-options: nosniff
++< referrer-policy: no-referrer
++< x-frame-options: DENY
++< cross-origin-opener-policy: same-origin
++< cross-origin-resource-policy: same-origin
++< permissions-policy: camera=(), microphone=(), geolocation=()
++< 
++{ [226 bytes data]
++* Connection #0 to host 127.0.0.1:18000 left intact
++{"type": "about:blank", "title": "CLEARTEXT_HTTP_BLOCKED", "status": 403, "detail": "Standalone mode serves cleartext HTTP only to localhost. Put a TLS reverse proxy in front or add the host to KB_STANDALONE_CLEARTEXT_HOSTS."}
+diff --git a/docs/qa/KANBA-23/dependency-evaluation.md b/docs/qa/KANBA-23/dependency-evaluation.md
+new file mode 100644
+index 0000000..95bb222
+--- /dev/null
++++ b/docs/qa/KANBA-23/dependency-evaluation.md
+@@ -0,0 +1,77 @@
++# Dependency Evaluation: ASGI App Factory, Static Server & Security Headers (KANBA-23 / KB-P0-10)
++
++## 1. Scope & Target Dependencies
++This document records the architectural, security, and quality evaluations for external runtime and test dependencies introduced for Ticket `KANBA-23` (`KB-P0-10`).
++In accordance with repository governance invariants (`AGENTS.md`, `S2.5`), all dependencies are strictly permissive (`Apache-2.0`, `MIT`, or `BSD-3-Clause`) with zero viral copyleft (`GPL`, `AGPL`, `SSPL`, or static `LGPL`) and are cryptographically pinned in `uv.lock`.
++
++### Evaluated Packages
++- `fastapi==0.162.5`
++  - License: MIT
++  - Ecosystem: Python Web Framework
++  - Wheel SHA-256: `sha256:5303c67415fde762889ca337db79d27b755b8bd09cef314fa7a4340bb30bfd2b`
++  - Source Dist SHA-256: `sha256:1ca37f64f61c99cebd38636e67525fb721c5e8c1169f07f2a35d73b0a63265d4`
++- `starlette==1.10.0` (transitive of FastAPI)
++  - License: BSD-3-Clause
++  - Ecosystem: Core ASGI Toolkit
++  - Wheel SHA-256: `sha256:478c0ab3b4ced6e82719849c118fa406f0278a3499c1a898cd15cd31bdc38ce4`
++  - Source Dist SHA-256: `sha256:b8399098d4c1e3522734f7235dc79b1fc967f96cf139c81e0fa30479e0685f9b`
++- `uvicorn[standard]==0.54.0` (includes `uvloop==0.22.1`, `httptools==0.7.1`)
++  - License: BSD-3-Clause (uvloop: MIT / Apache-2.0 dual; httptools: MIT)
++  - Ecosystem: Production ASGI Runtime
++  - Wheel SHA-256: `sha256:505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf`
++  - Source Dist SHA-256: `sha256:a2e33cbfaa0306f8e6b0c13e0cb89d7d7a2da3e62b90c66e18c33d9807b28620`
++- `pydantic-settings==2.16.2`
++  - License: MIT
++  - Ecosystem: Type-Safe Environment Configuration
++  - Wheel SHA-256: `sha256:8d523e5c129b097686bde019bd6109bff53f4c8c3f63f1ddf9933ffa42e5ab4f`
++  - Source Dist SHA-256: `sha256:3dc08ffabed2bbd5dc2dd55ead7b78b4e4c5cd776aecd04310db5f1224caaf46`
++- `httpx==0.28.1` (scoped strictly to root pyproject.toml dev group)
++  - License: BSD-3-Clause
++  - Ecosystem: Async In-Memory ASGI Test Client
++  - Wheel SHA-256: `sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad`
++  - Source Dist SHA-256: `sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc`
++
++---
++
++## 2. Alternatives Evaluated
++1. **Raw Starlette vs FastAPI:**
++   - Raw Starlette provides the foundational ASGI protocol handler, but lacks typed route decorators, automatic parameter validation, standard OpenAPI schema reflection (`/api/openapi.json`), and standardized RFC 9457 Problem Details error generation required for future API and MCP expansion.
++   - FastAPI builds directly on Starlette with zero performance penalty while enforcing structured typing.
++2. **Granian vs Uvicorn[standard]:**
++   - Granian is a Rust-based HTTP server for Python. While promising in raw benchmarks, Uvicorn is the battle-tested industry standard with full support for Unix domain socket binding, zero-downtime reloads, and ASGI lifespan events across minimal Linux container environments.
++3. **Requests / Urllib vs HTTPX:**
++   - Standard requests or urllib require opening live loopback TCP sockets, incurring port contention and flake in concurrent CI runs.
++   - HTTPX provides native `ASGITransport(app)` executing full HTTP request/response lifecycles in-memory with sub-millisecond execution times and zero socket allocation.
++
++---
++
++## 3. Specialist Evaluations & Sign-Offs
++
++### A. Test and Build Quality Engineer (`qa-eng`, Board Post #28)
++- **Role:** Engineer #2, Test and Build Quality Engineer
++- **Evaluation:**
++  - `fastapi` and `starlette`: High-performance ASGI framework enabling in-process testing via `httpx.ASGITransport(app)` and Starlette `TestClient`. In-process execution bypasses TCP loopback sockets and port allocation overhead, allowing full HTTP request and response cycle validation with sub-millisecond execution times and zero socket flakiness.
++  - `uvicorn[standard]`: Production-grade ASGI runtime with Rust/C-accelerated event loops (`uvloop`) and HTTP parsing (`httptools`). Provides robust connection handling and deterministic lifecycle events.
++  - `pydantic-settings`: Strict, environment-driven configuration model (`Settings`) validating environment variable prefixes (`KB_`), paths (`web_dist`), and security modes before server binding. Fails closed immediately on invalid configuration.
++  - `httpx`: Essential async test client providing native ASGI transport support for integration test suites without spawning background server processes.
++  - Security and Performance Integration: Delivers precompressed SPA asset negotiation (`.br` / `.gz`) and attaches strict Content-Security-Policy and hardening headers to all responses while remaining within latency SLAs.
++- **Verdict:** `APPROVED`
++
++### B. Application and Supply-Chain Security Engineer (`sec-eng`, Board Post #29)
++- **Role:** Engineer #1, Application and Supply-Chain Security Engineer
++- **Evaluation:**
++  - License Compliance: 100% permissive (`MIT`, `BSD-3-Clause`, `Apache-2.0`). Zero viral copyleft.
++  - Attack Surface Minimization: `docs_url=None` and `redoc_url=None` are enforced by default, preventing unauthorized exploration of interactive API documentation in production environments.
++  - Content Security Policy (CSP): Enforces byte-identical S5.4 production policy on every response, forbidding inline scripts/styles, requiring trusted types, and restricting resource origins to self.
++  - Hardening Headers: Applies `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`, and production HSTS (`Strict-Transport-Security: max-age=63072000; includeSubDomains`).
++  - Path Traversal and DoS Defense: `PrecompressedSPAStaticApp` enforces single percent-decoding, rejects null bytes, backslashes, and `..` segments, and validates absolute paths against `dist_dir.resolve()` to prevent symlink traversal escapes. File streaming is capped at 50 MiB in 64 KiB chunks to prevent memory exhaustion attacks.
++  - Cleartext Network Prevention: Standalone mode rejects cleartext HTTP requests from non-loopback hosts with 403 `CLEARTEXT_HTTP_BLOCKED`, requiring reverse-proxy TLS termination.
++- **Verdict:** `APPROVED`
++
++### C. Systems/Backend Architect (`arch-reviewer`, Board Post #30)
++- **Role:** Systems/Backend Architect
++- **Evaluation:**
++  - License and Compatibility: All components and transitive dependencies (`fastapi`, `starlette`, `uvicorn`, `uvloop`, `httptools`, `pydantic-settings`, `httpx`) are licensed under MIT, BSD-3-Clause, or Apache-2.0. Completely permissive, zero copyleft. 100% compliant with repository license invariants.
++  - Supply-Chain and Attack Surface: `fastapi`, `starlette`, `uvicorn`, and `pydantic-settings` form the core ASGI server layer for the unified kanban application. `uvicorn[standard]` utilizes high-performance C-based event loops (`uvloop`) and HTTP parsers (`httptools`) to guard against slowloris and HTTP parsing vulnerabilities. `PrecompressedSPAStaticApp` enforces strict path-traversal prevention and serves pre-compressed Brotli (`.br`) and gzip (`.gz`) assets with immutable caching.
++  - Architectural Rationale: `fastapi` builds directly on Starlette, providing automatic OpenAPI documentation (`/api/openapi.json`), robust parameter validation, and standard problem+json error formatting required for the unified REST and MCP API gateways. `uvicorn` is the mature industry standard with seamless support for Unix domain socket binding, reload hooks, and ASGI lifespan events across diverse Linux container environments.
++- **Verdict:** `APPROVED`
+diff --git a/docs/qa/KANBA-23/message-to-reality-checker.md b/docs/qa/KANBA-23/message-to-reality-checker.md
+new file mode 100644
+index 0000000..ff283d4
+--- /dev/null
++++ b/docs/qa/KANBA-23/message-to-reality-checker.md
+@@ -0,0 +1,79 @@
++# Reality-Checker Verification Packet: KANBA-23
++
++## Ticket Summary
++- Ticket ID: KANBA-23 (KB-P0-10)
++- Epic: KB-E0 (Phase 0 Bootstrap and Foundation)
++- Title: [Phase 0 / Web Server] ASGI app factory, PrecompressedSPAStaticApp & security headers
++- Author: builder-20
++- Gates: reality-checker, api-specialist, ui-specialist
++- Branch: feat/KANBA-23
++- Base SHA: 75eb4e4ebbec9e0ba33f0cd11575728acc4c2253 (merged feat/KANBA-17 to build kanban/web/dist)
++
++---
++
++## 1. Specification Traceability Matrix
++- **S2.3 (Single :8080 port runtime & pre-compressed assets):**
++  - Implemented `kanban/app.py:create_app()` mounting `/api`, `/ws`, `/sse`, `/mcp/*` placeholders, and `PrecompressedSPAStaticApp` at `/`.
++  - Implemented `kanban/web_static.py:PrecompressedSPAStaticApp` serving Brotli (`.br`) and Gzip (`.gz`) pre-compressed static assets with Accept-Encoding negotiation, strong ETags, and 304 Not Modified revalidation.
++- **S5.4 (Production CSP & security headers):**
++  - Implemented byte-identical `CSP_POLICY` in `kanban/security/headers.py`.
++  - Stamped `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, and `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
++  - Enforced `Strict-Transport-Security: max-age=63072000; includeSubDomains` in production mode, cleanly omitted in standalone mode.
++  - Overwrites existing inner app headers to prevent duplication.
++- **S3.5 (Standalone cleartext host gate):**
++  - Implemented host inspection stripping port and retaining IPv6 brackets in `kanban/security/headers.py:_extract_host`.
++  - When `deployment_mode == "standalone"` and request scheme is `http`, requests from non-loopback hosts return HTTP 403 Forbidden with RFC 9457 Problem Details `CLEARTEXT_HTTP_BLOCKED`.
++  - Missing Host header returns HTTP 400 Bad Request.
++  - Hosts listed in `KB_STANDALONE_CLEARTEXT_HOSTS` are permitted.
++- **Layering Isolation & Non-Import of MCP:**
++  - `kanban/app.py` implements `/mcp/{surface:path}` placeholders returning HTTP 501 without importing `mcp`.
++  - Verified via `import-linter` (contract: agent -> mcp -> kanban -> database, 1 kept, 0 broken).
++
++---
++
++## 2. Deliverables Produced
++1. `kanban/app.py`: `create_app(settings: Settings | None = None) -> FastAPI` ASGI factory.
++2. `kanban/settings.py`: `Settings` model using Pydantic Settings with `KB_` prefix, `deployment_mode`, `web_dist`, `hsts_max_age`, and `standalone_cleartext_hosts`.
++3. `kanban/web_static.py`: Pure ASGI `PrecompressedSPAStaticApp` with encoding negotiation, path traversal guards, 50 MiB size limit, 64 KiB chunk streaming, strong ETags, and SPA fallback.
++4. `kanban/security/headers.py`: `CSP_POLICY` constant, `_extract_host`, and `SecurityHeadersMiddleware`.
++5. `kanban/security/__init__.py`: Package exports for `CSP_POLICY` and `SecurityHeadersMiddleware`.
++6. `kanban/__init__.py`: Package export for `create_app`.
++7. `kanban/GEMINI.md`: Updated module manifest documenting contracts, budgets, and failure modes.
++8. `kanban/pyproject.toml` & `pyproject.toml` & `uv.lock`: Pinned runtime dependencies (`fastapi==0.162.5`, `starlette==1.10.0`, `uvicorn[standard]==0.54.0`, `pydantic-settings==2.16.2`) and dev dependency (`httpx==0.28.1`).
++9. `kanban/tests/test_app.py`: Tests for `/api/v1/health`, 404 problem JSON, `/ws` 1008 close, `/sse` 501, `/mcp/*` 501, OpenAPI schema access, and default settings parsing.
++10. `kanban/tests/test_web_static.py`: Tests for Brotli/Gzip negotiation, wire payload verification, SPA fallback, path traversal/symlink guards, HEAD requests, and 50 MiB limit.
++11. `kanban/tests/test_security_headers.py`: Tests for CSP presence on all endpoints (200, 404, 501), HSTS production vs standalone, header replacement, standalone cleartext blocking, missing Host, and non-http scope pass-through.
++
++---
++
++## 3. Forensic Proof Artifacts in docs/qa/KANBA-23/
++- `docs/qa/KANBA-23/unit-test-results.txt`:
++  - 27/27 unit tests passed in 0.67s.
++  - Overall coverage across `kanban`: 96.39% statement and branch coverage (minimum threshold: >= 95%).
++  - Exit code: 0.
++- `docs/qa/KANBA-23/build-check.txt`:
++  - `make check` passing cleanly (ruff check 0 errors, ruff format 235 files clean, mypy strict 48 source files clean, lint-imports 1 kept 0 broken, check_no_dashes 0 hits).
++  - Exit code: 0.
++- `docs/qa/KANBA-23/contract-sample.txt`:
++  - Live uvicorn server captures on port 18000 against built `kanban/web/dist`:
++    * Scenario 1: `GET /` with `Accept-Encoding: br` -> HTTP 200, `cache-control: no-cache`, `vary: Accept-Encoding`, canonical CSP, HSTS.
++    * Scenario 2: `GET /assets/index-CJtVY9il.js` with `Accept-Encoding: gzip` -> HTTP 200, `content-encoding: gzip`, `cache-control: public, max-age=31536000, immutable`, canonical CSP.
++    * Scenario 3: `GET /api/v1/health` -> HTTP 200, `{"status":"ok"}`.
++    * Scenario 4: `GET /mcp/admin` -> HTTP 501 Not Implemented, problem JSON.
++    * Scenario 5: Standalone `GET /` with `Host: 192.168.1.20:18000` -> HTTP 403 Forbidden, `CLEARTEXT_HTTP_BLOCKED`, no HSTS.
++- `docs/qa/KANBA-23/api-specialist-review.md`:
++  - Verbatim review from Systems/Backend Architect & API Specialist (`@arch-reviewer`, board post #73).
++  - Verdict: `APPROVED`.
++- `docs/qa/KANBA-23/ui-specialist-review.md`:
++  - Verbatim review from UX Architect / UI Designer Specialist Gate (`@ui-specialist`, board post #71).
++  - Verdict: `APPROVED`.
++- `docs/qa/KANBA-23/dependency-evaluation.md`:
++  - Supply-chain evaluation for `fastapi`, `starlette`, `uvicorn[standard]`, `pydantic-settings`, and `httpx`.
++  - Pinned SHA-256 hashes from `uv.lock`.
++  - Signed approvals from `qa-eng` (#28), `sec-eng` (#29), and `arch-reviewer` (#30).
++- `docs/qa/KANBA-23/git-diff.patch`:
++  - Unified diff covering all changes relative to the worktree merge commit.
++- **Screenshots:**
++  - N/A: Non-UI Ticket (no rendered UI changes; behavior validated via `contract-sample.txt`).
++- **Typography & Dash Hygiene:**
++  - Zero `U+2014` or `U+2013` unicode characters across all source files, tests, documentation, and QA artifacts.
+diff --git a/docs/qa/KANBA-23/ui-specialist-review.md b/docs/qa/KANBA-23/ui-specialist-review.md
+new file mode 100644
+index 0000000..6017245
+--- /dev/null
++++ b/docs/qa/KANBA-23/ui-specialist-review.md
+@@ -0,0 +1,42 @@
++# UI Specialist Gate Review: KANBA-23 (KB-P0-10)
++
++## 1. Ticket and Review Scope
++- Ticket: KANBA-23 (KB-P0-10)
++- Epic: KB-E0 (Phase 0 Bootstrap and Foundation)
++- Worktree: /tmp/kb-wt-KANBA-23
++- Reviewer: ui-specialist (UX Architect / UI Designer Specialist Gate)
++- Scope: Frontend-facing web server behavior, SPA fallback routing, client-side route handling, static asset caching vs index.html freshness, CSP compatibility with frontend bundle (KB-P0-03), and user-facing error ergonomics (CLEARTEXT_HTTP_BLOCKED).
++
++## 2. SPA Fallback Routing and Client Navigation
++- Client-Side Navigation: Requests to extensionless paths without dots (e.g. `/projects/KAN/board`, `/cycle/current`, `/settings`) correctly resolve to `index.html` with HTTP 200 and `Content-Type: text/html; charset=utf-8`. This guarantees that client-side routers (React Router) mount properly without 404 dead ends.
++- Asset 404 Disambiguation: Requests for missing static files containing file extensions (e.g. `/assets/missing.js`, `/favicon.ico`) intentionally do NOT fall back to `index.html`. They return a clean 404 plain text `Not Found`. This prevents MIME-type mismatch parsing crashes when the browser attempts to execute HTML as JavaScript or CSS.
++- Reserved Path Protection: Requests starting with reserved prefixes (`/api`, `/ws`, `/sse`, `/mcp`) never trigger SPA fallback. They return RFC 9457 `application/problem+json` error responses (404 or 501), ensuring unambiguous API failure signaling for frontend HTTP clients.
++
++## 3. Asset Caching Strategy and Cache Invalidation
++- Content-Hashed Assets: Files located under `/assets/` (e.g. `/assets/index-CJtVY9il.js`, `/assets/index-BAvQsaM-.css`) are stamped with `Cache-Control: public, max-age=31536000, immutable`. Because Vite emits unique content hashes in filenames, browsers and CDNs can cache assets indefinitely with zero stale asset bugs.
++- SPA Entrypoint Freshness: `index.html` (served at `/` and via SPA fallback) is explicitly stamped with `Cache-Control: no-cache`. This ensures the browser revalidates before use, allowing instant rollout of new deployments as soon as `index.html` changes.
++- Conditional Revalidation: Strong ETags (`"<sha256-hex-16>-<encoding>"`) and `Vary: Accept-Encoding` are attached to all static responses. `If-None-Match` requests return HTTP 304 Not Modified with zero body payload, saving mobile bandwidth.
++
++## 4. Content Security Policy (CSP) Compatibility with Frontend Bundle
++- S5.4 CSP Verification: Every static and dynamic HTTP response is stamped with the exact canonical CSP header:
++  `default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;`
++- Bundle Compatibility:
++  * Static stylesheets in `/assets/*.css` load without warnings under `style-src 'self'`.
++  * ESM scripts in `/assets/*.js` execute cleanly under `script-src 'self'`.
++  * Precompressed siblings (`.br`, `.gz`) are served with transparent `Content-Encoding` without modifying payload hashes or requiring separate CSP whitelisting.
++- Anti-Framing and Hardening Headers:
++  * `X-Frame-Options: DENY` and `frame-ancestors 'none'` prevent clickjacking.
++  * `X-Content-Type-Options: nosniff` prevents MIME confusion attacks.
++  * `Referrer-Policy: no-referrer` prevents credential leakage.
++  * HSTS (`Strict-Transport-Security: max-age=63072000; includeSubDomains`) is cleanly enabled in production and suppressed in standalone mode to avoid development lockout.
++
++## 5. User-Facing Error Ergonomics: CLEARTEXT_HTTP_BLOCKED
++- Error Response Format: HTTP 403 Forbidden with `Content-Type: application/problem+json`.
++- Title: `CLEARTEXT_HTTP_BLOCKED`.
++- Detail: "Standalone mode serves cleartext HTTP only to localhost. Put a TLS reverse proxy in front or add the host to KB_STANDALONE_CLEARTEXT_HOSTS."
++- UX Assessment: Clear, concise, and actionable. It explains why the connection was rejected (cleartext HTTP to a non-loopback host) and provides immediate, concrete remediation paths (TLS reverse proxy or configuration override) without cryptic codes or stack traces.
++
++## 6. Gate Conclusion
++The ASGI web server implementation, static file negotiation, SPA fallback routing, asset caching rules, and security headers meet all frontend architecture, UX ergonomics, and security requirements defined in KB-P0-10 and AGENTS.md.
++
++Verdict: APPROVED
+diff --git a/docs/qa/KANBA-23/unit-test-results.txt b/docs/qa/KANBA-23/unit-test-results.txt
+new file mode 100644
+index 0000000..6830a5f
+--- /dev/null
++++ b/docs/qa/KANBA-23/unit-test-results.txt
+@@ -0,0 +1,32 @@
++...........................                                              [100%]
++=============================== warnings summary ===============================
++kanban/tests/test_app.py:7
++  /tmp/kb-wt-KANBA-23/kanban/tests/test_app.py:7: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
++    from starlette.testclient import TestClient
++
++-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                     Stmts   Miss Branch BrPart  Cover   Missing
++------------------------------------------------------------------------------------
++kanban/__init__.py                           3      0      0      0   100%
++kanban/app.py                               32      0      2      0   100%
++kanban/security/__init__.py                  3      0      0      0   100%
++kanban/security/headers.py                  54      0     18      1    99%   56->58
++kanban/security/scrubber.py                134      0     50      0   100%
++kanban/settings.py                          24      0      6      0   100%
++kanban/tests/__init__.py                     0      0      0      0   100%
++kanban/tests/conftest.py                    23      8     14      4    62%   10->exit, 14, 22-26, 28-30
++kanban/tests/security/__init__.py            0      0      0      0   100%
++kanban/tests/security/test_scrubber.py     203      0     20      0   100%
++kanban/tests/test_app.py                    85      1      2      0    99%   91
++kanban/tests/test_security_headers.py      118      3      6      0    98%   156, 186, 189
++kanban/tests/test_smoke.py                   3      3      0      0     0%   3-8
++kanban/tests/test_web_static.py            148      2      4      1    98%   156->161, 219, 222
++kanban/web_static.py                       158     13     54      4    92%   47->45, 81-82, 111-112, 116, 148, 234, 252-254, 318-320
++------------------------------------------------------------------------------------
++TOTAL                                      988     30    176     10    96%
++Required test coverage of 95% reached. Total coverage: 96.39%
++27 passed, 1 warning in 0.67s
++Exit code: 0
+diff --git a/kanban/GEMINI.md b/kanban/GEMINI.md
+index d8365db..ab06da2 100644
+--- a/kanban/GEMINI.md
++++ b/kanban/GEMINI.md
+@@ -1,29 +1,41 @@
+ # Kanban Core Module Manifest (`kanban-core`)
+ 
+ ## Responsibility
+-Core web application and API service layer for the Kanban platform. Implements FastAPI HTTP REST, WebSocket, and SSE endpoints, Multi-Card Authentication (OAuth2/OIDC, LDAPS, Local Admin), session lifecycle, nh3 server-side content sanitization, state machine workflow transitions, Markdown conversion, Project Stickies with Doc promotion, and static SPA serving.
++Core web application, static asset server, and API service layer for the Kanban platform. Implements:
++- Single ASGI application factory (`create_app`) mounting `/api`, `/ws`, `/sse`, `/mcp` placeholders, and static SPA.
++- Configuration management (`kanban.settings.Settings`) with `KB_` environment prefix.
++- Hardened static file delivery (`kanban.web_static.PrecompressedSPAStaticApp`) with Brotli/Gzip content negotiation, SPA fallback, 50 MiB file limits, 64 KiB streaming, path traversal prevention, and strong ETags.
++- Security headers middleware (`kanban.security.headers.SecurityHeadersMiddleware`) enforcing Section 5.4 Content-Security-Policy, anti-framing, nosniff, permissions policy, and standalone cleartext host protection.
++- Outbound secret scrubber (`kanban.security.scrubber`) preventing sensitive credential egress.
+ 
+ ## Depends On
+ - `database` (`kanban-database` package for PostgreSQL data layer and models).
+ 
+ ## Depended On By
+ - `mcp` (`kanban-mcp` gateway via internal HTTP API endpoints).
++- Root deployment harnesses (Docker standalone and runtime-slim images).
+ 
+ ## Inbound Contracts
++- ASGI 3.0 protocol interface via Uvicorn.
+ - HTTP/1.1, HTTP/2, WebSocket, and SSE connections from clients and reverse proxy (Caddy).
+-- Authenticated internal API requests from MCP gateway over application network.
++- Standalone cleartext requests restricted to loopback hosts (`localhost`, `127.0.0.1`, `[::1]`) unless overridden via `KB_STANDALONE_CLEARTEXT_HOSTS`.
+ 
+ ## Outbound Contracts
+-- Clean JSON REST payloads, WebSocket event broadcasts, and SSE change streams.
+-- Database access executed under kanban_app role with SET LOCAL principal session variables.
++- Hardened HTTP response headers on 100% of responses, including error responses and static files.
++- Byte-identical Section 5.4 Content-Security-Policy on every response.
++- RFC 9457 Problem Details JSON format for error responses.
++- Database access executed under `kanban_app` role with `SET LOCAL` principal session variables.
+ 
+ ## Performance Budgets
++- Static asset delivery latency <= 5ms for pre-compressed Brotli and Gzip assets.
++- Scrubber execution latency <= 1.0ms median on 2,000-char text windows.
+ - Standard REST API read endpoint latency < 50ms (p95).
+ - Realtime WebSocket and SSE broadcast latency < 25ms from trigger event.
+-- Content sanitization and Markdown conversion < 10ms for payloads up to 100KB.
+ 
+ ## Failure Modes
+-- Authentication failure returning 401 Unauthorized or 404 Not Found (anti-enumeration).
+-- Invalid payload schemas returning RFC 7807 Problem Details.
+-- Database connection pool exhaustion returning HTTP 503 Service Unavailable.
+-- Sanitizer rejection for disallowed HTML tags, scripts, or dangerous URI schemes.
++- Standalone cleartext HTTP on external host returns HTTP 403 `CLEARTEXT_HTTP_BLOCKED` problem JSON.
++- Missing Host header in standalone mode returns HTTP 400 Bad Request.
++- Static file traversal attempts or symlink escapes return HTTP 404 Not Found.
++- Static files exceeding 50 MiB return HTTP 404 Not Found.
++- WebSocket access to `/ws` returns policy violation closure code 1008.
++- Placeholder routes `/sse` and `/mcp/*` return HTTP 501 Not Implemented problem JSON.
+diff --git a/kanban/__init__.py b/kanban/__init__.py
+index 8682edf..38973fe 100644
+--- a/kanban/__init__.py
++++ b/kanban/__init__.py
+@@ -1,3 +1,7 @@
+ """Kanban core web application, REST/WS APIs, auth, and state machines."""
+ 
++from kanban.app import create_app
++
+ __version__: str = "0.0.0"
++
++__all__ = ["create_app"]
+diff --git a/kanban/app.py b/kanban/app.py
+new file mode 100644
+index 0000000..125df07
+--- /dev/null
++++ b/kanban/app.py
+@@ -0,0 +1,96 @@
++"""ASGI application factory for the Kanban platform.
++
++Mounts API routes, WebSocket rejection gates, SSE/MCP placeholder endpoints,
++pre-compressed single page application static assets, and security middleware.
++"""
++
++from __future__ import annotations
++
++from fastapi import APIRouter, FastAPI, WebSocket
++from fastapi.responses import JSONResponse
++
++from kanban.security.headers import SecurityHeadersMiddleware
++from kanban.settings import Settings
++from kanban.web_static import PrecompressedSPAStaticApp
++
++
++def create_app(settings: Settings | None = None) -> FastAPI:
++    """Create and configure the canonical Kanban ASGI FastAPI application."""
++    if settings is None:
++        settings = Settings()
++
++    app = FastAPI(
++        docs_url=None,
++        redoc_url=None,
++        openapi_url="/api/openapi.json",
++    )
++
++    # API Router
++    api_router = APIRouter(prefix="/api")
++
++    @api_router.get("/v1/health")
++    async def health_check() -> dict[str, str]:
++        return {"status": "ok"}
++
++    @api_router.api_route(
++        "/{full_path:path}",
++        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
++        include_in_schema=False,
++    )
++    async def api_not_found(full_path: str) -> JSONResponse:
++        del full_path
++        return JSONResponse(
++            status_code=404,
++            content={
++                "type": "about:blank",
++                "title": "Not Found",
++                "status": 404,
++            },
++            media_type="application/problem+json",
++        )
++
++    app.include_router(api_router)
++
++    # WebSocket route: closes with code 1008 immediately before accept
++    @app.websocket("/ws")
++    async def ws_endpoint(websocket: WebSocket) -> None:
++        await websocket.close(code=1008)
++
++    # Server-Sent Events placeholder: 501 Not Implemented
++    @app.get("/sse", include_in_schema=False)
++    async def sse_endpoint() -> JSONResponse:
++        return JSONResponse(
++            status_code=501,
++            content={
++                "type": "about:blank",
++                "title": "Not Implemented",
++                "status": 501,
++            },
++            media_type="application/problem+json",
++        )
++
++    # MCP placeholders (/mcp/agent, /mcp/docs, /mcp/admin and subpaths): 501 Not Implemented
++    @app.api_route(
++        "/mcp/{surface:path}",
++        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
++        include_in_schema=False,
++    )
++    async def mcp_placeholder(surface: str) -> JSONResponse:
++        del surface
++        return JSONResponse(
++            status_code=501,
++            content={
++                "type": "about:blank",
++                "title": "Not Implemented",
++                "status": 501,
++            },
++            media_type="application/problem+json",
++        )
++
++    # SPA Static assets mounted at root
++    app.mount("/", PrecompressedSPAStaticApp(dist_dir=settings.web_dist))
++
++    # Add security headers and host protection middleware
++    app.add_middleware(SecurityHeadersMiddleware, settings=settings)
++
++    return app
+diff --git a/kanban/pyproject.toml b/kanban/pyproject.toml
+index 58f9bf4..cbc1be0 100644
+--- a/kanban/pyproject.toml
++++ b/kanban/pyproject.toml
+@@ -9,7 +9,10 @@ description = "Kanban web application, REST/WS APIs, auth, and state machines"
+ requires-python = ">=3.12,<3.13"
+ license = "Apache-2.0"
+ dependencies = [
++    "fastapi==0.162.5",
+     "kanban-database",
++    "pydantic-settings==2.16.2",
++    "uvicorn[standard]==0.54.0",
+ ]
+ 
+ [tool.hatch.build.targets.wheel.sources]
+diff --git a/kanban/security/__init__.py b/kanban/security/__init__.py
+index 42cc1b6..3885a30 100644
+--- a/kanban/security/__init__.py
++++ b/kanban/security/__init__.py
+@@ -1,5 +1,6 @@
+-"""Security utilities for the Kanban platform."""
++"""Security utilities and middleware for the Kanban platform."""
+ 
++from kanban.security.headers import CSP_POLICY, SecurityHeadersMiddleware
+ from kanban.security.scrubber import (
+     ScrubFinding,
+     ScrubResult,
+@@ -9,9 +10,11 @@ from kanban.security.scrubber import (
+ )
+ 
+ __all__ = [
++    "CSP_POLICY",
+     "ScrubFinding",
+     "ScrubResult",
+     "SecretKind",
++    "SecurityHeadersMiddleware",
+     "outbound_secret_scrubber",
+     "scrub_text",
+ ]
+diff --git a/kanban/security/headers.py b/kanban/security/headers.py
+new file mode 100644
+index 0000000..01c5459
+--- /dev/null
++++ b/kanban/security/headers.py
+@@ -0,0 +1,176 @@
++"""Security headers middleware and Content-Security-Policy definition.
++
++Implements the hardened production HTTP response headers mandated by Section 5.4,
++including the strict Content-Security-Policy, anti-framing, nosniff, and
++standalone cleartext loopback protections.
++"""
++
++from __future__ import annotations
++
++import json
++from typing import TYPE_CHECKING, Final
++
++from starlette.datastructures import Headers
++
++if TYPE_CHECKING:
++    from starlette.types import ASGIApp, Message, Receive, Scope, Send
++
++    from kanban.settings import Settings
++
++CSP_POLICY: Final[str] = (
++    "default-src 'none'; "
++    "script-src 'self'; "
++    "worker-src 'self'; "
++    "style-src 'self'; "
++    "img-src 'self' blob: data:image/png data:image/webp; "
++    "font-src 'self'; "
++    "connect-src 'self' wss:; "
++    "media-src 'self'; "
++    "object-src 'none'; "
++    "base-uri 'none'; "
++    "form-action 'self'; "
++    "frame-ancestors 'none'; "
++    "require-trusted-types-for 'script'; "
++    "trusted-types kanban-sanitizer dompurify;"
++)
++
++_SECURITY_HEADER_NAMES: Final[frozenset[bytes]] = frozenset(
++    {
++        b"content-security-policy",
++        b"x-content-type-options",
++        b"referrer-policy",
++        b"x-frame-options",
++        b"cross-origin-opener-policy",
++        b"cross-origin-resource-policy",
++        b"permissions-policy",
++        b"strict-transport-security",
++    }
++)
++
++
++def _extract_host(host_header: str) -> str:
++    """Extract lowercase host without port, preserving IPv6 brackets."""
++    host = host_header.strip().lower()
++    if host.startswith("["):
++        closing = host.find("]")
++        if closing != -1:
++            return host[: closing + 1]
++    if ":" in host:
++        return host.rsplit(":", 1)[0]
++    return host
++
++
++class SecurityHeadersMiddleware:
++    """Pure ASGI middleware enforcing hardening headers and standalone Host rules."""
++
++    def __init__(self, app: ASGIApp, settings: Settings) -> None:
++        """Initialize middleware with inner ASGI application and settings."""
++        self.app = app
++        self.settings = settings
++
++    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
++        """Process incoming ASGI HTTP request and enforce security headers."""
++        if scope["type"] != "http":
++            await self.app(scope, receive, send)
++            return
++
++        # Check standalone cleartext block
++        if self.settings.deployment_mode == "standalone" and scope.get("scheme", "http") == "http":
++            headers = Headers(scope=scope)
++            host_header = headers.get("host")
++            if not host_header:
++                await self._send_problem(
++                    send,
++                    status=400,
++                    title="Bad Request",
++                    detail="Host header is required",
++                )
++                return
++
++            host_name = _extract_host(host_header)
++            if host_name not in self.settings.standalone_cleartext_hosts:
++                await self._send_problem(
++                    send,
++                    status=403,
++                    title="CLEARTEXT_HTTP_BLOCKED",
++                    detail=(
++                        "Standalone mode serves cleartext HTTP only to localhost. "
++                        "Put a TLS reverse proxy in front or add the host to "
++                        "KB_STANDALONE_CLEARTEXT_HOSTS."
++                    ),
++                )
++                return
++
++        # Wrap send to inject security headers
++        async def send_wrapper(message: Message) -> None:
++            if message["type"] == "http.response.start":
++                raw_headers: list[tuple[bytes, bytes]] = [
++                    (name, value)
++                    for name, value in message.get("headers", [])
++                    if name.lower() not in _SECURITY_HEADER_NAMES
++                ]
++
++                # Append canonical security headers
++                raw_headers.append((b"content-security-policy", CSP_POLICY.encode("latin1")))
++                raw_headers.append((b"x-content-type-options", b"nosniff"))
++                raw_headers.append((b"referrer-policy", b"no-referrer"))
++                raw_headers.append((b"x-frame-options", b"DENY"))
++                raw_headers.append((b"cross-origin-opener-policy", b"same-origin"))
++                raw_headers.append((b"cross-origin-resource-policy", b"same-origin"))
++                raw_headers.append(
++                    (b"permissions-policy", b"camera=(), microphone=(), geolocation=()")
++                )
++
++                if self.settings.deployment_mode == "production":
++                    hsts_value = f"max-age={self.settings.hsts_max_age}; includeSubDomains".encode(
++                        "latin1"
++                    )
++                    raw_headers.append((b"strict-transport-security", hsts_value))
++
++                message["headers"] = raw_headers
++
++            await send(message)
++
++        await self.app(scope, receive, send_wrapper)
++
++    async def _send_problem(
++        self,
++        send: Send,
++        status: int,
++        title: str,
++        detail: str,
++    ) -> None:
++        body = json.dumps(
++            {
++                "type": "about:blank",
++                "title": title,
++                "status": status,
++                "detail": detail,
++            }
++        ).encode("utf-8")
++
++        raw_headers: list[tuple[bytes, bytes]] = [
++            (b"content-type", b"application/problem+json"),
++            (b"content-length", str(len(body)).encode("ascii")),
++            (b"content-security-policy", CSP_POLICY.encode("latin1")),
++            (b"x-content-type-options", b"nosniff"),
++            (b"referrer-policy", b"no-referrer"),
++            (b"x-frame-options", b"DENY"),
++            (b"cross-origin-opener-policy", b"same-origin"),
++            (b"cross-origin-resource-policy", b"same-origin"),
++            (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
++        ]
++
++        await send(
++            {
++                "type": "http.response.start",
++                "status": status,
++                "headers": raw_headers,
++            }
++        )
++        await send(
++            {
++                "type": "http.response.body",
++                "body": body,
++            }
++        )
+diff --git a/kanban/settings.py b/kanban/settings.py
+new file mode 100644
+index 0000000..ce08e67
+--- /dev/null
++++ b/kanban/settings.py
+@@ -0,0 +1,38 @@
++"""Runtime settings and environment configuration for the Kanban platform."""
++
++from __future__ import annotations
++
++from pathlib import Path
++from typing import Literal
++
++from pydantic import field_validator
++from pydantic_settings import BaseSettings, SettingsConfigDict
++
++
++class Settings(BaseSettings):
++    """Platform configuration loaded from environment variables with KB_ prefix."""
++
++    model_config = SettingsConfigDict(
++        env_prefix="KB_",
++        case_sensitive=False,
++        extra="ignore",
++    )
++
++    deployment_mode: Literal["standalone", "production"] = "production"
++    web_dist: Path = Path("kanban/web/dist")
++    standalone_cleartext_hosts: frozenset[str] = frozenset({"localhost", "127.0.0.1", "[::1]"})
++    hsts_max_age: int = 63072000
++
++    @field_validator("standalone_cleartext_hosts", mode="before")
++    @classmethod
++    def _parse_standalone_cleartext_hosts(cls, v: object) -> frozenset[str]:
++        defaults = {"localhost", "127.0.0.1", "[::1]"}
++        if v is None:
++            return frozenset(defaults)
++        if isinstance(v, str):
++            entries = {s.strip().lower() for s in v.replace(",", " ").split() if s.strip()}
++            return frozenset(defaults | entries)
++        if isinstance(v, (set, frozenset, list, tuple)):
++            entries = {str(s).strip().lower() for s in v if str(s).strip()}
++            return frozenset(defaults | entries)
++        return frozenset(defaults)
+diff --git a/kanban/tests/test_app.py b/kanban/tests/test_app.py
+new file mode 100644
+index 0000000..cd7d8a7
+--- /dev/null
++++ b/kanban/tests/test_app.py
+@@ -0,0 +1,129 @@
++"""Unit tests for the canonical Kanban ASGI application factory."""
++
++from pathlib import Path
++
++import httpx
++import pytest
++from starlette.testclient import TestClient
++from starlette.websockets import WebSocketDisconnect
++
++from kanban.app import create_app
++from kanban.settings import Settings
++
++
++@pytest.fixture
++def test_settings(tmp_path: Path) -> Settings:
++    """Fixture providing isolated settings with dummy web_dist directory."""
++    dist_dir = tmp_path / "web_dist"
++    dist_dir.mkdir()
++    index_file = dist_dir / "index.html"
++    index_file.write_text("<!doctype html><html><body>Test</body></html>", encoding="utf-8")
++    return Settings(
++        web_dist=dist_dir,
++        deployment_mode="production",
++    )
++
++
++@pytest.mark.asyncio
++async def test_health_check_endpoint(test_settings: Settings) -> None:
++    """Test GET /api/v1/health returns 200 with status ok."""
++    app = create_app(test_settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        response = await client.get("/api/v1/health")
++        assert response.status_code == 200
++        assert response.json() == {"status": "ok"}
++
++
++@pytest.mark.asyncio
++async def test_api_not_found_problem_json(test_settings: Settings) -> None:
++    """Test unknown /api/* endpoints return RFC 9457 Problem Details 404."""
++    app = create_app(test_settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        # Subpath
++        response = await client.get("/api/nope")
++        assert response.status_code == 404
++        assert response.headers.get("content-type") == "application/problem+json"
++        data = response.json()
++        assert data["type"] == "about:blank"
++        assert data["title"] == "Not Found"
++        assert data["status"] == 404
++
++        # Non-GET method on unknown API path
++        post_resp = await client.post("/api/v2/nonexistent")
++        assert post_resp.status_code == 404
++        assert post_resp.headers.get("content-type") == "application/problem+json"
++
++
++@pytest.mark.asyncio
++async def test_sse_placeholder_501(test_settings: Settings) -> None:
++    """Test GET /sse returns 501 Not Implemented problem JSON."""
++    app = create_app(test_settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        response = await client.get("/sse")
++        assert response.status_code == 501
++        assert response.headers.get("content-type") == "application/problem+json"
++        data = response.json()
++        assert data["title"] == "Not Implemented"
++        assert data["status"] == 501
++
++
++@pytest.mark.asyncio
++async def test_mcp_placeholders_501(test_settings: Settings) -> None:
++    """Test /mcp/* routes return 501 Not Implemented without importing mcp module."""
++    app = create_app(test_settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        for path in ("/mcp/agent", "/mcp/docs", "/mcp/admin", "/mcp/admin/tools"):
++            response = await client.get(path)
++            assert response.status_code == 501
++            assert response.headers.get("content-type") == "application/problem+json"
++            assert response.json()["status"] == 501
++
++
++def test_websocket_close_1008(test_settings: Settings) -> None:
++    """Test WebSocket connection to /ws is closed with policy violation code 1008."""
++    app = create_app(test_settings)
++    client = TestClient(app)
++    with pytest.raises(WebSocketDisconnect) as exc_info, client.websocket_connect("/ws"):
++        pass
++    assert exc_info.value.code == 1008
++
++
++@pytest.mark.asyncio
++async def test_openapi_available_but_docs_disabled(test_settings: Settings) -> None:
++    """Test OpenAPI schema is available at /api/openapi.json while Swagger/Redoc are disabled."""
++    app = create_app(test_settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        openapi_resp = await client.get("/api/openapi.json")
++        assert openapi_resp.status_code == 200
++        assert "openapi" in openapi_resp.json()
++
++        # Swagger and Redoc should not match API routes and fall back or 404
++        docs_resp = await client.get("/docs")
++        # /docs falls back to SPA index.html (200) rather than Swagger UI
++        assert "Swagger UI" not in docs_resp.text
++
++
++def test_default_settings_and_hosts_parsing() -> None:
++    """Test default settings initialization and standalone_cleartext_hosts validator formats."""
++    # Default factory invocation without settings
++    app = create_app()
++    assert app is not None
++
++    # Test standalone_cleartext_hosts with comma-separated string
++    s_str = Settings(standalone_cleartext_hosts="example.org, custom.internal")  # type: ignore[arg-type]
++    assert "example.org" in s_str.standalone_cleartext_hosts
++    assert "custom.internal" in s_str.standalone_cleartext_hosts
++    assert "localhost" in s_str.standalone_cleartext_hosts
++
++    # Test standalone_cleartext_hosts with None
++    s_none = Settings(standalone_cleartext_hosts=None)  # type: ignore[arg-type]
++    assert "localhost" in s_none.standalone_cleartext_hosts
++
++    # Test standalone_cleartext_hosts with unsupported type fallback
++    s_fallback = Settings(standalone_cleartext_hosts=12345)  # type: ignore[arg-type]
++    assert "localhost" in s_fallback.standalone_cleartext_hosts
+diff --git a/kanban/tests/test_security_headers.py b/kanban/tests/test_security_headers.py
+new file mode 100644
+index 0000000..2a15eaa
+--- /dev/null
++++ b/kanban/tests/test_security_headers.py
+@@ -0,0 +1,198 @@
++"""Unit tests for security headers middleware and standalone cleartext blocking."""
++
++from pathlib import Path
++
++import httpx
++import pytest
++from fastapi import FastAPI, Response
++from starlette.types import Message, Receive, Scope, Send
++
++from kanban.app import create_app
++from kanban.security.headers import CSP_POLICY, SecurityHeadersMiddleware
++from kanban.settings import Settings
++
++
++@pytest.fixture
++def dummy_dist(tmp_path: Path) -> Path:
++    """Fixture providing minimal dist directory with index.html."""
++    dist_dir = tmp_path / "web_dist"
++    dist_dir.mkdir()
++    (dist_dir / "index.html").write_text("<!doctype html><html></html>", encoding="utf-8")
++    return dist_dir
++
++
++@pytest.mark.asyncio
++async def test_security_headers_present_on_all_responses(dummy_dist: Path) -> None:
++    """Test all responses (200, 404, 501) carry canonical CSP and hardening headers."""
++    settings = Settings(web_dist=dummy_dist, deployment_mode="production")
++    app = create_app(settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        endpoints_to_test = [
++            "/api/v1/health",  # 200
++            "/api/unknown",  # 404
++            "/sse",  # 501
++            "/mcp/agent",  # 501
++        ]
++        for ep in endpoints_to_test:
++            resp = await client.get(ep)
++            assert resp.headers.get("content-security-policy") == CSP_POLICY
++            assert resp.headers.get("x-content-type-options") == "nosniff"
++            assert resp.headers.get("referrer-policy") == "no-referrer"
++            assert resp.headers.get("x-frame-options") == "DENY"
++            assert resp.headers.get("cross-origin-opener-policy") == "same-origin"
++            assert resp.headers.get("cross-origin-resource-policy") == "same-origin"
++            assert (
++                resp.headers.get("permissions-policy") == "camera=(), microphone=(), geolocation=()"
++            )
++            assert (
++                resp.headers.get("strict-transport-security")
++                == "max-age=63072000; includeSubDomains"
++            )
++
++
++@pytest.mark.asyncio
++async def test_hsts_behavior_production_vs_standalone(dummy_dist: Path) -> None:
++    """Test HSTS is present in production mode and strictly omitted in standalone mode."""
++    # Production
++    prod_app = create_app(Settings(web_dist=dummy_dist, deployment_mode="production"))
++    prod_client = httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=prod_app), base_url="http://localhost"
++    )
++    async with prod_client:
++        r_prod = await prod_client.get("/api/v1/health")
++        assert "strict-transport-security" in r_prod.headers
++
++    # Standalone
++    standalone_app = create_app(Settings(web_dist=dummy_dist, deployment_mode="standalone"))
++    standalone_client = httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=standalone_app), base_url="http://localhost"
++    )
++    async with standalone_client:
++        r_standalone = await standalone_client.get("/api/v1/health")
++        assert "strict-transport-security" not in r_standalone.headers
++
++
++@pytest.mark.asyncio
++async def test_inner_app_headers_replaced_never_duplicated() -> None:
++    """Test inner application headers are overwritten by security middleware."""
++    inner_app = FastAPI()
++
++    @inner_app.get("/custom")
++    def custom_endpoint() -> Response:
++        resp = Response(content="ok", media_type="text/plain")
++        resp.headers["X-Frame-Options"] = "SAMEORIGIN"
++        resp.headers["X-Content-Type-Options"] = "sniff-allowed"
++        return resp
++
++    settings = Settings(deployment_mode="production")
++    inner_app.add_middleware(SecurityHeadersMiddleware, settings=settings)
++
++    transport = httpx.ASGITransport(app=inner_app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        resp = await client.get("/custom")
++        assert resp.status_code == 200
++        # Exactly one DENY, no duplicate headers
++        assert resp.headers.get("x-frame-options") == "DENY"
++        assert resp.headers.get("x-content-type-options") == "nosniff"
++
++
++@pytest.mark.asyncio
++async def test_standalone_cleartext_host_blocking(dummy_dist: Path) -> None:
++    """Test standalone mode allows loopbacks, blocks non-loopback IPs unless configured."""
++    settings = Settings(
++        web_dist=dummy_dist,
++        deployment_mode="standalone",
++        standalone_cleartext_hosts=frozenset({"localhost", "127.0.0.1", "[::1]"}),
++    )
++    app = create_app(settings)
++    transport = httpx.ASGITransport(app=app)
++
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        # Allowed loopback hosts
++        for host in ("localhost:8080", "127.0.0.1:8080", "[::1]:8080", "localhost"):
++            resp = await client.get("/api/v1/health", headers={"Host": host})
++            assert resp.status_code == 200
++
++        # Blocked external IP
++        resp_blocked = await client.get("/api/v1/health", headers={"Host": "192.168.1.20:8080"})
++        assert resp_blocked.status_code == 403
++        assert resp_blocked.headers.get("content-type") == "application/problem+json"
++        body = resp_blocked.json()
++        assert body["title"] == "CLEARTEXT_HTTP_BLOCKED"
++        assert "Put a TLS reverse proxy in front" in body["detail"]
++
++    # Explicitly allowed via KB_STANDALONE_CLEARTEXT_HOSTS
++    custom_settings = Settings(
++        web_dist=dummy_dist,
++        deployment_mode="standalone",
++        standalone_cleartext_hosts=frozenset({"localhost", "192.168.1.20"}),
++    )
++    app_custom = create_app(custom_settings)
++    transport_custom = httpx.ASGITransport(app=app_custom)
++    async with httpx.AsyncClient(transport=transport_custom, base_url="http://localhost") as client:
++        resp_allowed = await client.get("/api/v1/health", headers={"Host": "192.168.1.20:8080"})
++        assert resp_allowed.status_code == 200
++
++    # Production mode never blocks regardless of Host header
++    prod_app = create_app(Settings(web_dist=dummy_dist, deployment_mode="production"))
++    transport_prod = httpx.ASGITransport(app=prod_app)
++    async with httpx.AsyncClient(transport=transport_prod, base_url="http://localhost") as client:
++        resp_prod = await client.get("/api/v1/health", headers={"Host": "192.168.1.20:8080"})
++        assert resp_prod.status_code == 200
++
++
++@pytest.mark.asyncio
++async def test_standalone_missing_host_header(dummy_dist: Path) -> None:
++    """Test standalone mode returns 400 when Host header is missing."""
++    settings = Settings(web_dist=dummy_dist, deployment_mode="standalone")
++    app = create_app(settings)
++
++    # Use pure ASGI scope without host header in headers list
++    async def app_caller() -> int:
++        response_status = 0
++
++        async def receive() -> Message:
++            return {"type": "http.request", "body": b""}
++
++        async def send(message: Message) -> None:
++            nonlocal response_status
++            if message["type"] == "http.response.start":
++                val = message["status"]
++                assert isinstance(val, int)
++                response_status = val
++
++        scope: Scope = {
++            "type": "http",
++            "method": "GET",
++            "path": "/api/v1/health",
++            "scheme": "http",
++            "headers": [],  # No host header
++        }
++        await app(scope, receive, send)
++        return response_status
++
++    status = await app_caller()
++    assert status == 400
++
++
++@pytest.mark.asyncio
++async def test_non_http_scope_passes_through(dummy_dist: Path) -> None:
++    """Test non-http scope passes through SecurityHeadersMiddleware unchanged."""
++    settings = Settings(web_dist=dummy_dist, deployment_mode="production")
++    inner_called = False
++
++    async def dummy_receive() -> Message:
++        return {"type": "lifespan.startup"}
++
++    async def dummy_send(_message: Message) -> None:
++        pass
++
++    async def dummy_inner(_s: Scope, _r: Receive, _snd: Send) -> None:
++        nonlocal inner_called
++        inner_called = True
++
++    mw = SecurityHeadersMiddleware(dummy_inner, settings=settings)
++    scope: Scope = {"type": "lifespan"}
++    await mw(scope, dummy_receive, dummy_send)
++    assert inner_called is True
+diff --git a/kanban/tests/test_web_static.py b/kanban/tests/test_web_static.py
+new file mode 100644
+index 0000000..1c0aa60
+--- /dev/null
++++ b/kanban/tests/test_web_static.py
+@@ -0,0 +1,237 @@
++"""Unit tests for PrecompressedSPAStaticApp and asset negotiation."""
++
++import contextlib
++import gzip
++from pathlib import Path
++
++import httpx
++import pytest
++from starlette.types import Message, Scope
++
++from kanban.app import create_app
++from kanban.settings import Settings
++from kanban.web_static import PrecompressedSPAStaticApp
++
++
++@pytest.fixture
++def static_dist(tmp_path: Path) -> Path:
++    """Fixture populating a test static distribution directory."""
++    dist_dir = tmp_path / "dist"
++    dist_dir.mkdir()
++
++    # index.html
++    index_file = dist_dir / "index.html"
++    index_file.write_bytes(b"<!doctype html><html><body>Root App</body></html>")
++
++    # assets/
++    assets_dir = dist_dir / "assets"
++    assets_dir.mkdir()
++
++    # app.js and compressed variants
++    js_raw = b"console.log('identity js content');" * 20
++    js_br = b"BR_COMPRESSED_DATA_CONTENT"
++    js_gz = gzip.compress(js_raw)
++
++    (assets_dir / "app.js").write_bytes(js_raw)
++    (assets_dir / "app.js.br").write_bytes(js_br)
++    (assets_dir / "app.js.gz").write_bytes(js_gz)
++
++    # Stylesheet
++    css_raw = b"body { background: #fff; }"
++    (assets_dir / "style.css").write_bytes(css_raw)
++
++    return dist_dir
++
++
++@pytest.mark.asyncio
++async def test_precompressed_encoding_negotiation(static_dist: Path) -> None:
++    """Test Accept-Encoding negotiation prefers br, then gzip, then identity."""
++    settings = Settings(web_dist=static_dist)
++    app = create_app(settings)
++    transport = httpx.ASGITransport(app=app)
++    expected_js_raw = b"console.log('identity js content');" * 20
++    expected_js_gz = gzip.compress(expected_js_raw)
++
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        # Prefer Brotli when both br and gzip are acceptable
++        r_br = await client.get("/assets/app.js", headers={"Accept-Encoding": "br, gzip"})
++        assert r_br.status_code == 200
++        assert r_br.content == b"BR_COMPRESSED_DATA_CONTENT"
++        assert r_br.headers.get("content-encoding") == "br"
++        assert r_br.headers.get("vary") == "Accept-Encoding"
++        assert r_br.headers.get("content-type") == "text/javascript; charset=utf-8"
++        assert "immutable" in r_br.headers.get("cache-control", "")
++
++        # Prefer Gzip when br is not accepted (httpx automatically decodes gzip payload)
++        r_gz = await client.get("/assets/app.js", headers={"Accept-Encoding": "gzip"})
++        assert r_gz.status_code == 200
++        assert r_gz.content == expected_js_raw
++        assert r_gz.headers.get("content-encoding") == "gzip"
++
++        # Verify wire-level Gzip payload via streaming
++        async with client.stream(
++            "GET", "/assets/app.js", headers={"Accept-Encoding": "gzip"}
++        ) as s_gz:
++            assert b"".join([c async for c in s_gz.aiter_raw()]) == expected_js_gz
++
++        # Explicit q=0 for br with gzip acceptable
++        r_q0 = await client.get("/assets/app.js", headers={"Accept-Encoding": "br;q=0, gzip"})
++        assert r_q0.status_code == 200
++        assert r_q0.content == expected_js_raw
++        assert r_q0.headers.get("content-encoding") == "gzip"
++
++        # No Accept-Encoding header serves identity
++        r_id = await client.get("/assets/app.js", headers={"Accept-Encoding": ""})
++        assert r_id.status_code == 200
++        assert r_id.content == expected_js_raw
++        assert "content-encoding" not in r_id.headers
++
++        # ETag revalidation with If-None-Match
++        etag = r_br.headers.get("etag")
++        assert etag is not None
++        r_304 = await client.get(
++            "/assets/app.js",
++            headers={"Accept-Encoding": "br, gzip", "If-None-Match": etag},
++        )
++        assert r_304.status_code == 304
++        assert r_304.headers.get("etag") == etag
++        assert r_304.headers.get("vary") == "Accept-Encoding"
++        assert len(r_304.content) == 0
++
++
++@pytest.mark.asyncio
++async def test_spa_fallback_routing(static_dist: Path) -> None:
++    """Test SPA fallback serves index.html for client-side navigation paths."""
++    settings = Settings(web_dist=static_dist)
++    app = create_app(settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        # Client-side router path without dot serves index.html
++        resp = await client.get("/projects/KAN/board")
++        assert resp.status_code == 200
++        assert b"Root App" in resp.content
++        assert resp.headers.get("cache-control") == "no-cache"
++
++        # Missing file with extension must NOT fallback; returns 404 plain text
++        missing_file_resp = await client.get("/assets/missing.js")
++        assert missing_file_resp.status_code == 404
++        assert missing_file_resp.text == "Not Found"
++
++        # Reserved prefix /api must not trigger SPA fallback
++        api_resp = await client.get("/api/v2/x")
++        assert api_resp.status_code == 404
++        assert api_resp.headers.get("content-type") == "application/problem+json"
++
++
++@pytest.mark.asyncio
++async def test_security_and_path_traversal_guards(static_dist: Path, tmp_path: Path) -> None:
++    """Test path traversal, null bytes, backslashes, and symlinks outside root are rejected."""
++    # Create external secret file outside static_dist
++    secret_dir = tmp_path / "secret_dir"
++    secret_dir.mkdir()
++    secret_file = secret_dir / "secret.txt"
++    secret_file.write_bytes(b"TOP_SECRET_CREDENTIAL")
++
++    # Symlink inside static_dist pointing outside
++    symlink_file = static_dist / "leak.txt"
++    with contextlib.suppress(OSError):
++        symlink_file.symlink_to(secret_file)
++
++    settings = Settings(web_dist=static_dist)
++    app = create_app(settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        # Directory traversal attacks
++        traversal_attempts = [
++            "/../pyproject.toml",
++            "/%2e%2e/secret",
++            "/assets/%00.js",
++            "/assets\\x.js",
++        ]
++        for path in traversal_attempts:
++            resp = await client.get(path)
++            assert resp.status_code == 404
++
++        # Symlink escape
++        if symlink_file.is_symlink():
++            resp_symlink = await client.get("/leak.txt")
++            assert resp_symlink.status_code == 404
++
++        # HTTP method not allowed: POST to static app returns 405 with Allow header
++        resp_post = await client.post("/")
++        assert resp_post.status_code == 405
++        assert resp_post.headers.get("allow") == "GET, HEAD"
++
++
++@pytest.mark.asyncio
++async def test_head_method_and_size_boundary(static_dist: Path) -> None:
++    """Test HEAD requests and oversized file rejection."""
++    # Create file slightly larger than 50 MiB limit using sparse file
++    large_file = static_dist / "assets" / "oversized.bin"
++    with large_file.open("wb") as f:
++        f.seek(50 * 1024 * 1024)
++        f.write(b"X")
++
++    settings = Settings(web_dist=static_dist)
++    app = create_app(settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        # HEAD request on valid file returns headers with Content-Length and empty body
++        resp_head = await client.head("/assets/style.css")
++        assert resp_head.status_code == 200
++        assert int(resp_head.headers.get("content-length", "0")) > 0
++        assert len(resp_head.content) == 0
++
++        # Oversized file > 50 MiB returns 404
++        resp_large = await client.get("/assets/oversized.bin")
++        assert resp_large.status_code == 404
++
++
++@pytest.mark.asyncio
++async def test_non_asset_file_caching_and_asgi_scope(static_dist: Path) -> None:
++    """Test non-assets static files receive no-cache and non-http scopes return early."""
++    # Create a non-asset file at root (e.g. robots.txt)
++    robots_file = static_dist / "robots.txt"
++    robots_file.write_text("User-agent: *\nDisallow: /", encoding="utf-8")
++
++    settings = Settings(web_dist=static_dist)
++    app = create_app(settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        # Non-assets static file should receive no-cache
++        resp = await client.get("/robots.txt")
++        assert resp.status_code == 200
++        assert resp.headers.get("cache-control") == "no-cache"
++        assert "User-agent" in resp.text
++
++        # Invalid q-value parse error falls back to q=0.0
++        resp_bad_q = await client.get(
++            "/assets/app.js",
++            headers={"Accept-Encoding": "gzip;q=invalid, *;q=0.5"},
++        )
++        assert resp_bad_q.status_code == 200
++
++    # Non-http scope test directly on PrecompressedSPAStaticApp
++    static_app = PrecompressedSPAStaticApp(dist_dir=static_dist)
++    sent_messages: list[Message] = []
++
++    async def dummy_receive() -> Message:
++        return {"type": "http.request"}
++
++    async def dummy_send(msg: Message) -> None:
++        sent_messages.append(msg)
++
++    # Lifespan scope returns early without sending anything
++    scope: Scope = {"type": "lifespan", "asgi": {"version": "3.0"}}
++    await static_app(scope, dummy_receive, dummy_send)
++    assert len(sent_messages) == 0
++
++    # Missing index.html fallback coverage
++    empty_dist = static_dist.parent / "empty_dist"
++    empty_dist.mkdir()
++    empty_settings = Settings(web_dist=empty_dist)
++    empty_app = create_app(empty_settings)
++    empty_transport = httpx.ASGITransport(app=empty_app)
++    async with httpx.AsyncClient(transport=empty_transport, base_url="http://localhost") as c:
++        resp_no_index = await c.get("/some/route")
++        assert resp_no_index.status_code == 404
+diff --git a/kanban/web_static.py b/kanban/web_static.py
+new file mode 100644
+index 0000000..a8ad464
+--- /dev/null
++++ b/kanban/web_static.py
+@@ -0,0 +1,328 @@
++"""ASGI application for serving pre-compressed single page applications.
++
++Implements encoding negotiation (Brotli, Gzip, Identity), strict path traversal
++defense, SPA fallback routing, asset caching headers, and ETag revalidation.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import mimetypes
++import urllib.parse
++from pathlib import Path
++from typing import TYPE_CHECKING, Final
++
++from starlette.datastructures import Headers
++
++if TYPE_CHECKING:
++    from starlette.types import Receive, Scope, Send
++
++_CHUNK_SIZE: Final[int] = 64 * 1024
++_MAX_FILE_SIZE: Final[int] = 50 * 1024 * 1024
++
++_EXPLICIT_MIME_TYPES: Final[dict[str, str]] = {
++    ".js": "text/javascript; charset=utf-8",
++    ".css": "text/css; charset=utf-8",
++    ".html": "text/html; charset=utf-8",
++    ".svg": "image/svg+xml",
++    ".json": "application/json",
++    ".wasm": "application/wasm",
++    ".woff2": "font/woff2",
++}
++
++
++def _parse_accept_encoding(header: str) -> dict[str, float]:
++    """Parse Accept-Encoding header into encoding name to q-value mapping."""
++    result: dict[str, float] = {}
++    for raw_part in header.split(","):
++        part = raw_part.strip()
++        if not part:
++            continue
++        if ";" in part:
++            enc, q_part = part.split(";", 1)
++            enc = enc.strip().lower()
++            q_val = 1.0
++            for raw_item in q_part.split(";"):
++                item = raw_item.strip()
++                if item.startswith("q="):
++                    try:
++                        q_val = float(item[2:])
++                    except ValueError:
++                        q_val = 0.0
++            result[enc] = q_val
++        else:
++            result[part.lower()] = 1.0
++    return result
++
++
++class PrecompressedSPAStaticApp:
++    """Pure ASGI application serving pre-compressed static assets and SPA fallback."""
++
++    def __init__(self, dist_dir: Path) -> None:
++        """Initialize static application with root distribution directory."""
++        self.dist_dir = dist_dir
++
++    def _is_safe_path(self, unquoted_path: str) -> bool:
++        """Verify path does not contain null bytes, backslashes, or directory traversal."""
++        return not (
++            "\x00" in unquoted_path
++            or "\\" in unquoted_path
++            or any(seg == ".." for seg in unquoted_path.split("/"))
++        )
++
++    def _resolve_file(self, unquoted_path: str, raw_path: str) -> tuple[Path | None, bool]:
++        """Resolve requested file safely within dist_dir or resolve SPA fallback index.html."""
++        clean_path = unquoted_path.lstrip("/")
++        target_path = (self.dist_dir / clean_path) if clean_path else (self.dist_dir / "index.html")
++
++        if target_path.is_file():
++            try:
++                resolved = target_path.resolve(strict=True)
++            except (OSError, RuntimeError):
++                return None, False
++            else:
++                if resolved.is_relative_to(self.dist_dir.resolve()):
++                    return resolved, False
++                return None, False
++
++        fallback = self._resolve_spa_fallback(unquoted_path, raw_path)
++        if fallback is not None:
++            return fallback, True
++        return None, False
++
++    def _resolve_spa_fallback(self, unquoted_path: str, raw_path: str) -> Path | None:
++        """Resolve index.html fallback for extensionless non-reserved paths."""
++        segments = [s for s in unquoted_path.split("/") if s]
++        last_segment = segments[-1] if segments else ""
++        disallowed_prefixes = ("/api", "/ws", "/sse", "/mcp")
++        is_reserved = any(
++            raw_path == p or raw_path.startswith(p + "/") for p in disallowed_prefixes
++        )
++
++        if "." in last_segment or is_reserved:
++            return None
++
++        index_path = self.dist_dir / "index.html"
++        if not index_path.is_file():
++            return None
++
++        try:
++            resolved_index = index_path.resolve(strict=True)
++        except (OSError, RuntimeError):
++            return None
++        else:
++            if resolved_index.is_relative_to(self.dist_dir.resolve()):
++                return resolved_index
++            return None
++
++    def _select_encoding(
++        self, file_path: Path, encodings: dict[str, float]
++    ) -> tuple[Path, str | None]:
++        """Select best pre-compressed variant according to accepted encodings."""
++        br_variant = Path(str(file_path) + ".br")
++        gz_variant = Path(str(file_path) + ".gz")
++
++        if encodings.get("br", 0.0) > 0 and br_variant.is_file():
++            return br_variant, "br"
++        if encodings.get("gzip", 0.0) > 0 and gz_variant.is_file():
++            return gz_variant, "gzip"
++        return file_path, None
++
++    def _get_cache_control(
++        self, file_path: Path, unquoted_path: str, *, is_spa_fallback: bool
++    ) -> str:
++        """Determine Cache-Control header based on file type and path."""
++        if is_spa_fallback or file_path.name == "index.html":
++            return "no-cache"
++        if unquoted_path.startswith("/assets/"):
++            return "public, max-age=31536000, immutable"
++        return "no-cache"
++
++    def _is_not_modified(self, if_none_match: str | None, etag: str) -> bool:
++        """Check whether If-None-Match matches the current ETag."""
++        if not if_none_match:
++            return False
++        candidate = if_none_match.strip()
++        if candidate in (etag, "*"):
++            return True
++        return etag in [item.strip() for item in candidate.split(",")]
++
++    async def _send_response(
++        self,
++        send: Send,
++        status: int,
++        headers: list[tuple[bytes, bytes]],
++        body: bytes = b"",
++    ) -> None:
++        """Send complete single-chunk HTTP response."""
++        await send(
++            {
++                "type": "http.response.start",
++                "status": status,
++                "headers": headers,
++            }
++        )
++        await send({"type": "http.response.body", "body": body})
++
++    async def _send_404(self, send: Send) -> None:
++        """Send 404 Not Found plain text response."""
++        await self._send_response(
++            send,
++            status=404,
++            headers=[(b"content-type", b"text/plain; charset=utf-8")],
++            body=b"Not Found",
++        )
++
++    async def _send_method_not_allowed(self, send: Send) -> None:
++        """Send 405 Method Not Allowed response with Allow header."""
++        await self._send_response(
++            send,
++            status=405,
++            headers=[
++                (b"content-type", b"text/plain; charset=utf-8"),
++                (b"allow", b"GET, HEAD"),
++            ],
++            body=b"Method Not Allowed",
++        )
++
++    async def _send_304(self, send: Send, etag: str, cache_control: str) -> None:
++        """Send 304 Not Modified response."""
++        await send(
++            {
++                "type": "http.response.start",
++                "status": 304,
++                "headers": [
++                    (b"etag", etag.encode("ascii")),
++                    (b"vary", b"Accept-Encoding"),
++                    (b"cache-control", cache_control.encode("ascii")),
++                ],
++            }
++        )
++        await send({"type": "http.response.body", "body": b""})
++
++    async def _send_200(
++        self,
++        send: Send,
++        file_bytes: bytes,
++        headers: list[tuple[bytes, bytes]],
++        *,
++        is_head: bool,
++    ) -> None:
++        """Send 200 OK response with chunked body streaming."""
++        await send(
++            {
++                "type": "http.response.start",
++                "status": 200,
++                "headers": headers,
++            }
++        )
++        if is_head:
++            await send({"type": "http.response.body", "body": b""})
++            return
++
++        for offset in range(0, len(file_bytes), _CHUNK_SIZE):
++            chunk = file_bytes[offset : offset + _CHUNK_SIZE]
++            more_body = (offset + _CHUNK_SIZE) < len(file_bytes)
++            await send(
++                {
++                    "type": "http.response.body",
++                    "body": chunk,
++                    "more_body": more_body,
++                }
++            )
++        if not file_bytes:
++            await send({"type": "http.response.body", "body": b""})
++
++    async def _serve_file(
++        self,
++        scope: Scope,
++        send: Send,
++        file_to_serve: Path,
++        unquoted_path: str,
++        *,
++        is_spa_fallback: bool,
++    ) -> None:
++        """Read and stream file content with content negotiation and ETag headers."""
++        headers = Headers(scope=scope)
++        encodings = _parse_accept_encoding(headers.get("accept-encoding", ""))
++        actual_file, content_encoding = self._select_encoding(file_to_serve, encodings)
++
++        try:
++            file_bytes = actual_file.read_bytes()
++        except OSError:
++            await self._send_404(send)
++            return
++
++        sha16 = hashlib.sha256(file_bytes).hexdigest()[:16]
++        encoding_tag = content_encoding or "identity"
++        etag = f'"{sha16}-{encoding_tag}"'
++
++        suffix = file_to_serve.suffix.lower()
++        content_type = _EXPLICIT_MIME_TYPES.get(
++            suffix, mimetypes.guess_type(file_to_serve.name)[0] or "application/octet-stream"
++        )
++        cache_control = self._get_cache_control(
++            file_to_serve, unquoted_path, is_spa_fallback=is_spa_fallback
++        )
++
++        if_none_match = headers.get("if-none-match")
++        if self._is_not_modified(if_none_match, etag):
++            await self._send_304(send, etag, cache_control)
++            return
++
++        response_headers: list[tuple[bytes, bytes]] = [
++            (b"content-type", content_type.encode("ascii")),
++            (b"content-length", str(len(file_bytes)).encode("ascii")),
++            (b"etag", etag.encode("ascii")),
++            (b"vary", b"Accept-Encoding"),
++            (b"cache-control", cache_control.encode("ascii")),
++        ]
++        if content_encoding:
++            response_headers.append((b"content-encoding", content_encoding.encode("ascii")))
++
++        is_head = scope.get("method") == "HEAD"
++        await self._send_200(
++            send,
++            file_bytes,
++            response_headers,
++            is_head=is_head,
++        )
++
++    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
++        """Process incoming ASGI request, serving pre-compressed assets or SPA fallback."""
++        del receive
++        if scope["type"] != "http":
++            return
++
++        method = scope.get("method", "GET")
++        if method not in ("GET", "HEAD"):
++            await self._send_method_not_allowed(send)
++            return
++
++        raw_path = scope.get("path", "/")
++        unquoted_path = urllib.parse.unquote(raw_path)
++
++        if not self._is_safe_path(unquoted_path):
++            await self._send_404(send)
++            return
++
++        file_to_serve, is_spa_fallback = self._resolve_file(unquoted_path, raw_path)
++        if file_to_serve is None:
++            await self._send_404(send)
++            return
++
++        try:
++            if file_to_serve.stat().st_size > _MAX_FILE_SIZE:
++                await self._send_404(send)
++                return
++        except OSError:
++            await self._send_404(send)
++            return
++
++        await self._serve_file(
++            scope,
++            send,
++            file_to_serve,
++            unquoted_path,
++            is_spa_fallback=is_spa_fallback,
++        )
+diff --git a/pyproject.toml b/pyproject.toml
+index 76e19bd..78fbc9a 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -33,6 +33,7 @@ dev = [
+     "pytest-socket==0.8.1",
+     "types-PyYAML==6.0.12.20261111",
+     "types-jsonschema==4.26.0.20261006",
++    "httpx==0.28.1",
+ ]
+ 
+ [tool.ruff]
+diff --git a/uv.lock b/uv.lock
+index e679e50..b2b6c23 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -10,6 +10,15 @@ members = [
+     "kanban-platform",
+ ]
+ 
++[[package]]
++name = "annotated-doc"
++version = "0.0.6"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/0f/6e/a61e86e43bb6039b31a33a8f5fba76fe1cdacf3661e7b9756d4ff1b28cdc/annotated_doc-0.0.6.tar.gz", hash = "sha256:7969bb69912085b2285849c0dcac0b4b374fd180c13cf10a87f284ffcf347bbf", size = 10767 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/cd/f5/3dd85d583e55be76cd02b1fc9bbec771b12d63124b01661d9535ccf8721f/annotated_doc-0.0.6-py3-none-any.whl", hash = "sha256:361ca0950cc7082f53fa69e9328409f40a62c61e57e0a47e1825a08078a58a53", size = 5293 },
++]
++
+ [[package]]
+ name = "annotated-types"
+ version = "0.8.0"
+@@ -19,6 +28,19 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl", hash = "sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0", size = 13427 },
+ ]
+ 
++[[package]]
++name = "anyio"
++version = "4.16.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "idna" },
++    { name = "typing-extensions" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/a1/98/7e457a3b014976887a050561955c0b76e1e7e2d6e27b78ecef2ef80518f2/anyio-4.16.0.tar.gz", hash = "sha256:59bb03251907983d1603d27c3087ddb1e93299ea2163adcdba37899a4fb12ffb", size = 310971 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/a9/16/7757fb84c819accc7d7e9af5291b261e4abb8627ee040f99e7d35ef2457a/anyio-4.16.0-py3-none-any.whl", hash = "sha256:c66ae634e0b8228396b801741beb3294326d4b6102f7bba4041c0dfb58c29026", size = 134521 },
++]
++
+ [[package]]
+ name = "ast-serialize"
+ version = "0.13.1"
+@@ -88,6 +110,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309", size = 67548 },
+ ]
+ 
++[[package]]
++name = "certifi"
++version = "2026.10.23"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/fd/11/b524cbd9bbdaca58608e4cf4053fd463417549e1959fa8d3aa18319f9555/certifi-2026.10.23.tar.gz", hash = "sha256:a9895e6e2758b371e0545e321a3a8fd1fcfd9829ada8824a936dfb16aaaf36cd", size = 136225 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl", hash = "sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1", size = 135082 },
++]
++
+ [[package]]
+ name = "cfgv"
+ version = "3.5.0"
+@@ -157,6 +188,24 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/ab/84/02fc1827e8cdded4aa65baef11296a9bbe595c474f0d6d758af082d849fd/execnet-2.1.2-py3-none-any.whl", hash = "sha256:67fba928dd5a544b783f6056f449e5e3931a5c378b128bc18501f7ea79e296ec", size = 40708 },
+ ]
+ 
++[[package]]
++name = "fastapi"
++version = "0.162.5"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "annotated-doc" },
++    { name = "anyio" },
++    { name = "opentelemetry-api" },
++    { name = "pydantic" },
++    { name = "starlette" },
++    { name = "typing-extensions" },
++    { name = "typing-inspection" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/4e/7b/ae546e10f153fcf9a6afd8b9fe4730bdfeb8fdcb93178d54122973ef3f4c/fastapi-0.162.5.tar.gz", hash = "sha256:1ca37f64f61c99cebd38636e67525fb721c5e8c1169f07f2a35d73b0a63265d4", size = 531785 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/10/19/5b9abfa67a29b862e509911eef40f4901f78aa48de32ad1f939b5c2b165e/fastapi-0.162.5-py3-none-any.whl", hash = "sha256:5303c67415fde762889ca337db79d27b755b8bd09cef314fa7a4340bb30bfd2b", size = 151782 },
++]
++
+ [[package]]
+ name = "filelock"
+ version = "4.2.10"
+@@ -207,6 +256,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/85/ef/5f5f94e96ded439076797d54cb009d69aff3e3bc2fec42c73fd045f58d6b/grimp-3.19-cp312-cp312-win_arm64.whl", hash = "sha256:72e581569d6ffa0da6e5aa2b60123995c9fe2ff52bf9c1dc4df64931ad32bed0", size = 1925933 },
+ ]
+ 
++[[package]]
++name = "h11"
++version = "0.16.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/01/ee/02a2c011bdab74c6fb3c75474d40b3052059d95df7e73351460c8588d963/h11-0.16.0.tar.gz", hash = "sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1", size = 101250 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86", size = 37515 },
++]
++
+ [[package]]
+ name = "hatchling"
+ version = "1.33.0"
+@@ -223,6 +281,55 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/32/64/4afe5dd77b2939a93e8c9513f8082dbd049ecba9c1484a379a0f6ae29d6b/hatchling-1.33.0-py3-none-any.whl", hash = "sha256:415290b84f464d2884303fca8974d38e7b85579069fab02a15db0828fbb1446d", size = 78750 },
+ ]
+ 
++[[package]]
++name = "httpcore"
++version = "1.0.9"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "certifi" },
++    { name = "h11" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/06/94/82699a10bca87a5556c9c59b5963f2d039dbd239f25bc2a63907a05a14cb/httpcore-1.0.9.tar.gz", hash = "sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8", size = 85484 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl", hash = "sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55", size = 78784 },
++]
++
++[[package]]
++name = "httptools"
++version = "0.9.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/3a/ec/deed52912ab7ca6c0b12859330c571c60c61d7267b341b28951fcbf13694/httptools-0.9.0.tar.gz", hash = "sha256:d484ebb7e3a3f3597b0f645fbd1b85633674ca808c1f5ba11c2caf7c66f5c8b6", size = 282523 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/da/ed/0916b8b7ebd1deeaf22acba71b68c57b4b6b69aa1918f3812dea208b4276/httptools-0.9.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:f9ccc9884241efceb4547a92955d128574c864681f11b7ea3ecbde295fafbe8b", size = 119039 },
++    { url = "https://files.pythonhosted.org/packages/c2/0b/9b6de4a01a563a904d0826c9069c824b330e1816df26c9bdf93f60b50857/httptools-0.9.0-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:45b3002392948dcf578029c89f6318e1289a993a1a5ec38a4161560fab60f811", size = 115051 },
++    { url = "https://files.pythonhosted.org/packages/85/3f/642113e9882f53158ecddf58003d25f18ded2c210ed23bf6eb663d4d51c3/httptools-0.9.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:3e3201fe4d46e0d15d7ff9fafc94a605da9eb82d2c5b9837f0368acb325481f1", size = 552848 },
++    { url = "https://files.pythonhosted.org/packages/95/4c/3ecc59c99c28652d8d08d9b5be65770a14d2cadc616dad94224cee2b0e7e/httptools-0.9.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:58a1b0ec4cbb930e69669f9771715b2c7898d3cdf064d9811f7a66afef96b544", size = 549181 },
++    { url = "https://files.pythonhosted.org/packages/43/ce/21f5b2759590b7054e38d3b704a3c6b853c3395c370b3d6f16c45aea0fc0/httptools-0.9.0-cp312-cp312-manylinux2014_ppc64le.manylinux_2_17_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:4c58dc91aefb31adad500aa68054334f429b840b36dd29e34e834101044cb2ef", size = 569121 },
++    { url = "https://files.pythonhosted.org/packages/52/c3/7c523aa8d0fa7a57010a3e1bbdebc209585009076465f3d1ae6a3f54b814/httptools-0.9.0-cp312-cp312-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:6b900073e7b8481ef1aaf4f6c1789d210a1db01a9da8789821578cfeb4c2d540", size = 487649 },
++    { url = "https://files.pythonhosted.org/packages/94/e2/d90d60002692b8afcbc06fb49ca3a4365b32abed6c40fb2b612c67721a00/httptools-0.9.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:6c12d0393a903b58bc5f5a7406d6c5290acfb8284290d68547ce620c06f7d133", size = 529583 },
++    { url = "https://files.pythonhosted.org/packages/46/c0/19172874cde0344a20c85877a0b2d0dcfca31111729ad8a79e8b4ac4e207/httptools-0.9.0-cp312-cp312-musllinux_1_2_ppc64le.whl", hash = "sha256:29b0d823e3c1e7cd1093a5dc889245db693ef13ada624cd66e2262421ef38867", size = 552414 },
++    { url = "https://files.pythonhosted.org/packages/1b/b8/02ea7910f69e5371986b025fb3b410592106df54e977a5732fd1d95917b5/httptools-0.9.0-cp312-cp312-musllinux_1_2_riscv64.whl", hash = "sha256:6ebd39ee26db460cfe5ab8b71a15d1149b289139a0d3981522757d6af620887e", size = 482400 },
++    { url = "https://files.pythonhosted.org/packages/de/97/f05eac916d44cbbfe43668a6a40ab93e7fd8f94d5120d1ce2d8e55c69871/httptools-0.9.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:4efbee349138a3fee7a4cc3a95abd2d499fae70dd5bff9fed9138d6f570f4283", size = 536148 },
++    { url = "https://files.pythonhosted.org/packages/b6/e9/9435dfcb7f1a1d6ebdc79a902164dfca70e33774c80bb60d25c630c31ef1/httptools-0.9.0-cp312-cp312-win32.whl", hash = "sha256:36fac804b8cfd6b935ae64f71349f833d2b6298404626d017a2c57bb942bc643", size = 86274 },
++    { url = "https://files.pythonhosted.org/packages/8b/69/813f1bf90be507d4166c437be1a413574d0e0abf36e2fec10c266661b0ee/httptools-0.9.0-cp312-cp312-win_amd64.whl", hash = "sha256:7e32b83bd8c2f8b6fa726ef34e63e21c4d7eddc277d40d4ef7245ea3ed28e5b6", size = 92446 },
++    { url = "https://files.pythonhosted.org/packages/ae/e0/1d29e328c4cafe843403341e1455e0aec18b0e6910fbb14f12b36b563f19/httptools-0.9.0-cp312-cp312-win_arm64.whl", hash = "sha256:813a32f94991b9627795528053c73a57d2ce3eb98ede89f0e1c7a31095938e81", size = 88676 },
++]
++
++[[package]]
++name = "httpx"
++version = "0.28.1"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "anyio" },
++    { name = "certifi" },
++    { name = "httpcore" },
++    { name = "idna" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/b1/df/48c586a5fe32a0f01324ee087459e112ebb7224f646c0b5023f5e79e9956/httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc", size = 141406 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad", size = 73517 },
++]
++
+ [[package]]
+ name = "identify"
+ version = "2.6.20"
+@@ -232,6 +339,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/fa/70/fffc9613501877c0a10a1ef73a165e6ded3e53f6e7502227fef56d973933/identify-2.6.20-py2.py3-none-any.whl", hash = "sha256:6a16b69b93187244e0548cbfd25b3e4a6f9a7a2ad784625c3bec2b8d27b81aaa", size = 99506 },
+ ]
+ 
++[[package]]
++name = "idna"
++version = "3.20"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/f5/08/8eea9d4b8302028f3abb2c0813953f7aec26d33b7a8960ed760e65ff29fa/idna-3.20.tar.gz", hash = "sha256:a7db850025b95ded1eae8a46181a1a6c56c92c96f0e2b005d9ff8dc0210cab44", size = 216463 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl", hash = "sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c", size = 69583 },
++]
++
+ [[package]]
+ name = "import-linter"
+ version = "2.16"
+@@ -306,11 +422,19 @@ name = "kanban-core"
+ version = "0.0.0"
+ source = { editable = "kanban" }
+ dependencies = [
++    { name = "fastapi" },
+     { name = "kanban-database" },
++    { name = "pydantic-settings" },
++    { name = "uvicorn", extra = ["standard"] },
+ ]
+ 
+ [package.metadata]
+-requires-dist = [{ name = "kanban-database", editable = "database" }]
++requires-dist = [
++    { name = "fastapi", specifier = "==0.162.5" },
++    { name = "kanban-database", editable = "database" },
++    { name = "pydantic-settings", specifier = "==2.16.2" },
++    { name = "uvicorn", extras = ["standard"], specifier = "==0.54.0" },
++]
+ 
+ [[package]]
+ name = "kanban-database"
+@@ -352,6 +476,7 @@ dependencies = [
+ [package.dev-dependencies]
+ dev = [
+     { name = "hatchling" },
++    { name = "httpx" },
+     { name = "import-linter" },
+     { name = "mypy" },
+     { name = "pre-commit" },
+@@ -376,6 +501,7 @@ requires-dist = [
+ [package.metadata.requires-dev]
+ dev = [
+     { name = "hatchling", specifier = "==1.33.0" },
++    { name = "httpx", specifier = "==0.28.1" },
+     { name = "import-linter", specifier = "==2.16" },
+     { name = "mypy", specifier = "==2.4.1" },
+     { name = "pre-commit", specifier = "==4.7.0" },
+@@ -473,6 +599,18 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/2d/6a/8a9ac7d5e2f7cf53c459bfef90ebc17a2f8cd54b665af96799d4c534840e/nodeenv-1.12.0-py3-none-any.whl", hash = "sha256:80644d65c10cc2be12e3e4b54b3367ff288c7ad24ae75c2dcc65454fc7449d4d", size = 39442 },
+ ]
+ 
++[[package]]
++name = "opentelemetry-api"
++version = "1.45.2"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "typing-extensions" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/19/14/cf3a6b6448849656e1e5f4e2101f3988dc6789724050096aba1bc5ccf592/opentelemetry_api-1.45.2.tar.gz", hash = "sha256:d7b0008e21e5fd61cbe7a7f34ca3b6905a78ab677d9bc395e299359c75cda6b4", size = 73277 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/a9/2d/610db864d7513158cebb8f36cc88e67e73bd6c7aa1905ef18d89e1281c81/opentelemetry_api-1.45.2-py3-none-any.whl", hash = "sha256:2cbd737377e710ee740d261c94e93fa0f08e6d037c18f17513cc0a2d94479a34", size = 60335 },
++]
++
+ [[package]]
+ name = "packaging"
+ version = "26.3"
+@@ -573,6 +711,21 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/e3/d5/b76fc647e473377ca6e693c21549ee3a4a7677e4962c28ae4659337c5114/pydantic_core-2.50.4-graalpy313-graalpy253_313_native-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:4eb15be588407148ef5937dc8d9256a71f6b115e6cddadb7aa20b6ee384680dc", size = 2280639 },
+ ]
+ 
++[[package]]
++name = "pydantic-settings"
++version = "2.16.2"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "pydantic" },
++    { name = "python-dotenv" },
++    { name = "typing-extensions" },
++    { name = "typing-inspection" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/d0/31/21d21e0e38a8f5f7a7f0cde22820117b6d17d6bc36f348129527f915d7f4/pydantic_settings-2.16.2.tar.gz", hash = "sha256:3dc08ffabed2bbd5dc2dd55ead7b78b4e4c5cd776aecd04310db5f1224caaf46", size = 309225 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/39/88/4131c51ff87b7cd7f82a1194d0c0a2b7ca68c72d9da04c3b7e69ab91a79f/pydantic_settings-2.16.2-py3-none-any.whl", hash = "sha256:8d523e5c129b097686bde019bd6109bff53f4c8c3f63f1ddf9933ffa42e5ab4f", size = 81994 },
++]
++
+ [[package]]
+ name = "pygments"
+ version = "2.21.0"
+@@ -662,6 +815,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/ac/35/25bd092ca8a7e71192afdca67fbff4f797da74408e74ac3626e13b409ec0/python_discovery-1.9.5-py3-none-any.whl", hash = "sha256:a1fae8fca11e4bc61e38491c2aafff29e430b3c5e272d51ae52fb895bc4c0fac", size = 44377 },
+ ]
+ 
++[[package]]
++name = "python-dotenv"
++version = "1.2.4"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/74/26/2fbeedb218a787a5eea551c7532cac4e009f83d689dd2faa0d0353473f86/python_dotenv-1.2.4.tar.gz", hash = "sha256:f0d53e69935a851c0dcc78f3ab7aaccd8cabef0b92382b576b824212902873c0", size = 60824 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/60/d1/38f3a3405989a89ac18390803e70c6ad7c7760da4f9b83cbeca0c44a0c72/python_dotenv-1.2.4-py3-none-any.whl", hash = "sha256:42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc", size = 23266 },
++]
++
+ [[package]]
+ name = "pyyaml"
+ version = "6.0.3"
+@@ -793,6 +955,19 @@ asyncio = [
+     { name = "greenlet" },
+ ]
+ 
++[[package]]
++name = "starlette"
++version = "1.10.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "anyio" },
++    { name = "typing-extensions" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/48/bb/3d8757f21e9a53d9035c9eb039a777047139a16bfdbedfc7a58241c3d914/starlette-1.10.0.tar.gz", hash = "sha256:b8399098d4c1e3522734f7235dc79b1fc967f96cf139c81e0fa30479e0685f9b", size = 2734356 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/88/2e/947cfe02def9371c07cd5bf5b6b61c829e9aecb9904db02a66cfafbc1eec/starlette-1.10.0-py3-none-any.whl", hash = "sha256:478c0ab3b4ced6e82719849c118fa406f0278a3499c1a898cd15cd31bdc38ce4", size = 80571 },
++]
++
+ [[package]]
+ name = "tomlkit"
+ version = "0.15.2"
+@@ -853,6 +1028,43 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/de/0c/ea2544850a7c135e15033a5c7a8e7211136184b7ae63e2239d557c2b3019/typing_inspection-0.4.5-py3-none-any.whl", hash = "sha256:bc210535442b39e1bf2805e0c7a17dfd6a4ace760c84c7f7d16245d23a6b1c39", size = 14874 },
+ ]
+ 
++[[package]]
++name = "uvicorn"
++version = "0.54.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "click" },
++    { name = "h11" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/da/34/30e9280707135d2cfc589dfff3cb796bd07a3aeb1a3e415ba09dd89d7bb4/uvicorn-0.54.0.tar.gz", hash = "sha256:a2e33cbfaa0306f8e6b0c13e0cb89d7d7a2da3e62b90c66e18c33d9807b28620", size = 112283 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/38/0c/b54a4fdd7f90a3af8b02ebc9ce6712c2c208b7926a2f7bad95c33ebbe943/uvicorn-0.54.0-py3-none-any.whl", hash = "sha256:505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf", size = 87427 },
++]
++
++[package.optional-dependencies]
++standard = [
++    { name = "httptools" },
++    { name = "python-dotenv" },
++    { name = "pyyaml" },
++    { name = "uvloop", marker = "platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'" },
++    { name = "watchfiles" },
++    { name = "websockets" },
++]
++
++[[package]]
++name = "uvloop"
++version = "0.23.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/fa/42/02c739ce85fb2ee8d99212c61417da8140c6b87e9d97c430bea520d76044/uvloop-0.23.0.tar.gz", hash = "sha256:28d160f51ab4da3b187063652e643dea6831072add4adc1e6d62afbe73b6be27", size = 2559185 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/05/98/04e766a6de99e6f7f955ecb7829e8d5a557de3427cb85be2236de54dda0c/uvloop-0.23.0-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:93935ab27b6eaef4c3e5489aebc84284f0644592f7ab516df60ee1b27eaf5eb3", size = 1393055 },
++    { url = "https://files.pythonhosted.org/packages/33/8a/499e7b863a848ede009539bce39806b66205da5f8779354228e785601144/uvloop-0.23.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:4448e9124537620f9c25d004c227bb5104440b58955c19bbd312d910af919a63", size = 768909 },
++    { url = "https://files.pythonhosted.org/packages/3d/95/a880f8ce3b87ac5b307c354e8ee480be4658d24bf01f87921d57e3530b4a/uvloop-0.23.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:f7548ede3ee908cfabc0d068106e303a9a2d811af959cdf6ab85676344cedcda", size = 4419106 },
++    { url = "https://files.pythonhosted.org/packages/51/27/c1d2f9fa977f8f42ea294604166df10e0027e6dc6cd17f85ede386c9bf36/uvloop-0.23.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:090865d8ce7a03986755a3ce711b7dd0d4b44eb14ab74368b717f3fad1180208", size = 4532597 },
++    { url = "https://files.pythonhosted.org/packages/42/dd/2cb6a2c8a30ca55c07a882dd4ae4ceae0fa7d8c15b25b3b7cb9a4b6cf4ca/uvloop-0.23.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:bd6f2f81c7b9da99d301c0b16b82044e76fe887086e42e1590ecf520b94dbdac", size = 4230048 },
++    { url = "https://files.pythonhosted.org/packages/f4/52/29989cbaa4022dc4ef35c1dd60a4ab989e4c2065f341ed483ae71d2bd950/uvloop-0.23.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:a6ac96da66c35bf789bdcde78a88dc7d56b7907d8379648c54adc1c61594575d", size = 4394152 },
++]
++
+ [[package]]
+ name = "virtualenv"
+ version = "21.15.6"
+@@ -868,3 +1080,63 @@ sdist = { url = "https://files.pythonhosted.org/packages/b3/bd/e40ad2df6a9efc1f8
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/0a/63/fd514dee3159f74a96ac01beb8f460b65e4ef0b972f63f4fe9f0cd2aa0e3/virtualenv-21.15.6-py3-none-any.whl", hash = "sha256:4b99ab9b95ff11043939bb4cad2fa0449175fa5a478372864f62160cb6c1a7ed", size = 5680963 },
+ ]
++
++[[package]]
++name = "watchfiles"
++version = "1.3.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "anyio" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/b3/68/e6aa0b77d217b31f8f486ec0cdfe5e00e6e38dc0be657e7d85819b9faf0a/watchfiles-1.3.0.tar.gz", hash = "sha256:99aee4a07847c06820765fd7b1b49ceac4f3f711ccb7d104655a33231de1c207", size = 108119 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/68/fa/c0b840d5d8bafe640925408ce11095948c8945bb61be1e67d0ab629b872a/watchfiles-1.3.0-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:000b9688fc8133037a8b075c8ebf98f32844ff8964dda61e85c1db547dafc441", size = 399703 },
++    { url = "https://files.pythonhosted.org/packages/c7/8a/894799b485fe9473ad10422a0d9668e53fb78e3a2b5cc6061159572844ad/watchfiles-1.3.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:bbc1198edfdc90fda0600f825aa94150f428dfcbf8138746f55998e0e660d64c", size = 397647 },
++    { url = "https://files.pythonhosted.org/packages/5a/61/f277cd5ead05f5d37b98b41fbdd0c943ee0c04d49738f62e902cb291cf43/watchfiles-1.3.0-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4af9c464d410e8c44b58ddf1cbec7c3a02c1cb2c6c80df9c74659ba2fbda0ab5", size = 454994 },
++    { url = "https://files.pythonhosted.org/packages/46/66/ea4c01382975e53b1ac1b0a0ea1b353416b8127fb6e04f5c1c313119aab6/watchfiles-1.3.0-cp310-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:eb94e40b9a0db19636b5e3fed0a9803452ecc7381df13b385272abb779ee83ca", size = 460105 },
++    { url = "https://files.pythonhosted.org/packages/31/c3/1a501b597817096c9831c255f6270c124ce0e2faeb74124be24dcc93b86d/watchfiles-1.3.0-cp310-abi3-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:7398930a2b76b9dc67a4e6b8bfc7baf30946892a86f417a3920c07bdd6febc30", size = 493761 },
++    { url = "https://files.pythonhosted.org/packages/5a/16/77352d05e152c7786a016e9f1decdb4507e8aa5bcf3343c72142a0413d14/watchfiles-1.3.0-cp310-abi3-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:025b108f2d5cc2799cb941f79380df3e8b22bfb589c218e801767fe78d598c95", size = 577500 },
++    { url = "https://files.pythonhosted.org/packages/95/fe/81001c55b24466fe9911135e50269fd3a29f43e446627a92adfab54553b6/watchfiles-1.3.0-cp310-abi3-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:be9ef3cd403d756a304a0a08a112163c63da7ec72c8c9d083c98818291ff8f29", size = 469209 },
++    { url = "https://files.pythonhosted.org/packages/8a/cf/e3ad894ed5909a7c44b0707e89bc25d19a3d78b3a7aec846119443b6ae56/watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b5768b49e426fd5b550b012c866db347cdf15c398ef98dc557b6e6b72fa74cd1", size = 458353 },
++    { url = "https://files.pythonhosted.org/packages/7f/f5/2f106829e6e2bc91ad74614730f6df484202b9a4d20d927dbf2f08d37d44/watchfiles-1.3.0-cp310-abi3-manylinux_2_31_riscv64.whl", hash = "sha256:d36c72fcdc08f143d87316a4c4c3b064e340da2c7383d39803950740ed418935", size = 468707 },
++    { url = "https://files.pythonhosted.org/packages/15/37/2741ab776b978669c1f3bba1e573f1a184f727ab8b4d3a6d9c61090800ed/watchfiles-1.3.0-cp310-abi3-musllinux_1_1_aarch64.whl", hash = "sha256:f0c9865240e065a2247f4b5248528ae3d01e0e8ae071462c250c884dc16e3ee3", size = 632510 },
++    { url = "https://files.pythonhosted.org/packages/48/64/db4a4684275fe9b696ee5118c194705c1423b3d42181c3f8ee70194d5c73/watchfiles-1.3.0-cp310-abi3-musllinux_1_1_x86_64.whl", hash = "sha256:380f513d26cc2e598266b88d66456e07d67ef4be8f0f435a1154d9c44b43d509", size = 661723 },
++    { url = "https://files.pythonhosted.org/packages/52/80/95ddb24f6a2f595c031c24432ab7b8aa7d6d1ada0c6d63a552166e06e8d1/watchfiles-1.3.0-cp310-abi3-win32.whl", hash = "sha256:509d9f74d2bec5c1f4cd868ddcfe0c9601f7ea53066dfcb19d8ede742c4de661", size = 277761 },
++    { url = "https://files.pythonhosted.org/packages/48/a1/1c4a1b3c8030cd03206232612be8a6e8799093490c220b0fcb935d02b75a/watchfiles-1.3.0-cp310-abi3-win_amd64.whl", hash = "sha256:1acabde19b67e673274e89a04d613b7fb1f122e2c4b8ec9a581e59c149264b61", size = 290643 },
++    { url = "https://files.pythonhosted.org/packages/82/e0/d2db577c632d26d08078c4390dd870b8555c4e558df25d22270f0166c71f/watchfiles-1.3.0-cp310-abi3-win_arm64.whl", hash = "sha256:d978cc1dd7ba44f5590d7de74f7a9c8be7262d9e469c2c0efb8bbfc2574321dc", size = 285510 },
++]
++
++[[package]]
++name = "websockets"
++version = "17.4"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/75/79/590c5f0cc7d1661195aeefccb0e342b79f4c77d368d526d028821a390332/websockets-17.4.tar.gz", hash = "sha256:09d3939b70df0c8ad2da145ebd50978bccaee1d565e838b0e7921a34d38571eb", size = 191391 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/af/71/b020221345ea6c012dcf7496827a48a744b58696470b2b07fef95a32905a/websockets-17.4-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:3d512e3a6c528c42ce220ed9c3caff83c6fdcd98a1b98249f08ccfc66ad111b1", size = 218779 },
++    { url = "https://files.pythonhosted.org/packages/8e/84/1c372ae7c032021a84e5c9e9b76b0dddefb354e9b4af783a97efd4d80ab3/websockets-17.4-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:7390e060f830b3d132f484b21ac2783a2d227b682ef62bb8146e1c1b4ca0e45a", size = 216457 },
++    { url = "https://files.pythonhosted.org/packages/74/b6/cff249107473f149c6c916a49cba967379fa63b0a7d2dce6896d6848f0a3/websockets-17.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:bcad49104711f88b2b7c3ba166de172857d837248205e541b044a552558fecc3", size = 216726 },
++    { url = "https://files.pythonhosted.org/packages/77/5d/aff8ecbf1c55c4d96f6dacc46a52102895f58b85bb284c8d325aaf31606a/websockets-17.4-cp312-cp312-manylinux1_i686.manylinux_2_28_i686.manylinux_2_5_i686.whl", hash = "sha256:cf99debb17227a50620aee16647bb33a0387f5fa5418d628666c0f05745e0d2a", size = 226043 },
++    { url = "https://files.pythonhosted.org/packages/cb/18/6229d6583031ca81d092a0cd887a13a57b402fb555acc323d39b45967eb7/websockets-17.4-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:9ae1429ee9e52b139167ed0169757806a27ed7307e942e8c62037a9184e9843b", size = 226321 },
++    { url = "https://files.pythonhosted.org/packages/b8/61/7aba018fd53873e792a25afe1f4c005518133477b727d7455f2f7550c425/websockets-17.4-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:51adfc30f467077293a6695d8149bcef501c0728386f3a491054f835dadb60b2", size = 227559 },
++    { url = "https://files.pythonhosted.org/packages/fb/66/37b207df9cdacaa017aa4487f3a9f2fcd668f6f7cfbafdac5b95ea258ee0/websockets-17.4-cp312-cp312-manylinux2014_armv7l.manylinux_2_17_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:c564d1e6531611bf87078c28780456ecc75459dcca189629fff2fe7c020d8e67", size = 230386 },
++    { url = "https://files.pythonhosted.org/packages/ad/f6/87507e11fbae53817a435945273953b5b020589e309fac4fd60527ee5999/websockets-17.4-cp312-cp312-manylinux2014_ppc64le.manylinux_2_17_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:4c792e6cce24d08f92199d907785c9e64f74c357deeed3dbaf7d699ed5930b64", size = 228193 },
++    { url = "https://files.pythonhosted.org/packages/2f/3d/90a04f0aa989b68fbd2efcd38237420afe2abe5a1cab0b5d7c2aa4f0dbb6/websockets-17.4-cp312-cp312-manylinux2014_s390x.manylinux_2_17_s390x.manylinux_2_28_s390x.whl", hash = "sha256:c44776f82b04e623eb9e1b81fcd17ac6e9808ae1ba5cdf8edce1f7c869a95a9b", size = 226952 },
++    { url = "https://files.pythonhosted.org/packages/ad/3e/50952af22b8e3e2d03f7e83f0e335851c6b484c3fd88586626fb1c2a34b3/websockets-17.4-cp312-cp312-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:4d2636a5b61c69e32db0e74b57073dd4a66f1ad195e9398c5f01bba41090deea", size = 224183 },
++    { url = "https://files.pythonhosted.org/packages/c4/73/2a4a5d9c6bca1127f24af7bf08f406a69052d7f341bc81f08d9e8eb446b4/websockets-17.4-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:cfbbba4597f19ad717f79fd3f2a67ae7efae647bd6a61e14554e1b5ad242a5bf", size = 226991 },
++    { url = "https://files.pythonhosted.org/packages/68/de/90d96a579839bfe541ef214315df81d2bd519d952847c303328518ffdd02/websockets-17.4-cp312-cp312-musllinux_1_2_armv7l.whl", hash = "sha256:c7b996c02de5e032cb63dc65482b73693b7ecaa586654126be2749ddea239c40", size = 225600 },
++    { url = "https://files.pythonhosted.org/packages/91/17/12c15ed446d842e40918cd16e79b56ee4422d6fbf210258cb8882f50bbd5/websockets-17.4-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:a920e99155d75d1b1c08172da8aaa7200e7b30871fb628d1631d7891a333e30e", size = 226366 },
++    { url = "https://files.pythonhosted.org/packages/9d/73/cb4c927e806a73a0377696e031ef3c0db409028cdb2373f96ee863e8df8e/websockets-17.4-cp312-cp312-musllinux_1_2_ppc64le.whl", hash = "sha256:8c00c5c49f80a588a2c4f99d519d2abed4ce26cdca11273041bc8b7e60af60de", size = 227470 },
++    { url = "https://files.pythonhosted.org/packages/33/b3/e682b3ea069933044f4bf4809eea0cd83e3a5bdbdff601d1777a9ae90795/websockets-17.4-cp312-cp312-musllinux_1_2_riscv64.whl", hash = "sha256:52c31d123f5adf14dec694c2a4036bf42c523df7cefc641d31cd05653de56e49", size = 225026 },
++    { url = "https://files.pythonhosted.org/packages/2d/e9/d039757260705e5a265a31c9fff36b0d4567b842ce2b54e5d14369f200bd/websockets-17.4-cp312-cp312-musllinux_1_2_s390x.whl", hash = "sha256:d0acd8191c0e5a61d1c27bfa33b6ec8431982299f5d71c02129aa4f16f182ad0", size = 226007 },
++    { url = "https://files.pythonhosted.org/packages/db/e7/cb9907fac6f9b28f93beded6efda2953960cd02b633d432acf3451590859/websockets-17.4-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:2a9cb5bbfc33b4ebd3c8d3714d6e09805437f60a14977774e4bd11b5ace46c23", size = 226286 },
++    { url = "https://files.pythonhosted.org/packages/39/99/85f6f4dd104a5d9a33a1ef272f501d0f2e8527ddf66be1b383d51f90ce56/websockets-17.4-cp312-cp312-win32.whl", hash = "sha256:c63c0d7832956d5f3bb77888b93c854569d13f806289ff75c43926d25c6e5fd2", size = 219256 },
++    { url = "https://files.pythonhosted.org/packages/59/31/d1636ba67ee9232a60033d90483e48686aa3856014e59110f29015f97bd2/websockets-17.4-cp312-cp312-win_amd64.whl", hash = "sha256:dde9cd67f18803949ebf96de8aba12b8ec5ee3115e34c75a2db85a3b0a6c20d5", size = 219561 },
++    { url = "https://files.pythonhosted.org/packages/23/aa/e3859d52188f041a5a05c9f3ac005a9c829723f521f0fe60e2c5f9c93bb9/websockets-17.4-cp312-cp312-win_arm64.whl", hash = "sha256:c634053459278cf31fb404ddb5ecd38124e4609e8b609166da621edc2d5796db", size = 219487 },
++    { url = "https://files.pythonhosted.org/packages/e9/a3/d8fbc72c5c0e78905caf2d6dcf806e532451e3f48e2a09a8ebe1de9ad412/websockets-17.4-pp312-pypy312_pp80-macosx_10_15_x86_64.whl", hash = "sha256:c7f66a53e9b7ec831abb15e3d9b6cee8f52d6a24cd0a374786bf46c3ec218bc6", size = 216397 },
++    { url = "https://files.pythonhosted.org/packages/d3/de/1bf313cd0f4662df4884a7602932cd13347090e59dd6047865eee2bb5aa5/websockets-17.4-pp312-pypy312_pp80-macosx_11_0_arm64.whl", hash = "sha256:4fb2db1f649b6464711846b5bb9c1611bd906ce939d9460cbd1fa419552cd6c3", size = 216664 },
++    { url = "https://files.pythonhosted.org/packages/30/e2/7912bd417511b54907853bd495aef2daee111062dbafd43d133a3f7253a7/websockets-17.4-pp312-pypy312_pp80-manylinux1_i686.manylinux_2_28_i686.manylinux_2_5_i686.whl", hash = "sha256:32110d954d9d0e51f36edb0396673bf4d35193a0a80ba7013bf7f7d58a33ca07", size = 217603 },
++    { url = "https://files.pythonhosted.org/packages/56/6f/2e8d5610f6184a2e1720bf8ce256402ed99ad30ea87c461fba5bc4d651d9/websockets-17.4-pp312-pypy312_pp80-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:88ba8a439b2bad97bb69c38db5bf0ec16a061ee834cf0f244089186ee803e899", size = 217489 },
++    { url = "https://files.pythonhosted.org/packages/29/3a/a05bc57eadcd7e8e072d917888128e6d22e1203984afb21a8da3198982fe/websockets-17.4-pp312-pypy312_pp80-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:868744c68e9342768888c7326604da2228c19bb6946aa46b5f9e1ac32ea8d40b", size = 218356 },
++    { url = "https://files.pythonhosted.org/packages/b2/49/eed86bfb8863093a82cbaa52c9159be1ce2374d5ace6fe1f8e8031567e7d/websockets-17.4-pp312-pypy312_pp80-win_amd64.whl", hash = "sha256:829bcaa90be8737c132d9515d6a466e8528e3b3d050d3f3466f36ea94d3beb48", size = 306838 },
++    { url = "https://files.pythonhosted.org/packages/eb/27/9db924cb0dbf22eade78d98fbae77790f9bf6bc729e6ab29aef9d68e4156/websockets-17.4-py3-none-any.whl", hash = "sha256:c6bd2c9781915592b209160d0f017d4c7c82ad53075e6b0c24d2a89299e7f9e9", size = 212900 },
++]
