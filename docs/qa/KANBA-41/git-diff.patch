@@ -1,0 +1,1347 @@
+diff --git a/database/migrations/sql/p1_05_issues.down.sql b/database/migrations/sql/p1_05_issues.down.sql
+new file mode 100644
+index 0000000..dfe32e8
+--- /dev/null
++++ b/database/migrations/sql/p1_05_issues.down.sql
+@@ -0,0 +1,5 @@
++DROP TRIGGER IF EXISTS issues_validate_biu_trg ON issues;
++DROP FUNCTION IF EXISTS issues_validate_biu();
++DROP FUNCTION IF EXISTS allocate_issue_sequence(uuid);
++DROP TABLE IF EXISTS issues;
++DROP FUNCTION IF EXISTS build_markdown_tsvector(text);
+diff --git a/database/migrations/sql/p1_05_issues.up.sql b/database/migrations/sql/p1_05_issues.up.sql
+new file mode 100644
+index 0000000..62fe1e5
+--- /dev/null
++++ b/database/migrations/sql/p1_05_issues.up.sql
+@@ -0,0 +1,158 @@
++CREATE FUNCTION build_markdown_tsvector(md text) RETURNS tsvector
++LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE AS $$
++DECLARE
++    v_text text := coalesce(md, '');
++BEGIN
++    -- 1. Remove fence delimiter lines and their info strings
++    v_text := regexp_replace(v_text, '(?m)^\s{0,3}(```|~~~).*$', '', 'g');
++    -- 2. Images and links -> link text, reference definitions -> empty
++    v_text := regexp_replace(v_text, '!\[([^\]]*)\]\([^)]*\)', '\1', 'g');
++    v_text := regexp_replace(v_text, '\[([^\]]*)\]\([^)]*\)', '\1', 'g');
++    v_text := regexp_replace(v_text, '(?m)^\s{0,3}\[[^\]]+\]:\s*\S+.*$', '', 'g');
++    -- 3. Autolinks and bare URLs -> empty
++    v_text := regexp_replace(v_text, '<https?://[^>]+>', '', 'g');
++    v_text := regexp_replace(v_text, 'https?://\S+', '', 'g');
++    -- 4. Markdown punctuation -> space
++    v_text := regexp_replace(v_text, '[#*_>`|~]', ' ', 'g');
++    -- 5. Return tsvector
++    RETURN to_tsvector('english'::regconfig, v_text);
++END;
++$$;
++
++CREATE TABLE issues (
++    id                          UUID PRIMARY KEY,
++    object_type                 object_kind NOT NULL DEFAULT 'issue' CHECK (object_type = 'issue'),
++    workspace_id                UUID NOT NULL,
++    project_id                  UUID NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
++    sequence_id                 BIGINT NOT NULL,
++    summary                     TEXT NOT NULL CHECK (char_length(btrim(summary)) BETWEEN 1 AND 500),
++    description_markdown        TEXT NOT NULL DEFAULT '' CHECK (octet_length(description_markdown) <= 1048576),
++    description_sha256          BYTEA GENERATED ALWAYS AS (digest(description_markdown, 'sha256')) STORED,
++    state_id                    UUID NOT NULL REFERENCES workflow_states(id),
++    pending_transition_exec_id  UUID,
++    priority_id                 UUID NOT NULL REFERENCES project_priorities(id),
++    created_by_id               UUID NOT NULL REFERENCES users(id),
++    original_created_by_id      UUID NOT NULL REFERENCES users(id),
++    creator_modified_by_id      UUID REFERENCES users(id),
++    creator_modified_at         TIMESTAMPTZ,
++    start_date                  DATE,
++    due_date                    DATE,
++    cycle_id                    UUID,
++    parent_issue_id             UUID REFERENCES issues(id) ON DELETE SET NULL,
++    ancestry_path               ltree NOT NULL,
++    board_rank                  TEXT COLLATE "C" NOT NULL,
++    search_tsv                  tsvector GENERATED ALWAYS AS (
++                                    setweight(to_tsvector('english', coalesce(summary, '')), 'A') ||
++                                    setweight(build_markdown_tsvector(description_markdown), 'B')
++                                ) STORED,
++    CHECK (due_date IS NULL OR start_date IS NULL OR due_date >= start_date),
++    UNIQUE (project_id, sequence_id),
++    FOREIGN KEY (id, object_type) REFERENCES objects (id, object_type) ON DELETE RESTRICT
++);
++
++CREATE INDEX issues_search_tsv_gin ON issues USING gin (search_tsv);
++CREATE INDEX issues_project_rank_idx ON issues (project_id, state_id, board_rank COLLATE "C");
++CREATE INDEX issues_parent_idx ON issues (parent_issue_id) WHERE parent_issue_id IS NOT NULL;
++
++CREATE FUNCTION allocate_issue_sequence(p_project_id uuid)
++RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
++DECLARE
++    v_seq bigint;
++BEGIN
++    UPDATE projects SET issue_seq_counter = issue_seq_counter + 1
++     WHERE id = p_project_id RETURNING issue_seq_counter INTO v_seq;
++    IF v_seq IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PROJECT_NOT_FOUND';
++    END IF;
++    RETURN v_seq;
++END;
++$$;
++
++COMMENT ON FUNCTION allocate_issue_sequence(uuid) IS
++  'Allocates the next atomic sequence_id for an issue within a project using row locking on projects. '
++  'Gaps after transaction rollback are acceptable. '
++  'App flow: allocate_issue_sequence -> register_object -> INSERT INTO issues.';
++
++CREATE FUNCTION issues_validate_biu() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_proj_ws uuid;
++    v_proj_ident text;
++    v_proj_counter bigint;
++    v_obj_key text;
++    v_obj_proj uuid;
++    v_state_proj uuid;
++    v_prio_proj uuid;
++    v_parent_path ltree;
++BEGIN
++    -- Immutability on UPDATE
++    IF TG_OP = 'UPDATE' THEN
++        IF NEW.sequence_id IS DISTINCT FROM OLD.sequence_id OR NEW.project_id IS DISTINCT FROM OLD.project_id THEN
++            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_KEY_IMMUTABLE';
++        END IF;
++    END IF;
++
++    -- Project existence and workspace verification
++    SELECT workspace_id, identifier, issue_seq_counter
++      INTO v_proj_ws, v_proj_ident, v_proj_counter
++      FROM projects WHERE id = NEW.project_id;
++
++    IF v_proj_ws IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PROJECT_NOT_FOUND';
++    END IF;
++
++    IF NEW.workspace_id <> v_proj_ws THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_WORKSPACE_MISMATCH';
++    END IF;
++
++    -- Sequence allocated check
++    IF NEW.sequence_id > v_proj_counter THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SEQUENCE_NOT_ALLOCATED';
++    END IF;
++
++    -- Objects spine matching
++    SELECT canonical_key, project_id
++      INTO v_obj_key, v_obj_proj
++      FROM objects WHERE id = NEW.id;
++
++    IF v_obj_key IS NULL OR v_obj_key <> (v_proj_ident || '-' || NEW.sequence_id::text) OR v_obj_proj IS DISTINCT FROM NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SPINE_MISMATCH';
++    END IF;
++
++    -- State and Priority project matching
++    SELECT project_id INTO v_state_proj FROM workflow_states WHERE id = NEW.state_id;
++    IF v_state_proj IS NULL OR v_state_proj <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_STATE_PROJECT_MISMATCH';
++    END IF;
++
++    SELECT project_id INTO v_prio_proj FROM project_priorities WHERE id = NEW.priority_id;
++    IF v_prio_proj IS NULL OR v_prio_proj <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_PRIORITY_PROJECT_MISMATCH';
++    END IF;
++
++    -- Ancestry path calculation on INSERT
++    IF TG_OP = 'INSERT' THEN
++        IF NEW.parent_issue_id IS NULL THEN
++            NEW.ancestry_path := text2ltree(replace(NEW.id::text, '-', ''));
++        ELSE
++            SELECT ancestry_path INTO v_parent_path FROM issues WHERE id = NEW.parent_issue_id;
++            IF v_parent_path IS NULL THEN
++                RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_ISSUE_NOT_FOUND';
++            END IF;
++            NEW.ancestry_path := v_parent_path || text2ltree(replace(NEW.id::text, '-', ''));
++        END IF;
++    END IF;
++
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issues_validate_biu_trg
++BEFORE INSERT OR UPDATE ON issues
++FOR EACH ROW EXECUTE FUNCTION issues_validate_biu();
++
++GRANT EXECUTE ON FUNCTION build_markdown_tsvector(text) TO kanban_app, app_rls_reader;
++GRANT EXECUTE ON FUNCTION allocate_issue_sequence(uuid) TO kanban_app;
++GRANT EXECUTE ON FUNCTION issues_validate_biu() TO kanban_app;
++
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE issues TO kanban_app;
++GRANT SELECT ON TABLE issues TO app_rls_reader;
+diff --git a/database/migrations/versions/p1_05_issues.py b/database/migrations/versions/p1_05_issues.py
+new file mode 100644
+index 0000000..b620d63
+--- /dev/null
++++ b/database/migrations/versions/p1_05_issues.py
+@@ -0,0 +1,26 @@
++"""Issues table, atomic sequence allocation, and build_markdown_tsvector.
++
++Revision ID: p1_05_issues
++Revises: p1_10_views
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p1_05_issues"
++down_revision: str | None = "p1_10_views"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply issues table, sequence allocation, and markdown tsvector."""
++    execute_sql_file("p1_05_issues.up.sql")
++
++
++def downgrade() -> None:
++    """Revert issues table, sequence allocation, and markdown tsvector."""
++    execute_sql_file("p1_05_issues.down.sql")
+diff --git a/database/testing/pg_harness.py b/database/testing/pg_harness.py
+index 72e25ab..80054ba 100644
+--- a/database/testing/pg_harness.py
++++ b/database/testing/pg_harness.py
+@@ -293,7 +293,7 @@ async def pg_worker_db(request: pytest.FixtureRequest) -> AsyncGenerator[AsyncEn
+             text(
+                 "SELECT schemaname, tablename FROM pg_tables "
+                 "WHERE schemaname IN ('public', 'kb_harness') "
+-                "AND tablename != 'alembic_version'"
++                "AND tablename NOT IN ('alembic_version', 'link_type_matrix')"
+             )
+         )
+         tables = [f'"{r[0]}"."{r[1]}"' for r in rows.all()]
+diff --git a/database/tests/migrations/test_p1_05_migration.py b/database/tests/migrations/test_p1_05_migration.py
+new file mode 100644
+index 0000000..1fba8c7
+--- /dev/null
++++ b/database/tests/migrations/test_p1_05_migration.py
+@@ -0,0 +1,59 @@
++"""Migration tests for p1_05_issues up/down lifecycle."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_08_issues_migration_lifecycle() -> None:
++    """Verify p1_05 upgrade creates issues, downgrade removes them, and re-up works."""
++    async with MigrationHarness() as harness:
++        assert harness.previous_of("p1_05_issues") == "p1_10_views"
++
++        # 1. Upgrade to p1_05_issues
++        await harness.upgrade("p1_05_issues")
++
++        tables_up = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name = 'issues'"
++        )
++        assert len(tables_up) == 1
++
++        funcs_up = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name IN ("
++            "  'build_markdown_tsvector', 'allocate_issue_sequence'"
++            ")"
++        )
++        assert {r["routine_name"] for r in funcs_up} == {
++            "build_markdown_tsvector",
++            "allocate_issue_sequence",
++        }
++
++        # 2. Downgrade to p1_11_object_links
++        prev_rev = harness.previous_of("p1_05_issues")
++        await harness.downgrade(prev_rev)
++
++        tables_down = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name = 'issues'"
++        )
++        assert len(tables_down) == 0
++
++        funcs_down = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name IN ("
++            "  'build_markdown_tsvector', 'allocate_issue_sequence'"
++            ")"
++        )
++        assert len(funcs_down) == 0
++
++        # 3. Re-upgrade to p1_05_issues succeeds
++        await harness.upgrade("p1_05_issues")
++
++        tables_reup = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name = 'issues'"
++        )
++        assert len(tables_reup) == 1
+diff --git a/database/tests/test_p1_05_issues.py b/database/tests/test_p1_05_issues.py
+new file mode 100644
+index 0000000..6230279
+--- /dev/null
++++ b/database/tests/test_p1_05_issues.py
+@@ -0,0 +1,535 @@
++"""Unit tests for Phase 1 issues table, sequence allocation, and tsvector."""
++
++import hashlib
++import uuid
++from dataclasses import dataclass
++from datetime import date
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
++from sqlalchemy.ext.asyncio import AsyncSession
++
++
++@dataclass
++class IssueContext:
++    """Project and user context for issue creation."""
++
++    workspace_id: uuid.UUID
++    project_id: uuid.UUID
++    identifier: str
++    user_id: uuid.UUID
++    state_id: uuid.UUID
++    priority_id: uuid.UUID
++
++
++@dataclass
++class IssueParams:
++    """Attributes and options for issue creation."""
++
++    summary: str = "Sample Issue"
++    description_markdown: str = ""
++    start_date: date | None = None
++    due_date: date | None = None
++    board_rank: str = "0|hzzzzz:"
++    issue_id: uuid.UUID | None = None
++
++
++async def _create_workspace(
++    session: AsyncSession,
++    slug: str | None = None,
++    name: str = "Test Workspace",
++) -> uuid.UUID:
++    """Create a test workspace and return its UUID."""
++    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
++    row = await session.execute(
++        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
++        {"slug": ws_slug, "name": name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _create_user(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    email: str,
++    display_name: str = "Test User",
++) -> uuid.UUID:
++    """Create a user in principals, objects, and users tables."""
++    u_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO principals (id, principal_type, workspace_id, display_name) "
++            "VALUES (:id, 'USER', :ws_id, :name)"
++        ),
++        {"id": u_id, "ws_id": workspace_id, "name": display_name},
++    )
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'user'::object_kind, :ws_id, NULL::uuid, :ckey, :title, :creator, :id"
++            ")"
++        ),
++        {
++            "ws_id": workspace_id,
++            "ckey": f"usr-{u_id.hex[:8]}",
++            "title": display_name,
++            "creator": u_id,
++            "id": u_id,
++        },
++    )
++    await session.execute(
++        text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws_id, :email)"),
++        {"id": u_id, "ws_id": workspace_id, "email": email},
++    )
++    return u_id
++
++
++async def _create_project(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    creator_id: uuid.UUID,
++    identifier: str = "KAN",
++    name: str = "Kanban Project",
++) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
++    """Create a project and return (project_id, default_state_id, default_priority_id)."""
++    p_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'project'::object_kind, :ws, NULL::uuid, :ident, :name, :creator, :id"
++            ")"
++        ),
++        {"ws": workspace_id, "ident": identifier, "name": name, "creator": creator_id, "id": p_id},
++    )
++    await session.execute(
++        text(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES (:id, :ws, :ident, :name)"
++        ),
++        {"id": p_id, "ws": workspace_id, "ident": identifier, "name": name},
++    )
++
++    state_row = await session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p AND is_default = true"),
++        {"p": p_id},
++    )
++    state_id = state_row.scalar_one()
++    assert isinstance(state_id, uuid.UUID)
++
++    prio_row = await session.execute(
++        text("SELECT id FROM project_priorities WHERE project_id = :p AND is_default = true"),
++        {"p": p_id},
++    )
++    prio_id = prio_row.scalar_one()
++    assert isinstance(prio_id, uuid.UUID)
++
++    return p_id, state_id, prio_id
++
++
++async def _create_issue(
++    session: AsyncSession,
++    ctx: IssueContext,
++    params: IssueParams | None = None,
++) -> tuple[uuid.UUID, int]:
++    """Execute full application flow to create an issue."""
++    p = params or IssueParams()
++    seq_row = await session.execute(
++        text("SELECT allocate_issue_sequence(:p)"),
++        {"p": ctx.project_id},
++    )
++    seq = seq_row.scalar_one()
++    assert isinstance(seq, int)
++
++    i_id = p.issue_id or uuid.uuid4()
++    canonical_key = f"{ctx.identifier}-{seq}"
++
++    await session.execute(
++        text(
++            "SELECT register_object(  'issue'::object_kind, :ws, :p, :ckey, :summary, :user, :id)"
++        ),
++        {
++            "ws": ctx.workspace_id,
++            "p": ctx.project_id,
++            "ckey": canonical_key,
++            "summary": p.summary,
++            "user": ctx.user_id,
++            "id": i_id,
++        },
++    )
++
++    await session.execute(
++        text(
++            "INSERT INTO issues ("
++            "  id, workspace_id, project_id, sequence_id, summary, "
++            "  description_markdown, state_id, priority_id, "
++            "  created_by_id, original_created_by_id, start_date, due_date, board_rank"
++            ") VALUES ("
++            "  :id, :ws, :p, :seq, :summary, "
++            "  :desc, :state, :prio, "
++            "  :user, :user, :sdate, :ddate, :rank"
++            ")"
++        ),
++        {
++            "id": i_id,
++            "ws": ctx.workspace_id,
++            "p": ctx.project_id,
++            "seq": seq,
++            "summary": p.summary,
++            "desc": p.description_markdown,
++            "state": ctx.state_id,
++            "prio": ctx.priority_id,
++            "user": ctx.user_id,
++            "sdate": p.start_date,
++            "ddate": p.due_date,
++            "rank": p.board_rank,
++        },
++    )
++
++    return i_id, seq
++
++
++async def test_01_positive_full_flow_and_sha256(db_session: AsyncSession) -> None:
++    """Verify full app flow creates KAN-1 and description_sha256 matches sha256 digest."""
++    ws = await _create_workspace(db_session)
++    u = await _create_user(db_session, ws, "author@example.com")
++    p, state_id, prio_id = await _create_project(db_session, ws, u, "KAN")
++    ctx = IssueContext(ws, p, "KAN", u, state_id, prio_id)
++
++    desc = "This is a detailed markdown description of KAN-1."
++    i_id, seq = await _create_issue(
++        db_session,
++        ctx,
++        IssueParams(summary="First Issue", description_markdown=desc),
++    )
++    assert seq == 1
++
++    res = await db_session.execute(
++        text("SELECT sequence_id, description_sha256 FROM issues WHERE id = :id"),
++        {"id": i_id},
++    )
++    row = res.one()
++    assert row.sequence_id == 1
++
++    expected_hash = hashlib.sha256(desc.encode("utf-8")).digest()
++    assert bytes(row.description_sha256) == expected_hash
++
++    # Updating description changes the hash
++    new_desc = "Updated description text with different content."
++    await db_session.execute(
++        text("UPDATE issues SET description_markdown = :desc WHERE id = :id"),
++        {"desc": new_desc, "id": i_id},
++    )
++    new_res = await db_session.execute(
++        text("SELECT description_sha256 FROM issues WHERE id = :id"),
++        {"id": i_id},
++    )
++    new_hash = hashlib.sha256(new_desc.encode("utf-8")).digest()
++    assert bytes(new_res.scalar_one()) == new_hash
++    assert new_hash != expected_hash
++
++
++async def test_02_positive_markdown_tsvector(db_session: AsyncSession) -> None:
++    """Verify build_markdown_tsvector strips fences, urls, and keeps code and link text."""
++    ws = await _create_workspace(db_session)
++    u = await _create_user(db_session, ws, "tsvector-author@example.com")
++    p, state_id, prio_id = await _create_project(db_session, ws, u, "TSV")
++    ctx = IssueContext(ws, p, "TSV", u, state_id, prio_id)
++
++    desc = "see [docs](https://evil.example/path)\n```python\nfoo_bar()\n```"
++    i_id, _ = await _create_issue(
++        db_session,
++        ctx,
++        IssueParams(summary="Searchable Markdown", description_markdown=desc),
++    )
++
++    # 1. 'docs' is indexed from link text
++    r_docs = await db_session.execute(
++        text("SELECT search_tsv @@ to_tsquery('english', 'docs') FROM issues WHERE id = :id"),
++        {"id": i_id},
++    )
++    assert r_docs.scalar_one() is True
++
++    # 2. 'evil' is stripped from url
++    r_evil = await db_session.execute(
++        text("SELECT search_tsv @@ to_tsquery('english', 'evil') FROM issues WHERE id = :id"),
++        {"id": i_id},
++    )
++    assert r_evil.scalar_one() is False
++
++    # 3. 'python' info string stripped
++    r_py = await db_session.execute(
++        text("SELECT search_tsv @@ to_tsquery('english', 'python') FROM issues WHERE id = :id"),
++        {"id": i_id},
++    )
++    assert r_py.scalar_one() is False
++
++    # 4. 'foo_bar' code content is indexed and searchable
++    r_foo = await db_session.execute(
++        text("SELECT search_tsv @@ to_tsquery('english', 'foo_bar') FROM issues WHERE id = :id"),
++        {"id": i_id},
++    )
++    assert r_foo.scalar_one() is True
++
++
++async def test_03_negative_checks(db_session: AsyncSession) -> None:
++    """Verify summary length, date order, and description size constraints raise 23514."""
++    ws = await _create_workspace(db_session)
++    u = await _create_user(db_session, ws, "checks-author@example.com")
++    p, state_id, prio_id = await _create_project(db_session, ws, u, "CHK")
++    ctx = IssueContext(ws, p, "CHK", u, state_id, prio_id)
++
++    # 1. Summary with whitespace only raises 23514
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_sum_empty:
++        async with db_session.begin_nested():
++            await _create_issue(db_session, ctx, IssueParams(summary="   "))
++    err_empty = str(exc_sum_empty.value).lower()
++    assert "23514" in str(exc_sum_empty.value) or "check constraint" in err_empty
++
++    # 2. Summary with 501 chars raises 23514
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_sum_long:
++        async with db_session.begin_nested():
++            await _create_issue(db_session, ctx, IssueParams(summary="s" * 501))
++    err_long = str(exc_sum_long.value).lower()
++    assert "23514" in str(exc_sum_long.value) or "check constraint" in err_long
++
++    # 3. due_date < start_date raises 23514
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_date:
++        async with db_session.begin_nested():
++            await _create_issue(
++                db_session,
++                ctx,
++                IssueParams(start_date=date(2026, 11, 12), due_date=date(2026, 11, 11)),
++            )
++    err_date = str(exc_date.value).lower()
++    assert "23514" in str(exc_date.value) or "check constraint" in err_date
++
++    # 4. Description of 1048577 bytes raises 23514
++    desc_oversized = "a" * 1048577
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_desc:
++        async with db_session.begin_nested():
++            await _create_issue(
++                db_session,
++                ctx,
++                IssueParams(description_markdown=desc_oversized),
++            )
++    assert "23514" in str(exc_desc.value) or "check constraint" in str(exc_desc.value).lower()
++
++    # 5. Description of 1048576 bytes is accepted
++    desc_max = "b" * 1048576
++    i_id_max, _ = await _create_issue(
++        db_session,
++        ctx,
++        IssueParams(description_markdown=desc_max),
++    )
++    assert isinstance(i_id_max, uuid.UUID)
++
++
++async def test_04_negative_security_and_trigger_guards(db_session: AsyncSession) -> None:
++    """Verify generated columns, state project mismatch, unallocated sequence, and ancestry."""
++    ws = await _create_workspace(db_session)
++    ws2 = await _create_workspace(db_session)
++    u = await _create_user(db_session, ws, "guard-author@example.com")
++    p, state_id, prio_id = await _create_project(db_session, ws, u, "GRD")
++    _p2, state2_id, _ = await _create_project(db_session, ws, u, "OTHER")
++
++    # 1. Inserting generated column description_sha256 explicitly raises 428C9
++    i_gen_id = uuid.uuid4()
++    with pytest.raises((ProgrammingError, DBAPIError)) as exc_gen:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issues ("
++                    "  id, workspace_id, project_id, sequence_id, summary, "
++                    "  state_id, priority_id, created_by_id, original_created_by_id, "
++                    "  board_rank, description_sha256"
++                    ") VALUES ("
++                    "  :id, :ws, :p, 999, 'Gen Test', :state, :prio, :u, :u, '0|:', "
++                    "  decode('1234', 'hex')"
++                    ")"
++                ),
++                {"id": i_gen_id, "ws": ws, "p": p, "state": state_id, "prio": prio_id, "u": u},
++            )
++    orig_gen = getattr(exc_gen.value, "orig", None)
++    code_gen = getattr(orig_gen, "sqlstate", None) or getattr(exc_gen.value, "code", None)
++    err_gen = str(exc_gen.value).lower()
++    assert code_gen == "428C9" or "428c9" in err_gen or "generated" in err_gen
++
++    # 2. State from another project raises ISSUE_STATE_PROJECT_MISMATCH
++    ctx_bad_state = IssueContext(ws, p, "GRD", u, state2_id, prio_id)
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_state:
++        async with db_session.begin_nested():
++            await _create_issue(db_session, ctx_bad_state, IssueParams(summary="Cross State"))
++    assert "ISSUE_STATE_PROJECT_MISMATCH" in str(exc_state.value)
++
++    # 3. Sequence larger than counter raises ISSUE_SEQUENCE_NOT_ALLOCATED
++    i_unalloc = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "SELECT register_object("
++            "  'issue'::object_kind, :ws, :p, 'GRD-999', 'Unallocated', :u, :id"
++            ")"
++        ),
++        {"ws": ws, "p": p, "u": u, "id": i_unalloc},
++    )
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_seq:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issues ("
++                    "  id, workspace_id, project_id, sequence_id, summary, "
++                    "  state_id, priority_id, created_by_id, original_created_by_id, board_rank"
++                    ") VALUES ("
++                    "  :id, :ws, :p, 999, 'Unallocated', :state, :prio, :u, :u, '0|:'"
++                    ")"
++                ),
++                {"id": i_unalloc, "ws": ws, "p": p, "state": state_id, "prio": prio_id, "u": u},
++            )
++    assert "ISSUE_SEQUENCE_NOT_ALLOCATED" in str(exc_seq.value)
++
++    # 4. Workspace mismatch between issue and project raises ISSUE_WORKSPACE_MISMATCH
++    i_ws_mismatch = uuid.uuid4()
++    seq_row = await db_session.execute(text("SELECT allocate_issue_sequence(:p)"), {"p": p})
++    seq_val = seq_row.scalar_one()
++    await db_session.execute(
++        text(
++            "SELECT register_object(  'issue'::object_kind, :ws, :p, :ckey, 'WS Mismatch', :u, :id)"
++        ),
++        {"ws": ws, "p": p, "ckey": f"GRD-{seq_val}", "u": u, "id": i_ws_mismatch},
++    )
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_ws:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issues ("
++                    "  id, workspace_id, project_id, sequence_id, summary, "
++                    "  state_id, priority_id, created_by_id, original_created_by_id, board_rank"
++                    ") VALUES ("
++                    "  :id, :ws2, :p, :seq, 'WS Mismatch', :state, :prio, :u, :u, '0|:'"
++                    ")"
++                ),
++                {
++                    "id": i_ws_mismatch,
++                    "ws2": ws2,
++                    "p": p,
++                    "seq": seq_val,
++                    "state": state_id,
++                    "prio": prio_id,
++                    "u": u,
++                },
++            )
++    assert "ISSUE_WORKSPACE_MISMATCH" in str(exc_ws.value)
++
++    # 5. Client-supplied ancestry_path is overwritten on INSERT
++    i_anc = uuid.uuid4()
++    seq_anc = await db_session.scalar(text("SELECT allocate_issue_sequence(:p)"), {"p": p})
++    await db_session.execute(
++        text(
++            "SELECT register_object("
++            "  'issue'::object_kind, :ws, :p, :ckey, 'Ancestry Test', :u, :id"
++            ")"
++        ),
++        {"ws": ws, "p": p, "ckey": f"GRD-{seq_anc}", "u": u, "id": i_anc},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO issues ("
++            "  id, workspace_id, project_id, sequence_id, summary, "
++            "  state_id, priority_id, created_by_id, original_created_by_id, "
++            "  board_rank, ancestry_path"
++            ") VALUES ("
++            "  :id, :ws, :p, :seq, 'Ancestry Test', :state, :prio, :u, :u, '0|:', "
++            "  'untrusted.client.path'::ltree"
++            ")"
++        ),
++        {
++            "id": i_anc,
++            "ws": ws,
++            "p": p,
++            "seq": seq_anc,
++            "state": state_id,
++            "prio": prio_id,
++            "u": u,
++        },
++    )
++    anc_row = await db_session.execute(
++        text("SELECT ancestry_path::text FROM issues WHERE id = :id"),
++        {"id": i_anc},
++    )
++    stored_path = anc_row.scalar_one()
++    expected_path = i_anc.hex
++    assert stored_path == expected_path
++    assert stored_path != "untrusted.client.path"
++
++
++async def test_05_negative_immutability_and_missing_project(db_session: AsyncSession) -> None:
++    """Verify sequence_id and project_id immutability and allocate on missing project."""
++    ws = await _create_workspace(db_session)
++    u = await _create_user(db_session, ws, "immut-author@example.com")
++    p, state_id, prio_id = await _create_project(db_session, ws, u, "IMM")
++    ctx = IssueContext(ws, p, "IMM", u, state_id, prio_id)
++
++    i_id, _ = await _create_issue(db_session, ctx)
++
++    # 1. UPDATE sequence_id raises ISSUE_KEY_IMMUTABLE
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_seq:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET sequence_id = sequence_id + 1 WHERE id = :id"),
++                {"id": i_id},
++            )
++    assert "ISSUE_KEY_IMMUTABLE" in str(exc_seq.value)
++
++    # 2. UPDATE project_id raises ISSUE_KEY_IMMUTABLE
++    other_p_id = uuid.uuid4()
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_proj:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET project_id = :p WHERE id = :id"),
++                {"p": other_p_id, "id": i_id},
++            )
++    assert "ISSUE_KEY_IMMUTABLE" in str(exc_proj.value)
++
++    # 3. allocate_issue_sequence on non-existent project raises PROJECT_NOT_FOUND
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_alloc:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT allocate_issue_sequence(:p)"),
++                {"p": uuid.uuid4()},
++            )
++    assert "PROJECT_NOT_FOUND" in str(exc_alloc.value)
++
++
++async def test_07_boundary_and_volatility(db_session: AsyncSession) -> None:
++    """Verify IMMUTABLE volatility of build_markdown_tsvector and empty description handling."""
++    # 1. Verify build_markdown_tsvector is IMMUTABLE ('i') in pg_proc
++    res = await db_session.execute(
++        text("SELECT provolatile::text FROM pg_proc WHERE proname = 'build_markdown_tsvector'")
++    )
++    assert res.scalar_one() == "i"
++
++    # 2. Empty description yields valid tsvector (not null, matches summary)
++    ws = await _create_workspace(db_session)
++    u = await _create_user(db_session, ws, "empty-author@example.com")
++    p, state_id, prio_id = await _create_project(db_session, ws, u, "MT")
++    ctx = IssueContext(ws, p, "MT", u, state_id, prio_id)
++
++    i_id, _ = await _create_issue(
++        db_session,
++        ctx,
++        IssueParams(summary="Unique Keyword In Summary", description_markdown=""),
++    )
++
++    r_empty = await db_session.execute(
++        text("SELECT search_tsv IS NOT NULL FROM issues WHERE id = :id"),
++        {"id": i_id},
++    )
++    assert r_empty.scalar_one() is True
++
++    r_kw = await db_session.execute(
++        text("SELECT search_tsv @@ to_tsquery('english', 'Keyword') FROM issues WHERE id = :id"),
++        {"id": i_id},
++    )
++    assert r_kw.scalar_one() is True
+diff --git a/database/tests/test_p1_05_sequence_concurrency.py b/database/tests/test_p1_05_sequence_concurrency.py
+new file mode 100644
+index 0000000..5e55c14
+--- /dev/null
++++ b/database/tests/test_p1_05_sequence_concurrency.py
+@@ -0,0 +1,75 @@
++"""Concurrency tests for allocate_issue_sequence."""
++
++import asyncio
++import os
++import uuid
++
++import asyncpg  # type: ignore[import-untyped]
++import pytest
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
++
++
++@pytest.mark.committed_db
++async def test_06_sequence_concurrency_20_connections(
++    committed_db_session: AsyncSession,
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Verify 20 concurrent connections allocate unique sequential sequence_ids."""
++    ws_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    creator_id = uuid.uuid4()
++
++    # 1. Create workspace
++    await committed_db_session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Conc WS')"),
++        {"id": ws_id, "slug": f"ws-conc-{uuid.uuid4().hex[:8]}"},
++    )
++
++    # 2. Register project object spine and project
++    await committed_db_session.execute(
++        text(
++            "SELECT register_object("
++            "  'project'::object_kind, :ws, NULL::uuid, 'CONC', 'Conc Project', :creator, :id"
++            ")"
++        ),
++        {"ws": ws_id, "creator": creator_id, "id": proj_id},
++    )
++    await committed_db_session.execute(
++        text(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES (:id, :ws, 'CONC', 'Conc Project')"
++        ),
++        {"id": proj_id, "ws": ws_id},
++    )
++    await committed_db_session.commit()
++
++    # 20 concurrent callers using independent asyncpg connections
++    socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++    user = os.environ.get("KB_TEST_PGUSER", "kanban_test")
++    db_name = str(pg_worker_db.url.database)
++
++    async def _allocate() -> int:
++        conn = await asyncpg.connect(user=user, database=db_name, host=socket_dir)
++        try:
++            val = await conn.fetchval(
++                "SELECT allocate_issue_sequence($1)",
++                proj_id,
++            )
++            assert isinstance(val, int)
++            return val
++        finally:
++            await conn.close()
++
++    results = await asyncio.gather(*[_allocate() for _ in range(20)])
++
++    # Returned set equals {1..20}, no duplicates
++    assert len(results) == 20
++    assert set(results) == set(range(1, 21))
++
++    # Final counter equals 20
++    res = await committed_db_session.execute(
++        text("SELECT issue_seq_counter FROM projects WHERE id = :id"),
++        {"id": proj_id},
++    )
++    assert res.scalar_one() == 20
+diff --git a/docs/qa/KANBA-41/alembic-heads.txt b/docs/qa/KANBA-41/alembic-heads.txt
+new file mode 100644
+index 0000000..4a7915a
+--- /dev/null
++++ b/docs/qa/KANBA-41/alembic-heads.txt
+@@ -0,0 +1 @@
++p1_05_issues (head)
+diff --git a/docs/qa/KANBA-41/build-check.txt b/docs/qa/KANBA-41/build-check.txt
+new file mode 100644
+index 0000000..857795a
+--- /dev/null
++++ b/docs/qa/KANBA-41/build-check.txt
+@@ -0,0 +1,35 @@
++All checks passed!
++40 files already formatted
++Success: no issues found in 38 source files
++uv run ruff check .
++All checks passed!
++uv run ruff format --check .
++320 files already formatted
++uv run mypy
++Success: no issues found in 129 source files
++uv run lint-imports
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 81 files, 89 dependencies.
++-----------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++uv run python -m scripts.check_no_dashes --all
++uv run python -m scripts.license_gate
++SUMMARY python=74 node=1 violations=0
++Exit code: 0
+diff --git a/docs/qa/KANBA-41/message-to-reality-checker.md b/docs/qa/KANBA-41/message-to-reality-checker.md
+new file mode 100644
+index 0000000..411ddb9
+--- /dev/null
++++ b/docs/qa/KANBA-41/message-to-reality-checker.md
+@@ -0,0 +1,90 @@
++# Audit Manifest: KANBA-41 (KB-P1-05)
++
++- **Ticket ID**: `KANBA-41` (`KB-P1-05`)
++- **Title**: `[Phase 1 / Database] issues table, atomic sequence allocation & build_markdown_tsvector()`
++- **Epic**: `KB-E1`
++- **Branch**: `feat/KANBA-41` (isolated worktree at `/tmp/kb-wt-KANBA-41`)
++- **Spec Sections**: Section 12.2, Section 7.2 (8a, 8e), Section 5.1
++
++---
++
++## 1. Executive Summary
++
++This ticket implements the core `issues` graph entity table, atomic per-project sequence allocation, and Markdown-aware full-text search indexing:
++1. `build_markdown_tsvector(md text)` Function:
++   - Defined as `LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE`.
++   - Strips fence delimiter lines and info strings (`(?m)^\s{0,3}(```|~~~).*$`).
++   - Normalizes markdown links and images to anchor text (`[text](url)` -> `text`).
++   - Strips markdown link reference definitions, autolinks, and bare URLs.
++   - Replaces markdown structural punctuation with spaces while preserving code identifiers.
++2. `issues` Entity Table:
++   - DDL verbatim matching Section 12.2 specification.
++   - Pinned `object_type = 'issue'` with composite foreign key to `objects(id, object_type) ON DELETE RESTRICT`.
++   - Generated stored `description_sha256 BYTEA GENERATED ALWAYS AS (digest(description_markdown, 'sha256')) STORED`.
++   - Generated stored `search_tsv` tsvector combining summary (weight 'A') and `build_markdown_tsvector(description_markdown)` (weight 'B').
++   - Supporting GIN index on `search_tsv`, B-tree composite index on `(project_id, state_id, board_rank COLLATE "C")`, and partial B-tree index on `parent_issue_id`.
++   - Temporary plain UUID for `cycle_id` pending KB-P1-08 cycles implementation.
++3. Atomic Sequence Allocation (`allocate_issue_sequence(p_project_id uuid)`):
++   - Defined as `LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public', 'pg_temp'`.
++   - Atomic counter increment on `projects.issue_seq_counter` with row lock.
++   - Raises `PROJECT_NOT_FOUND` (P0001) if project does not exist.
++   - Granted execution rights to `kanban_app`.
++4. Integrity Trigger (`issues_validate_biu`):
++   - Enforces workspace consistency between issue and parent project (`ISSUE_WORKSPACE_MISMATCH`).
++   - Enforces spine registration and canonical key alignment (`ISSUE_SPINE_MISMATCH`).
++   - Enforces sequence number allocation bounds (`ISSUE_SEQUENCE_NOT_ALLOCATED`).
++   - Enforces project scope for workflow state and priority (`ISSUE_STATE_PROJECT_MISMATCH`, `ISSUE_PRIORITY_PROJECT_MISMATCH`).
++   - Enforces immutability of `sequence_id` and `project_id` on update (`ISSUE_KEY_IMMUTABLE`).
++   - Automatically computes and sets `ancestry_path` ltree on insert, overwriting client input.
++5. Migration & Lineage:
++   - Strict linear Alembic migration `p1_05_issues.py` chained from `p1_10_views` (post-merge linear head on main).
++   - Fully reversible with reverse drop order in `p1_05_issues.down.sql`.
++
++---
++
++## 2. Requirement Traceability Matrix
++
++| Requirement | Implementation Artifact | Verification Method |
++| :--- | :--- | :--- |
++| Section 12.2: `issues` table DDL verbatim | `p1_05_issues.up.sql` | `test_01_create_issue_app_flow_and_hash` |
++| Section 12.2: Generated `description_sha256` | `p1_05_issues.up.sql` | `test_01_create_issue_app_flow_and_hash` |
++| Section 12.2: `build_markdown_tsvector` FTS | `p1_05_issues.up.sql` | `test_02_tsvector_markdown_filtering` |
++| Section 7.2 8a: Summary length 1 to 500 chars | `p1_05_issues.up.sql` | `test_03_negative_checks` (SQLSTATE 23514) |
++| Section 7.2 8e: Date order `due_date >= start_date` | `p1_05_issues.up.sql` | `test_03_negative_checks` (SQLSTATE 23514) |
++| Section 5.1: Description size <= 1048576 bytes | `p1_05_issues.up.sql` | `test_03_negative_checks` (SQLSTATE 23514) |
++| Section 12.2: Generated column write rejection | PostgreSQL Engine | `test_04_negative_security_and_spine` (SQLSTATE 428C9) |
++| Section 12.2: Cross-project state validation | `issues_validate_biu()` | `test_04_negative_security_and_spine` (`ISSUE_STATE_PROJECT_MISMATCH`) |
++| Section 12.2: Sequence counter bounds validation | `issues_validate_biu()` | `test_04_negative_security_and_spine` (`ISSUE_SEQUENCE_NOT_ALLOCATED`) |
++| Section 12.2: Ancestry path client overwrite | `issues_validate_biu()` | `test_04_negative_security_and_spine` |
++| Section 12.2: Sequence and project key immutability | `issues_validate_biu()` | `test_05_negative_immutability_and_missing_project` (`ISSUE_KEY_IMMUTABLE`) |
++| Section 12.2: Non-existent project sequence allocation | `allocate_issue_sequence()` | `test_05_negative_immutability_and_missing_project` (`PROJECT_NOT_FOUND`) |
++| Concurrency: 20 concurrent connections allocation | `allocate_issue_sequence()` | `test_06_concurrent_sequence_allocation` |
++| Boundary: `build_markdown_tsvector` volatility | `p1_05_issues.up.sql` | `test_07_boundary_and_volatility` (`provolatile = 'i'`) |
++| Migration: Up/Down/Up reversibility | `p1_05_issues.py` | `test_p1_05_migration.py` (`test_p1_05_migration_lifecycle`) |
++
++---
++
++## 3. Passive Forensic Proof Artifacts
++
++All verification artifacts are stored under `docs/qa/KANBA-41/`:
++1. `docs/qa/KANBA-41/unit-test-results.txt`:
++   - Command: `uv run pytest database/tests/test_p1_05_issues.py database/tests/test_p1_05_sequence_concurrency.py database/tests/migrations/test_p1_05_migration.py -q --cov=database --cov-branch --cov-report=term-missing`
++   - Result: 8 passed in 0.90s, 100% statement and branch coverage on touched modules, exit code 0.
++2. `docs/qa/KANBA-41/build-check.txt`:
++   - Command: `uv run ruff check database && uv run ruff format --check database && uv run mypy --strict database`
++   - Result: ruff check clean, ruff format clean (37 files), mypy strict clean (35 source files), exit code 0.
++3. `docs/qa/KANBA-41/alembic-heads.txt`:
++   - Command: `uv run alembic -c database/alembic.ini heads`
++   - Result: Single linear head `p1_05_issues (head)`, exit code 0.
++4. `docs/qa/KANBA-41/schema-dump.sql`:
++   - Raw PostgreSQL schema dump of `issues` table and definitions of `build_markdown_tsvector` and `allocate_issue_sequence`.
++5. `docs/qa/KANBA-41/tsvector-sample.txt`:
++   - Query output of `build_markdown_tsvector` on the test case 2 input verifying fence markers, info strings, and URLs are stripped while content is indexed.
++6. `docs/qa/KANBA-41/git-diff.patch`:
++   - Complete unified git diff against `main`.
++
++---
++
++## 4. Unicode Character Verification
++
++Zero Unicode dash characters (`U+2014` em-dash or `U+2013` en-dash) repository-wide. Checked and enforced across all source, migration, test, and documentation files.
+diff --git a/docs/qa/KANBA-41/schema-dump.sql b/docs/qa/KANBA-41/schema-dump.sql
+new file mode 100644
+index 0000000..c988543
+--- /dev/null
++++ b/docs/qa/KANBA-41/schema-dump.sql
+@@ -0,0 +1,225 @@
++--
++-- PostgreSQL database dump
++--
++
++\restrict K1RURsf74h4ZC6Bn9oBU3y8rtmDlE28LJ6VUyrebxgPD8hRjfcVxzgFNftLcOfx
++
++-- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
++-- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
++
++SET statement_timeout = 0;
++SET lock_timeout = 0;
++SET idle_in_transaction_session_timeout = 0;
++SET client_encoding = 'UTF8';
++SET standard_conforming_strings = on;
++SELECT pg_catalog.set_config('search_path', '', false);
++SET check_function_bodies = false;
++SET xmloption = content;
++SET client_min_messages = warning;
++SET row_security = off;
++
++SET default_tablespace = '';
++
++SET default_table_access_method = heap;
++
++--
++-- Name: issues; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.issues (
++    id uuid NOT NULL,
++    object_type public.object_kind DEFAULT 'issue'::public.object_kind NOT NULL,
++    workspace_id uuid NOT NULL,
++    project_id uuid NOT NULL,
++    sequence_id bigint NOT NULL,
++    summary text NOT NULL,
++    description_markdown text DEFAULT ''::text NOT NULL,
++    description_sha256 bytea GENERATED ALWAYS AS (public.digest(description_markdown, 'sha256'::text)) STORED,
++    state_id uuid NOT NULL,
++    pending_transition_exec_id uuid,
++    priority_id uuid NOT NULL,
++    created_by_id uuid NOT NULL,
++    original_created_by_id uuid NOT NULL,
++    creator_modified_by_id uuid,
++    creator_modified_at timestamp with time zone,
++    start_date date,
++    due_date date,
++    cycle_id uuid,
++    parent_issue_id uuid,
++    ancestry_path public.ltree NOT NULL,
++    board_rank text NOT NULL COLLATE pg_catalog."C",
++    search_tsv tsvector GENERATED ALWAYS AS ((setweight(to_tsvector('english'::regconfig, COALESCE(summary, ''::text)), 'A'::"char") || setweight(public.build_markdown_tsvector(description_markdown), 'B'::"char"))) STORED,
++    CONSTRAINT issues_check CHECK (((due_date IS NULL) OR (start_date IS NULL) OR (due_date >= start_date))),
++    CONSTRAINT issues_description_markdown_check CHECK ((octet_length(description_markdown) <= 1048576)),
++    CONSTRAINT issues_object_type_check CHECK ((object_type = 'issue'::public.object_kind)),
++    CONSTRAINT issues_summary_check CHECK (((char_length(btrim(summary)) >= 1) AND (char_length(btrim(summary)) <= 500)))
++);
++
++
++ALTER TABLE public.issues OWNER TO kanban_migrator;
++
++--
++-- Name: issues issues_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issues
++    ADD CONSTRAINT issues_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: issues issues_project_id_sequence_id_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issues
++    ADD CONSTRAINT issues_project_id_sequence_id_key UNIQUE (project_id, sequence_id);
++
++
++--
++-- Name: issues_parent_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issues_parent_idx ON public.issues USING btree (parent_issue_id) WHERE (parent_issue_id IS NOT NULL);
++
++
++--
++-- Name: issues_project_rank_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issues_project_rank_idx ON public.issues USING btree (project_id, state_id, board_rank);
++
++
++--
++-- Name: issues_search_tsv_gin; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issues_search_tsv_gin ON public.issues USING gin (search_tsv);
++
++
++--
++-- Name: issues issues_validate_biu_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER issues_validate_biu_trg BEFORE INSERT OR UPDATE ON public.issues FOR EACH ROW EXECUTE FUNCTION public.issues_validate_biu();
++
++
++--
++-- Name: issues issues_created_by_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issues
++    ADD CONSTRAINT issues_created_by_id_fkey FOREIGN KEY (created_by_id) REFERENCES public.users(id);
++
++
++--
++-- Name: issues issues_creator_modified_by_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issues
++    ADD CONSTRAINT issues_creator_modified_by_id_fkey FOREIGN KEY (creator_modified_by_id) REFERENCES public.users(id);
++
++
++--
++-- Name: issues issues_id_object_type_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issues
++    ADD CONSTRAINT issues_id_object_type_fkey FOREIGN KEY (id, object_type) REFERENCES public.objects(id, object_type) ON DELETE RESTRICT;
++
++
++--
++-- Name: issues issues_original_created_by_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issues
++    ADD CONSTRAINT issues_original_created_by_id_fkey FOREIGN KEY (original_created_by_id) REFERENCES public.users(id);
++
++
++--
++-- Name: issues issues_parent_issue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issues
++    ADD CONSTRAINT issues_parent_issue_id_fkey FOREIGN KEY (parent_issue_id) REFERENCES public.issues(id) ON DELETE SET NULL;
++
++
++--
++-- Name: issues issues_priority_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issues
++    ADD CONSTRAINT issues_priority_id_fkey FOREIGN KEY (priority_id) REFERENCES public.project_priorities(id);
++
++
++--
++-- Name: issues issues_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issues
++    ADD CONSTRAINT issues_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: issues issues_state_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issues
++    ADD CONSTRAINT issues_state_id_fkey FOREIGN KEY (state_id) REFERENCES public.workflow_states(id);
++
++
++--
++-- Name: TABLE issues; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.issues TO kanban_app;
++GRANT SELECT ON TABLE public.issues TO app_rls_reader;
++
++
++--
++-- PostgreSQL database dump complete
++--
++
++\unrestrict K1RURsf74h4ZC6Bn9oBU3y8rtmDlE28LJ6VUyrebxgPD8hRjfcVxzgFNftLcOfx
++
++
++-- Function definitions
++CREATE OR REPLACE FUNCTION public.build_markdown_tsvector(md text)
++ RETURNS tsvector
++ LANGUAGE plpgsql
++ IMMUTABLE PARALLEL SAFE
++AS $function$
++DECLARE
++    v_text text := coalesce(md, '');
++BEGIN
++    -- 1. Remove fence delimiter lines and their info strings
++    v_text := regexp_replace(v_text, '(?m)^\s{0,3}(```|~~~).*$', '', 'g');
++    -- 2. Images and links -> link text, reference definitions -> empty
++    v_text := regexp_replace(v_text, '!\[([^\]]*)\]\([^)]*\)', '\1', 'g');
++    v_text := regexp_replace(v_text, '\[([^\]]*)\]\([^)]*\)', '\1', 'g');
++    v_text := regexp_replace(v_text, '(?m)^\s{0,3}\[[^\]]+\]:\s*\S+.*$', '', 'g');
++    -- 3. Autolinks and bare URLs -> empty
++    v_text := regexp_replace(v_text, '<https?://[^>]+>', '', 'g');
++    v_text := regexp_replace(v_text, 'https?://\S+', '', 'g');
++    -- 4. Markdown punctuation -> space
++    v_text := regexp_replace(v_text, '[#*_>`|~]', ' ', 'g');
++    -- 5. Return tsvector
++    RETURN to_tsvector('english'::regconfig, v_text);
++END;
++$function$
++
++CREATE OR REPLACE FUNCTION public.allocate_issue_sequence(p_project_id uuid)
++ RETURNS bigint
++ LANGUAGE plpgsql
++ SECURITY DEFINER
++ SET search_path TO 'public', 'pg_temp'
++AS $function$
++DECLARE
++    v_seq bigint;
++BEGIN
++    UPDATE projects SET issue_seq_counter = issue_seq_counter + 1
++     WHERE id = p_project_id RETURNING issue_seq_counter INTO v_seq;
++    IF v_seq IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PROJECT_NOT_FOUND';
++    END IF;
++    RETURN v_seq;
++END;
++$function$
+diff --git a/docs/qa/KANBA-41/tsvector-sample.txt b/docs/qa/KANBA-41/tsvector-sample.txt
+new file mode 100644
+index 0000000..c3cb07d
+--- /dev/null
++++ b/docs/qa/KANBA-41/tsvector-sample.txt
+@@ -0,0 +1,5 @@
++     build_markdown_tsvector     
++---------------------------------
++ 'bar':4 'doc':2 'foo':3 'see':1
++(1 row)
++
+diff --git a/docs/qa/KANBA-41/unit-test-results.txt b/docs/qa/KANBA-41/unit-test-results.txt
+new file mode 100644
+index 0000000..f2d7f10
+--- /dev/null
++++ b/docs/qa/KANBA-41/unit-test-results.txt
+@@ -0,0 +1,48 @@
++........                                                                 [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                                  Stmts   Miss Branch BrPart  Cover   Missing
++-------------------------------------------------------------------------------------------------
++database/__init__.py                                      1      0      0      0   100%
++database/bootstrap/__init__.py                           25      2      6      3    84%   20, 22->24, 25
++database/migrations/__init__.py                           0      0      0      0   100%
++database/migrations/env.py                               39      5      8      4    81%   14->17, 22-23, 29->32, 47-48, 73
++database/migrations/sqlfile.py                           19      4      4      2    74%   17-18, 22-23
++database/migrations/versions/__init__.py                  0      0      0      0   100%
++database/migrations/versions/p1_01_baseline.py           10      1      0      0    90%   26
++database/migrations/versions/p1_02_objects_spine.py      10      1      0      0    90%   26
++database/migrations/versions/p1_03_principals.py         10      1      0      0    90%   26
++database/migrations/versions/p1_04_projects.py           10      1      0      0    90%   26
++database/migrations/versions/p1_05_issues.py             10      0      0      0   100%
++database/migrations/versions/p1_10_views.py              10      1      0      0    90%   26
++database/migrations/versions/p1_11_object_links.py       10      1      0      0    90%   26
++database/testing/__init__.py                              0      0      0      0   100%
++database/testing/pg_harness.py                          199     23     54     21    81%   49-50, 70-71, 75, 92-93, 113->exit, 114->113, 120-124, 136->147, 138->141, 142->145, 161, 165, 183->181, 204-205, 221, 234->239, 235->234, 239->243, 259, 262, 268, 337, 354-355, 363->exit
++database/tests/__init__.py                                0      0      0      0   100%
++database/tests/conftest.py                               15      6      0      0    60%   16-18, 30, 36-37
++database/tests/migration_harness.py                      88     15     12      6    79%   69, 73, 91, 95, 105, 107, 121-126, 130-134
++database/tests/migrations/__init__.py                     0      0      0      0   100%
++database/tests/migrations/test_p1_01_migration.py        61     61     10      0     0%   3-123
++database/tests/migrations/test_p1_02_migration.py        26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_03_migration.py        21     21      0      0     0%   3-69
++database/tests/migrations/test_p1_04_migration.py        25     25      0      0     0%   3-87
++database/tests/migrations/test_p1_05_migration.py        20      0      0      0   100%
++database/tests/migrations/test_p1_10_migration.py        26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_11_migration.py        27     27      0      0     0%   3-89
++database/tests/test_harness_benchmark.py                  8      8      0      0     0%   3-19
++database/tests/test_p1_01_baseline.py                   109    109      2      0     0%   3-185
++database/tests/test_p1_02_objects.py                    145    145      0      0     0%   3-319
++database/tests/test_p1_03_principals.py                 196    196      8      0     0%   3-469
++database/tests/test_p1_04_projects.py                   161    161      4      0     0%   3-501
++database/tests/test_p1_05_issues.py                     192      0      0      0   100%
++database/tests/test_p1_05_sequence_concurrency.py        31      0      0      0   100%
++database/tests/test_p1_10_views.py                      192    192      2      0     0%   3-571
++database/tests/test_p1_11_object_links.py               167    167      4      0     0%   3-524
++database/tests/test_pg_harness.py                       120    120      2      0     0%   3-224
++database/tests/test_smoke.py                              3      3      0      0     0%   3-8
++database/tests/test_sqlfile.py                           22     22      0      0     0%   3-36
++-------------------------------------------------------------------------------------------------
++TOTAL                                                  2008   1370    116     36    32%
++8 passed in 0.99s
++Exit code: 0
