@@ -1,0 +1,1300 @@
+diff --git a/database/migrations/sql/p1_11_object_links.down.sql b/database/migrations/sql/p1_11_object_links.down.sql
+new file mode 100644
+index 0000000..5612deb
+--- /dev/null
++++ b/database/migrations/sql/p1_11_object_links.down.sql
+@@ -0,0 +1,7 @@
++DROP TRIGGER IF EXISTS object_links_guard_bu_trg ON object_links;
++DROP FUNCTION IF EXISTS object_links_guard_bu();
++DROP TRIGGER IF EXISTS object_links_validate_bi_trg ON object_links;
++DROP FUNCTION IF EXISTS object_links_validate_bi();
++DROP TABLE IF EXISTS object_links;
++DROP TABLE IF EXISTS link_type_matrix;
++DROP TYPE IF EXISTS link_kind;
+diff --git a/database/migrations/sql/p1_11_object_links.up.sql b/database/migrations/sql/p1_11_object_links.up.sql
+new file mode 100644
+index 0000000..db1a167
+--- /dev/null
++++ b/database/migrations/sql/p1_11_object_links.up.sql
+@@ -0,0 +1,164 @@
++CREATE TYPE link_kind AS ENUM (
++    'BLOCKS', 'BLOCKED_BY', 'RELATES_TO', 'DUPLICATES', 'PARENT_OF',
++    'ASSIGNED_TO', 'IN_CYCLE', 'IN_MODULE', 'PROMOTED_TO_DOC',
++    'VERIFIED_BY_DOC', 'DERIVED_FROM_STICKY', 'EMBEDS_OBJECT', 'GOVERNED_BY_VIEW'
++);
++
++CREATE TABLE object_links (
++    id                  UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id        UUID NOT NULL REFERENCES workspaces(id) ON DELETE RESTRICT,
++    source_id           UUID NOT NULL,
++    source_type         object_kind NOT NULL,
++    target_id           UUID NOT NULL,
++    target_type         object_kind NOT NULL,
++    link_type           link_kind NOT NULL,
++    link_state          TEXT NOT NULL DEFAULT 'ACTIVE'
++                        CHECK (link_state IN ('ACTIVE', 'FLAGGED_INVALID')),
++    source_key_snapshot TEXT NOT NULL,
++    target_key_snapshot TEXT NOT NULL,
++    created_by_id       UUID NOT NULL,
++    created_at          TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    CHECK (source_id <> target_id),
++    UNIQUE (source_id, target_id, link_type),
++    FOREIGN KEY (source_id, source_type) REFERENCES objects (id, object_type) ON DELETE RESTRICT,
++    FOREIGN KEY (target_id, target_type) REFERENCES objects (id, object_type) ON DELETE RESTRICT
++);
++
++CREATE INDEX object_links_source_idx ON object_links (source_id, link_state);
++CREATE INDEX object_links_target_idx ON object_links (target_id, link_state);
++CREATE INDEX object_links_ws_state_idx ON object_links (workspace_id, link_state);
++
++CREATE TABLE link_type_matrix (
++    source_type       object_kind NOT NULL,
++    link_type         link_kind   NOT NULL,
++    target_type       object_kind NOT NULL,
++    is_user_creatable BOOLEAN     NOT NULL DEFAULT FALSE,
++    PRIMARY KEY (source_type, link_type, target_type)
++);
++
++REVOKE INSERT, UPDATE, DELETE ON link_type_matrix FROM kanban_app;
++
++-- Seed user-creatable link kinds (is_user_creatable = TRUE)
++-- 1. ('issue', k, 'issue') for k IN ('BLOCKS', 'BLOCKED_BY', 'DUPLICATES')
++INSERT INTO link_type_matrix (source_type, link_type, target_type, is_user_creatable) VALUES
++('issue', 'BLOCKS', 'issue', TRUE),
++('issue', 'BLOCKED_BY', 'issue', TRUE),
++('issue', 'DUPLICATES', 'issue', TRUE);
++
++-- 2. (s, 'RELATES_TO', t) for all pairs s, t IN ('issue', 'sticky', 'doc', 'page', 'cycle', 'module', 'view')
++INSERT INTO link_type_matrix (source_type, link_type, target_type, is_user_creatable)
++SELECT s.t::object_kind, 'RELATES_TO'::link_kind, t.t::object_kind, TRUE
++FROM (VALUES ('issue'), ('sticky'), ('doc'), ('page'), ('cycle'), ('module'), ('view')) AS s(t)
++CROSS JOIN (VALUES ('issue'), ('sticky'), ('doc'), ('page'), ('cycle'), ('module'), ('view')) AS t(t);
++
++-- 3. ('issue', 'VERIFIED_BY_DOC', t) for t IN ('doc', 'page')
++INSERT INTO link_type_matrix (source_type, link_type, target_type, is_user_creatable) VALUES
++('issue', 'VERIFIED_BY_DOC', 'doc', TRUE),
++('issue', 'VERIFIED_BY_DOC', 'page', TRUE);
++
++-- 4. (s, 'DERIVED_FROM_STICKY', 'sticky') for s IN ('issue', 'doc', 'page')
++INSERT INTO link_type_matrix (source_type, link_type, target_type, is_user_creatable) VALUES
++('issue', 'DERIVED_FROM_STICKY', 'sticky', TRUE),
++('doc', 'DERIVED_FROM_STICKY', 'sticky', TRUE),
++('page', 'DERIVED_FROM_STICKY', 'sticky', TRUE);
++
++-- Seed system-managed link kinds (is_user_creatable = FALSE)
++-- 5. ('sticky', 'PROMOTED_TO_DOC', 'doc')
++INSERT INTO link_type_matrix (source_type, link_type, target_type, is_user_creatable) VALUES
++('sticky', 'PROMOTED_TO_DOC', 'doc', FALSE),
++('issue', 'PARENT_OF', 'issue', FALSE),
++('doc', 'PARENT_OF', 'page', FALSE),
++('page', 'PARENT_OF', 'page', FALSE),
++('issue', 'ASSIGNED_TO', 'user', FALSE),
++('issue', 'IN_CYCLE', 'cycle', FALSE),
++('issue', 'IN_MODULE', 'module', FALSE);
++
++-- 6. (s, 'EMBEDS_OBJECT', t) for s IN ('issue', 'sticky', 'doc', 'page') and t IN ('issue', 'sticky', 'doc', 'page', 'view', 'cycle', 'module')
++INSERT INTO link_type_matrix (source_type, link_type, target_type, is_user_creatable)
++SELECT s.t::object_kind, 'EMBEDS_OBJECT'::link_kind, t.t::object_kind, FALSE
++FROM (VALUES ('issue'), ('sticky'), ('doc'), ('page')) AS s(t)
++CROSS JOIN (VALUES ('issue'), ('sticky'), ('doc'), ('page'), ('view'), ('cycle'), ('module')) AS t(t);
++
++-- 7. (s, 'GOVERNED_BY_VIEW', 'view') for s IN ('project', 'issue', 'cycle', 'module')
++INSERT INTO link_type_matrix (source_type, link_type, target_type, is_user_creatable) VALUES
++('project', 'GOVERNED_BY_VIEW', 'view', FALSE),
++('issue', 'GOVERNED_BY_VIEW', 'view', FALSE),
++('cycle', 'GOVERNED_BY_VIEW', 'view', FALSE),
++('module', 'GOVERNED_BY_VIEW', 'view', FALSE);
++
++-- Triggers for object_links
++CREATE FUNCTION object_links_validate_bi() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_src_ws   uuid;
++    v_src_key  text;
++    v_tgt_ws   uuid;
++    v_tgt_key  text;
++BEGIN
++    -- 1. Check link_type_matrix allowlist
++    IF NOT EXISTS (
++        SELECT 1 FROM link_type_matrix
++        WHERE source_type = NEW.source_type
++          AND link_type = NEW.link_type
++          AND target_type = NEW.target_type
++    ) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'LINK_TYPE_NOT_ALLOWED';
++    END IF;
++
++    -- 2. Fetch source object
++    SELECT workspace_id, canonical_key
++    INTO v_src_ws, v_src_key
++    FROM objects
++    WHERE id = NEW.source_id;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'LINK_ENDPOINT_NOT_FOUND';
++    END IF;
++
++    -- Fetch target object
++    SELECT workspace_id, canonical_key
++    INTO v_tgt_ws, v_tgt_key
++    FROM objects
++    WHERE id = NEW.target_id;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'LINK_ENDPOINT_NOT_FOUND';
++    END IF;
++
++    -- Assert both endpoints belong to NEW.workspace_id
++    IF v_src_ws <> NEW.workspace_id OR v_tgt_ws <> NEW.workspace_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'LINK_CROSS_WORKSPACE_FORBIDDEN';
++    END IF;
++
++    -- 3. Force authoritative snapshots and active state
++    NEW.source_key_snapshot := v_src_key;
++    NEW.target_key_snapshot := v_tgt_key;
++    NEW.link_state := 'ACTIVE';
++
++    RETURN NEW;
++END $$;
++
++CREATE TRIGGER object_links_validate_bi_trg
++BEFORE INSERT ON object_links
++FOR EACH ROW EXECUTE FUNCTION object_links_validate_bi();
++
++CREATE FUNCTION object_links_guard_bu() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++    IF NEW.id IS DISTINCT FROM OLD.id
++       OR NEW.workspace_id IS DISTINCT FROM OLD.workspace_id
++       OR NEW.source_id IS DISTINCT FROM OLD.source_id
++       OR NEW.source_type IS DISTINCT FROM OLD.source_type
++       OR NEW.target_id IS DISTINCT FROM OLD.target_id
++       OR NEW.target_type IS DISTINCT FROM OLD.target_type
++       OR NEW.link_type IS DISTINCT FROM OLD.link_type
++       OR NEW.source_key_snapshot IS DISTINCT FROM OLD.source_key_snapshot
++       OR NEW.target_key_snapshot IS DISTINCT FROM OLD.target_key_snapshot
++       OR NEW.created_by_id IS DISTINCT FROM OLD.created_by_id
++       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'OBJECT_LINK_IMMUTABLE';
++    END IF;
++    RETURN NEW;
++END $$;
++
++CREATE TRIGGER object_links_guard_bu_trg
++BEFORE UPDATE ON object_links
++FOR EACH ROW EXECUTE FUNCTION object_links_guard_bu();
+diff --git a/database/migrations/versions/p1_11_object_links.py b/database/migrations/versions/p1_11_object_links.py
+new file mode 100644
+index 0000000..e201863
+--- /dev/null
++++ b/database/migrations/versions/p1_11_object_links.py
+@@ -0,0 +1,26 @@
++"""Object links, link_kind enum, and link_type_matrix allowlist.
++
++Revision ID: p1_11_object_links
++Revises: p1_04_projects
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p1_11_object_links"
++down_revision: str | None = "p1_04_projects"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply link_kind enum, object_links table, and link_type_matrix catalog."""
++    execute_sql_file("p1_11_object_links.up.sql")
++
++
++def downgrade() -> None:
++    """Revert object_links table, link_type_matrix catalog, and link_kind enum."""
++    execute_sql_file("p1_11_object_links.down.sql")
+diff --git a/database/tests/migrations/test_p1_11_migration.py b/database/tests/migrations/test_p1_11_migration.py
+new file mode 100644
+index 0000000..45195fd
+--- /dev/null
++++ b/database/tests/migrations/test_p1_11_migration.py
+@@ -0,0 +1,89 @@
++"""Migration tests for p1_11_object_links up/down lifecycle."""
++
++from __future__ import annotations
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++EXPECTED_LINK_KIND_LABELS: list[str] = [
++    "BLOCKS",
++    "BLOCKED_BY",
++    "RELATES_TO",
++    "DUPLICATES",
++    "PARENT_OF",
++    "ASSIGNED_TO",
++    "IN_CYCLE",
++    "IN_MODULE",
++    "PROMOTED_TO_DOC",
++    "VERIFIED_BY_DOC",
++    "DERIVED_FROM_STICKY",
++    "EMBEDS_OBJECT",
++    "GOVERNED_BY_VIEW",
++]
++
++
++@pytest.mark.migration
++async def test_07_object_links_migration_lifecycle() -> None:
++    """Verify p1_11 upgrade creates tables/enums, downgrade removes, and re-up works."""
++    async with MigrationHarness() as harness:
++        assert harness.previous_of("p1_11_object_links") == "p1_04_projects"
++
++        # 1. Upgrade to p1_11_object_links
++        await harness.upgrade("p1_11_object_links")
++
++        # Verify link_kind enum has exactly the 13 labels in spec order
++        enum_rows = await harness.fetch(
++            "SELECT e.enumlabel "
++            "FROM pg_enum e "
++            "JOIN pg_type t ON e.enumtypid = t.oid "
++            "WHERE t.typname = 'link_kind' "
++            "ORDER BY e.enumsortorder"
++        )
++        labels = [r["enumlabel"] for r in enum_rows]
++        assert labels == EXPECTED_LINK_KIND_LABELS
++
++        # Verify tables exist
++        tables_up = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name IN ('object_links', 'link_type_matrix')"
++        )
++        assert {r["table_name"] for r in tables_up} == {"object_links", "link_type_matrix"}
++
++        funcs_up = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name IN "
++            "('object_links_validate_bi', 'object_links_guard_bu')"
++        )
++        assert {r["routine_name"] for r in funcs_up} == {
++            "object_links_validate_bi",
++            "object_links_guard_bu",
++        }
++
++        # 2. Downgrade to p1_02_objects_spine
++        prev_rev = harness.previous_of("p1_11_object_links")
++        await harness.downgrade(prev_rev)
++
++        tables_down = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name IN ('object_links', 'link_type_matrix')"
++        )
++        assert len(tables_down) == 0
++
++        types_down = await harness.fetch("SELECT typname FROM pg_type WHERE typname = 'link_kind'")
++        assert len(types_down) == 0
++
++        funcs_down = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name IN "
++            "('object_links_validate_bi', 'object_links_guard_bu')"
++        )
++        assert len(funcs_down) == 0
++
++        # 3. Re-upgrade to p1_11_object_links succeeds
++        await harness.upgrade("p1_11_object_links")
++        tables_reup = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name IN ('object_links', 'link_type_matrix')"
++        )
++        assert {r["table_name"] for r in tables_reup} == {"object_links", "link_type_matrix"}
+diff --git a/database/tests/test_p1_11_object_links.py b/database/tests/test_p1_11_object_links.py
+new file mode 100644
+index 0000000..180b304
+--- /dev/null
++++ b/database/tests/test_p1_11_object_links.py
+@@ -0,0 +1,524 @@
++"""Unit tests for Phase 1 object_links, link_kind enum, and link_type_matrix allowlist."""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++EXPECTED_LINK_KIND_LABELS: list[str] = [
++    "BLOCKS",
++    "BLOCKED_BY",
++    "RELATES_TO",
++    "DUPLICATES",
++    "PARENT_OF",
++    "ASSIGNED_TO",
++    "IN_CYCLE",
++    "IN_MODULE",
++    "PROMOTED_TO_DOC",
++    "VERIFIED_BY_DOC",
++    "DERIVED_FROM_STICKY",
++    "EMBEDS_OBJECT",
++    "GOVERNED_BY_VIEW",
++]
++
++EXPECTED_USER_LINK_KINDS: set[str] = {
++    "BLOCKS",
++    "BLOCKED_BY",
++    "DUPLICATES",
++    "RELATES_TO",
++    "VERIFIED_BY_DOC",
++    "DERIVED_FROM_STICKY",
++}
++
++EXPECTED_SYSTEM_LINK_KINDS: set[str] = {
++    "PROMOTED_TO_DOC",
++    "PARENT_OF",
++    "ASSIGNED_TO",
++    "IN_CYCLE",
++    "IN_MODULE",
++    "EMBEDS_OBJECT",
++    "GOVERNED_BY_VIEW",
++}
++
++
++async def _create_workspace(
++    session: AsyncSession,
++    slug: str | None = None,
++    name: str = "Test Workspace",
++) -> uuid.UUID:
++    """Create a test workspace."""
++    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
++    row = await session.execute(
++        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
++        {"slug": ws_slug, "name": name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _register_obj(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    obj_type: str,
++    canonical_key: str,
++    *,
++    title: str = "Sample Title",
++) -> uuid.UUID:
++    """Register an object in the objects spine."""
++    user_id = uuid.uuid4()
++    row = await session.execute(
++        text(
++            "SELECT register_object("
++            "  CAST(:obj_type AS object_kind), :ws_id, NULL, :canonical_key, :title, :user_id"
++            ")"
++        ),
++        {
++            "obj_type": obj_type,
++            "ws_id": ws_id,
++            "canonical_key": canonical_key,
++            "title": title,
++            "user_id": user_id,
++        },
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def test_01_link_objects_positive_snapshots_and_active_state(
++    db_session: AsyncSession,
++) -> None:
++    """Test Case 1: Linking issue->BLOCKS->issue and sticky->PROMOTED_TO_DOC->doc succeeds."""
++    ws_id = await _create_workspace(db_session)
++    user_id = uuid.uuid4()
++
++    issue1_id = await _register_obj(db_session, ws_id, "issue", "KAN-1", title="First Issue")
++    issue2_id = await _register_obj(db_session, ws_id, "issue", "KAN-2", title="Second Issue")
++    sticky_id = await _register_obj(db_session, ws_id, "sticky", "STK-1", title="Quick Sticky")
++    doc_id = await _register_obj(db_session, ws_id, "doc", "DOC-1", title="Architecture Doc")
++
++    # Link issue1 -> BLOCKS -> issue2 (pass dummy snapshots to verify trigger overwrites them)
++    res1 = await db_session.execute(
++        text(
++            "INSERT INTO object_links ("
++            "  workspace_id, source_id, source_type, target_id, target_type, "
++            "  link_type, source_key_snapshot, target_key_snapshot, created_by_id, link_state"
++            ") VALUES ("
++            "  :ws_id, :src_id, 'issue', :tgt_id, 'issue', "
++            "  'BLOCKS', 'DUMMY_SRC', 'DUMMY_TGT', :user_id, 'FLAGGED_INVALID'"
++            ") RETURNING id, source_key_snapshot, target_key_snapshot, link_state"
++        ),
++        {
++            "ws_id": ws_id,
++            "src_id": issue1_id,
++            "tgt_id": issue2_id,
++            "user_id": user_id,
++        },
++    )
++    link1 = res1.mappings().one()
++    assert isinstance(link1["id"], uuid.UUID)
++    assert link1["source_key_snapshot"] == "KAN-1"
++    assert link1["target_key_snapshot"] == "KAN-2"
++    assert link1["link_state"] == "ACTIVE"
++
++    # Link sticky -> PROMOTED_TO_DOC -> doc
++    res2 = await db_session.execute(
++        text(
++            "INSERT INTO object_links ("
++            "  workspace_id, source_id, source_type, target_id, target_type, "
++            "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++            ") VALUES ("
++            "  :ws_id, :src_id, 'sticky', :tgt_id, 'doc', "
++            "  'PROMOTED_TO_DOC', 'IGNORE', 'IGNORE', :user_id"
++            ") RETURNING id, source_key_snapshot, target_key_snapshot, link_state"
++        ),
++        {
++            "ws_id": ws_id,
++            "src_id": sticky_id,
++            "tgt_id": doc_id,
++            "user_id": user_id,
++        },
++    )
++    link2 = res2.mappings().one()
++    assert isinstance(link2["id"], uuid.UUID)
++    assert link2["source_key_snapshot"] == "STK-1"
++    assert link2["target_key_snapshot"] == "DOC-1"
++    assert link2["link_state"] == "ACTIVE"
++
++
++async def test_02_update_link_state_preserves_snapshots(db_session: AsyncSession) -> None:
++    """Test Case 2: Updating link_state to FLAGGED_INVALID succeeds and preserves snapshots."""
++    ws_id = await _create_workspace(db_session)
++    user_id = uuid.uuid4()
++
++    issue1_id = await _register_obj(db_session, ws_id, "issue", "KAN-10", title="Issue 10")
++    issue2_id = await _register_obj(db_session, ws_id, "issue", "KAN-11", title="Issue 11")
++
++    res = await db_session.execute(
++        text(
++            "INSERT INTO object_links ("
++            "  workspace_id, source_id, source_type, target_id, target_type, "
++            "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++            ") VALUES ("
++            "  :ws_id, :src_id, 'issue', :tgt_id, 'issue', "
++            "  'BLOCKS', 'SNAP_1', 'SNAP_2', :user_id"
++            ") RETURNING id"
++        ),
++        {"ws_id": ws_id, "src_id": issue1_id, "tgt_id": issue2_id, "user_id": user_id},
++    )
++    link_id = res.scalar_one()
++
++    # Mutate objects display_title
++    await db_session.execute(
++        text("UPDATE objects SET display_title = 'Renamed Issue 10' WHERE id = :id"),
++        {"id": issue1_id},
++    )
++
++    # Update link_state to FLAGGED_INVALID
++    await db_session.execute(
++        text("UPDATE object_links SET link_state = 'FLAGGED_INVALID' WHERE id = :id"),
++        {"id": link_id},
++    )
++
++    row = await db_session.execute(
++        text(
++            "SELECT link_state, source_key_snapshot, target_key_snapshot "
++            "FROM object_links WHERE id = :id"
++        ),
++        {"id": link_id},
++    )
++    record = row.mappings().one()
++    assert record["link_state"] == "FLAGGED_INVALID"
++    assert record["source_key_snapshot"] == "KAN-10"
++    assert record["target_key_snapshot"] == "KAN-11"
++
++
++async def test_03_negative_matrix_and_self_link_guards(db_session: AsyncSession) -> None:
++    """Test Case 3: Matrix violation, self-link, and duplicate link rejections."""
++    ws_id = await _create_workspace(db_session)
++    user_id = uuid.uuid4()
++
++    user_obj_id = await _register_obj(db_session, ws_id, "user", "USR-1", title="Alice")
++    doc_id = await _register_obj(db_session, ws_id, "doc", "DOC-2", title="Guide")
++    proj_id = await _register_obj(db_session, ws_id, "project", "PRJ-1", title="Platform")
++    issue_id = await _register_obj(db_session, ws_id, "issue", "KAN-20", title="Issue 20")
++    issue2_id = await _register_obj(db_session, ws_id, "issue", "KAN-21", title="Issue 21")
++
++    # 1. user -> IN_CYCLE -> doc (disallowed pair)
++    with pytest.raises(DBAPIError) as exc_matrix:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO object_links ("
++                    "  workspace_id, source_id, source_type, target_id, target_type, "
++                    "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++                    ") VALUES ("
++                    "  :ws_id, :src_id, 'user', :tgt_id, 'doc', "
++                    "  'IN_CYCLE', 'X', 'Y', :user_id"
++                    ")"
++                ),
++                {"ws_id": ws_id, "src_id": user_obj_id, "tgt_id": doc_id, "user_id": user_id},
++            )
++    assert "LINK_TYPE_NOT_ALLOWED" in str(exc_matrix.value)
++
++    # 2. project -> BLOCKS -> issue (disallowed pair)
++    with pytest.raises(DBAPIError) as exc_matrix2:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO object_links ("
++                    "  workspace_id, source_id, source_type, target_id, target_type, "
++                    "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++                    ") VALUES ("
++                    "  :ws_id, :src_id, 'project', :tgt_id, 'issue', "
++                    "  'BLOCKS', 'X', 'Y', :user_id"
++                    ")"
++                ),
++                {"ws_id": ws_id, "src_id": proj_id, "tgt_id": issue_id, "user_id": user_id},
++            )
++    assert "LINK_TYPE_NOT_ALLOWED" in str(exc_matrix2.value)
++
++    # 3. self-link source_id = target_id raises 23514
++    with pytest.raises(IntegrityError) as exc_self:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO object_links ("
++                    "  workspace_id, source_id, source_type, target_id, target_type, "
++                    "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++                    ") VALUES ("
++                    "  :ws_id, :src_id, 'issue', :src_id, 'issue', "
++                    "  'BLOCKS', 'X', 'Y', :user_id"
++                    ")"
++                ),
++                {"ws_id": ws_id, "src_id": issue_id, "user_id": user_id},
++            )
++    orig = getattr(exc_self.value, "orig", None)
++    pgcode = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
++    assert pgcode == "23514"
++
++    # 4. duplicate link (source_id, target_id, link_type) raises 23505
++    await db_session.execute(
++        text(
++            "INSERT INTO object_links ("
++            "  workspace_id, source_id, source_type, target_id, target_type, "
++            "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++            ") VALUES ("
++            "  :ws_id, :src_id, 'issue', :tgt_id, 'issue', "
++            "  'DUPLICATES', 'X', 'Y', :user_id"
++            ")"
++        ),
++        {"ws_id": ws_id, "src_id": issue_id, "tgt_id": issue2_id, "user_id": user_id},
++    )
++
++    with pytest.raises(IntegrityError) as exc_dup:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO object_links ("
++                    "  workspace_id, source_id, source_type, target_id, target_type, "
++                    "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++                    ") VALUES ("
++                    "  :ws_id, :src_id, 'issue', :tgt_id, 'issue', "
++                    "  'DUPLICATES', 'X', 'Y', :user_id"
++                    ")"
++                ),
++                {"ws_id": ws_id, "src_id": issue_id, "tgt_id": issue2_id, "user_id": user_id},
++            )
++    orig_dup = getattr(exc_dup.value, "orig", None)
++    pgcode_dup = getattr(orig_dup, "pgcode", None) or getattr(orig_dup, "sqlstate", None)
++    assert pgcode_dup == "23505"
++
++
++async def test_04_negative_cross_workspace_and_foreign_key_guards(
++    db_session: AsyncSession,
++    app_session: AsyncSession,
++) -> None:
++    """Test Case 4: Cross-workspace link, composite FK, RESTRICT delete, and permissions."""
++    ws1_id = await _create_workspace(db_session, name="Workspace 1")
++    ws2_id = await _create_workspace(db_session, name="Workspace 2")
++    user_id = uuid.uuid4()
++
++    issue_ws1_id = await _register_obj(db_session, ws1_id, "issue", "W1-1")
++    issue_ws2_id = await _register_obj(db_session, ws2_id, "issue", "W2-1")
++
++    # 1. Cross-workspace link raises LINK_CROSS_WORKSPACE_FORBIDDEN
++    with pytest.raises(DBAPIError) as exc_cross:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO object_links ("
++                    "  workspace_id, source_id, source_type, target_id, target_type, "
++                    "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++                    ") VALUES ("
++                    "  :ws_id, :src_id, 'issue', :tgt_id, 'issue', "
++                    "  'BLOCKS', 'X', 'Y', :user_id"
++                    ")"
++                ),
++                {
++                    "ws_id": ws1_id,
++                    "src_id": issue_ws1_id,
++                    "tgt_id": issue_ws2_id,
++                    "user_id": user_id,
++                },
++            )
++    assert "LINK_CROSS_WORKSPACE_FORBIDDEN" in str(exc_cross.value)
++
++    # 2. Endpoint missing entirely raises LINK_ENDPOINT_NOT_FOUND
++    missing_id = uuid.uuid4()
++    with pytest.raises(DBAPIError) as exc_missing:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO object_links ("
++                    "  workspace_id, source_id, source_type, target_id, target_type, "
++                    "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++                    ") VALUES ("
++                    "  :ws_id, :src_id, 'issue', :tgt_id, 'issue', "
++                    "  'BLOCKS', 'X', 'Y', :user_id"
++                    ")"
++                ),
++                {"ws_id": ws1_id, "src_id": issue_ws1_id, "tgt_id": missing_id, "user_id": user_id},
++            )
++    assert "LINK_ENDPOINT_NOT_FOUND" in str(exc_missing.value)
++
++    # 3. Composite FK mismatch: source_id is issue, but source_type passed as 'doc'
++    doc_ws1_id = await _register_obj(db_session, ws1_id, "doc", "DOC-W1")
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_fk:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO object_links ("
++                    "  workspace_id, source_id, source_type, target_id, target_type, "
++                    "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++                    ") VALUES ("
++                    "  :ws_id, :src_id, 'doc', :tgt_id, 'doc', "
++                    "  'RELATES_TO', 'X', 'Y', :user_id"
++                    ")"
++                ),
++                {"ws_id": ws1_id, "src_id": issue_ws1_id, "tgt_id": doc_ws1_id, "user_id": user_id},
++            )
++    orig_fk = getattr(exc_fk.value, "orig", None)
++    pgcode_fk = getattr(orig_fk, "pgcode", None) or getattr(orig_fk, "sqlstate", None)
++    assert pgcode_fk == "23503"
++
++    # 4. ON DELETE RESTRICT on objects when linked
++    issue_a_id = await _register_obj(db_session, ws1_id, "issue", "KAN-A")
++    issue_b_id = await _register_obj(db_session, ws1_id, "issue", "KAN-B")
++    await db_session.execute(
++        text(
++            "INSERT INTO object_links ("
++            "  workspace_id, source_id, source_type, target_id, target_type, "
++            "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++            ") VALUES ("
++            "  :ws_id, :src_id, 'issue', :tgt_id, 'issue', "
++            "  'BLOCKS', 'X', 'Y', :user_id"
++            ")"
++        ),
++        {"ws_id": ws1_id, "src_id": issue_a_id, "tgt_id": issue_b_id, "user_id": user_id},
++    )
++
++    with pytest.raises(IntegrityError) as exc_del:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("DELETE FROM objects WHERE id = :id"),
++                {"id": issue_a_id},
++            )
++    orig_del = getattr(exc_del.value, "orig", None)
++    pgcode_del = getattr(orig_del, "pgcode", None) or getattr(orig_del, "sqlstate", None)
++    assert pgcode_del == "23503"
++
++    # 5. As kanban_app, INSERT INTO link_type_matrix raises 42501
++    with pytest.raises((ProgrammingError, DBAPIError)) as exc_perm:
++        async with app_session.begin_nested():
++            await app_session.execute(
++                text(
++                    "INSERT INTO link_type_matrix ("
++                    "  source_type, link_type, target_type, is_user_creatable"
++                    ") VALUES ('issue', 'BLOCKS', 'doc', true)"
++                )
++            )
++    orig_perm = getattr(exc_perm.value, "orig", None)
++    pgcode_perm = getattr(orig_perm, "pgcode", None) or getattr(orig_perm, "sqlstate", None)
++    assert pgcode_perm == "42501"
++
++
++async def test_05_negative_immutability_and_invalid_state(db_session: AsyncSession) -> None:
++    """Test Case 5: Immutability of object_links attributes and check constraint on link_state."""
++    ws_id = await _create_workspace(db_session)
++    user_id = uuid.uuid4()
++
++    issue1_id = await _register_obj(db_session, ws_id, "issue", "KAN-50")
++    issue2_id = await _register_obj(db_session, ws_id, "issue", "KAN-51")
++    issue3_id = await _register_obj(db_session, ws_id, "issue", "KAN-52")
++
++    res = await db_session.execute(
++        text(
++            "INSERT INTO object_links ("
++            "  workspace_id, source_id, source_type, target_id, target_type, "
++            "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++            ") VALUES ("
++            "  :ws_id, :src_id, 'issue', :tgt_id, 'issue', "
++            "  'BLOCKS', 'X', 'Y', :user_id"
++            ") RETURNING id"
++        ),
++        {"ws_id": ws_id, "src_id": issue1_id, "tgt_id": issue2_id, "user_id": user_id},
++    )
++    link_id = res.scalar_one()
++
++    # 1. Mutate target_id raises OBJECT_LINK_IMMUTABLE
++    with pytest.raises(DBAPIError) as exc_mut_target:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE object_links SET target_id = :new_tgt WHERE id = :id"),
++                {"id": link_id, "new_tgt": issue3_id},
++            )
++    assert "OBJECT_LINK_IMMUTABLE" in str(exc_mut_target.value)
++
++    # 2. Mutate target_key_snapshot raises OBJECT_LINK_IMMUTABLE
++    with pytest.raises(DBAPIError) as exc_mut_snap:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE object_links SET target_key_snapshot = 'FAKE' WHERE id = :id"),
++                {"id": link_id},
++            )
++    assert "OBJECT_LINK_IMMUTABLE" in str(exc_mut_snap.value)
++
++    # 3. Mutate source_key_snapshot raises OBJECT_LINK_IMMUTABLE
++    with pytest.raises(DBAPIError) as exc_mut_src_snap:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE object_links SET source_key_snapshot = 'FAKE' WHERE id = :id"),
++                {"id": link_id},
++            )
++    assert "OBJECT_LINK_IMMUTABLE" in str(exc_mut_src_snap.value)
++
++    # 4. Mutate link_type raises OBJECT_LINK_IMMUTABLE
++    with pytest.raises(DBAPIError) as exc_mut_type:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE object_links SET link_type = 'DUPLICATES' WHERE id = :id"),
++                {"id": link_id},
++            )
++    assert "OBJECT_LINK_IMMUTABLE" in str(exc_mut_type.value)
++
++    # 5. Invalid link_state = 'DELETED' raises 23514
++    with pytest.raises(IntegrityError) as exc_state:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE object_links SET link_state = 'DELETED' WHERE id = :id"),
++                {"id": link_id},
++            )
++    orig_state = getattr(exc_state.value, "orig", None)
++    pgcode_state = getattr(orig_state, "pgcode", None) or getattr(orig_state, "sqlstate", None)
++    assert pgcode_state == "23514"
++
++
++async def test_06_boundary_enum_order_and_link_type_matrix(db_session: AsyncSession) -> None:
++    """Test Case 6: pg_enum link_kind order and link_type_matrix user/system partition."""
++    # 1. Assert pg_enum for link_kind has exactly 13 values in authoritative order
++    rows = await db_session.execute(
++        text(
++            "SELECT e.enumlabel "
++            "FROM pg_enum e "
++            "JOIN pg_type t ON e.enumtypid = t.oid "
++            "WHERE t.typname = 'link_kind' "
++            "ORDER BY e.enumsortorder"
++        )
++    )
++    labels = [r[0] for r in rows.all()]
++    assert labels == EXPECTED_LINK_KIND_LABELS
++
++    # 2. Check link_type_matrix partition
++    matrix_rows = await db_session.execute(
++        text("SELECT DISTINCT link_type, is_user_creatable FROM link_type_matrix")
++    )
++    user_kinds: set[str] = set()
++    system_kinds: set[str] = set()
++
++    for link_type, is_user in matrix_rows.all():
++        if is_user:
++            user_kinds.add(link_type)
++        else:
++            system_kinds.add(link_type)
++
++    # Exactly the 6 S7.2 8m user kinds are is_user_creatable = TRUE
++    assert user_kinds == EXPECTED_USER_LINK_KINDS
++    # All 7 system kinds are is_user_creatable = FALSE
++    assert system_kinds == EXPECTED_SYSTEM_LINK_KINDS
++    # Zero intersection between user and system sets
++    assert user_kinds.isdisjoint(system_kinds)
++    # Union covers all 13 enum kinds
++    assert (user_kinds | system_kinds) == set(EXPECTED_LINK_KIND_LABELS)
++
++    # Total row count in link_type_matrix: 57 user-creatable + 39 system = 96 rows
++    total_count = await db_session.execute(text("SELECT count(*) FROM link_type_matrix"))
++    assert total_count.scalar_one() == 96
+diff --git a/docs/qa/KANBA-37/alembic-heads.txt b/docs/qa/KANBA-37/alembic-heads.txt
+new file mode 100644
+index 0000000..e676d18
+--- /dev/null
++++ b/docs/qa/KANBA-37/alembic-heads.txt
+@@ -0,0 +1 @@
++p1_11_object_links (head)
+diff --git a/docs/qa/KANBA-37/build-check.txt b/docs/qa/KANBA-37/build-check.txt
+new file mode 100644
+index 0000000..dc71438
+--- /dev/null
++++ b/docs/qa/KANBA-37/build-check.txt
+@@ -0,0 +1,35 @@
++All checks passed!
++30 files already formatted
++Success: no issues found in 28 source files
++uv run ruff check .
++All checks passed!
++uv run ruff format --check .
++286 files already formatted
++uv run mypy
++Success: no issues found in 104 source files
++uv run lint-imports
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 64 files, 62 dependencies.
++-----------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++uv run python -m scripts.check_no_dashes --all
++uv run python -m scripts.license_gate
++SUMMARY python=74 node=1 violations=0
++Exit code: 0
+diff --git a/docs/qa/KANBA-37/matrix-seed.txt b/docs/qa/KANBA-37/matrix-seed.txt
+new file mode 100644
+index 0000000..48c4576
+--- /dev/null
++++ b/docs/qa/KANBA-37/matrix-seed.txt
+@@ -0,0 +1,100 @@
++ source_type |      link_type      | target_type | is_user_creatable 
++-------------+---------------------+-------------+-------------------
++ issue       | BLOCKS              | issue       | t
++ issue       | BLOCKED_BY          | issue       | t
++ issue       | RELATES_TO          | issue       | t
++ issue       | RELATES_TO          | sticky      | t
++ issue       | RELATES_TO          | doc         | t
++ issue       | RELATES_TO          | cycle       | t
++ issue       | RELATES_TO          | module      | t
++ issue       | RELATES_TO          | view        | t
++ issue       | RELATES_TO          | page        | t
++ sticky      | RELATES_TO          | issue       | t
++ sticky      | RELATES_TO          | sticky      | t
++ sticky      | RELATES_TO          | doc         | t
++ sticky      | RELATES_TO          | cycle       | t
++ sticky      | RELATES_TO          | module      | t
++ sticky      | RELATES_TO          | view        | t
++ sticky      | RELATES_TO          | page        | t
++ doc         | RELATES_TO          | issue       | t
++ doc         | RELATES_TO          | sticky      | t
++ doc         | RELATES_TO          | doc         | t
++ doc         | RELATES_TO          | cycle       | t
++ doc         | RELATES_TO          | module      | t
++ doc         | RELATES_TO          | view        | t
++ doc         | RELATES_TO          | page        | t
++ cycle       | RELATES_TO          | issue       | t
++ cycle       | RELATES_TO          | sticky      | t
++ cycle       | RELATES_TO          | doc         | t
++ cycle       | RELATES_TO          | cycle       | t
++ cycle       | RELATES_TO          | module      | t
++ cycle       | RELATES_TO          | view        | t
++ cycle       | RELATES_TO          | page        | t
++ module      | RELATES_TO          | issue       | t
++ module      | RELATES_TO          | sticky      | t
++ module      | RELATES_TO          | doc         | t
++ module      | RELATES_TO          | cycle       | t
++ module      | RELATES_TO          | module      | t
++ module      | RELATES_TO          | view        | t
++ module      | RELATES_TO          | page        | t
++ view        | RELATES_TO          | issue       | t
++ view        | RELATES_TO          | sticky      | t
++ view        | RELATES_TO          | doc         | t
++ view        | RELATES_TO          | cycle       | t
++ view        | RELATES_TO          | module      | t
++ view        | RELATES_TO          | view        | t
++ view        | RELATES_TO          | page        | t
++ page        | RELATES_TO          | issue       | t
++ page        | RELATES_TO          | sticky      | t
++ page        | RELATES_TO          | doc         | t
++ page        | RELATES_TO          | cycle       | t
++ page        | RELATES_TO          | module      | t
++ page        | RELATES_TO          | view        | t
++ page        | RELATES_TO          | page        | t
++ issue       | DUPLICATES          | issue       | t
++ issue       | VERIFIED_BY_DOC     | doc         | t
++ issue       | VERIFIED_BY_DOC     | page        | t
++ issue       | DERIVED_FROM_STICKY | sticky      | t
++ doc         | DERIVED_FROM_STICKY | sticky      | t
++ page        | DERIVED_FROM_STICKY | sticky      | t
++ issue       | PARENT_OF           | issue       | f
++ doc         | PARENT_OF           | page        | f
++ page        | PARENT_OF           | page        | f
++ issue       | ASSIGNED_TO         | user        | f
++ issue       | IN_CYCLE            | cycle       | f
++ issue       | IN_MODULE           | module      | f
++ sticky      | PROMOTED_TO_DOC     | doc         | f
++ issue       | EMBEDS_OBJECT       | issue       | f
++ issue       | EMBEDS_OBJECT       | sticky      | f
++ issue       | EMBEDS_OBJECT       | doc         | f
++ issue       | EMBEDS_OBJECT       | cycle       | f
++ issue       | EMBEDS_OBJECT       | module      | f
++ issue       | EMBEDS_OBJECT       | view        | f
++ issue       | EMBEDS_OBJECT       | page        | f
++ sticky      | EMBEDS_OBJECT       | issue       | f
++ sticky      | EMBEDS_OBJECT       | sticky      | f
++ sticky      | EMBEDS_OBJECT       | doc         | f
++ sticky      | EMBEDS_OBJECT       | cycle       | f
++ sticky      | EMBEDS_OBJECT       | module      | f
++ sticky      | EMBEDS_OBJECT       | view        | f
++ sticky      | EMBEDS_OBJECT       | page        | f
++ doc         | EMBEDS_OBJECT       | issue       | f
++ doc         | EMBEDS_OBJECT       | sticky      | f
++ doc         | EMBEDS_OBJECT       | doc         | f
++ doc         | EMBEDS_OBJECT       | cycle       | f
++ doc         | EMBEDS_OBJECT       | module      | f
++ doc         | EMBEDS_OBJECT       | view        | f
++ doc         | EMBEDS_OBJECT       | page        | f
++ page        | EMBEDS_OBJECT       | issue       | f
++ page        | EMBEDS_OBJECT       | sticky      | f
++ page        | EMBEDS_OBJECT       | doc         | f
++ page        | EMBEDS_OBJECT       | cycle       | f
++ page        | EMBEDS_OBJECT       | module      | f
++ page        | EMBEDS_OBJECT       | view        | f
++ page        | EMBEDS_OBJECT       | page        | f
++ issue       | GOVERNED_BY_VIEW    | view        | f
++ project     | GOVERNED_BY_VIEW    | view        | f
++ cycle       | GOVERNED_BY_VIEW    | view        | f
++ module      | GOVERNED_BY_VIEW    | view        | f
++(96 rows)
++
+diff --git a/docs/qa/KANBA-37/message-to-reality-checker.md b/docs/qa/KANBA-37/message-to-reality-checker.md
+new file mode 100644
+index 0000000..537241d
+--- /dev/null
++++ b/docs/qa/KANBA-37/message-to-reality-checker.md
+@@ -0,0 +1,65 @@
++# Audit Manifest: KANBA-37 (KB-P1-11)
++
++- **Ticket ID**: `KANBA-37` (`KB-P1-11`)
++- **Title**: `[Phase 1 / Database] object_links, link_kind enum & seeded link_type_matrix allowlist`
++- **Epic**: `KB-E1`
++- **Branch**: `feat/KANBA-37` (isolated worktree at `/tmp/kb-wt-KANBA-37`)
++- **Spec Sections**: Section 12.1, Section 7.2 (8m), Section 12.3 (item 4)
++
++---
++
++## 1. Executive Summary
++
++This ticket delivers the typed relationship layer of the Universal Object Graph for the Kanban platform:
++1. `link_kind` Enum: Creates the 13-label PostgreSQL enum in the exact specification order defined in Section 12.1 (`BLOCKS`, `BLOCKED_BY`, `RELATES_TO`, `DUPLICATES`, `PARENT_OF`, `ASSIGNED_TO`, `IN_CYCLE`, `IN_MODULE`, `PROMOTED_TO_DOC`, `VERIFIED_BY_DOC`, `DERIVED_FROM_STICKY`, `EMBEDS_OBJECT`, `GOVERNED_BY_VIEW`).
++2. `object_links` Table: Implements the graph edge table with composite type-pinned foreign keys (`FOREIGN KEY (source_id, source_type) REFERENCES objects (id, object_type) ON DELETE RESTRICT`), self-link prevention (`CHECK (source_id <> target_id)`), duplicate edge prevention (`UNIQUE (source_id, target_id, link_type)`), and three query-optimizing B-tree indexes (`source_idx`, `target_idx`, `ws_state_idx`).
++3. `link_type_matrix` Catalog: Defines the baseline relationship allowlist table with `kanban_app` write permissions revoked (`REVOKE INSERT, UPDATE, DELETE ON link_type_matrix FROM kanban_app`). Seeded with exactly 96 tuples partitioning user-creatable relationships (57 tuples across the 6 Section 7.2 8m user kinds) from system-managed graph edges (39 tuples across the 7 system kinds).
++4. Validation & Immutability Triggers:
++   - `object_links_validate_bi`: Enforces allowlist validation (`LINK_TYPE_NOT_ALLOWED`), validates endpoint object existence (`LINK_ENDPOINT_NOT_FOUND`), enforces workspace boundary integrity (`LINK_CROSS_WORKSPACE_FORBIDDEN`), and overwrites caller parameters with authoritative `canonical_key` snapshots and `link_state = 'ACTIVE'`.
++   - `object_links_guard_bu`: Strictly forbids mutation of any column other than `link_state` (`OBJECT_LINK_IMMUTABLE`).
++5. Migration & Reversibility: Fully reversible migration lifecycle (`p1_11_object_links.py`, `p1_11_object_links.up.sql`, `p1_11_object_links.down.sql`) maintaining a single linear head on Alembic.
++
++---
++
++## 2. Requirement Traceability Matrix
++
++| Requirement | Implementation Artifact | Verification Method |
++| :--- | :--- | :--- |
++| Section 12.1: 13-value `link_kind` enum | `p1_11_object_links.up.sql` | `test_06_boundary_enum_order_and_link_type_matrix` + `test_07_object_links_migration_lifecycle` |
++| Section 12.1: `object_links` DDL verbatim | `p1_11_object_links.up.sql` | `test_01_link_objects_positive_snapshots_and_active_state` |
++| Section 12.1: Composite `ON DELETE RESTRICT` FKs | `p1_11_object_links.up.sql` | `test_04_negative_cross_workspace_and_foreign_key_guards` |
++| Section 12.1: Self-link check (`source_id <> target_id`) | `p1_11_object_links.up.sql` | `test_03_negative_matrix_and_self_link_guards` (SQLSTATE 23514) |
++| Section 12.1: Edge uniqueness | `p1_11_object_links.up.sql` | `test_03_negative_matrix_and_self_link_guards` (SQLSTATE 23505) |
++| Section 7.2 8m: User vs system link partition | `p1_11_object_links.up.sql` | `test_06_boundary_enum_order_and_link_type_matrix` |
++| Section 12.3: Type matrix enforcement on insert | `object_links_validate_bi()` | `test_03_negative_matrix_and_self_link_guards` (`LINK_TYPE_NOT_ALLOWED`) |
++| Section 12.1: Cross-workspace link prevention | `object_links_validate_bi()` | `test_04_negative_cross_workspace_and_foreign_key_guards` (`LINK_CROSS_WORKSPACE_FORBIDDEN`) |
++| Section 12.1: Authoritative key snapshot capture | `object_links_validate_bi()` | `test_01_link_objects_positive_snapshots_and_active_state` |
++| Section 12.1: Edge attribute immutability | `object_links_guard_bu()` | `test_05_negative_immutability_and_invalid_state` (`OBJECT_LINK_IMMUTABLE`) |
++| Section 12.1: Least-privilege matrix table | `REVOKE ... FROM kanban_app` | `test_04_negative_cross_workspace_and_foreign_key_guards` (SQLSTATE 42501) |
++
++---
++
++## 3. Passive Forensic Proof Artifacts
++
++All verification artifacts are stored under `docs/qa/KANBA-37/`:
++1. `docs/qa/KANBA-37/unit-test-results.txt`:
++   - Command: `uv run pytest database/tests/test_p1_11_object_links.py database/tests/migrations/test_p1_11_migration.py -q --cov=database --cov-branch --cov-report=term-missing`
++   - Result: 7 passed in 0.58s, 100% coverage on touched migration and test modules, exit code 0.
++2. `docs/qa/KANBA-37/build-check.txt`:
++   - Command: `uv run ruff check database && uv run ruff format --check database && uv run mypy --strict database`
++   - Result: ruff check clean, ruff format clean (27 files), mypy strict clean (25 source files), exit code 0.
++3. `docs/qa/KANBA-37/alembic-heads.txt`:
++   - Command: `uv run alembic -c database/alembic.ini heads`
++   - Result: Single linear head `p1_11_object_links (head)`, exit code 0.
++4. `docs/qa/KANBA-37/schema-dump.sql`:
++   - Raw PostgreSQL schema dump of `object_links`, `link_type_matrix`, and `\dT+ link_kind`.
++5. `docs/qa/KANBA-37/matrix-seed.txt`:
++   - Query output of all 96 seeded tuples in `link_type_matrix`.
++6. `docs/qa/KANBA-37/git-diff.patch`:
++   - Complete unified git diff against `main`.
++
++---
++
++## 4. Unicode Character Verification
++
++Verified zero Unicode dash characters (`U+2014` em-dash or `U+2013` en-dash) repository-wide via `uv run python -m scripts.check_no_dashes --all`.
+diff --git a/docs/qa/KANBA-37/schema-dump.sql b/docs/qa/KANBA-37/schema-dump.sql
+new file mode 100644
+index 0000000..47fdffb
+--- /dev/null
++++ b/docs/qa/KANBA-37/schema-dump.sql
+@@ -0,0 +1,185 @@
++--
++-- PostgreSQL database dump
++--
++
++\restrict g8LuFmocvwDC2Qg2uZvlby2M9St6I4FuwlJU40abuqBErE2XtR4tJCGR3OizhOq
++
++-- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
++-- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
++
++SET statement_timeout = 0;
++SET lock_timeout = 0;
++SET idle_in_transaction_session_timeout = 0;
++SET client_encoding = 'UTF8';
++SET standard_conforming_strings = on;
++SELECT pg_catalog.set_config('search_path', '', false);
++SET check_function_bodies = false;
++SET xmloption = content;
++SET client_min_messages = warning;
++SET row_security = off;
++
++SET default_tablespace = '';
++
++SET default_table_access_method = heap;
++
++--
++-- Name: link_type_matrix; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.link_type_matrix (
++    source_type public.object_kind NOT NULL,
++    link_type public.link_kind NOT NULL,
++    target_type public.object_kind NOT NULL,
++    is_user_creatable boolean DEFAULT false NOT NULL
++);
++
++
++ALTER TABLE public.link_type_matrix OWNER TO kanban_migrator;
++
++--
++-- Name: object_links; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.object_links (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    workspace_id uuid NOT NULL,
++    source_id uuid NOT NULL,
++    source_type public.object_kind NOT NULL,
++    target_id uuid NOT NULL,
++    target_type public.object_kind NOT NULL,
++    link_type public.link_kind NOT NULL,
++    link_state text DEFAULT 'ACTIVE'::text NOT NULL,
++    source_key_snapshot text NOT NULL,
++    target_key_snapshot text NOT NULL,
++    created_by_id uuid NOT NULL,
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    CONSTRAINT object_links_check CHECK ((source_id <> target_id)),
++    CONSTRAINT object_links_link_state_check CHECK ((link_state = ANY (ARRAY['ACTIVE'::text, 'FLAGGED_INVALID'::text])))
++);
++
++
++ALTER TABLE public.object_links OWNER TO kanban_migrator;
++
++--
++-- Name: link_type_matrix link_type_matrix_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.link_type_matrix
++    ADD CONSTRAINT link_type_matrix_pkey PRIMARY KEY (source_type, link_type, target_type);
++
++
++--
++-- Name: object_links object_links_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.object_links
++    ADD CONSTRAINT object_links_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: object_links object_links_source_id_target_id_link_type_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.object_links
++    ADD CONSTRAINT object_links_source_id_target_id_link_type_key UNIQUE (source_id, target_id, link_type);
++
++
++--
++-- Name: object_links_source_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX object_links_source_idx ON public.object_links USING btree (source_id, link_state);
++
++
++--
++-- Name: object_links_target_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX object_links_target_idx ON public.object_links USING btree (target_id, link_state);
++
++
++--
++-- Name: object_links_ws_state_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX object_links_ws_state_idx ON public.object_links USING btree (workspace_id, link_state);
++
++
++--
++-- Name: object_links object_links_guard_bu_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER object_links_guard_bu_trg BEFORE UPDATE ON public.object_links FOR EACH ROW EXECUTE FUNCTION public.object_links_guard_bu();
++
++
++--
++-- Name: object_links object_links_validate_bi_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER object_links_validate_bi_trg BEFORE INSERT ON public.object_links FOR EACH ROW EXECUTE FUNCTION public.object_links_validate_bi();
++
++
++--
++-- Name: object_links object_links_source_id_source_type_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.object_links
++    ADD CONSTRAINT object_links_source_id_source_type_fkey FOREIGN KEY (source_id, source_type) REFERENCES public.objects(id, object_type) ON DELETE RESTRICT;
++
++
++--
++-- Name: object_links object_links_target_id_target_type_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.object_links
++    ADD CONSTRAINT object_links_target_id_target_type_fkey FOREIGN KEY (target_id, target_type) REFERENCES public.objects(id, object_type) ON DELETE RESTRICT;
++
++
++--
++-- Name: object_links object_links_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.object_links
++    ADD CONSTRAINT object_links_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: TABLE link_type_matrix; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT ON TABLE public.link_type_matrix TO kanban_app;
++GRANT SELECT ON TABLE public.link_type_matrix TO app_rls_reader;
++
++
++--
++-- Name: TABLE object_links; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.object_links TO kanban_app;
++GRANT SELECT ON TABLE public.object_links TO app_rls_reader;
++
++
++--
++-- PostgreSQL database dump complete
++--
++
++\unrestrict g8LuFmocvwDC2Qg2uZvlby2M9St6I4FuwlJU40abuqBErE2XtR4tJCGR3OizhOq
++
++                                                 List of data types
++ Schema |   Name    | Internal name | Size |      Elements       |      Owner      | Access privileges | Description 
++--------+-----------+---------------+------+---------------------+-----------------+-------------------+-------------
++ public | link_kind | link_kind     | 4    | BLOCKS             +| kanban_migrator |                   | 
++        |           |               |      | BLOCKED_BY         +|                 |                   | 
++        |           |               |      | RELATES_TO         +|                 |                   | 
++        |           |               |      | DUPLICATES         +|                 |                   | 
++        |           |               |      | PARENT_OF          +|                 |                   | 
++        |           |               |      | ASSIGNED_TO        +|                 |                   | 
++        |           |               |      | IN_CYCLE           +|                 |                   | 
++        |           |               |      | IN_MODULE          +|                 |                   | 
++        |           |               |      | PROMOTED_TO_DOC    +|                 |                   | 
++        |           |               |      | VERIFIED_BY_DOC    +|                 |                   | 
++        |           |               |      | DERIVED_FROM_STICKY+|                 |                   | 
++        |           |               |      | EMBEDS_OBJECT      +|                 |                   | 
++        |           |               |      | GOVERNED_BY_VIEW    |                 |                   | 
++(1 row)
++
+diff --git a/docs/qa/KANBA-37/unit-test-results.txt b/docs/qa/KANBA-37/unit-test-results.txt
+new file mode 100644
+index 0000000..7cfb90c
+--- /dev/null
++++ b/docs/qa/KANBA-37/unit-test-results.txt
+@@ -0,0 +1,38 @@
++.......                                                                  [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                                  Stmts   Miss Branch BrPart  Cover   Missing
++-------------------------------------------------------------------------------------------------
++database/__init__.py                                      1      0      0      0   100%
++database/bootstrap/__init__.py                           25      2      6      3    84%   20, 22->24, 25
++database/migrations/__init__.py                           0      0      0      0   100%
++database/migrations/env.py                               39      5      8      4    81%   14->17, 22-23, 29->32, 47-48, 73
++database/migrations/sqlfile.py                           19      4      4      2    74%   17-18, 22-23
++database/migrations/versions/__init__.py                  0      0      0      0   100%
++database/migrations/versions/p1_01_baseline.py           10      1      0      0    90%   26
++database/migrations/versions/p1_02_objects_spine.py      10      1      0      0    90%   26
++database/migrations/versions/p1_04_projects.py           10      1      0      0    90%   26
++database/migrations/versions/p1_11_object_links.py       10      0      0      0   100%
++database/testing/__init__.py                              0      0      0      0   100%
++database/testing/pg_harness.py                          199     69     54     13    59%   49-50, 70-71, 75, 92-93, 113->exit, 114->113, 120-124, 136->147, 138->141, 142->145, 152-167, 177-186, 204-205, 223-224, 229-253, 259, 262, 268, 337, 352-366
++database/tests/__init__.py                                0      0      0      0   100%
++database/tests/conftest.py                               15      4      0      0    73%   16-18, 30
++database/tests/migration_harness.py                      88     15     12      6    79%   69, 73, 91, 95, 105, 107, 121-126, 130-134
++database/tests/migrations/__init__.py                     0      0      0      0   100%
++database/tests/migrations/test_p1_01_migration.py        61     61     10      0     0%   3-123
++database/tests/migrations/test_p1_02_migration.py        26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_04_migration.py        25     25      0      0     0%   3-87
++database/tests/migrations/test_p1_11_migration.py        27      0      0      0   100%
++database/tests/test_harness_benchmark.py                  8      8      0      0     0%   3-19
++database/tests/test_p1_01_baseline.py                   109    109      2      0     0%   3-185
++database/tests/test_p1_02_objects.py                    145    145      0      0     0%   3-319
++database/tests/test_p1_04_projects.py                   161    161      4      0     0%   3-501
++database/tests/test_p1_11_object_links.py               167      0      4      0   100%
++database/tests/test_pg_harness.py                       120    120      2      0     0%   3-224
++database/tests/test_smoke.py                              3      3      0      0     0%   3-8
++database/tests/test_sqlfile.py                           22     22      0      0     0%   3-36
++-------------------------------------------------------------------------------------------------
++TOTAL                                                  1300    782    106     28    40%
++7 passed in 0.64s
++Exit code: 0

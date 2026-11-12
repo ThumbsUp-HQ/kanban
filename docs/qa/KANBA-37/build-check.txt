@@ -1,0 +1,35 @@
+All checks passed!
+30 files already formatted
+Success: no issues found in 28 source files
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+286 files already formatted
+uv run mypy
+Success: no issues found in 104 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 64 files, 62 dependencies.
+-----------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+uv run python -m scripts.license_gate
+SUMMARY python=74 node=1 violations=0
+Exit code: 0
