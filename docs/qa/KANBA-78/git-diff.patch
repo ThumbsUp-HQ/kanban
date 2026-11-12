@@ -1,6 +1,6 @@
 diff --git a/docs/qa/KANBA-78/build-check.txt b/docs/qa/KANBA-78/build-check.txt
 new file mode 100644
-index 0000000..42cf8ef
+index 0000000..b1a3afe
 --- /dev/null
 +++ b/docs/qa/KANBA-78/build-check.txt
 @@ -0,0 +1,28 @@
@@ -22,15 +22,15 @@ index 0000000..42cf8ef
 +rendering chunks...
 +computing gzip size...
 +dist/index.html                   0.39 kB │ gzip:   0.27 kB
-+dist/assets/index-BbcwZpBq.css   23.32 kB │ gzip:   5.00 kB
-+dist/assets/index-C8iuoMwx.js   666.40 kB │ gzip: 206.68 kB
++dist/assets/index-q3pupVQ0.css   23.33 kB │ gzip:   5.01 kB
++dist/assets/index-CJgpmaeQ.js   666.40 kB │ gzip: 206.68 kB
 +
 +[plugin builtin:vite-reporter] 
 +(!) Some chunks are larger than 500 kB after minification. Consider:
 +- Using dynamic import() to code-split the application
 +- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 +- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-+✓ built in 263ms
++✓ built in 297ms
 +EXIT_CODE=0
 diff --git a/docs/qa/KANBA-78/computed-styles-desktop.json b/docs/qa/KANBA-78/computed-styles-desktop.json
 new file mode 100644
@@ -208,7 +208,7 @@ index 0000000..2cb25d0
 +   - Verified that client CSP `require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify` permits policy initialization without runtime violations.
 diff --git a/docs/qa/KANBA-78/e2e-results.txt b/docs/qa/KANBA-78/e2e-results.txt
 new file mode 100644
-index 0000000..9ea4acc
+index 0000000..bb640b6
 --- /dev/null
 +++ b/docs/qa/KANBA-78/e2e-results.txt
 @@ -0,0 +1,23 @@
@@ -220,20 +220,20 @@ index 0000000..9ea4acc
 +
 +Running 12 tests using 10 workers
 +
-+  ✓   4 [desktop] › e2e/editor/media-viewport.spec.ts:194:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 04: Air-gap local-only mode renders offline placeholder with zero network requests (1.5s)
-+  ✓   3 [tablet] › e2e/editor/media-viewport.spec.ts:155:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 03: External media displays external proxy badge with tooltip explanation (1.6s)
-+  ✓   8 [desktop] › e2e/editor/media-viewport.spec.ts:155:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 03: External media displays external proxy badge with tooltip explanation (1.5s)
-+  ✓   2 [desktop] › e2e/editor/media-viewport.spec.ts:20:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 01: Safe SVG with dark strokes toggles contrast backdrops (theme -> light -> dark -> checkerboard) (2.0s)
-+  ✓  10 [tablet] › e2e/editor/media-viewport.spec.ts:194:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 04: Air-gap local-only mode renders offline placeholder with zero network requests (1.6s)
-+  ✓   7 [tablet] › e2e/editor/media-viewport.spec.ts:20:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 01: Safe SVG with dark strokes toggles contrast backdrops (theme -> light -> dark -> checkerboard) (1.9s)
-+  ✓   9 [mobile] › e2e/editor/media-viewport.spec.ts:20:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 01: Safe SVG with dark strokes toggles contrast backdrops (theme -> light -> dark -> checkerboard) (1.8s)
-+  ✓   6 [desktop] › e2e/editor/media-viewport.spec.ts:100:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 02: Media Lightbox opens in modal dialog with 10% - 800% pan/zoom controls (2.3s)
-+  ✓   5 [mobile] › e2e/editor/media-viewport.spec.ts:100:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 02: Media Lightbox opens in modal dialog with 10% - 800% pan/zoom controls (2.5s)
-+  ✓   1 [tablet] › e2e/editor/media-viewport.spec.ts:100:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 02: Media Lightbox opens in modal dialog with 10% - 800% pan/zoom controls (2.7s)
-+  ✓  11 [mobile] › e2e/editor/media-viewport.spec.ts:194:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 04: Air-gap local-only mode renders offline placeholder with zero network requests (554ms)
-+  ✓  12 [mobile] › e2e/editor/media-viewport.spec.ts:155:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 03: External media displays external proxy badge with tooltip explanation (591ms)
++  ✓   3 [desktop] › e2e/editor/media-viewport.spec.ts:194:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 04: Air-gap local-only mode renders offline placeholder with zero network requests (1.3s)
++  ✓   8 [desktop] › e2e/editor/media-viewport.spec.ts:155:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 03: External media displays external proxy badge with tooltip explanation (1.3s)
++  ✓   4 [tablet] › e2e/editor/media-viewport.spec.ts:155:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 03: External media displays external proxy badge with tooltip explanation (1.5s)
++  ✓   5 [tablet] › e2e/editor/media-viewport.spec.ts:194:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 04: Air-gap local-only mode renders offline placeholder with zero network requests (1.5s)
++  ✓   9 [desktop] › e2e/editor/media-viewport.spec.ts:20:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 01: Safe SVG with dark strokes toggles contrast backdrops (theme -> light -> dark -> checkerboard) (1.6s)
++  ✓   1 [tablet] › e2e/editor/media-viewport.spec.ts:20:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 01: Safe SVG with dark strokes toggles contrast backdrops (theme -> light -> dark -> checkerboard) (1.9s)
++  ✓   7 [mobile] › e2e/editor/media-viewport.spec.ts:20:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 01: Safe SVG with dark strokes toggles contrast backdrops (theme -> light -> dark -> checkerboard) (1.8s)
++  ✓   2 [desktop] › e2e/editor/media-viewport.spec.ts:100:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 02: Media Lightbox opens in modal dialog with 10% - 800% pan/zoom controls (2.0s)
++  ✓   6 [mobile] › e2e/editor/media-viewport.spec.ts:100:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 02: Media Lightbox opens in modal dialog with 10% - 800% pan/zoom controls (2.1s)
++  ✓  10 [tablet] › e2e/editor/media-viewport.spec.ts:100:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 02: Media Lightbox opens in modal dialog with 10% - 800% pan/zoom controls (2.3s)
++  ✓  11 [mobile] › e2e/editor/media-viewport.spec.ts:155:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 03: External media displays external proxy badge with tooltip explanation (634ms)
++  ✓  12 [mobile] › e2e/editor/media-viewport.spec.ts:194:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 04: Air-gap local-only mode renders offline placeholder with zero network requests (567ms)
 +
-+  12 passed (11.8s)
++  12 passed (11.5s)
 +PLAYWRIGHT_EXIT=0
 diff --git a/docs/qa/KANBA-78/message-to-reality-checker.md b/docs/qa/KANBA-78/message-to-reality-checker.md
 new file mode 100644
@@ -328,7 +328,7 @@ index 0000000..f07816d
 Binary files /dev/null and b/docs/qa/KANBA-78/screenshots/02-lightbox-pan-zoom-tablet.png differ
 diff --git a/docs/qa/KANBA-78/screenshots/03-external-proxied-badge-desktop.png b/docs/qa/KANBA-78/screenshots/03-external-proxied-badge-desktop.png
 new file mode 100644
-index 0000000..143ce39
+index 0000000..bb3f111
 Binary files /dev/null and b/docs/qa/KANBA-78/screenshots/03-external-proxied-badge-desktop.png differ
 diff --git a/docs/qa/KANBA-78/screenshots/03-external-proxied-badge-mobile.png b/docs/qa/KANBA-78/screenshots/03-external-proxied-badge-mobile.png
 new file mode 100644
@@ -340,15 +340,15 @@ index 0000000..83a1800
 Binary files /dev/null and b/docs/qa/KANBA-78/screenshots/03-external-proxied-badge-tablet.png differ
 diff --git a/docs/qa/KANBA-78/screenshots/04-airgap-media-placeholder-desktop.png b/docs/qa/KANBA-78/screenshots/04-airgap-media-placeholder-desktop.png
 new file mode 100644
-index 0000000..56f8242
+index 0000000..22b7024
 Binary files /dev/null and b/docs/qa/KANBA-78/screenshots/04-airgap-media-placeholder-desktop.png differ
 diff --git a/docs/qa/KANBA-78/screenshots/04-airgap-media-placeholder-mobile.png b/docs/qa/KANBA-78/screenshots/04-airgap-media-placeholder-mobile.png
 new file mode 100644
-index 0000000..a2e4dc8
+index 0000000..4f52030
 Binary files /dev/null and b/docs/qa/KANBA-78/screenshots/04-airgap-media-placeholder-mobile.png differ
 diff --git a/docs/qa/KANBA-78/screenshots/04-airgap-media-placeholder-tablet.png b/docs/qa/KANBA-78/screenshots/04-airgap-media-placeholder-tablet.png
 new file mode 100644
-index 0000000..eebd096
+index 0000000..25c71a6
 Binary files /dev/null and b/docs/qa/KANBA-78/screenshots/04-airgap-media-placeholder-tablet.png differ
 diff --git a/docs/qa/KANBA-78/svg-sanitizer-corpus.json b/docs/qa/KANBA-78/svg-sanitizer-corpus.json
 new file mode 100644
@@ -700,10 +700,10 @@ index 0000000..adb5dca
 +EXIT_CODE=0
 diff --git a/kanban/web/e2e/editor/media-viewport.spec.ts b/kanban/web/e2e/editor/media-viewport.spec.ts
 new file mode 100644
-index 0000000..90997e8
+index 0000000..5ff43a7
 --- /dev/null
 +++ b/kanban/web/e2e/editor/media-viewport.spec.ts
-@@ -0,0 +1,230 @@
+@@ -0,0 +1,236 @@
 +/**
 + * Playwright E2E Tests & Design Proofs for Media Viewport & Lightbox (KB-P3-48).
 + * Validates sandboxed SVG blob rendering, contrast backdrop cycling,
@@ -910,6 +910,12 @@ index 0000000..90997e8
 +    // Invariant: zero <img> tags mounted inside air-gap viewport
 +    const container = page.locator('[data-testid="story-airgap-viewport"]');
 +    await expect(container.locator('img')).toHaveCount(0);
++
++    // Scroll section into view at top of viewport so card is centered and clear of bottom legend
++    const section4 = page.locator('[data-testid="story-section-airgap"]');
++    await section4.evaluate((el) => {
++      el.scrollIntoView({ block: 'start', behavior: 'instant' });
++    });
 +
 +    // Capture Annotated Screenshot 04
 +    await annotatedScreenshot(page, testInfo, {
@@ -1215,7 +1221,7 @@ index ff8fe65..9ba8472 100644
 +export type ExtendedEmojiKey = EmojiKey | 'externalMedia';
 diff --git a/kanban/web/src/dev/MediaStory.css b/kanban/web/src/dev/MediaStory.css
 new file mode 100644
-index 0000000..0a47623
+index 0000000..5b4a232
 --- /dev/null
 +++ b/kanban/web/src/dev/MediaStory.css
 @@ -0,0 +1,54 @@
@@ -1226,7 +1232,7 @@ index 0000000..0a47623
 +.media-story-container {
 +  max-width: 1200px;
 +  margin: 0 auto;
-+  padding: 40px 24px;
++  padding: 40px 24px 240px;
 +  font-family: var(--font-sans, sans-serif);
 +}
 +

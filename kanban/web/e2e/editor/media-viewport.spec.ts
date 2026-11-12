@@ -205,6 +205,12 @@ test.describe('Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3
     const container = page.locator('[data-testid="story-airgap-viewport"]');
     await expect(container.locator('img')).toHaveCount(0);
 
+    // Scroll section into view at top of viewport so card is centered and clear of bottom legend
+    const section4 = page.locator('[data-testid="story-section-airgap"]');
+    await section4.evaluate((el) => {
+      el.scrollIntoView({ block: 'start', behavior: 'instant' });
+    });
+
     // Capture Annotated Screenshot 04
     await annotatedScreenshot(page, testInfo, {
       name: '04-airgap-media-placeholder',
