@@ -49,9 +49,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "PLR2004", "S603", "S607", "S108"]     # assert, magic values, subprocess calls, and /tmp paths in tests
-"**/tests/**" = ["S101", "PLR2004", "S603", "S607", "S108"]  # assert, magic values, subprocess calls, and /tmp paths in tests
-"database/testing/**" = ["S108", "ASYNC240"]                  # test harness uses /tmp sockets and initialization file reads
+"tests/**" = ["S101", "PLR2004", "S603", "S607", "S108", "S105"]     # assert, magic values, subprocess calls, /tmp paths, and test credentials in tests
+"**/tests/**" = ["S101", "PLR2004", "S603", "S607", "S108", "S105"]  # assert, magic values, subprocess calls, /tmp paths, and test credentials in tests
+"database/testing/**" = ["S108", "ASYNC240"]                          # test harness uses /tmp sockets and initialization file reads
 
 [tool.mypy]
 python_version = "3.12"
