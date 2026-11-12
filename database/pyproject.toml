@@ -9,6 +9,7 @@ description = "Universal Object Graph, FORCE RLS, Link Auditor, and PostgreSQL s
 requires-python = ">=3.12,<3.13"
 license = "Apache-2.0"
 dependencies = [
+    "alembic==1.20.1",
     "asyncpg==0.30.0",
     "sqlalchemy[asyncio]==2.0.38",
 ]
@@ -17,7 +18,7 @@ dependencies = [
 "" = "database"
 
 [tool.hatch.build.targets.wheel]
-include = ["*.py", "**/*.py", "**/*.sql"]
+include = ["*.py", "**/*.py", "**/*.sql", "**/*.ini", "**/*.mako"]
 exclude = [
     "tests",
     "pyproject.toml",
