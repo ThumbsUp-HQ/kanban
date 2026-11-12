@@ -11,6 +11,7 @@ from starlette.requests import Request  # noqa: TC002  # Required at runtime for
 
 from database.session import RLSContext
 from kanban.api.problems import ProblemException
+from kanban.settings import Settings
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -110,3 +111,11 @@ async def get_rls_session(
 
     async with session_factory.session(rls_ctx) as session:
         yield session
+
+
+def get_settings(request: Request) -> Settings:
+    """Return the active platform settings from app state, or default."""
+    settings = getattr(request.app.state, "settings", None)
+    if isinstance(settings, Settings):
+        return settings
+    return Settings()
