@@ -1,0 +1,31 @@
+=== 1. CLI INVOCATION: OPENAI STREAM OK ===
+$ uv run kanban-agent validate-echo --provider openai --model gpt-4o-mini --http-cassette tests/fixtures/ai/openai_stream_ok.yaml
+=== 1. RENDERED CONTEXT ===
+Hello Sparkle
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 22.7ms | Total: 23.6ms | Tokens: 10 in, 5 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok
+EXIT_CODE=0
+
+=== 2. CLI INVOCATION: OPENAI FAULT TIMEOUT ===
+$ uv run kanban-agent validate-echo --provider openai --model gpt-4o-mini --http-cassette tests/fixtures/ai/openai_fault_timeout.yaml
+=== 1. RENDERED CONTEXT ===
+Hello Sparkle
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 24.4ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: failed
+Error Code: TIMEOUT
+Detail: [TIMEOUT] Request timed out.
+EXIT_CODE=1

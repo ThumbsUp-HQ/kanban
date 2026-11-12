@@ -116,3 +116,26 @@ The `GeminiProvider` adapter implements the `@runtime_checkable LLMProvider` pro
 - `SCHEMA_ERROR`: Model output failed local Pydantic schema validation.
 - `HTTP_ERROR`: Upstream Gemini or Vertex API returned an HTTP 4xx or 5xx status code.
 - `TIMEOUT`: Request exceeded the configured timeout deadline.
+
+
+## OpenAI Provider Adapter (`OpenAIProvider`)
+
+The `OpenAIProvider` adapter implements the `@runtime_checkable LLMProvider` protocol over `AsyncOpenAI`, supporting streaming completions, strict structured outputs, and batch vector embeddings for OpenAI and OpenAI-compatible inference servers (vLLM, Azure OpenAI, LiteLLM).
+
+### Privacy, Residency & Security Guarantees
+
+1. Zero Data Retention Mandate (`store=False`):
+   - Every outbound chat completion request strictly enforces `"store": false` via the private `_chat_kwargs()` builder, ensuring prompts and completions are never logged or stored for training by OpenAI.
+2. Endpoint URL & SSRF Validation:
+   - Base URLs must use `https://` unless targeting local loopback addresses (`127.0.0.1`, `::1`, `localhost`) for self-hosted inference servers.
+   - Userinfo (`user:pass@host`), query parameters, and fragments are strictly rejected.
+3. Deterministic Retries & Client Isolation:
+   - Initialized with `max_retries=0`, delegating all failover and retry decisions to the platform router.
+   - Configured with `trust_env=False` and `follow_redirects=False` to prevent ambient proxy interception and redirect abuse.
+   - HTTP redirects (3xx) raise `ProviderProtocolError` with code `REDIRECT_REFUSED`.
+4. Strict Structured Outputs:
+   - Uses `response_format` with `type: "json_schema"` and `strict: True`.
+   - Recursively enforces `additionalProperties: False` and ensures all properties are marked required across all object schemas.
+   - Local validation via Pydantic model ensures schema compliance; refusals raise `ProviderRefusal`.
+5. Secret Protection:
+   - `api_key` is encapsulated in Pydantic `SecretStr` and excluded from `repr()`, logs, and exception strings.

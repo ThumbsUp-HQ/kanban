@@ -1,0 +1,42 @@
+{
+  "model": "gpt-4o-mini",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant."
+    },
+    {
+      "role": "user",
+      "content": "Echo back hello sparkle"
+    }
+  ],
+  "max_tokens": 1024,
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "DummyEcho",
+      "strict": true,
+      "schema": {
+        "properties": {
+          "echo": {
+            "title": "Echo",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "echo",
+          "ok"
+        ],
+        "title": "DummyEcho",
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  },
+  "store": false,
+  "temperature": 0.0
+}
