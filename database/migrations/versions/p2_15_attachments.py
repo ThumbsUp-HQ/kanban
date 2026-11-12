@@ -1,7 +1,7 @@
 """attachments (FORCE RLS, metadata guards, content-addressed storage keys).
 
 Revision ID: p2_15_attachments
-Revises: p2_18_rate_limit_buckets
+Revises: p2_02_sessions
 Create Date: 2026-11-12 00:00:00.000000
 """
 
@@ -11,7 +11,7 @@ from database.migrations.sqlfile import execute_sql_file
 
 # revision identifiers, used by Alembic.
 revision: str = "p2_15_attachments"
-down_revision: str | None = "p2_18_rate_limit_buckets"
+down_revision: str | None = "p2_02_sessions"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

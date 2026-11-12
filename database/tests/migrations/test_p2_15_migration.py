@@ -12,7 +12,7 @@ async def test_2_15_attachments_migration_lifecycle() -> None:
     """Verify p2_15 upgrade applies attachments table with FORCE RLS, and downgrade reverts."""
     async with MigrationHarness() as harness:
         prev_rev = harness.previous_of("p2_15_attachments")
-        assert prev_rev == "p2_18_rate_limit_buckets"
+        assert prev_rev == "p2_02_sessions"
 
         # 1. Upgrade to p2_15_attachments
         await harness.upgrade("p2_15_attachments")
