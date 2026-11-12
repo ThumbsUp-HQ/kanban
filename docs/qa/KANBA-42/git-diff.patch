@@ -1,0 +1,1328 @@
+diff --git a/database/migrations/sql/p1_10_views.down.sql b/database/migrations/sql/p1_10_views.down.sql
+new file mode 100644
+index 0000000..221725a
+--- /dev/null
++++ b/database/migrations/sql/p1_10_views.down.sql
+@@ -0,0 +1,9 @@
++-- Migration: p1_10_views (down)
++-- Revert views table, view_layout enum, and filter/WIP JSON validators.
++
++DROP TRIGGER IF EXISTS views_spine_match_biu_trg ON views;
++DROP FUNCTION IF EXISTS views_spine_match_biu();
++DROP TABLE IF EXISTS views CASCADE;
++DROP TYPE IF EXISTS view_layout;
++DROP FUNCTION IF EXISTS validate_view_wip_limits_json(jsonb);
++DROP FUNCTION IF EXISTS validate_view_filters_json(jsonb);
+diff --git a/database/migrations/sql/p1_10_views.up.sql b/database/migrations/sql/p1_10_views.up.sql
+new file mode 100644
+index 0000000..2cab83d
+--- /dev/null
++++ b/database/migrations/sql/p1_10_views.up.sql
+@@ -0,0 +1,240 @@
++-- Migration: p1_10_views
++-- Views table, view_layout enum, and filter/WIP JSON validators.
++
++-- 1. JSON Validator Functions (IMMUTABLE PARALLEL SAFE)
++CREATE OR REPLACE FUNCTION validate_view_filters_json(p_doc jsonb)
++RETURNS boolean
++LANGUAGE plpgsql
++IMMUTABLE PARALLEL SAFE AS $$
++DECLARE
++    v_key text;
++    v_allowed text[] := ARRAY[
++        'state_ids', 'state_groups', 'priority_ids', 'assignee_ids',
++        'label_ids', 'cycle_ids', 'module_ids', 'start_date',
++        'due_date', 'gate_status', 'search_query'
++    ];
++BEGIN
++    IF p_doc IS NULL THEN
++        RETURN FALSE;
++    END IF;
++    IF jsonb_typeof(p_doc) <> 'object' THEN
++        RETURN FALSE;
++    END IF;
++    IF octet_length(p_doc::text) > 16384 THEN
++        RETURN FALSE;
++    END IF;
++    FOR v_key IN SELECT jsonb_object_keys(p_doc) LOOP
++        IF NOT (v_key = ANY(v_allowed)) THEN
++            RETURN FALSE;
++        END IF;
++    END LOOP;
++    RETURN TRUE;
++END;
++$$;
++
++CREATE OR REPLACE FUNCTION validate_view_wip_limits_json(p_doc jsonb)
++RETURNS boolean
++LANGUAGE plpgsql
++IMMUTABLE PARALLEL SAFE AS $$
++DECLARE
++    v_k text;
++    v_v jsonb;
++    v_prop_k text;
++    v_soft_present boolean;
++    v_hard_present boolean;
++    v_soft_val int;
++    v_hard_val int;
++    v_num_val numeric;
++BEGIN
++    IF p_doc IS NULL THEN
++        RETURN FALSE;
++    END IF;
++    IF jsonb_typeof(p_doc) <> 'object' THEN
++        RETURN FALSE;
++    END IF;
++    IF octet_length(p_doc::text) > 8192 THEN
++        RETURN FALSE;
++    END IF;
++
++    FOR v_k, v_v IN SELECT * FROM jsonb_each(p_doc) LOOP
++        -- Key must be valid UUID string
++        IF v_k !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN
++            RETURN FALSE;
++        END IF;
++
++        -- Value must be a JSON object
++        IF jsonb_typeof(v_v) <> 'object' THEN
++            RETURN FALSE;
++        END IF;
++
++        v_soft_present := FALSE;
++        v_hard_present := FALSE;
++        v_soft_val := NULL;
++        v_hard_val := NULL;
++
++        -- Keys of v_v must be subset of ('soft', 'hard')
++        FOR v_prop_k IN SELECT jsonb_object_keys(v_v) LOOP
++            IF v_prop_k NOT IN ('soft', 'hard') THEN
++                RETURN FALSE;
++            END IF;
++        END LOOP;
++
++        -- Check 'soft' if present
++        IF v_v ? 'soft' AND jsonb_typeof(v_v->'soft') <> 'null' THEN
++            IF jsonb_typeof(v_v->'soft') <> 'number' THEN
++                RETURN FALSE;
++            END IF;
++            BEGIN
++                v_num_val := (v_v->>'soft')::numeric;
++                IF v_num_val <> trunc(v_num_val) OR v_num_val < 1 OR v_num_val > 10000 THEN
++                    RETURN FALSE;
++                END IF;
++                v_soft_val := v_num_val::int;
++                v_soft_present := TRUE;
++            EXCEPTION WHEN OTHERS THEN
++                RETURN FALSE;
++            END;
++        END IF;
++
++        -- Check 'hard' if present
++        IF v_v ? 'hard' AND jsonb_typeof(v_v->'hard') <> 'null' THEN
++            IF jsonb_typeof(v_v->'hard') <> 'number' THEN
++                RETURN FALSE;
++            END IF;
++            BEGIN
++                v_num_val := (v_v->>'hard')::numeric;
++                IF v_num_val <> trunc(v_num_val) OR v_num_val < 1 OR v_num_val > 10000 THEN
++                    RETURN FALSE;
++                END IF;
++                v_hard_val := v_num_val::int;
++                v_hard_present := TRUE;
++            EXCEPTION WHEN OTHERS THEN
++                RETURN FALSE;
++            END;
++        END IF;
++
++        -- When both soft and hard are non-null: hard >= soft
++        IF v_soft_present AND v_hard_present THEN
++            IF v_hard_val < v_soft_val THEN
++                RETURN FALSE;
++            END IF;
++        END IF;
++
++    END LOOP;
++
++    RETURN TRUE;
++END;
++$$;
++
++-- 2. view_layout Enum
++CREATE TYPE view_layout AS ENUM ('list', 'board', 'table', 'calendar', 'timeline');
++
++-- 3. views Table
++CREATE TABLE views (
++    id                    UUID PRIMARY KEY,
++    object_type           object_kind NOT NULL DEFAULT 'view' CHECK (object_type = 'view'),
++    workspace_id          UUID NOT NULL REFERENCES workspaces(id) ON DELETE RESTRICT,
++    project_id            UUID REFERENCES projects(id) ON DELETE RESTRICT,
++    owner_principal_id    UUID NOT NULL REFERENCES principals(id) ON DELETE RESTRICT,
++    visibility            TEXT NOT NULL DEFAULT 'project'
++                          CHECK (visibility IN ('private', 'project', 'workspace')),
++    name                  TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 200),
++    summary_markdown      TEXT NOT NULL DEFAULT '' CHECK (octet_length(summary_markdown) <= 65536),
++    summary_sha256        BYTEA GENERATED ALWAYS AS (digest(summary_markdown, 'sha256')) STORED,
++    layout                view_layout NOT NULL DEFAULT 'board',
++    group_by              TEXT CHECK (group_by IS NULL OR group_by IN
++                            ('state', 'priority', 'assignee', 'cycle', 'module', 'label', 'project')),
++    sub_group_by          TEXT CHECK (sub_group_by IS NULL OR sub_group_by IN
++                            ('assignee', 'priority', 'cycle', 'module', 'label', 'state')),
++    filters_json          JSONB NOT NULL DEFAULT '{}'::jsonb
++                          CHECK (validate_view_filters_json(filters_json)),
++    display_props_json    JSONB NOT NULL DEFAULT '{}'::jsonb
++                          CHECK (jsonb_typeof(display_props_json) = 'object'
++                                 AND octet_length(display_props_json::text) <= 8192),
++    wip_limits_json       JSONB NOT NULL DEFAULT '{}'::jsonb
++                          CHECK (validate_view_wip_limits_json(wip_limits_json)),
++    sort_rank             TEXT COLLATE "C" NOT NULL DEFAULT 'a0',
++    CHECK (visibility <> 'project' OR project_id IS NOT NULL),
++    CHECK (group_by IS NULL OR sub_group_by IS NULL OR group_by <> sub_group_by),
++    FOREIGN KEY (id, object_type) REFERENCES objects (id, object_type) ON DELETE RESTRICT
++);
++
++CREATE INDEX views_project_rank_idx ON views (project_id, sort_rank COLLATE "C") WHERE project_id IS NOT NULL;
++CREATE INDEX views_ws_owner_idx ON views (workspace_id, owner_principal_id);
++
++-- 4. Integrity Trigger: views_spine_match_biu
++CREATE OR REPLACE FUNCTION views_spine_match_biu()
++RETURNS trigger
++LANGUAGE plpgsql AS $$
++DECLARE
++    v_obj_ws uuid;
++    v_obj_project uuid;
++    v_princ_ws uuid;
++    v_princ_type text;
++    v_proj_ws uuid;
++BEGIN
++    -- 1. Objects spine match
++    SELECT workspace_id, project_id
++    INTO v_obj_ws, v_obj_project
++    FROM objects
++    WHERE id = NEW.id;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION 'VIEW_SPINE_MISMATCH: object % does not exist', NEW.id
++            USING ERRCODE = 'P0001';
++    END IF;
++
++    IF v_obj_ws <> NEW.workspace_id OR (v_obj_project IS DISTINCT FROM NEW.project_id) THEN
++        RAISE EXCEPTION 'VIEW_SPINE_MISMATCH: workspace or project mismatch for view %', NEW.id
++            USING ERRCODE = 'P0001';
++    END IF;
++
++    -- 2. Owner principal validation
++    SELECT workspace_id, principal_type
++    INTO v_princ_ws, v_princ_type
++    FROM principals
++    WHERE id = NEW.owner_principal_id;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION 'VIEW_INVALID_OWNER: principal % does not exist', NEW.owner_principal_id
++            USING ERRCODE = 'P0001';
++    END IF;
++
++    IF v_princ_ws <> NEW.workspace_id OR v_princ_type NOT IN ('USER', 'AGENT', 'SERVICE_PRINCIPAL') THEN
++        RAISE EXCEPTION 'VIEW_INVALID_OWNER: owner principal % must belong to same workspace and be USER, AGENT, or SERVICE_PRINCIPAL', NEW.owner_principal_id
++            USING ERRCODE = 'P0001';
++    END IF;
++
++    -- 3. Project workspace match (if project_id is NOT NULL)
++    IF NEW.project_id IS NOT NULL THEN
++        SELECT workspace_id
++        INTO v_proj_ws
++        FROM projects
++        WHERE id = NEW.project_id;
++
++        IF NOT FOUND THEN
++            RAISE EXCEPTION 'VIEW_PROJECT_WORKSPACE_MISMATCH: project % does not exist', NEW.project_id
++                USING ERRCODE = 'P0001';
++        END IF;
++
++        IF v_proj_ws <> NEW.workspace_id THEN
++            RAISE EXCEPTION 'VIEW_PROJECT_WORKSPACE_MISMATCH: project % workspace % does not match view workspace %', NEW.project_id, v_proj_ws, NEW.workspace_id
++                USING ERRCODE = 'P0001';
++        END IF;
++    END IF;
++
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER views_spine_match_biu_trg
++BEFORE INSERT OR UPDATE ON views
++FOR EACH ROW EXECUTE FUNCTION views_spine_match_biu();
++
++-- 5. Permissions
++GRANT EXECUTE ON FUNCTION validate_view_filters_json(jsonb) TO kanban_app, kanban_migrator, app_rls_reader;
++GRANT EXECUTE ON FUNCTION validate_view_wip_limits_json(jsonb) TO kanban_app, kanban_migrator, app_rls_reader;
++GRANT EXECUTE ON FUNCTION views_spine_match_biu() TO kanban_app, kanban_migrator;
++
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE views TO kanban_app;
++GRANT SELECT ON TABLE views TO app_rls_reader;
+diff --git a/database/migrations/versions/p1_10_views.py b/database/migrations/versions/p1_10_views.py
+new file mode 100644
+index 0000000..0e09589
+--- /dev/null
++++ b/database/migrations/versions/p1_10_views.py
+@@ -0,0 +1,26 @@
++"""Views table, view_layout enum, and filter/WIP JSON validators.
++
++Revision ID: p1_10_views
++Revises: p1_11_object_links
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p1_10_views"
++down_revision: str | None = "p1_11_object_links"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply view_layout enum, validator functions, and views table."""
++    execute_sql_file("p1_10_views.up.sql")
++
++
++def downgrade() -> None:
++    """Revert views table, validator functions, and view_layout enum."""
++    execute_sql_file("p1_10_views.down.sql")
+diff --git a/database/tests/migrations/test_p1_10_migration.py b/database/tests/migrations/test_p1_10_migration.py
+new file mode 100644
+index 0000000..e0f8353
+--- /dev/null
++++ b/database/tests/migrations/test_p1_10_migration.py
+@@ -0,0 +1,82 @@
++"""Migration tests for p1_10_views up/down lifecycle."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++EXPECTED_ENUM_LABELS = {"list", "board", "table", "calendar", "timeline"}
++
++
++@pytest.mark.migration
++async def test_06_views_migration_lifecycle() -> None:
++    """Verify p1_10 upgrade creates views table + enum, downgrade removes them, and re-upgrade."""
++    async with MigrationHarness() as harness:
++        assert harness.previous_of("p1_10_views") == "p1_11_object_links"
++
++        # 1. Upgrade to p1_10_views
++        await harness.upgrade("p1_10_views")
++
++        # Verify views table exists
++        tables_up = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name = 'views'"
++        )
++        assert len(tables_up) == 1
++
++        # Verify view_layout enum exists and has exactly 5 labels
++        enum_up = await harness.fetch(
++            "SELECT e.enumlabel "
++            "FROM pg_enum e "
++            "JOIN pg_type t ON e.enumtypid = t.oid "
++            "WHERE t.typname = 'view_layout'"
++        )
++        labels = {r["enumlabel"] for r in enum_up}
++        assert labels == EXPECTED_ENUM_LABELS
++
++        # Verify functions exist
++        funcs_up = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' "
++            "  AND routine_name IN ("
++            "    'validate_view_filters_json', "
++            "    'validate_view_wip_limits_json', "
++            "    'views_spine_match_biu'"
++            "  )"
++        )
++        assert len(funcs_up) == 3
++
++        # 2. Downgrade to p1_11_object_links
++        prev_rev = harness.previous_of("p1_10_views")
++        await harness.downgrade(prev_rev)
++
++        # Verify table is absent
++        tables_down = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name = 'views'"
++        )
++        assert len(tables_down) == 0
++
++        # Verify enum is absent
++        enum_down = await harness.fetch("SELECT typname FROM pg_type WHERE typname = 'view_layout'")
++        assert len(enum_down) == 0
++
++        # Verify functions are absent
++        funcs_down = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' "
++            "  AND routine_name IN ("
++            "    'validate_view_filters_json', "
++            "    'validate_view_wip_limits_json', "
++            "    'views_spine_match_biu'"
++            "  )"
++        )
++        assert len(funcs_down) == 0
++
++        # 3. Re-upgrade to p1_10_views succeeds
++        await harness.upgrade("p1_10_views")
++
++        tables_reup = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name = 'views'"
++        )
++        assert len(tables_reup) == 1
+diff --git a/database/tests/test_p1_10_views.py b/database/tests/test_p1_10_views.py
+new file mode 100644
+index 0000000..97f7836
+--- /dev/null
++++ b/database/tests/test_p1_10_views.py
+@@ -0,0 +1,571 @@
++"""Unit tests for Phase 1 views table, view_layout enum, and filter/WIP JSON validators."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError, IntegrityError
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++def _is_check_violation(exc: IntegrityError) -> bool:
++    """Return True if exception indicates a PostgreSQL check_violation (23514)."""
++    sqlstate = getattr(exc.orig, "sqlstate", None)
++    return sqlstate == "23514" or "checkviolation" in str(exc).lower() or "23514" in str(exc)
++
++
++async def _create_workspace(
++    session: AsyncSession,
++    slug: str | None = None,
++    name: str = "Test Workspace",
++) -> uuid.UUID:
++    """Create a test workspace."""
++    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
++    row = await session.execute(
++        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
++        {"slug": ws_slug, "name": name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _create_principal(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    *,
++    principal_type: str = "USER",
++    display_name: str = "Test Principal",
++) -> uuid.UUID:
++    """Create a principal in the principals table."""
++    row = await session.execute(
++        text(
++            "INSERT INTO principals (workspace_id, principal_type, display_name) "
++            "VALUES (:ws_id, :pt, :name) RETURNING id"
++        ),
++        {"ws_id": ws_id, "pt": principal_type, "name": display_name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _create_project(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    *,
++    identifier: str = "PRJ",
++    name: str = "Test Project",
++) -> uuid.UUID:
++    """Register and create a project in the database."""
++    u_id = uuid.uuid4()
++    reg_row = await session.execute(
++        text(
++            "SELECT register_object("
++            "  'project'::object_kind, :ws_id, NULL, :identifier, :name, :u_id"
++            ")"
++        ),
++        {"ws_id": ws_id, "identifier": identifier, "name": name, "u_id": u_id},
++    )
++    proj_id = reg_row.scalar_one()
++    assert isinstance(proj_id, uuid.UUID)
++    await session.execute(
++        text(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES (:id, :ws_id, :identifier, :name)"
++        ),
++        {"id": proj_id, "ws_id": ws_id, "identifier": identifier, "name": name},
++    )
++    return proj_id
++
++
++async def _register_view_object(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    project_id: uuid.UUID | None,
++    canonical_key: str,
++    title: str,
++) -> uuid.UUID:
++    """Register a view entity in the objects spine."""
++    u_id = uuid.uuid4()
++    row = await session.execute(
++        text(
++            "SELECT register_object(  'view'::object_kind, :ws_id, :proj_id, :key, :title, :u_id)"
++        ),
++        {
++            "ws_id": ws_id,
++            "proj_id": project_id,
++            "key": canonical_key,
++            "title": title,
++            "u_id": u_id,
++        },
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def test_01_views_layouts_and_sha256(app_session: AsyncSession) -> None:
++    """Test inserting views across all 5 layouts, 2D swimlanes, and SHA-256 generation."""
++    ws_id = await _create_workspace(app_session)
++    user_id = await _create_principal(app_session, ws_id, principal_type="USER")
++    proj_id = await _create_project(app_session, ws_id, identifier="LAY")
++
++    layouts = ["list", "board", "table", "calendar", "timeline"]
++    state_uuid = str(uuid.uuid4())
++    wip_json = json.dumps({state_uuid: {"soft": 4, "hard": 6}})
++    filter_json = json.dumps(
++        {
++            "state_groups": ["started"],
++            "priority_ids": [str(uuid.uuid4())],
++            "search_query": "perf regression",
++        }
++    )
++
++    for idx, layout in enumerate(layouts):
++        v_key = f"VIEW-L{idx}"
++        v_title = f"{layout.capitalize()} View"
++        v_summary = f"Summary for {layout} view with details."
++        v_id = await _register_view_object(app_session, ws_id, proj_id, v_key, v_title)
++
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, visibility, "
++                "  name, summary_markdown, layout, group_by, sub_group_by, "
++                "  filters_json, wip_limits_json"
++                ") VALUES ("
++                "  :id, :ws_id, :proj_id, :owner_id, 'project', "
++                "  :name, :summary, CAST(:layout AS view_layout), 'state', 'assignee', "
++                "  CAST(:filters AS jsonb), CAST(:wip AS jsonb)"
++                ")"
++            ),
++            {
++                "id": v_id,
++                "ws_id": ws_id,
++                "proj_id": proj_id,
++                "owner_id": user_id,
++                "name": v_title,
++                "summary": v_summary,
++                "layout": layout,
++                "filters": filter_json,
++                "wip": wip_json,
++            },
++        )
++
++        # Verify query and summary_sha256 digest match
++        res = await app_session.execute(
++            text("SELECT layout, group_by, sub_group_by, summary_sha256 FROM views WHERE id = :id"),
++            {"id": v_id},
++        )
++        row = res.fetchone()
++        assert row is not None
++        assert row.layout == layout
++        assert row.group_by == "state"
++        assert row.sub_group_by == "assignee"
++        expected_digest = hashlib.sha256(v_summary.encode("utf-8")).digest()
++        assert bytes(row.summary_sha256) == expected_digest
++
++
++async def test_02_views_visibility_and_scope(app_session: AsyncSession) -> None:
++    """Test workspace-scoped views (NULL project_id) and private project views."""
++    ws_id = await _create_workspace(app_session)
++    user_id = await _create_principal(app_session, ws_id, principal_type="USER")
++    proj_id = await _create_project(app_session, ws_id, identifier="SCP")
++
++    # Workspace-scoped view (project_id IS NULL, visibility = 'workspace')
++    ws_view_id = await _register_view_object(
++        app_session, ws_id, None, "VIEW-WS", "Workspace Global View"
++    )
++    await app_session.execute(
++        text(
++            "INSERT INTO views ("
++            "  id, workspace_id, project_id, owner_principal_id, visibility, name"
++            ") VALUES (:id, :ws_id, NULL, :owner_id, 'workspace', 'Workspace Global View')"
++        ),
++        {"id": ws_view_id, "ws_id": ws_id, "owner_id": user_id},
++    )
++
++    # Private project view (project_id NOT NULL, visibility = 'private')
++    priv_view_id = await _register_view_object(
++        app_session, ws_id, proj_id, "VIEW-PRIV", "Private Project View"
++    )
++    await app_session.execute(
++        text(
++            "INSERT INTO views ("
++            "  id, workspace_id, project_id, owner_principal_id, visibility, name"
++            ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'private', 'Private Project View')"
++        ),
++        {"id": priv_view_id, "ws_id": ws_id, "proj_id": proj_id, "owner_id": user_id},
++    )
++
++    res_ws = await app_session.execute(
++        text("SELECT project_id, visibility FROM views WHERE id = :id"),
++        {"id": ws_view_id},
++    )
++    r_ws = res_ws.fetchone()
++    assert r_ws is not None
++    assert r_ws.project_id is None
++    assert r_ws.visibility == "workspace"
++
++    res_priv = await app_session.execute(
++        text("SELECT project_id, visibility FROM views WHERE id = :id"),
++        {"id": priv_view_id},
++    )
++    r_priv = res_priv.fetchone()
++    assert r_priv is not None
++    assert r_priv.project_id == proj_id
++    assert r_priv.visibility == "private"
++
++
++async def test_03_views_layout_and_filter_checks(app_session: AsyncSession) -> None:
++    """Test CHECK constraint rejections on layouts, visibility, and filter JSON."""
++    ws_id = await _create_workspace(app_session)
++    user_id = await _create_principal(app_session, ws_id, principal_type="USER")
++    proj_id = await _create_project(app_session, ws_id, identifier="CHK")
++
++    # 1. group_by = sub_group_by raises 23514
++    sp1 = await app_session.begin_nested()
++    v1_id = await _register_view_object(app_session, ws_id, proj_id, "VIEW-CHK1", "Same Swimlane")
++    with pytest.raises(IntegrityError) as exc1:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name, group_by, sub_group_by"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'Same Swimlane', 'state', 'state')"
++            ),
++            {"id": v1_id, "ws_id": ws_id, "proj_id": proj_id, "owner_id": user_id},
++        )
++    assert _is_check_violation(exc1.value)
++    await sp1.rollback()
++
++    # 2. visibility = 'project' with project_id IS NULL raises 23514
++    sp2 = await app_session.begin_nested()
++    v2_id = await _register_view_object(
++        app_session, ws_id, None, "VIEW-CHK2", "Null Project Visible"
++    )
++    with pytest.raises(IntegrityError) as exc2:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, visibility, name"
++                ") VALUES (:id, :ws_id, NULL, :owner_id, 'project', 'Null Project Visible')"
++            ),
++            {"id": v2_id, "ws_id": ws_id, "owner_id": user_id},
++        )
++    assert _is_check_violation(exc2.value)
++    await sp2.rollback()
++
++    # 3. Unknown filter key raises 23514
++    sp3 = await app_session.begin_nested()
++    v3_id = await _register_view_object(app_session, ws_id, proj_id, "VIEW-CHK3", "Bad Filter Key")
++    with pytest.raises(IntegrityError) as exc3:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name, filters_json"
++                ") VALUES ("
++                "  :id, :ws_id, :proj_id, :owner_id, 'Bad Filter Key', '{\"raw_sql\": \"1=1\"}'"
++                ")"
++            ),
++            {"id": v3_id, "ws_id": ws_id, "proj_id": proj_id, "owner_id": user_id},
++        )
++    assert _is_check_violation(exc3.value)
++    await sp3.rollback()
++
++    # 4. Array filters_json raises 23514
++    sp4 = await app_session.begin_nested()
++    v4_id = await _register_view_object(app_session, ws_id, proj_id, "VIEW-CHK4", "Array Filter")
++    with pytest.raises(IntegrityError) as exc4:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name, filters_json"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'Array Filter', '[1, 2, 3]')"
++            ),
++            {"id": v4_id, "ws_id": ws_id, "proj_id": proj_id, "owner_id": user_id},
++        )
++    assert _is_check_violation(exc4.value)
++    await sp4.rollback()
++
++
++async def test_03_views_wip_limits_checks(app_session: AsyncSession) -> None:
++    """Test CHECK constraint rejections on WIP limits JSON."""
++    ws_id = await _create_workspace(app_session)
++    user_id = await _create_principal(app_session, ws_id, principal_type="USER")
++    proj_id = await _create_project(app_session, ws_id, identifier="WIP")
++
++    # 5. WIP limits: hard < soft raises 23514
++    st_uuid = str(uuid.uuid4())
++    sp5 = await app_session.begin_nested()
++    v5_id = await _register_view_object(app_session, ws_id, proj_id, "VIEW-CHK5", "WIP Hard < Soft")
++    with pytest.raises(IntegrityError) as exc5:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name, wip_limits_json"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'WIP Hard < Soft', :wip)"
++            ),
++            {
++                "id": v5_id,
++                "ws_id": ws_id,
++                "proj_id": proj_id,
++                "owner_id": user_id,
++                "wip": json.dumps({st_uuid: {"soft": 5, "hard": 3}}),
++            },
++        )
++    assert _is_check_violation(exc5.value)
++    await sp5.rollback()
++
++    # 6. WIP limits: soft = 0 raises 23514
++    sp6 = await app_session.begin_nested()
++    v6_id = await _register_view_object(app_session, ws_id, proj_id, "VIEW-CHK6", "WIP Soft 0")
++    with pytest.raises(IntegrityError) as exc6:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name, wip_limits_json"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'WIP Soft 0', :wip)"
++            ),
++            {
++                "id": v6_id,
++                "ws_id": ws_id,
++                "proj_id": proj_id,
++                "owner_id": user_id,
++                "wip": json.dumps({st_uuid: {"soft": 0, "hard": 5}}),
++            },
++        )
++    assert _is_check_violation(exc6.value)
++    await sp6.rollback()
++
++    # 7. WIP limits: non-UUID key raises 23514
++    sp7 = await app_session.begin_nested()
++    v7_id = await _register_view_object(app_session, ws_id, proj_id, "VIEW-CHK7", "WIP Non-UUID")
++    with pytest.raises(IntegrityError) as exc7:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name, wip_limits_json"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'WIP Non-UUID', :wip)"
++            ),
++            {
++                "id": v7_id,
++                "ws_id": ws_id,
++                "proj_id": proj_id,
++                "owner_id": user_id,
++                "wip": json.dumps({"not-a-uuid": {"soft": 1, "hard": 2}}),
++            },
++        )
++    assert _is_check_violation(exc7.value)
++    await sp7.rollback()
++
++    # 8. WIP limits: extra key 'override' raises 23514
++    sp8 = await app_session.begin_nested()
++    v8_id = await _register_view_object(app_session, ws_id, proj_id, "VIEW-CHK8", "WIP Extra Key")
++    with pytest.raises(IntegrityError) as exc8:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name, wip_limits_json"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'WIP Extra Key', :wip)"
++            ),
++            {
++                "id": v8_id,
++                "ws_id": ws_id,
++                "proj_id": proj_id,
++                "owner_id": user_id,
++                "wip": json.dumps({st_uuid: {"soft": 1, "hard": 2, "override": True}}),
++            },
++        )
++    assert _is_check_violation(exc8.value)
++    await sp8.rollback()
++
++
++async def test_04_views_security_and_spine_mismatches(app_session: AsyncSession) -> None:
++    """Test security trigger enforcements on owner principal, spine, and project."""
++    ws1 = await _create_workspace(app_session)
++    ws2 = await _create_workspace(app_session)
++    user_ws1 = await _create_principal(app_session, ws1, principal_type="USER")
++    user_ws2 = await _create_principal(app_session, ws2, principal_type="USER")
++    group_ws1 = await _create_principal(app_session, ws1, principal_type="GROUP")
++    proj_ws1 = await _create_project(app_session, ws1, identifier="SEC1")
++    proj_ws2 = await _create_project(app_session, ws2, identifier="SEC2")
++
++    # 1. owner_principal_id pointing to a GROUP raises VIEW_INVALID_OWNER
++    sp1 = await app_session.begin_nested()
++    v1_id = await _register_view_object(app_session, ws1, proj_ws1, "VIEW-SEC1", "Group Owner View")
++    with pytest.raises(DBAPIError) as exc1:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'Group Owner View')"
++            ),
++            {"id": v1_id, "ws_id": ws1, "proj_id": proj_ws1, "owner_id": group_ws1},
++        )
++    assert "VIEW_INVALID_OWNER" in str(exc1.value)
++    await sp1.rollback()
++
++    # 2. owner_principal_id from another workspace raises VIEW_INVALID_OWNER
++    sp2 = await app_session.begin_nested()
++    v2_id = await _register_view_object(
++        app_session, ws1, proj_ws1, "VIEW-SEC2", "Other WS Owner View"
++    )
++    with pytest.raises(DBAPIError) as exc2:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'Other WS Owner View')"
++            ),
++            {"id": v2_id, "ws_id": ws1, "proj_id": proj_ws1, "owner_id": user_ws2},
++        )
++    assert "VIEW_INVALID_OWNER" in str(exc2.value)
++    await sp2.rollback()
++
++    # 3. Mismatching objects.project_id raises VIEW_SPINE_MISMATCH
++    # Register view with NULL project_id, but insert views with proj_ws1
++    sp3 = await app_session.begin_nested()
++    v3_id = await _register_view_object(app_session, ws1, None, "VIEW-SEC3", "Spine Mismatch View")
++    with pytest.raises(DBAPIError) as exc3:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'Spine Mismatch View')"
++            ),
++            {"id": v3_id, "ws_id": ws1, "proj_id": proj_ws1, "owner_id": user_ws1},
++        )
++    assert "VIEW_SPINE_MISMATCH" in str(exc3.value)
++    await sp3.rollback()
++
++    # 4. project from another workspace raises VIEW_PROJECT_WORKSPACE_MISMATCH
++    # Register view in ws1 with proj_ws2 (which belongs to ws2) -> raises during views insert
++    sp4 = await app_session.begin_nested()
++    v4_id = await _register_view_object(
++        app_session, ws1, proj_ws2, "VIEW-SEC4", "Cross WS Project View"
++    )
++    with pytest.raises(DBAPIError) as exc4:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'Cross WS Project View')"
++            ),
++            {"id": v4_id, "ws_id": ws1, "proj_id": proj_ws2, "owner_id": user_ws1},
++        )
++    assert "VIEW_PROJECT_WORKSPACE_MISMATCH" in str(exc4.value)
++    await sp4.rollback()
++
++
++async def test_05_views_boundary_conditions(app_session: AsyncSession) -> None:
++    """Test boundary conditions on filter size, WIP soft/hard equality, and catalog columns."""
++    ws_id = await _create_workspace(app_session)
++    user_id = await _create_principal(app_session, ws_id, principal_type="USER")
++    proj_id = await _create_project(app_session, ws_id, identifier="BND")
++
++    # 1. filters_json exactly 16384 bytes accepted
++    prefix = '{"search_query": "'
++    suffix = '"}'
++    target_bytes = 16384
++    pad_len = target_bytes - len(prefix) - len(suffix)
++    filters_exact = prefix + ("x" * pad_len) + suffix
++    assert len(filters_exact.encode("utf-8")) == 16384
++
++    v1_id = await _register_view_object(
++        app_session, ws_id, proj_id, "VIEW-BND1", "Exact 16K Filter"
++    )
++    await app_session.execute(
++        text(
++            "INSERT INTO views ("
++            "  id, workspace_id, project_id, owner_principal_id, name, filters_json"
++            ") VALUES ("
++            "  :id, :ws_id, :proj_id, :owner_id, 'Exact 16K Filter', CAST(:filters AS jsonb)"
++            ")"
++        ),
++        {
++            "id": v1_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "owner_id": user_id,
++            "filters": filters_exact,
++        },
++    )
++
++    # 2. filters_json 16385 bytes rejected
++    filters_oversized = prefix + ("x" * (pad_len + 1)) + suffix
++    assert len(filters_oversized.encode("utf-8")) == 16385
++    sp2 = await app_session.begin_nested()
++    v2_id = await _register_view_object(
++        app_session, ws_id, proj_id, "VIEW-BND2", "Oversized 16K Filter"
++    )
++    with pytest.raises(IntegrityError) as exc2:
++        await app_session.execute(
++            text(
++                "INSERT INTO views ("
++                "  id, workspace_id, project_id, owner_principal_id, name, filters_json"
++                ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'Oversized', CAST(:filters AS jsonb))"
++            ),
++            {
++                "id": v2_id,
++                "ws_id": ws_id,
++                "proj_id": proj_id,
++                "owner_id": user_id,
++                "filters": filters_oversized,
++            },
++        )
++    assert _is_check_violation(exc2.value)
++    await sp2.rollback()
++
++    # 3. WIP limits: soft = hard (equal) accepted
++    st_uuid1 = str(uuid.uuid4())
++    v3_id = await _register_view_object(app_session, ws_id, proj_id, "VIEW-BND3", "Equal Soft Hard")
++    await app_session.execute(
++        text(
++            "INSERT INTO views ("
++            "  id, workspace_id, project_id, owner_principal_id, name, wip_limits_json"
++            ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'Equal Soft Hard', :wip)"
++        ),
++        {
++            "id": v3_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "owner_id": user_id,
++            "wip": json.dumps({st_uuid1: {"soft": 5, "hard": 5}}),
++        },
++    )
++
++    # 4. WIP limits: {"soft": 5, "hard": null} accepted
++    st_uuid2 = str(uuid.uuid4())
++    v4_id = await _register_view_object(app_session, ws_id, proj_id, "VIEW-BND4", "Null Hard WIP")
++    await app_session.execute(
++        text(
++            "INSERT INTO views ("
++            "  id, workspace_id, project_id, owner_principal_id, name, wip_limits_json"
++            ") VALUES (:id, :ws_id, :proj_id, :owner_id, 'Null Hard WIP', :wip)"
++        ),
++        {
++            "id": v4_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "owner_id": user_id,
++            "wip": json.dumps({st_uuid2: {"soft": 5, "hard": None}}),
++        },
++    )
++
++    # 5. Schema verification: views has no prohibited body/description/content columns
++    cols_res = await app_session.execute(
++        text(
++            "SELECT column_name FROM information_schema.columns "
++            "WHERE table_schema = 'public' AND table_name = 'views' "
++            "  AND column_name IN ('body', 'description', 'content')"
++        )
++    )
++    assert len(cols_res.fetchall()) == 0
+diff --git a/docs/qa/KANBA-42/alembic-heads.txt b/docs/qa/KANBA-42/alembic-heads.txt
+new file mode 100644
+index 0000000..9605d3a
+--- /dev/null
++++ b/docs/qa/KANBA-42/alembic-heads.txt
+@@ -0,0 +1 @@
++p1_10_views (head)
+diff --git a/docs/qa/KANBA-42/build-check.txt b/docs/qa/KANBA-42/build-check.txt
+new file mode 100644
+index 0000000..9a677a8
+--- /dev/null
++++ b/docs/qa/KANBA-42/build-check.txt
+@@ -0,0 +1,3 @@
++All checks passed!
++36 files already formatted
++Success: no issues found in 34 source files
+diff --git a/docs/qa/KANBA-42/message-to-reality-checker.md b/docs/qa/KANBA-42/message-to-reality-checker.md
+new file mode 100644
+index 0000000..594c380
+--- /dev/null
++++ b/docs/qa/KANBA-42/message-to-reality-checker.md
+@@ -0,0 +1,48 @@
++# Forensic QA Packet: KANBA-42 (KB-P1-10)
++
++- Ticket: KANBA-42
++- Spec Reference: docs/tickets/KB-P1-10.md
++- Specification Authority: docs/ARCHITECTURE_AND_PRODUCT_SPEC.md (S6.4, S12.1, S3.4)
++- Author: builder-20
++- Branch: feat/KANBA-42
++
++## Summary of Implementation
++
++Implemented Phase 1 database schema and migrations for views table, view_layout enum, and filter/WIP JSON validators:
++1. Migration files:
++   - database/migrations/versions/p1_10_views.py: down_revision = 'p1_11_object_links'
++   - database/migrations/sql/p1_10_views.up.sql: DDL, triggers, and functions
++   - database/migrations/sql/p1_10_views.down.sql: clean rollback
++2. JSON Validator Functions:
++   - validate_view_filters_json(p_doc jsonb): IMMUTABLE PARALLEL SAFE function enforcing object type, <= 16384 bytes, and allowlisted keys ('state_ids', 'state_groups', 'priority_ids', 'assignee_ids', 'label_ids', 'cycle_ids', 'module_ids', 'start_date', 'due_date', 'gate_status', 'search_query').
++   - validate_view_wip_limits_json(p_doc jsonb): IMMUTABLE PARALLEL SAFE function enforcing object type, <= 8192 bytes, UUID string keys, subset of ('soft', 'hard') properties, integer values between 1 and 10000, and hard >= soft when both are non-null.
++3. Enum and Table DDL:
++   - view_layout: ENUM ('list', 'board', 'table', 'calendar', 'timeline')
++   - views: id UUID PRIMARY KEY, object_type object_kind DEFAULT 'view', workspace_id, project_id, owner_principal_id, visibility ('private', 'project', 'workspace'), name (1-200 chars), summary_markdown (<= 65536 bytes), summary_sha256 STORED GENERATED digest, layout, group_by, sub_group_by, filters_json, display_props_json, wip_limits_json, sort_rank COLLATE "C", composite FK (id, object_type) to objects.
++   - CHECK (visibility <> 'project' OR project_id IS NOT NULL).
++   - CHECK (group_by IS NULL OR sub_group_by IS NULL OR group_by <> sub_group_by).
++4. Integrity Trigger:
++   - views_spine_match_biu: BEFORE INSERT OR UPDATE ON views enforcing objects spine match (workspace_id and project_id IS NOT DISTINCT FROM), owner principal validation (must belong to same workspace and be USER, AGENT, or SERVICE_PRINCIPAL), and project workspace match.
++
++## Definition of Done Verification
++
++| DoD Item | Requirement | Result | Evidence |
++| :--- | :--- | :--- | :--- |
++| File Existence | 3 migration files created | PASS | p1_10_views.py, .up.sql, .down.sql |
++| Single Alembic Head | Exactly one head: p1_10_views (head) | PASS | alembic-heads.txt |
++| Unit Tests Passing | All 7 tests pass with 0 failures | PASS | unit-test-results.txt |
++| Coverage | >=95% branch+line coverage on touched modules | PASS (100%) | unit-test-results.txt |
++| Lint / Type Check | ruff check, ruff format, mypy --strict pass | PASS | build-check.txt |
++| Schema Dump | pg_dump -t views, \dT+ view_layout, \sf validate_view_wip_limits_json | PASS | schema-dump.sql |
++| UI Changes | Non-UI Ticket | N/A | Non-UI Ticket |
++| Unicode Dashes | Zero U+2014 or U+2013 characters | PASS | scripts.check_no_dashes |
++
++## Test Traceability Matrix
++
++1. Positive layouts and SHA-256 (all 5 layouts, 2D swimlanes, SHA-256 digest match): test_01_views_layouts_and_sha256 (PASSED)
++2. Positive visibility and scope (workspace-scoped null project view and private project view): test_02_views_visibility_and_scope (PASSED)
++3. Negative layout and filter checks (identical swimlanes, null project on project visibility, invalid filter keys, array filters): test_03_views_layout_and_filter_checks (PASSED)
++4. Negative WIP limits checks (hard < soft, soft = 0, non-UUID key, extra key override): test_03_views_wip_limits_checks (PASSED)
++5. Security trigger enforcements (group owner, cross-workspace owner, spine mismatch, cross-workspace project): test_04_views_security_and_spine_mismatches (PASSED)
++6. Boundary conditions (16384 bytes filter accepted, 16385 rejected, WIP soft=hard, WIP null hard, catalog markdown-only check): test_05_views_boundary_conditions (PASSED)
++7. Migration up/down/re-up lifecycle (views table and view_layout enum verified): test_06_views_migration_lifecycle (PASSED)
+diff --git a/docs/qa/KANBA-42/schema-dump.sql b/docs/qa/KANBA-42/schema-dump.sql
+new file mode 100644
+index 0000000..a22b7a8
+--- /dev/null
++++ b/docs/qa/KANBA-42/schema-dump.sql
+@@ -0,0 +1,245 @@
++-- === PG_DUMP VIEWS TABLE ===
++--
++-- PostgreSQL database dump
++--
++
++\restrict JbeaE2jEE03FrvbDcNKtGU2WSdkyCiZNIPHx7oXlsdYVxotaLKVxFZIDYlZe4Cy
++
++-- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
++-- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
++
++SET statement_timeout = 0;
++SET lock_timeout = 0;
++SET idle_in_transaction_session_timeout = 0;
++SET client_encoding = 'UTF8';
++SET standard_conforming_strings = on;
++SELECT pg_catalog.set_config('search_path', '', false);
++SET check_function_bodies = false;
++SET xmloption = content;
++SET client_min_messages = warning;
++SET row_security = off;
++
++SET default_tablespace = '';
++
++SET default_table_access_method = heap;
++
++--
++-- Name: views; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.views (
++    id uuid NOT NULL,
++    object_type public.object_kind DEFAULT 'view'::public.object_kind NOT NULL,
++    workspace_id uuid NOT NULL,
++    project_id uuid,
++    owner_principal_id uuid NOT NULL,
++    visibility text DEFAULT 'project'::text NOT NULL,
++    name text NOT NULL,
++    summary_markdown text DEFAULT ''::text NOT NULL,
++    summary_sha256 bytea GENERATED ALWAYS AS (public.digest(summary_markdown, 'sha256'::text)) STORED,
++    layout public.view_layout DEFAULT 'board'::public.view_layout NOT NULL,
++    group_by text,
++    sub_group_by text,
++    filters_json jsonb DEFAULT '{}'::jsonb NOT NULL,
++    display_props_json jsonb DEFAULT '{}'::jsonb NOT NULL,
++    wip_limits_json jsonb DEFAULT '{}'::jsonb NOT NULL,
++    sort_rank text DEFAULT 'a0'::text NOT NULL COLLATE pg_catalog."C",
++    CONSTRAINT views_check CHECK (((visibility <> 'project'::text) OR (project_id IS NOT NULL))),
++    CONSTRAINT views_check1 CHECK (((group_by IS NULL) OR (sub_group_by IS NULL) OR (group_by <> sub_group_by))),
++    CONSTRAINT views_display_props_json_check CHECK (((jsonb_typeof(display_props_json) = 'object'::text) AND (octet_length((display_props_json)::text) <= 8192))),
++    CONSTRAINT views_filters_json_check CHECK (public.validate_view_filters_json(filters_json)),
++    CONSTRAINT views_group_by_check CHECK (((group_by IS NULL) OR (group_by = ANY (ARRAY['state'::text, 'priority'::text, 'assignee'::text, 'cycle'::text, 'module'::text, 'label'::text, 'project'::text])))),
++    CONSTRAINT views_name_check CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 200))),
++    CONSTRAINT views_object_type_check CHECK ((object_type = 'view'::public.object_kind)),
++    CONSTRAINT views_sub_group_by_check CHECK (((sub_group_by IS NULL) OR (sub_group_by = ANY (ARRAY['assignee'::text, 'priority'::text, 'cycle'::text, 'module'::text, 'label'::text, 'state'::text])))),
++    CONSTRAINT views_summary_markdown_check CHECK ((octet_length(summary_markdown) <= 65536)),
++    CONSTRAINT views_visibility_check CHECK ((visibility = ANY (ARRAY['private'::text, 'project'::text, 'workspace'::text]))),
++    CONSTRAINT views_wip_limits_json_check CHECK (public.validate_view_wip_limits_json(wip_limits_json))
++);
++
++
++ALTER TABLE public.views OWNER TO kanban_migrator;
++
++--
++-- Name: views views_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.views
++    ADD CONSTRAINT views_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: views_project_rank_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX views_project_rank_idx ON public.views USING btree (project_id, sort_rank) WHERE (project_id IS NOT NULL);
++
++
++--
++-- Name: views_ws_owner_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX views_ws_owner_idx ON public.views USING btree (workspace_id, owner_principal_id);
++
++
++--
++-- Name: views views_spine_match_biu_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER views_spine_match_biu_trg BEFORE INSERT OR UPDATE ON public.views FOR EACH ROW EXECUTE FUNCTION public.views_spine_match_biu();
++
++
++--
++-- Name: views views_id_object_type_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.views
++    ADD CONSTRAINT views_id_object_type_fkey FOREIGN KEY (id, object_type) REFERENCES public.objects(id, object_type) ON DELETE RESTRICT;
++
++
++--
++-- Name: views views_owner_principal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.views
++    ADD CONSTRAINT views_owner_principal_id_fkey FOREIGN KEY (owner_principal_id) REFERENCES public.principals(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: views views_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.views
++    ADD CONSTRAINT views_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: views views_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.views
++    ADD CONSTRAINT views_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: TABLE views; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.views TO kanban_app;
++GRANT SELECT ON TABLE public.views TO app_rls_reader;
++
++
++--
++-- PostgreSQL database dump complete
++--
++
++\unrestrict JbeaE2jEE03FrvbDcNKtGU2WSdkyCiZNIPHx7oXlsdYVxotaLKVxFZIDYlZe4Cy
++
++
++-- === \dT+ view_layout ===
++                                             List of data types
++ Schema |    Name     | Internal name | Size | Elements |      Owner      | Access privileges | Description 
++--------+-------------+---------------+------+----------+-----------------+-------------------+-------------
++ public | view_layout | view_layout   | 4    | list    +| kanban_migrator |                   | 
++        |             |               |      | board   +|                 |                   | 
++        |             |               |      | table   +|                 |                   | 
++        |             |               |      | calendar+|                 |                   | 
++        |             |               |      | timeline |                 |                   | 
++(1 row)
++
++
++-- === \sf validate_view_wip_limits_json ===
++CREATE OR REPLACE FUNCTION public.validate_view_wip_limits_json(p_doc jsonb)
++ RETURNS boolean
++ LANGUAGE plpgsql
++ IMMUTABLE PARALLEL SAFE
++AS $function$
++DECLARE
++    v_k text;
++    v_v jsonb;
++    v_prop_k text;
++    v_soft_present boolean;
++    v_hard_present boolean;
++    v_soft_val int;
++    v_hard_val int;
++    v_num_val numeric;
++BEGIN
++    IF p_doc IS NULL THEN
++        RETURN FALSE;
++    END IF;
++    IF jsonb_typeof(p_doc) <> 'object' THEN
++        RETURN FALSE;
++    END IF;
++    IF octet_length(p_doc::text) > 8192 THEN
++        RETURN FALSE;
++    END IF;
++
++    FOR v_k, v_v IN SELECT * FROM jsonb_each(p_doc) LOOP
++        -- Key must be valid UUID string
++        IF v_k !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN
++            RETURN FALSE;
++        END IF;
++
++        -- Value must be a JSON object
++        IF jsonb_typeof(v_v) <> 'object' THEN
++            RETURN FALSE;
++        END IF;
++
++        v_soft_present := FALSE;
++        v_hard_present := FALSE;
++        v_soft_val := NULL;
++        v_hard_val := NULL;
++
++        -- Keys of v_v must be subset of ('soft', 'hard')
++        FOR v_prop_k IN SELECT jsonb_object_keys(v_v) LOOP
++            IF v_prop_k NOT IN ('soft', 'hard') THEN
++                RETURN FALSE;
++            END IF;
++        END LOOP;
++
++        -- Check 'soft' if present
++        IF v_v ? 'soft' AND jsonb_typeof(v_v->'soft') <> 'null' THEN
++            IF jsonb_typeof(v_v->'soft') <> 'number' THEN
++                RETURN FALSE;
++            END IF;
++            BEGIN
++                v_num_val := (v_v->>'soft')::numeric;
++                IF v_num_val <> trunc(v_num_val) OR v_num_val < 1 OR v_num_val > 10000 THEN
++                    RETURN FALSE;
++                END IF;
++                v_soft_val := v_num_val::int;
++                v_soft_present := TRUE;
++            EXCEPTION WHEN OTHERS THEN
++                RETURN FALSE;
++            END;
++        END IF;
++
++        -- Check 'hard' if present
++        IF v_v ? 'hard' AND jsonb_typeof(v_v->'hard') <> 'null' THEN
++            IF jsonb_typeof(v_v->'hard') <> 'number' THEN
++                RETURN FALSE;
++            END IF;
++            BEGIN
++                v_num_val := (v_v->>'hard')::numeric;
++                IF v_num_val <> trunc(v_num_val) OR v_num_val < 1 OR v_num_val > 10000 THEN
++                    RETURN FALSE;
++                END IF;
++                v_hard_val := v_num_val::int;
++                v_hard_present := TRUE;
++            EXCEPTION WHEN OTHERS THEN
++                RETURN FALSE;
++            END;
++        END IF;
++
++        -- When both soft and hard are non-null: hard >= soft
++        IF v_soft_present AND v_hard_present THEN
++            IF v_hard_val < v_soft_val THEN
++                RETURN FALSE;
++            END IF;
++        END IF;
++
++    END LOOP;
++
++    RETURN TRUE;
++END;
++$function$
+diff --git a/docs/qa/KANBA-42/unit-test-results.txt b/docs/qa/KANBA-42/unit-test-results.txt
+new file mode 100644
+index 0000000..f3e9750
+--- /dev/null
++++ b/docs/qa/KANBA-42/unit-test-results.txt
+@@ -0,0 +1,43 @@
++.......                                                                  [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                                  Stmts   Miss Branch BrPart  Cover   Missing
++-------------------------------------------------------------------------------------------------
++database/__init__.py                                      1      0      0      0   100%
++database/bootstrap/__init__.py                           25      2      6      3    84%   20, 22->24, 25
++database/migrations/__init__.py                           0      0      0      0   100%
++database/migrations/env.py                               39      5      8      4    81%   14->17, 22-23, 29->32, 47-48, 73
++database/migrations/sqlfile.py                           19      4      4      2    74%   17-18, 22-23
++database/migrations/versions/__init__.py                  0      0      0      0   100%
++database/migrations/versions/p1_01_baseline.py           10      1      0      0    90%   26
++database/migrations/versions/p1_02_objects_spine.py      10      1      0      0    90%   26
++database/migrations/versions/p1_03_principals.py         10      1      0      0    90%   26
++database/migrations/versions/p1_04_projects.py           10      1      0      0    90%   26
++database/migrations/versions/p1_10_views.py              10      0      0      0   100%
++database/migrations/versions/p1_11_object_links.py       10      1      0      0    90%   26
++database/testing/__init__.py                              0      0      0      0   100%
++database/testing/pg_harness.py                          199     69     54     13    59%   49-50, 70-71, 75, 92-93, 113->exit, 114->113, 120-124, 136->147, 138->141, 142->145, 152-167, 177-186, 204-205, 223-224, 229-253, 259, 262, 268, 337, 352-366
++database/tests/__init__.py                                0      0      0      0   100%
++database/tests/conftest.py                               15      4      0      0    73%   16-18, 30
++database/tests/migration_harness.py                      88     15     12      6    79%   69, 73, 91, 95, 105, 107, 121-126, 130-134
++database/tests/migrations/__init__.py                     0      0      0      0   100%
++database/tests/migrations/test_p1_01_migration.py        61     61     10      0     0%   3-123
++database/tests/migrations/test_p1_02_migration.py        26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_03_migration.py        21     21      0      0     0%   3-69
++database/tests/migrations/test_p1_04_migration.py        25     25      0      0     0%   3-87
++database/tests/migrations/test_p1_10_migration.py        26      0      0      0   100%
++database/tests/migrations/test_p1_11_migration.py        27     27      0      0     0%   3-89
++database/tests/test_harness_benchmark.py                  8      8      0      0     0%   3-19
++database/tests/test_p1_01_baseline.py                   109    109      2      0     0%   3-185
++database/tests/test_p1_02_objects.py                    145    145      0      0     0%   3-319
++database/tests/test_p1_03_principals.py                 196    196      8      0     0%   3-469
++database/tests/test_p1_04_projects.py                   161    161      4      0     0%   3-501
++database/tests/test_p1_10_views.py                      192      0      2      0   100%
++database/tests/test_p1_11_object_links.py               167    167      4      0     0%   3-524
++database/tests/test_pg_harness.py                       120    120      2      0     0%   3-224
++database/tests/test_smoke.py                              3      3      0      0     0%   3-8
++database/tests/test_sqlfile.py                           22     22      0      0     0%   3-36
++-------------------------------------------------------------------------------------------------
++TOTAL                                                  1755   1195    116     28    32%
++7 passed in 0.73s
