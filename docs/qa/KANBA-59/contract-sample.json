@@ -1,0 +1,151 @@
+{
+  "description": "Captured HTTP wire contract samples for KANBA-59 (KB-P2-11) access manifest and anti-enumeration endpoints",
+  "endpoints": {
+    "get_object_access_manifest": {
+      "route": "GET /api/v1/objects/{object_id}/access",
+      "responses": {
+        "200_OK": {
+          "status_code": 200,
+          "description": "Full AccessManifest serialization including users, groups, agents, deny_overrides, and redacted_entries",
+          "payload": {
+            "pill_label": "Project + 3",
+            "explicit_grant_count": 3,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: KAN",
+              "workspace_id": "01a1ce7f-1fbe-7265-a796-6737b4fcd6a7",
+              "workspace_name": "Platform Engineering",
+              "project_id": "01a1ce7f-1fcb-7ea1-a4eb-e181de7558ad",
+              "project_key": "KAN",
+              "project_name": "Kanban"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ce7f-1fbf-732c-af14-f914acbb5a45",
+                "handle": "@admin_user",
+                "display_name": "Admin User",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              },
+              {
+                "principal_id": "01a1ce7f-1fc0-749f-9883-80cbc70f7db4",
+                "handle": "@viewer_user",
+                "display_name": "Viewer User",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK"
+                ],
+                "grant_source": "project_role"
+              },
+              {
+                "principal_id": "01a1ce7f-1fc4-7760-a109-568cbcf00a78",
+                "handle": "@guest_ext",
+                "display_name": "Guest Partner",
+                "capabilities": [
+                  "VIEW"
+                ],
+                "grant_source": "direct_share"
+              },
+              {
+                "principal_id": "01a1ce7f-1fc9-755c-afc6-a84a881041b6",
+                "handle": "@core_member",
+                "display_name": "Core Member",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK"
+                ],
+                "grant_source": "workspace_role"
+              }
+            ],
+            "groups": [
+              {
+                "principal_id": "01a1ce7f-1fc7-726a-87e5-d02c6b5a03d5",
+                "name": "Core Platform Team",
+                "member_count": 1,
+                "external_source": "LDAP",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT"
+                ],
+                "grant_source": "direct_share"
+              }
+            ],
+            "agents": [
+              {
+                "principal_id": "01a1ce7f-1fc6-74cf-be94-55724c86f72f",
+                "display_name": "Codebot (openai/gpt-4o)",
+                "principal_type": "AGENT",
+                "provider_badge": "openai/gpt-4o",
+                "scope_summary": "Workspace Scoped",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT"
+                ]
+              }
+            ],
+            "deny_overrides": [
+              {
+                "principal_id": "01a1ce7f-1fc8-7499-b516-0db3355e4188",
+                "principal_type": "GROUP",
+                "display_name": "Third-Party Contractors",
+                "redacted": false,
+                "denied_capabilities": [
+                  "EDIT"
+                ]
+              }
+            ],
+            "redacted_entries": [
+              {
+                "redacted": true,
+                "label": "1 External Collaborator"
+              }
+            ],
+            "redacted_count": 1
+          }
+        },
+        "404_NOT_FOUND": {
+          "status_code": 404,
+          "description": "RFC 9457 Problem Details for non-existent or unreadable object (jitter-equalized anti-enumeration)",
+          "payload": {
+            "type": "urn:kanban:problem:NOT_FOUND",
+            "title": "Not Found",
+            "status": 404,
+            "code": "NOT_FOUND",
+            "request_id": "24bd6a91432140e0b91a35b63977402e"
+          }
+        }
+      }
+    },
+    "agent_kill_switch": {
+      "route": "POST /api/v1/objects/{object_id}/access/agent-kill-switch",
+      "responses": {
+        "403_INSUFFICIENT_CAPABILITY": {
+          "status_code": 403,
+          "description": "RFC 9457 Problem Details when caller lacks SHARE or ADMIN capability to invoke kill-switch",
+          "payload": {
+            "type": "urn:kanban:problem:INSUFFICIENT_CAPABILITY",
+            "title": "Insufficient Capability",
+            "status": 403,
+            "code": "INSUFFICIENT_CAPABILITY",
+            "request_id": "a63de05670694da3b25d2364e269e2b4"
+          }
+        }
+      }
+    }
+  }
+}
