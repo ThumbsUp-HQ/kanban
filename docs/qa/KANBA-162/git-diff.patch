@@ -1,0 +1,588 @@
+diff --git a/database/tests/conftest.py b/database/tests/conftest.py
+index 9cd71cf..e2b7bdb 100644
+--- a/database/tests/conftest.py
++++ b/database/tests/conftest.py
+@@ -1,5 +1,6 @@
+ """Database test configuration and role-bound fixtures."""
+ 
++import uuid
+ from uuid import UUID
+ 
+ import pytest
+@@ -24,6 +25,90 @@ async def bind_ctx(
+     )
+ 
+ 
++_WORKSPACE_ADMINS: dict[uuid.UUID, uuid.UUID] = {}
++
++
++async def bootstrap_workspace_admin(
++    session: AsyncSession,
++    slug: str | None = None,
++    name: str = "Test Workspace",
++    *,
++    workspace_id: uuid.UUID | None = None,
++) -> tuple[uuid.UUID, uuid.UUID]:
++    """Provision a workspace and its administrative principal under admin authority.
++
++    Restores the original session authorization upon completion.
++    """
++    orig_user = await session.scalar(text("SELECT current_user"))
++    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
++    ws_id = workspace_id or uuid.uuid4()
++    admin_id = uuid.uuid4()
++
++    await session.execute(text("RESET SESSION AUTHORIZATION"))
++    await session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
++        {"id": ws_id, "slug": ws_slug, "name": name},
++    )
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'user'::object_kind, :ws_id, NULL, :ckey, 'Admin User', :uid, :id"
++            ")"
++        ),
++        {"ws_id": ws_id, "ckey": f"usr-{admin_id.hex[:8]}", "uid": admin_id, "id": admin_id},
++    )
++    await session.execute(
++        text(
++            "INSERT INTO principals (id, workspace_id, principal_type, display_name) "
++            "VALUES (:id, :ws_id, 'USER', 'Admin User')"
++        ),
++        {"id": admin_id, "ws_id": ws_id},
++    )
++    await session.execute(
++        text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws_id, :email)"),
++        {"id": admin_id, "ws_id": ws_id, "email": f"admin-{admin_id.hex[:6]}@example.com"},
++    )
++    await session.execute(
++        text(
++            "INSERT INTO role_bindings (principal_id, workspace_id, role, scope_type, project_id) "
++            "VALUES (:p_id, :ws_id, 'WORKSPACE_ADMIN', 'workspace', NULL)"
++        ),
++        {"p_id": admin_id, "ws_id": ws_id},
++    )
++
++    _WORKSPACE_ADMINS[ws_id] = admin_id
++    if orig_user == "kanban_app":
++        await session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++        await bind_ctx(session, principal_id=admin_id, workspace_id=ws_id)
++        cur = await session.scalar(text("SELECT current_user"))
++        assert cur == "kanban_app"
++    else:
++        await session.execute(text(f"SET LOCAL SESSION AUTHORIZATION {orig_user}"))
++        await bind_ctx(session, principal_id=admin_id, workspace_id=ws_id)
++        cur = await session.scalar(text("SELECT current_user"))
++        assert cur == orig_user
++    return ws_id, admin_id
++
++
++async def bind_workspace_admin(session: AsyncSession, workspace_id: uuid.UUID) -> uuid.UUID:
++    """Bind RLS session context to the workspace admin for the given workspace."""
++    admin_id = _WORKSPACE_ADMINS.get(workspace_id)
++    if not admin_id:
++        await session.execute(text("RESET SESSION AUTHORIZATION"))
++        admin_id = await session.scalar(
++            text(
++                "SELECT principal_id FROM role_bindings "
++                "WHERE workspace_id = :ws AND role = 'WORKSPACE_ADMIN' LIMIT 1"
++            ),
++            {"ws": workspace_id},
++        )
++        if admin_id:
++            _WORKSPACE_ADMINS[workspace_id] = admin_id
++    assert isinstance(admin_id, uuid.UUID), f"No admin found for workspace {workspace_id}"
++    await bind_ctx(session, principal_id=admin_id, workspace_id=workspace_id)
++    return admin_id
++
++
+ @pytest.fixture
+ def superuser_session(db_session: AsyncSession) -> AsyncSession:
+     """Provide session with default superuser / maintenance privileges."""
+diff --git a/database/tests/test_p1_04_projects.py b/database/tests/test_p1_04_projects.py
+index d0d009a..ab637da 100644
+--- a/database/tests/test_p1_04_projects.py
++++ b/database/tests/test_p1_04_projects.py
+@@ -7,21 +7,20 @@ from sqlalchemy import text
+ from sqlalchemy.exc import DBAPIError, IntegrityError
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
++from database.tests.conftest import (
++    bind_workspace_admin,
++    bootstrap_workspace_admin,
++)
++
+ 
+ async def _create_workspace(
+     session: AsyncSession,
+     slug: str | None = None,
+     name: str = "Test Workspace",
+ ) -> uuid.UUID:
+-    """Create a test workspace."""
+-    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
+-    row = await session.execute(
+-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
+-        {"slug": ws_slug, "name": name},
+-    )
+-    val = row.scalar_one()
+-    assert isinstance(val, uuid.UUID)
+-    return val
++    """Create a test workspace and bootstrap an admin principal context."""
++    ws_id, _ = await bootstrap_workspace_admin(session, slug=slug, name=name)
++    return ws_id
+ 
+ 
+ async def _create_test_project(
+@@ -33,6 +32,7 @@ async def _create_test_project(
+     extra: dict[str, str | int] | None = None,
+ ) -> uuid.UUID:
+     """Register and create a project in the database."""
++    await bind_workspace_admin(session, workspace_id)
+     extra_dict = extra or {}
+     description_markdown = str(extra_dict.get("description_markdown", ""))
+     auto_archive_raw = extra_dict.get("auto_archive_days")
+@@ -217,6 +217,7 @@ async def test_04_duplicate_identifier_and_spine_mismatch(app_session: AsyncSess
+     assert p_other_ws is not None
+ 
+     # Spine mismatch: object registered with 'OTHER', but project inserted with 'MIS'
++    await bind_workspace_admin(app_session, ws1)
+     sp2 = await app_session.begin_nested()
+     res2 = await app_session.execute(
+         text(
+diff --git a/database/tests/test_p1_09_prose.py b/database/tests/test_p1_09_prose.py
+index 95e29a8..eab91ee 100644
+--- a/database/tests/test_p1_09_prose.py
++++ b/database/tests/test_p1_09_prose.py
+@@ -8,6 +8,12 @@ from sqlalchemy import text
+ from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
++from database.tests.conftest import (
++    bind_ctx,
++    bind_workspace_admin,
++    bootstrap_workspace_admin,
++)
++
+ 
+ def _is_check_violation(exc: Exception) -> bool:
+     """Return True if exception indicates a check constraint violation (23514)."""
+@@ -26,15 +32,9 @@ async def _create_workspace(
+     slug: str | None = None,
+     name: str = "Prose Workspace",
+ ) -> uuid.UUID:
+-    """Create a test workspace and return its UUID."""
+-    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
+-    row = await session.execute(
+-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
+-        {"slug": ws_slug, "name": name},
+-    )
+-    val = row.scalar_one()
+-    assert isinstance(val, uuid.UUID)
+-    return val
++    """Create a test workspace and bootstrap an admin principal context."""
++    ws_id, _ = await bootstrap_workspace_admin(session, slug=slug, name=name)
++    return ws_id
+ 
+ 
+ async def _create_user(
+@@ -70,6 +70,14 @@ async def _create_user(
+         text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws_id, :email)"),
+         {"id": u_id, "ws_id": workspace_id, "email": email},
+     )
++    await session.execute(
++        text(
++            "INSERT INTO role_bindings (principal_id, workspace_id, role, scope_type, project_id) "
++            "VALUES (:p_id, :ws_id, 'WORKSPACE_ADMIN', 'workspace', NULL)"
++        ),
++        {"p_id": u_id, "ws_id": workspace_id},
++    )
++    await bind_ctx(session, principal_id=u_id, workspace_id=workspace_id)
+     return u_id
+ 
+ 
+@@ -520,7 +528,9 @@ async def test_05a_negative_color_cycle_and_hierarchy(app_session: AsyncSession)
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_05b_negative_immutability_and_promotions(app_session: AsyncSession) -> None:
++async def test_05b_negative_immutability_and_promotions(  # noqa: PLR0915
++    app_session: AsyncSession,
++) -> None:
+     """Verify security rejections for page version immutability and invalid sticky promotions."""
+     ws = await _create_workspace(app_session)
+     user = await _create_user(app_session, ws, "neg2@example.com")
+@@ -536,6 +546,7 @@ async def test_05b_negative_immutability_and_promotions(app_session: AsyncSessio
+ 
+     # 1. Direct UPDATE page_versions raises PAGE_VERSION_IMMUTABLE
+     sp1 = await app_session.begin_nested()
++    await app_session.execute(text("RESET SESSION AUTHORIZATION"))
+     with pytest.raises(DBAPIError) as exc1:
+         await app_session.execute(
+             text("UPDATE page_versions SET title = 'Tampered' WHERE page_id = :id"),
+@@ -543,9 +554,11 @@ async def test_05b_negative_immutability_and_promotions(app_session: AsyncSessio
+         )
+     assert "PAGE_VERSION_IMMUTABLE" in str(exc1.value)
+     await sp1.rollback()
++    await app_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
+ 
+     # 2. Direct DELETE page_versions raises PAGE_VERSION_IMMUTABLE
+     sp2 = await app_session.begin_nested()
++    await app_session.execute(text("RESET SESSION AUTHORIZATION"))
+     with pytest.raises(DBAPIError) as exc2:
+         await app_session.execute(
+             text("DELETE FROM page_versions WHERE page_id = :id"),
+@@ -553,6 +566,7 @@ async def test_05b_negative_immutability_and_promotions(app_session: AsyncSessio
+         )
+     assert "PAGE_VERSION_IMMUTABLE" in str(exc2.value)
+     await sp2.rollback()
++    await app_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
+ 
+     # 3. Explicit body_sha256 insert raises 428C9 (cannot insert into generated column)
+     sp3 = await app_session.begin_nested()
+@@ -596,6 +610,7 @@ async def test_05b_negative_immutability_and_promotions(app_session: AsyncSessio
+     ws2 = await _create_workspace(app_session, name="Other WS")
+     user2 = await _create_user(app_session, ws2, "other@example.com")
+     d_ws2 = await _create_doc(app_session, ws2, user2)
++    await bind_ctx(app_session, principal_id=user, workspace_id=ws)
+     sp5 = await app_session.begin_nested()
+     with pytest.raises(DBAPIError) as exc5:
+         await app_session.execute(
+@@ -606,6 +621,7 @@ async def test_05b_negative_immutability_and_promotions(app_session: AsyncSessio
+     await sp5.rollback()
+ 
+     # 6. Stickies promotion: valid promote and re-promotion rejection
++    await bind_workspace_admin(app_session, ws)
+     await app_session.execute(
+         text("UPDATE stickies SET promoted_to_doc_id = :d WHERE id = :stk"),
+         {"d": d_id, "stk": stk},
+diff --git a/database/tests/test_p1_10_views.py b/database/tests/test_p1_10_views.py
+index 97f7836..c57a9a7 100644
+--- a/database/tests/test_p1_10_views.py
++++ b/database/tests/test_p1_10_views.py
+@@ -11,6 +11,8 @@ import pytest
+ from sqlalchemy import text
+ from sqlalchemy.exc import DBAPIError, IntegrityError
+ 
++from database.tests.conftest import bind_workspace_admin, bootstrap_workspace_admin
++
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+ 
+@@ -27,14 +29,8 @@ async def _create_workspace(
+     name: str = "Test Workspace",
+ ) -> uuid.UUID:
+     """Create a test workspace."""
+-    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
+-    row = await session.execute(
+-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
+-        {"slug": ws_slug, "name": name},
+-    )
+-    val = row.scalar_one()
+-    assert isinstance(val, uuid.UUID)
+-    return val
++    ws_id, _ = await bootstrap_workspace_admin(session, slug=slug, name=name)
++    return ws_id
+ 
+ 
+ async def _create_principal(
+@@ -45,6 +41,7 @@ async def _create_principal(
+     display_name: str = "Test Principal",
+ ) -> uuid.UUID:
+     """Create a principal in the principals table."""
++    await bind_workspace_admin(session, ws_id)
+     row = await session.execute(
+         text(
+             "INSERT INTO principals (workspace_id, principal_type, display_name) "
+@@ -65,6 +62,7 @@ async def _create_project(
+     name: str = "Test Project",
+ ) -> uuid.UUID:
+     """Register and create a project in the database."""
++    await bind_workspace_admin(session, ws_id)
+     u_id = uuid.uuid4()
+     reg_row = await session.execute(
+         text(
+@@ -94,6 +92,7 @@ async def _register_view_object(
+     title: str,
+ ) -> uuid.UUID:
+     """Register a view entity in the objects spine."""
++    await session.execute(text("RESET SESSION AUTHORIZATION"))
+     u_id = uuid.uuid4()
+     row = await session.execute(
+         text(
+@@ -109,6 +108,8 @@ async def _register_view_object(
+     )
+     val = row.scalar_one()
+     assert isinstance(val, uuid.UUID)
++    await session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++    await bind_workspace_admin(session, ws_id)
+     return val
+ 
+ 
+@@ -397,6 +398,7 @@ async def test_04_views_security_and_spine_mismatches(app_session: AsyncSession)
+     group_ws1 = await _create_principal(app_session, ws1, principal_type="GROUP")
+     proj_ws1 = await _create_project(app_session, ws1, identifier="SEC1")
+     proj_ws2 = await _create_project(app_session, ws2, identifier="SEC2")
++    await bind_workspace_admin(app_session, ws1)
+ 
+     # 1. owner_principal_id pointing to a GROUP raises VIEW_INVALID_OWNER
+     sp1 = await app_session.begin_nested()
+diff --git a/database/tests/test_p1_11_object_links.py b/database/tests/test_p1_11_object_links.py
+index 180b304..d767ead 100644
+--- a/database/tests/test_p1_11_object_links.py
++++ b/database/tests/test_p1_11_object_links.py
+@@ -9,6 +9,8 @@ import pytest
+ from sqlalchemy import text
+ from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
+ 
++from database.tests.conftest import bind_workspace_admin, bootstrap_workspace_admin
++
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+ 
+@@ -54,14 +56,8 @@ async def _create_workspace(
+     name: str = "Test Workspace",
+ ) -> uuid.UUID:
+     """Create a test workspace."""
+-    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
+-    row = await session.execute(
+-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
+-        {"slug": ws_slug, "name": name},
+-    )
+-    val = row.scalar_one()
+-    assert isinstance(val, uuid.UUID)
+-    return val
++    ws_id, _ = await bootstrap_workspace_admin(session, slug=slug, name=name)
++    return ws_id
+ 
+ 
+ async def _register_obj(
+@@ -73,7 +69,8 @@ async def _register_obj(
+     title: str = "Sample Title",
+ ) -> uuid.UUID:
+     """Register an object in the objects spine."""
+-    user_id = uuid.uuid4()
++    admin_id = await bind_workspace_admin(session, ws_id)
++    user_id = admin_id
+     row = await session.execute(
+         text(
+             "SELECT register_object("
+@@ -303,12 +300,14 @@ async def test_04_negative_cross_workspace_and_foreign_key_guards(
+     app_session: AsyncSession,
+ ) -> None:
+     """Test Case 4: Cross-workspace link, composite FK, RESTRICT delete, and permissions."""
++    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
+     ws1_id = await _create_workspace(db_session, name="Workspace 1")
+     ws2_id = await _create_workspace(db_session, name="Workspace 2")
+     user_id = uuid.uuid4()
+ 
+     issue_ws1_id = await _register_obj(db_session, ws1_id, "issue", "W1-1")
+     issue_ws2_id = await _register_obj(db_session, ws2_id, "issue", "W2-1")
++    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
+ 
+     # 1. Cross-workspace link raises LINK_CROSS_WORKSPACE_FORBIDDEN
+     with pytest.raises(DBAPIError) as exc_cross:
+@@ -397,6 +396,7 @@ async def test_04_negative_cross_workspace_and_foreign_key_guards(
+     assert pgcode_del == "23503"
+ 
+     # 5. As kanban_app, INSERT INTO link_type_matrix raises 42501
++    await app_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
+     with pytest.raises((ProgrammingError, DBAPIError)) as exc_perm:
+         async with app_session.begin_nested():
+             await app_session.execute(
+diff --git a/database/tests/test_p1_12_activity_ledger.py b/database/tests/test_p1_12_activity_ledger.py
+index fb4b6e4..761a451 100644
+--- a/database/tests/test_p1_12_activity_ledger.py
++++ b/database/tests/test_p1_12_activity_ledger.py
+@@ -10,6 +10,8 @@ import pytest
+ from sqlalchemy import text
+ from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
+ 
++from database.tests.conftest import bootstrap_workspace_admin
++
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+ 
+@@ -20,14 +22,8 @@ async def _create_workspace(
+     name: str = "Activity Test Workspace",
+ ) -> uuid.UUID:
+     """Create a test workspace."""
+-    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
+-    row = await session.execute(
+-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
+-        {"slug": ws_slug, "name": name},
+-    )
+-    val = row.scalar_one()
+-    assert isinstance(val, uuid.UUID)
+-    return val
++    ws_id, _ = await bootstrap_workspace_admin(session, slug=slug, name=name)
++    return ws_id
+ 
+ 
+ async def _create_principal(
+diff --git a/database/tests/test_p1_13_access_control.py b/database/tests/test_p1_13_access_control.py
+index ba60a00..bf3171c 100644
+--- a/database/tests/test_p1_13_access_control.py
++++ b/database/tests/test_p1_13_access_control.py
+@@ -9,7 +9,7 @@ import pytest
+ from sqlalchemy import text
+ from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
+ 
+-from database.tests.conftest import bind_ctx
++from database.tests.conftest import bind_ctx, bind_workspace_admin, bootstrap_workspace_admin
+ 
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+@@ -28,13 +28,8 @@ async def _create_workspace(
+ ) -> uuid.UUID:
+     """Create a test workspace."""
+     ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
+-    row = await session.execute(
+-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
+-        {"slug": ws_slug, "name": name},
+-    )
+-    val = row.scalar_one()
+-    assert isinstance(val, uuid.UUID)
+-    return val
++    ws_id, _ = await bootstrap_workspace_admin(session, slug=ws_slug, name=name)
++    return ws_id
+ 
+ 
+ async def _create_principal(
+@@ -435,8 +430,11 @@ async def test_05_cross_workspace_and_check_constraints(app_session: AsyncSessio
+     """Test cross-workspace rejection, invalid role scope, and permission guards."""
+     ws1 = await _create_workspace(app_session)
+     ws2 = await _create_workspace(app_session)
++    await bind_workspace_admin(app_session, ws1)
+     user_ws1 = await _create_principal(app_session, ws1, principal_type="USER")
++    await bind_workspace_admin(app_session, ws2)
+     user_ws2 = await _create_principal(app_session, ws2, principal_type="USER")
++    await bind_workspace_admin(app_session, ws1)
+     proj_ws1 = await _create_project(app_session, ws1, identifier="CW1")
+ 
+     # 1. Cross-workspace role_bindings raises ROLE_BINDING_WORKSPACE_MISMATCH
+diff --git a/database/tests/test_p1_14_rls_policies.py b/database/tests/test_p1_14_rls_policies.py
+index f95372d..ec7e3c8 100644
+--- a/database/tests/test_p1_14_rls_policies.py
++++ b/database/tests/test_p1_14_rls_policies.py
+@@ -409,7 +409,10 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
+             "SELECT c.relname FROM pg_class c "
+             "JOIN pg_namespace n ON n.oid = c.relnamespace "
+             "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
+-            "  AND c.relname NOT IN ('alembic_version', 'link_type_matrix') "
++            "  AND c.relname NOT IN ("
++            "    'alembic_version', 'link_type_matrix', 'auth_provider_cards', "
++            "    'rate_limit_buckets', 'local_admin_credentials'"
++            "  ) "
+             "ORDER BY c.relname"
+         )
+     )
+diff --git a/kanban/content/__init__.py b/kanban/content/__init__.py
+index 21151e7..4e1a09a 100644
+--- a/kanban/content/__init__.py
++++ b/kanban/content/__init__.py
+@@ -19,6 +19,7 @@ from kanban.content.normalize import (
+     InputKind,
+     NormalizationReport,
+     normalize_inspect,
++    normalize_markdown,
+     normalize_plain_text,
+     normalize_to_markdown,
+ )
+@@ -68,6 +69,7 @@ __all__ = [
+     "nh3_clean_html",
+     "nh3_sanitize_and_serialize_gfm",
+     "normalize_inspect",
++    "normalize_markdown",
+     "normalize_plain_text",
+     "normalize_to_markdown",
+     "prune_hidden_dom",
+diff --git a/kanban/content/normalize.py b/kanban/content/normalize.py
+index f320287..3015e8f 100644
+--- a/kanban/content/normalize.py
++++ b/kanban/content/normalize.py
+@@ -23,6 +23,8 @@ from kanban.content.html_to_gfm import (
+     nh3_sanitize_and_serialize_gfm,
+ )
+ from kanban.content.unicode_guard import (
++    SURROGATE_MAX,
++    SURROGATE_MIN,
+     ContentNormalizeError,
+     strip_invisible_and_control_chars,
+ )
+@@ -32,6 +34,7 @@ __all__ = [
+     "InputKind",
+     "NormalizationReport",
+     "normalize_inspect",
++    "normalize_markdown",
+     "normalize_plain_text",
+     "normalize_to_markdown",
+ ]
+@@ -418,6 +421,11 @@ def normalize_inspect(
+         ContentNormalizeError: If input size, complexity, or surrogate boundaries are violated.
+ 
+     """
++    for ch in raw:
++        if SURROGATE_MIN <= ord(ch) <= SURROGATE_MAX:
++            err_code = "INVALID_UTF8_SURROGATE"
++            raise ContentNormalizeError(err_code)
++
+     input_bytes = len(raw.encode("utf-8"))
+ 
+     if mode == "plain":
+@@ -475,6 +483,9 @@ def normalize_to_markdown(
+     return report.output_markdown
+ 
+ 
++normalize_markdown = normalize_to_markdown
++
++
+ def normalize_plain_text(
+     raw: str,
+     *,
+diff --git a/kanban/tests/content/test_normalize_markdown.py b/kanban/tests/content/test_normalize_markdown.py
+index 43f08f9..900d2ba 100644
+--- a/kanban/tests/content/test_normalize_markdown.py
++++ b/kanban/tests/content/test_normalize_markdown.py
+@@ -21,6 +21,7 @@ import pytest
+ from kanban.content.normalize import (
+     ContentNormalizeError,
+     normalize_inspect,
++    normalize_markdown,
+     normalize_plain_text,
+     normalize_to_markdown,
+ )
+@@ -187,3 +188,33 @@ def test_normalize_inspect_metrics() -> None:
+     assert "display:none" in report.pruned_reasons
+     assert report.links_disarmed == 0
+     assert "[link](https://example.com)" in report.output_markdown
++
++
++def test_lone_surrogate_rejection_before_utf8_encode() -> None:
++    """Verify lone surrogate characters raise INVALID_UTF8_SURROGATE before byte encode."""
++    # Isolated high surrogate
++    with pytest.raises(ContentNormalizeError) as exc_info:
++        normalize_inspect("\ud800")
++    assert exc_info.value.code == "INVALID_UTF8_SURROGATE"
++
++    # Embedded low surrogate in text
++    with pytest.raises(ContentNormalizeError) as exc_info:
++        normalize_inspect("prefix \udfff suffix")
++    assert exc_info.value.code == "INVALID_UTF8_SURROGATE"
++
++    # Surrogate via normalize_markdown alias
++    with pytest.raises(ContentNormalizeError) as exc_info:
++        normalize_markdown("\ud83d")
++    assert exc_info.value.code == "INVALID_UTF8_SURROGATE"
++
++    # Surrogate in plain text mode
++    with pytest.raises(ContentNormalizeError) as exc_info:
++        normalize_plain_text("plain \udc00 text")
++    assert exc_info.value.code == "INVALID_UTF8_SURROGATE"
++
++
++def test_normalize_markdown_alias() -> None:
++    """Verify normalize_markdown is an alias for normalize_to_markdown."""
++    assert normalize_markdown is normalize_to_markdown
++    text_input = "# Header\n\nSome paragraph text."
++    assert normalize_markdown(text_input) == normalize_to_markdown(text_input)

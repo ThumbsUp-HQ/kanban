@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
 
-from database.tests.conftest import bind_ctx
+from database.tests.conftest import bind_ctx, bind_workspace_admin, bootstrap_workspace_admin
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,13 +28,8 @@ async def _create_workspace(
 ) -> uuid.UUID:
     """Create a test workspace."""
     ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
-    row = await session.execute(
-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
-        {"slug": ws_slug, "name": name},
-    )
-    val = row.scalar_one()
-    assert isinstance(val, uuid.UUID)
-    return val
+    ws_id, _ = await bootstrap_workspace_admin(session, slug=ws_slug, name=name)
+    return ws_id
 
 
 async def _create_principal(
@@ -435,8 +430,11 @@ async def test_05_cross_workspace_and_check_constraints(app_session: AsyncSessio
     """Test cross-workspace rejection, invalid role scope, and permission guards."""
     ws1 = await _create_workspace(app_session)
     ws2 = await _create_workspace(app_session)
+    await bind_workspace_admin(app_session, ws1)
     user_ws1 = await _create_principal(app_session, ws1, principal_type="USER")
+    await bind_workspace_admin(app_session, ws2)
     user_ws2 = await _create_principal(app_session, ws2, principal_type="USER")
+    await bind_workspace_admin(app_session, ws1)
     proj_ws1 = await _create_project(app_session, ws1, identifier="CW1")
 
     # 1. Cross-workspace role_bindings raises ROLE_BINDING_WORKSPACE_MISMATCH

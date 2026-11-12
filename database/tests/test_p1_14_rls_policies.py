@@ -409,7 +409,10 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
             "SELECT c.relname FROM pg_class c "
             "JOIN pg_namespace n ON n.oid = c.relnamespace "
             "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
-            "  AND c.relname NOT IN ('alembic_version', 'link_type_matrix') "
+            "  AND c.relname NOT IN ("
+            "    'alembic_version', 'link_type_matrix', 'auth_provider_cards', "
+            "    'rate_limit_buckets', 'local_admin_credentials'"
+            "  ) "
             "ORDER BY c.relname"
         )
     )

@@ -21,6 +21,7 @@ import pytest
 from kanban.content.normalize import (
     ContentNormalizeError,
     normalize_inspect,
+    normalize_markdown,
     normalize_plain_text,
     normalize_to_markdown,
 )
@@ -187,3 +188,33 @@ def test_normalize_inspect_metrics() -> None:
     assert "display:none" in report.pruned_reasons
     assert report.links_disarmed == 0
     assert "[link](https://example.com)" in report.output_markdown
+
+
+def test_lone_surrogate_rejection_before_utf8_encode() -> None:
+    """Verify lone surrogate characters raise INVALID_UTF8_SURROGATE before byte encode."""
+    # Isolated high surrogate
+    with pytest.raises(ContentNormalizeError) as exc_info:
+        normalize_inspect("\ud800")
+    assert exc_info.value.code == "INVALID_UTF8_SURROGATE"
+
+    # Embedded low surrogate in text
+    with pytest.raises(ContentNormalizeError) as exc_info:
+        normalize_inspect("prefix \udfff suffix")
+    assert exc_info.value.code == "INVALID_UTF8_SURROGATE"
+
+    # Surrogate via normalize_markdown alias
+    with pytest.raises(ContentNormalizeError) as exc_info:
+        normalize_markdown("\ud83d")
+    assert exc_info.value.code == "INVALID_UTF8_SURROGATE"
+
+    # Surrogate in plain text mode
+    with pytest.raises(ContentNormalizeError) as exc_info:
+        normalize_plain_text("plain \udc00 text")
+    assert exc_info.value.code == "INVALID_UTF8_SURROGATE"
+
+
+def test_normalize_markdown_alias() -> None:
+    """Verify normalize_markdown is an alias for normalize_to_markdown."""
+    assert normalize_markdown is normalize_to_markdown
+    text_input = "# Header\n\nSome paragraph text."
+    assert normalize_markdown(text_input) == normalize_to_markdown(text_input)

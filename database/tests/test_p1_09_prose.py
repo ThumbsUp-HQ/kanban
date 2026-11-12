@@ -8,6 +8,12 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.tests.conftest import (
+    bind_ctx,
+    bind_workspace_admin,
+    bootstrap_workspace_admin,
+)
+
 
 def _is_check_violation(exc: Exception) -> bool:
     """Return True if exception indicates a check constraint violation (23514)."""
@@ -26,15 +32,9 @@ async def _create_workspace(
     slug: str | None = None,
     name: str = "Prose Workspace",
 ) -> uuid.UUID:
-    """Create a test workspace and return its UUID."""
-    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
-    row = await session.execute(
-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
-        {"slug": ws_slug, "name": name},
-    )
-    val = row.scalar_one()
-    assert isinstance(val, uuid.UUID)
-    return val
+    """Create a test workspace and bootstrap an admin principal context."""
+    ws_id, _ = await bootstrap_workspace_admin(session, slug=slug, name=name)
+    return ws_id
 
 
 async def _create_user(
@@ -70,6 +70,14 @@ async def _create_user(
         text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws_id, :email)"),
         {"id": u_id, "ws_id": workspace_id, "email": email},
     )
+    await session.execute(
+        text(
+            "INSERT INTO role_bindings (principal_id, workspace_id, role, scope_type, project_id) "
+            "VALUES (:p_id, :ws_id, 'WORKSPACE_ADMIN', 'workspace', NULL)"
+        ),
+        {"p_id": u_id, "ws_id": workspace_id},
+    )
+    await bind_ctx(session, principal_id=u_id, workspace_id=workspace_id)
     return u_id
 
 
@@ -520,7 +528,9 @@ async def test_05a_negative_color_cycle_and_hierarchy(app_session: AsyncSession)
 
 
 @pytest.mark.asyncio
-async def test_05b_negative_immutability_and_promotions(app_session: AsyncSession) -> None:
+async def test_05b_negative_immutability_and_promotions(  # noqa: PLR0915
+    app_session: AsyncSession,
+) -> None:
     """Verify security rejections for page version immutability and invalid sticky promotions."""
     ws = await _create_workspace(app_session)
     user = await _create_user(app_session, ws, "neg2@example.com")
@@ -536,6 +546,7 @@ async def test_05b_negative_immutability_and_promotions(app_session: AsyncSessio
 
     # 1. Direct UPDATE page_versions raises PAGE_VERSION_IMMUTABLE
     sp1 = await app_session.begin_nested()
+    await app_session.execute(text("RESET SESSION AUTHORIZATION"))
     with pytest.raises(DBAPIError) as exc1:
         await app_session.execute(
             text("UPDATE page_versions SET title = 'Tampered' WHERE page_id = :id"),
@@ -543,9 +554,11 @@ async def test_05b_negative_immutability_and_promotions(app_session: AsyncSessio
         )
     assert "PAGE_VERSION_IMMUTABLE" in str(exc1.value)
     await sp1.rollback()
+    await app_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
 
     # 2. Direct DELETE page_versions raises PAGE_VERSION_IMMUTABLE
     sp2 = await app_session.begin_nested()
+    await app_session.execute(text("RESET SESSION AUTHORIZATION"))
     with pytest.raises(DBAPIError) as exc2:
         await app_session.execute(
             text("DELETE FROM page_versions WHERE page_id = :id"),
@@ -553,6 +566,7 @@ async def test_05b_negative_immutability_and_promotions(app_session: AsyncSessio
         )
     assert "PAGE_VERSION_IMMUTABLE" in str(exc2.value)
     await sp2.rollback()
+    await app_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
 
     # 3. Explicit body_sha256 insert raises 428C9 (cannot insert into generated column)
     sp3 = await app_session.begin_nested()
@@ -596,6 +610,7 @@ async def test_05b_negative_immutability_and_promotions(app_session: AsyncSessio
     ws2 = await _create_workspace(app_session, name="Other WS")
     user2 = await _create_user(app_session, ws2, "other@example.com")
     d_ws2 = await _create_doc(app_session, ws2, user2)
+    await bind_ctx(app_session, principal_id=user, workspace_id=ws)
     sp5 = await app_session.begin_nested()
     with pytest.raises(DBAPIError) as exc5:
         await app_session.execute(
@@ -606,6 +621,7 @@ async def test_05b_negative_immutability_and_promotions(app_session: AsyncSessio
     await sp5.rollback()
 
     # 6. Stickies promotion: valid promote and re-promotion rejection
+    await bind_workspace_admin(app_session, ws)
     await app_session.execute(
         text("UPDATE stickies SET promoted_to_doc_id = :d WHERE id = :stk"),
         {"d": d_id, "stk": stk},
