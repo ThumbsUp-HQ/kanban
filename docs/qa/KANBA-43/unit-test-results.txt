@@ -1,0 +1,45 @@
+.........                                                                [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                                    Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------------------
+database/__init__.py                                        1      0      0      0   100%
+database/bootstrap/__init__.py                             25      2      6      3    84%   20, 22->24, 25
+database/migrations/__init__.py                             0      0      0      0   100%
+database/migrations/env.py                                 39      5      8      4    81%   14->17, 22-23, 29->32, 47-48, 73
+database/migrations/sqlfile.py                             19      4      4      2    74%   17-18, 22-23
+database/migrations/versions/__init__.py                    0      0      0      0   100%
+database/migrations/versions/p1_01_baseline.py             10      1      0      0    90%   26
+database/migrations/versions/p1_02_objects_spine.py        10      1      0      0    90%   26
+database/migrations/versions/p1_03_principals.py           10      1      0      0    90%   26
+database/migrations/versions/p1_04_projects.py             10      1      0      0    90%   26
+database/migrations/versions/p1_11_object_links.py         10      1      0      0    90%   26
+database/migrations/versions/p1_12_activity_ledger.py      10      0      0      0   100%
+database/testing/__init__.py                                0      0      0      0   100%
+database/testing/pg_harness.py                            199     58     54     15    64%   49-50, 70-71, 75, 92-93, 113->exit, 114->113, 120-124, 136->147, 138->141, 142->145, 152-167, 177-186, 204-205, 223-224, 229-253, 259, 262, 268, 337, 354-355, 363->exit
+database/tests/__init__.py                                  0      0      0      0   100%
+database/tests/conftest.py                                 15      4      0      0    73%   16-18, 30
+database/tests/migration_harness.py                        88     15     12      6    79%   69, 73, 91, 95, 105, 107, 121-126, 130-134
+database/tests/migrations/__init__.py                       0      0      0      0   100%
+database/tests/migrations/test_p1_01_migration.py          61     61     10      0     0%   3-123
+database/tests/migrations/test_p1_02_migration.py          26     26      0      0     0%   3-82
+database/tests/migrations/test_p1_03_migration.py          21     21      0      0     0%   3-69
+database/tests/migrations/test_p1_04_migration.py          25     25      0      0     0%   3-87
+database/tests/migrations/test_p1_11_migration.py          27     27      0      0     0%   3-89
+database/tests/migrations/test_p1_12_migration.py          21      0      0      0   100%
+database/tests/test_harness_benchmark.py                    8      8      0      0     0%   3-19
+database/tests/test_p1_01_baseline.py                     109    109      2      0     0%   3-185
+database/tests/test_p1_02_objects.py                      145    145      0      0     0%   3-319
+database/tests/test_p1_03_principals.py                   196    196      8      0     0%   3-469
+database/tests/test_p1_04_projects.py                     161    161      4      0     0%   3-501
+database/tests/test_p1_11_object_links.py                 167    167      4      0     0%   3-524
+database/tests/test_p1_12_activity_ledger.py              218      0     10      0   100%
+database/tests/test_p1_12_chain_concurrency.py             27      0      2      0   100%
+database/tests/test_pg_harness.py                         120    120      2      0     0%   3-224
+database/tests/test_smoke.py                                3      3      0      0     0%   3-8
+database/tests/test_sqlfile.py                             22     22      0      0     0%   3-36
+---------------------------------------------------------------------------------------------------
+TOTAL                                                    1803   1184    126     30    35%
+9 passed in 0.89s
+EXIT_CODE=0

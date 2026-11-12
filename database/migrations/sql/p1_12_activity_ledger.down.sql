@@ -1,0 +1,10 @@
+DROP FUNCTION IF EXISTS verify_activity_chain(uuid);
+DROP FUNCTION IF EXISTS append_activity(uuid, uuid, object_kind, uuid, text, jsonb);
+DROP TRIGGER IF EXISTS activity_records_immutable_bud_trg ON activity_records;
+DROP FUNCTION IF EXISTS activity_records_immutable_bud();
+DROP TRIGGER IF EXISTS activity_records_chain_bi_trg ON activity_records;
+DROP FUNCTION IF EXISTS activity_records_chain_bi();
+DROP TABLE IF EXISTS activity_records CASCADE;
+DROP TABLE IF EXISTS activity_chain_heads CASCADE;
+DROP FUNCTION IF EXISTS ensure_activity_partitions(timestamptz, int, int);
+DROP FUNCTION IF EXISTS compute_activity_row_hash(bytea, uuid, bigint, uuid, uuid, object_kind, uuid, text, timestamptz, jsonb);
