@@ -1,0 +1,145 @@
+=== 1. GET / (Accept-Encoding: br) ===
+*   Trying 127.0.0.1:18000...
+* Established connection to 127.0.0.1 (127.0.0.1 port 18000) from 127.0.0.1 port 58646 
+* using HTTP/1.x
+> GET / HTTP/1.1
+> Host: 127.0.0.1:18000
+> User-Agent: curl/8.18.0
+> Accept: */*
+> Accept-Encoding: br
+> 
+* Request completely sent off
+< HTTP/1.1 200 OK
+< date: Thu, 12 Nov 2026 02:23:01 GMT
+< server: uvicorn
+< content-type: text/html; charset=utf-8
+< content-length: 391
+< etag: "6eedb01c969c9007-identity"
+< vary: Accept-Encoding
+< cache-control: no-cache
+< content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+< x-content-type-options: nosniff
+< referrer-policy: no-referrer
+< x-frame-options: DENY
+< cross-origin-opener-policy: same-origin
+< cross-origin-resource-policy: same-origin
+< permissions-policy: camera=(), microphone=(), geolocation=()
+< strict-transport-security: max-age=63072000; includeSubDomains
+< 
+{ [391 bytes data]
+* Connection #0 to host 127.0.0.1:18000 left intact
+
+=== 2. GET /assets/index-CJtVY9il.js (Accept-Encoding: gzip) ===
+*   Trying 127.0.0.1:18000...
+* Established connection to 127.0.0.1 (127.0.0.1 port 18000) from 127.0.0.1 port 58656 
+* using HTTP/1.x
+> GET /assets/index-CJtVY9il.js HTTP/1.1
+> Host: 127.0.0.1:18000
+> User-Agent: curl/8.18.0
+> Accept: */*
+> Accept-Encoding: gzip
+> 
+* Request completely sent off
+< HTTP/1.1 200 OK
+< date: Thu, 12 Nov 2026 02:23:01 GMT
+< server: uvicorn
+< content-type: text/javascript; charset=utf-8
+< content-length: 67727
+< etag: "8f4b6a4c6db8f937-gzip"
+< vary: Accept-Encoding
+< cache-control: public, max-age=31536000, immutable
+< content-encoding: gzip
+< content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+< x-content-type-options: nosniff
+< referrer-policy: no-referrer
+< x-frame-options: DENY
+< cross-origin-opener-policy: same-origin
+< cross-origin-resource-policy: same-origin
+< permissions-policy: camera=(), microphone=(), geolocation=()
+< strict-transport-security: max-age=63072000; includeSubDomains
+< 
+{ [32768 bytes data]
+* Connection #0 to host 127.0.0.1:18000 left intact
+
+=== 3. GET /api/v1/health ===
+*   Trying 127.0.0.1:18000...
+* Established connection to 127.0.0.1 (127.0.0.1 port 18000) from 127.0.0.1 port 58666 
+* using HTTP/1.x
+> GET /api/v1/health HTTP/1.1
+> Host: 127.0.0.1:18000
+> User-Agent: curl/8.18.0
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/1.1 200 OK
+< date: Thu, 12 Nov 2026 02:23:01 GMT
+< server: uvicorn
+< content-length: 15
+< content-type: application/json
+< content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+< x-content-type-options: nosniff
+< referrer-policy: no-referrer
+< x-frame-options: DENY
+< cross-origin-opener-policy: same-origin
+< cross-origin-resource-policy: same-origin
+< permissions-policy: camera=(), microphone=(), geolocation=()
+< strict-transport-security: max-age=63072000; includeSubDomains
+< 
+{ [15 bytes data]
+* Connection #0 to host 127.0.0.1:18000 left intact
+{"status":"ok"}
+
+=== 4. GET /mcp/admin ===
+*   Trying 127.0.0.1:18000...
+* Established connection to 127.0.0.1 (127.0.0.1 port 18000) from 127.0.0.1 port 58678 
+* using HTTP/1.x
+> GET /mcp/admin HTTP/1.1
+> Host: 127.0.0.1:18000
+> User-Agent: curl/8.18.0
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/1.1 501 Not Implemented
+< date: Thu, 12 Nov 2026 02:23:01 GMT
+< server: uvicorn
+< content-length: 61
+< content-type: application/problem+json
+< content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+< x-content-type-options: nosniff
+< referrer-policy: no-referrer
+< x-frame-options: DENY
+< cross-origin-opener-policy: same-origin
+< cross-origin-resource-policy: same-origin
+< permissions-policy: camera=(), microphone=(), geolocation=()
+< strict-transport-security: max-age=63072000; includeSubDomains
+< 
+{ [61 bytes data]
+* Connection #0 to host 127.0.0.1:18000 left intact
+{"type":"about:blank","title":"Not Implemented","status":501}
+
+=== 5. GET / in standalone mode with Host: 192.168.1.20:18000 ===
+*   Trying 127.0.0.1:18000...
+* Established connection to 127.0.0.1 (127.0.0.1 port 18000) from 127.0.0.1 port 52838 
+* using HTTP/1.x
+> GET / HTTP/1.1
+> Host: 192.168.1.20:18000
+> User-Agent: curl/8.18.0
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/1.1 403 Forbidden
+< date: Thu, 12 Nov 2026 02:23:03 GMT
+< server: uvicorn
+< content-type: application/problem+json
+< content-length: 226
+< content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+< x-content-type-options: nosniff
+< referrer-policy: no-referrer
+< x-frame-options: DENY
+< cross-origin-opener-policy: same-origin
+< cross-origin-resource-policy: same-origin
+< permissions-policy: camera=(), microphone=(), geolocation=()
+< 
+{ [226 bytes data]
+* Connection #0 to host 127.0.0.1:18000 left intact
+{"type": "about:blank", "title": "CLEARTEXT_HTTP_BLOCKED", "status": 403, "detail": "Standalone mode serves cleartext HTTP only to localhost. Put a TLS reverse proxy in front or add the host to KB_STANDALONE_CLEARTEXT_HOSTS."}
