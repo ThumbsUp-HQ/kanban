@@ -73,7 +73,9 @@ async def test_case_1_positive_create_get_etag_304_and_activity(
 ) -> None:
     """Case 1: Positive create returns 201, ETag, Location, GET 200, If-None-Match 304."""
     admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
-    _ = await make_project("POS", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    _ = await make_project(
+        "POS", created_by=admin, roles={admin: "PROJECT_ADMIN"}, modules_enabled=True
+    )
     client = as_principal(admin)
 
     desc = "# Description\n\nThis is a standard issue."

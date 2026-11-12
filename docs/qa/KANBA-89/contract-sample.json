@@ -1,0 +1,246 @@
+{
+  "ticket": "KANBA-89",
+  "exchanges": [
+    {
+      "name": "module_create_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/MOD1/modules",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "224",
+          "content-type": "application/json"
+        },
+        "body": {
+          "name": "Auth Core",
+          "description_markdown": "# Authentication\nCore identity and tokens.",
+          "lead_principal_id": "01a1cee8-f221-785d-bc79-1112c549272d",
+          "status": "in_progress",
+          "start_date": "2026-11-01",
+          "target_date": "2026-11-30"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "358",
+          "content-type": "application/json",
+          "location": "/api/v1/modules/6d7c8fff-0234-4d13-b4ec-0b479c4fd020",
+          "x-request-id": "5e521bd7b4c44a338a49c6a02214ae44",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "6d7c8fff-0234-4d13-b4ec-0b479c4fd020",
+          "name": "Auth Core",
+          "status": "in_progress",
+          "lead": {
+            "id": "01a1cee8-f221-785d-bc79-1112c549272d",
+            "handle": "leaduser",
+            "display_name": "Leaduser",
+            "type": "USER"
+          },
+          "description_markdown": "# Authentication\nCore identity and tokens.",
+          "start_date": "2026-11-01",
+          "target_date": "2026-11-30",
+          "issue_count": 0,
+          "completed_count": 0
+        }
+      }
+    },
+    {
+      "name": "issue_assign_200",
+      "request": {
+        "method": "PUT",
+        "path": "/api/v1/issues/MOD1-1/modules",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "55",
+          "content-type": "application/json"
+        },
+        "body": {
+          "module_ids": [
+            "6d7c8fff-0234-4d13-b4ec-0b479c4fd020"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "55",
+          "content-type": "application/json",
+          "x-request-id": "0893186d01f342aeb2137b6c958b97c6",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "module_ids": [
+            "6d7c8fff-0234-4d13-b4ec-0b479c4fd020"
+          ]
+        }
+      }
+    },
+    {
+      "name": "modules_disabled_404",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/projects/DIS1/modules",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "0d4809e0013f418284684d48426e0c83",
+          "content-length": "209",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:MODULES_DISABLED",
+          "title": "Not Found",
+          "status": 404,
+          "code": "MODULES_DISABLED",
+          "detail": "Modules feature is disabled for this project",
+          "request_id": "0d4809e0013f418284684d48426e0c83"
+        }
+      }
+    },
+    {
+      "name": "non_viewer_plain_404",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/projects/SEC1/modules",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "0d07bc4f9b5d402998d9dfbb1a4791c3",
+          "content-length": "139",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "request_id": "0d07bc4f9b5d402998d9dfbb1a4791c3"
+        }
+      }
+    },
+    {
+      "name": "module_limit_422",
+      "request": {
+        "method": "PUT",
+        "path": "/api/v1/issues/BND1-1/modules",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "445",
+          "content-type": "application/json"
+        },
+        "body": {
+          "module_ids": [
+            "8747502a-4fa0-44d7-b122-e0aa090d4dbf",
+            "71f43a56-57ec-4a40-aa1a-24f7d4990346",
+            "2fe2b1d9-5e30-4959-af1c-992849d79510",
+            "b95cc433-fa40-4199-b94a-e2d82b248a6a",
+            "47ca913c-db8c-40ed-b610-defcf7269997",
+            "cfcf4543-2c7e-4817-befe-eb2a8e54ed2d",
+            "522cf6ab-47a7-450c-a8a0-5fceeaf9e99b",
+            "dcc158e5-281c-4a01-b0a4-8ba2f6818500",
+            "4baa6eb7-6331-4d97-a95e-eadd14920afb",
+            "04efd62a-0e40-4dcb-98ca-623b415b879c",
+            "d6360490-6389-437d-a243-33cf82530e29"
+          ]
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "b91c1103464c4128ab9d0a293f32ff1e",
+          "content-length": "220",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:MODULE_LIMIT",
+          "title": "Module Limit Exceeded",
+          "status": 422,
+          "code": "MODULE_LIMIT",
+          "detail": "An issue cannot be assigned to more than 10 modules",
+          "request_id": "b91c1103464c4128ab9d0a293f32ff1e"
+        }
+      }
+    }
+  ]
+}

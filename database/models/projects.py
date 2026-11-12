@@ -182,6 +182,13 @@ class Module(Base):
         ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
+    description_markdown: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("''")
+    )
+    lead_principal_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'planned'"))
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
