@@ -1,0 +1,16 @@
+=== OUTBOX RELAY END-TO-END DELIVERY TRACE ===
+Event enqueued and committed: id=01a1ce3e-35ff-7b87-868c-ac39ceb4b61e, topic=issue.created, t_committed=+2.49ms
+Wakeup NOTIFY received and published by OutboxRelay
+Subscriber received envelope: id=01a1ce3e-35ff-7b87-868c-ac39ceb4b61e, topic=issue.created, payload={'action': 'trace_benchmark', 'priority': 'HIGH', 'ticket': 'KANBA-56'}
+End-to-End Relay Delivery Latency: 3.78ms (Budget: < 200.00ms, PASS)
+Database Row Status: seq=1, attempts=1, published_at=2026-11-12 05:32:25.994184+00:00, dead_lettered_at=None
+
+=== POISON-PILL AND DEAD-LETTER TRANSITION TRACE ===
+Poison-pill event enqueued: id=01a1ce3e-3610-72c1-80bf-056078750b52, topic=issue.poison_pill
+Attempt 1/5: attempts=1, dead_lettered_at=None, last_error=Injected downstream cluster timeout (503 Serv...
+Attempt 2/5: attempts=2, dead_lettered_at=None, last_error=Injected downstream cluster timeout (503 Serv...
+Attempt 3/5: attempts=3, dead_lettered_at=None, last_error=Injected downstream cluster timeout (503 Serv...
+Attempt 4/5: attempts=4, dead_lettered_at=None, last_error=Injected downstream cluster timeout (503 Serv...
+Attempt 5/5: attempts=5, dead_lettered_at=2026-11-12 05:32:26.010087+00:00, last_error=Injected downstream cluster timeout (503 Serv...
+Post-dead-letter claim_outbox_batch returned: 0 rows (Event safely bypassed)
+OUTBOX_EVENT_DEAD_LETTERED transition verified.
