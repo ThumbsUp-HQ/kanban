@@ -3,6 +3,7 @@ import { TokenStory } from './dev/TokenStory';
 import { EmojiStory } from './dev/EmojiStory';
 import { EditorStory } from './dev/EditorStory';
 import { MediaStory } from './dev/MediaStory';
+import { RealtimeStory } from './dev/RealtimeStory';
 import './App.css';
 
 /**
@@ -33,6 +34,9 @@ export function App(): JSX.Element {
     }
     if (window.location.pathname === '/__dev/media') {
       return <MediaStory />;
+    }
+    if (window.location.pathname === '/__dev/realtime') {
+      return <RealtimeStory />;
     }
   }
 
