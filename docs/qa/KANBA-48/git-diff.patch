@@ -1,0 +1,2093 @@
+diff --git a/database/migrations/sql/p1_08_planning_joins.down.sql b/database/migrations/sql/p1_08_planning_joins.down.sql
+new file mode 100644
+index 0000000..c019abd
+--- /dev/null
++++ b/database/migrations/sql/p1_08_planning_joins.down.sql
+@@ -0,0 +1,45 @@
++-- Revert KB-P1-08: cycles, modules, assignees, labels & subscriptions join tables
++
++DROP TRIGGER IF EXISTS issue_assignees_autosubscribe_ai_trg ON issue_assignees;
++DROP FUNCTION IF EXISTS issue_assignees_autosubscribe_ai();
++
++DROP TRIGGER IF EXISTS issues_autosubscribe_creator_ai_trg ON issues;
++DROP FUNCTION IF EXISTS issues_autosubscribe_creator_ai();
++
++DROP TRIGGER IF EXISTS issue_labels_exclusive_bi_trg ON issue_labels;
++DROP FUNCTION IF EXISTS issue_labels_exclusive_bi();
++
++DROP TRIGGER IF EXISTS issue_assignees_guard_bi_trg ON issue_assignees;
++DROP FUNCTION IF EXISTS issue_assignees_guard_bi();
++
++DROP TRIGGER IF EXISTS issues_apply_module_defaults_ai_trg ON issues;
++DROP FUNCTION IF EXISTS issues_apply_module_defaults_ai();
++
++DROP TRIGGER IF EXISTS project_module_defaults_guard_bi_trg ON project_module_defaults;
++DROP FUNCTION IF EXISTS project_module_defaults_guard_bi();
++
++DROP TRIGGER IF EXISTS issue_modules_guard_bi_trg ON issue_modules;
++DROP FUNCTION IF EXISTS issue_modules_guard_bi();
++
++DROP TRIGGER IF EXISTS issue_subscriptions_guard_bi_trg ON issue_subscriptions;
++DROP FUNCTION IF EXISTS issue_subscriptions_guard_bi();
++
++DROP TRIGGER IF EXISTS issues_cycle_project_biu_trg ON issues;
++DROP FUNCTION IF EXISTS issues_cycle_project_biu();
++
++DROP TRIGGER IF EXISTS modules_spine_match_biu_trg ON modules;
++DROP FUNCTION IF EXISTS modules_spine_match_biu();
++
++DROP TRIGGER IF EXISTS cycles_spine_match_biu_trg ON cycles;
++DROP FUNCTION IF EXISTS cycles_spine_match_biu();
++
++DROP TABLE IF EXISTS issue_subscriptions CASCADE;
++DROP TABLE IF EXISTS issue_labels CASCADE;
++DROP TABLE IF EXISTS issue_assignees CASCADE;
++DROP TABLE IF EXISTS issue_modules CASCADE;
++DROP TABLE IF EXISTS project_module_defaults CASCADE;
++
++ALTER TABLE issues DROP CONSTRAINT IF EXISTS issues_cycle_fk;
++
++DROP TABLE IF EXISTS modules CASCADE;
++DROP TABLE IF EXISTS cycles CASCADE;
+diff --git a/database/migrations/sql/p1_08_planning_joins.up.sql b/database/migrations/sql/p1_08_planning_joins.up.sql
+new file mode 100644
+index 0000000..151d68d
+--- /dev/null
++++ b/database/migrations/sql/p1_08_planning_joins.up.sql
+@@ -0,0 +1,408 @@
++-- KB-P1-08: cycles, modules, assignees, labels & subscriptions join tables
++
++-- 1. Cycles Table
++CREATE TABLE cycles (
++    id            UUID PRIMARY KEY,
++    object_type   object_kind NOT NULL DEFAULT 'cycle' CHECK (object_type = 'cycle'),
++    workspace_id  UUID NOT NULL,
++    project_id    UUID NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
++    name          TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 200),
++    status        TEXT NOT NULL DEFAULT 'upcoming' CHECK (status IN ('upcoming','active','completed')),
++    start_date    DATE,
++    end_date      DATE,
++    CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date),
++    FOREIGN KEY (id, object_type) REFERENCES objects (id, object_type) ON DELETE RESTRICT,
++    EXCLUDE USING gist (project_id WITH =, daterange(start_date, end_date, '[]') WITH &&)
++        WHERE (start_date IS NOT NULL AND end_date IS NOT NULL)
++);
++
++CREATE UNIQUE INDEX cycles_one_active_per_project ON cycles (project_id) WHERE status = 'active';
++CREATE INDEX cycles_project_idx ON cycles (project_id);
++
++-- 2. Foreign Key from issues to cycles
++ALTER TABLE issues ADD CONSTRAINT issues_cycle_fk
++    FOREIGN KEY (cycle_id) REFERENCES cycles(id) ON DELETE SET NULL;
++
++-- 3. Modules Table
++CREATE TABLE modules (
++    id            UUID PRIMARY KEY,
++    object_type   object_kind NOT NULL DEFAULT 'module' CHECK (object_type = 'module'),
++    workspace_id  UUID NOT NULL,
++    project_id    UUID NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
++    name          TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 200),
++    start_date    DATE,
++    target_date   DATE,
++    CHECK (target_date IS NULL OR start_date IS NULL OR target_date >= start_date),
++    UNIQUE (project_id, name),
++    FOREIGN KEY (id, object_type) REFERENCES objects (id, object_type) ON DELETE RESTRICT
++);
++
++CREATE INDEX modules_project_idx ON modules (project_id);
++
++-- 4. Join Tables
++CREATE TABLE project_module_defaults (
++    project_id   UUID NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
++    module_id    UUID NOT NULL REFERENCES modules(id)  ON DELETE CASCADE,
++    workspace_id UUID NOT NULL,
++    PRIMARY KEY (project_id, module_id)
++);
++
++CREATE TABLE issue_modules (
++    issue_id     UUID NOT NULL REFERENCES issues(id)  ON DELETE CASCADE,
++    module_id    UUID NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
++    workspace_id UUID NOT NULL,
++    PRIMARY KEY (issue_id, module_id)
++);
++CREATE INDEX issue_modules_module_idx ON issue_modules (module_id);
++
++CREATE TABLE issue_assignees (
++    id                  UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id        UUID NOT NULL,
++    issue_id            UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
++    principal_id        UUID REFERENCES principals(id) ON DELETE RESTRICT,
++    free_text_assignee  TEXT CHECK (free_text_assignee IS NULL OR char_length(btrim(free_text_assignee)) BETWEEN 1 AND 120),
++    created_at          TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    CHECK (num_nonnulls(principal_id, free_text_assignee) = 1)
++);
++CREATE UNIQUE INDEX issue_assignees_principal_uq ON issue_assignees (issue_id, principal_id) WHERE principal_id IS NOT NULL;
++CREATE UNIQUE INDEX issue_assignees_text_uq ON issue_assignees (issue_id, lower(free_text_assignee)) WHERE free_text_assignee IS NOT NULL;
++CREATE INDEX issue_assignees_issue_idx ON issue_assignees (issue_id);
++CREATE INDEX issue_assignees_principal_idx ON issue_assignees (principal_id) WHERE principal_id IS NOT NULL;
++
++COMMENT ON COLUMN issue_assignees.free_text_assignee IS 'Vendor or external assignee; grants zero system access and is omitted from effective_resource_access computation.';
++
++CREATE TABLE issue_labels (
++    issue_id     UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
++    label_id     UUID NOT NULL REFERENCES project_labels(id) ON DELETE CASCADE,
++    workspace_id UUID NOT NULL,
++    PRIMARY KEY (issue_id, label_id)
++);
++CREATE INDEX issue_labels_label_idx ON issue_labels (label_id);
++
++CREATE TABLE issue_subscriptions (
++    issue_id      UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
++    principal_id  UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
++    workspace_id  UUID NOT NULL,
++    source        TEXT NOT NULL CHECK (source IN ('MANUAL','CREATOR','ASSIGNEE','MENTION')),
++    is_muted      BOOLEAN NOT NULL DEFAULT FALSE,
++    created_at    TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    PRIMARY KEY (issue_id, principal_id)
++);
++CREATE INDEX issue_subscriptions_principal_idx ON issue_subscriptions (principal_id);
++
++-- 5. Triggers and Functions
++
++-- Spine validation for cycles
++CREATE FUNCTION cycles_spine_match_biu() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_ws_id UUID;
++    v_proj_id UUID;
++BEGIN
++    SELECT workspace_id, project_id
++      INTO v_ws_id, v_proj_id
++      FROM objects
++     WHERE id = NEW.id AND object_type = 'cycle';
++
++    IF NOT FOUND OR v_ws_id <> NEW.workspace_id OR v_proj_id IS DISTINCT FROM NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PLANNING_SPINE_MISMATCH';
++    END IF;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER cycles_spine_match_biu_trg
++    BEFORE INSERT OR UPDATE ON cycles
++    FOR EACH ROW EXECUTE FUNCTION cycles_spine_match_biu();
++
++-- Spine validation for modules
++CREATE FUNCTION modules_spine_match_biu() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_ws_id UUID;
++    v_proj_id UUID;
++BEGIN
++    SELECT workspace_id, project_id
++      INTO v_ws_id, v_proj_id
++      FROM objects
++     WHERE id = NEW.id AND object_type = 'module';
++
++    IF NOT FOUND OR v_ws_id <> NEW.workspace_id OR v_proj_id IS DISTINCT FROM NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PLANNING_SPINE_MISMATCH';
++    END IF;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER modules_spine_match_biu_trg
++    BEFORE INSERT OR UPDATE ON modules
++    FOR EACH ROW EXECUTE FUNCTION modules_spine_match_biu();
++
++-- Issues cycle_id project verification
++CREATE FUNCTION issues_cycle_project_biu() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_cycle_proj UUID;
++BEGIN
++    IF NEW.cycle_id IS NOT NULL THEN
++        SELECT project_id INTO v_cycle_proj FROM cycles WHERE id = NEW.cycle_id;
++        IF v_cycle_proj IS NULL OR v_cycle_proj <> NEW.project_id THEN
++            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CYCLE_PROJECT_MISMATCH';
++        END IF;
++    END IF;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issues_cycle_project_biu_trg
++    BEFORE INSERT OR UPDATE OF cycle_id ON issues
++    FOR EACH ROW EXECUTE FUNCTION issues_cycle_project_biu();
++
++-- Issue modules guard: module project must equal issue project, modules_enabled must be true
++CREATE FUNCTION issue_modules_guard_bi() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_issue_ws UUID;
++    v_issue_proj UUID;
++    v_mod_proj UUID;
++    v_modules_enabled BOOLEAN;
++BEGIN
++    SELECT workspace_id, project_id
++      INTO v_issue_ws, v_issue_proj
++      FROM issues WHERE id = NEW.issue_id;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_NOT_FOUND';
++    END IF;
++
++    SELECT project_id INTO v_mod_proj FROM modules WHERE id = NEW.module_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MODULE_NOT_FOUND';
++    END IF;
++
++    IF v_mod_proj <> v_issue_proj THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MODULE_PROJECT_MISMATCH';
++    END IF;
++
++    SELECT modules_enabled INTO v_modules_enabled FROM projects WHERE id = v_issue_proj;
++    IF v_modules_enabled IS NOT TRUE THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MODULES_DISABLED';
++    END IF;
++
++    NEW.workspace_id := v_issue_ws;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issue_modules_guard_bi_trg
++    BEFORE INSERT ON issue_modules
++    FOR EACH ROW EXECUTE FUNCTION issue_modules_guard_bi();
++
++-- Project module defaults guard: module project must equal project, modules_enabled must be true
++CREATE FUNCTION project_module_defaults_guard_bi() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_proj_ws UUID;
++    v_modules_enabled BOOLEAN;
++    v_mod_proj UUID;
++BEGIN
++    SELECT workspace_id, modules_enabled
++      INTO v_proj_ws, v_modules_enabled
++      FROM projects WHERE id = NEW.project_id;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PROJECT_NOT_FOUND';
++    END IF;
++
++    IF v_modules_enabled IS NOT TRUE THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MODULES_DISABLED';
++    END IF;
++
++    SELECT project_id INTO v_mod_proj FROM modules WHERE id = NEW.module_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MODULE_NOT_FOUND';
++    END IF;
++
++    IF v_mod_proj <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MODULE_PROJECT_MISMATCH';
++    END IF;
++
++    NEW.workspace_id := v_proj_ws;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER project_module_defaults_guard_bi_trg
++    BEFORE INSERT ON project_module_defaults
++    FOR EACH ROW EXECUTE FUNCTION project_module_defaults_guard_bi();
++
++-- Apply module defaults after issue insert
++CREATE FUNCTION issues_apply_module_defaults_ai() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_modules_enabled BOOLEAN;
++BEGIN
++    SELECT modules_enabled INTO v_modules_enabled FROM projects WHERE id = NEW.project_id;
++    IF v_modules_enabled IS TRUE THEN
++        INSERT INTO issue_modules (issue_id, module_id, workspace_id)
++        SELECT NEW.id, pmd.module_id, NEW.workspace_id
++          FROM project_module_defaults pmd
++         WHERE pmd.project_id = NEW.project_id
++        ON CONFLICT DO NOTHING;
++    END IF;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issues_apply_module_defaults_ai_trg
++    AFTER INSERT ON issues
++    FOR EACH ROW EXECUTE FUNCTION issues_apply_module_defaults_ai();
++
++-- Issue assignees guard: principal must be USER or AGENT, ACTIVE status, same workspace
++CREATE FUNCTION issue_assignees_guard_bi() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_issue_ws UUID;
++    v_p_type TEXT;
++    v_p_status TEXT;
++    v_p_ws UUID;
++BEGIN
++    SELECT workspace_id INTO v_issue_ws FROM issues WHERE id = NEW.issue_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_NOT_FOUND';
++    END IF;
++
++    IF NEW.principal_id IS NOT NULL THEN
++        SELECT principal_type, status, workspace_id
++          INTO v_p_type, v_p_status, v_p_ws
++          FROM principals
++         WHERE id = NEW.principal_id;
++
++        IF NOT FOUND OR v_p_type NOT IN ('USER', 'AGENT') OR v_p_status <> 'ACTIVE' OR v_p_ws <> v_issue_ws THEN
++            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ASSIGNEE_INVALID_PRINCIPAL';
++        END IF;
++    END IF;
++
++    NEW.workspace_id := v_issue_ws;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issue_assignees_guard_bi_trg
++    BEFORE INSERT ON issue_assignees
++    FOR EACH ROW EXECUTE FUNCTION issue_assignees_guard_bi();
++
++-- Issue labels exclusive group replacement and project check
++CREATE FUNCTION issue_labels_exclusive_bi() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_issue_proj UUID;
++    v_issue_ws UUID;
++    v_label_proj UUID;
++    v_exclusive_group TEXT;
++BEGIN
++    -- Lock parent issue FOR UPDATE to prevent race conditions during exclusive group check
++    SELECT project_id, workspace_id
++      INTO v_issue_proj, v_issue_ws
++      FROM issues
++     WHERE id = NEW.issue_id
++       FOR UPDATE;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_NOT_FOUND';
++    END IF;
++
++    SELECT project_id, exclusive_group
++      INTO v_label_proj, v_exclusive_group
++      FROM project_labels
++     WHERE id = NEW.label_id;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'LABEL_NOT_FOUND';
++    END IF;
++
++    IF v_label_proj <> v_issue_proj THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'LABEL_PROJECT_MISMATCH';
++    END IF;
++
++    -- If label belongs to an exclusive group, remove existing labels in that group for this issue
++    IF v_exclusive_group IS NOT NULL THEN
++        DELETE FROM issue_labels il
++         USING project_labels pl
++         WHERE il.issue_id = NEW.issue_id
++           AND il.label_id = pl.id
++           AND pl.exclusive_group = v_exclusive_group;
++    END IF;
++
++    NEW.workspace_id := v_issue_ws;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issue_labels_exclusive_bi_trg
++    BEFORE INSERT ON issue_labels
++    FOR EACH ROW EXECUTE FUNCTION issue_labels_exclusive_bi();
++
++-- Autosubscribe issue creator on issue insert
++CREATE FUNCTION issues_autosubscribe_creator_ai() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++    INSERT INTO issue_subscriptions (issue_id, principal_id, workspace_id, source)
++    VALUES (NEW.id, NEW.created_by_id, NEW.workspace_id, 'CREATOR')
++    ON CONFLICT (issue_id, principal_id) DO NOTHING;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issues_autosubscribe_creator_ai_trg
++    AFTER INSERT ON issues
++    FOR EACH ROW EXECUTE FUNCTION issues_autosubscribe_creator_ai();
++
++-- Autosubscribe principal assignee on assignee insert
++CREATE FUNCTION issue_assignees_autosubscribe_ai() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++    IF NEW.principal_id IS NOT NULL THEN
++        INSERT INTO issue_subscriptions (issue_id, principal_id, workspace_id, source)
++        VALUES (NEW.issue_id, NEW.principal_id, NEW.workspace_id, 'ASSIGNEE')
++        ON CONFLICT (issue_id, principal_id) DO NOTHING;
++    END IF;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issue_assignees_autosubscribe_ai_trg
++    AFTER INSERT ON issue_assignees
++    FOR EACH ROW EXECUTE FUNCTION issue_assignees_autosubscribe_ai();
++
++-- Issue subscriptions guard: principal and issue must share workspace
++CREATE FUNCTION issue_subscriptions_guard_bi() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE
++    v_issue_ws UUID;
++    v_p_ws UUID;
++BEGIN
++    SELECT workspace_id INTO v_issue_ws FROM issues WHERE id = NEW.issue_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_NOT_FOUND';
++    END IF;
++
++    SELECT workspace_id INTO v_p_ws FROM principals WHERE id = NEW.principal_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PRINCIPAL_NOT_FOUND';
++    END IF;
++
++    IF v_p_ws <> v_issue_ws THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUBSCRIPTION_WORKSPACE_MISMATCH';
++    END IF;
++
++    NEW.workspace_id := v_issue_ws;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issue_subscriptions_guard_bi_trg
++    BEFORE INSERT ON issue_subscriptions
++    FOR EACH ROW EXECUTE FUNCTION issue_subscriptions_guard_bi();
++
++-- Grants
++GRANT EXECUTE ON FUNCTION cycles_spine_match_biu() TO kanban_app;
++GRANT EXECUTE ON FUNCTION modules_spine_match_biu() TO kanban_app;
++GRANT EXECUTE ON FUNCTION issues_cycle_project_biu() TO kanban_app;
++GRANT EXECUTE ON FUNCTION issue_modules_guard_bi() TO kanban_app;
++GRANT EXECUTE ON FUNCTION project_module_defaults_guard_bi() TO kanban_app;
++GRANT EXECUTE ON FUNCTION issues_apply_module_defaults_ai() TO kanban_app;
++GRANT EXECUTE ON FUNCTION issue_assignees_guard_bi() TO kanban_app;
++GRANT EXECUTE ON FUNCTION issue_labels_exclusive_bi() TO kanban_app;
++GRANT EXECUTE ON FUNCTION issues_autosubscribe_creator_ai() TO kanban_app;
++GRANT EXECUTE ON FUNCTION issue_assignees_autosubscribe_ai() TO kanban_app;
++GRANT EXECUTE ON FUNCTION issue_subscriptions_guard_bi() TO kanban_app;
+diff --git a/database/migrations/versions/p1_08_planning_joins.py b/database/migrations/versions/p1_08_planning_joins.py
+new file mode 100644
+index 0000000..b7dc9c2
+--- /dev/null
++++ b/database/migrations/versions/p1_08_planning_joins.py
+@@ -0,0 +1,26 @@
++"""Cycles, modules, assignees, labels, and subscriptions join tables.
++
++Revision ID: p1_08_planning_joins
++Revises: p1_13_access_control
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p1_08_planning_joins"
++down_revision: str | None = "p1_13_access_control"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply cycles, modules, and planning join tables."""
++    execute_sql_file("p1_08_planning_joins.up.sql")
++
++
++def downgrade() -> None:
++    """Revert cycles, modules, and planning join tables."""
++    execute_sql_file("p1_08_planning_joins.down.sql")
+diff --git a/database/tests/migrations/test_p1_08_migration.py b/database/tests/migrations/test_p1_08_migration.py
+new file mode 100644
+index 0000000..0a377bf
+--- /dev/null
++++ b/database/tests/migrations/test_p1_08_migration.py
+@@ -0,0 +1,67 @@
++"""Migration tests for p1_08_planning_joins up/down lifecycle."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++_TARGET_TABLES = {
++    "cycles",
++    "modules",
++    "project_module_defaults",
++    "issue_modules",
++    "issue_assignees",
++    "issue_labels",
++    "issue_subscriptions",
++}
++
++
++@pytest.mark.migration
++async def test_08_planning_joins_migration_lifecycle() -> None:
++    """Verify p1_08 upgrade creates 7 tables and FK, downgrade removes them, and re-up works."""
++    async with MigrationHarness() as harness:
++        assert harness.previous_of("p1_08_planning_joins") == "p1_13_access_control"
++
++        # 1. Upgrade to p1_08_planning_joins
++        await harness.upgrade("p1_08_planning_joins")
++
++        tables_up = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name = ANY($1)",
++            list(_TARGET_TABLES),
++        )
++        assert {r["table_name"] for r in tables_up} == _TARGET_TABLES
++
++        fk_up = await harness.fetch(
++            "SELECT constraint_name FROM information_schema.table_constraints "
++            "WHERE table_schema = 'public' AND table_name = 'issues' "
++            "AND constraint_name = 'issues_cycle_fk'"
++        )
++        assert len(fk_up) == 1
++
++        # 2. Downgrade to p1_05_issues
++        prev_rev = harness.previous_of("p1_08_planning_joins")
++        await harness.downgrade(prev_rev)
++
++        tables_down = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name = ANY($1)",
++            list(_TARGET_TABLES),
++        )
++        assert len(tables_down) == 0
++
++        fk_down = await harness.fetch(
++            "SELECT constraint_name FROM information_schema.table_constraints "
++            "WHERE table_schema = 'public' AND table_name = 'issues' "
++            "AND constraint_name = 'issues_cycle_fk'"
++        )
++        assert len(fk_down) == 0
++
++        # 3. Re-upgrade to p1_08_planning_joins
++        await harness.upgrade("p1_08_planning_joins")
++
++        tables_reup = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name = ANY($1)",
++            list(_TARGET_TABLES),
++        )
++        assert {r["table_name"] for r in tables_reup} == _TARGET_TABLES
+diff --git a/database/tests/test_p1_08_planning.py b/database/tests/test_p1_08_planning.py
+new file mode 100644
+index 0000000..5b8d923
+--- /dev/null
++++ b/database/tests/test_p1_08_planning.py
+@@ -0,0 +1,806 @@
++"""Unit tests for Phase 1 cycles, modules, and planning join tables (KB-P1-08)."""
++
++from __future__ import annotations
++
++import uuid
++from dataclasses import dataclass
++from datetime import date
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError, IntegrityError
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++def _get_sqlstate(exc: BaseException) -> str:
++    """Extract PostgreSQL SQLSTATE code from SQLAlchemy DBAPIError/IntegrityError."""
++    orig = getattr(exc, "orig", None)
++    return str(getattr(orig, "sqlstate", None) or "")
++
++
++@dataclass
++class PlanContext:
++    """Workspace, user, and project context for planning tests."""
++
++    workspace_id: uuid.UUID
++    project_id: uuid.UUID
++    user_id: uuid.UUID
++    identifier: str
++    state_id: uuid.UUID
++    priority_id: uuid.UUID
++
++
++async def _create_workspace(
++    session: AsyncSession,
++    slug: str | None = None,
++    name: str = "Planning Workspace",
++) -> uuid.UUID:
++    """Create a workspace and return its UUID."""
++    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
++    row = await session.execute(
++        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
++        {"slug": ws_slug, "name": name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _create_user(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    email: str,
++    display_name: str = "Test User",
++) -> uuid.UUID:
++    """Create a user in principals, objects, and users tables."""
++    u_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO principals (id, principal_type, workspace_id, display_name) "
++            "VALUES (:id, 'USER', :ws_id, :name)"
++        ),
++        {"id": u_id, "ws_id": workspace_id, "name": display_name},
++    )
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'user'::object_kind, :ws_id, NULL::uuid, :ckey, :title, :creator, :id"
++            ")"
++        ),
++        {
++            "ws_id": workspace_id,
++            "ckey": f"usr-{u_id.hex[:8]}",
++            "title": display_name,
++            "creator": u_id,
++            "id": u_id,
++        },
++    )
++    await session.execute(
++        text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws_id, :email)"),
++        {"id": u_id, "ws_id": workspace_id, "email": email},
++    )
++    return u_id
++
++
++async def _create_agent(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    display_name: str = "Test Agent",
++) -> uuid.UUID:
++    """Create an AGENT principal in principals table."""
++    a_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO principals (id, principal_type, workspace_id, display_name) "
++            "VALUES (:id, 'AGENT', :ws_id, :name)"
++        ),
++        {"id": a_id, "ws_id": workspace_id, "name": display_name},
++    )
++    return a_id
++
++
++async def _create_group(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    name: str = "Test Group",
++) -> uuid.UUID:
++    """Create a GROUP principal in principals and groups tables."""
++    g_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO principals (id, principal_type, workspace_id, display_name) "
++            "VALUES (:id, 'GROUP', :ws_id, :name)"
++        ),
++        {"id": g_id, "ws_id": workspace_id, "name": name},
++    )
++    await session.execute(
++        text("INSERT INTO groups (id, workspace_id, name) VALUES (:id, :ws_id, :name)"),
++        {"id": g_id, "ws_id": workspace_id, "name": name},
++    )
++    return g_id
++
++
++async def _create_project(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    creator_id: uuid.UUID,
++    *,
++    identifier: str = "PLAN",
++    name: str = "Planning Project",
++) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
++    """Create a project and return (project_id, default_state_id, default_priority_id)."""
++    p_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'project'::object_kind, :ws, NULL::uuid, :ident, :name, :creator, :id"
++            ")"
++        ),
++        {
++            "ws": workspace_id,
++            "ident": identifier,
++            "name": name,
++            "creator": creator_id,
++            "id": p_id,
++        },
++    )
++    await session.execute(
++        text(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES (:id, :ws, :ident, :name)"
++        ),
++        {
++            "id": p_id,
++            "ws": workspace_id,
++            "ident": identifier,
++            "name": name,
++        },
++    )
++
++    state_row = await session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p AND is_default = true"),
++        {"p": p_id},
++    )
++    state_id = state_row.scalar_one()
++
++    prio_row = await session.execute(
++        text("SELECT id FROM project_priorities WHERE project_id = :p AND is_default = true"),
++        {"p": p_id},
++    )
++    prio_id = prio_row.scalar_one()
++
++    return p_id, state_id, prio_id
++
++
++async def _setup_context(
++    session: AsyncSession,
++    *,
++    identifier: str = "PLAN",
++    modules_enabled: bool = False,
++) -> PlanContext:
++    """Set up workspace, user, and project context."""
++    ws_id = await _create_workspace(session)
++    u_id = await _create_user(session, ws_id, f"lead-{uuid.uuid4().hex[:6]}@example.com")
++    p_id, s_id, prio_id = await _create_project(session, ws_id, u_id, identifier=identifier)
++    if modules_enabled:
++        await session.execute(
++            text("UPDATE projects SET modules_enabled = true WHERE id = :id"),
++            {"id": p_id},
++        )
++    return PlanContext(
++        workspace_id=ws_id,
++        project_id=p_id,
++        user_id=u_id,
++        identifier=identifier,
++        state_id=s_id,
++        priority_id=prio_id,
++    )
++
++
++async def _create_cycle(
++    session: AsyncSession,
++    ctx: PlanContext,
++    *,
++    name: str = "Sprint 1",
++    status: str = "upcoming",
++    dates: tuple[date | None, date | None] | None = None,
++) -> uuid.UUID:
++    """Register cycle object and insert cycle row."""
++    c_id = uuid.uuid4()
++    sdate = dates[0] if dates else None
++    edate = dates[1] if dates else None
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'cycle'::object_kind, :ws, :proj, :ckey, :title, :creator, :id"
++            ")"
++        ),
++        {
++            "ws": ctx.workspace_id,
++            "proj": ctx.project_id,
++            "ckey": f"cycle-{c_id.hex[:12]}",
++            "title": name,
++            "creator": ctx.user_id,
++            "id": c_id,
++        },
++    )
++    await session.execute(
++        text(
++            "INSERT INTO cycles (id, workspace_id, project_id, name, status, start_date, end_date) "
++            "VALUES (:id, :ws, :proj, :name, :status, :sdate, :edate)"
++        ),
++        {
++            "id": c_id,
++            "ws": ctx.workspace_id,
++            "proj": ctx.project_id,
++            "name": name,
++            "status": status,
++            "sdate": sdate,
++            "edate": edate,
++        },
++    )
++    return c_id
++
++
++async def _create_module(
++    session: AsyncSession,
++    ctx: PlanContext,
++    *,
++    name: str = "Auth Module",
++    dates: tuple[date | None, date | None] | None = None,
++) -> uuid.UUID:
++    """Register module object and insert module row."""
++    m_id = uuid.uuid4()
++    sdate = dates[0] if dates else None
++    tdate = dates[1] if dates else None
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'module'::object_kind, :ws, :proj, :ckey, :title, :creator, :id"
++            ")"
++        ),
++        {
++            "ws": ctx.workspace_id,
++            "proj": ctx.project_id,
++            "ckey": f"mod-{m_id.hex[:12]}",
++            "title": name,
++            "creator": ctx.user_id,
++            "id": m_id,
++        },
++    )
++    await session.execute(
++        text(
++            "INSERT INTO modules (id, workspace_id, project_id, name, start_date, target_date) "
++            "VALUES (:id, :ws, :proj, :name, :sdate, :tdate)"
++        ),
++        {
++            "id": m_id,
++            "ws": ctx.workspace_id,
++            "proj": ctx.project_id,
++            "name": name,
++            "sdate": sdate,
++            "tdate": tdate,
++        },
++    )
++    return m_id
++
++
++async def _create_issue(
++    session: AsyncSession,
++    ctx: PlanContext,
++    summary: str = "Test Issue",
++    cycle_id: uuid.UUID | None = None,
++) -> uuid.UUID:
++    """Create an issue within ctx."""
++    seq_row = await session.execute(
++        text("SELECT allocate_issue_sequence(:p)"),
++        {"p": ctx.project_id},
++    )
++    seq = seq_row.scalar_one()
++    i_id = uuid.uuid4()
++    canonical_key = f"{ctx.identifier}-{seq}"
++
++    await session.execute(
++        text("SELECT register_object('issue'::object_kind, :ws, :p, :ckey, :summary, :user, :id)"),
++        {
++            "ws": ctx.workspace_id,
++            "p": ctx.project_id,
++            "ckey": canonical_key,
++            "summary": summary,
++            "user": ctx.user_id,
++            "id": i_id,
++        },
++    )
++    await session.execute(
++        text(
++            "INSERT INTO issues ("
++            "  id, workspace_id, project_id, sequence_id, summary, state_id, priority_id,"
++            "  created_by_id, original_created_by_id, cycle_id, board_rank"
++            ") VALUES ("
++            "  :id, :ws, :proj, :seq, :summary, :state, :prio, :user, :user, :cycle, '0|hzzzzz:'"
++            ")"
++        ),
++        {
++            "id": i_id,
++            "ws": ctx.workspace_id,
++            "proj": ctx.project_id,
++            "seq": seq,
++            "summary": summary,
++            "state": ctx.state_id,
++            "prio": ctx.priority_id,
++            "user": ctx.user_id,
++            "cycle": cycle_id,
++        },
++    )
++    return i_id
++
++
++# -----------------------------------------------------------------------------
++# Case 1: Positive: Issue assigned to cycle; deleting cycle sets cycle_id to NULL
++# -----------------------------------------------------------------------------
++async def test_case_1_cycle_delete_sets_null(db_session: AsyncSession) -> None:
++    """Deleting a cycle sets issues.cycle_id to NULL via ON DELETE SET NULL."""
++    ctx = await _setup_context(db_session)
++    c_id = await _create_cycle(db_session, ctx, name="Sprint Alpha")
++    i_id = await _create_issue(db_session, ctx, summary="Issue in Alpha", cycle_id=c_id)
++
++    # Verify assigned
++    row = await db_session.execute(text("SELECT cycle_id FROM issues WHERE id = :id"), {"id": i_id})
++    assert row.scalar_one() == c_id
++
++    # Delete cycle
++    await db_session.execute(text("DELETE FROM cycles WHERE id = :id"), {"id": c_id})
++
++    # Verify cycle_id became NULL
++    row_after = await db_session.execute(
++        text("SELECT cycle_id FROM issues WHERE id = :id"), {"id": i_id}
++    )
++    assert row_after.scalar_one() is None
++
++
++# -----------------------------------------------------------------------------
++# Case 2: Positive: Module defaults auto-applied; creator & assignee autosubscribed
++# -----------------------------------------------------------------------------
++async def test_case_2_module_defaults_and_autosubscribe(db_session: AsyncSession) -> None:
++    """When modules_enabled=TRUE and defaults exist, new issues get modules and subscriptions."""
++    ctx = await _setup_context(db_session, modules_enabled=True)
++
++    # Create 2 modules
++    mod1 = await _create_module(db_session, ctx, name="Core Module")
++    mod2 = await _create_module(db_session, ctx, name="Billing Module")
++
++    # Add both as project defaults
++    await db_session.execute(
++        text(
++            "INSERT INTO project_module_defaults (project_id, module_id, workspace_id) "
++            "VALUES (:p, :m1, :w), (:p, :m2, :w)"
++        ),
++        {"p": ctx.project_id, "m1": mod1, "m2": mod2, "w": ctx.workspace_id},
++    )
++
++    # Create an issue
++    i_id = await _create_issue(db_session, ctx, summary="Planned work")
++
++    # Assert exactly 2 issue_modules rows created
++    mod_rows = await db_session.execute(
++        text("SELECT module_id FROM issue_modules WHERE issue_id = :id ORDER BY module_id"),
++        {"id": i_id},
++    )
++    assigned_mods = {r[0] for r in mod_rows.fetchall()}
++    assert assigned_mods == {mod1, mod2}
++
++    # Assert creator auto-subscribed
++    sub_rows = await db_session.execute(
++        text("SELECT principal_id, source FROM issue_subscriptions WHERE issue_id = :id"),
++        {"id": i_id},
++    )
++    subs = {r[0]: r[1] for r in sub_rows.fetchall()}
++    assert ctx.user_id in subs
++    assert subs[ctx.user_id] == "CREATOR"
++
++    # Create assignee user and assign
++    assignee_id = await _create_user(db_session, ctx.workspace_id, "dev@example.com")
++    await db_session.execute(
++        text(
++            "INSERT INTO issue_assignees (issue_id, principal_id, workspace_id) VALUES (:i, :p, :w)"
++        ),
++        {"i": i_id, "p": assignee_id, "w": ctx.workspace_id},
++    )
++
++    # Assert assignee auto-subscribed with source='ASSIGNEE'
++    sub_rows2 = await db_session.execute(
++        text("SELECT principal_id, source FROM issue_subscriptions WHERE issue_id = :id"),
++        {"id": i_id},
++    )
++    subs2 = {r[0]: r[1] for r in sub_rows2.fetchall()}
++    assert assignee_id in subs2
++    assert subs2[assignee_id] == "ASSIGNEE"
++
++
++# -----------------------------------------------------------------------------
++# Case 3: Positive: Exclusive labels auto-replacement
++# -----------------------------------------------------------------------------
++async def test_case_3_exclusive_labels_autoreplace(db_session: AsyncSession) -> None:
++    """Inserting a label in the same exclusive_group deletes previous label in that group."""
++    ctx = await _setup_context(db_session)
++    i_id = await _create_issue(db_session, ctx, summary="Labeled issue")
++
++    # Create 3 labels in project
++    lbl_feature = uuid.uuid4()
++    lbl_ui = uuid.uuid4()
++    lbl_bug = uuid.uuid4()
++
++    await db_session.execute(
++        text(
++            "INSERT INTO project_labels ("
++            "  id, workspace_id, project_id, name, color_hex, exclusive_group"
++            ") VALUES "
++            "(:f, :w, :p, 'type:feature', '#3B82F6', 'type'), "
++            "(:u, :w, :p, 'ui', '#10B981', NULL), "
++            "(:b, :w, :p, 'type:bug', '#EF4444', 'type')"
++        ),
++        {"f": lbl_feature, "u": lbl_ui, "b": lbl_bug, "w": ctx.workspace_id, "p": ctx.project_id},
++    )
++
++    # Attach type:feature and ui
++    await db_session.execute(
++        text(
++            "INSERT INTO issue_labels (issue_id, label_id, workspace_id) "
++            "VALUES (:i, :f, :w), (:i, :u, :w)"
++        ),
++        {"i": i_id, "f": lbl_feature, "u": lbl_ui, "w": ctx.workspace_id},
++    )
++
++    # Check attached labels
++    rows = await db_session.execute(
++        text("SELECT label_id FROM issue_labels WHERE issue_id = :id"),
++        {"id": i_id},
++    )
++    assert {r[0] for r in rows.fetchall()} == {lbl_feature, lbl_ui}
++
++    # Now attach type:bug (same exclusive_group 'type')
++    await db_session.execute(
++        text("INSERT INTO issue_labels (issue_id, label_id, workspace_id) VALUES (:i, :b, :w)"),
++        {"i": i_id, "b": lbl_bug, "w": ctx.workspace_id},
++    )
++
++    # Verify type:feature is replaced by type:bug, ui remains
++    rows_after = await db_session.execute(
++        text("SELECT label_id FROM issue_labels WHERE issue_id = :id"),
++        {"id": i_id},
++    )
++    assert {r[0] for r in rows_after.fetchall()} == {lbl_bug, lbl_ui}
++
++
++# -----------------------------------------------------------------------------
++# Case 4: Negative: Assignee CHECK constraints and vendor non-subscription
++# -----------------------------------------------------------------------------
++async def test_case_4_assignee_check_and_vendor_nosub(db_session: AsyncSession) -> None:
++    """Both principal and free-text, or neither, violates check 23514.
++
++    Free text creates no subscription.
++    """
++    ctx = await _setup_context(db_session)
++    i_id = await _create_issue(db_session, ctx, summary="Assignee issue")
++    u_id = await _create_user(db_session, ctx.workspace_id, "user2@example.com")
++
++    # 1. Both principal and free text -> 23514
++    with pytest.raises(IntegrityError) as exc_both:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issue_assignees ("
++                    "  issue_id, principal_id, free_text_assignee, workspace_id"
++                    ") VALUES (:i, :p, 'Vendor Corp', :w)"
++                ),
++                {"i": i_id, "p": u_id, "w": ctx.workspace_id},
++            )
++    assert _get_sqlstate(exc_both.value) == "23514"
++
++    # 2. Neither principal nor free text -> 23514
++    with pytest.raises(IntegrityError) as exc_none:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issue_assignees ("
++                    "  issue_id, principal_id, free_text_assignee, workspace_id"
++                    ") VALUES (:i, NULL, NULL, :w)"
++                ),
++                {"i": i_id, "w": ctx.workspace_id},
++            )
++    assert _get_sqlstate(exc_none.value) == "23514"
++
++    # 3. Free text assignee succeeds
++    await db_session.execute(
++        text(
++            "INSERT INTO issue_assignees (issue_id, free_text_assignee, workspace_id) "
++            "VALUES (:i, 'Acme External Vendor', :w)"
++        ),
++        {"i": i_id, "w": ctx.workspace_id},
++    )
++
++    # 4. Check that no extra subscription was created for the vendor
++    sub_rows = await db_session.execute(
++        text("SELECT principal_id, source FROM issue_subscriptions WHERE issue_id = :id"),
++        {"id": i_id},
++    )
++    subs = list(sub_rows.fetchall())
++    # Exactly 1 subscription: the issue creator
++    assert len(subs) == 1
++    assert subs[0][0] == ctx.user_id
++    assert subs[0][1] == "CREATOR"
++
++
++# -----------------------------------------------------------------------------
++# Case 5: Negative / Security: Foreign cross-project and invalid principal guards
++# -----------------------------------------------------------------------------
++async def test_case_5_security_and_mismatch_guards(db_session: AsyncSession) -> None:
++    """Validates cross-project and cross-workspace access control checks."""
++    ctx1 = await _setup_context(db_session, identifier="PRJA")
++    ctx2 = await _setup_context(db_session, identifier="PRJB")
++    i_id1 = await _create_issue(db_session, ctx1, summary="Project 1 Issue")
++
++    # 1. Assigning a GROUP principal raises ASSIGNEE_INVALID_PRINCIPAL
++    group_id = await _create_group(db_session, ctx1.workspace_id, name="Security Team")
++    with pytest.raises(DBAPIError) as exc_group:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issue_assignees (issue_id, principal_id, workspace_id) "
++                    "VALUES (:i, :g, :w)"
++                ),
++                {"i": i_id1, "g": group_id, "w": ctx1.workspace_id},
++            )
++    assert "ASSIGNEE_INVALID_PRINCIPAL" in str(exc_group.value)
++
++    # 2. Assigning a principal from another workspace raises ASSIGNEE_INVALID_PRINCIPAL
++    with pytest.raises(DBAPIError) as exc_foreign_user:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issue_assignees (issue_id, principal_id, workspace_id) "
++                    "VALUES (:i, :u2, :w)"
++                ),
++                {"i": i_id1, "u2": ctx2.user_id, "w": ctx1.workspace_id},
++            )
++    assert "ASSIGNEE_INVALID_PRINCIPAL" in str(exc_foreign_user.value)
++
++    # 3. Label from another project raises LABEL_PROJECT_MISMATCH
++    foreign_lbl = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO project_labels (id, workspace_id, project_id, name, color_hex) "
++            "VALUES (:l, :w, :p, 'foreign-label', '#FFFFFF')"
++        ),
++        {"l": foreign_lbl, "w": ctx2.workspace_id, "p": ctx2.project_id},
++    )
++    with pytest.raises(DBAPIError) as exc_lbl_proj:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issue_labels (issue_id, label_id, workspace_id) "
++                    "VALUES (:i, :l, :w)"
++                ),
++                {"i": i_id1, "l": foreign_lbl, "w": ctx1.workspace_id},
++            )
++    assert "LABEL_PROJECT_MISMATCH" in str(exc_lbl_proj.value)
++
++    # 4. Cycle from another project raises CYCLE_PROJECT_MISMATCH
++    foreign_cycle = await _create_cycle(db_session, ctx2, name="Sprint Foreign")
++    with pytest.raises(DBAPIError) as exc_cycle_proj:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET cycle_id = :c WHERE id = :i"),
++                {"c": foreign_cycle, "i": i_id1},
++            )
++    assert "CYCLE_PROJECT_MISMATCH" in str(exc_cycle_proj.value)
++
++    # 5. Insert into issue_modules when modules_enabled=FALSE raises MODULES_DISABLED
++    # ctx1 has modules_enabled=False
++    mod_id = await _create_module(db_session, ctx1, name="Disabled Module")
++    with pytest.raises(DBAPIError) as exc_mod_dis:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issue_modules (issue_id, module_id, workspace_id) "
++                    "VALUES (:i, :m, :w)"
++                ),
++                {"i": i_id1, "m": mod_id, "w": ctx1.workspace_id},
++            )
++    assert "MODULES_DISABLED" in str(exc_mod_dis.value)
++
++    # 6. Insert into project_module_defaults when modules_enabled=FALSE raises MODULES_DISABLED
++    with pytest.raises(DBAPIError) as exc_pmd_dis:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO project_module_defaults (project_id, module_id, workspace_id) "
++                    "VALUES (:p, :m, :w)"
++                ),
++                {"p": ctx1.project_id, "m": mod_id, "w": ctx1.workspace_id},
++            )
++    assert "MODULES_DISABLED" in str(exc_pmd_dis.value)
++
++    # 7. Module from another project raises MODULE_PROJECT_MISMATCH
++    ctx1_mod_en = await _setup_context(db_session, identifier="PRJC", modules_enabled=True)
++    i_id_mod_en = await _create_issue(db_session, ctx1_mod_en, summary="Mod Issue")
++    foreign_mod = await _create_module(db_session, ctx2, name="Foreign Module")
++    with pytest.raises(DBAPIError) as exc_mod_proj:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issue_modules (issue_id, module_id, workspace_id) "
++                    "VALUES (:i, :m, :w)"
++                ),
++                {"i": i_id_mod_en, "m": foreign_mod, "w": ctx1_mod_en.workspace_id},
++            )
++    assert "MODULE_PROJECT_MISMATCH" in str(exc_mod_proj.value)
++
++    # 8. Subscription from another workspace raises SUBSCRIPTION_WORKSPACE_MISMATCH
++    with pytest.raises(DBAPIError) as exc_sub_ws:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issue_subscriptions ("
++                    "  issue_id, principal_id, workspace_id, source"
++                    ") VALUES (:i, :p, :w, 'MANUAL')"
++                ),
++                {"i": i_id1, "p": ctx2.user_id, "w": ctx1.workspace_id},
++            )
++    assert "SUBSCRIPTION_WORKSPACE_MISMATCH" in str(exc_sub_ws.value)
++
++
++# -----------------------------------------------------------------------------
++# Case 6: Boundary tests: Cycle date ranges, single active cycle, free-text bounds
++# -----------------------------------------------------------------------------
++async def test_case_6_boundary_rules(db_session: AsyncSession) -> None:
++    """Cycle date overlap 23P01, adjacent ranges ok, active cycle 23505, text len 120/121."""
++    ctx = await _setup_context(db_session)
++
++    # 1. Overlapping date ranges raise 23P01
++    await _create_cycle(
++        db_session,
++        ctx,
++        name="Sprint 1",
++        dates=(date(2026, 1, 1), date(2026, 1, 14)),
++    )
++
++    with pytest.raises(IntegrityError) as exc_overlap:
++        async with db_session.begin_nested():
++            await _create_cycle(
++                db_session,
++                ctx,
++                name="Sprint Overlap",
++                dates=(date(2026, 1, 10), date(2026, 1, 20)),
++            )
++    assert _get_sqlstate(exc_overlap.value) == "23P01"
++
++    # 2. Adjacent non-overlapping range accepted
++    c_adj = await _create_cycle(
++        db_session,
++        ctx,
++        name="Sprint 2 Adjacent",
++        dates=(date(2026, 1, 15), date(2026, 1, 28)),
++    )
++    assert isinstance(c_adj, uuid.UUID)
++
++    # 3. Two active cycles in the same project raise 23505
++    c_act1 = await _create_cycle(db_session, ctx, name="Active 1", status="active")
++    assert isinstance(c_act1, uuid.UUID)
++
++    with pytest.raises(IntegrityError) as exc_active:
++        async with db_session.begin_nested():
++            await _create_cycle(db_session, ctx, name="Active 2", status="active")
++    assert _get_sqlstate(exc_active.value) == "23505"
++
++    # 4. Free text assignee length boundary (120 ok, 121 rejected with 23514)
++    i_id = await _create_issue(db_session, ctx, summary="Text length issue")
++    valid_120 = "x" * 120
++    await db_session.execute(
++        text(
++            "INSERT INTO issue_assignees (issue_id, free_text_assignee, workspace_id) "
++            "VALUES (:i, :txt, :w)"
++        ),
++        {"i": i_id, "txt": valid_120, "w": ctx.workspace_id},
++    )
++
++    invalid_121 = "y" * 121
++    with pytest.raises(IntegrityError) as exc_len:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issue_assignees (issue_id, free_text_assignee, workspace_id) "
++                    "VALUES (:i, :txt, :w)"
++                ),
++                {"i": i_id, "txt": invalid_121, "w": ctx.workspace_id},
++            )
++    assert _get_sqlstate(exc_len.value) == "23514"
++
++    # 5. Duplicate free text assignee (case insensitive) raises 23505
++    with pytest.raises(IntegrityError) as exc_dup_txt:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO issue_assignees (issue_id, free_text_assignee, workspace_id) "
++                    "VALUES (:i, :txt, :w)"
++                ),
++                {"i": i_id, "txt": valid_120.upper(), "w": ctx.workspace_id},
++            )
++    assert _get_sqlstate(exc_dup_txt.value) == "23505"
++
++
++# -----------------------------------------------------------------------------
++# Case 7: AGENT principal assignee support and spine match guards
++# -----------------------------------------------------------------------------
++async def test_case_7_agent_assignee_and_spine_guards(db_session: AsyncSession) -> None:
++    """AGENT principal can be assigned, and planning spine mismatch guards trigger."""
++    ctx = await _setup_context(db_session)
++    i_id = await _create_issue(db_session, ctx, summary="Agent work")
++
++    # AGENT principal can be assigned
++    agent_id = await _create_agent(db_session, ctx.workspace_id, display_name="Bot Agent")
++    await db_session.execute(
++        text(
++            "INSERT INTO issue_assignees (issue_id, principal_id, workspace_id) VALUES (:i, :a, :w)"
++        ),
++        {"i": i_id, "a": agent_id, "w": ctx.workspace_id},
++    )
++
++    # Cycle spine mismatch raises PLANNING_SPINE_MISMATCH
++    fake_cycle_id = uuid.uuid4()
++    # Register object with different project_id
++    ctx2 = await _setup_context(db_session, identifier="PRJD")
++    await db_session.execute(
++        text(
++            "SELECT register_object("
++            "  'cycle'::object_kind, :ws, :proj2, :ckey, 'Mismatched Cycle', :creator, :id"
++            ")"
++        ),
++        {
++            "ws": ctx.workspace_id,
++            "proj2": ctx2.project_id,
++            "ckey": f"cycle-{fake_cycle_id.hex[:12]}",
++            "creator": ctx.user_id,
++            "id": fake_cycle_id,
++        },
++    )
++    with pytest.raises(DBAPIError) as exc_spine:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO cycles (id, workspace_id, project_id, name) "
++                    "VALUES (:id, :ws, :proj1, 'Mismatched Cycle')"
++                ),
++                {"id": fake_cycle_id, "ws": ctx.workspace_id, "proj1": ctx.project_id},
++            )
++    assert "PLANNING_SPINE_MISMATCH" in str(exc_spine.value)
++
++    # Module spine mismatch raises PLANNING_SPINE_MISMATCH
++    fake_mod_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "SELECT register_object("
++            "  'module'::object_kind, :ws, :proj2, :ckey, 'Mismatched Module', :creator, :id"
++            ")"
++        ),
++        {
++            "ws": ctx.workspace_id,
++            "proj2": ctx2.project_id,
++            "ckey": f"mod-{fake_mod_id.hex[:12]}",
++            "creator": ctx.user_id,
++            "id": fake_mod_id,
++        },
++    )
++    with pytest.raises(DBAPIError) as exc_mod_spine:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO modules (id, workspace_id, project_id, name) "
++                    "VALUES (:id, :ws, :proj1, 'Mismatched Module')"
++                ),
++                {"id": fake_mod_id, "ws": ctx.workspace_id, "proj1": ctx.project_id},
++            )
++    assert "PLANNING_SPINE_MISMATCH" in str(exc_mod_spine.value)
+diff --git a/docs/qa/KANBA-48/alembic-heads.txt b/docs/qa/KANBA-48/alembic-heads.txt
+new file mode 100644
+index 0000000..c7f6dcb
+--- /dev/null
++++ b/docs/qa/KANBA-48/alembic-heads.txt
+@@ -0,0 +1 @@
++p1_08_planning_joins (head)
+diff --git a/docs/qa/KANBA-48/build-check.txt b/docs/qa/KANBA-48/build-check.txt
+new file mode 100644
+index 0000000..f4f598c
+--- /dev/null
++++ b/docs/qa/KANBA-48/build-check.txt
+@@ -0,0 +1,35 @@
++All checks passed!
++50 files already formatted
++Success: no issues found in 48 source files
++uv run ruff check .
++All checks passed!
++uv run ruff format --check .
++333 files already formatted
++uv run mypy
++Success: no issues found in 139 source files
++uv run lint-imports
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 91 files, 96 dependencies.
++-----------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++uv run python -m scripts.check_no_dashes --all
++uv run python -m scripts.license_gate
++SUMMARY python=74 node=1 violations=0
++Exit code: 0
+diff --git a/docs/qa/KANBA-48/message-to-reality-checker.md b/docs/qa/KANBA-48/message-to-reality-checker.md
+new file mode 100644
+index 0000000..b6f3ad1
+--- /dev/null
++++ b/docs/qa/KANBA-48/message-to-reality-checker.md
+@@ -0,0 +1,68 @@
++# Reality-Checker Verification Packet: KANBA-48 (KB-P1-08)
++
++## Ticket Overview
++- **Ticket ID**: `KANBA-48` (`KB-P1-08`)
++- **Title**: [Phase 1 / Database] cycles, modules, assignees, labels & subscriptions join tables
++- **Branch**: `feat/KANBA-48`
++- **Base Commit**: `f38fbc2adf37df3da7253805476cc63e4586d865` (HEAD of `feat/KANBA-41`)
++- **Author**: `builder-21`
++
++---
++
++## Technical Deliverables Summary
++
++1. **Database Schema & DDL (`p1_08_planning_joins.up.sql`)**:
++   - `cycles` table:
++     * Graph entity with `FOREIGN KEY (id, object_type) REFERENCES objects (id, object_type) ON DELETE RESTRICT`.
++     * Strict name length check (1 to 200 chars).
++     * `status IN ('upcoming', 'active', 'completed')` with unique index `cycles_one_active_per_project` enforcing single active cycle per project.
++     * Date range check (`end_date >= start_date`).
++     * `EXCLUDE USING gist (project_id WITH =, daterange(start_date, end_date, '[]') WITH &&)` preventing overlapping cycle dates in the same project.
++   - `issues_cycle_fk`:
++     * Foreign key on `issues(cycle_id) REFERENCES cycles(id) ON DELETE SET NULL`.
++   - `modules` table:
++     * Graph entity with `FOREIGN KEY (id, object_type) REFERENCES objects (id, object_type) ON DELETE RESTRICT`.
++     * `UNIQUE (project_id, name)` and `target_date >= start_date` constraint.
++   - 5 Join Tables:
++     * `project_module_defaults`: `(project_id, module_id)` PK with cascade delete on module.
++     * `issue_modules`: `(issue_id, module_id)` PK with cascade delete on issue/module.
++     * `issue_assignees`: `CHECK (num_nonnulls(principal_id, free_text_assignee) = 1)`, unique index on `(issue_id, principal_id)`, case-insensitive unique index on `(issue_id, lower(free_text_assignee))`. Documented in column comment that free-text assignees grant zero system access.
++     * `issue_labels`: `(issue_id, label_id)` PK with cascade delete.
++     * `issue_subscriptions`: `(issue_id, principal_id)` PK, `source IN ('MANUAL', 'CREATOR', 'ASSIGNEE', 'MENTION')`, `is_muted` flag.
++
++2. **Database Triggers & Invariants**:
++   - `cycles_spine_match_biu` / `modules_spine_match_biu`: Enforces that `objects.workspace_id` and `objects.project_id` match the row values (`PLANNING_SPINE_MISMATCH`).
++   - `issues_cycle_project_biu`: Validates that `cycle.project_id == issue.project_id` on INSERT/UPDATE of `cycle_id` (`CYCLE_PROJECT_MISMATCH`).
++   - `issue_modules_guard_bi` / `project_module_defaults_guard_bi`: Validates that `module.project_id == project_id`, and that `projects.modules_enabled = TRUE` (`MODULES_DISABLED` and `MODULE_PROJECT_MISMATCH`). Sets `workspace_id` from parent.
++   - `issues_apply_module_defaults_ai`: When `projects.modules_enabled = TRUE`, automatically populates `issue_modules` from `project_module_defaults` on issue insertion.
++   - `issue_assignees_guard_bi`: Enforces that assigned principal is `principal_type IN ('USER', 'AGENT')`, has `status = 'ACTIVE'`, and shares the issue's `workspace_id` (`ASSIGNEE_INVALID_PRINCIPAL`). Sets `workspace_id` from parent.
++   - `issue_labels_exclusive_bi`: Locks parent issue `FOR UPDATE`, enforces `label.project_id == issue.project_id` (`LABEL_PROJECT_MISMATCH`), and automatically deletes existing issue labels within the same non-NULL `exclusive_group`. Sets `workspace_id` from parent.
++   - `issues_autosubscribe_creator_ai`: Automatically subscribes the issue creator with `source = 'CREATOR'`.
++   - `issue_assignees_autosubscribe_ai`: Automatically subscribes principal assignees with `source = 'ASSIGNEE'`.
++   - `issue_subscriptions_guard_bi`: Validates that principal and issue belong to the same workspace (`SUBSCRIPTION_WORKSPACE_MISMATCH`). Sets `workspace_id` from parent.
++
++3. **Reversible Down Migration (`p1_08_planning_joins.down.sql`)**:
++   - Drops all 11 triggers and trigger functions.
++   - Drops all 5 join tables.
++   - Drops `issues_cycle_fk` foreign key constraint.
++   - Drops `modules` and `cycles` tables.
++
++4. **Single Linear Migration Head**:
++   - `p1_08_planning_joins` chains cleanly after `p1_13_access_control` (post-merge linear head on main).
++   - `alembic heads` confirms single head: `p1_08_planning_joins (head)`.
++
++5. **Automated Test Suite & Coverage**:
++   - `database/tests/test_p1_08_planning.py`: 7 test suites validating cycle deletion setting NULL, module defaults and autosubscribe, exclusive labels auto-replacement, assignee check constraints, security mismatch guards, boundary rules (overlapping ranges 23P01, adjacent ranges ok, active cycle 23505, text len 120/121), and AGENT principal assignee support.
++   - `database/tests/migrations/test_p1_08_migration.py`: Full migration lifecycle test (upgrade -> table/FK presence -> downgrade -> table/FK absence -> re-upgrade).
++   - Test results: 8/8 tests passed in 0.91s.
++   - Coverage: 100% statement and branch coverage on all touched modules.
++
++---
++
++## Artifact Index
++- `docs/qa/KANBA-48/git-diff.patch`
++- `docs/qa/KANBA-48/unit-test-results.txt`
++- `docs/qa/KANBA-48/build-check.txt`
++- `docs/qa/KANBA-48/alembic-heads.txt`
++- `docs/qa/KANBA-48/schema-dump.sql`
++- `docs/qa/KANBA-48/message-to-reality-checker.md`
+diff --git a/docs/qa/KANBA-48/schema-dump.sql b/docs/qa/KANBA-48/schema-dump.sql
+new file mode 100644
+index 0000000..bc6da98
+--- /dev/null
++++ b/docs/qa/KANBA-48/schema-dump.sql
+@@ -0,0 +1,519 @@
++--
++-- PostgreSQL database dump
++--
++
++\restrict al2vlAaeFlFQ0qwLAwQhV7cMbZ8GFtnr0UC5QOaD4ve4EzDkycx6UlLfqNjfFoo
++
++-- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
++-- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
++
++SET statement_timeout = 0;
++SET lock_timeout = 0;
++SET idle_in_transaction_session_timeout = 0;
++SET client_encoding = 'UTF8';
++SET standard_conforming_strings = on;
++SELECT pg_catalog.set_config('search_path', '', false);
++SET check_function_bodies = false;
++SET xmloption = content;
++SET client_min_messages = warning;
++SET row_security = off;
++
++SET default_tablespace = '';
++
++SET default_table_access_method = heap;
++
++--
++-- Name: cycles; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.cycles (
++    id uuid NOT NULL,
++    object_type public.object_kind DEFAULT 'cycle'::public.object_kind NOT NULL,
++    workspace_id uuid NOT NULL,
++    project_id uuid NOT NULL,
++    name text NOT NULL,
++    status text DEFAULT 'upcoming'::text NOT NULL,
++    start_date date,
++    end_date date,
++    CONSTRAINT cycles_check CHECK (((end_date IS NULL) OR (start_date IS NULL) OR (end_date >= start_date))),
++    CONSTRAINT cycles_name_check CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 200))),
++    CONSTRAINT cycles_object_type_check CHECK ((object_type = 'cycle'::public.object_kind)),
++    CONSTRAINT cycles_status_check CHECK ((status = ANY (ARRAY['upcoming'::text, 'active'::text, 'completed'::text])))
++);
++
++
++ALTER TABLE public.cycles OWNER TO kanban_migrator;
++
++--
++-- Name: issue_assignees; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.issue_assignees (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    workspace_id uuid NOT NULL,
++    issue_id uuid NOT NULL,
++    principal_id uuid,
++    free_text_assignee text,
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    CONSTRAINT issue_assignees_check CHECK ((num_nonnulls(principal_id, free_text_assignee) = 1)),
++    CONSTRAINT issue_assignees_free_text_assignee_check CHECK (((free_text_assignee IS NULL) OR ((char_length(btrim(free_text_assignee)) >= 1) AND (char_length(btrim(free_text_assignee)) <= 120))))
++);
++
++
++ALTER TABLE public.issue_assignees OWNER TO kanban_migrator;
++
++--
++-- Name: COLUMN issue_assignees.free_text_assignee; Type: COMMENT; Schema: public; Owner: kanban_migrator
++--
++
++COMMENT ON COLUMN public.issue_assignees.free_text_assignee IS 'Vendor or external assignee; grants zero system access and is omitted from effective_resource_access computation.';
++
++
++--
++-- Name: issue_labels; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.issue_labels (
++    issue_id uuid NOT NULL,
++    label_id uuid NOT NULL,
++    workspace_id uuid NOT NULL
++);
++
++
++ALTER TABLE public.issue_labels OWNER TO kanban_migrator;
++
++--
++-- Name: issue_modules; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.issue_modules (
++    issue_id uuid NOT NULL,
++    module_id uuid NOT NULL,
++    workspace_id uuid NOT NULL
++);
++
++
++ALTER TABLE public.issue_modules OWNER TO kanban_migrator;
++
++--
++-- Name: issue_subscriptions; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.issue_subscriptions (
++    issue_id uuid NOT NULL,
++    principal_id uuid NOT NULL,
++    workspace_id uuid NOT NULL,
++    source text NOT NULL,
++    is_muted boolean DEFAULT false NOT NULL,
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    CONSTRAINT issue_subscriptions_source_check CHECK ((source = ANY (ARRAY['MANUAL'::text, 'CREATOR'::text, 'ASSIGNEE'::text, 'MENTION'::text])))
++);
++
++
++ALTER TABLE public.issue_subscriptions OWNER TO kanban_migrator;
++
++--
++-- Name: modules; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.modules (
++    id uuid NOT NULL,
++    object_type public.object_kind DEFAULT 'module'::public.object_kind NOT NULL,
++    workspace_id uuid NOT NULL,
++    project_id uuid NOT NULL,
++    name text NOT NULL,
++    start_date date,
++    target_date date,
++    CONSTRAINT modules_check CHECK (((target_date IS NULL) OR (start_date IS NULL) OR (target_date >= start_date))),
++    CONSTRAINT modules_name_check CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 200))),
++    CONSTRAINT modules_object_type_check CHECK ((object_type = 'module'::public.object_kind))
++);
++
++
++ALTER TABLE public.modules OWNER TO kanban_migrator;
++
++--
++-- Name: project_module_defaults; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.project_module_defaults (
++    project_id uuid NOT NULL,
++    module_id uuid NOT NULL,
++    workspace_id uuid NOT NULL
++);
++
++
++ALTER TABLE public.project_module_defaults OWNER TO kanban_migrator;
++
++--
++-- Name: cycles cycles_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.cycles
++    ADD CONSTRAINT cycles_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: cycles cycles_project_id_daterange_excl; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.cycles
++    ADD CONSTRAINT cycles_project_id_daterange_excl EXCLUDE USING gist (project_id WITH =, daterange(start_date, end_date, '[]'::text) WITH &&) WHERE (((start_date IS NOT NULL) AND (end_date IS NOT NULL)));
++
++
++--
++-- Name: issue_assignees issue_assignees_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_assignees
++    ADD CONSTRAINT issue_assignees_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: issue_labels issue_labels_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_labels
++    ADD CONSTRAINT issue_labels_pkey PRIMARY KEY (issue_id, label_id);
++
++
++--
++-- Name: issue_modules issue_modules_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_modules
++    ADD CONSTRAINT issue_modules_pkey PRIMARY KEY (issue_id, module_id);
++
++
++--
++-- Name: issue_subscriptions issue_subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_subscriptions
++    ADD CONSTRAINT issue_subscriptions_pkey PRIMARY KEY (issue_id, principal_id);
++
++
++--
++-- Name: modules modules_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.modules
++    ADD CONSTRAINT modules_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: modules modules_project_id_name_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.modules
++    ADD CONSTRAINT modules_project_id_name_key UNIQUE (project_id, name);
++
++
++--
++-- Name: project_module_defaults project_module_defaults_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_module_defaults
++    ADD CONSTRAINT project_module_defaults_pkey PRIMARY KEY (project_id, module_id);
++
++
++--
++-- Name: cycles_one_active_per_project; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE UNIQUE INDEX cycles_one_active_per_project ON public.cycles USING btree (project_id) WHERE (status = 'active'::text);
++
++
++--
++-- Name: cycles_project_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX cycles_project_idx ON public.cycles USING btree (project_id);
++
++
++--
++-- Name: issue_assignees_issue_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issue_assignees_issue_idx ON public.issue_assignees USING btree (issue_id);
++
++
++--
++-- Name: issue_assignees_principal_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issue_assignees_principal_idx ON public.issue_assignees USING btree (principal_id) WHERE (principal_id IS NOT NULL);
++
++
++--
++-- Name: issue_assignees_principal_uq; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE UNIQUE INDEX issue_assignees_principal_uq ON public.issue_assignees USING btree (issue_id, principal_id) WHERE (principal_id IS NOT NULL);
++
++
++--
++-- Name: issue_assignees_text_uq; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE UNIQUE INDEX issue_assignees_text_uq ON public.issue_assignees USING btree (issue_id, lower(free_text_assignee)) WHERE (free_text_assignee IS NOT NULL);
++
++
++--
++-- Name: issue_labels_label_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issue_labels_label_idx ON public.issue_labels USING btree (label_id);
++
++
++--
++-- Name: issue_modules_module_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issue_modules_module_idx ON public.issue_modules USING btree (module_id);
++
++
++--
++-- Name: issue_subscriptions_principal_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX issue_subscriptions_principal_idx ON public.issue_subscriptions USING btree (principal_id);
++
++
++--
++-- Name: modules_project_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX modules_project_idx ON public.modules USING btree (project_id);
++
++
++--
++-- Name: cycles cycles_spine_match_biu_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER cycles_spine_match_biu_trg BEFORE INSERT OR UPDATE ON public.cycles FOR EACH ROW EXECUTE FUNCTION public.cycles_spine_match_biu();
++
++
++--
++-- Name: issue_assignees issue_assignees_autosubscribe_ai_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER issue_assignees_autosubscribe_ai_trg AFTER INSERT ON public.issue_assignees FOR EACH ROW EXECUTE FUNCTION public.issue_assignees_autosubscribe_ai();
++
++
++--
++-- Name: issue_assignees issue_assignees_guard_bi_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER issue_assignees_guard_bi_trg BEFORE INSERT ON public.issue_assignees FOR EACH ROW EXECUTE FUNCTION public.issue_assignees_guard_bi();
++
++
++--
++-- Name: issue_labels issue_labels_exclusive_bi_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER issue_labels_exclusive_bi_trg BEFORE INSERT ON public.issue_labels FOR EACH ROW EXECUTE FUNCTION public.issue_labels_exclusive_bi();
++
++
++--
++-- Name: issue_modules issue_modules_guard_bi_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER issue_modules_guard_bi_trg BEFORE INSERT ON public.issue_modules FOR EACH ROW EXECUTE FUNCTION public.issue_modules_guard_bi();
++
++
++--
++-- Name: issue_subscriptions issue_subscriptions_guard_bi_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER issue_subscriptions_guard_bi_trg BEFORE INSERT ON public.issue_subscriptions FOR EACH ROW EXECUTE FUNCTION public.issue_subscriptions_guard_bi();
++
++
++--
++-- Name: modules modules_spine_match_biu_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER modules_spine_match_biu_trg BEFORE INSERT OR UPDATE ON public.modules FOR EACH ROW EXECUTE FUNCTION public.modules_spine_match_biu();
++
++
++--
++-- Name: project_module_defaults project_module_defaults_guard_bi_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER project_module_defaults_guard_bi_trg BEFORE INSERT ON public.project_module_defaults FOR EACH ROW EXECUTE FUNCTION public.project_module_defaults_guard_bi();
++
++
++--
++-- Name: cycles cycles_id_object_type_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.cycles
++    ADD CONSTRAINT cycles_id_object_type_fkey FOREIGN KEY (id, object_type) REFERENCES public.objects(id, object_type) ON DELETE RESTRICT;
++
++
++--
++-- Name: cycles cycles_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.cycles
++    ADD CONSTRAINT cycles_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: issue_assignees issue_assignees_issue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_assignees
++    ADD CONSTRAINT issue_assignees_issue_id_fkey FOREIGN KEY (issue_id) REFERENCES public.issues(id) ON DELETE CASCADE;
++
++
++--
++-- Name: issue_assignees issue_assignees_principal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_assignees
++    ADD CONSTRAINT issue_assignees_principal_id_fkey FOREIGN KEY (principal_id) REFERENCES public.principals(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: issue_labels issue_labels_issue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_labels
++    ADD CONSTRAINT issue_labels_issue_id_fkey FOREIGN KEY (issue_id) REFERENCES public.issues(id) ON DELETE CASCADE;
++
++
++--
++-- Name: issue_labels issue_labels_label_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_labels
++    ADD CONSTRAINT issue_labels_label_id_fkey FOREIGN KEY (label_id) REFERENCES public.project_labels(id) ON DELETE CASCADE;
++
++
++--
++-- Name: issue_modules issue_modules_issue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_modules
++    ADD CONSTRAINT issue_modules_issue_id_fkey FOREIGN KEY (issue_id) REFERENCES public.issues(id) ON DELETE CASCADE;
++
++
++--
++-- Name: issue_modules issue_modules_module_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_modules
++    ADD CONSTRAINT issue_modules_module_id_fkey FOREIGN KEY (module_id) REFERENCES public.modules(id) ON DELETE CASCADE;
++
++
++--
++-- Name: issue_subscriptions issue_subscriptions_issue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_subscriptions
++    ADD CONSTRAINT issue_subscriptions_issue_id_fkey FOREIGN KEY (issue_id) REFERENCES public.issues(id) ON DELETE CASCADE;
++
++
++--
++-- Name: issue_subscriptions issue_subscriptions_principal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.issue_subscriptions
++    ADD CONSTRAINT issue_subscriptions_principal_id_fkey FOREIGN KEY (principal_id) REFERENCES public.principals(id) ON DELETE CASCADE;
++
++
++--
++-- Name: modules modules_id_object_type_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.modules
++    ADD CONSTRAINT modules_id_object_type_fkey FOREIGN KEY (id, object_type) REFERENCES public.objects(id, object_type) ON DELETE RESTRICT;
++
++
++--
++-- Name: modules modules_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.modules
++    ADD CONSTRAINT modules_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: project_module_defaults project_module_defaults_module_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_module_defaults
++    ADD CONSTRAINT project_module_defaults_module_id_fkey FOREIGN KEY (module_id) REFERENCES public.modules(id) ON DELETE CASCADE;
++
++
++--
++-- Name: project_module_defaults project_module_defaults_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_module_defaults
++    ADD CONSTRAINT project_module_defaults_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: TABLE cycles; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.cycles TO kanban_app;
++GRANT SELECT ON TABLE public.cycles TO app_rls_reader;
++
++
++--
++-- Name: TABLE issue_assignees; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.issue_assignees TO kanban_app;
++GRANT SELECT ON TABLE public.issue_assignees TO app_rls_reader;
++
++
++--
++-- Name: TABLE issue_labels; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.issue_labels TO kanban_app;
++GRANT SELECT ON TABLE public.issue_labels TO app_rls_reader;
++
++
++--
++-- Name: TABLE issue_modules; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.issue_modules TO kanban_app;
++GRANT SELECT ON TABLE public.issue_modules TO app_rls_reader;
++
++
++--
++-- Name: TABLE issue_subscriptions; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.issue_subscriptions TO kanban_app;
++GRANT SELECT ON TABLE public.issue_subscriptions TO app_rls_reader;
++
++
++--
++-- Name: TABLE modules; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.modules TO kanban_app;
++GRANT SELECT ON TABLE public.modules TO app_rls_reader;
++
++
++--
++-- Name: TABLE project_module_defaults; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.project_module_defaults TO kanban_app;
++GRANT SELECT ON TABLE public.project_module_defaults TO app_rls_reader;
++
++
++--
++-- PostgreSQL database dump complete
++--
++
++\unrestrict al2vlAaeFlFQ0qwLAwQhV7cMbZ8GFtnr0UC5QOaD4ve4EzDkycx6UlLfqNjfFoo
++
+diff --git a/docs/qa/KANBA-48/unit-test-results.txt b/docs/qa/KANBA-48/unit-test-results.txt
+new file mode 100644
+index 0000000..b4de16e
+--- /dev/null
++++ b/docs/qa/KANBA-48/unit-test-results.txt
+@@ -0,0 +1,58 @@
++........                                                                 [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                                    Stmts   Miss Branch BrPart  Cover   Missing
++---------------------------------------------------------------------------------------------------
++database/__init__.py                                        1      0      0      0   100%
++database/bootstrap/__init__.py                             25      2      6      3    84%   20, 22->24, 25
++database/migrations/__init__.py                             0      0      0      0   100%
++database/migrations/env.py                                 39      5      8      4    81%   14->17, 22-23, 29->32, 47-48, 73
++database/migrations/sqlfile.py                             19      4      4      2    74%   17-18, 22-23
++database/migrations/versions/__init__.py                    0      0      0      0   100%
++database/migrations/versions/p1_01_baseline.py             10      1      0      0    90%   26
++database/migrations/versions/p1_02_objects_spine.py        10      1      0      0    90%   26
++database/migrations/versions/p1_03_principals.py           10      1      0      0    90%   26
++database/migrations/versions/p1_04_projects.py             10      1      0      0    90%   26
++database/migrations/versions/p1_05_issues.py               10      1      0      0    90%   26
++database/migrations/versions/p1_08_planning_joins.py       10      0      0      0   100%
++database/migrations/versions/p1_10_views.py                10      1      0      0    90%   26
++database/migrations/versions/p1_11_object_links.py         10      1      0      0    90%   26
++database/migrations/versions/p1_12_activity_ledger.py      10      1      0      0    90%   26
++database/migrations/versions/p1_13_access_control.py       10      1      0      0    90%   26
++database/testing/__init__.py                                0      0      0      0   100%
++database/testing/pg_harness.py                            199     34     54     19    76%   49-50, 70-71, 75, 92-93, 113->exit, 114->113, 120-124, 136->147, 138->141, 142->145, 161, 165, 183->181, 204-205, 221, 234->239, 235->234, 239->243, 259, 262, 268, 337, 352-366
++database/tests/__init__.py                                  0      0      0      0   100%
++database/tests/conftest.py                                 15      6      0      0    60%   16-18, 30, 36-37
++database/tests/migration_harness.py                        88     15     12      6    79%   69, 73, 91, 95, 105, 107, 121-126, 130-134
++database/tests/migrations/__init__.py                       0      0      0      0   100%
++database/tests/migrations/test_p1_01_migration.py          61     61     10      0     0%   3-123
++database/tests/migrations/test_p1_02_migration.py          26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_03_migration.py          21     21      0      0     0%   3-69
++database/tests/migrations/test_p1_04_migration.py          25     25      0      0     0%   3-87
++database/tests/migrations/test_p1_05_migration.py          20     20      0      0     0%   3-59
++database/tests/migrations/test_p1_08_migration.py          21      0      0      0   100%
++database/tests/migrations/test_p1_10_migration.py          26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_11_migration.py          27     27      0      0     0%   3-89
++database/tests/migrations/test_p1_12_migration.py          21     21      0      0     0%   3-72
++database/tests/migrations/test_p1_13_migration.py          26     26      0      0     0%   3-103
++database/tests/test_harness_benchmark.py                    8      8      0      0     0%   3-19
++database/tests/test_p1_01_baseline.py                     109    109      2      0     0%   3-185
++database/tests/test_p1_02_objects.py                      145    145      0      0     0%   3-319
++database/tests/test_p1_03_principals.py                   196    196      8      0     0%   3-469
++database/tests/test_p1_04_projects.py                     161    161      4      0     0%   3-501
++database/tests/test_p1_05_issues.py                       192    192      0      0     0%   3-535
++database/tests/test_p1_05_sequence_concurrency.py          31     31      0      0     0%   3-75
++database/tests/test_p1_08_planning.py                     226      0      2      0   100%
++database/tests/test_p1_10_views.py                        192    192      2      0     0%   3-571
++database/tests/test_p1_11_object_links.py                 167    167      4      0     0%   3-524
++database/tests/test_p1_12_activity_ledger.py              218    218     10      0     0%   3-600
++database/tests/test_p1_12_chain_concurrency.py             27     27      2      0     0%   3-67
++database/tests/test_p1_13_access_control.py               171    171      0      0     0%   3-569
++database/tests/test_pg_harness.py                         120    120      2      0     0%   3-224
++database/tests/test_smoke.py                                3      3      0      0     0%   3-8
++database/tests/test_sqlfile.py                             22     22      0      0     0%   3-36
++---------------------------------------------------------------------------------------------------
++TOTAL                                                    2748   2090    130     34    24%
++8 passed in 1.17s
++Exit code: 0
