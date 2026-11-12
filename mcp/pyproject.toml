@@ -10,6 +10,12 @@ requires-python = ">=3.12,<3.13"
 license = "Apache-2.0"
 dependencies = [
     "kanban-core",
+    "httpx==0.28.1",
+    "h2==4.4.1",
+    "pydantic==2.14.3",
+    "pydantic-settings==2.16.2",
+    "pyyaml==6.0.3",
+    "starlette>=0.40.0",
 ]
 
 [tool.hatch.build.targets.wheel.sources]

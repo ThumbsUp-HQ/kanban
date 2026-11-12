@@ -1,0 +1,44 @@
+=== uv run ruff check mcp ===
+All checks passed!
+Exit code: 0
+
+=== uv run ruff format --check mcp ===
+15 files already formatted
+Exit code: 0
+
+=== uv run mypy --strict mcp ===
+Success: no issues found in 13 source files
+Exit code: 0
+
+=== uv run lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 166 files, 258 dependencies.
+-------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT
+
+Contracts: 2 kept, 0 broken.
+Exit code: 0
+
+=== make license ===
+uv run python -m scripts.license_gate
+SUMMARY python=97 node=1 violations=0
+Exit code: 0
+
+=== uv run python -m scripts.check_no_dashes --all ===
+Exit code: 0

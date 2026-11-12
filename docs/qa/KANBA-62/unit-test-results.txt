@@ -1,0 +1,24 @@
+...................                                                      [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                   Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------------
+mcp/__init__.py                            8      0      0      0   100%
+mcp/app.py                                42      0      2      0   100%
+mcp/errors.py                             29      0      2      0   100%
+mcp/internal_client.py                   104      0     34      0   100%
+mcp/protocol.py                          164      1     60      2    99%   126->exit, 234
+mcp/registry.py                           42      0      4      0   100%
+mcp/settings.py                           18      0      0      0   100%
+mcp/tests/__init__.py                      0      0      0      0   100%
+mcp/tests/conftest.py                     61     13     12      2    74%   40-43, 91-108
+mcp/tests/test_internal_client.py        143      0     14      1    99%   104->exit
+mcp/tests/test_protocol.py               195      0      2      0   100%
+mcp/tests/test_registry_isolation.py      75      0      0      0   100%
+mcp/tests/test_smoke.py                    3      0      0      0   100%
+----------------------------------------------------------------------------------
+TOTAL                                    884     14    130      5    98%
+Required test coverage of 95% reached. Total coverage: 97.73%
+19 passed in 1.07s
+Exit code: 0
