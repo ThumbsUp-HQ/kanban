@@ -1,0 +1,47 @@
+
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-112/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/table/tableColumns.test.ts (7 tests) 19ms
+ ✓ src/features/views/viewsApi.test.ts (2 tests) 21ms
+ ✓ src/features/list/ListRow.test.tsx (2 tests) 295ms
+ ✓ src/features/views/viewRegistry.test.tsx (4 tests) 514ms
+   ✓ viewRegistry (4)
+     ✓ renders TableView when layout is table 300ms
+Not implemented: navigation to another Document
+ ✓ src/features/table/ColumnConfigurator.test.tsx (5 tests) 743ms
+   ✓ ColumnConfigurator (5)
+     ✓ renders trigger button with count and opens/closes dialog 430ms
+ ✓ src/features/list/ListView.test.tsx (9 tests) 1011ms
+   ✓ ListView (9)
+     ✓ renders external assignee with literal hint and links KAN-142 to peek 356ms
+ ✓ src/features/table/TableView.test.tsx (9 tests) 1955ms
+   ✓ TableView (9)
+     ✓ renders default columns and cycles aria-sort ascending -> descending -> none on Priority click 508ms
+     ✓ sorts by other sortable columns (Key, Summary, State, Due date) 537ms
+     ✓ toggles Start date on, Cycle off, reorders Due date before Assignees, and persists to localStorage 512ms
+
+ Test Files  7 passed (7)
+      Tests  38 passed (38)
+   Start at  08:08:59
+   Duration  3.37s (environment 50%, tests 38%, import 7%, worker 4%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.79 |    95.65 |     100 |    98.7 |                   
+ list              |     100 |    98.76 |     100 |     100 |                   
+  ListRow.tsx      |     100 |      100 |     100 |     100 |                   
+  ListView.tsx     |     100 |       96 |     100 |     100 | 77                
+ table             |   98.22 |    94.17 |     100 |   98.13 |                   
+  ...figurator.tsx |     100 |      100 |     100 |     100 |                   
+  TableView.tsx    |    97.5 |    91.72 |     100 |   97.36 | 44,126,246        
+  tableColumns.ts  |   98.48 |    98.36 |     100 |   98.43 | 191               
+ views             |     100 |      100 |     100 |     100 |                   
+  fixtures.ts      |     100 |      100 |     100 |     100 |                   
+  listTable.css    |       0 |        0 |       0 |       0 |                   
+  viewRegistry.tsx |     100 |      100 |     100 |     100 |                   
+  viewsApi.ts      |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
+EXIT_CODE=0
