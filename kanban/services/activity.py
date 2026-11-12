@@ -95,6 +95,8 @@ class ActivityEventType(StrEnum):
     COMMENT_EDITED = "COMMENT_EDITED"
     COMMENT_DELETED = "COMMENT_DELETED"
     MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
+    LINK_CREATED = "LINK_CREATED"
+    LINK_DELETED = "LINK_DELETED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -136,6 +138,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.COMMENT_EDITED: ActivityCategory.COMMENT,
         ActivityEventType.COMMENT_DELETED: ActivityCategory.COMMENT,
         ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
+        ActivityEventType.LINK_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.LINK_DELETED: ActivityCategory.HISTORY,
     }
 )
 

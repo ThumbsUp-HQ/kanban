@@ -42,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Initialize default state dependencies
     app.state.principal_resolver = DenyAllResolver()
     app.state.session_factory = None
+    app.state.settings = settings
 
     # Register RFC 7807 problem exception handlers
     app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
