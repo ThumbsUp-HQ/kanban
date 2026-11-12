@@ -36,6 +36,9 @@ def create_mcp_app(
     settings: McpSettings | None = None,
     *,
     kanban_app: ASGIApp | None = None,
+    agent_registry: ToolRegistry | None = None,
+    docs_registry: ToolRegistry | None = None,
+    admin_registry: ToolRegistry | None = None,
 ) -> Starlette:
     """Construct Starlette application mounting exactly 3 isolated MCP surfaces.
 
@@ -47,19 +50,26 @@ def create_mcp_app(
     active_settings: Final[McpSettings] = settings or McpSettings()
 
     # Construct 3 independent registries
-    agent_registry: Final[ToolRegistry] = ToolRegistry(Surface.AGENT)
-    docs_registry: Final[ToolRegistry] = ToolRegistry(Surface.DOCS)
-    admin_registry: Final[ToolRegistry] = ToolRegistry(Surface.ADMIN)
+    active_agent_reg = agent_registry
+    if active_agent_reg is None:
+        active_agent_reg = ToolRegistry(Surface.AGENT)
+        active_agent_reg.register(create_placeholder_tool(Surface.AGENT))
+    if not active_agent_reg.is_frozen:
+        active_agent_reg.freeze()
 
-    # Register placeholder tools
-    agent_registry.register(create_placeholder_tool(Surface.AGENT))
-    docs_registry.register(create_placeholder_tool(Surface.DOCS))
-    admin_registry.register(create_placeholder_tool(Surface.ADMIN))
+    active_docs_reg = docs_registry
+    if active_docs_reg is None:
+        active_docs_reg = ToolRegistry(Surface.DOCS)
+        active_docs_reg.register(create_placeholder_tool(Surface.DOCS))
+    if not active_docs_reg.is_frozen:
+        active_docs_reg.freeze()
 
-    # Freeze registries at startup
-    agent_registry.freeze()
-    docs_registry.freeze()
-    admin_registry.freeze()
+    active_admin_reg = admin_registry
+    if active_admin_reg is None:
+        active_admin_reg = ToolRegistry(Surface.ADMIN)
+        active_admin_reg.register(create_placeholder_tool(Surface.ADMIN))
+    if not active_admin_reg.is_frozen:
+        active_admin_reg.freeze()
 
     # Shared session store across mounts
     session_store: Final[InMemorySessionStore] = InMemorySessionStore(
@@ -80,21 +90,24 @@ def create_mcp_app(
     # Protocol handlers
     agent_handler: Final[McpProtocolHandler] = McpProtocolHandler(
         Surface.AGENT,
-        agent_registry,
+        active_agent_reg,
         session_store,
         active_settings,
+        internal_client=internal_client,
     )
     docs_handler: Final[McpProtocolHandler] = McpProtocolHandler(
         Surface.DOCS,
-        docs_registry,
+        active_docs_reg,
         session_store,
         active_settings,
+        internal_client=internal_client,
     )
     admin_handler: Final[McpProtocolHandler] = McpProtocolHandler(
         Surface.ADMIN,
-        admin_registry,
+        active_admin_reg,
         session_store,
         active_settings,
+        internal_client=internal_client,
     )
 
     # Sub-apps

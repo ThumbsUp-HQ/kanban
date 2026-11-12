@@ -45,12 +45,16 @@ class Problem(BaseModel):
         default=None,
         description="Field-level validation errors",
     )
+    candidates: list[dict[str, str]] | None = Field(
+        default=None,
+        description="Candidate suggestions when identifier resolution is ambiguous",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
     """Application exception mapped directly to an RFC 7807 Problem document."""
 
-    def __init__(  # noqa: PLR0913, PLR0917 - Extended with response headers
+    def __init__(  # noqa: PLR0913, PLR0917
         self,
         code: str,
         status: int,
@@ -58,6 +62,8 @@ class ProblemException(Exception):  # noqa: N818
         detail: str | None = None,
         errors: list[FieldError] | None = None,
         headers: dict[str, str] | None = None,
+        *,
+        candidates: list[dict[str, str]] | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -70,6 +76,7 @@ class ProblemException(Exception):  # noqa: N818
         self.detail = detail
         self.errors = errors
         self.headers = headers
+        self.candidates = candidates
 
 
 def not_found() -> NoReturn:
@@ -101,6 +108,7 @@ async def problem_exception_handler(
         detail=exc.detail,
         request_id=req_id,
         errors=exc.errors,
+        candidates=exc.candidates,
     )
     response_headers = {"x-request-id": req_id}
     if exc.headers:
