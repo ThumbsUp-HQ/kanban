@@ -16,6 +16,7 @@
 - **License**: MIT (100% Apache-2.0 compatible, permissive)
 - **Role**: Runtime asynchronous server-state cache, optimistic mutations, query lifecycle coordination, and realtime cache invalidation.
 - **Lockfile Integrity (SHA-512)**: `sha512-fH5u4JLwB6A+wLFdi8wWBWAYoJV5deYif2OveJ26ktAWjU499uvVFS1wPWnyEyq5LvZX1MZInvv9QRaIZANRaQ==`
+- **Package SHA-256 Digest**: `e8804f8a16ed8a307cc133dde82eb20dbf0a53acc45fd3fe4fba46713d7a1afb` (`package.json`)
 - **Pre-Flight Swarm Approvals**:
   * Architect Reviewer: Board #116, #167 (APPROVED)
   * Security Engineer: Board #118, #170 (APPROVED)
@@ -28,6 +29,7 @@
 - **License**: MIT (100% Apache-2.0 compatible, permissive)
 - **Role**: Build-time static TypeScript interface generator converting FastAPI `openapi.json` into type-safe contract definitions in `src/api/schema.gen.ts`.
 - **Lockfile Integrity (SHA-512)**: `sha512-F7RXEeo/heF3O9lOXo2bNjCOtfp7u+D6W3a3VNEH2xE6v+fxLtn5nq0uvUcA1F5aT+CMhNeC5Uqtg5tlXFX/ag==`
+- **Package SHA-256 Digest**: `67686ddfb209b1df9cb1d2025d49d35c84a891fb87205800158c090324e10625` (`package.json`)
 - **Pre-Flight Swarm Approvals**:
   * Architect Reviewer: Board #116, #167 (APPROVED)
   * Security Engineer: Board #118, #170 (APPROVED)
@@ -40,7 +42,7 @@
 - **Permissive License Mandate**: Both packages are published under the MIT license, with zero copyleft (GPL, AGPL, SSPL, LGPL) clauses.
 - **Supply-Chain Verification**:
   * Exact version pinning in `kanban/web/package.json`.
-  * Cryptographic SHA-512 integrity hashes enforced by `pnpm-lock.yaml`.
+  * Cryptographic SHA-512 integrity hashes enforced by `pnpm-lock.yaml` (lockfile SHA-256: `bec97915dbc963bf4cc64a11c1536644706191bda4e1b83be8430a6eb40e46be`).
   * `make license` (`uv run python -m scripts.license_gate`) validates clean permissive status (`violations=0`).
 - **Zero Runtime Script/Style Injection**: Neither dependency injects inline `<style>` or `<script>` tags, ensuring 100% adherence to the application's strict `Content-Security-Policy`.
 
