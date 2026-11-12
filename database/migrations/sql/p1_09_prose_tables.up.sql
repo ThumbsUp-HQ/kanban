@@ -311,6 +311,9 @@ FOR EACH ROW EXECUTE FUNCTION pages_hierarchy_biu();
 CREATE OR REPLACE FUNCTION pages_hierarchy_au() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
+    IF OLD.hierarchy_path = NEW.hierarchy_path THEN
+        RETURN NEW;
+    END IF;
     UPDATE pages
     SET hierarchy_path = NEW.hierarchy_path || subpath(hierarchy_path, nlevel(OLD.hierarchy_path))
     WHERE hierarchy_path <@ OLD.hierarchy_path AND id <> NEW.id;
@@ -322,7 +325,7 @@ $$;
 CREATE TRIGGER pages_hierarchy_au_trg
 AFTER UPDATE OF parent_page_id, doc_id ON pages
 FOR EACH ROW
-WHEN (OLD.hierarchy_path IS DISTINCT FROM NEW.hierarchy_path)
+WHEN (OLD.parent_page_id IS DISTINCT FROM NEW.parent_page_id OR OLD.doc_id IS DISTINCT FROM NEW.doc_id)
 EXECUTE FUNCTION pages_hierarchy_au();
 
 -- 6.8 pages_versioning_bu

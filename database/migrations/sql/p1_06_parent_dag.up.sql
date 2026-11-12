@@ -164,6 +164,9 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+    IF OLD.ancestry_path = NEW.ancestry_path THEN
+        RETURN NEW;
+    END IF;
     UPDATE issues
        SET ancestry_path = NEW.ancestry_path || subpath(ancestry_path, nlevel(OLD.ancestry_path))
      WHERE ancestry_path <@ OLD.ancestry_path AND id <> NEW.id;
@@ -174,5 +177,5 @@ $$;
 CREATE TRIGGER issues_parent_dag_au_trg
 AFTER UPDATE OF parent_issue_id ON issues
 FOR EACH ROW
-WHEN (OLD.ancestry_path IS DISTINCT FROM NEW.ancestry_path)
+WHEN (OLD.parent_issue_id IS DISTINCT FROM NEW.parent_issue_id)
 EXECUTE FUNCTION issues_parent_dag_au();

@@ -1,0 +1,56 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-54/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-54
+configfile: pyproject.toml
+plugins: anyio-4.16.0, asyncio-1.4.1.post1, xdist-3.8.0, socket-0.8.1, cov-7.1.0, platformdirs-4.14.5
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 33 items
+
+kanban/tests/ops/test_backup_crypto.py::test_decode_raw_key_validations PASSED [  3%]
+kanban/tests/ops/test_backup_crypto.py::test_key_source_implementations PASSED [  6%]
+kanban/tests/ops/test_backup_crypto.py::test_empty_stream_encryption_roundtrip PASSED [  9%]
+kanban/tests/ops/test_backup_crypto.py::test_multichunk_streaming_roundtrip PASSED [ 12%]
+kanban/tests/ops/test_backup_crypto.py::test_passphrase_multichunk_roundtrip PASSED [ 15%]
+kanban/tests/ops/test_backup_crypto.py::test_tamper_defense_bit_flip PASSED [ 18%]
+kanban/tests/ops/test_backup_crypto.py::test_tamper_defense_chunk_swap PASSED [ 21%]
+kanban/tests/ops/test_backup_crypto.py::test_tamper_defense_truncation PASSED [ 24%]
+kanban/tests/ops/test_backup_crypto.py::test_tamper_defense_wrong_key PASSED [ 27%]
+kanban/tests/ops/test_backup_crypto.py::test_archive_corruptions PASSED  [ 30%]
+kanban/tests/ops/test_backup_restore.py::test_positive_standalone_to_production_roundtrip PASSED [ 33%]
+kanban/tests/ops/test_backup_restore.py::test_restore_non_empty_database_safety PASSED [ 36%]
+kanban/tests/ops/test_backup_restore.py::test_cli_secret_hygiene_and_commands PASSED [ 39%]
+kanban/tests/ops/test_compose_export.py::test_compose_export_with_keyring_carryover PASSED [ 42%]
+kanban/tests/ops/test_compose_export.py::test_compose_export_without_keyring PASSED [ 45%]
+kanban/tests/ops/test_ops_coverage.py::test_backup_manifest_from_dict_and_to_dict PASSED [ 48%]
+kanban/tests/ops/test_ops_coverage.py::test_pg_bin_resolvers PASSED      [ 51%]
+kanban/tests/ops/test_ops_coverage.py::test_parse_db_conn_params PASSED  [ 54%]
+kanban/tests/ops/test_ops_coverage.py::test_read_secrets_carryover PASSED [ 57%]
+kanban/tests/ops/test_ops_coverage.py::test_safe_extract_tar_security PASSED [ 60%]
+kanban/tests/ops/test_ops_coverage.py::test_verify_backup_missing_or_corrupt_files PASSED [ 63%]
+kanban/tests/ops/test_ops_coverage.py::test_restore_secrets_and_attachments PASSED [ 66%]
+kanban/tests/ops/test_ops_coverage.py::test_compose_export_keyring_edge_cases PASSED [ 69%]
+kanban/tests/ops/test_ops_coverage.py::test_cli_key_resolution_edge_cases PASSED [ 72%]
+kanban/tests/ops/test_ops_coverage.py::test_cli_handler_error_paths PASSED [ 75%]
+kanban/tests/ops/test_ops_coverage.py::test_cli_main_entrypoint PASSED   [ 78%]
+kanban/tests/ops/test_ops_coverage.py::test_subprocess_error_branches PASSED [ 81%]
+kanban/tests/ops/test_ops_coverage.py::test_cli_fallback_key_source_prompts PASSED [ 84%]
+kanban/tests/ops/test_ops_coverage.py::test_cli_backup_create_error_branches PASSED [ 87%]
+kanban/tests/ops/test_ops_coverage.py::test_atomic_write_encrypted_tar_cleanup PASSED [ 90%]
+kanban/tests/ops/test_ops_coverage.py::test_cli_main_subcommand_dispatch PASSED [ 93%]
+kanban/tests/ops/test_ops_coverage.py::test_inspect_db_metadata_no_alembic PASSED [ 96%]
+kanban/tests/ops/test_ops_coverage.py::test_verify_post_restore_invariants_alembic_mismatch PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                           Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------
+kanban/cli/ops.py                184      3     44      3    97%   67->70, 358-359, 363
+kanban/ops/__init__.py             5      0      0      0   100%
+kanban/ops/backup_crypto.py      179      0     28      0   100%
+kanban/ops/backup_service.py     433     18    106     20    93%   135, 138, 141->140, 143, 153, 156, 159->158, 161, 243->251, 244->246, 246->251, 274->273, 371-372, 375, 542->555, 569-573, 585-589, 604-608, 628, 674->673, 737-741
+kanban/ops/compose_export.py      69      0     14      2    98%   331->335, 359->365
+--------------------------------------------------------------------------
+TOTAL                            870     21    192     25    96%
+Required test coverage of 95% reached. Total coverage: 95.67%
+============================== 33 passed in 2.13s ==============================
