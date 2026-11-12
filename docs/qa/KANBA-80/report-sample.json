@@ -1,0 +1,64 @@
+{
+  "schema_version": "kb-sparkle-report/v1",
+  "command": "validate-sparkle",
+  "rendered_context": "Project: KAN (Kanban Core) | User: @adam | Surface: description\nRedactions Detected: 0\n--- Rendered Prompt (after secret scrubbing) ---\n<<<UNTRUSTED_CONTEXT_DEMO>>>\nContext from KAN\n<<<UNTRUSTED_CONTEXT_DEMO>>>\n\nEnforce PKCE S256 on OAuth2 cards and verify  [CURSOR]  before LDAP bind.",
+  "tool_trace": [
+    {
+      "tool": "retrieval_trace",
+      "args": {
+        "project_id": "00000000-0000-0000-0000-000000000010",
+        "project_key": "KAN",
+        "as_user": "@adam"
+      },
+      "result": {
+        "retrieval_status": "ok",
+        "retrieved_objects": [
+          {
+            "object_id": "00000000-0000-0000-0000-000000000100",
+            "canonical_key": "KAN-1",
+            "chunk_index": 0
+          }
+        ],
+        "route_trace": [
+          {
+            "provider_config_id": "8664e584-959b-46e5-bfdb-ca0422a7760e",
+            "outcome": "success",
+            "breaker_state": "CLOSED",
+            "ttft_ms": 18.0
+          }
+        ]
+      }
+    }
+  ],
+  "metrics": {
+    "ttft_ms": 12.53216597251594,
+    "total_latency_ms": 12.59,
+    "prompt_tokens": 32,
+    "completion_tokens": 4,
+    "route_trace": [
+      {
+        "provider_config_id": "8664e584-959b-46e5-bfdb-ca0422a7760e",
+        "outcome": "success",
+        "breaker_state": "CLOSED",
+        "ttft_ms": 18.0
+      }
+    ],
+    "iterations": null,
+    "p50_latency_ms": null,
+    "p90_latency_ms": null,
+    "p95_latency_ms": null,
+    "p99_latency_ms": null
+  },
+  "schema_status": {
+    "valid": true,
+    "status": "ok",
+    "error_code": null,
+    "detail": "Completion accepted (4 tokens); output filter: none"
+  },
+  "qa_verdict": null,
+  "sparkle_details": {
+    "text": "PKCE S256 code_challenge verified",
+    "retrieval_status": "ok",
+    "filter_actions": []
+  }
+}

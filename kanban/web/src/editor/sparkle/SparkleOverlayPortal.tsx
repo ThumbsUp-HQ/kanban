@@ -18,6 +18,10 @@ import {
   acceptSparkleSuggestion,
   type SparklePluginState,
 } from './SparkleCompletionPlugin';
+import {
+  setBadgeContextMenuSuppression,
+  consumeBadgeContextMenuSuppression,
+} from './contextMenuMatrix';
 import './sparkle.css';
 
 export interface SparkleOverlayPortalProps {
@@ -103,6 +107,34 @@ export function SparkleOverlayPortal({
     }
   };
 
+  const handlePointerDown = (
+    e: React.PointerEvent<HTMLDivElement>,
+  ): void => {
+    if (e.button === 2) {
+      e.preventDefault();
+      if (onAccept) {
+        onAccept();
+      } else if (view) {
+        acceptSparkleSuggestion(view);
+      }
+      setBadgeContextMenuSuppression();
+    }
+  };
+
+  const handleContextMenu = (e: MouseEvent<HTMLDivElement>): void => {
+    if (e.shiftKey) {
+      return;
+    }
+    e.preventDefault();
+    if (!consumeBadgeContextMenuSuppression()) {
+      if (onAccept) {
+        onAccept();
+      } else if (view) {
+        acceptSparkleSuggestion(view);
+      }
+    }
+  };
+
   const isBlinking = activeState?.machine.name === 'READY_BLINKING';
 
   return (
@@ -115,6 +147,8 @@ export function SparkleOverlayPortal({
         tabIndex={-1}
         data-testid={testId}
         onClick={handleClick}
+        onPointerDown={handlePointerDown}
+        onContextMenu={handleContextMenu}
       >
         ✨
       </div>

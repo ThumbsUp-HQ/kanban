@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from kanban.api.request_id import get_request_id
 
@@ -31,6 +31,8 @@ class FieldError(BaseModel):
 
 class Problem(BaseModel):
     """Canonical RFC 7807 problem document for the platform."""
+
+    model_config = ConfigDict(extra="allow")
 
     type: str = Field(description="Absolute URI referencing problem definition")
     title: str = Field(description="Short human-readable summary of the problem type")
@@ -61,6 +63,22 @@ class Problem(BaseModel):
         default=None,
         description="List of mentioned users who lack access to the resource",
     )
+    state_group: str | None = Field(
+        default=None,
+        description="Current state group when archive transition is rejected",
+    )
+    open_subissue_keys: list[str] | None = Field(
+        default=None,
+        description="Keys of open sub-issues preventing archive",
+    )
+    hidden_open_count: int | None = Field(
+        default=None,
+        description="Count of open sub-issues hidden by RLS",
+    )
+    retry_after_seconds: int | None = Field(
+        default=None,
+        description="Numeric seconds after which the client may retry rate-limited requests",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -79,7 +97,12 @@ class ProblemException(Exception):  # noqa: N818
         *,
         candidates: list[dict[str, str]] | None = None,
         unauthorized_mentions: list[dict[str, str]] | None = None,
+        state_group: str | None = None,
+        open_subissue_keys: list[str] | None = None,
+        hidden_open_count: int | None = None,
         type_uri: str | None = None,
+        extra: dict[str, Any] | None = None,
+        retry_after_seconds: int | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -96,7 +119,12 @@ class ProblemException(Exception):  # noqa: N818
         self.field = field
         self.candidates = candidates
         self.unauthorized_mentions = unauthorized_mentions
+        self.state_group = state_group
+        self.open_subissue_keys = open_subissue_keys
+        self.hidden_open_count = hidden_open_count
         self.type_uri = type_uri
+        self.extra = extra
+        self.retry_after_seconds = retry_after_seconds
 
 
 def not_found() -> NoReturn:
@@ -120,6 +148,7 @@ async def problem_exception_handler(
     """Format an explicit ProblemException into application/problem+json."""
     del request
     req_id = get_request_id()
+    extra_fields = exc.extra or {}
     problem = Problem(
         type=exc.type_uri or f"urn:kanban:problem:{exc.code}",
         title=exc.title,
@@ -132,6 +161,11 @@ async def problem_exception_handler(
         field=exc.field,
         candidates=exc.candidates,
         unauthorized_mentions=exc.unauthorized_mentions,
+        state_group=exc.state_group,
+        open_subissue_keys=exc.open_subissue_keys,
+        hidden_open_count=exc.hidden_open_count,
+        retry_after_seconds=exc.retry_after_seconds,
+        **extra_fields,
     )
     response_headers = {"x-request-id": req_id}
     if exc.headers:

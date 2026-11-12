@@ -1,0 +1,34 @@
+
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-96/kanban/web
+
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 1. Table-driven S9.2 Rows 1-6 > evaluates Row 1: READY_BLINKING + Collapsed + onB… -> ACCEPT (preventDefault: true) 3ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 1. Table-driven S9.2 Rows 1-6 > evaluates Row 2: READY_BLINKING + Collapsed + wit… -> ACCEPT (preventDefault: true) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 1. Table-driven S9.2 Rows 1-6 > evaluates Row 3: READY_BLINKING + Collapsed + Hol… -> NATIVE (preventDefault: false) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 1. Table-driven S9.2 Rows 1-6 > evaluates Row 4: READY_BLINKING + Non-empty selec… -> NATIVE (preventDefault: false) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 1. Table-driven S9.2 Rows 1-6 > evaluates Row 5a: READY_BLINKING + Collapsed + Ov… -> NATIVE (preventDefault: false) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 1. Table-driven S9.2 Rows 1-6 > evaluates Row 5b: READY_BLINKING + Collapsed + > … -> NATIVE (preventDefault: false) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 1. Table-driven S9.2 Rows 1-6 > evaluates Row 6: IDLE / DISMISSED / other states … -> NATIVE (preventDefault: false) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 2. Boundary Conditions on Caret Radius (28px) > returns ACCEPT at distancePx = 0 (exact caret hit) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 2. Boundary Conditions on Caret Radius (28px) > returns ACCEPT at distancePx = 28 (exact boundary hit) 1ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 2. Boundary Conditions on Caret Radius (28px) > returns NATIVE at distancePx = 28.01 (just outside boundary) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 2. Boundary Conditions on Caret Radius (28px) > returns NATIVE at distancePx = 28.0001 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 2. Boundary Conditions on Caret Radius (28px) > returns NATIVE when distancePx is NaN or Infinity 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 3. Precedence Rules Hierarchy > shiftKey + onBadge -> NATIVE (Shift escape hatch trumps onBadge) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 3. Precedence Rules Hierarchy > non-empty selection + onBadge -> NATIVE (Selection copy/cut trumps onBadge) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 3. Precedence Rules Hierarchy > overSpellingNode at distancePx = 5 -> NATIVE (Spellcheck trumps proximity) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 3. Precedence Rules Hierarchy > onBadge + overSpellingNode -> ACCEPT (onBadge trumps overSpellingNode) 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 4. Inactive / Non-Ready States > returns NATIVE for state IDLE even at distance 0 on badge 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 4. Inactive / Non-Ready States > returns NATIVE for state TYPING even at distance 0 on badge 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 4. Inactive / Non-Ready States > returns NATIVE for state FETCHING even at distance 0 on badge 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 4. Inactive / Non-Ready States > returns NATIVE for state DISMISSED even at distance 0 on badge 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 4. Inactive / Non-Ready States > returns NATIVE for state ACCEPTED even at distance 0 on badge 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 5. Distance and DOM Helpers > computes Euclidean distance to caret midpoint 0ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 5. Distance and DOM Helpers > detects spelling nodes via .cm-lint-spelling and [data-spell-error] 11ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 5. Distance and DOM Helpers > detects badge element via .sparkle-badge 6ms
+ ✓ src/editor/sparkle/__tests__/contextMenuMatrix.test.ts > contextMenuMatrix (S9.2 Right-Click Accept Matrix) > 5. Distance and DOM Helpers > handles badge contextmenu suppression flag lifecycle 4ms
+
+ Test Files  1 passed (1)
+      Tests  25 passed (25)
+   Start at  03:04:12
+   Duration  1.01s (environment 92%, tests 4%, import 2%, transform 1%, worker 1%)
+

@@ -17,6 +17,10 @@ from agent.cli_commands.validate_qa_packet import (
     configure_validate_qa_packet_parser,
     handle_validate_qa_packet,
 )
+from agent.cli_commands.validate_sparkle import (
+    configure_validate_sparkle_parser,
+    handle_validate_sparkle,
+)
 from agent.cli_report import (
     ContextScrubber,
     ExitCode,
@@ -196,6 +200,16 @@ register_subcommand(
         help="Run local reality-checker forensic QA audit over proof directory and ticket file",
         configure_parser=configure_validate_qa_packet_parser,
         handler=handle_validate_qa_packet,
+    )
+)
+
+# Register validate-sparkle subcommand
+register_subcommand(
+    SubcommandSpec(
+        name="validate-sparkle",
+        help="Validate Sparkle FIM latency, RLS filtering and ghost-text output at a cursor offset",
+        configure_parser=configure_validate_sparkle_parser,
+        handler=handle_validate_sparkle,
     )
 )
 
