@@ -104,6 +104,10 @@ class SecurityHeadersMiddleware:
         # Wrap send to inject security headers
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
+                existing_headers: dict[bytes, bytes] = {}
+                for name, value in message.get("headers", []):
+                    existing_headers[name.lower()] = value
+
                 raw_headers: list[tuple[bytes, bytes]] = [
                     (name, value)
                     for name, value in message.get("headers", [])
@@ -111,7 +115,13 @@ class SecurityHeadersMiddleware:
                 ]
 
                 # Append canonical security headers
-                raw_headers.append((b"content-security-policy", CSP_POLICY.encode("latin1")))
+                # (preserving endpoint-specific CSP like SVG sandbox)
+                custom_csp = existing_headers.get(b"content-security-policy")
+                if custom_csp is not None:
+                    raw_headers.append((b"content-security-policy", custom_csp))
+                else:
+                    raw_headers.append((b"content-security-policy", CSP_POLICY.encode("latin1")))
+
                 raw_headers.append((b"x-content-type-options", b"nosniff"))
                 raw_headers.append((b"referrer-policy", b"no-referrer"))
                 raw_headers.append((b"x-frame-options", b"DENY"))

@@ -36,6 +36,8 @@ def _decode_body(content: bytes) -> Any:  # noqa: ANN401  # Arbitrary JSON docum
     """Decode an HTTP body as JSON, falling back to text, or ``None`` when empty."""
     if not content:
         return None
+    if len(content) > 65536:
+        return f"<payload: {len(content)} bytes>"
     try:
         return json.loads(content)
     except ValueError:
@@ -52,6 +54,14 @@ class ContractRecorder:
 
     def record(self, name: str, request: httpx.Request, response: httpx.Response) -> None:
         """Store one exchange with sensitive header values redacted."""
+        try:
+            req_content = request.read()
+        except Exception:  # noqa: BLE001
+            req_content = b""
+        try:
+            resp_content = response.read()
+        except Exception:  # noqa: BLE001
+            resp_content = b""
         self.exchanges.append(
             {
                 "name": name,
@@ -59,12 +69,12 @@ class ContractRecorder:
                     "method": request.method,
                     "path": request.url.raw_path.decode("ascii"),
                     "headers": redact_headers(dict(request.headers)),
-                    "body": _decode_body(request.content),
+                    "body": _decode_body(req_content),
                 },
                 "response": {
                     "status": response.status_code,
                     "headers": redact_headers(dict(response.headers)),
-                    "body": _decode_body(response.content),
+                    "body": _decode_body(resp_content),
                 },
             }
         )

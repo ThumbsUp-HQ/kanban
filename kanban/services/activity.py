@@ -61,6 +61,7 @@ class ActivityEventType(StrEnum):
     PROJECT_CREATED = "PROJECT_CREATED"
     PROJECT_UPDATED = "PROJECT_UPDATED"
     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
+    ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -68,6 +69,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.PROJECT_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.PROJECT_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
     }
 )
 
