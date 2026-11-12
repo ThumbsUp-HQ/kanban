@@ -97,6 +97,13 @@ class ActivityEventType(StrEnum):
     MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
     LINK_CREATED = "LINK_CREATED"
     LINK_DELETED = "LINK_DELETED"
+    STICKY_CREATED = "STICKY_CREATED"
+    STICKY_UPDATED = "STICKY_UPDATED"
+    STICKY_RECOLORED = "STICKY_RECOLORED"
+    STICKY_PROMOTION_SNOOZED = "STICKY_PROMOTION_SNOOZED"
+    STICKY_PROMOTED_TO_DOC = "STICKY_PROMOTED_TO_DOC"
+    STICKY_UNARCHIVED_COPY = "STICKY_UNARCHIVED_COPY"
+    STICKY_TRASHED = "STICKY_TRASHED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -140,6 +147,13 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
         ActivityEventType.LINK_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.LINK_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_RECOLORED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_PROMOTION_SNOOZED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_PROMOTED_TO_DOC: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_UNARCHIVED_COPY: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_TRASHED: ActivityCategory.HISTORY,
     }
 )
 
