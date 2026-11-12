@@ -1,9 +1,9 @@
 === 1. ruff check ===
 All checks passed!
 === 2. ruff format --check ===
-674 files already formatted
+720 files already formatted
 === 3. mypy --strict kanban database ===
-Success: no issues found in 263 source files
+Success: no issues found in 292 source files
 === 4. lint-imports ===
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
@@ -20,7 +20,7 @@ Success: no issues found in 263 source files
 Contracts
 ---------
 
-Analyzed 350 files, 768 dependencies.
+Analyzed 379 files, 879 dependencies.
 -------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT
@@ -28,8 +28,9 @@ mcp forbidden from importing database KEPT
 
 Contracts: 2 kept, 0 broken.
 === 5. license_gate.py ===
-SUMMARY python=111 node=1 violations=0
+SUMMARY python=112 node=1 violations=0
 === 6. check_no_dashes.py --all ===
+Zero Unicode dashes found. All clean!
 === 7. banned imports audit ===
 kanban/tests/fixtures/fake_idp.py:20:from joserfc import jwt
 kanban/tests/fixtures/fake_idp.py:21:from joserfc.jwk import RSAKey

@@ -2,7 +2,16 @@
 
 from database.models.activity import ActivityChainHead, ActivityRecord
 from database.models.agent_definition import AgentDefinition
-from database.models.auth import AuthProviderCard, LdapGroupMapping, OidcAuthRequest, UserSession
+from database.models.attachments import Attachment
+from database.models.auth import (
+    AuthProviderCard,
+    LdapGroupMapping,
+    LocalAdminCredential,
+    OidcAuthRequest,
+    RecoveryCode,
+    TotpFactor,
+    UserSession,
+)
 from database.models.base import (
     Base,
     InvalidLinkReason,
@@ -14,6 +23,7 @@ from database.models.base import (
 )
 from database.models.embeddings import ObjectEmbedding
 from database.models.issues import (
+    CommentReaction,
     Issue,
     IssueAssignee,
     IssueComment,
@@ -56,8 +66,10 @@ __all__ = [
     "ActivityChainHead",
     "ActivityRecord",
     "AgentDefinition",
+    "Attachment",
     "AuthProviderCard",
     "Base",
+    "CommentReaction",
     "Cycle",
     "Doc",
     "EffectiveResourceAccess",
@@ -73,6 +85,7 @@ __all__ = [
     "LdapGroupMapping",
     "LinkKind",
     "LinkTypeMatrix",
+    "LocalAdminCredential",
     "LtreeType",
     "Module",
     "ObjectEmbedding",
@@ -92,9 +105,11 @@ __all__ = [
     "ProjectPriority",
     "RateLimitBucket",
     "RbacRole",
+    "RecoveryCode",
     "ResourceAclEntry",
     "RoleBinding",
     "Sticky",
+    "TotpFactor",
     "User",
     "UserSession",
     "View",

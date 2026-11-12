@@ -12,7 +12,7 @@ async def test_24_oidc_auth_requests_migration_lifecycle() -> None:
     """Verify p2_06 upgrade applies oidc_auth_requests and functions, and downgrade reverts."""
     async with MigrationHarness() as harness:
         prev_rev = harness.previous_of("p2_06_oidc_auth_requests")
-        assert prev_rev == "p5_16_agent_definitions"
+        assert prev_rev == "p2_04_local_admin_credentials"
 
         # 1. Upgrade to p2_06_oidc_auth_requests
         await harness.upgrade("p2_06_oidc_auth_requests")

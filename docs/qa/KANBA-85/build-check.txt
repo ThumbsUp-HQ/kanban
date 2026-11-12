@@ -1,0 +1,34 @@
+=== uv run ruff check kanban database ===
+All checks passed!
+=== uv run ruff format --check . ===
+737 files already formatted
+=== uv run mypy --strict kanban database ===
+Success: no issues found in 303 source files
+=== uv run lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 390 files, 940 dependencies.
+-------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT
+
+Contracts: 2 kept, 0 broken.
+=== uv run python -m scripts.check_no_dashes --all ===
+Zero Unicode dashes found. All clean!
+=== make license ===
+uv run python -m scripts.license_gate
+SUMMARY python=112 node=1 violations=0

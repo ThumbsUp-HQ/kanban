@@ -11,9 +11,11 @@ from starlette.requests import Request  # noqa: TC002  # Required at runtime for
 
 from database.session import RLSContext
 from kanban.api.problems import ProblemException
+from kanban.settings import Settings
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+    from datetime import datetime
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +33,7 @@ class PrincipalContext:
     session_id: uuid.UUID | None = None
     agent_principal_id: uuid.UUID | None = None
     mfa_pending: bool = False
+    aal2_verified_at: datetime | None = None
 
     def __post_init__(self) -> None:
         """Enforce AAL level bounds."""
@@ -110,3 +113,11 @@ async def get_rls_session(
 
     async with session_factory.session(rls_ctx) as session:
         yield session
+
+
+def get_settings(request: Request) -> Settings:
+    """Return the active platform settings from app state, or default."""
+    settings = getattr(request.app.state, "settings", None)
+    if isinstance(settings, Settings):
+        return settings
+    return Settings()

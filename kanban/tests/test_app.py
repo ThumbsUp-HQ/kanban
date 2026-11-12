@@ -63,17 +63,17 @@ async def test_api_not_found_problem_json(test_settings: Settings) -> None:
 
 
 @pytest.mark.asyncio
-async def test_sse_placeholder_501(test_settings: Settings) -> None:
-    """Test GET /sse returns 501 Not Implemented problem JSON."""
+async def test_sse_unauthenticated_401(test_settings: Settings) -> None:
+    """Test GET /sse returns 401 Unauthorized problem JSON when unauthenticated."""
     app = create_app(test_settings)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.get("/sse")
-        assert response.status_code == 501
+        assert response.status_code == 401
         assert response.headers.get("content-type") == "application/problem+json"
         data = response.json()
-        assert data["title"] == "Not Implemented"
-        assert data["status"] == 501
+        assert data["title"] == "Unauthorized"
+        assert data["status"] == 401
 
 
 @pytest.mark.asyncio
@@ -89,13 +89,13 @@ async def test_mcp_placeholders_501(test_settings: Settings) -> None:
             assert response.json()["status"] == 501
 
 
-def test_websocket_close_1008(test_settings: Settings) -> None:
-    """Test WebSocket connection to /ws is closed with policy violation code 1008."""
+def test_websocket_close_4401(test_settings: Settings) -> None:
+    """Test unauthenticated WebSocket connection to /ws is closed with 4401."""
     app = create_app(test_settings)
     client = TestClient(app)
     with pytest.raises(WebSocketDisconnect) as exc_info, client.websocket_connect("/ws"):
         pass
-    assert exc_info.value.code == 1008
+    assert exc_info.value.code == 4401
 
 
 @pytest.mark.asyncio

@@ -110,6 +110,12 @@ class IssueModule(Base):
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
     )
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    added_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class IssueAssignee(Base):
@@ -199,3 +205,20 @@ class IssueComment(Base):
     )
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CommentReaction(Base):
+    """Emoji reaction on an issue comment (KB-P3-05)."""
+
+    __tablename__ = "comment_reactions"
+
+    comment_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("issue_comments.id", ondelete="CASCADE"), primary_key=True
+    )
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), primary_key=True
+    )
+    emoji: Mapped[str] = mapped_column(String, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )

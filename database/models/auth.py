@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import (
     ARRAY,
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -126,6 +127,35 @@ class UserSession(Base):
         return self.__repr__()
 
 
+class LocalAdminCredential(Base):
+    """Local administrator credential with Argon2id hash and pepper key id (KB-P2-04)."""
+
+    __tablename__ = "local_admin_credentials"
+
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), primary_key=True
+    )
+    username: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    pepper_kid: Mapped[str] = mapped_column(
+        Text, nullable=False, default="pepper-v1", server_default=text("'pepper-v1'")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    def __repr__(self) -> str:
+        """Sanitized representation omitting password_hash."""
+        return (
+            f"<LocalAdminCredential principal_id={self.principal_id} "
+            f"username={self.username!r} pepper_kid={self.pepper_kid!r}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()
+
+
 class OidcAuthRequest(Base):
     """Temporary OIDC and OAuth2 authentication request and state tracking (KB-P2-06)."""
 
@@ -156,6 +186,72 @@ class OidcAuthRequest(Base):
         return (
             f"<OidcAuthRequest id={self.id} card_id={self.card_id} "
             f"expires_at={self.expires_at} consumed_at={self.consumed_at}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()
+
+
+class TotpFactor(Base):
+    """RFC 6238 TOTP authentication factor (KB-P2-05a)."""
+
+    __tablename__ = "totp_factors"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, default="PENDING", server_default=text("'PENDING'")
+    )
+    encrypted_secret_blob: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    wrapped_dek: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    dek_kid: Mapped[str] = mapped_column(
+        Text, nullable=False, default="kek-v1", server_default=text("'kek-v1'")
+    )
+    last_accepted_step: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    def __repr__(self) -> str:
+        """Sanitized representation omitting encrypted secret bytes."""
+        return (
+            f"<TotpFactor id={self.id} principal_id={self.principal_id} "
+            f"status={self.status!r} last_accepted_step={self.last_accepted_step}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()
+
+
+class RecoveryCode(Base):
+    """Hashed one-time backup recovery code (KB-P2-05a)."""
+
+    __tablename__ = "recovery_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), nullable=False
+    )
+    code_hmac: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, unique=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    def __repr__(self) -> str:
+        """Sanitized representation omitting code HMAC."""
+        return (
+            f"<RecoveryCode id={self.id} principal_id={self.principal_id} "
+            f"used={self.used_at is not None}>"
         )
 
     def __str__(self) -> str:

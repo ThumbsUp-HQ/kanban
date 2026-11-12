@@ -1,0 +1,29 @@
+Limit  (cost=21.24..21.24 rows=1 width=112) (actual time=0.033..0.034 rows=2 loops=1)
+  Buffers: shared hit=10
+  ->  Sort  (cost=21.24..21.24 rows=1 width=112) (actual time=0.032..0.033 rows=2 loops=1)
+        Sort Key: p.display_name, o.canonical_key
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=10
+        ->  Nested Loop  (cost=4.48..21.23 rows=1 width=112) (actual time=0.023..0.027 rows=2 loops=1)
+              Buffers: shared hit=10
+              ->  Nested Loop  (cost=4.34..20.93 rows=1 width=64) (actual time=0.015..0.017 rows=2 loops=1)
+                    Buffers: shared hit=6
+                    ->  Bitmap Heap Scan on effective_resource_access era  (cost=4.19..12.72 rows=1 width=16) (actual time=0.010..0.011 rows=2 loops=1)
+                          Recheck Cond: (object_id = '01a1cf17-0c78-7877-8004-10c5271af83f'::uuid)
+                          Filter: ((workspace_id = '01a1cf17-0c69-7743-96fa-e7c4d8d6a829'::uuid) AND ((allow_mask & 1) = 1) AND ((deny_mask & 1) = 0))
+                          Heap Blocks: exact=1
+                          Buffers: shared hit=2
+                          ->  Bitmap Index Scan on effective_resource_access_pkey  (cost=0.00..4.19 rows=5 width=0) (actual time=0.004..0.004 rows=8 loops=1)
+                                Index Cond: (object_id = '01a1cf17-0c78-7877-8004-10c5271af83f'::uuid)
+                                Buffers: shared hit=1
+                    ->  Index Scan using objects_id_object_type_key on objects o  (cost=0.15..8.17 rows=1 width=48) (actual time=0.002..0.002 rows=1 loops=2)
+                          Index Cond: (id = era.principal_id)
+                          Buffers: shared hit=4
+              ->  Index Scan using principals_id_principal_type_key on principals p  (cost=0.15..0.29 rows=1 width=80) (actual time=0.004..0.004 rows=1 loops=2)
+                    Index Cond: (id = o.id)
+                    Filter: ((principal_type = ANY ('{USER,AGENT}'::text[])) AND (workspace_id = '01a1cf17-0c69-7743-96fa-e7c4d8d6a829'::uuid) AND (status = 'ACTIVE'::text) AND ((o.canonical_key ~~* 'a%'::text) OR (display_name ~~* 'a%'::text)))
+                    Buffers: shared hit=4
+Planning:
+  Buffers: shared hit=10
+Planning Time: 0.318 ms
+Execution Time: 0.055 ms

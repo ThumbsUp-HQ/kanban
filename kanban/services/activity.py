@@ -77,6 +77,46 @@ class ActivityEventType(StrEnum):
     ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
     ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
     ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
+    STATE_CREATED = "STATE_CREATED"
+    STATE_UPDATED = "STATE_UPDATED"
+    STATE_DELETED = "STATE_DELETED"
+    PRIORITY_CREATED = "PRIORITY_CREATED"
+    PRIORITY_UPDATED = "PRIORITY_UPDATED"
+    PRIORITY_DELETED = "PRIORITY_DELETED"
+    LABEL_CREATED = "LABEL_CREATED"
+    LABEL_UPDATED = "LABEL_UPDATED"
+    LABEL_DELETED = "LABEL_DELETED"
+    ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
+    MODULE_CREATED = "MODULE_CREATED"
+    MODULE_UPDATED = "MODULE_UPDATED"
+    MODULE_DELETED = "MODULE_DELETED"
+    ISSUE_MODULES_CHANGED = "ISSUE_MODULES_CHANGED"
+    ISSUE_MODULE_ADDED = "ISSUE_MODULE_ADDED"
+    ISSUE_MODULE_REMOVED = "ISSUE_MODULE_REMOVED"
+    LOCAL_ADMIN_LOGIN_SUCCEEDED = "LOCAL_ADMIN_LOGIN_SUCCEEDED"
+    LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
+    ASSIGNEE_ADDED = "ASSIGNEE_ADDED"
+    ASSIGNEE_REMOVED = "ASSIGNEE_REMOVED"
+    COMMENT_CREATED = "COMMENT_CREATED"
+    COMMENT_EDITED = "COMMENT_EDITED"
+    COMMENT_DELETED = "COMMENT_DELETED"
+    MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
+    LINK_CREATED = "LINK_CREATED"
+    LINK_DELETED = "LINK_DELETED"
+    MFA_VERIFIED = "MFA_VERIFIED"
+    MFA_FAILED = "MFA_FAILED"
+    RECOVERY_CODE_USED = "RECOVERY_CODE_USED"
+    RECOVERY_CODES_REGENERATED = "RECOVERY_CODES_REGENERATED"
+    CYCLE_CREATED = "CYCLE_CREATED"
+    CYCLE_UPDATED = "CYCLE_UPDATED"
+    CYCLE_STATUS_CHANGED = "CYCLE_STATUS_CHANGED"
+    CYCLE_ACTIVATED = "CYCLE_ACTIVATED"
+    CYCLE_COMPLETED = "CYCLE_COMPLETED"
+    CYCLE_DELETED = "CYCLE_DELETED"
+    ISSUE_CYCLE_CHANGED = "ISSUE_CYCLE_CHANGED"
+    VIEW_CREATED = "VIEW_CREATED"
+    VIEW_UPDATED = "VIEW_UPDATED"
+    VIEW_DELETED = "VIEW_DELETED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -100,6 +140,46 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.STATE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.STATE_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.STATE_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.PRIORITY_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.PRIORITY_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.PRIORITY_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.LABEL_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.LABEL_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.LABEL_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
+        ActivityEventType.MODULE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.MODULE_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.MODULE_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MODULES_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MODULE_ADDED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MODULE_REMOVED: ActivityCategory.HISTORY,
+        ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
+        ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.ASSIGNEE_ADDED: ActivityCategory.HISTORY,
+        ActivityEventType.ASSIGNEE_REMOVED: ActivityCategory.HISTORY,
+        ActivityEventType.COMMENT_CREATED: ActivityCategory.COMMENT,
+        ActivityEventType.COMMENT_EDITED: ActivityCategory.COMMENT,
+        ActivityEventType.COMMENT_DELETED: ActivityCategory.COMMENT,
+        ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
+        ActivityEventType.LINK_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.LINK_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.MFA_VERIFIED: ActivityCategory.SYSTEM,
+        ActivityEventType.MFA_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.RECOVERY_CODE_USED: ActivityCategory.SYSTEM,
+        ActivityEventType.RECOVERY_CODES_REGENERATED: ActivityCategory.SYSTEM,
+        ActivityEventType.CYCLE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.CYCLE_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.CYCLE_STATUS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.CYCLE_ACTIVATED: ActivityCategory.HISTORY,
+        ActivityEventType.CYCLE_COMPLETED: ActivityCategory.HISTORY,
+        ActivityEventType.CYCLE_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_CYCLE_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.VIEW_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.VIEW_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.VIEW_DELETED: ActivityCategory.HISTORY,
     }
 )
 
@@ -110,8 +190,8 @@ class ActivityEnvelope:
 
     activity_id: uuid.UUID
     workspace_id: uuid.UUID
-    object_id: uuid.UUID
-    actor_principal_id: uuid.UUID
+    object_id: uuid.UUID | None
+    actor_principal_id: uuid.UUID | None
     event_type: ActivityEventType
     category: ActivityCategory
     payload: Mapping[str, JSONValue]
@@ -165,8 +245,8 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
     session: AsyncSession,
     *,
     workspace_id: uuid.UUID,
-    object_id: uuid.UUID,
-    actor_principal_id: uuid.UUID,
+    object_id: uuid.UUID | None = None,
+    actor_principal_id: uuid.UUID | None = None,
     event_type: ActivityEventType,
     payload: Mapping[str, JSONValue],
 ) -> uuid.UUID:
@@ -176,15 +256,17 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
         raise ActivityPayloadTooLarge(msg)
 
     async with session.begin_nested():
-        kind = (
-            await session.execute(
-                text("SELECT object_type::text FROM objects WHERE id = :oid"),
-                {"oid": object_id},
-            )
-        ).scalar_one_or_none()
-        if kind is None:
-            msg = "Activity object is not visible"
-            raise ActivityObjectNotFound(msg)
+        kind: str | None = None
+        if object_id is not None:
+            kind = (
+                await session.execute(
+                    text("SELECT object_type::text FROM objects WHERE id = :oid"),
+                    {"oid": object_id},
+                )
+            ).scalar_one_or_none()
+            if kind is None:
+                msg = "Activity object is not visible"
+                raise ActivityObjectNotFound(msg)
 
         activity_id = (
             await session.execute(

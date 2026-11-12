@@ -130,6 +130,7 @@ async def create_project(
     identifier: str = "PRJ",
     name: str = "Test Project",
     created_by_id: uuid.UUID | None = None,
+    modules_enabled: bool = False,
 ) -> uuid.UUID:
     """Register and create a project in the database."""
     creator_id = created_by_id or uuid.uuid4()
@@ -144,10 +145,16 @@ async def create_project(
     proj_id = cast("uuid.UUID", reg_row.scalar_one())
     await session.execute(
         text(
-            "INSERT INTO projects (id, workspace_id, identifier, name) "
-            "VALUES (:id, :ws_id, :identifier, :name)"
+            "INSERT INTO projects (id, workspace_id, identifier, name, modules_enabled) "
+            "VALUES (:id, :ws_id, :identifier, :name, :modules_enabled)"
         ),
-        {"id": proj_id, "ws_id": ws_id, "identifier": identifier, "name": name},
+        {
+            "id": proj_id,
+            "ws_id": ws_id,
+            "identifier": identifier,
+            "name": name,
+            "modules_enabled": modules_enabled,
+        },
     )
     return proj_id
 

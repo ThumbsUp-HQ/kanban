@@ -1,0 +1,22 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 12 tests using 10 workers
+
+  ✓   1 [tablet] › e2e/editor/paste-autoconvert.spec.ts:194:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 04: Branch 1 binary image paste optimistic placeholder and attachment upload (1.4s)
+  ✓   2 [desktop] › e2e/editor/paste-autoconvert.spec.ts:152:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 03: Branch 2 IDE paste converts VS Code HTML into clean fenced code block (1.4s)
+  ✓   7 [desktop] › e2e/editor/paste-autoconvert.spec.ts:194:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 04: Branch 1 binary image paste optimistic placeholder and attachment upload (1.3s)
+  ✓   5 [desktop] › e2e/editor/paste-autoconvert.spec.ts:102:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 02: Two-step Cmd/Ctrl+Z undo reverts converted HTML to plain text (1.5s)
+  ✓   6 [tablet] › e2e/editor/paste-autoconvert.spec.ts:152:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 03: Branch 2 IDE paste converts VS Code HTML into clean fenced code block (1.5s)
+  ✓   4 [tablet] › e2e/editor/paste-autoconvert.spec.ts:102:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 02: Two-step Cmd/Ctrl+Z undo reverts converted HTML to plain text (1.6s)
+  ✓   9 [mobile] › e2e/editor/paste-autoconvert.spec.ts:102:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 02: Two-step Cmd/Ctrl+Z undo reverts converted HTML to plain text (1.6s)
+  ✓   3 [desktop] › e2e/editor/paste-autoconvert.spec.ts:19:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 01: Branch 3 HTML paste converts to clean Markdown and renders sanitized status pill with exact tooltip (1.7s)
+  ✓  10 [tablet] › e2e/editor/paste-autoconvert.spec.ts:19:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 01: Branch 3 HTML paste converts to clean Markdown and renders sanitized status pill with exact tooltip (1.6s)
+  ✓   8 [mobile] › e2e/editor/paste-autoconvert.spec.ts:19:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 01: Branch 3 HTML paste converts to clean Markdown and renders sanitized status pill with exact tooltip (1.7s)
+  ✓  11 [mobile] › e2e/editor/paste-autoconvert.spec.ts:194:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 04: Branch 1 binary image paste optimistic placeholder and attachment upload (612ms)
+  ✓  12 [mobile] › e2e/editor/paste-autoconvert.spec.ts:152:3 › Clipboard 5-Branch Auto-Convert & Sanitized Pill E2E Verification (KB-P3-46) › 03: Branch 2 IDE paste converts VS Code HTML into clean fenced code block (672ms)
+
+  12 passed (11.3s)

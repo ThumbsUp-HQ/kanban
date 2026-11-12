@@ -12,7 +12,7 @@ async def test_25_ldap_group_mappings_migration_lifecycle() -> None:
     """Verify p2_07 upgrade applies ldap_group_mappings with FORCE RLS, and downgrade reverts."""
     async with MigrationHarness() as harness:
         prev_rev = harness.previous_of("p2_07_ldap_group_mappings")
-        assert prev_rev == "p2_06_oidc_auth_requests"
+        assert prev_rev == "p3_10b_modules"
 
         # 1. Upgrade to p2_07_ldap_group_mappings
         await harness.upgrade("p2_07_ldap_group_mappings")
