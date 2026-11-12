@@ -19,7 +19,7 @@
         "X-CSRF-Token": "<pre-session-csrf-token>"
       },
       "body": {
-        "token": "kb_setup_REDACTED_ENTROPY_32_BYTES_SAMPLE",
+        "token": "kb_setup_[REDACTED]",
         "username": "rootadmin",
         "display_name": "Root Administrator",
         "email": "root@kanban.example",
@@ -61,7 +61,7 @@
         "X-CSRF-Token": "<csrf-token>"
       },
       "body": {
-        "token": "kb_setup_invalid_or_expired_or_already_consumed",
+        "token": "kb_setup_invalid",
         "username": "rootadmin",
         "display_name": "Root Administrator",
         "password": "SecurePassword1234!"
@@ -86,7 +86,7 @@
         "X-CSRF-Token": "<csrf-token>"
       },
       "body": {
-        "token": "kb_setup_rate_limited_token",
+        "token": "kb_setup_exceeded",
         "username": "rootadmin",
         "display_name": "Root Administrator",
         "password": "SecurePassword1234!"
