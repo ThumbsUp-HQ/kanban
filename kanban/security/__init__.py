@@ -4,6 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from kanban.security.access_manifest import (
+    AccessManifest,
+    InheritedScope,
+    ManifestAgent,
+    ManifestDenyOverride,
+    ManifestGroup,
+    ManifestRedactedEntry,
+    ManifestUser,
+    build_access_manifest,
+)
 from kanban.security.envelope import (
     EnvelopeDecryptError,
     EnvelopeInputError,
@@ -16,6 +26,14 @@ from kanban.security.envelope import (
     seal_card_secret,
 )
 from kanban.security.headers import CSP_POLICY, SecurityHeadersMiddleware
+from kanban.security.permissions import (
+    SCOPE_CAPABILITY_MAP,
+    Capability,
+    capabilities_to_names,
+    evaluate_capabilities,
+    parse_token_scope_mask,
+    require_capability,
+)
 from kanban.security.scrubber import (
     ScrubFinding,
     ScrubResult,
@@ -34,11 +52,20 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CSP_POLICY",
+    "SCOPE_CAPABILITY_MAP",
+    "AccessManifest",
+    "Capability",
     "EnvelopeDecryptError",
     "EnvelopeInputError",
+    "InheritedScope",
     "KekProvider",
     "KeyMaterial",
     "KeyMaterialError",
+    "ManifestAgent",
+    "ManifestDenyOverride",
+    "ManifestGroup",
+    "ManifestRedactedEntry",
+    "ManifestUser",
     "ScrubFinding",
     "ScrubResult",
     "SealedSecret",
@@ -46,10 +73,15 @@ __all__ = [
     "SecurityHeadersMiddleware",
     "StaticKekProvider",
     "UnknownKekError",
+    "build_access_manifest",
+    "capabilities_to_names",
     "derive_subkey",
+    "evaluate_capabilities",
     "load_key_material",
     "open_card_secret",
     "outbound_secret_scrubber",
+    "parse_token_scope_mask",
+    "require_capability",
     "rewrap_dek",
     "scrub_text",
     "seal_card_secret",

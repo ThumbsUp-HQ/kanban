@@ -29,6 +29,7 @@ class PrincipalContext:
     token_scopes: tuple[str, ...] = ()
     aal_level: int = 1
     session_id: uuid.UUID | None = None
+    agent_principal_id: uuid.UUID | None = None
 
     def __post_init__(self) -> None:
         """Enforce AAL level bounds."""
