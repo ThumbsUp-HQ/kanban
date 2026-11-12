@@ -40,6 +40,7 @@ def to_admin_schema(card: AuthProviderCard) -> AuthCardAdmin:
         public_config=dict(card.public_config) if card.public_config else {},
         dek_kid=card.dek_kid or "kek-v1",
         last_health_status=card.last_health_status or "UNVERIFIED",
+        last_admin_handshake_at=getattr(card, "last_admin_handshake_at", None),
         created_at=card.created_at,
         updated_at=card.updated_at,
         has_secret=has_secret,

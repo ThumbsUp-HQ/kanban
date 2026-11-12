@@ -61,6 +61,9 @@ class AuthProviderCard(Base):
     last_health_status: Mapped[str] = mapped_column(
         String(64), nullable=False, default="UNVERIFIED", server_default=text("'UNVERIFIED'")
     )
+    last_admin_handshake_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
@@ -252,6 +255,38 @@ class RecoveryCode(Base):
         return (
             f"<RecoveryCode id={self.id} principal_id={self.principal_id} "
             f"used={self.used_at is not None}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()
+
+
+class UserIdentity(Base):
+    """External IdP identity linked to an internal principal (KB-P2-08, KB-P2-09)."""
+
+    __tablename__ = "user_identities"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), nullable=False
+    )
+    auth_card_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("auth_provider_cards.id", ondelete="CASCADE"), nullable=False
+    )
+    immutable_subject_id: Mapped[str] = mapped_column(Text, nullable=False)
+    email_at_link: Mapped[str] = mapped_column(Text, nullable=False)
+    display_name_at_link: Mapped[str | None] = mapped_column(Text, nullable=True)
+    linked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self) -> str:
+        """Sanitized representation omitting internal email."""
+        return (
+            f"<UserIdentity id={self.id} principal_id={self.principal_id} "
+            f"auth_card_id={self.auth_card_id}>"
         )
 
     def __str__(self) -> str:

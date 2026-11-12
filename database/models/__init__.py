@@ -9,6 +9,7 @@ from database.models.auth import (
     OidcAuthRequest,
     RecoveryCode,
     TotpFactor,
+    UserIdentity,
     UserSession,
 )
 from database.models.base import (
@@ -109,6 +110,7 @@ __all__ = [
     "Sticky",
     "TotpFactor",
     "User",
+    "UserIdentity",
     "UserSession",
     "View",
     "ViewLayout",

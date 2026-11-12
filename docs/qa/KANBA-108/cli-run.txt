@@ -1,0 +1,19 @@
+=== COMMAND ===
+uv run kanban-ctl auth emergency-unlock --enable-local-admin --workspace ws-674cec26 --reason QA verification
+EXIT CODE: 0
+=== STDOUT ===
+EMERGENCY_UNLOCK_SUCCESS workspace=674cec26-4aa5-43ab-81a0-f3c0b6815f54 card=ef315a17-583d-4022-ad81-2e5e263766c6 activity=01a1d000-7fad-762c-9a82-762ffb38ad08 reason='QA verification'
+=== STDERR ===
+
+=== AUTH PROVIDER CARD STATUS ===
+id=ef315a17-583d-4022-ad81-2e5e263766c6 provider_kind=LOCAL_ADMIN is_enabled=True
+=== ACTIVITY LEDGER ENTRY ===
+id=01a1d000-7fad-762c-9a82-762ffb38ad08
+workspace_id=674cec26-4aa5-43ab-81a0-f3c0b6815f54
+event_type=EMERGENCY_BREAK_GLASS_INVOKED
+payload={"tty": "/dev/pts/2", "os_uid": 1000, "reason": "QA verification", "card_id": "ef315a17-583d-4022-ad81-2e5e263766c6"}
+prev_hash=0000000000000000000000000000000000000000000000000000000000000000
+row_hash=7001e44eaab22cf494f5a97631c2767af7f30ebb6cad33eac3d99e1ef156fc85
+=== VERIFY ACTIVITY CHAIN ===
+is_valid=True
+checked_rows=1
