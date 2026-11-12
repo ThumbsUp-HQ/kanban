@@ -1,0 +1,23 @@
+:root {
+  /* Typography: Readable technical prose + aligned tabular issue keys */
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --text-body: 0.9375rem;         /* 15px comfortable prose base */
+  --leading-prose: 1.73;          /* 26px generous breathable line-height */
+
+  /* Shell & Board Whitespace (Calm, Open Canvas) */
+  --sidebar-w: 256px;             /* Collapses cleanly to 0px via `[` */
+  --topbar-h: 52px;               /* Uncluttered breadcrumb, view bar & 🛡️/⚠️ pills */
+  --board-canvas-pad: 24px 28px;  /* Outer breathing room around board lanes */
+  --board-col-w: 324px;           /* Spacious Kanban lane width */
+  --board-col-gap: 20px;          /* Clear visual gutter between state columns */
+  --card-pad: 16px 18px;          /* Airy internal card padding */
+  --card-gap: 12px;               /* Vertical breathing room between cards */
+  --list-row-h: 46px;             /* Calm Plane-style list row height */
+
+  /* Ticket Drawer & Full-Screen Editorial Breathing Room */
+  --drawer-w: min(960px, 68vw);   /* 640px spacious prose + 320px properties rail */
+  --prose-pad: 32px 40px;         /* Generous editorial margins inside description */
+  --prop-row-h: 38px;             /* Uncramped property rows */
+  --section-gap: 32px;            /* Clear vertical separation between sections */
+}
