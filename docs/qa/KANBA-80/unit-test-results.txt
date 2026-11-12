@@ -1,0 +1,49 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
+INFO  [alembic.runtime.migration] Running upgrade p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
+INFO  [alembic.runtime.migration] Running upgrade p1_02_objects_spine -> p1_03_principals, Principals, users, groups, and cycle-safe principal_group_closure.
+INFO  [alembic.runtime.migration] Running upgrade p1_03_principals -> p1_04_projects, Projects, workflow_states, project_priorities, and project_labels.
+INFO  [alembic.runtime.migration] Running upgrade p1_04_projects -> p1_11_object_links, Object links, link_kind enum, and link_type_matrix allowlist.
+INFO  [alembic.runtime.migration] Running upgrade p1_11_object_links -> p1_10_views, Views table, view_layout enum, and filter/WIP JSON validators.
+INFO  [alembic.runtime.migration] Running upgrade p1_10_views -> p1_05_issues, Issues table, atomic sequence allocation, and build_markdown_tsvector.
+INFO  [alembic.runtime.migration] Running upgrade p1_05_issues -> p1_12_activity_ledger, Partitioned SHA-256 hash-chained activity_records, append_activity & verify_activity_chain.
+INFO  [alembic.runtime.migration] Running upgrade p1_12_activity_ledger -> p1_13_access_control, Role bindings, resource ACL entries, and effective_resource_access.
+INFO  [alembic.runtime.migration] Running upgrade p1_13_access_control -> p1_08_planning_joins, Cycles, modules, assignees, labels, and subscriptions join tables.
+INFO  [alembic.runtime.migration] Running upgrade p1_08_planning_joins -> p1_06_parent_dag, Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry.
+INFO  [alembic.runtime.migration] Running upgrade p1_06_parent_dag -> p1_09_prose_tables, Prose tables: issue_comments, docs, pages, page_versions, and stickies.
+INFO  [alembic.runtime.migration] Running upgrade p1_09_prose_tables -> p1_07_creator_provenance, Created-by provenance trigger with admin-only override and CREATOR_OVERRIDDEN ledger entry.
+INFO  [alembic.runtime.migration] Running upgrade p1_07_creator_provenance -> p1_14_force_rls, FORCE ROW LEVEL SECURITY policies, session context helpers, and schema-wide RLS catalog gate.
+INFO  [alembic.runtime.migration] Running upgrade p1_14_force_rls -> p1_15_link_auditor, audit_object_links() 6-reason detector, invalid_object_link_audits & incremental triggers.
+INFO  [alembic.runtime.migration] Running upgrade p1_15_link_auditor -> p1_16_link_purger, purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger.
+INFO  [alembic.runtime.migration] Running upgrade p1_16_link_purger -> p1_18_outbox, Transactional outbox_events, OutboxRelay (SKIP LOCKED) and RealtimeBroker.
+INFO  [alembic.runtime.migration] Running upgrade p1_18_outbox -> p5_06_object_embeddings, object_embeddings (pgvector HNSW + FORCE RLS).
+INFO  [alembic.runtime.migration] Running upgrade p5_06_object_embeddings -> p2_03_auth_provider_cards, auth_provider_cards DDL, kb_auth data boundary and envelope encryption (KB-P2-03).
+INFO  [alembic.runtime.migration] Running upgrade p2_03_auth_provider_cards -> p2_18_rate_limit_buckets, Rate limit buckets (PG-backed + Valkey-backed sliding window).
+INFO  [alembic.runtime.migration] Running upgrade p2_18_rate_limit_buckets -> p2_02_sessions, Server-side sessions, HMAC-signed __Host- cookies, rotation, timeouts and CSRF (KB-P2-02).
+INFO  [alembic.runtime.migration] Running upgrade p2_02_sessions -> p5_16_agent_definitions, agent_definitions registry (KB-P5-16).
+INFO  [alembic.runtime.migration] Running upgrade p5_16_agent_definitions -> p3_01b_workflow_state_wip_limits, Workflow states WIP limits (KB-P3-01b).
+INFO  [alembic.runtime.migration] Running upgrade p3_01b_workflow_state_wip_limits -> p2_15_attachments, attachments (FORCE RLS, metadata guards, content-addressed storage keys).
+INFO  [alembic.runtime.migration] Running upgrade p2_15_attachments -> p2_04_local_admin_credentials, Local Admin credentials and kb_auth functions (KB-P2-04).
+INFO  [alembic.runtime.migration] Running upgrade p2_04_local_admin_credentials -> p2_06_oidc_auth_requests, OIDC and OAuth2 authentication requests and state tracking (KB-P2-06).
+INFO  [alembic.runtime.migration] Running upgrade p2_06_oidc_auth_requests -> p3_05_comment_threads_reactions, Threaded comments, reactions, permalinks and access-checked mentions (KB-P3-05).
+INFO  [alembic.runtime.migration] Running upgrade p3_05_comment_threads_reactions -> p2_05a_mfa_totp_recovery, RFC 6238 TOTP, recovery codes, and kb_auth functions (KB-P2-05a).
+INFO  [alembic.runtime.migration] Running upgrade p2_05a_mfa_totp_recovery -> p3_10b_modules, Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
+..................                                                       [100%]
+=============================== warnings summary ===============================
+agent/tests/cli/test_validate_sparkle.py::test_case_6_fault_ttft_timeout_and_db_unreachable
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                     Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------------
+agent/cli_commands/validate_sparkle.py     264      1     70      5    98%   469, 564->580, 567->570, 570->580, 576->580
+------------------------------------------------------------------------------------
+TOTAL                                      264      1     70      5    98%
+Required test coverage of 95% reached. Total coverage: 98.20%
+18 passed, 1 warning in 8.75s
+EXIT_CODE=0

@@ -1,0 +1,73 @@
+=== CLI RUN (a): Positive Run with --verbose-tools ===
+$ uv run kanban-agent validate-sparkle --provider fixture --cassette tests/fixtures/ai/sparkle_cli_pkce_ldap.yaml --input-markdown "Enforce PKCE S256 on OAuth2 cards and verify | before LDAP bind." --project KAN --as-user "@adam" --verbose-tools --database-url "postgresql+asyncpg://kanban_app@/kanban_demo?host=/tmp/kb-pgsock-21"
+=== 1. RENDERED CONTEXT ===
+Project: KAN (Kanban Core) | User: @adam | Surface: description
+Redactions Detected: 0
+--- Rendered Prompt (after secret scrubbing) ---
+<<<UNTRUSTED_CONTEXT_DEMO>>>
+Context from KAN
+<<<UNTRUSTED_CONTEXT_DEMO>>>
+
+Enforce PKCE S256 on OAuth2 cards and verify  [CURSOR]  before LDAP bind.
+
+=== 2. TOOL TRACE ===
+Calls: 1
+  - Tool: retrieval_trace
+    Args: {"project_id": "00000000-0000-0000-0000-000000000010", "project_key": "KAN", "as_user": "@adam"}
+    Result: {"retrieval_status": "ok", "retrieved_objects": [{"object_id": "00000000-0000-0000-0000-000000000100", "canonical_key": "KAN-1", "chunk_index": 0}], "route_trace": [{"provider_config_id": "9e938ff9-522e-44e6-854a-dd5354870cb8", "outcome": "success", "breaker_state": "CLOSED", "ttft_ms": 18.0}]}
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 21.2ms | Total: 21.3ms | Tokens: 32 in, 4 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok
+Detail: Completion accepted (4 tokens); output filter: none
+
+=== 5. ROUTE TRACE ===
+  - Provider: 9e938ff9-522e-44e6-854a-dd5354870cb8 | Outcome: success | Breaker: CLOSED | TTFT: 18.0ms
+Exit code: 0
+
+=== CLI RUN (b): Multi-Iteration Benchmark (--iterations 200) ===
+$ uv run kanban-agent validate-sparkle --provider fixture --cassette tests/fixtures/ai/sparkle_cli_pkce_ldap.yaml --input-markdown "Enforce PKCE S256 on OAuth2 cards and verify | before LDAP bind." --project KAN --as-user "@adam" --iterations 200 --database-url "postgresql+asyncpg://kanban_app@/kanban_demo?host=/tmp/kb-pgsock-21"
+=== 1. RENDERED CONTEXT ===
+Project: KAN (Kanban Core) | User: @adam | Surface: description
+Redactions Detected: 0
+--- Rendered Prompt (after secret scrubbing) ---
+<<<UNTRUSTED_CONTEXT_DEMO>>>
+Context from KAN
+<<<UNTRUSTED_CONTEXT_DEMO>>>
+
+Enforce PKCE S256 on OAuth2 cards and verify  [CURSOR]  before LDAP bind.
+
+=== 2. TOOL TRACE ===
+Calls: 1; Tools: retrieval_trace
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 2.2ms | Total: 466.0ms | Tokens: 32 in, 4 out
+Iterations: 200
+Percentiles: p50=2.26ms | p90=2.63ms | p95=2.80ms | p99=3.11ms
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok
+Detail: Completion accepted (4 tokens); output filter: none
+
+=== 5. ROUTE TRACE ===
+  - Provider: 3b53391e-ad8c-4060-89d3-6f00433f668c | Outcome: success | Breaker: CLOSED | TTFT: 18.0ms
+Exit code: 0
+
+=== CLI RUN (c): Negative Run: Invalid Cursor Marker (Two Pipes) ===
+$ uv run kanban-agent validate-sparkle --provider fixture --cassette tests/fixtures/ai/sparkle_cli_pkce_ldap.yaml --input-markdown "First | and second | marker." --project KAN --as-user "@adam" --database-url "postgresql+asyncpg://kanban_app@/kanban_demo?host=/tmp/kb-pgsock-21"
+=== 1. RENDERED CONTEXT ===
+Input markdown parsing failed: exactly one unescaped | marker required.
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 0.0ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: CURSOR_MARKER_INVALID
+Error Code: CURSOR_MARKER_INVALID
+Detail: Input markdown must contain exactly one unescaped | cursor marker.
+Exit code: 2
