@@ -1,0 +1,50 @@
+=== Build and Lint Verification Suite: KANBA-16 ===
+Timestamp: 2026-11-12 01:51:54Z
+
+--- 1. make check ---
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+199 files already formatted
+uv run mypy
+Success: no issues found in 16 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 12 files, 4 dependencies.
+----------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+Exit Code: 0
+
+--- 2. uv run pre-commit run --all-files ---
+trim trailing whitespace.................................................Passed
+fix end of files.........................................................Passed
+check for merge conflicts................................................Passed
+check for added large files..............................................Passed
+ruff check...............................................................Passed
+ruff format..............................................................Passed
+mypy.....................................................................Passed
+no unicode dashes........................................................Passed
+Exit Code: 0
+
+--- 3. uv run python -m scripts.check_no_dashes --all ---
+Exit Code: 0
+
+=== End of Build and Lint Verification Suite ===

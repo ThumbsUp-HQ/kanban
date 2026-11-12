@@ -1,0 +1,20 @@
+Command: uv run pytest scripts/tests -q --cov=scripts --cov-branch --cov-report=term-missing --cov-fail-under=95
+Timestamp: 2026-11-12 01:50:42Z
+Working Directory: /home/adamoutler/kanban
+----------------------------------------------------------------------
+.........                                                                [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                    Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------------
+scripts/__init__.py                         0      0      0      0   100%
+scripts/check_no_dashes.py                 61      1     34      2    97%   62->60, 94
+scripts/tests/__init__.py                   0      0      0      0   100%
+scripts/tests/test_check_no_dashes.py      78      0      0      0   100%
+-----------------------------------------------------------------------------------
+TOTAL                                     139      1     34      2    98%
+Required test coverage of 95% reached. Total coverage: 98.27%
+9 passed in 0.09s
+----------------------------------------------------------------------
+Exit Code: 0
