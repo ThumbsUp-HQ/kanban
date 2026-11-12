@@ -34,8 +34,10 @@ __all__ = [
     "SealedSecret",
     "StaticKekProvider",
     "UnknownKekError",
+    "open_bound",
     "open_card_secret",
     "rewrap_dek",
+    "seal_bound",
     "seal_card_secret",
 ]
 
@@ -286,6 +288,100 @@ def rewrap_dek(
             wrapped_dek=new_wrapped_dek,
             dek_kid=new_kid,
         )
+    finally:
+        for idx in range(len(dek)):
+            dek[idx] = 0
+
+
+def _build_bound_dek_aad(aad: bytes, kid: str) -> bytes:
+    return b"kanban/bound_dek/v1|" + kid.encode("ascii") + b"|" + aad
+
+
+def seal_bound(
+    plaintext: bytes,
+    aad: bytes,
+    kek: KekProvider,
+    kid: str | None = None,
+) -> SealedSecret:
+    """Seal plaintext with arbitrary AAD binding using a fresh per-secret DEK."""
+    if len(plaintext) > MAX_PLAINTEXT_BYTES:
+        raise EnvelopeInputError(len(plaintext), MAX_PLAINTEXT_BYTES)
+
+    dek_raw = AESGCM.generate_key(bit_length=256)
+    dek = bytearray(dek_raw)
+    try:
+        secret_nonce = os.urandom(NONCE_LENGTH_BYTES)
+        secret_cipher = AESGCM(bytes(dek)).encrypt(secret_nonce, plaintext, aad)
+        encrypted_secret_blob = bytes([BLOB_VERSION]) + secret_nonce + secret_cipher
+
+        chosen_kid = kid if kid is not None else kek.current_kid()
+        kek_bytes = kek.get(chosen_kid)
+        dek_nonce = os.urandom(NONCE_LENGTH_BYTES)
+        dek_aad = _build_bound_dek_aad(aad, chosen_kid)
+        wrapped_cipher = AESGCM(kek_bytes).encrypt(dek_nonce, bytes(dek), dek_aad)
+        wrapped_dek = bytes([BLOB_VERSION]) + dek_nonce + wrapped_cipher
+
+        return SealedSecret(
+            encrypted_secret_blob=encrypted_secret_blob,
+            wrapped_dek=wrapped_dek,
+            dek_kid=chosen_kid,
+        )
+    finally:
+        for idx in range(len(dek)):
+            dek[idx] = 0
+
+
+def open_bound(
+    sealed: SealedSecret,
+    aad: bytes,
+    kek: KekProvider,
+) -> bytearray:
+    """Open sealed secret with custom AAD binding.
+
+    Returns mutable bytearray so caller can zeroize (best effort in CPython).
+    """
+    try:
+        kek_bytes = kek.get(sealed.dek_kid)
+    except (UnknownKekError, KeyError):
+        err_code = CODE_UNKNOWN_KID
+        raise EnvelopeDecryptError(err_code) from None
+
+    if len(sealed.wrapped_dek) < MIN_BLOB_LENGTH_BYTES:
+        err_code = CODE_TRUNCATED
+        raise EnvelopeDecryptError(err_code)
+    if sealed.wrapped_dek[0] != BLOB_VERSION:
+        err_code = CODE_BAD_VERSION
+        raise EnvelopeDecryptError(err_code)
+
+    dek_nonce = sealed.wrapped_dek[1 : 1 + NONCE_LENGTH_BYTES]
+    dek_ct = sealed.wrapped_dek[1 + NONCE_LENGTH_BYTES :]
+    dek_aad = _build_bound_dek_aad(aad, sealed.dek_kid)
+
+    try:
+        dek_plain = AESGCM(kek_bytes).decrypt(dek_nonce, dek_ct, dek_aad)
+    except InvalidTag:
+        err_code = CODE_TAG_MISMATCH
+        raise EnvelopeDecryptError(err_code) from None
+
+    dek = bytearray(dek_plain)
+    try:
+        if len(sealed.encrypted_secret_blob) < MIN_BLOB_LENGTH_BYTES:
+            err_code = CODE_TRUNCATED
+            raise EnvelopeDecryptError(err_code)
+        if sealed.encrypted_secret_blob[0] != BLOB_VERSION:
+            err_code = CODE_BAD_VERSION
+            raise EnvelopeDecryptError(err_code)
+
+        secret_nonce = sealed.encrypted_secret_blob[1 : 1 + NONCE_LENGTH_BYTES]
+        secret_ct = sealed.encrypted_secret_blob[1 + NONCE_LENGTH_BYTES :]
+
+        try:
+            secret_plain = AESGCM(bytes(dek)).decrypt(secret_nonce, secret_ct, aad)
+        except InvalidTag:
+            err_code = CODE_TAG_MISMATCH
+            raise EnvelopeDecryptError(err_code) from None
+
+        return bytearray(secret_plain)
     finally:
         for idx in range(len(dek)):
             dek[idx] = 0

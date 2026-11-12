@@ -7,6 +7,8 @@ from database.models.auth import (
     AuthProviderCard,
     LocalAdminCredential,
     OidcAuthRequest,
+    RecoveryCode,
+    TotpFactor,
     UserSession,
 )
 from database.models.base import (
@@ -101,9 +103,11 @@ __all__ = [
     "ProjectPriority",
     "RateLimitBucket",
     "RbacRole",
+    "RecoveryCode",
     "ResourceAclEntry",
     "RoleBinding",
     "Sticky",
+    "TotpFactor",
     "User",
     "UserSession",
     "View",

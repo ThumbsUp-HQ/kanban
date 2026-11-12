@@ -97,6 +97,10 @@ class ActivityEventType(StrEnum):
     MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
     LINK_CREATED = "LINK_CREATED"
     LINK_DELETED = "LINK_DELETED"
+    MFA_VERIFIED = "MFA_VERIFIED"
+    MFA_FAILED = "MFA_FAILED"
+    RECOVERY_CODE_USED = "RECOVERY_CODE_USED"
+    RECOVERY_CODES_REGENERATED = "RECOVERY_CODES_REGENERATED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -140,6 +144,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
         ActivityEventType.LINK_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.LINK_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.MFA_VERIFIED: ActivityCategory.SYSTEM,
+        ActivityEventType.MFA_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.RECOVERY_CODE_USED: ActivityCategory.SYSTEM,
+        ActivityEventType.RECOVERY_CODES_REGENERATED: ActivityCategory.SYSTEM,
     }
 )
 

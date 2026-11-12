@@ -79,6 +79,7 @@ class SessionCookieResolver:
             aal_level=user_session.aal_level,
             session_id=user_session.id,
             mfa_pending=user_session.mfa_pending,
+            aal2_verified_at=user_session.aal2_verified_at,
         )
         request.state.principal = ctx
         return ctx
