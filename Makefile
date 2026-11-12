@@ -1,4 +1,4 @@
-.PHONY: check fmt testdb-up testdb-down license image-slim image-standalone hadolint
+.PHONY: check fmt testdb-up testdb-down license image-slim image-standalone hadolint compose-check
 
 check:
 	uv run ruff check .
@@ -29,3 +29,11 @@ image-standalone:
 
 hadolint:
 	docker run --rm -i hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d < Dockerfile
+
+compose-check:
+	install -d -m 0700 deploy/secrets
+	test -f deploy/secrets/postgres_password.txt || echo "placeholder_postgres_password" > deploy/secrets/postgres_password.txt
+	test -f deploy/secrets/master_kek.txt || echo "placeholder_master_kek_32_bytes_long" > deploy/secrets/master_kek.txt
+	chmod 0600 deploy/secrets/*.txt
+	docker compose -f docker-compose.yml --profile sandbox config --quiet
+	uv run python -m scripts.check_compose_networks
