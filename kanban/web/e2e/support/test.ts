@@ -54,9 +54,10 @@ export async function testGuardFixture(
   const offOriginRequests: string[] = [];
   await page.route('**', (route) => {
     const urlStr = route.request().url();
+    const port = process.env.E2E_PORT ?? '4173';
     if (
-      urlStr.startsWith('http://127.0.0.1:4173') ||
-      urlStr.startsWith('http://localhost:4173')
+      urlStr.startsWith(`http://127.0.0.1:${port}`) ||
+      urlStr.startsWith(`http://localhost:${port}`)
     ) {
       return route.continue();
     }

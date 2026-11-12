@@ -1,0 +1,81 @@
+### CMD: pnpm --dir kanban/web check:api
+
+> @kanban/web@0.1.0 check:api /tmp/kb-wt-KANBA-92/kanban/web
+> node scripts/gen-api.mjs && git diff --exit-code src/api/schema.gen.ts openapi.json
+
+✨ openapi-typescript 7.6.1
+🚀 /tmp/kb-wt-KANBA-92/kanban/web/openapi.json → /tmp/kb-wt-KANBA-92/kanban/web/src/api/schema.gen.ts [192.6ms]
+EXIT_CODE=0
+
+### CMD: pnpm --dir kanban/web typecheck
+
+> @kanban/web@0.1.0 typecheck /tmp/kb-wt-KANBA-92/kanban/web
+> tsc -b --noEmit
+
+EXIT_CODE=0
+
+### CMD: pnpm --dir kanban/web lint
+
+> @kanban/web@0.1.0 lint /tmp/kb-wt-KANBA-92/kanban/web
+> eslint . --max-warnings 0
+
+EXIT_CODE=0
+
+### CMD: pnpm --dir kanban/web build
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.39 kB │ gzip:   0.27 kB
+dist/assets/index-D29DKeZR.css   25.53 kB │ gzip:   5.46 kB
+dist/assets/index-C2c2954a.js   751.74 kB │ gzip: 234.71 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 288ms
+EXIT_CODE=0
+
+### CMD: uv run mypy --strict kanban/tools
+Success: no issues found in 2 source files
+EXIT_CODE=0
+
+### CMD: uv run ruff check kanban/tools
+All checks passed!
+EXIT_CODE=0
+
+### CMD: uv run ruff check kanban
+All checks passed!
+EXIT_CODE=0
+
+### CMD: uv run ruff format --check kanban
+207 files already formatted
+EXIT_CODE=0
+
+### CMD: uv run mypy --strict kanban
+Success: no issues found in 205 source files
+EXIT_CODE=0
+
+### CMD: uv run lint-imports
+
+---------
+Contracts
+---------
+
+Analyzed 411 files, 1039 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT
+
+Contracts: 2 kept, 0 broken.
+EXIT_CODE=0
+
+### CMD: uv run python -m scripts.check_no_dashes --all
+EXIT_CODE=0
+
+### CMD: make license
+uv run python -m scripts.license_gate
+SUMMARY python=112 node=1 violations=0
+EXIT_CODE=0
+

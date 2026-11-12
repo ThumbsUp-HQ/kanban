@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { App, isStoryEnabled } from './App';
 import { ThemeProvider } from './theme/ThemeProvider';
 
@@ -56,6 +56,30 @@ describe('App component', () => {
       );
       const story = screen.getByTestId('editor-story');
       expect(story).toBeDefined();
+    } finally {
+      window.history.pushState({}, '', originalPathname);
+    }
+  });
+
+  it('renders RealtimeStory when pathname is /__dev/realtime and forces each state', () => {
+    const originalPathname = window.location.pathname;
+    try {
+      window.history.pushState({}, '', '/__dev/realtime');
+      render(
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>,
+      );
+      expect(screen.getByTestId('realtime-story')).toBeDefined();
+      expect(document.querySelector('.realtime-status-chip')).toBeNull();
+      fireEvent.click(screen.getByTestId('force-closed'));
+      expect(document.querySelector('.realtime-status-chip')?.textContent).toBe(
+        'Offline - changes will sync when reconnected',
+      );
+      fireEvent.click(screen.getByTestId('force-sse-fallback'));
+      expect(document.querySelector('.realtime-status-chip')?.textContent).toBe(
+        'Live updates via fallback channel',
+      );
     } finally {
       window.history.pushState({}, '', originalPathname);
     }

@@ -1,5 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
+const PORT = process.env.E2E_PORT ?? '4173';
+
 export default defineConfig({
   testDir: 'e2e',
   testMatch: '**/*.spec.ts',
@@ -12,7 +14,7 @@ export default defineConfig({
     ['json', { outputFile: 'test-results/e2e.json' }],
   ],
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: `http://127.0.0.1:${PORT}`,
     reducedMotion: 'reduce',
     colorScheme: 'light',
     locale: 'en-US',
@@ -50,8 +52,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm build && pnpm preview --host 127.0.0.1 --port 4173 --strictPort',
-    url: 'http://127.0.0.1:4173',
+    command: `pnpm build && pnpm preview --host 127.0.0.1 --port ${PORT} --strictPort`,
+    url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: false,
     timeout: 120000,
     env: {

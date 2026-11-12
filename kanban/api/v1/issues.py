@@ -41,12 +41,12 @@ async def create_issue(
 
 
 @router.get(
-    "/issues/{issue_ref}",
+    "/issues/{issue_key}",
     response_model=IssueResponse,
     summary="Get an issue by key or UUID",
 )
 async def get_issue(
-    issue_ref: str,
+    issue_key: str,
     caller: Caller,
     session: Session,
     response: Response,
@@ -54,7 +54,7 @@ async def get_issue(
 ) -> IssueResponse | Response:
     """Return an issue, or 304 when If-None-Match matches current description ETag."""
     async with timing_floor(floor_ms=25.0):
-        issue = await svc.get_issue_or_404(session, caller, issue_ref)
+        issue = await svc.get_issue_or_404(session, caller, issue_key)
         sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
         etag = f'"{sha256_hex}"'
 
@@ -71,12 +71,12 @@ async def get_issue(
 
 
 @router.patch(
-    "/issues/{issue_ref}",
+    "/issues/{issue_key}",
     response_model=IssueResponse,
     summary="Update an issue",
 )
 async def patch_issue(  # noqa: PLR0913, PLR0917
-    issue_ref: str,
+    issue_key: str,
     body: IssuePatch,
     caller: Caller,
     session: Session,
@@ -85,7 +85,7 @@ async def patch_issue(  # noqa: PLR0913, PLR0917
 ) -> IssueResponse:
     """Update issue fields under description ETag concurrency check."""
     async with timing_floor(floor_ms=25.0):
-        result, new_etag = await svc.update_issue(session, caller, issue_ref, body, if_match)
+        result, new_etag = await svc.update_issue(session, caller, issue_key, body, if_match)
         response.headers["ETag"] = new_etag
         return result
 

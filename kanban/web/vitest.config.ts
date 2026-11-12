@@ -14,7 +14,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}', 'build/**/*.ts', 'e2e/support/**/*.ts'],
-      exclude: ['src/main.tsx', '**/*.test.*', '**/*.spec.*'],
+      exclude: ['src/main.tsx', '**/*.test.*', '**/*.spec.*', 'src/api/schema.gen.ts', '**/*.gen.ts'],
       thresholds: {
         lines: 95,
         functions: 95,
