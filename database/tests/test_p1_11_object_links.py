@@ -9,6 +9,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
 
+from database.tests.conftest import bind_workspace_admin, bootstrap_workspace_admin
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,14 +56,8 @@ async def _create_workspace(
     name: str = "Test Workspace",
 ) -> uuid.UUID:
     """Create a test workspace."""
-    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
-    row = await session.execute(
-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
-        {"slug": ws_slug, "name": name},
-    )
-    val = row.scalar_one()
-    assert isinstance(val, uuid.UUID)
-    return val
+    ws_id, _ = await bootstrap_workspace_admin(session, slug=slug, name=name)
+    return ws_id
 
 
 async def _register_obj(
@@ -73,7 +69,8 @@ async def _register_obj(
     title: str = "Sample Title",
 ) -> uuid.UUID:
     """Register an object in the objects spine."""
-    user_id = uuid.uuid4()
+    admin_id = await bind_workspace_admin(session, ws_id)
+    user_id = admin_id
     row = await session.execute(
         text(
             "SELECT register_object("
@@ -303,12 +300,14 @@ async def test_04_negative_cross_workspace_and_foreign_key_guards(
     app_session: AsyncSession,
 ) -> None:
     """Test Case 4: Cross-workspace link, composite FK, RESTRICT delete, and permissions."""
+    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
     ws1_id = await _create_workspace(db_session, name="Workspace 1")
     ws2_id = await _create_workspace(db_session, name="Workspace 2")
     user_id = uuid.uuid4()
 
     issue_ws1_id = await _register_obj(db_session, ws1_id, "issue", "W1-1")
     issue_ws2_id = await _register_obj(db_session, ws2_id, "issue", "W2-1")
+    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
 
     # 1. Cross-workspace link raises LINK_CROSS_WORKSPACE_FORBIDDEN
     with pytest.raises(DBAPIError) as exc_cross:
@@ -397,6 +396,7 @@ async def test_04_negative_cross_workspace_and_foreign_key_guards(
     assert pgcode_del == "23503"
 
     # 5. As kanban_app, INSERT INTO link_type_matrix raises 42501
+    await app_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
     with pytest.raises((ProgrammingError, DBAPIError)) as exc_perm:
         async with app_session.begin_nested():
             await app_session.execute(

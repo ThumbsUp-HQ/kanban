@@ -21,6 +21,12 @@ from database.session import RLSSessionFactory
 from database.testing.pg_harness import build_dsn
 from kanban.api.deps import PrincipalContext
 from kanban.app import create_app
+from kanban.auth.sessions.csrf import (
+    CSRF_COOKIE_NAME,
+    CSRF_HEADER_NAME,
+    PRE_SESSION_ID,
+    generate_csrf_token,
+)
 from kanban.tests.contract import ContractRecorder
 from kanban.tests.security.helpers import (
     add_role_binding,
@@ -96,8 +102,14 @@ async def api_env(
     app.state.session_factory = RLSSessionFactory(app_engine)
     app.state.principal_resolver = resolver
     transport = httpx.ASGITransport(app=app)
+    csrf_token = generate_csrf_token(PRE_SESSION_ID, b"\x00" * 32)
     try:
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={CSRF_HEADER_NAME: csrf_token},
+            cookies={CSRF_COOKIE_NAME: csrf_token},
+        ) as client:
             yield ApiEnv(client, resolver, committed_db_session, workspace_id)
     finally:
         await app_engine.dispose()

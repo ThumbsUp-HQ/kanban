@@ -7,21 +7,20 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.tests.conftest import (
+    bind_workspace_admin,
+    bootstrap_workspace_admin,
+)
+
 
 async def _create_workspace(
     session: AsyncSession,
     slug: str | None = None,
     name: str = "Test Workspace",
 ) -> uuid.UUID:
-    """Create a test workspace."""
-    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
-    row = await session.execute(
-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
-        {"slug": ws_slug, "name": name},
-    )
-    val = row.scalar_one()
-    assert isinstance(val, uuid.UUID)
-    return val
+    """Create a test workspace and bootstrap an admin principal context."""
+    ws_id, _ = await bootstrap_workspace_admin(session, slug=slug, name=name)
+    return ws_id
 
 
 async def _create_test_project(
@@ -33,6 +32,7 @@ async def _create_test_project(
     extra: dict[str, str | int] | None = None,
 ) -> uuid.UUID:
     """Register and create a project in the database."""
+    await bind_workspace_admin(session, workspace_id)
     extra_dict = extra or {}
     description_markdown = str(extra_dict.get("description_markdown", ""))
     auto_archive_raw = extra_dict.get("auto_archive_days")
@@ -217,6 +217,7 @@ async def test_04_duplicate_identifier_and_spine_mismatch(app_session: AsyncSess
     assert p_other_ws is not None
 
     # Spine mismatch: object registered with 'OTHER', but project inserted with 'MIS'
+    await bind_workspace_admin(app_session, ws1)
     sp2 = await app_session.begin_nested()
     res2 = await app_session.execute(
         text(

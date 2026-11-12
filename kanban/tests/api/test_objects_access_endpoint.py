@@ -24,6 +24,12 @@ from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException
 from kanban.api.v1.objects_access import agent_kill_switch, get_object_access_manifest
 from kanban.app import create_app
+from kanban.auth.sessions.csrf import (
+    CSRF_COOKIE_NAME,
+    CSRF_HEADER_NAME,
+    PRE_SESSION_ID,
+    generate_csrf_token,
+)
 from kanban.security.permissions import Capability
 from kanban.tests.security.helpers import (
     add_acl_entry,
@@ -402,8 +408,14 @@ async def test_case_8_objects_access_and_kill_switch(
         app.state.principal_resolver = resolver
 
         transport = httpx.ASGITransport(app=app)
+        csrf_token = generate_csrf_token(PRE_SESSION_ID, b"\x00" * 32)
 
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={CSRF_HEADER_NAME: csrf_token},
+            cookies={CSRF_COOKIE_NAME: csrf_token},
+        ) as client:
             await _verify_access_and_kill_switch(client, resolver, data, committed_db_session)
             await _run_timing_equalization(client, resolver, data)
     finally:

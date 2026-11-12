@@ -19,6 +19,7 @@ from kanban.content.normalize import (
     InputKind,
     NormalizationReport,
     normalize_inspect,
+    normalize_markdown,
     normalize_plain_text,
     normalize_to_markdown,
 )
@@ -68,6 +69,7 @@ __all__ = [
     "nh3_clean_html",
     "nh3_sanitize_and_serialize_gfm",
     "normalize_inspect",
+    "normalize_markdown",
     "normalize_plain_text",
     "normalize_to_markdown",
     "prune_hidden_dom",
