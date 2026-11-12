@@ -7,8 +7,20 @@ pre-compressed single page application static assets, and security middleware.
 from __future__ import annotations
 
 from fastapi import APIRouter, FastAPI, WebSocket
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from kanban.api.deps import DenyAllResolver
+from kanban.api.problems import (
+    ProblemException,
+    problem_exception_handler,
+    starlette_http_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
+from kanban.api.request_id import RequestIdMiddleware
+from kanban.api.v1 import build_v1_router
 from kanban.security.headers import SecurityHeadersMiddleware
 from kanban.settings import Settings
 from kanban.web_static import PrecompressedSPAStaticApp
@@ -20,17 +32,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings = Settings()
 
     app = FastAPI(
+        title="👍kanban API",
         docs_url=None,
         redoc_url=None,
         openapi_url="/api/openapi.json",
     )
 
-    # API Router
-    api_router = APIRouter(prefix="/api")
+    # Initialize default state dependencies
+    app.state.principal_resolver = DenyAllResolver()
+    app.state.session_factory = None
 
-    @api_router.get("/v1/health")
-    async def health_check() -> dict[str, str]:
-        return {"status": "ok"}
+    # Register RFC 7807 problem exception handlers
+    app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(StarletteHTTPException, starlette_http_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(Exception, unhandled_exception_handler)
+
+    # Mount canonical /api/v1 router tree
+    app.include_router(build_v1_router(), prefix="/api/v1")
+
+    # Fallback API router for legacy/subpath 404s
+    api_router = APIRouter(prefix="/api")
 
     @api_router.api_route(
         "/{full_path:path}",
@@ -89,6 +111,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # SPA Static assets mounted at root
     app.mount("/", PrecompressedSPAStaticApp(dist_dir=settings.web_dist))
+
+    # Add RequestIdMiddleware so request-id is available inside all routes and middleware
+    app.add_middleware(RequestIdMiddleware)
 
     # Add security headers and host protection middleware
     app.add_middleware(SecurityHeadersMiddleware, settings=settings)

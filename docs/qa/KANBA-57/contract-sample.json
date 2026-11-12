@@ -1,0 +1,74 @@
+{
+  "401_AUTHENTICATION_REQUIRED": {
+    "status_code": 401,
+    "headers": {
+      "x-request-id": "3049f785e24c4c5fb2c7fe805c29e6e8",
+      "content-length": "181",
+      "content-type": "application/problem+json",
+      "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "x-frame-options": "DENY",
+      "cross-origin-opener-policy": "same-origin",
+      "cross-origin-resource-policy": "same-origin",
+      "permissions-policy": "camera=(), microphone=(), geolocation=()",
+      "strict-transport-security": "max-age=63072000; includeSubDomains"
+    },
+    "body": {
+      "type": "urn:kanban:problem:AUTHENTICATION_REQUIRED",
+      "title": "Authentication Required",
+      "status": 401,
+      "code": "AUTHENTICATION_REQUIRED",
+      "request_id": "3049f785e24c4c5fb2c7fe805c29e6e8"
+    }
+  },
+  "422_VALIDATION_FAILED": {
+    "status_code": 422,
+    "headers": {
+      "x-request-id": "f355bc46506e456c9d3c4716c95e4469",
+      "content-length": "344",
+      "content-type": "application/problem+json",
+      "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "x-frame-options": "DENY",
+      "cross-origin-opener-policy": "same-origin",
+      "cross-origin-resource-policy": "same-origin",
+      "permissions-policy": "camera=(), microphone=(), geolocation=()",
+      "strict-transport-security": "max-age=63072000; includeSubDomains"
+    },
+    "body": {
+      "type": "urn:kanban:problem:VALIDATION_FAILED",
+      "title": "Validation Failed",
+      "status": 422,
+      "code": "VALIDATION_FAILED",
+      "detail": "Request validation failed",
+      "request_id": "f355bc46506e456c9d3c4716c95e4469",
+      "errors": [
+        {
+          "path": "username",
+          "message": "String should have at least 3 characters"
+        },
+        {
+          "path": "count",
+          "message": "Input should be greater than 0"
+        }
+      ]
+    }
+  },
+  "500_INTERNAL_ERROR": {
+    "status_code": 500,
+    "headers": {
+      "x-request-id": "2562e856a339481388ae8d1f7afe56f5",
+      "content-length": "161",
+      "content-type": "application/problem+json"
+    },
+    "body": {
+      "type": "urn:kanban:problem:INTERNAL_ERROR",
+      "title": "Internal Server Error",
+      "status": 500,
+      "code": "INTERNAL_ERROR",
+      "request_id": "2562e856a339481388ae8d1f7afe56f5"
+    }
+  }
+}
