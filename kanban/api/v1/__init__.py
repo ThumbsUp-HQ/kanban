@@ -20,6 +20,7 @@ from kanban.api.v1.cycles import router as cycles_router
 from kanban.api.v1.docs import router as docs_router
 from kanban.api.v1.health import router as health_router
 from kanban.api.v1.issue_archive import router as archive_router
+from kanban.api.v1.issue_copy import router as issue_copy_router
 from kanban.api.v1.issue_move import router as issue_move_router
 from kanban.api.v1.issue_provenance import router as issue_provenance_router
 from kanban.api.v1.issues import router as issues_router
@@ -46,6 +47,7 @@ def build_v1_router() -> APIRouter:
     v1.include_router(project_config_router)
     v1.include_router(modules_router)
     v1.include_router(issues_router)
+    v1.include_router(issue_copy_router)
     v1.include_router(assignees_router)
     v1.include_router(links_router)
     v1.include_router(issue_move_router)
