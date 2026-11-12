@@ -69,6 +69,7 @@ packages = ["database", "kanban", "mcp", "agent", "scripts", "deploy"]
 # SQLAlchemy asyncio runs coroutine frames inside greenlets; without this setting coverage.py
 # loses line tracking after the first awaited DB call and under-reports service/route modules.
 concurrency = ["greenlet", "thread"]
+branch = true
 
 [tool.pytest.ini_options]
 addopts = "--disable-socket --allow-unix-socket -p no:cacheprovider --strict-markers"

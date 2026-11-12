@@ -1,0 +1,23 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 12 tests using 10 workers
+
+  ✓   3 [desktop] › e2e/editor/media-viewport.spec.ts:194:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 04: Air-gap local-only mode renders offline placeholder with zero network requests (1.3s)
+  ✓   8 [desktop] › e2e/editor/media-viewport.spec.ts:155:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 03: External media displays external proxy badge with tooltip explanation (1.3s)
+  ✓   4 [tablet] › e2e/editor/media-viewport.spec.ts:155:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 03: External media displays external proxy badge with tooltip explanation (1.5s)
+  ✓   5 [tablet] › e2e/editor/media-viewport.spec.ts:194:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 04: Air-gap local-only mode renders offline placeholder with zero network requests (1.5s)
+  ✓   9 [desktop] › e2e/editor/media-viewport.spec.ts:20:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 01: Safe SVG with dark strokes toggles contrast backdrops (theme -> light -> dark -> checkerboard) (1.6s)
+  ✓   1 [tablet] › e2e/editor/media-viewport.spec.ts:20:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 01: Safe SVG with dark strokes toggles contrast backdrops (theme -> light -> dark -> checkerboard) (1.9s)
+  ✓   7 [mobile] › e2e/editor/media-viewport.spec.ts:20:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 01: Safe SVG with dark strokes toggles contrast backdrops (theme -> light -> dark -> checkerboard) (1.8s)
+  ✓   2 [desktop] › e2e/editor/media-viewport.spec.ts:100:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 02: Media Lightbox opens in modal dialog with 10% - 800% pan/zoom controls (2.0s)
+  ✓   6 [mobile] › e2e/editor/media-viewport.spec.ts:100:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 02: Media Lightbox opens in modal dialog with 10% - 800% pan/zoom controls (2.1s)
+  ✓  10 [tablet] › e2e/editor/media-viewport.spec.ts:100:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 02: Media Lightbox opens in modal dialog with 10% - 800% pan/zoom controls (2.3s)
+  ✓  11 [mobile] › e2e/editor/media-viewport.spec.ts:155:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 03: External media displays external proxy badge with tooltip explanation (634ms)
+  ✓  12 [mobile] › e2e/editor/media-viewport.spec.ts:194:3 › Media Viewport & Lightbox E2E Verification & Design Proofs (KB-P3-48) › 04: Air-gap local-only mode renders offline placeholder with zero network requests (567ms)
+
+  12 passed (11.5s)
+PLAYWRIGHT_EXIT=0

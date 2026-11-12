@@ -200,14 +200,32 @@ class KanbanApiClient:
         prob_type = str(problem.get("type", ""))
         prob_title = str(problem.get("title", ""))
         prob_detail = str(problem.get("detail", ""))
+        prob_code = str(problem.get("code", ""))
+        prob_hint = problem.get("hint")
+        prob_candidates = problem.get("candidates")
         error_message = prob_detail or prob_title or f"Upstream returned HTTP {status_code}"
 
-        mapped_code = self._resolve_error_code(status_code, prob_type)
-        raise KbMcpError(mapped_code, error_message)
+        mapped_code = self._resolve_error_code(status_code, prob_type, prob_code)
+        hint_str = str(prob_hint) if prob_hint is not None else None
+        candidates_list = (
+            [dict(c) for c in prob_candidates] if isinstance(prob_candidates, list) else None
+        )
+        raise KbMcpError(mapped_code, error_message, hint=hint_str, candidates=candidates_list)
 
     @staticmethod
-    def _resolve_error_code(status_code: int, prob_type: str) -> McpErrorCode:
+    def _resolve_conflict_code(prob_type: str, prob_code: str) -> McpErrorCode:
+        if prob_type.endswith("etag-mismatch"):
+            return McpErrorCode.CONFLICT_ETAG
+        if prob_type.endswith("ambiguous-identifier") or prob_code == "AMBIGUOUS_IDENTIFIER":
+            return McpErrorCode.AMBIGUOUS_IDENTIFIER
+        return McpErrorCode.VALIDATION_FAILED
+
+    @staticmethod
+    def _resolve_error_code(status_code: int, prob_type: str, prob_code: str = "") -> McpErrorCode:
         """Determine McpErrorCode from HTTP status and problem type."""
+        if prob_code == "MODULES_DISABLED" or prob_type.endswith("modules-disabled"):
+            return McpErrorCode.MODULES_DISABLED
+
         direct_map = {
             _HTTP_NOT_FOUND: McpErrorCode.NOT_FOUND,
             _HTTP_PRECONDITION_FAILED: McpErrorCode.CONFLICT_ETAG,
@@ -217,9 +235,7 @@ class KanbanApiClient:
         if status_code in direct_map:
             return direct_map[status_code]
         if status_code == _HTTP_CONFLICT:
-            if prob_type.endswith("etag-mismatch"):
-                return McpErrorCode.CONFLICT_ETAG
-            return McpErrorCode.VALIDATION_FAILED
+            return KanbanApiClient._resolve_conflict_code(prob_type, prob_code)
         if status_code >= _HTTP_SERVER_ERROR_MIN:
             return McpErrorCode.UPSTREAM_UNAVAILABLE
         return McpErrorCode.UPSTREAM_ERROR

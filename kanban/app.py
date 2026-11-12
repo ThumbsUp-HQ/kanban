@@ -21,6 +21,7 @@ from kanban.api.problems import (
 )
 from kanban.api.request_id import RequestIdMiddleware
 from kanban.api.v1 import build_v1_router
+from kanban.auth.sessions.csrf import CsrfMiddleware
 from kanban.security.headers import SecurityHeadersMiddleware
 from kanban.settings import Settings
 from kanban.web_static import PrecompressedSPAStaticApp
@@ -111,6 +112,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # SPA Static assets mounted at root
     app.mount("/", PrecompressedSPAStaticApp(dist_dir=settings.web_dist))
+
+    # Add CSRF protection middleware for unsafe API methods
+    app.add_middleware(CsrfMiddleware)
 
     # Add RequestIdMiddleware so request-id is available inside all routes and middleware
     app.add_middleware(RequestIdMiddleware)

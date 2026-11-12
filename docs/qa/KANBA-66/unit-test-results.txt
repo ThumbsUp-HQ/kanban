@@ -1,0 +1,47 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-66/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-66
+configfile: pyproject.toml
+plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 22 items
+
+kanban/tests/media_proxy/test_ssrf_and_rebinding.py::test_case_3_ssrf_ip_matrix PASSED [  4%]
+kanban/tests/media_proxy/test_ssrf_and_rebinding.py::test_case_4_dns_rebinding_toctou PASSED [  9%]
+kanban/tests/media_proxy/test_ssrf_and_rebinding.py::test_dns_resolver_failures_and_timeouts PASSED [ 13%]
+kanban/tests/media_proxy/test_ssrf_and_rebinding.py::test_default_async_host_resolver PASSED [ 18%]
+kanban/tests/media_proxy/test_ssrf_and_rebinding.py::test_is_public_global_ip_coverage PASSED [ 22%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_case_1_positive_cookieless_proxy PASSED [ 27%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_case_2_hmac_gate_defense PASSED [ 31%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_case_5_zero_redirects PASSED [ 36%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_case_6_url_and_port_scanning PASSED [ 40%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_case_7_mime_and_magic_mismatch PASSED [ 45%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_case_8_boundary_10mib_cap PASSED [ 50%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_case_9_air_gap_mode_and_rate_limit PASSED [ 54%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_generate_contract_sample_artifact PASSED [ 59%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_magic_signature_verification PASSED [ 63%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_status_code_parsing_failures PASSED [ 68%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_header_validation_failures PASSED [ 72%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_chunked_transfer_encoding PASSED [ 77%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_service_query_params_and_air_gap_checker PASSED [ 81%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_signing_boundary_checks PASSED [ 86%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_default_pinned_connection_transport PASSED [ 90%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_stream_limits_and_timeouts PASSED [ 95%]
+kanban/tests/media_proxy/test_media_proxy_api.py::test_api_loads_default_key_material PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------
+kanban/api/v1/media_proxy.py           31      0      4      0   100%
+kanban/media_proxy/__init__.py          7      0      0      0   100%
+kanban/media_proxy/client.py          165      5     48      3    96%   121->116, 256-257, 281-282, 332
+kanban/media_proxy/placeholder.py      24      0     10      3    91%   46->49, 50->55, 52->55
+kanban/media_proxy/service.py          24      0      4      0   100%
+kanban/media_proxy/signing.py          76      3     20      1    96%   51->exit, 129-131
+kanban/media_proxy/ssrf.py             63      0     22      0   100%
+-------------------------------------------------------------------------------
+TOTAL                                 390      8    108      7    97%
+Required test coverage of 95% reached. Total coverage: 96.99%
+============================== 22 passed in 2.78s ==============================

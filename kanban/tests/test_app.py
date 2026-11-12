@@ -50,8 +50,14 @@ async def test_api_not_found_problem_json(test_settings: Settings) -> None:
         assert data["title"] == "Not Found"
         assert data["status"] == 404
 
-        # Non-GET method on unknown API path
-        post_resp = await client.post("/api/v2/nonexistent")
+        # Non-GET method on unknown API path with valid CSRF tokens
+        sess_resp = await client.get("/api/v1/auth/session")
+        csrf_token = sess_resp.json()["csrf_token"]
+        post_resp = await client.post(
+            "/api/v2/nonexistent",
+            headers={"X-CSRF-Token": csrf_token},
+            cookies={"__Host-kb_csrf": csrf_token},
+        )
         assert post_resp.status_code == 404
         assert post_resp.headers.get("content-type") == "application/problem+json"
 

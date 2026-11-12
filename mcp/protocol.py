@@ -5,22 +5,25 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 import secrets
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
-import yaml
 from starlette.responses import JSONResponse, Response
 
 from mcp.errors import KbMcpError, McpErrorCode
+from mcp.help import build_help
+from mcp.yaml_out import dump_yaml
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from starlette.requests import Request
 
+    from mcp.internal_client import KanbanApiClient
     from mcp.registry import Surface, ToolRegistry
     from mcp.settings import McpSettings
 
@@ -33,6 +36,8 @@ __all__ = [
 ]
 
 PROTOCOL_VERSION: Final[str] = "2025-06-18"
+
+_logger: Final[logging.Logger] = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -148,12 +153,14 @@ class McpProtocolHandler:
         registry: ToolRegistry,
         session_store: SessionStore,
         settings: McpSettings,
+        internal_client: KanbanApiClient | None = None,
     ) -> None:
         """Initialize handler for a specific surface mount."""
         self.surface: Final[Surface] = surface
         self.registry: Final[ToolRegistry] = registry
         self.session_store: Final[SessionStore] = session_store
         self.settings: Final[McpSettings] = settings
+        self.internal_client: Final[KanbanApiClient | None] = internal_client
 
     def _check_request_preconditions(self, request: Request) -> Response | None:
         """Validate HTTP method, DNS-rebinding origin, and protocol version header."""
@@ -262,7 +269,20 @@ class McpProtocolHandler:
         if not session_id or self.session_store.get_session(session_id) is None:
             return Response("Session not found or expired; please re-initialize", status_code=404)
 
-        return await self._dispatch_method(method, req_id, params)
+        raw_auth = request.headers.get("x-kb-subject-token") or request.headers.get("authorization")
+        subject_token = (
+            raw_auth[7:].strip()
+            if raw_auth and raw_auth.lower().startswith("bearer ")
+            else raw_auth
+        )
+
+        return await self._dispatch_method(
+            method,
+            req_id,
+            params,
+            session_id=session_id,
+            subject_token=subject_token,
+        )
 
     def _handle_delete_session(self, request: Request) -> Response:
         session_id = request.headers.get("mcp-session-id")
@@ -294,6 +314,9 @@ class McpProtocolHandler:
         method: str,
         req_id: object,
         params: object,
+        *,
+        session_id: str | None = None,
+        subject_token: str | None = None,
     ) -> Response:
         # Notifications (no id)
         if req_id is None:
@@ -306,7 +329,12 @@ class McpProtocolHandler:
             return self._handle_tools_list(req_id)
 
         if method == "tools/call":
-            return await self._handle_tools_call(req_id, params)
+            return await self._handle_tools_call(
+                req_id,
+                params,
+                session_id=session_id,
+                subject_token=subject_token,
+            )
 
         # Unknown method
         return JSONResponse(
@@ -335,11 +363,11 @@ class McpProtocolHandler:
             }
         )
 
-    async def _handle_tools_call(
-        self,
+    @staticmethod
+    def _validate_tools_call_params(
         req_id: object,
         params: object,
-    ) -> JSONResponse:
+    ) -> tuple[str, dict[str, Any]] | JSONResponse:
         if not isinstance(params, dict) or "name" not in params:
             return JSONResponse(
                 {
@@ -350,7 +378,6 @@ class McpProtocolHandler:
                 status_code=200,
             )
 
-        tool_name = str(params["name"])
         arguments = params.get("arguments") or {}
         if not isinstance(arguments, dict):
             return JSONResponse(
@@ -364,6 +391,21 @@ class McpProtocolHandler:
                 },
                 status_code=200,
             )
+        return str(params["name"]), arguments
+
+    async def _handle_tools_call(
+        self,
+        req_id: object,
+        params: object,
+        *,
+        session_id: str | None = None,
+        subject_token: str | None = None,
+    ) -> JSONResponse:
+        validated = self._validate_tools_call_params(req_id, params)
+        if isinstance(validated, JSONResponse):
+            return validated
+
+        tool_name, arguments = validated
 
         spec = self.registry.get(tool_name)
         if spec is None:
@@ -383,6 +425,16 @@ class McpProtocolHandler:
                 }
             )
 
+        # Progressive disclosure: JIT help
+        if arguments.get("identifier") == "help" or arguments.get("action") == "help":
+            return await self._handle_jit_help(
+                req_id,
+                tool_name,
+                arguments,
+                session_id=session_id,
+                subject_token=subject_token,
+            )
+
         try:
             # Invoke handler
             handler = spec.handler
@@ -396,8 +448,8 @@ class McpProtocolHandler:
             # Format result text as YAML
             if isinstance(res, str):
                 text_result = res
-            elif isinstance(res, dict):
-                text_result = yaml.safe_dump(res, sort_keys=False)
+            elif isinstance(res, (dict, list)):
+                text_result = dump_yaml(res)
             else:
                 text_result = str(res)
 
@@ -422,10 +474,11 @@ class McpProtocolHandler:
                     },
                 }
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception:
+            _logger.exception("Internal tool execution error (session=%s)", session_id)
             internal_err = KbMcpError(
                 code=McpErrorCode.INTERNAL,
-                message=f"Internal tool execution error: {exc}",
+                message="Internal tool execution error",
             )
             return JSONResponse(
                 {
@@ -437,3 +490,32 @@ class McpProtocolHandler:
                     },
                 }
             )
+
+    async def _handle_jit_help(
+        self,
+        req_id: object,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        session_id: str | None = None,
+        subject_token: str | None = None,
+    ) -> JSONResponse:
+        """Render progressive disclosure JIT help document for a tool."""
+        project_arg = arguments.get("project")
+        help_data = await build_help(
+            tool_name=tool_name,
+            project=str(project_arg) if project_arg is not None else None,
+            client=self.internal_client,
+            subject_token=subject_token,
+            mcp_session_id=session_id,
+        )
+        return JSONResponse(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [{"type": "text", "text": dump_yaml(help_data)}],
+                    "isError": False,
+                },
+            }
+        )
