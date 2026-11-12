@@ -1,0 +1,72 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-60/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-60
+configfile: pyproject.toml
+plugins: cov-7.1.0, xdist-3.8.0, socket-0.8.1, anyio-4.16.0, asyncio-1.4.1.post1, platformdirs-4.14.5
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 49 items
+
+kanban/tests/content/test_coverage_boost.py::test_html_to_gfm_attribute_and_url_filters PASSED [  2%]
+kanban/tests/content/test_coverage_boost.py::test_extract_url_from_target_variations PASSED [  4%]
+kanban/tests/content/test_coverage_boost.py::test_disarm_links_parenthesis_and_unclosed_brackets PASSED [  6%]
+kanban/tests/content/test_coverage_boost.py::test_disarm_links_with_tilde_fences PASSED [  8%]
+kanban/tests/content/test_coverage_boost.py::test_html_to_gfm_inline_formatting_edge_cases PASSED [ 10%]
+kanban/tests/content/test_coverage_boost.py::test_html_to_gfm_headings_all_levels PASSED [ 12%]
+kanban/tests/content/test_coverage_boost.py::test_html_to_gfm_pre_without_code_class PASSED [ 14%]
+kanban/tests/content/test_coverage_boost.py::test_html_to_gfm_details_and_summary PASSED [ 16%]
+kanban/tests/content/test_coverage_boost.py::test_html_to_gfm_images_and_links PASSED [ 18%]
+kanban/tests/content/test_coverage_boost.py::test_html_to_gfm_table_empty_and_no_header PASSED [ 20%]
+kanban/tests/content/test_coverage_boost.py::test_html_to_gfm_ordered_lists_and_tasks PASSED [ 22%]
+kanban/tests/content/test_coverage_boost.py::test_ide_detector_negative_cases PASSED [ 24%]
+kanban/tests/content/test_coverage_boost.py::test_ide_detector_div_lines PASSED [ 26%]
+kanban/tests/content/test_coverage_boost.py::test_normalize_markdown_with_tilde_fences PASSED [ 28%]
+kanban/tests/content/test_coverage_boost.py::test_normalize_modes_explicit PASSED [ 30%]
+kanban/tests/content/test_coverage_boost.py::test_html_to_gfm_blockquote_and_breaks PASSED [ 32%]
+kanban/tests/content/test_coverage_boost.py::test_extract_non_code_text_with_inline_and_fenced PASSED [ 34%]
+kanban/tests/content/test_coverage_boost.py::test_hidden_dom_color_and_font_branches PASSED [ 36%]
+kanban/tests/content/test_hidden_dom_pruner.py::test_decode_css_escapes PASSED [ 38%]
+kanban/tests/content/test_hidden_dom_pruner.py::test_wcag_luminance_and_contrast PASSED [ 40%]
+kanban/tests/content/test_hidden_dom_pruner.py::test_parse_css_color PASSED [ 42%]
+kanban/tests/content/test_hidden_dom_pruner.py::test_paste_jacking_corpus_all_strip_canary PASSED [ 44%]
+kanban/tests/content/test_hidden_dom_pruner.py::test_dark_mode_white_text_preserved PASSED [ 46%]
+kanban/tests/content/test_hidden_dom_pruner.py::test_white_text_no_background_preserved PASSED [ 48%]
+kanban/tests/content/test_hidden_dom_pruner.py::test_depth_limit_enforced PASSED [ 51%]
+kanban/tests/content/test_hidden_dom_pruner.py::test_node_count_limit_enforced PASSED [ 53%]
+kanban/tests/content/test_hidden_dom_pruner.py::test_empty_html PASSED   [ 55%]
+kanban/tests/content/test_normalize_markdown.py::test_case_1_positive_html_to_gfm_goldens PASSED [ 57%]
+kanban/tests/content/test_normalize_markdown.py::test_case_2_positive_ide_wrapper_bypass PASSED [ 59%]
+kanban/tests/content/test_normalize_markdown.py::test_case_3_positive_clean_markdown_preservation PASSED [ 61%]
+kanban/tests/content/test_normalize_markdown.py::test_case_4_security_hidden_dom_paste_jacking_corpus PASSED [ 63%]
+kanban/tests/content/test_normalize_markdown.py::test_case_5_security_xss_and_embedded_html_in_markdown PASSED [ 65%]
+kanban/tests/content/test_normalize_markdown.py::test_case_6_security_unicode_smuggling_and_bidi PASSED [ 67%]
+kanban/tests/content/test_normalize_markdown.py::test_case_7_plain_text_mode PASSED [ 69%]
+kanban/tests/content/test_normalize_markdown.py::test_case_8_boundary_conditions PASSED [ 71%]
+kanban/tests/content/test_normalize_markdown.py::test_normalize_inspect_metrics PASSED [ 73%]
+kanban/tests/content/test_unicode_and_links.py::test_is_zero_width_or_invisible PASSED [ 75%]
+kanban/tests/content/test_unicode_and_links.py::test_is_c0_c1_control PASSED [ 77%]
+kanban/tests/content/test_unicode_and_links.py::test_strip_invisible_and_control_chars_clean PASSED [ 79%]
+kanban/tests/content/test_unicode_and_links.py::test_strip_invisible_and_control_chars_removes_bad PASSED [ 81%]
+kanban/tests/content/test_unicode_and_links.py::test_strip_plane_14_tags PASSED [ 83%]
+kanban/tests/content/test_unicode_and_links.py::test_newline_normalization PASSED [ 85%]
+kanban/tests/content/test_unicode_and_links.py::test_surrogate_rejection PASSED [ 87%]
+kanban/tests/content/test_unicode_and_links.py::test_size_boundary_enforcement PASSED [ 89%]
+kanban/tests/content/test_unicode_and_links.py::test_is_safe_url_allowed PASSED [ 91%]
+kanban/tests/content/test_unicode_and_links.py::test_is_safe_url_denied PASSED [ 93%]
+kanban/tests/content/test_unicode_and_links.py::test_is_safe_url_obfuscated_bypasses PASSED [ 95%]
+kanban/tests/content/test_unicode_and_links.py::test_disarm_dangerous_markdown_links PASSED [ 97%]
+kanban/tests/content/test_unicode_and_links.py::test_disarm_links_preserves_code_fences_and_spans PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                              Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------
+kanban/content/__init__.py            6      0      0      0   100%
+kanban/content/hidden_dom.py        250      2    122     10    97%   231->exit, 232->231, 239, 256, 266->273, 275->280, 319->323, 326->323, 340->344, 375->378
+kanban/content/html_to_gfm.py       364      5    176     13    97%   161->163, 240->242, 285->290, 334->exit, 335->334, 356, 369->366, 395, 413->415, 451->exit, 468, 496, 513
+kanban/content/normalize.py         254      1     90      8    97%   140->exit, 141->140, 167, 170->exit, 223->225, 251->255, 337->339, 381->386
+kanban/content/unicode_guard.py      58      0     16      0   100%
+-----------------------------------------------------------------------------
+TOTAL                               932      8    404     31    97%
+Required test coverage of 95% reached. Total coverage: 97.08%
+============================== 49 passed in 1.42s ==============================

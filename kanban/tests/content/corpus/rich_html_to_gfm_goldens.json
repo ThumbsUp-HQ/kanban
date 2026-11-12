@@ -1,0 +1,20 @@
+[
+  {
+    "id": "jira-confluence-full-document",
+    "name": "Jira Confluence Full Document Golden",
+    "html": "<h2>Project Execution Brief</h2>\n<p>This is a <strong>critical</strong> and <em>thorough</em> update with <del>obsolete tasks</del>.</p>\n<ul>\n  <li>Requirements established</li>\n  <li><input type=\"checkbox\" checked> Wave 00 skeleton deployed</li>\n  <li><input type=\"checkbox\"> Ingestion normalizer verification</li>\n  <li>Module Breakdown:\n    <ul>\n      <li>Unicode Guard</li>\n      <li>Hidden DOM Pruner</li>\n    </ul>\n  </li>\n</ul>\n<table>\n  <thead>\n    <tr><th>Component</th><th>Status</th></tr>\n  </thead>\n  <tbody>\n    <tr><td>Server Normalizer</td><td>Active</td></tr>\n  </tbody>\n</table>\n<pre><code class=\"language-python\">def calculate_ratio(l1, l2):\n    return (l1 + 0.05) / (l2 + 0.05)</code></pre>\n<p>Reference: <a href=\"https://docs.hackedyour.info/spec\">Architecture Spec</a></p>\n<p>Diagram: <img src=\"attachment://att_0196abc123\" alt=\"Universal Architecture\"></p>",
+    "expected_markdown": "## Project Execution Brief\n\nThis is a **critical** and *thorough* update with ~~obsolete tasks~~.\n\n- Requirements established\n- [x] Wave 00 skeleton deployed\n- [ ] Ingestion normalizer verification\n- Module Breakdown:\n  - Unicode Guard\n  - Hidden DOM Pruner\n\n| Component | Status |\n| --- | --- |\n| Server Normalizer | Active |\n\n```python\ndef calculate_ratio(l1, l2):\n    return (l1 + 0.05) / (l2 + 0.05)\n```\n\nReference: [Architecture Spec](https://docs.hackedyour.info/spec)\n\nDiagram: ![Universal Architecture](attachment://att_0196abc123)"
+  },
+  {
+    "id": "google-docs-nested-lists",
+    "name": "Google Docs Nested Ordered and Unordered Lists",
+    "html": "<ol>\n  <li>First step</li>\n  <li>Second step\n    <ul>\n      <li>Subtask alpha</li>\n      <li>Subtask beta</li>\n    </ul>\n  </li>\n  <li>Final step</li>\n</ol>",
+    "expected_markdown": "1. First step\n2. Second step\n  - Subtask alpha\n  - Subtask beta\n3. Final step"
+  },
+  {
+    "id": "table-with-alignment",
+    "name": "Table With Explicit Alignments",
+    "html": "<table>\n  <tr>\n    <th align=\"left\">Left</th>\n    <th align=\"center\">Center</th>\n    <th align=\"right\">Right</th>\n  </tr>\n  <tr>\n    <td>A</td>\n    <td>B</td>\n    <td>C</td>\n  </tr>\n</table>",
+    "expected_markdown": "| Left | Center | Right |\n| :--- | :---: | ---: |\n| A | B | C |"
+  }
+]
