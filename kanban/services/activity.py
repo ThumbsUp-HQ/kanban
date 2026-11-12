@@ -61,6 +61,11 @@ class ActivityEventType(StrEnum):
     PROJECT_CREATED = "PROJECT_CREATED"
     PROJECT_UPDATED = "PROJECT_UPDATED"
     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
+    ISSUE_CREATED = "ISSUE_CREATED"
+    ISSUE_FIELD_CHANGED = "ISSUE_FIELD_CHANGED"
+    ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
+    ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
+    ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -68,6 +73,11 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.PROJECT_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.PROJECT_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_FIELD_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
     }
 )
 

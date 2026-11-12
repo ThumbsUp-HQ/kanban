@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
@@ -25,6 +26,7 @@ REDACTED: Final[str] = "<redacted>"
 SENSITIVE_HEADERS: Final[frozenset[str]] = frozenset(
     {"cookie", "set-cookie", "x-csrf-token", "authorization"}
 )
+_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"kb_[A-Za-z0-9_-]+")
 
 
 def redact_headers(headers: Mapping[str, str]) -> dict[str, str]:
@@ -32,14 +34,27 @@ def redact_headers(headers: Mapping[str, str]) -> dict[str, str]:
     return {k: (REDACTED if k.lower() in SENSITIVE_HEADERS else v) for k, v in headers.items()}
 
 
+def _scrub_tokens(obj: Any) -> Any:  # noqa: ANN401
+    """Recursively redact tokens matching `kb_*` in parsed structures or text."""
+    if isinstance(obj, str):
+        return _TOKEN_RE.sub(REDACTED, obj)
+    if isinstance(obj, dict):
+        return {k: _scrub_tokens(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_scrub_tokens(v) for v in obj]
+    return obj
+
+
 def _decode_body(content: bytes) -> Any:  # noqa: ANN401  # Arbitrary JSON document
     """Decode an HTTP body as JSON, falling back to text, or ``None`` when empty."""
     if not content:
         return None
     try:
-        return json.loads(content)
+        decoded = json.loads(content)
+        return _scrub_tokens(decoded)
     except ValueError:
-        return content.decode("utf-8", errors="replace")
+        raw_text = content.decode("utf-8", errors="replace")
+        return _scrub_tokens(raw_text)
 
 
 class ContractRecorder:
