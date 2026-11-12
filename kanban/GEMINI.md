@@ -12,6 +12,8 @@ Core web application, static asset server, and API service layer for the Kanban 
 - Cryptographic key material provider (`kanban.security.keys.KeyMaterial`, `load_key_material`, `derive_subkey`) enforcing mode 0600 keyring files, symlink rejection, 32-byte key boundaries, and purpose-separated HKDF-SHA256 derivations.
 - Principal identity and RLS session dependencies (`kanban.api.deps.PrincipalContext`, `PrincipalResolver`, `DenyAllResolver`, `get_principal`, `get_rls_session`) rejecting client-supplied headers and binding context inside transactions.
 - Timing equalization engine (`kanban.api.timing.TimingFloor`, `timing_floor`, `load_or_404`) enforcing a 25.0ms timing floor and indistinguishable 404 responses for non-existent and RLS-hidden objects.
+- Multi-Card Auth Studio envelope encryption (`kanban.security.envelope`) using AES-256-GCM, per-card DEK wrapping, and AAD context binding.
+- Multi-Card Auth repository and schemas (`kanban.auth.cards`) interacting with `kb_auth` database boundary.
 
 ## Depends On
 - `database` (`kanban-database` package for PostgreSQL data layer, ORM models, and `RLSSessionFactory`).

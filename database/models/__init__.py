@@ -1,6 +1,7 @@
 """Universal Object Graph SQLAlchemy 2.0 ORM models for kanban-database."""
 
 from database.models.activity import ActivityChainHead, ActivityRecord
+from database.models.auth import AuthProviderCard
 from database.models.base import (
     Base,
     InvalidLinkReason,
@@ -52,6 +53,7 @@ from database.models.spine import (
 __all__ = [
     "ActivityChainHead",
     "ActivityRecord",
+    "AuthProviderCard",
     "Base",
     "Cycle",
     "Doc",
