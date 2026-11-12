@@ -36,4 +36,5 @@ repos:
         entry: uv run python -m scripts.check_no_dashes
         language: system
         files: ^(docs|\.agents)/
-        exclude: \.patch$
+        types_or: [text]
+        exclude: (\.patch$|\.(png|jpg|jpeg|webp|ico|gif)$)
