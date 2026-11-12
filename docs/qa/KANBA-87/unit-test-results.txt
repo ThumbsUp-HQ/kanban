@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-87/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-87
+configfile: pyproject.toml
+plugins: socket-0.8.1, asyncio-1.4.1.post1, cov-7.1.0, anyio-4.16.0, xdist-3.8.0, platformdirs-4.14.5
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 7 items
+
+kanban/tests/api/test_issue_archive.py::test_case_1_positive_archive_unarchive_and_list_filtering PASSED [ 14%]
+kanban/tests/api/test_issue_archive.py::test_case_2_rule_archive_in_progress_and_open_subissues PASSED [ 28%]
+kanban/tests/api/test_issue_archive.py::test_case_3_security_permissions_patch_guard_and_query_conflict PASSED [ 42%]
+kanban/tests/jobs/test_auto_archive.py::test_case_4_job_boundary PASSED  [ 57%]
+kanban/tests/jobs/test_auto_archive.py::test_case_5_job_concurrency PASSED [ 71%]
+kanban/tests/jobs/test_auto_archive.py::test_case_6_cli PASSED           [ 85%]
+kanban/tests/jobs/test_auto_archive.py::test_scheduler_and_registry PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                               Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------
+kanban/api/v1/issue_archive.py        19      0      0      0   100%
+kanban/jobs/auto_archive.py          106      1     28      2    98%   194->197, 271
+kanban/services/issue_archive.py      51      0     12      0   100%
+------------------------------------------------------------------------------
+TOTAL                                176      1     40      2    99%
+Required test coverage of 95% reached. Total coverage: 98.61%
+============================== 7 passed in 3.36s ===============================

@@ -66,6 +66,8 @@ class ActivityEventType(StrEnum):
     ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
     ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
     ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
+    ISSUE_ARCHIVED = "ISSUE_ARCHIVED"
+    ISSUE_UNARCHIVED = "ISSUE_UNARCHIVED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -78,6 +80,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_ARCHIVED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_UNARCHIVED: ActivityCategory.HISTORY,
     }
 )
 

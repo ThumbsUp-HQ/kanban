@@ -22,6 +22,7 @@ from kanban.api.problems import (
 from kanban.api.request_id import RequestIdMiddleware
 from kanban.api.v1 import build_v1_router
 from kanban.auth.sessions.csrf import CsrfMiddleware
+from kanban.jobs import lifespan
 from kanban.security.headers import SecurityHeadersMiddleware
 from kanban.settings import Settings
 from kanban.web_static import PrecompressedSPAStaticApp
@@ -37,6 +38,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=None,
         redoc_url=None,
         openapi_url="/api/openapi.json",
+        lifespan=lifespan,
     )
 
     # Initialize default state dependencies

@@ -1,0 +1,350 @@
+{
+  "ticket": "KANBA-87",
+  "exchanges": [
+    {
+      "name": "archive_issue_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/ARC-1/archive",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1389",
+          "content-type": "application/json",
+          "x-request-id": "29ac7b1ea75a474a8177f839e661150f",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceeb-1968-7799-a4ea-d81970ba45f7",
+          "key": "ARC-1",
+          "summary": "Completed task ready for archive",
+          "description_markdown": "Work finished.",
+          "description_sha256": "d1b8279c1141dcc69029a2b5b77cdde0cbab6865f0f913d941e5e0fd04e99a53",
+          "state": {
+            "id": "01a1ceeb-18c8-7e8b-a6a0-f66784809b34",
+            "name": "Done",
+            "group": "completed"
+          },
+          "priority": {
+            "slug": "none",
+            "label": "None",
+            "emoji": null
+          },
+          "start_date": null,
+          "due_date": null,
+          "cycle_id": null,
+          "parent": null,
+          "labels": [],
+          "module_ids": [],
+          "board_rank": "a000001",
+          "created_by_id": "01a1ceeb-18aa-7fac-b9da-687fd7b064d0",
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: ARC",
+              "workspace_id": "01a1ceeb-1898-7dd9-8602-3c2546a854a8",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceeb-18c3-7cc3-a047-ec3ab7d24f60",
+              "project_key": "ARC",
+              "project_name": "ARC project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceeb-18aa-7fac-b9da-687fd7b064d0",
+                "handle": "@arc_admin",
+                "display_name": "Arc_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "archived_at": "2026-11-12T08:41:16.523271Z",
+          "archive_eligibility": {
+            "allowed": false,
+            "reason": "Issue is already archived"
+          }
+        }
+      }
+    },
+    {
+      "name": "unarchive_issue_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/ARC-1/unarchive",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1340",
+          "content-type": "application/json",
+          "x-request-id": "8a73ec22776445878b6a1ce40230af5b",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceeb-1968-7799-a4ea-d81970ba45f7",
+          "key": "ARC-1",
+          "summary": "Completed task ready for archive",
+          "description_markdown": "Work finished.",
+          "description_sha256": "d1b8279c1141dcc69029a2b5b77cdde0cbab6865f0f913d941e5e0fd04e99a53",
+          "state": {
+            "id": "01a1ceeb-18c8-7e8b-a6a0-f66784809b34",
+            "name": "Done",
+            "group": "completed"
+          },
+          "priority": {
+            "slug": "none",
+            "label": "None",
+            "emoji": null
+          },
+          "start_date": null,
+          "due_date": null,
+          "cycle_id": null,
+          "parent": null,
+          "labels": [],
+          "module_ids": [],
+          "board_rank": "a000001",
+          "created_by_id": "01a1ceeb-18aa-7fac-b9da-687fd7b064d0",
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: ARC",
+              "workspace_id": "01a1ceeb-1898-7dd9-8602-3c2546a854a8",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceeb-18c3-7cc3-a047-ec3ab7d24f60",
+              "project_key": "ARC",
+              "project_name": "ARC project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceeb-18aa-7fac-b9da-687fd7b064d0",
+                "handle": "@arc_admin",
+                "display_name": "Arc_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "archived_at": null,
+          "archive_eligibility": {
+            "allowed": true,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "name": "archive_issue_409_not_allowed",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/RUL-1/archive",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "x-request-id": "f291a7b96e474eb2b80a72aabc9de2b4",
+          "content-length": "258",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:ARCHIVE_NOT_ALLOWED",
+          "title": "Archive not allowed",
+          "status": 409,
+          "code": "ARCHIVE_NOT_ALLOWED",
+          "detail": "Only completed or canceled work items can be archived",
+          "request_id": "f291a7b96e474eb2b80a72aabc9de2b4",
+          "state_group": "started"
+        }
+      }
+    },
+    {
+      "name": "archive_issue_404_not_found",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/SEC-1/archive",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "3893125a90724581900a3c5df1baf68e",
+          "content-length": "139",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "request_id": "3893125a90724581900a3c5df1baf68e"
+        }
+      }
+    },
+    {
+      "name": "archive_conflict_422",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/projects/SEC/issues?include_archived=false&only_archived=true",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "f81c84a5c075414a83582c71aaa9b01f",
+          "content-length": "253",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:ARCHIVE_FILTER_CONFLICT",
+          "title": "Archive Filter Conflict",
+          "status": 422,
+          "code": "ARCHIVE_FILTER_CONFLICT",
+          "detail": "Cannot filter only_archived=true when include_archived=false",
+          "request_id": "f81c84a5c075414a83582c71aaa9b01f"
+        }
+      }
+    }
+  ]
+}
