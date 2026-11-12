@@ -1,0 +1,638 @@
+{
+  "ticket": "KANBA-103",
+  "exchanges": [
+    {
+      "name": "sticky_create_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/01a1cfbb-35a2-729b-b47a-8ae561871127/stickies",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "662",
+          "content-type": "application/json"
+        },
+        "body": {
+          "body_markdown": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "color_token": "amber"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "1985",
+          "content-type": "application/json",
+          "etag": "\"170a9ed24c8c7b2318ab41e5783164870da595e0a4e3b040e5c4c3926f958cd9\"",
+          "location": "/api/v1/stickies/5a22aa99-1010-41da-a22f-53527f247b3f",
+          "x-request-id": "53b46b3a8513465a97411915da811d99",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "5a22aa99-1010-41da-a22f-53527f247b3f",
+          "workspace_id": "01a1cfbb-358a-7bbc-95b6-22cd1b7d5b6e",
+          "project_id": "01a1cfbb-35a2-729b-b47a-8ae561871127",
+          "body_markdown": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "body_sha256": "170a9ed24c8c7b2318ab41e5783164870da595e0a4e3b040e5c4c3926f958cd9",
+          "color_token": "amber",
+          "sort_rank": "a0",
+          "promotion_recommended": true,
+          "promotion_snoozed_at_length": null,
+          "promoted_to_doc_id": null,
+          "is_promoted_stub": false,
+          "promoted_to_doc": null,
+          "triggers": [
+            "char_length"
+          ],
+          "etag": "\"170a9ed24c8c7b2318ab41e5783164870da595e0a4e3b040e5c4c3926f958cd9\"",
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: SNZ",
+              "workspace_id": "01a1cfbb-358a-7bbc-95b6-22cd1b7d5b6e",
+              "workspace_name": "Engineering",
+              "project_id": "01a1cfbb-35a2-729b-b47a-8ae561871127",
+              "project_key": "SNZ",
+              "project_name": "Stickies Project SNZ"
+            },
+            "users": [
+              {
+                "principal_id": "01a1cfbb-3595-7667-bf49-990ad2d3fec3",
+                "handle": "@stk_snooze_admin",
+                "display_name": "Stk_Snooze_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "created_at": "2026-11-12T12:28:35.461608Z",
+          "updated_at": "2026-11-12T12:28:35.461608Z"
+        }
+      }
+    },
+    {
+      "name": "snooze_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/stickies/5a22aa99-1010-41da-a22f-53527f247b3f/snooze-promotion",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1985",
+          "content-type": "application/json",
+          "etag": "\"170a9ed24c8c7b2318ab41e5783164870da595e0a4e3b040e5c4c3926f958cd9\"",
+          "x-request-id": "0706ba0bfcff4144bd95afd39592015b",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "5a22aa99-1010-41da-a22f-53527f247b3f",
+          "workspace_id": "01a1cfbb-358a-7bbc-95b6-22cd1b7d5b6e",
+          "project_id": "01a1cfbb-35a2-729b-b47a-8ae561871127",
+          "body_markdown": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "body_sha256": "170a9ed24c8c7b2318ab41e5783164870da595e0a4e3b040e5c4c3926f958cd9",
+          "color_token": "amber",
+          "sort_rank": "a0",
+          "promotion_recommended": false,
+          "promotion_snoozed_at_length": 620,
+          "promoted_to_doc_id": null,
+          "is_promoted_stub": false,
+          "promoted_to_doc": null,
+          "triggers": [
+            "char_length"
+          ],
+          "etag": "\"170a9ed24c8c7b2318ab41e5783164870da595e0a4e3b040e5c4c3926f958cd9\"",
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: SNZ",
+              "workspace_id": "01a1cfbb-358a-7bbc-95b6-22cd1b7d5b6e",
+              "workspace_name": "Engineering",
+              "project_id": "01a1cfbb-35a2-729b-b47a-8ae561871127",
+              "project_key": "SNZ",
+              "project_name": "Stickies Project SNZ"
+            },
+            "users": [
+              {
+                "principal_id": "01a1cfbb-3595-7667-bf49-990ad2d3fec3",
+                "handle": "@stk_snooze_admin",
+                "display_name": "Stk_Snooze_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "created_at": "2026-11-12T12:28:35.461608Z",
+          "updated_at": "2026-11-12T12:28:35.461608Z"
+        }
+      }
+    },
+    {
+      "name": "promote_to_doc_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/stickies/c326ec5a-eefc-47d0-8f64-05392c431ec8/promote-to-doc",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "36",
+          "content-type": "application/json"
+        },
+        "body": {
+          "title": "Auth Studio Architecture"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "2109",
+          "content-type": "application/json",
+          "etag": "\"810af393a90cc8eae9da68cadd0fff0d2ad74d0edaa77c158f194ce305434ddf\"",
+          "location": "/api/v1/stickies/c326ec5a-eefc-47d0-8f64-05392c431ec8",
+          "x-request-id": "40fcc3dfd5314d0b8ed3e5e1b2557878",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "c326ec5a-eefc-47d0-8f64-05392c431ec8",
+          "workspace_id": "01a1cfbb-37e8-7c31-87eb-089b1eb8fcae",
+          "project_id": "01a1cfbb-3803-74b4-8889-449eec3071a4",
+          "body_markdown": "# Auth Studio Notes\n## Decisions\nUse WebAuthn with Argon2id.",
+          "body_sha256": "810af393a90cc8eae9da68cadd0fff0d2ad74d0edaa77c158f194ce305434ddf",
+          "color_token": "sky",
+          "sort_rank": "a0",
+          "promotion_recommended": false,
+          "promotion_snoozed_at_length": null,
+          "promoted_to_doc_id": "01a1cfbb-3947-7724-ba74-28d6fa77fee9",
+          "is_promoted_stub": true,
+          "promoted_to_doc": {
+            "id": "01a1cfbb-3947-7724-ba74-28d6fa77fee9",
+            "canonical_key": "docs/auth-studio-architecture",
+            "title": "Auth Studio Architecture",
+            "restricted": false
+          },
+          "triggers": [],
+          "etag": "\"810af393a90cc8eae9da68cadd0fff0d2ad74d0edaa77c158f194ce305434ddf\"",
+          "access_manifest": {
+            "pill_label": "Project + 1",
+            "explicit_grant_count": 1,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: ACL",
+              "workspace_id": "01a1cfbb-37e8-7c31-87eb-089b1eb8fcae",
+              "workspace_name": "Engineering",
+              "project_id": "01a1cfbb-3803-74b4-8889-449eec3071a4",
+              "project_key": "ACL",
+              "project_name": "Stickies Project ACL"
+            },
+            "users": [
+              {
+                "principal_id": "01a1cfbb-37f2-7fd4-a121-4b9650b09e0e",
+                "handle": "@stk_prom_admin",
+                "display_name": "Stk_Prom_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              },
+              {
+                "principal_id": "01a1cfbb-37fa-7056-916b-df95e80e4f94",
+                "handle": "@maya",
+                "display_name": "Maya",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK"
+                ],
+                "grant_source": "direct_share"
+              },
+              {
+                "principal_id": "01a1cfbb-37fe-7658-8d2e-6dafc2d16cf9",
+                "handle": "@bob",
+                "display_name": "Bob",
+                "capabilities": [
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK"
+                ],
+                "grant_source": "project_role"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [
+              {
+                "principal_id": "01a1cfbb-3808-7313-a8f2-b42af078d905",
+                "principal_type": "GROUP",
+                "display_name": "Contractors",
+                "redacted": false,
+                "denied_capabilities": [
+                  "VIEW"
+                ]
+              }
+            ],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "created_at": "2026-11-12T12:28:35.957835Z",
+          "updated_at": "2026-11-12T12:28:35.957835Z"
+        }
+      }
+    },
+    {
+      "name": "stub_serializer_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/stickies/c326ec5a-eefc-47d0-8f64-05392c431ec8",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "2109",
+          "content-type": "application/json",
+          "etag": "\"810af393a90cc8eae9da68cadd0fff0d2ad74d0edaa77c158f194ce305434ddf\"",
+          "x-request-id": "b2acfc2ca0cd484ba0e5a18ebd38bbc1",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "c326ec5a-eefc-47d0-8f64-05392c431ec8",
+          "workspace_id": "01a1cfbb-37e8-7c31-87eb-089b1eb8fcae",
+          "project_id": "01a1cfbb-3803-74b4-8889-449eec3071a4",
+          "body_markdown": "# Auth Studio Notes\n## Decisions\nUse WebAuthn with Argon2id.",
+          "body_sha256": "810af393a90cc8eae9da68cadd0fff0d2ad74d0edaa77c158f194ce305434ddf",
+          "color_token": "sky",
+          "sort_rank": "a0",
+          "promotion_recommended": false,
+          "promotion_snoozed_at_length": null,
+          "promoted_to_doc_id": "01a1cfbb-3947-7724-ba74-28d6fa77fee9",
+          "is_promoted_stub": true,
+          "promoted_to_doc": {
+            "id": "01a1cfbb-3947-7724-ba74-28d6fa77fee9",
+            "canonical_key": "docs/auth-studio-architecture",
+            "title": "Auth Studio Architecture",
+            "restricted": false
+          },
+          "triggers": [],
+          "etag": "\"810af393a90cc8eae9da68cadd0fff0d2ad74d0edaa77c158f194ce305434ddf\"",
+          "access_manifest": {
+            "pill_label": "Project + 1",
+            "explicit_grant_count": 1,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: ACL",
+              "workspace_id": "01a1cfbb-37e8-7c31-87eb-089b1eb8fcae",
+              "workspace_name": "Engineering",
+              "project_id": "01a1cfbb-3803-74b4-8889-449eec3071a4",
+              "project_key": "ACL",
+              "project_name": "Stickies Project ACL"
+            },
+            "users": [
+              {
+                "principal_id": "01a1cfbb-37f2-7fd4-a121-4b9650b09e0e",
+                "handle": "@stk_prom_admin",
+                "display_name": "Stk_Prom_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              },
+              {
+                "principal_id": "01a1cfbb-37fa-7056-916b-df95e80e4f94",
+                "handle": "@maya",
+                "display_name": "Maya",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK"
+                ],
+                "grant_source": "direct_share"
+              },
+              {
+                "principal_id": "01a1cfbb-37fe-7658-8d2e-6dafc2d16cf9",
+                "handle": "@bob",
+                "display_name": "Bob",
+                "capabilities": [
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK"
+                ],
+                "grant_source": "project_role"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [
+              {
+                "principal_id": "01a1cfbb-3808-7313-a8f2-b42af078d905",
+                "principal_type": "GROUP",
+                "display_name": "Contractors",
+                "redacted": false,
+                "denied_capabilities": [
+                  "VIEW"
+                ]
+              }
+            ],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "created_at": "2026-11-12T12:28:35.957835Z",
+          "updated_at": "2026-11-12T12:28:35.957835Z"
+        }
+      }
+    },
+    {
+      "name": "already_promoted_409",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/stickies/c326ec5a-eefc-47d0-8f64-05392c431ec8/promote-to-doc",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "31",
+          "content-type": "application/json"
+        },
+        "body": {
+          "title": "Duplicate Promotion"
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "x-request-id": "8eda6bb2833e41b98e0d24ee25e1a74b",
+          "content-length": "230",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:ALREADY_PROMOTED",
+          "title": "Sticky Already Promoted",
+          "status": 409,
+          "code": "ALREADY_PROMOTED",
+          "detail": "This sticky has already been promoted to a document",
+          "request_id": "8eda6bb2833e41b98e0d24ee25e1a74b"
+        }
+      }
+    },
+    {
+      "name": "unarchive_copy_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/stickies/b3064b5b-c43d-477b-bb3f-139a97504728/unarchive-copy",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "1387",
+          "content-type": "application/json",
+          "etag": "\"5ac1c6e05a5f778af0e2c39c9d971d089c76ef3e59b10bbd518c26ede1a3407b\"",
+          "location": "/api/v1/stickies/661cb582-3cb8-42fc-9d9b-c9315aa696df",
+          "x-request-id": "36917676146147819f54003044f03cf1",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "661cb582-3cb8-42fc-9d9b-c9315aa696df",
+          "workspace_id": "01a1cfbb-3aa3-70aa-84b5-72ba014f9eaf",
+          "project_id": "01a1cfbb-3ab5-7b2b-8448-70f9098e9c26",
+          "body_markdown": "# Scope Sticky\nWill stay in A.",
+          "body_sha256": "5ac1c6e05a5f778af0e2c39c9d971d089c76ef3e59b10bbd518c26ede1a3407b",
+          "color_token": "slate",
+          "sort_rank": "mzzV",
+          "promotion_recommended": false,
+          "promotion_snoozed_at_length": null,
+          "promoted_to_doc_id": null,
+          "is_promoted_stub": false,
+          "promoted_to_doc": null,
+          "triggers": [],
+          "etag": "\"5ac1c6e05a5f778af0e2c39c9d971d089c76ef3e59b10bbd518c26ede1a3407b\"",
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: PRJA",
+              "workspace_id": "01a1cfbb-3aa3-70aa-84b5-72ba014f9eaf",
+              "workspace_name": "Engineering",
+              "project_id": "01a1cfbb-3ab5-7b2b-8448-70f9098e9c26",
+              "project_key": "PRJA",
+              "project_name": "Stickies Project PRJA"
+            },
+            "users": [
+              {
+                "principal_id": "01a1cfbb-3aad-73ff-9cc1-6c377840ae40",
+                "handle": "@stk_cross_admin",
+                "display_name": "Stk_Cross_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "created_at": "2026-11-12T12:28:36.939372Z",
+          "updated_at": "2026-11-12T12:28:36.939373Z"
+        }
+      }
+    }
+  ]
+}

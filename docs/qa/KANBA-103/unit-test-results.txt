@@ -1,0 +1,36 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-103/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-103
+configfile: pyproject.toml
+plugins: asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 15 items
+
+kanban/tests/services/test_sticky_heuristic.py::test_char_length_trigger PASSED [  6%]
+kanban/tests/services/test_sticky_heuristic.py::test_line_count_trigger PASSED [ 13%]
+kanban/tests/services/test_sticky_heuristic.py::test_headings_trigger_and_code_fence_exclusion PASSED [ 20%]
+kanban/tests/services/test_sticky_heuristic.py::test_structured_block_triggers PASSED [ 26%]
+kanban/tests/services/test_sticky_heuristic.py::test_outbound_links_trigger PASSED [ 33%]
+kanban/tests/services/test_sticky_heuristic.py::test_snooze_math_and_clearing PASSED [ 40%]
+kanban/tests/services/test_sticky_heuristic.py::test_promoted_sticky_never_recommends PASSED [ 46%]
+kanban/tests/api/test_stickies.py::test_case_1_crud_and_listing PASSED   [ 53%]
+kanban/tests/api/test_stickies.py::test_case_2_snooze_lifecycle_and_growth PASSED [ 60%]
+kanban/tests/api/test_stickies.py::test_case_3_atomic_promotion_and_verbatim_acl_proof PASSED [ 66%]
+kanban/tests/api/test_stickies.py::test_case_4_cross_scope_guard_stub_readonly_and_unarchive_copy PASSED [ 73%]
+kanban/tests/api/test_stickies.py::test_case_5_boundaries_and_sanitization PASSED [ 80%]
+kanban/tests/api/test_stickies.py::test_case_6_promote_to_existing_doc_and_nested_page PASSED [ 86%]
+kanban/tests/api/test_stickies.py::test_case_7_coverage_and_edge_cases PASSED [ 93%]
+kanban/tests/api/test_stickies.py::test_stickies_service_internal_helpers PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                  Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------
+kanban/api/v1/stickies.py                62      0      2      0   100%
+kanban/services/stickies.py             360      8    104     13    95%   97->100, 105->101, 146-147, 238->246, 375, 408->406, 423, 455->453, 552->564, 875, 896, 927, 1115
+kanban/services/sticky_heuristic.py     108      0     36      0   100%
+---------------------------------------------------------------------------------
+TOTAL                                   530      8    142     13    97%
+Required test coverage of 95% reached. Total coverage: 96.88%
+============================== 15 passed in 5.75s ==============================
