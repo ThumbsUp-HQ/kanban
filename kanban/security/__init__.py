@@ -32,6 +32,7 @@ __all__ = [
     "derive_subkey",
     "load_key_material",
     "outbound_secret_scrubber",
+    "resolve_client_ip",
     "scrub_text",
 ]
 
@@ -42,5 +43,9 @@ def __getattr__(name: str) -> Any:  # noqa: ANN401
         import kanban.security.keys as _keys  # noqa: PLC0415
 
         return getattr(_keys, name)
+    if name == "resolve_client_ip":
+        from kanban.security.client_ip import resolve_client_ip as _rcip  # noqa: PLC0415
+
+        return _rcip
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

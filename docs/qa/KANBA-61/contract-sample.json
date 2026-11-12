@@ -1,0 +1,16 @@
+{
+  "status_code": 429,
+  "headers": {
+    "content-type": "application/problem+json",
+    "retry-after": "59",
+    "x-request-id": "7034519bef2841c78c934f5d195a5373"
+  },
+  "body": {
+    "type": "urn:kanban:problem:RATE_LIMITED",
+    "title": "Rate Limit Exceeded",
+    "status": 429,
+    "code": "RATE_LIMITED",
+    "detail": "Rate limit exceeded for policy 'auth_login_test'",
+    "request_id": "7034519bef2841c78c934f5d195a5373"
+  }
+}

@@ -40,6 +40,7 @@ from database.models.projects import (
     View,
     WorkflowState,
 )
+from database.models.ratelimit import RateLimitBucket
 from database.models.spine import (
     InvalidObjectLinkAudit,
     LinkTypeMatrix,
@@ -81,6 +82,7 @@ __all__ = [
     "ProjectLabel",
     "ProjectModuleDefault",
     "ProjectPriority",
+    "RateLimitBucket",
     "RbacRole",
     "ResourceAclEntry",
     "RoleBinding",
