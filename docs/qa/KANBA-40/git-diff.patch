@@ -1250,6 +1250,53 @@ index 0000000..1ef33be
 +    assert chunks[0].delta == ""
 +    assert chunks[0].finish_reason is None
 +    assert chunks[0].prompt_tokens == 8
+diff --git a/docs/qa/KANBA-39/build-check.txt b/docs/qa/KANBA-39/build-check.txt
+index 369ef8c..636ed2c 100644
+--- a/docs/qa/KANBA-39/build-check.txt
++++ b/docs/qa/KANBA-39/build-check.txt
+@@ -1,4 +1,4 @@
+-Success: no issues found in 27 source files
++Success: no issues found in 29 source files
+ All checks passed!
+ 
+ ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+@@ -15,7 +15,7 @@ All checks passed!
+ Contracts
+ ---------
+ 
+-Analyzed 97 files, 108 dependencies.
++Analyzed 99 files, 117 dependencies.
+ ------------------------------------
+ 
+ Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+@@ -24,9 +24,9 @@ Contracts: 1 kept, 0 broken.
+ uv run ruff check .
+ All checks passed!
+ uv run ruff format --check .
+-342 files already formatted
++346 files already formatted
+ uv run mypy
+-Success: no issues found in 145 source files
++Success: no issues found in 147 source files
+ uv run lint-imports
+ 
+ ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+@@ -43,7 +43,7 @@ uv run lint-imports
+ Contracts
+ ---------
+ 
+-Analyzed 97 files, 108 dependencies.
++Analyzed 99 files, 117 dependencies.
+ ------------------------------------
+ 
+ Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+@@ -51,5 +51,5 @@ Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+ Contracts: 1 kept, 0 broken.
+ uv run python -m scripts.check_no_dashes --all
+ uv run python -m scripts.license_gate
+-SUMMARY python=90 node=1 violations=0
++SUMMARY python=92 node=1 violations=0
+ Exit code: 0
 diff --git a/docs/qa/KANBA-40/build-check.txt b/docs/qa/KANBA-40/build-check.txt
 new file mode 100644
 index 0000000..636ed2c
