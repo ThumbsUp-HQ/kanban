@@ -1,0 +1,61 @@
+=== 1. Forbidden Secret in Argv (--passphrase) ===
+$ uv run kanban-ctl backup create --passphrase secret_pass
+[STDERR]
+Error: SECRET_IN_ARGV_FORBIDDEN: Passing keys or passphrases as command-line arguments is strictly forbidden to prevent disclosure in process lists (ps). Use --key-env or --passphrase-file.
+Exit Code: 2
+
+=== 2. Forbidden Secret in Argv (--key) ===
+$ uv run kanban-ctl backup create --key secret_key
+[STDERR]
+Error: SECRET_IN_ARGV_FORBIDDEN: Passing keys or passphrases as command-line arguments is strictly forbidden to prevent disclosure in process lists (ps). Use --key-env or --passphrase-file.
+Exit Code: 2
+
+=== 3. Backup Create with Environment Key (KB_BACKUP_KEY) ===
+$ uv run kanban-ctl backup create --out /tmp/cli_run_proof/backup_archive.kbbak --db-url postgresql+asyncpg://kanban_test@/kb_cli_src?host=/tmp/kb-pgsock-21
+[STDOUT]
+Successfully created encrypted backup: /tmp/cli_run_proof/backup_archive.kbbak (368698 bytes, duration 0.11s)
+Alembic revision: p1_15_link_auditor
+Exit Code: 0
+
+=== 4. Backup Verify Clean Archive ===
+$ uv run kanban-ctl backup verify --in /tmp/cli_run_proof/backup_archive.kbbak
+[STDOUT]
+Archive verification PASSED: /tmp/cli_run_proof/backup_archive.kbbak
+Format version: 1
+Created at: 2026-11-12T05:07:29.645931+00:00
+Alembic revision: p1_15_link_auditor
+Database SHA-256: 434c8e227d1256ea7ca47f51f982c47d0e7f522d52452d92b55f0ca1f09d2fff
+Includes keyring secrets: False
+Exit Code: 0
+
+=== 5. Backup Verify Tampered Archive Rejection ===
+$ uv run kanban-ctl backup verify --in /tmp/cli_run_proof/tampered_archive.kbbak
+[STDERR]
+Archive verification FAILED: Cryptographic authentication failed on chunk 0 (corrupted data or wrong key)
+Exit Code: 2
+
+=== 6. Restore Safety Refusal on Non-Empty Target Database ===
+$ uv run kanban-ctl restore --in /tmp/cli_run_proof/backup_archive.kbbak --target-db-url postgresql+asyncpg://kanban_test@/kb_cli_dst?host=/tmp/kb-pgsock-21
+[STDERR]
+Restore verification failed: Target database is not empty (42 tables found in public schema). Refusing restore unless confirm_overwrite=True (--confirm-overwrite) is set.
+Exit Code: 2
+
+=== 7. Restore Success with --confirm-overwrite ===
+$ uv run kanban-ctl restore --in /tmp/cli_run_proof/backup_archive.kbbak --target-db-url postgresql+asyncpg://kanban_test@/kb_cli_dst?host=/tmp/kb-pgsock-21 --confirm-overwrite
+[STDOUT]
+Restore PASSED into postgresql+asyncpg://kanban_test@/kb_cli_dst?host=/tmp/kb-pgsock-21
+Workspaces verified: 0
+Links audited: 0
+Secrets restored: False
+Duration: 0.33s
+Exit Code: 0
+
+=== 8. Promote Export-Compose 5-Network Bundle ===
+$ uv run kanban-ctl promote export-compose --out-dir /tmp/cli_run_proof/exported_compose --domain kanban.example.com
+[STDOUT]
+Exported production bundle to /tmp/cli_run_proof/exported_compose
+Compose file: /tmp/cli_run_proof/exported_compose/docker-compose.yml
+Caddyfile: /tmp/cli_run_proof/exported_compose/Caddyfile
+Environment file: /tmp/cli_run_proof/exported_compose/.env.production (mode 0600)
+Carried over keyring secrets: False
+Exit Code: 0
