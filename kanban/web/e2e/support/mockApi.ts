@@ -17,6 +17,8 @@ export interface MockResponse {
   json?: unknown;
   headers?: Record<string, string>;
   delayMs?: number;
+  contentType?: string;
+  body?: string | Buffer;
 }
 
 export type MockHandler = MockResponse | ((req: MockRequest) => MockResponse);
@@ -141,11 +143,15 @@ export async function mockApi(page: Page, handlers: MockHandlers): Promise<MockR
         if (response.delayMs && response.delayMs > 0) {
           await new Promise((resolve) => setTimeout(resolve, response.delayMs));
         }
+        const contentType =
+          response.contentType ??
+          response.headers?.['content-type'] ??
+          'application/json';
         await route.fulfill({
           status: response.status ?? 200,
-          contentType: 'application/json',
+          contentType,
           headers: response.headers ?? {},
-          body: JSON.stringify(response.json ?? {}),
+          body: response.body ?? JSON.stringify(response.json ?? {}),
         });
         break;
       }

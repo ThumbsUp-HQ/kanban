@@ -1,0 +1,28 @@
+
+> @kanban/web@0.1.0 typecheck /tmp/kb-wt-KANBA-78/kanban/web
+> tsc -b --noEmit
+
+
+> @kanban/web@0.1.0 lint /tmp/kb-wt-KANBA-78/kanban/web
+> eslint . --max-warnings 0
+
+
+> @kanban/web@0.1.0 build /tmp/kb-wt-KANBA-78/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 240 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.39 kB │ gzip:   0.27 kB
+dist/assets/index-BbcwZpBq.css   23.32 kB │ gzip:   5.00 kB
+dist/assets/index-C8iuoMwx.js   666.40 kB │ gzip: 206.68 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 263ms
+EXIT_CODE=0

@@ -181,4 +181,13 @@ export const EMOJI_REGISTRY: Readonly<Record<EmojiKey, EmojiEntry>> = Object.fre
   }),
 });
 
-export const EXTENDED_EMOJI_REGISTRY: Readonly<Record<string, EmojiEntry>> = Object.freeze({});
+export const EXTENDED_EMOJI_REGISTRY: Readonly<Record<string, EmojiEntry>> = Object.freeze({
+  externalMedia: Object.freeze({
+    glyph: '🌐',
+    domain: 'External Media Shield',
+    ariaLabel: 'Proxied external image',
+    defaultHint: 'Proxied anonymously via Kanban Media Shield',
+  }),
+});
+
+export type ExtendedEmojiKey = EmojiKey | 'externalMedia';

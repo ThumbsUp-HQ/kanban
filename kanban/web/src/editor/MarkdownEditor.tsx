@@ -20,6 +20,7 @@ import {
   createEditorNodeViews,
   type EditorSurfaceKind,
 } from './editorSurfaceFactory';
+import { createMediaNodeViews } from './media/MediaNodeViews';
 import { EmojiHint } from '../components/emoji/EmojiHint';
 import './MarkdownEditor.css';
 
@@ -110,7 +111,10 @@ export function MarkdownEditor({
     const view = new EditorView(mountRef.current, {
       state,
       editable: () => !readOnly,
-      nodeViews: createEditorNodeViews(surface),
+      nodeViews: {
+        ...createEditorNodeViews(surface),
+        ...createMediaNodeViews(),
+      },
       attributes: {
         'aria-label': ariaLabel,
         role: 'textbox',

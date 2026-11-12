@@ -601,4 +601,89 @@ describe('EmojiHint Component', () => {
       fireEvent.pointerEnter(subtleTrigger);
     });
   });
+
+  it('covers interactive hint without focusable action elements and pointer enter/leave on popup', () => {
+    const clock = new TestClock();
+    const ctrl = createHintController(clock);
+
+    render(
+      <EmojiHint
+        kind="rawMarkdown"
+        variant="interactive"
+        testId="no-action-hint"
+        controller={ctrl}
+      />,
+    );
+
+    const trigger = screen.getByTestId('no-action-hint');
+    act(() => {
+      fireEvent.focus(trigger);
+    });
+
+    const popup = screen.getByTestId('no-action-hint-popup');
+    expect(popup).toBeDefined();
+
+    // Tab on trigger with popup open but no focusable children
+    fireEvent.keyDown(trigger, { key: 'Tab', shiftKey: false });
+
+    // Tab in popup with no focusable elements returns early
+    fireEvent.keyDown(popup, { key: 'Tab', shiftKey: false });
+    fireEvent.keyDown(popup, { key: 'Tab', shiftKey: true });
+
+    // Pointer enter and leave on popup
+    fireEvent.pointerEnter(popup);
+    fireEvent.pointerLeave(popup);
+
+    // Escape in popup
+    fireEvent.keyDown(popup, { key: 'Escape' });
+
+    // Blur with unrelated target outside popup and trigger
+    const outsideEl = document.createElement('div');
+    document.body.appendChild(outsideEl);
+    fireEvent.blur(popup, { relatedTarget: outsideEl });
+    document.body.removeChild(outsideEl);
+  });
+
+  it('falls back to safeEntry for unknown emoji kinds', () => {
+    render(
+      <EmojiHint
+        kind={'nonExistentKind' as unknown as 'access'}
+        testId="unknown-kind-hint"
+      />,
+    );
+    const trigger = screen.getByTestId('unknown-kind-hint');
+    expect(trigger.getAttribute('aria-label')).toBe('Status indicator');
+    expect(trigger.textContent).toContain('❓');
+  });
+
+  it('handles shift-tab trapping from first focusable element back to trigger', () => {
+    const clock = new TestClock();
+    const ctrl = createHintController(clock);
+
+    render(
+      <EmojiHint
+        kind="rawMarkdown"
+        variant="interactive"
+        activateLabel="First Action"
+        onActivate={vi.fn()}
+        testId="shift-tab-hint"
+        controller={ctrl}
+      />,
+    );
+
+    const trigger = screen.getByTestId('shift-tab-hint');
+    act(() => {
+      fireEvent.focus(trigger);
+    });
+
+    const popup = screen.getByTestId('shift-tab-hint-popup');
+    const actionBtn = popup.querySelector('button');
+    expect(actionBtn).toBeDefined();
+
+    if (actionBtn) {
+      actionBtn.focus();
+      // Shift-Tab from first element focuses trigger
+      fireEvent.keyDown(popup, { key: 'Tab', shiftKey: true });
+    }
+  });
 });

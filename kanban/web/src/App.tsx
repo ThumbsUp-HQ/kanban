@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { TokenStory } from './dev/TokenStory';
 import { EmojiStory } from './dev/EmojiStory';
 import { EditorStory } from './dev/EditorStory';
+import { MediaStory } from './dev/MediaStory';
 import './App.css';
 
 /**
@@ -29,6 +30,9 @@ export function App(): JSX.Element {
     }
     if (window.location.pathname === '/__dev/editor') {
       return <EditorStory />;
+    }
+    if (window.location.pathname === '/__dev/media') {
+      return <MediaStory />;
     }
   }
 
