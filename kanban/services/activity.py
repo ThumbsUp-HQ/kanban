@@ -63,6 +63,10 @@ class ActivityEventType(StrEnum):
     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
     LOCAL_ADMIN_LOGIN_SUCCEEDED = "LOCAL_ADMIN_LOGIN_SUCCEEDED"
     LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
+    MFA_VERIFIED = "MFA_VERIFIED"
+    MFA_FAILED = "MFA_FAILED"
+    RECOVERY_CODE_USED = "RECOVERY_CODE_USED"
+    RECOVERY_CODES_REGENERATED = "RECOVERY_CODES_REGENERATED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -72,6 +76,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.MFA_VERIFIED: ActivityCategory.SYSTEM,
+        ActivityEventType.MFA_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.RECOVERY_CODE_USED: ActivityCategory.SYSTEM,
+        ActivityEventType.RECOVERY_CODES_REGENERATED: ActivityCategory.SYSTEM,
     }
 )
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from kanban.api.v1.auth_local import router as auth_local_router
+from kanban.api.v1.auth_mfa import router as auth_mfa_router
 from kanban.api.v1.auth_session import router as auth_session_router
 from kanban.api.v1.health import router as health_router
 from kanban.api.v1.media_proxy import router as media_proxy_router
@@ -23,6 +24,7 @@ def build_v1_router() -> APIRouter:
     v1.include_router(resolve_router)
     v1.include_router(auth_session_router)
     v1.include_router(auth_local_router)
+    v1.include_router(auth_mfa_router)
     return v1
 
 

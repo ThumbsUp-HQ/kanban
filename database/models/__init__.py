@@ -1,7 +1,13 @@
 """Universal Object Graph SQLAlchemy 2.0 ORM models for kanban-database."""
 
 from database.models.activity import ActivityChainHead, ActivityRecord
-from database.models.auth import AuthProviderCard, LocalAdminCredential, UserSession
+from database.models.auth import (
+    AuthProviderCard,
+    LocalAdminCredential,
+    RecoveryCode,
+    TotpFactor,
+    UserSession,
+)
 from database.models.base import (
     Base,
     InvalidLinkReason,
@@ -89,9 +95,11 @@ __all__ = [
     "ProjectPriority",
     "RateLimitBucket",
     "RbacRole",
+    "RecoveryCode",
     "ResourceAclEntry",
     "RoleBinding",
     "Sticky",
+    "TotpFactor",
     "User",
     "UserSession",
     "View",

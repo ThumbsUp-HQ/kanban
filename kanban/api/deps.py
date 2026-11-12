@@ -14,6 +14,7 @@ from kanban.api.problems import ProblemException
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+    from datetime import datetime
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +32,7 @@ class PrincipalContext:
     session_id: uuid.UUID | None = None
     agent_principal_id: uuid.UUID | None = None
     mfa_pending: bool = False
+    aal2_verified_at: datetime | None = None
 
     def __post_init__(self) -> None:
         """Enforce AAL level bounds."""

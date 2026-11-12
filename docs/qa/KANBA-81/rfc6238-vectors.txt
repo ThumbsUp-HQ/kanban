@@ -1,0 +1,9 @@
+RFC 6238 Appendix B Verification Vectors (HMAC-SHA1, 6 digits, T0=0, X=30s):
+Seed: 12345678901234567890 (Hex: 3132333435363738393031323334353637383930)
+----------------------------------------------------------------------
+Time: 59           | Expected: 287082 | Calculated: 287082 | Result: MATCH
+Time: 1111111109   | Expected: 081804 | Calculated: 081804 | Result: MATCH
+Time: 1111111111   | Expected: 050471 | Calculated: 050471 | Result: MATCH
+Time: 1234567890   | Expected: 005924 | Calculated: 005924 | Result: MATCH
+Time: 2000000000   | Expected: 279037 | Calculated: 279037 | Result: MATCH
+Time: 20000000000  | Expected: 353130 | Calculated: 353130 | Result: MATCH
