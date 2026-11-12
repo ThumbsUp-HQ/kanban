@@ -1,0 +1,39 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 13 items
+
+database/tests/test_pg_harness.py::test_01_a_positive_isolation_insert PASSED [  7%]
+database/tests/test_pg_harness.py::test_01_b_positive_isolation_assert_clean PASSED [ 15%]
+database/tests/test_pg_harness.py::test_02_savepoint_join_outer_transaction_open PASSED [ 23%]
+database/tests/test_pg_harness.py::test_03_a_committed_db_insert PASSED  [ 30%]
+database/tests/test_pg_harness.py::test_03_b_committed_db_truncate_and_identity_restart PASSED [ 38%]
+database/tests/test_pg_harness.py::test_04_negative_security_socket_and_dsn_rejections PASSED [ 46%]
+database/tests/test_pg_harness.py::test_05_boundary_ensure_template_caching PASSED [ 53%]
+database/tests/test_pg_harness.py::test_06_negative_committed_db_session_without_marker PASSED [ 61%]
+database/tests/test_pg_harness.py::test_07_build_dsn_defaults PASSED     [ 69%]
+database/tests/test_pg_harness.py::test_08_check_pg_ready_failure_branches PASSED [ 76%]
+database/tests/test_pg_harness.py::test_09_compute_fingerprint_variations PASSED [ 84%]
+database/tests/test_pg_harness.py::test_10_ensure_template_tcp_rejection PASSED [ 92%]
+database/tests/test_pg_harness.py::test_11_pytest_configure_lifecycle PASSED [100%]
+
+=============================== warnings summary ===============================
+database/tests/test_pg_harness.py::test_04_negative_security_socket_and_dsn_rejections
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover
+------------------------------------------------------------------
+database/testing/pg_harness.py     160      0     34      4    98%
+------------------------------------------------------------------
+TOTAL                              160      0     34      4    98%
+Required test coverage of 95% reached. Total coverage: 97.94%
+======================== 13 passed, 1 warning in 10.54s ========================
+Exit Code: 0

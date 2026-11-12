@@ -1,0 +1,17 @@
+# Host-local Unix socket directory permissions:
+# The container runs with listen_addresses="" and zero exposed TCP ports.
+# Host authentication method "trust" is acceptable strictly because the sole
+# access path is a host-local Unix domain socket directory (/tmp/kb-pgsock)
+# created with mode 0700 owned by the invoking test user, and the database
+# contains only disposable, ephemeral test data.
+services:
+  pg-test:
+    image: pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off",
+              "-c", "full_page_writes=off", "-c", "max_connections=200",
+              "-c", "listen_addresses=", "-c", "unix_socket_directories=/var/run/postgresql",
+              "-c", "unix_socket_permissions=0777"]
+    environment: { POSTGRES_USER: kanban_test, POSTGRES_DB: postgres, POSTGRES_HOST_AUTH_METHOD: trust }
+    tmpfs: ["/var/lib/postgresql/data:rw,size=1g"]
+    volumes: ["${KB_TEST_PGSOCKET_DIR:-/tmp/kb-pgsock}:/var/run/postgresql"]
+    healthcheck: { test: ["CMD", "pg_isready", "-h", "/var/run/postgresql", "-U", "kanban_test"], interval: 1s, retries: 30 }

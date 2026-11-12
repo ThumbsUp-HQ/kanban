@@ -28,6 +28,9 @@ dev = [
     "ruff==0.17.4",
     "mypy==2.4.1",
     "pre-commit==4.7.0",
+    "pytest-asyncio==1.4.1.post1",
+    "pytest-xdist==3.8.0",
+    "pytest-socket==0.8.1",
 ]
 
 [tool.ruff]
@@ -46,8 +49,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "PLR2004", "S603", "S607"]     # assert, magic values, and subprocess calls in tests
-"**/tests/**" = ["S101", "PLR2004", "S603", "S607"]  # assert, magic values, and subprocess calls in tests
+"tests/**" = ["S101", "PLR2004", "S603", "S607", "S108"]     # assert, magic values, subprocess calls, and /tmp paths in tests
+"**/tests/**" = ["S101", "PLR2004", "S603", "S607", "S108"]  # assert, magic values, subprocess calls, and /tmp paths in tests
+"database/testing/**" = ["S108", "ASYNC240"]                  # test harness uses /tmp sockets and initialization file reads
 
 [tool.mypy]
 python_version = "3.12"
@@ -55,6 +59,13 @@ strict = true
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 packages = ["database", "kanban", "mcp", "agent", "scripts"]
+
+[tool.pytest.ini_options]
+addopts = "--disable-socket --allow-unix-socket -p no:cacheprovider --strict-markers"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["committed_db: test commits real transactions; TRUNCATE cleanup applied"]
 
 [tool.importlinter]
 root_packages = ["agent", "mcp", "kanban", "database"]
