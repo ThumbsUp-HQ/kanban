@@ -1,0 +1,283 @@
+/**
+ * Breathable Enterprise Typography and ProseMirror Styling (KB-P3-45, S5.1, S6.1, S6.2).
+ * Strictly compliant with Content-Security-Policy: zero inline styles, zero dynamic style tags.
+ */
+
+.kb-editor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--bg-surface);
+  color: var(--fg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.kb-editor--editorial {
+  padding: var(--prose-pad);
+}
+
+.kb-editor--compact {
+  padding: 12px 16px;
+}
+
+.kb-editor:focus-within {
+  border-color: var(--focus-ring);
+}
+
+/* Corner Action Pill for Raw Markdown Toggle (📝) */
+.kb-editor__hint-corner {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+.kb-editor:hover .kb-editor__hint-corner,
+.kb-editor:focus-within .kb-editor__hint-corner,
+.kb-editor__hint-corner.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.kb-editor__hint-corner.is-active .emoji-hint {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* ProseMirror WYSIWYG Editable Surface */
+.kb-editor__surface {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ProseMirror {
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--leading-prose);
+  color: var(--fg-primary);
+  min-height: 140px;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.ProseMirror p {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.ProseMirror p:last-child {
+  margin-bottom: 0;
+}
+
+.ProseMirror h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 24px;
+  margin-bottom: 12px;
+}
+
+.ProseMirror h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+.ProseMirror h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 14px;
+  margin-bottom: 6px;
+}
+
+.ProseMirror blockquote {
+  margin: 16px 0;
+  padding: 8px 16px;
+  border-left: 3px solid var(--accent-primary);
+  background-color: var(--bg-hover);
+  color: var(--fg-secondary);
+}
+
+.ProseMirror pre.kb-code-block {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  padding: 16px;
+  margin: 16px 0;
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.ProseMirror pre.kb-code-block code {
+  font-family: var(--font-mono);
+  background: transparent;
+  padding: 0;
+  border: none;
+}
+
+.ProseMirror code.kb-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  padding: 2px 6px;
+  background-color: var(--bg-hover);
+  border-radius: 4px;
+}
+
+.ProseMirror table.kb-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: var(--text-body);
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  padding: 8px 14px;
+  border: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+
+.ProseMirror th {
+  background-color: var(--bg-hover);
+  font-weight: 600;
+}
+
+.ProseMirror th[data-align='center'],
+.ProseMirror td[data-align='center'] {
+  text-align: center;
+}
+
+.ProseMirror th[data-align='right'],
+.ProseMirror td[data-align='right'] {
+  text-align: right;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  margin: 8px 0 16px 24px;
+  padding: 0;
+}
+
+.ProseMirror li {
+  margin-bottom: 4px;
+}
+
+.ProseMirror ul.kb-task-list {
+  list-style: none;
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.ProseMirror li.kb-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ProseMirror li.kb-task-item.is-checked {
+  color: var(--fg-muted);
+  text-decoration: line-through;
+}
+
+.ProseMirror input.kb-task-checkbox {
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.ProseMirror .kb-task-item__content {
+  flex: 1;
+}
+
+.ProseMirror hr.kb-hr {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 24px 0;
+}
+
+.ProseMirror a.kb-link {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
+.ProseMirror a.kb-link:hover {
+  text-decoration: none;
+}
+
+.ProseMirror .kb-editor__definition {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  margin: 8px 0;
+  padding: 4px 8px;
+  background-color: var(--bg-hover);
+  border-radius: 4px;
+}
+
+.ProseMirror img.kb-inline-image,
+.ProseMirror .kb-editor__image-block img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+/* Raw Canonical Markdown Monospace Textarea */
+.kb-editor__raw {
+  width: 100%;
+  min-height: 240px;
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
+  line-height: var(--leading-prose);
+  color: var(--fg-primary);
+  background-color: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 16px;
+  resize: vertical;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.kb-editor--editorial .kb-editor__raw {
+  padding: var(--prose-pad);
+}
+
+.kb-editor__raw:focus {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+/* Byte Limit Warning Strip */
+.kb-editor__byte-warning {
+  margin-top: 8px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  color: var(--danger-fg);
+  background-color: var(--danger-bg);
+  border: 1px solid var(--danger-fg);
+  border-radius: 4px;
+}

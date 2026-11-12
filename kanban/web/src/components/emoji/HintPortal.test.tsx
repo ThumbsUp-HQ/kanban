@@ -25,6 +25,19 @@ describe('HintPortal', () => {
 
   it('returns null when document is undefined or null', () => {
     expect(getOrCreateHintRoot(null)).toBeNull();
+
+    const origDesc = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    try {
+      Object.defineProperty(globalThis, 'document', {
+        get: () => undefined,
+        configurable: true,
+      });
+      expect(getOrCreateHintRoot()).toBeNull();
+    } finally {
+      if (origDesc) {
+        Object.defineProperty(globalThis, 'document', origDesc);
+      }
+    }
   });
 
   it('renders children into #kb-hint-root via portal', () => {

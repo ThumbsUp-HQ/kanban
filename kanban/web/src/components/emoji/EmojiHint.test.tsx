@@ -288,6 +288,20 @@ describe('EmojiHint Component', () => {
     expect(screen.getByTestId('touch-hint-popup')).toBeDefined();
     expect(onActivate).not.toHaveBeenCalled();
 
+    // Tap again on open trigger to test touch closing branch
+    act(() => {
+      fireEvent.pointerDown(trigger, { pointerType: 'touch' });
+      fireEvent.click(trigger);
+    });
+    expect(screen.queryByTestId('touch-hint-popup')).toBeNull();
+
+    // Re-open for the rest of the test
+    act(() => {
+      fireEvent.pointerDown(trigger, { pointerType: 'touch' });
+      fireEvent.click(trigger);
+    });
+    expect(screen.getByTestId('touch-hint-popup')).toBeDefined();
+
     // Now tap the action button inside popup
     const actionBtn = screen.getByTestId('touch-hint-action-btn');
     expect(actionBtn.textContent).toBe('Inspect Verdict');
@@ -525,5 +539,66 @@ describe('EmojiHint Component', () => {
       fireEvent.blur(popup, { relatedTarget: null });
     });
     expect(screen.getByTestId('touch-hint-popup')).toBeDefined();
+  });
+
+  it('tests handlePopupBlur and handlePopupKeyDown forward tab and non-tab keys', () => {
+    const clock = new TestClock();
+    const ctrl = createHintController(clock);
+
+    render(
+      <EmojiHint
+        kind="rawMarkdown"
+        variant="interactive"
+        activateLabel="Action"
+        onActivate={vi.fn()}
+        testId="tab-trap-hint"
+        controller={ctrl}
+      />,
+    );
+
+    const trigger = screen.getByTestId('tab-trap-hint');
+    act(() => {
+      fireEvent.focus(trigger);
+    });
+
+    const popup = screen.getByTestId('tab-trap-hint-popup');
+    expect(popup).toBeDefined();
+
+    // 1. Non-Tab keydown in popup
+    fireEvent.keyDown(popup, { key: 'ArrowDown' });
+
+    // 2. Tab and Shift-Tab on open trigger
+    fireEvent.keyDown(trigger, { key: 'Tab', shiftKey: true });
+    fireEvent.keyDown(trigger, { key: 'Tab', shiftKey: false });
+
+    // 3. Forward Tab on action button (last focusable element)
+    const actionBtn = popup.querySelector('button');
+    if (actionBtn) {
+      actionBtn.focus();
+      fireEvent.keyDown(popup, { key: 'Tab', shiftKey: false });
+    }
+
+    // 4. Popup blur with touch and relatedTarget variations
+    fireEvent.pointerDown(popup, { pointerType: 'touch' });
+    fireEvent.blur(popup);
+    fireEvent.blur(popup, { relatedTarget: popup });
+    fireEvent.blur(popup, { relatedTarget: trigger });
+
+    // 5. Blur on non-interactive subtle hint popup
+    const subtleCtrl = createHintController(new TestClock());
+    render(
+      <EmojiHint
+        kind="rawMarkdown"
+        variant="tooltip"
+        testId="subtle-blur-hint"
+        controller={subtleCtrl}
+      />,
+    );
+    const subtleTrigger = screen.getByTestId('subtle-blur-hint');
+    // Tab on closed trigger
+    fireEvent.keyDown(subtleTrigger, { key: 'Tab' });
+    act(() => {
+      fireEvent.pointerEnter(subtleTrigger);
+    });
   });
 });
