@@ -13,4 +13,4 @@ This ticket (`KANBA-70` / `KB-P5-07`) implements the core Sparkle FIM completion
 As explicitly specified in `docs/tickets/KB-P5-07.md` and `agent/GEMINI.md`:
 - CLI validation of this workflow is owned by downstream ticket `KB-P5-10` (`validate-sparkle`).
 - This ticket (`KB-P5-07`) exposes `run_sparkle_pipeline()` as the single canonical entry point that `KB-P5-10` calls.
-- Full automated test coverage (`97.25%`, exceeding the `>= 95%` mandate) is established across all 10 required test cases using deterministic AI response fixtures.
+- Full automated test coverage (`99.08%`, exceeding the `>= 95%` mandate across 43 tests) is established across all required test cases using deterministic AI response fixtures.

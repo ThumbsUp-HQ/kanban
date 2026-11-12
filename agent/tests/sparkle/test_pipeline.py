@@ -323,7 +323,7 @@ async def test_case_03_security_rls_isolation(pg_worker_db: AsyncEngine) -> None
         f"Grep Canary Exit Code: 1 (grep -c {sec_canary} = {canary_count})",
         "RLS Canary Verification: PASSED (Canary was not retrieved across project boundary)",
     ]
-    proof_path.write_text("\n".join(proof_lines))
+    proof_path.write_text("\n".join(proof_lines))  # noqa: ASYNC240
 
 
 @pytest.mark.asyncio
