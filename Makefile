@@ -1,4 +1,4 @@
-.PHONY: check fmt testdb-up testdb-down
+.PHONY: check fmt testdb-up testdb-down license
 
 check:
 	uv run ruff check .
@@ -6,6 +6,10 @@ check:
 	uv run mypy
 	uv run lint-imports
 	uv run python -m scripts.check_no_dashes --all
+
+license:
+	uv run python -m scripts.license_gate
+
 
 fmt:
 	uv run ruff format .
