@@ -124,6 +124,10 @@ class ActivityEventType(StrEnum):
     BOARD_COLUMN_REBALANCED = "BOARD_COLUMN_REBALANCED"
     ISSUE_ARCHIVED = "ISSUE_ARCHIVED"
     ISSUE_UNARCHIVED = "ISSUE_UNARCHIVED"
+    WEBAUTHN_REGISTERED = "WEBAUTHN_REGISTERED"
+    WEBAUTHN_VERIFIED = "WEBAUTHN_VERIFIED"
+    WEBAUTHN_DELETED = "WEBAUTHN_DELETED"
+    WEBAUTHN_SIGN_COUNT_REGRESSION = "WEBAUTHN_SIGN_COUNT_REGRESSION"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -194,6 +198,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.BOARD_COLUMN_REBALANCED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_ARCHIVED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_UNARCHIVED: ActivityCategory.HISTORY,
+        ActivityEventType.WEBAUTHN_REGISTERED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_VERIFIED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_DELETED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_SIGN_COUNT_REGRESSION: ActivityCategory.SYSTEM,
     }
 )
 

@@ -19,11 +19,17 @@ from kanban.auth.mfa.totp import (
     totp_at,
     verify_totp,
 )
+from kanban.auth.mfa.webauthn import (
+    WebauthnCredentialRecord,
+    WebauthnService,
+)
 
 __all__ = [
     "CROCKFORD_ALPHABET",
     "RecoveryCodeService",
     "TotpService",
+    "WebauthnCredentialRecord",
+    "WebauthnService",
     "assert_admin_routes_protected",
     "generate_recovery_codes",
     "hash_recovery_code",

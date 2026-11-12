@@ -54,7 +54,7 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
 
     # Exact set equality across all tables (45 tables incl. MFA totp/recovery)
     assert orm_tables == pg_tables
-    assert len(orm_tables) == 45
+    assert len(orm_tables) == 47
 
 
 async def _setup_test_project_spine(
