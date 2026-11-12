@@ -203,6 +203,7 @@ def tokenize_expression(expr: str) -> list[str]:
         processed = re.sub(re.escape(phrase), replacement, processed, flags=re.IGNORECASE)
 
     processed = re.sub(r"\s+/\s+", " OR ", processed)
+    processed = re.sub(r"\s*;\s*", " OR ", processed)
     spaced = processed.replace("(", " ( ").replace(")", " ) ")
     raw_tokens = spaced.split()
 

@@ -1,0 +1,32 @@
+............................                                             [100%]
+=============================== warnings summary ===============================
+kanban/tests/test_app.py:7
+  /home/adamoutler/kanban/kanban/tests/test_app.py:7: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                     Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------------
+kanban/__init__.py                           3      0      0      0   100%
+kanban/app.py                               32      0      2      0   100%
+kanban/security/__init__.py                  3      0      0      0   100%
+kanban/security/headers.py                  54      0     18      1    99%   56->58
+kanban/security/scrubber.py                134      0     50      0   100%
+kanban/settings.py                          24      0      6      0   100%
+kanban/tests/__init__.py                     0      0      0      0   100%
+kanban/tests/conftest.py                    23      8     14      4    62%   10->exit, 14, 22-26, 28-30
+kanban/tests/security/__init__.py            0      0      0      0   100%
+kanban/tests/security/test_scrubber.py     203      0     20      0   100%
+kanban/tests/test_app.py                    85      1      2      0    99%   91
+kanban/tests/test_security_headers.py      118      3      6      0    98%   156, 186, 189
+kanban/tests/test_smoke.py                   3      0      0      0   100%
+kanban/tests/test_web_static.py            148      2      4      1    98%   156->161, 219, 222
+kanban/web_static.py                       158     13     54      4    92%   47->45, 81-82, 111-112, 116, 148, 234, 252-254, 318-320
+------------------------------------------------------------------------------------
+TOTAL                                      988     27    176     10    97%
+Required test coverage of 95% reached. Total coverage: 96.65%
+28 passed, 1 warning in 0.63s
+Exit code: 0

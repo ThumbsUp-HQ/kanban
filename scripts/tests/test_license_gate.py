@@ -53,6 +53,7 @@ def test_classify_positive_variants() -> None:
     assert classify("BSD-3-Clause") == Verdict.ALLOW
     assert classify("Apache-2.0") == Verdict.ALLOW
     assert classify("MIT OR GPL-3.0") == Verdict.ALLOW
+    assert classify("Apache Software License; MIT License") == Verdict.ALLOW
     assert classify("Apache-2.0 OR BSD-2-Clause") == Verdict.ALLOW
     assert classify("MIT AND PSF-2.0") == Verdict.ALLOW
 
