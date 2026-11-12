@@ -20,14 +20,23 @@ def dump_schema(db_name: str) -> str:
         return proc.stdout
 
     # Docker fallback: locate running pg-test container
-    filter_arg = "label=com.docker.compose.service=pg-test"
+    socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     res = subprocess.run(
-        ["docker", "ps", "--filter", filter_arg, "--format", "{{.ID}}"],
+        ["docker", "ps", "--filter", f"volume={socket_dir}", "--format", "{{.ID}}"],
         capture_output=True,
         text=True,
         check=True,
     )
     cid = res.stdout.strip().splitlines()[0] if res.stdout.strip() else None
+    if not cid:
+        filter_arg = "label=com.docker.compose.service=pg-test"
+        res = subprocess.run(
+            ["docker", "ps", "--filter", filter_arg, "--format", "{{.ID}}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        cid = res.stdout.strip().splitlines()[0] if res.stdout.strip() else None
     if not cid:
         res2 = subprocess.run(
             ["docker", "ps", "--filter", "ancestor=pgvector/pgvector:pg16", "--format", "{{.ID}}"],

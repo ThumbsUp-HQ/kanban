@@ -1,0 +1,1486 @@
+diff --git a/database/migrations/sql/p1_06_parent_dag.down.sql b/database/migrations/sql/p1_06_parent_dag.down.sql
+new file mode 100644
+index 0000000..abee3e4
+--- /dev/null
++++ b/database/migrations/sql/p1_06_parent_dag.down.sql
+@@ -0,0 +1,86 @@
++-- Migration: p1_06_parent_dag (down)
++-- Drops parent DAG triggers and restores KB-P1-05 path logic
++
++DROP TRIGGER IF EXISTS issues_parent_dag_au_trg ON issues;
++DROP FUNCTION IF EXISTS issues_parent_dag_au();
++
++DROP TRIGGER IF EXISTS issues_parent_dag_biu_trg ON issues;
++DROP FUNCTION IF EXISTS issues_parent_dag_biu();
++
++DROP INDEX IF EXISTS issues_ancestry_gist;
++ALTER TABLE issues DROP CONSTRAINT IF EXISTS issues_ancestry_depth_chk;
++
++DROP FUNCTION IF EXISTS issue_ltree_label(uuid);
++
++-- Restore issues_validate_biu from KB-P1-05
++CREATE OR REPLACE FUNCTION issues_validate_biu()
++RETURNS trigger
++LANGUAGE plpgsql
++AS $$
++DECLARE
++    v_project projects%ROWTYPE;
++    v_object objects%ROWTYPE;
++    v_state workflow_states%ROWTYPE;
++    v_priority project_priorities%ROWTYPE;
++    v_parent issues%ROWTYPE;
++BEGIN
++    -- 1. Verify project exists and workspace matches
++    SELECT * INTO v_project FROM projects WHERE id = NEW.project_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PROJECT_NOT_FOUND';
++    END IF;
++
++    IF NEW.workspace_id <> v_project.workspace_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_WORKSPACE_MISMATCH';
++    END IF;
++
++    -- 2. Verify spine object matches
++    SELECT * INTO v_object FROM objects WHERE id = NEW.id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SPINE_NOT_FOUND';
++    END IF;
++
++    IF v_object.project_id IS DISTINCT FROM NEW.project_id
++       OR v_object.canonical_key <> (v_project.identifier || '-' || NEW.sequence_id::text) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SPINE_MISMATCH';
++    END IF;
++
++    -- 3. Verify sequence_id has been allocated
++    IF NEW.sequence_id > v_project.issue_seq_counter THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SEQUENCE_NOT_ALLOCATED';
++    END IF;
++
++    -- 4. Verify state_id and priority_id belong to NEW.project_id
++    SELECT * INTO v_state FROM workflow_states WHERE id = NEW.state_id;
++    IF NOT FOUND OR v_state.project_id <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_STATE_PROJECT_MISMATCH';
++    END IF;
++
++    SELECT * INTO v_priority FROM project_priorities WHERE id = NEW.priority_id;
++    IF NOT FOUND OR v_priority.project_id <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_PRIORITY_PROJECT_MISMATCH';
++    END IF;
++
++    -- 5. On UPDATE: sequence_id and project_id are immutable
++    IF TG_OP = 'UPDATE' THEN
++        IF NEW.sequence_id <> OLD.sequence_id OR NEW.project_id <> OLD.project_id THEN
++            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_KEY_IMMUTABLE';
++        END IF;
++    END IF;
++
++    -- 6. On INSERT: compute ancestry_path (KB-P1-05 baseline logic)
++    IF TG_OP = 'INSERT' THEN
++        IF NEW.parent_issue_id IS NULL THEN
++            NEW.ancestry_path := text2ltree(replace(NEW.id::text, '-', ''));
++        ELSE
++            SELECT * INTO v_parent FROM issues WHERE id = NEW.parent_issue_id;
++            IF NOT FOUND THEN
++                RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_NOT_FOUND';
++            END IF;
++            NEW.ancestry_path := v_parent.ancestry_path || text2ltree(replace(NEW.id::text, '-', ''));
++        END IF;
++    END IF;
++
++    RETURN NEW;
++END;
++$$;
+diff --git a/database/migrations/sql/p1_06_parent_dag.up.sql b/database/migrations/sql/p1_06_parent_dag.up.sql
+new file mode 100644
+index 0000000..85ccb83
+--- /dev/null
++++ b/database/migrations/sql/p1_06_parent_dag.up.sql
+@@ -0,0 +1,178 @@
++-- Migration: p1_06_parent_dag (up)
++-- Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry
++
++-- 1. Helper function to create ltree label from UUID
++CREATE OR REPLACE FUNCTION issue_ltree_label(p_id uuid)
++RETURNS ltree
++LANGUAGE sql
++IMMUTABLE PARALLEL SAFE
++AS $$
++    SELECT text2ltree(replace(p_id::text, '-', ''));
++$$;
++
++GRANT EXECUTE ON FUNCTION issue_ltree_label(uuid) TO kanban_app;
++GRANT EXECUTE ON FUNCTION issue_ltree_label(uuid) TO app_rls_reader;
++
++-- 2. Schema additions: GiST index and depth check constraint
++CREATE INDEX issues_ancestry_gist ON issues USING gist (ancestry_path);
++ALTER TABLE issues ADD CONSTRAINT issues_ancestry_depth_chk CHECK (nlevel(ancestry_path) BETWEEN 1 AND 6);
++
++-- 3. Replace issues_validate_biu function body to remove KB-P1-05 simple path logic
++-- (ancestry path is now exclusively managed by issues_parent_dag_biu and issues_parent_dag_au)
++CREATE OR REPLACE FUNCTION issues_validate_biu()
++RETURNS trigger
++LANGUAGE plpgsql
++AS $$
++DECLARE
++    v_project projects%ROWTYPE;
++    v_object objects%ROWTYPE;
++    v_state workflow_states%ROWTYPE;
++    v_priority project_priorities%ROWTYPE;
++BEGIN
++    -- 1. On UPDATE: sequence_id and project_id are immutable
++    IF TG_OP = 'UPDATE' THEN
++        IF NEW.sequence_id IS DISTINCT FROM OLD.sequence_id OR NEW.project_id IS DISTINCT FROM OLD.project_id THEN
++            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_KEY_IMMUTABLE';
++        END IF;
++    END IF;
++
++    -- 2. Verify project exists and workspace matches
++    SELECT * INTO v_project FROM projects WHERE id = NEW.project_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PROJECT_NOT_FOUND';
++    END IF;
++
++    IF NEW.workspace_id <> v_project.workspace_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_WORKSPACE_MISMATCH';
++    END IF;
++
++    -- 3. Verify sequence_id has been allocated
++    IF NEW.sequence_id > v_project.issue_seq_counter THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SEQUENCE_NOT_ALLOCATED';
++    END IF;
++
++    -- 4. Verify spine object matches
++    SELECT * INTO v_object FROM objects WHERE id = NEW.id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SPINE_NOT_FOUND';
++    END IF;
++
++    IF v_object.project_id IS DISTINCT FROM NEW.project_id
++       OR v_object.canonical_key <> (v_project.identifier || '-' || NEW.sequence_id::text) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SPINE_MISMATCH';
++    END IF;
++
++    -- 5. Verify state_id and priority_id belong to NEW.project_id
++    SELECT * INTO v_state FROM workflow_states WHERE id = NEW.state_id;
++    IF NOT FOUND OR v_state.project_id <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_STATE_PROJECT_MISMATCH';
++    END IF;
++
++    SELECT * INTO v_priority FROM project_priorities WHERE id = NEW.priority_id;
++    IF NOT FOUND OR v_priority.project_id <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_PRIORITY_PROJECT_MISMATCH';
++    END IF;
++
++    RETURN NEW;
++END;
++$$;
++
++-- 4. BEFORE INSERT OR UPDATE OF parent_issue_id trigger function
++CREATE OR REPLACE FUNCTION issues_parent_dag_biu()
++RETURNS trigger
++LANGUAGE plpgsql
++AS $$
++DECLARE
++    v_parent_path ltree;
++    v_parent_project_id uuid;
++    v_subtree_height integer := 0;
++BEGIN
++    -- 1. Root case
++    IF NEW.parent_issue_id IS NULL THEN
++        NEW.ancestry_path := issue_ltree_label(NEW.id);
++        RETURN NEW;
++    END IF;
++
++    -- 2. Self-reference check
++    IF NEW.parent_issue_id = NEW.id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_SELF_REFERENCE';
++    END IF;
++
++    -- 3. Lock ancestors top-down to avoid lock-order inversion
++    SELECT ancestry_path, project_id
++      INTO v_parent_path, v_parent_project_id
++      FROM issues
++     WHERE id = NEW.parent_issue_id;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_NOT_FOUND';
++    END IF;
++
++    PERFORM 1
++       FROM issues
++      WHERE ancestry_path @> v_parent_path
++      ORDER BY nlevel(ancestry_path)
++        FOR UPDATE;
++
++    -- Re-read parent path under lock
++    SELECT ancestry_path, project_id
++      INTO v_parent_path, v_parent_project_id
++      FROM issues
++     WHERE id = NEW.parent_issue_id;
++
++    -- 4. Cross-project check
++    IF v_parent_project_id <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_CROSS_PROJECT';
++    END IF;
++
++    -- 5. Cycle check
++    IF v_parent_path ~ ('*.' || replace(NEW.id::text, '-', '') || '.*')::lquery THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_CYCLE';
++    END IF;
++
++    -- 6. Depth check
++    IF TG_OP = 'UPDATE' THEN
++        SELECT COALESCE(max(nlevel(ancestry_path)) - nlevel(OLD.ancestry_path), 0)
++          INTO v_subtree_height
++          FROM issues
++         WHERE ancestry_path <@ OLD.ancestry_path;
++    ELSE
++        v_subtree_height := 0;
++    END IF;
++
++    IF (nlevel(v_parent_path) + 1 + v_subtree_height) > 6 THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_MAX_DEPTH_EXCEEDED';
++    END IF;
++
++    -- 7. Compute new ancestry path
++    NEW.ancestry_path := v_parent_path || issue_ltree_label(NEW.id);
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issues_parent_dag_biu_trg
++BEFORE INSERT OR UPDATE OF parent_issue_id ON issues
++FOR EACH ROW
++EXECUTE FUNCTION issues_parent_dag_biu();
++
++COMMENT ON TRIGGER issues_parent_dag_biu_trg ON issues IS
++  'Enforces tree hierarchy, acquires top-down FOR UPDATE ancestor locks, and rejects cycles and depths > 6. Concurrent opposite reparenting may raise 40P01 deadlock_detected which safely aborts one transaction.';
++
++-- 5. AFTER UPDATE OF parent_issue_id trigger function to rebase descendants
++CREATE OR REPLACE FUNCTION issues_parent_dag_au()
++RETURNS trigger
++LANGUAGE plpgsql
++AS $$
++BEGIN
++    UPDATE issues
++       SET ancestry_path = NEW.ancestry_path || subpath(ancestry_path, nlevel(OLD.ancestry_path))
++     WHERE ancestry_path <@ OLD.ancestry_path AND id <> NEW.id;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER issues_parent_dag_au_trg
++AFTER UPDATE OF parent_issue_id ON issues
++FOR EACH ROW
++WHEN (OLD.ancestry_path IS DISTINCT FROM NEW.ancestry_path)
++EXECUTE FUNCTION issues_parent_dag_au();
+diff --git a/database/migrations/versions/p1_06_parent_dag.py b/database/migrations/versions/p1_06_parent_dag.py
+new file mode 100644
+index 0000000..5541f85
+--- /dev/null
++++ b/database/migrations/versions/p1_06_parent_dag.py
+@@ -0,0 +1,26 @@
++"""Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry.
++
++Revision ID: p1_06_parent_dag
++Revises: p1_05_issues
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p1_06_parent_dag"
++down_revision: str | None = "p1_05_issues"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply parent DAG triggers, GiST index, depth check, and label helper."""
++    execute_sql_file("p1_06_parent_dag.up.sql")
++
++
++def downgrade() -> None:
++    """Revert parent DAG triggers, GiST index, and restore KB-P1-05 path logic."""
++    execute_sql_file("p1_06_parent_dag.down.sql")
+diff --git a/database/tests/migrations/test_p1_01_migration.py b/database/tests/migrations/test_p1_01_migration.py
+index a199b01..b7f1ad8 100644
+--- a/database/tests/migrations/test_p1_01_migration.py
++++ b/database/tests/migrations/test_p1_01_migration.py
+@@ -20,14 +20,23 @@ def dump_schema(db_name: str) -> str:
+         return proc.stdout
+ 
+     # Docker fallback: locate running pg-test container
+-    filter_arg = "label=com.docker.compose.service=pg-test"
++    socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
+     res = subprocess.run(
+-        ["docker", "ps", "--filter", filter_arg, "--format", "{{.ID}}"],
++        ["docker", "ps", "--filter", f"volume={socket_dir}", "--format", "{{.ID}}"],
+         capture_output=True,
+         text=True,
+         check=True,
+     )
+     cid = res.stdout.strip().splitlines()[0] if res.stdout.strip() else None
++    if not cid:
++        filter_arg = "label=com.docker.compose.service=pg-test"
++        res = subprocess.run(
++            ["docker", "ps", "--filter", filter_arg, "--format", "{{.ID}}"],
++            capture_output=True,
++            text=True,
++            check=True,
++        )
++        cid = res.stdout.strip().splitlines()[0] if res.stdout.strip() else None
+     if not cid:
+         res2 = subprocess.run(
+             ["docker", "ps", "--filter", "ancestor=pgvector/pgvector:pg16", "--format", "{{.ID}}"],
+diff --git a/database/tests/migrations/test_p1_06_migration.py b/database/tests/migrations/test_p1_06_migration.py
+new file mode 100644
+index 0000000..f49bd55
+--- /dev/null
++++ b/database/tests/migrations/test_p1_06_migration.py
+@@ -0,0 +1,89 @@
++"""Migration tests for p1_06_parent_dag up/down lifecycle."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_08_parent_dag_migration_lifecycle() -> None:
++    """Verify p1_06 upgrade creates triggers/indexes, downgrade reverts them, and re-up works."""
++    async with MigrationHarness() as harness:
++        assert harness.previous_of("p1_06_parent_dag") == "p1_05_issues"
++
++        # 1. Upgrade to p1_06_parent_dag
++        await harness.upgrade("p1_06_parent_dag")
++
++        indexes_up = await harness.fetch(
++            "SELECT indexname FROM pg_indexes "
++            "WHERE schemaname = 'public' AND tablename = 'issues' "
++            "AND indexname = 'issues_ancestry_gist'"
++        )
++        assert len(indexes_up) == 1
++
++        constraints_up = await harness.fetch(
++            "SELECT conname FROM pg_constraint WHERE conname = 'issues_ancestry_depth_chk'"
++        )
++        assert len(constraints_up) == 1
++
++        funcs_up = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name IN ("
++            "  'issue_ltree_label', 'issues_parent_dag_biu', 'issues_parent_dag_au'"
++            ")"
++        )
++        assert {r["routine_name"] for r in funcs_up} == {
++            "issue_ltree_label",
++            "issues_parent_dag_biu",
++            "issues_parent_dag_au",
++        }
++
++        triggers_up = await harness.fetch(
++            "SELECT trigger_name FROM information_schema.triggers "
++            "WHERE event_object_schema = 'public' AND event_object_table = 'issues' "
++            "AND trigger_name IN ('issues_parent_dag_biu_trg', 'issues_parent_dag_au_trg')"
++        )
++        assert {r["trigger_name"] for r in triggers_up} == {
++            "issues_parent_dag_biu_trg",
++            "issues_parent_dag_au_trg",
++        }
++
++        # 2. Downgrade to p1_05_issues
++        prev_rev = harness.previous_of("p1_06_parent_dag")
++        await harness.downgrade(prev_rev)
++
++        indexes_down = await harness.fetch(
++            "SELECT indexname FROM pg_indexes "
++            "WHERE schemaname = 'public' AND tablename = 'issues' "
++            "AND indexname = 'issues_ancestry_gist'"
++        )
++        assert len(indexes_down) == 0
++
++        constraints_down = await harness.fetch(
++            "SELECT conname FROM pg_constraint WHERE conname = 'issues_ancestry_depth_chk'"
++        )
++        assert len(constraints_down) == 0
++
++        funcs_down = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name IN ("
++            "  'issue_ltree_label', 'issues_parent_dag_biu', 'issues_parent_dag_au'"
++            ")"
++        )
++        assert len(funcs_down) == 0
++
++        triggers_down = await harness.fetch(
++            "SELECT trigger_name FROM information_schema.triggers "
++            "WHERE event_object_schema = 'public' AND event_object_table = 'issues' "
++            "AND trigger_name IN ('issues_parent_dag_biu_trg', 'issues_parent_dag_au_trg')"
++        )
++        assert len(triggers_down) == 0
++
++        # 3. Re-upgrade to p1_06_parent_dag
++        await harness.upgrade("p1_06_parent_dag")
++        indexes_reup = await harness.fetch(
++            "SELECT indexname FROM pg_indexes "
++            "WHERE schemaname = 'public' AND tablename = 'issues' "
++            "AND indexname = 'issues_ancestry_gist'"
++        )
++        assert len(indexes_reup) == 1
+diff --git a/database/tests/test_p1_06_parent_concurrency.py b/database/tests/test_p1_06_parent_concurrency.py
+new file mode 100644
+index 0000000..e25793f
+--- /dev/null
++++ b/database/tests/test_p1_06_parent_concurrency.py
+@@ -0,0 +1,197 @@
++"""Concurrency tests for parent DAG triggers and opposite reparenting."""
++
++import asyncio
++import os
++import uuid
++
++import asyncpg  # type: ignore[import-untyped]
++import pytest
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
++
++
++async def _seed_concurrency_issues(
++    session: AsyncSession,
++) -> tuple[uuid.UUID, uuid.UUID]:
++    """Seed workspace, user, project, and two root issues for concurrency testing."""
++    ws_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    user_id = uuid.uuid4()
++    a_id = uuid.uuid4()
++    b_id = uuid.uuid4()
++
++    # 1. Workspace
++    await session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Conc WS')"),
++        {"id": ws_id, "slug": f"ws-conc-{uuid.uuid4().hex[:8]}"},
++    )
++
++    # 2. User
++    await session.execute(
++        text(
++            "INSERT INTO principals (id, principal_type, workspace_id, display_name) "
++            "VALUES (:id, 'USER', :ws, 'Conc User')"
++        ),
++        {"id": user_id, "ws": ws_id},
++    )
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'user'::object_kind, :ws, NULL::uuid, :ckey, 'Conc User', :u, :id"
++            ")"
++        ),
++        {"ws": ws_id, "ckey": f"conc-{user_id.hex[:8]}@example.com", "u": user_id, "id": user_id},
++    )
++    await session.execute(
++        text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws, :email)"),
++        {"id": user_id, "ws": ws_id, "email": f"conc-{user_id.hex[:8]}@example.com"},
++    )
++
++    # 3. Project
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'project'::object_kind, :ws, NULL::uuid, 'OPP', 'Opp Project', :u, :id"
++            ")"
++        ),
++        {"ws": ws_id, "u": user_id, "id": proj_id},
++    )
++    await session.execute(
++        text(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES (:id, :ws, 'OPP', 'Opp Project')"
++        ),
++        {"id": proj_id, "ws": ws_id},
++    )
++
++    state_row = await session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p AND is_default = true"),
++        {"p": proj_id},
++    )
++    state_id = state_row.scalar_one()
++
++    prio_row = await session.execute(
++        text("SELECT id FROM project_priorities WHERE project_id = :p AND is_default = true"),
++        {"p": proj_id},
++    )
++    prio_id = prio_row.scalar_one()
++
++    # 4. Issue A and Issue B
++    for i_id, seq, summary in ((a_id, 1, "Issue A"), (b_id, 2, "Issue B")):
++        await session.execute(
++            text(
++                "SELECT register_object(  'issue'::object_kind, :ws, :p, :ckey, :summary, :u, :id)"
++            ),
++            {
++                "ws": ws_id,
++                "p": proj_id,
++                "ckey": f"OPP-{seq}",
++                "summary": summary,
++                "u": user_id,
++                "id": i_id,
++            },
++        )
++        await session.execute(
++            text("SELECT allocate_issue_sequence(:p)"),
++            {"p": proj_id},
++        )
++        await session.execute(
++            text(
++                "INSERT INTO issues ("
++                "  id, workspace_id, project_id, sequence_id, summary, "
++                "  description_markdown, state_id, priority_id, "
++                "  created_by_id, original_created_by_id, board_rank"
++                ") VALUES ("
++                "  :id, :ws, :p, :seq, :summary, "
++                "  '', :s, :pr, :u, :u, '0|:'"
++                ")"
++            ),
++            {
++                "id": i_id,
++                "ws": ws_id,
++                "p": proj_id,
++                "seq": seq,
++                "summary": summary,
++                "s": state_id,
++                "pr": prio_id,
++                "u": user_id,
++            },
++        )
++
++    await session.commit()
++    return a_id, b_id
++
++
++@pytest.mark.committed_db
++async def test_07_concurrent_opposite_reparenting(
++    committed_db_session: AsyncSession,
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Verify concurrent opposite reparenting results in exactly one commit and no cycles."""
++    a_id, b_id = await _seed_concurrency_issues(committed_db_session)
++
++    socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++    user = os.environ.get("KB_TEST_PGUSER", "kanban_test")
++    db_name = str(pg_worker_db.url.database)
++
++    start_barrier = asyncio.Barrier(2)
++
++    async def _attempt_move(child_id: uuid.UUID, parent_id: uuid.UUID, tag: str) -> str:
++        conn = await asyncpg.connect(user=user, database=db_name, host=socket_dir)
++        try:
++            await start_barrier.wait()
++            async with conn.transaction():
++                await conn.execute(
++                    "UPDATE issues SET parent_issue_id = $1 WHERE id = $2",
++                    parent_id,
++                    child_id,
++                )
++        except Exception as exc:  # noqa: BLE001
++            return f"FAILED_{tag}: {exc}"
++        else:
++            return f"SUCCESS_{tag}"
++        finally:
++            await conn.close()
++
++    res_a, res_b = await asyncio.gather(
++        _attempt_move(a_id, b_id, "A_UNDER_B"),
++        _attempt_move(b_id, a_id, "B_UNDER_A"),
++    )
++    results = [res_a, res_b]
++
++    successes = [r for r in results if r.startswith("SUCCESS_")]
++    failures = [r for r in results if r.startswith("FAILED_")]
++
++    assert len(successes) == 1, f"Expected 1 success, got {len(successes)}: {results}"
++    assert len(failures) == 1, f"Expected 1 failure, got {len(failures)}: {results}"
++
++    fail_msg = failures[0]
++    is_cycle_or_deadlock = (
++        "PARENT_CYCLE" in fail_msg or "40P01" in fail_msg or "deadlock detected" in fail_msg
++    )
++    assert is_cycle_or_deadlock, f"Expected PARENT_CYCLE or 40P01, got: {fail_msg}"
++
++    # Verify no cycles in the database
++    conn = await asyncpg.connect(user=user, database=db_name, host=socket_dir)
++    try:
++        rows = await conn.fetch(
++            "SELECT id, parent_issue_id, ancestry_path::text AS path "
++            "FROM issues WHERE id IN ($1, $2)",
++            a_id,
++            b_id,
++        )
++        row_map = {r["id"]: r for r in rows}
++        a_row = row_map[a_id]
++        b_row = row_map[b_id]
++
++        assert not (a_row["parent_issue_id"] == b_id and b_row["parent_issue_id"] == a_id)
++
++        moved_id, root_id = (a_id, b_id) if a_row["parent_issue_id"] is not None else (b_id, a_id)
++        moved_row = row_map[moved_id]
++        root_row = row_map[root_id]
++        assert moved_row["parent_issue_id"] == root_id
++        assert moved_row["path"] == f"{root_id.hex}.{moved_id.hex}"
++        assert root_row["parent_issue_id"] is None
++        assert root_row["path"] == root_id.hex
++    finally:
++        await conn.close()
+diff --git a/database/tests/test_p1_06_parent_dag.py b/database/tests/test_p1_06_parent_dag.py
+new file mode 100644
+index 0000000..e5875f1
+--- /dev/null
++++ b/database/tests/test_p1_06_parent_dag.py
+@@ -0,0 +1,450 @@
++"""Feature unit tests for Phase 1 parent DAG hierarchy and ltree triggers."""
++
++import uuid
++from dataclasses import dataclass
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError
++from sqlalchemy.ext.asyncio import AsyncSession
++
++
++@dataclass
++class ParentDagContext:
++    """Project and user context for parent DAG tests."""
++
++    workspace_id: uuid.UUID
++    project_id: uuid.UUID
++    identifier: str
++    user_id: uuid.UUID
++    state_id: uuid.UUID
++    priority_id: uuid.UUID
++
++
++def _label(u: uuid.UUID) -> str:
++    """Format UUID as an ltree label (hex without hyphens)."""
++    return u.hex
++
++
++async def _create_workspace(
++    session: AsyncSession,
++    slug: str | None = None,
++    name: str = "Test Workspace",
++) -> uuid.UUID:
++    """Create a test workspace and return its UUID."""
++    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
++    row = await session.execute(
++        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
++        {"slug": ws_slug, "name": name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _create_user(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    email: str,
++    display_name: str = "Test User",
++) -> uuid.UUID:
++    """Create a user in principals, objects, and users tables."""
++    u_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO principals (id, principal_type, workspace_id, display_name) "
++            "VALUES (:id, 'USER', :ws_id, :name)"
++        ),
++        {"id": u_id, "ws_id": workspace_id, "name": display_name},
++    )
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'user'::object_kind, :ws_id, NULL::uuid, :ckey, :title, :creator, :id"
++            ")"
++        ),
++        {
++            "ws_id": workspace_id,
++            "ckey": email,
++            "title": display_name,
++            "creator": u_id,
++            "id": u_id,
++        },
++    )
++    await session.execute(
++        text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws_id, :email)"),
++        {"id": u_id, "ws_id": workspace_id, "email": email},
++    )
++    return u_id
++
++
++async def _create_project_with_defaults(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    user_id: uuid.UUID,
++    identifier: str,
++    name: str = "Project",
++) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
++    """Register and create project, returning (project_id, state_id, priority_id)."""
++    p_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'project'::object_kind, :ws, NULL::uuid, :ident, :name, :creator, :id"
++            ")"
++        ),
++        {
++            "ws": workspace_id,
++            "ident": identifier,
++            "name": name,
++            "creator": user_id,
++            "id": p_id,
++        },
++    )
++    await session.execute(
++        text(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES (:id, :ws, :ident, :name)"
++        ),
++        {"id": p_id, "ws": workspace_id, "ident": identifier, "name": name},
++    )
++
++    state_row = await session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p AND is_default = true"),
++        {"p": p_id},
++    )
++    state_id = state_row.scalar_one()
++    assert isinstance(state_id, uuid.UUID)
++
++    prio_row = await session.execute(
++        text("SELECT id FROM project_priorities WHERE project_id = :p AND is_default = true"),
++        {"p": p_id},
++    )
++    prio_id = prio_row.scalar_one()
++    assert isinstance(prio_id, uuid.UUID)
++
++    return p_id, state_id, prio_id
++
++
++async def _create_issue(
++    session: AsyncSession,
++    ctx: ParentDagContext,
++    summary: str = "Sample Issue",
++    parent_issue_id: uuid.UUID | None = None,
++    custom_id: uuid.UUID | None = None,
++) -> uuid.UUID:
++    """Create an issue in objects and issues tables."""
++    seq_row = await session.execute(
++        text("SELECT allocate_issue_sequence(:p)"),
++        {"p": ctx.project_id},
++    )
++    seq = seq_row.scalar_one()
++    assert isinstance(seq, int)
++
++    i_id = custom_id or uuid.uuid4()
++    canonical_key = f"{ctx.identifier}-{seq}"
++
++    await session.execute(
++        text(
++            "SELECT register_object(  'issue'::object_kind, :ws, :p, :ckey, :summary, :user, :id)"
++        ),
++        {
++            "ws": ctx.workspace_id,
++            "p": ctx.project_id,
++            "ckey": canonical_key,
++            "summary": summary,
++            "user": ctx.user_id,
++            "id": i_id,
++        },
++    )
++
++    await session.execute(
++        text(
++            "INSERT INTO issues ("
++            "  id, workspace_id, project_id, sequence_id, summary, "
++            "  description_markdown, state_id, priority_id, "
++            "  created_by_id, original_created_by_id, board_rank, parent_issue_id"
++            ") VALUES ("
++            "  :id, :ws, :p, :seq, :summary, "
++            "  '', :state, :prio, "
++            "  :user, :user, '0|hzzzzz:', :parent_id"
++            ")"
++        ),
++        {
++            "id": i_id,
++            "ws": ctx.workspace_id,
++            "p": ctx.project_id,
++            "seq": seq,
++            "summary": summary,
++            "state": ctx.state_id,
++            "prio": ctx.priority_id,
++            "user": ctx.user_id,
++            "parent_id": parent_issue_id,
++        },
++    )
++    return i_id
++
++
++async def _get_ancestry(session: AsyncSession, issue_id: uuid.UUID) -> tuple[str, int]:
++    """Fetch (ancestry_path, nlevel) for an issue."""
++    row = await session.execute(
++        text(
++            "SELECT ancestry_path::text AS path, nlevel(ancestry_path) AS depth "
++            "FROM issues WHERE id = :id"
++        ),
++        {"id": issue_id},
++    )
++    r = row.mappings().one()
++    return str(r["path"]), int(r["depth"])
++
++
++async def _setup_context(session: AsyncSession, identifier: str = "DAG") -> ParentDagContext:
++    """Set up workspace, user, and project context."""
++    ws_id = await _create_workspace(session)
++    u_id = await _create_user(session, ws_id, f"user-{uuid.uuid4().hex[:8]}@example.com")
++    p_id, s_id, prio_id = await _create_project_with_defaults(
++        session, ws_id, u_id, identifier=identifier
++    )
++    return ParentDagContext(
++        workspace_id=ws_id,
++        project_id=p_id,
++        identifier=identifier,
++        user_id=u_id,
++        state_id=s_id,
++        priority_id=prio_id,
++    )
++
++
++@pytest.mark.asyncio
++async def test_01_positive_hierarchy_path_and_depth(db_session: AsyncSession) -> None:
++    """Verify A (root) <- B <- C establishes correct ancestry_path and depth."""
++    ctx = await _setup_context(db_session, identifier="POS")
++
++    a_id = await _create_issue(db_session, ctx, summary="Issue A")
++    b_id = await _create_issue(db_session, ctx, summary="Issue B", parent_issue_id=a_id)
++    c_id = await _create_issue(db_session, ctx, summary="Issue C", parent_issue_id=b_id)
++
++    a_path, a_depth = await _get_ancestry(db_session, a_id)
++    assert a_path == _label(a_id)
++    assert a_depth == 1
++
++    b_path, b_depth = await _get_ancestry(db_session, b_id)
++    assert b_path == f"{_label(a_id)}.{_label(b_id)}"
++    assert b_depth == 2
++
++    c_path, c_depth = await _get_ancestry(db_session, c_id)
++    expected_c_path = f"{_label(a_id)}.{_label(b_id)}.{_label(c_id)}"
++    assert c_path == expected_c_path
++    assert c_depth == 3
++
++
++@pytest.mark.asyncio
++async def test_02_positive_subtree_move_and_rebase(db_session: AsyncSession) -> None:
++    """Verify reparenting B from A to X rebases B and all descendants under X."""
++    ctx = await _setup_context(db_session, identifier="SUB")
++
++    a_id = await _create_issue(db_session, ctx, summary="Root A")
++    b_id = await _create_issue(db_session, ctx, summary="Sub B", parent_issue_id=a_id)
++    c_id = await _create_issue(db_session, ctx, summary="Child C", parent_issue_id=b_id)
++    x_id = await _create_issue(db_session, ctx, summary="Root X")
++
++    # Initial paths
++    b_path_pre, _ = await _get_ancestry(db_session, b_id)
++    assert b_path_pre == f"{_label(a_id)}.{_label(b_id)}"
++    c_path_pre, _ = await _get_ancestry(db_session, c_id)
++    assert c_path_pre == f"{_label(a_id)}.{_label(b_id)}.{_label(c_id)}"
++
++    # Move B under X
++    await db_session.execute(
++        text("UPDATE issues SET parent_issue_id = :x WHERE id = :b"),
++        {"x": x_id, "b": b_id},
++    )
++
++    # Post-move verification
++    b_path_post, b_depth_post = await _get_ancestry(db_session, b_id)
++    assert b_path_post == f"{_label(x_id)}.{_label(b_id)}"
++    assert b_depth_post == 2
++
++    c_path_post, c_depth_post = await _get_ancestry(db_session, c_id)
++    assert c_path_post == f"{_label(x_id)}.{_label(b_id)}.{_label(c_id)}"
++    assert c_depth_post == 3
++
++    # A now has no descendants
++    desc_row = await db_session.execute(
++        text("SELECT count(*) FROM issues WHERE ancestry_path <@ text2ltree(:a_lbl) AND id <> :a"),
++        {"a_lbl": _label(a_id), "a": a_id},
++    )
++    assert desc_row.scalar_one() == 0
++
++
++@pytest.mark.asyncio
++async def test_03_negative_cycles_and_self_reference(db_session: AsyncSession) -> None:
++    """Verify cycle detection and self-parent rejection."""
++    ctx = await _setup_context(db_session, identifier="CYC")
++
++    a_id = await _create_issue(db_session, ctx, summary="Node A")
++    b_id = await _create_issue(db_session, ctx, summary="Node B", parent_issue_id=a_id)
++    c_id = await _create_issue(db_session, ctx, summary="Node C", parent_issue_id=b_id)
++
++    # 1. 2-node cycle: A under B when A is parent of B
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET parent_issue_id = :b WHERE id = :a"),
++                {"b": b_id, "a": a_id},
++            )
++    assert "PARENT_CYCLE" in str(exc_info.value)
++
++    # 2. 3-node cycle: A under C when A is ancestor of C
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET parent_issue_id = :c WHERE id = :a"),
++                {"c": c_id, "a": a_id},
++            )
++    assert "PARENT_CYCLE" in str(exc_info.value)
++
++    # 3. Self-reference on UPDATE
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET parent_issue_id = :a WHERE id = :a"),
++                {"a": a_id},
++            )
++    assert "PARENT_SELF_REFERENCE" in str(exc_info.value)
++
++    # 4. Self-reference on INSERT
++    self_id = uuid.uuid4()
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await _create_issue(
++                db_session,
++                ctx,
++                summary="Self Insert",
++                parent_issue_id=self_id,
++                custom_id=self_id,
++            )
++    assert "PARENT_SELF_REFERENCE" in str(exc_info.value)
++
++
++@pytest.mark.asyncio
++async def test_04_negative_depth_limits(db_session: AsyncSession) -> None:
++    """Verify maximum tree depth of 6 is enforced on insert and subtree move."""
++    ctx = await _setup_context(db_session, identifier="DEP")
++
++    # Build chain of 6 levels: N1 -> N2 -> N3 -> N4 -> N5 -> N6
++    nodes: list[uuid.UUID] = []
++    parent: uuid.UUID | None = None
++    for i in range(1, 7):
++        n_id = await _create_issue(db_session, ctx, summary=f"Level {i}", parent_issue_id=parent)
++        nodes.append(n_id)
++        parent = n_id
++
++    # Level 6 node has depth 6
++    _, n6_depth = await _get_ancestry(db_session, nodes[5])
++    assert n6_depth == 6
++
++    # Inserting 7th-level child raises PARENT_MAX_DEPTH_EXCEEDED
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await _create_issue(db_session, ctx, summary="Level 7", parent_issue_id=nodes[5])
++    assert "PARENT_MAX_DEPTH_EXCEEDED" in str(exc_info.value) or "issues_ancestry_depth_chk" in str(
++        exc_info.value
++    )
++
++    # Build a separate 3-level subtree: S1 -> S2 -> S3
++    s1_id = await _create_issue(db_session, ctx, summary="Subtree Root S1")
++    s2_id = await _create_issue(db_session, ctx, summary="Subtree Child S2", parent_issue_id=s1_id)
++    await _create_issue(db_session, ctx, summary="Subtree Grandchild S3", parent_issue_id=s2_id)
++
++    # Moving 3-level subtree (height 2) under Level 4 node (depth 4):
++    # 4 + 1 + 2 = 7 > 6 -> raises PARENT_MAX_DEPTH_EXCEEDED
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET parent_issue_id = :target WHERE id = :subtree_root"),
++                {"target": nodes[3], "subtree_root": s1_id},
++            )
++    assert "PARENT_MAX_DEPTH_EXCEEDED" in str(exc_info.value)
++
++
++@pytest.mark.asyncio
++async def test_05_negative_cross_project_and_nonexistent_parent(
++    db_session: AsyncSession,
++) -> None:
++    """Verify parent in another project and nonexistent parent are rejected."""
++    ctx_a = await _setup_context(db_session, identifier="PJA")
++    ctx_b = await _setup_context(db_session, identifier="PJB")
++
++    parent_a = await _create_issue(db_session, ctx_a, summary="Project A Parent")
++
++    # 1. Insert issue in Project B with parent in Project A -> PARENT_CROSS_PROJECT
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await _create_issue(
++                db_session, ctx_b, summary="Cross Project Insert", parent_issue_id=parent_a
++            )
++    assert "PARENT_CROSS_PROJECT" in str(exc_info.value)
++
++    # 2. Update issue in Project B with parent in Project A -> PARENT_CROSS_PROJECT
++    issue_b = await _create_issue(db_session, ctx_b, summary="Issue in B")
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET parent_issue_id = :p WHERE id = :i"),
++                {"p": parent_a, "i": issue_b},
++            )
++    assert "PARENT_CROSS_PROJECT" in str(exc_info.value)
++
++    # 3. Nonexistent parent on insert -> PARENT_NOT_FOUND or foreign key violation (23503)
++    fake_parent = uuid.uuid4()
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await _create_issue(
++                db_session, ctx_a, summary="Ghost Parent", parent_issue_id=fake_parent
++            )
++    err = str(exc_info.value)
++    assert "PARENT_NOT_FOUND" in err or "23503" in err
++
++    # 4. Nonexistent parent on update -> PARENT_NOT_FOUND or 23503
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET parent_issue_id = :p WHERE id = :i"),
++                {"p": fake_parent, "i": parent_a},
++            )
++    err = str(exc_info.value)
++    assert "PARENT_NOT_FOUND" in err or "23503" in err
++
++
++@pytest.mark.asyncio
++async def test_06_boundary_parent_delete_and_unparent(db_session: AsyncSession) -> None:
++    """Verify unparenting B (setting parent_issue_id = NULL) promotes B to root and rebases C."""
++    ctx = await _setup_context(db_session, identifier="UNP")
++
++    a_id = await _create_issue(db_session, ctx, summary="Root A")
++    b_id = await _create_issue(db_session, ctx, summary="Sub B", parent_issue_id=a_id)
++    c_id = await _create_issue(db_session, ctx, summary="Child C", parent_issue_id=b_id)
++
++    # Unparent B (simulates ON DELETE SET NULL on parent deletion)
++    await db_session.execute(
++        text("UPDATE issues SET parent_issue_id = NULL WHERE id = :b"),
++        {"b": b_id},
++    )
++
++    # B becomes a root issue with depth 1
++    b_path, b_depth = await _get_ancestry(db_session, b_id)
++    assert b_path == _label(b_id)
++    assert b_depth == 1
++
++    # C is rebased to B.C with depth 2
++    c_path, c_depth = await _get_ancestry(db_session, c_id)
++    assert c_path == f"{_label(b_id)}.{_label(c_id)}"
++    assert c_depth == 2
++
++    # A has no descendants
++    desc_row = await db_session.execute(
++        text("SELECT count(*) FROM issues WHERE ancestry_path <@ text2ltree(:a_lbl) AND id <> :a"),
++        {"a_lbl": _label(a_id), "a": a_id},
++    )
++    assert desc_row.scalar_one() == 0
+diff --git a/docs/qa/KANBA-46/alembic-heads.txt b/docs/qa/KANBA-46/alembic-heads.txt
+new file mode 100644
+index 0000000..8fa61ba
+--- /dev/null
++++ b/docs/qa/KANBA-46/alembic-heads.txt
+@@ -0,0 +1 @@
++p1_06_parent_dag (head)
+diff --git a/docs/qa/KANBA-46/build-check.txt b/docs/qa/KANBA-46/build-check.txt
+new file mode 100644
+index 0000000..5173bf7
+--- /dev/null
++++ b/docs/qa/KANBA-46/build-check.txt
+@@ -0,0 +1,3 @@
++All checks passed!
++41 files already formatted
++Success: no issues found in 39 source files
+diff --git a/docs/qa/KANBA-46/message-to-reality-checker.md b/docs/qa/KANBA-46/message-to-reality-checker.md
+new file mode 100644
+index 0000000..e9c0ae9
+--- /dev/null
++++ b/docs/qa/KANBA-46/message-to-reality-checker.md
+@@ -0,0 +1,84 @@
++# Audit Manifest: KANBA-46 (KB-P1-06)
++
++- **Ticket ID**: `KANBA-46` (`KB-P1-06`)
++- **Title**: `[Phase 1 / Database] Parent DAG trigger with FOR UPDATE ancestor locks & ltree ancestry`
++- **Epic**: `KB-E1`
++- **Branch**: `feat/KANBA-46` (isolated worktree at `/tmp/kb-wt-KANBA-46`)
++- **Spec Sections**: Section 7.2 (8h)
++- **Dependencies**: `KB-P1-05` (KANBA-41)
++
++---
++
++## 1. Executive Summary
++
++This ticket delivers the hierarchical parent-child DAG enforcement engine for issues, securing the acyclic tree invariant and materialized `ancestry_path` ltree under concurrent reparenting:
++1. Schema Additions:
++   - GiST index `issues_ancestry_gist` on `issues(ancestry_path)` for accelerated `@>`, `<@`, and `~` hierarchical operations.
++   - Depth check constraint `issues_ancestry_depth_chk CHECK (nlevel(ancestry_path) BETWEEN 1 AND 6)`.
++   - Helper function `issue_ltree_label(p_id uuid) RETURNS ltree` declared `LANGUAGE sql IMMUTABLE PARALLEL SAFE`.
++2. Validation Trigger (`issues_validate_biu`):
++   - Replaced KB-P1-05 simple path logic, establishing precedence for `issues_parent_dag_biu`.
++   - Immutable keys (`sequence_id`, `project_id`) enforced as the first step on UPDATE (`ISSUE_KEY_IMMUTABLE`).
++   - Project existence, workspace matching, sequence bounds, and state/priority project validation maintained.
++3. Parent DAG Validation Trigger (`issues_parent_dag_biu`):
++   - Defined as `BEFORE INSERT OR UPDATE OF parent_issue_id ON issues FOR EACH ROW`.
++   - Root handling: `NEW.parent_issue_id IS NULL` sets `NEW.ancestry_path := issue_ltree_label(NEW.id)`.
++   - Self-reference rejection: `NEW.parent_issue_id = NEW.id` raises `PARENT_SELF_REFERENCE` (P0001).
++   - Top-down ancestor locking: executes `PERFORM 1 FROM issues WHERE ancestry_path @> v_parent_path ORDER BY nlevel(ancestry_path) FOR UPDATE` to prevent lock-order inversions.
++   - Cross-project rejection: parent project must match `NEW.project_id`, else raises `PARENT_CROSS_PROJECT` (P0001).
++   - Cycle detection: checks `v_parent_path ~ ('*.' || replace(NEW.id::text, '-', '') || '.*')::lquery`, raising `PARENT_CYCLE` (P0001).
++   - Subtree depth capping: checks `nlevel(v_parent_path) + 1 + v_subtree_height > 6`, raising `PARENT_MAX_DEPTH_EXCEEDED` (P0001).
++   - Authoritative path assignment: `NEW.ancestry_path := v_parent_path || issue_ltree_label(NEW.id)`.
++4. Descendant Rebasing Trigger (`issues_parent_dag_au`):
++   - Defined as `AFTER UPDATE OF parent_issue_id ON issues FOR EACH ROW WHEN (OLD.ancestry_path IS DISTINCT FROM NEW.ancestry_path)`.
++   - Automatically rebases all descendants:
++     `UPDATE issues SET ancestry_path = NEW.ancestry_path || subpath(ancestry_path, nlevel(OLD.ancestry_path)) WHERE ancestry_path <@ OLD.ancestry_path AND id <> NEW.id`.
++   - Updates only `ancestry_path`, ensuring no recursive re-triggering of `BEFORE ... OF parent_issue_id`.
++   - Naturally handles parent deletion (`ON DELETE SET NULL`), promoting orphans to roots and rebasing subtrees.
++5. Migration & Reversibility:
++   - Linear Alembic migration `p1_06_parent_dag.py` chained from `p1_05_issues`.
++   - Clean, verified rollback in `p1_06_parent_dag.down.sql` restoring KB-P1-05 path logic.
++
++---
++
++## 2. Requirement Traceability Matrix
++
++| Requirement | Implementation Artifact | Verification Method |
++| :--- | :--- | :--- |
++| Section 7.2 8h: Materialized `ancestry_path ltree` | `p1_06_parent_dag.up.sql` | `test_01_positive_hierarchy_path_and_depth` |
++| Section 7.2 8h: Max depth <= 6 constraint | `issues_ancestry_depth_chk` | `test_04_negative_depth_limits` |
++| Section 7.2 8h: `FOR UPDATE` ancestor locking | `issues_parent_dag_biu()` | `test_07_concurrent_opposite_reparenting` |
++| Section 7.2 8h: Reject cycles (`A -> B -> A`) | `issues_parent_dag_biu()` | `test_03_negative_cycles_and_self_reference` (`PARENT_CYCLE`) |
++| Section 7.2 8h: Reject self-parent reference | `issues_parent_dag_biu()` | `test_03_negative_cycles_and_self_reference` (`PARENT_SELF_REFERENCE`) |
++| Section 7.2 8h: Cross-project parent prevention | `issues_parent_dag_biu()` | `test_05_negative_cross_project_and_nonexistent_parent` (`PARENT_CROSS_PROJECT`) |
++| Section 7.2 8h: Subtree reparenting rebase | `issues_parent_dag_au()` | `test_02_positive_subtree_move_and_rebase` |
++| Section 7.2 8h: Parent delete / unparent rebase | `issues_parent_dag_au()` | `test_06_boundary_parent_delete_and_unparent` |
++| Concurrency: Opposite moves serialization / deadlock | `issues_parent_dag_biu()` | `test_07_concurrent_opposite_reparenting` |
++| Migration: Up/Down/Up reversibility | `p1_06_parent_dag.py` | `test_08_parent_dag_migration_lifecycle` |
++
++---
++
++## 3. Passive Forensic Proof Artifacts
++
++All verification artifacts are stored under `docs/qa/KANBA-46/`:
++1. `docs/qa/KANBA-46/unit-test-results.txt`:
++   - Command: `uv run pytest database/tests/test_p1_06_parent_dag.py database/tests/test_p1_06_parent_concurrency.py database/tests/migrations/test_p1_06_migration.py -q --cov=database --cov-branch --cov-report=term-missing`
++   - Result: 8 passed in 1.91s, 100% statement and branch coverage on touched modules, exit code 0.
++2. `docs/qa/KANBA-46/build-check.txt`:
++   - Command: `uv run ruff check database && uv run ruff format --check database && uv run mypy --strict database`
++   - Result: ruff check clean, ruff format clean (41 files), mypy strict clean (39 source files), exit code 0.
++3. `docs/qa/KANBA-46/alembic-heads.txt`:
++   - Command: `uv run alembic -c database/alembic.ini heads`
++   - Result: Single linear head `p1_06_parent_dag (head)`, exit code 0.
++4. `docs/qa/KANBA-46/schema-dump.sql`:
++   - PostgreSQL schema dump of `issues` table and function definitions (`issue_ltree_label`, `issues_parent_dag_biu`, `issues_parent_dag_au`, `issues_validate_biu`).
++5. `docs/qa/KANBA-46/subtree-move-sample.txt`:
++   - Output of `SELECT summary, id, parent_issue_id, ancestry_path FROM issues ORDER BY ancestry_path` before and after test case 2.
++6. `docs/qa/KANBA-46/git-diff.patch`:
++   - Complete unified git diff against base commit `f38fbc2`.
++
++---
++
++## 4. Unicode Character Verification
++
++Zero Unicode dash characters (`U+2014` em-dash or `U+2013` en-dash) repository-wide. Checked and enforced across all source, migration, test, and documentation files.
+diff --git a/docs/qa/KANBA-46/schema-dump.sql b/docs/qa/KANBA-46/schema-dump.sql
+new file mode 100644
+index 0000000..bba6e2b
+--- /dev/null
++++ b/docs/qa/KANBA-46/schema-dump.sql
+@@ -0,0 +1,209 @@
++-- Table definition for issues
++                                                                                                                            Table "public.issues"
++           Column           |           Type           | Collation | Nullable |                                                                                           Default                                                                                            
++----------------------------+--------------------------+-----------+----------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
++ id                         | uuid                     |           | not null | 
++ object_type                | object_kind              |           | not null | 'issue'::object_kind
++ workspace_id               | uuid                     |           | not null | 
++ project_id                 | uuid                     |           | not null | 
++ sequence_id                | bigint                   |           | not null | 
++ summary                    | text                     |           | not null | 
++ description_markdown       | text                     |           | not null | ''::text
++ description_sha256         | bytea                    |           |          | generated always as (digest(description_markdown, 'sha256'::text)) stored
++ state_id                   | uuid                     |           | not null | 
++ pending_transition_exec_id | uuid                     |           |          | 
++ priority_id                | uuid                     |           | not null | 
++ created_by_id              | uuid                     |           | not null | 
++ original_created_by_id     | uuid                     |           | not null | 
++ creator_modified_by_id     | uuid                     |           |          | 
++ creator_modified_at        | timestamp with time zone |           |          | 
++ start_date                 | date                     |           |          | 
++ due_date                   | date                     |           |          | 
++ cycle_id                   | uuid                     |           |          | 
++ parent_issue_id            | uuid                     |           |          | 
++ ancestry_path              | ltree                    |           | not null | 
++ board_rank                 | text                     | C         | not null | 
++ search_tsv                 | tsvector                 |           |          | generated always as (setweight(to_tsvector('english'::regconfig, COALESCE(summary, ''::text)), 'A'::"char") || setweight(build_markdown_tsvector(description_markdown), 'B'::"char")) stored
++Indexes:
++    "issues_pkey" PRIMARY KEY, btree (id)
++    "issues_ancestry_gist" gist (ancestry_path)
++    "issues_parent_idx" btree (parent_issue_id) WHERE parent_issue_id IS NOT NULL
++    "issues_project_id_sequence_id_key" UNIQUE CONSTRAINT, btree (project_id, sequence_id)
++    "issues_project_rank_idx" btree (project_id, state_id, board_rank)
++    "issues_search_tsv_gin" gin (search_tsv)
++Check constraints:
++    "issues_ancestry_depth_chk" CHECK (nlevel(ancestry_path) >= 1 AND nlevel(ancestry_path) <= 6)
++    "issues_check" CHECK (due_date IS NULL OR start_date IS NULL OR due_date >= start_date)
++    "issues_description_markdown_check" CHECK (octet_length(description_markdown) <= 1048576)
++    "issues_object_type_check" CHECK (object_type = 'issue'::object_kind)
++    "issues_summary_check" CHECK (char_length(btrim(summary)) >= 1 AND char_length(btrim(summary)) <= 500)
++Foreign-key constraints:
++    "issues_created_by_id_fkey" FOREIGN KEY (created_by_id) REFERENCES users(id)
++    "issues_creator_modified_by_id_fkey" FOREIGN KEY (creator_modified_by_id) REFERENCES users(id)
++    "issues_id_object_type_fkey" FOREIGN KEY (id, object_type) REFERENCES objects(id, object_type) ON DELETE RESTRICT
++    "issues_original_created_by_id_fkey" FOREIGN KEY (original_created_by_id) REFERENCES users(id)
++    "issues_parent_issue_id_fkey" FOREIGN KEY (parent_issue_id) REFERENCES issues(id) ON DELETE SET NULL
++    "issues_priority_id_fkey" FOREIGN KEY (priority_id) REFERENCES project_priorities(id)
++    "issues_project_id_fkey" FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE RESTRICT
++    "issues_state_id_fkey" FOREIGN KEY (state_id) REFERENCES workflow_states(id)
++Referenced by:
++    TABLE "issues" CONSTRAINT "issues_parent_issue_id_fkey" FOREIGN KEY (parent_issue_id) REFERENCES issues(id) ON DELETE SET NULL
++Triggers:
++    issues_parent_dag_au_trg AFTER UPDATE OF parent_issue_id ON issues FOR EACH ROW WHEN (old.ancestry_path IS DISTINCT FROM new.ancestry_path) EXECUTE FUNCTION issues_parent_dag_au()
++    issues_parent_dag_biu_trg BEFORE INSERT OR UPDATE OF parent_issue_id ON issues FOR EACH ROW EXECUTE FUNCTION issues_parent_dag_biu()
++    issues_validate_biu_trg BEFORE INSERT OR UPDATE ON issues FOR EACH ROW EXECUTE FUNCTION issues_validate_biu()
++
++
++-- Function: issue_ltree_label
++CREATE OR REPLACE FUNCTION public.issue_ltree_label(p_id uuid)
++ RETURNS ltree
++ LANGUAGE sql
++ IMMUTABLE PARALLEL SAFE
++AS $function$
++    SELECT text2ltree(replace(p_id::text, '-', ''));
++$function$
++
++-- Function: issues_parent_dag_biu
++CREATE OR REPLACE FUNCTION public.issues_parent_dag_biu()
++ RETURNS trigger
++ LANGUAGE plpgsql
++AS $function$
++DECLARE
++    v_parent_path ltree;
++    v_parent_project_id uuid;
++    v_subtree_height integer := 0;
++BEGIN
++    -- 1. Root case
++    IF NEW.parent_issue_id IS NULL THEN
++        NEW.ancestry_path := issue_ltree_label(NEW.id);
++        RETURN NEW;
++    END IF;
++
++    -- 2. Self-reference check
++    IF NEW.parent_issue_id = NEW.id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_SELF_REFERENCE';
++    END IF;
++
++    -- 3. Lock ancestors top-down to avoid lock-order inversion
++    SELECT ancestry_path, project_id
++      INTO v_parent_path, v_parent_project_id
++      FROM issues
++     WHERE id = NEW.parent_issue_id;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_NOT_FOUND';
++    END IF;
++
++    PERFORM 1
++       FROM issues
++      WHERE ancestry_path @> v_parent_path
++      ORDER BY nlevel(ancestry_path)
++        FOR UPDATE;
++
++    -- Re-read parent path under lock
++    SELECT ancestry_path, project_id
++      INTO v_parent_path, v_parent_project_id
++      FROM issues
++     WHERE id = NEW.parent_issue_id;
++
++    -- 4. Cross-project check
++    IF v_parent_project_id <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_CROSS_PROJECT';
++    END IF;
++
++    -- 5. Cycle check
++    IF v_parent_path ~ ('*.' || replace(NEW.id::text, '-', '') || '.*')::lquery THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_CYCLE';
++    END IF;
++
++    -- 6. Depth check
++    IF TG_OP = 'UPDATE' THEN
++        SELECT COALESCE(max(nlevel(ancestry_path)) - nlevel(OLD.ancestry_path), 0)
++          INTO v_subtree_height
++          FROM issues
++         WHERE ancestry_path <@ OLD.ancestry_path;
++    ELSE
++        v_subtree_height := 0;
++    END IF;
++
++    IF (nlevel(v_parent_path) + 1 + v_subtree_height) > 6 THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARENT_MAX_DEPTH_EXCEEDED';
++    END IF;
++
++    -- 7. Compute new ancestry path
++    NEW.ancestry_path := v_parent_path || issue_ltree_label(NEW.id);
++    RETURN NEW;
++END;
++$function$
++
++-- Function: issues_parent_dag_au
++CREATE OR REPLACE FUNCTION public.issues_parent_dag_au()
++ RETURNS trigger
++ LANGUAGE plpgsql
++AS $function$
++BEGIN
++    UPDATE issues
++       SET ancestry_path = NEW.ancestry_path || subpath(ancestry_path, nlevel(OLD.ancestry_path))
++     WHERE ancestry_path <@ OLD.ancestry_path AND id <> NEW.id;
++    RETURN NEW;
++END;
++$function$
++
++-- Function: issues_validate_biu
++CREATE OR REPLACE FUNCTION public.issues_validate_biu()
++ RETURNS trigger
++ LANGUAGE plpgsql
++AS $function$
++DECLARE
++    v_project projects%ROWTYPE;
++    v_object objects%ROWTYPE;
++    v_state workflow_states%ROWTYPE;
++    v_priority project_priorities%ROWTYPE;
++BEGIN
++    -- 1. On UPDATE: sequence_id and project_id are immutable
++    IF TG_OP = 'UPDATE' THEN
++        IF NEW.sequence_id IS DISTINCT FROM OLD.sequence_id OR NEW.project_id IS DISTINCT FROM OLD.project_id THEN
++            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_KEY_IMMUTABLE';
++        END IF;
++    END IF;
++
++    -- 2. Verify project exists and workspace matches
++    SELECT * INTO v_project FROM projects WHERE id = NEW.project_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PROJECT_NOT_FOUND';
++    END IF;
++
++    IF NEW.workspace_id <> v_project.workspace_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_WORKSPACE_MISMATCH';
++    END IF;
++
++    -- 3. Verify sequence_id has been allocated
++    IF NEW.sequence_id > v_project.issue_seq_counter THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SEQUENCE_NOT_ALLOCATED';
++    END IF;
++
++    -- 4. Verify spine object matches
++    SELECT * INTO v_object FROM objects WHERE id = NEW.id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SPINE_NOT_FOUND';
++    END IF;
++
++    IF v_object.project_id IS DISTINCT FROM NEW.project_id
++       OR v_object.canonical_key <> (v_project.identifier || '-' || NEW.sequence_id::text) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_SPINE_MISMATCH';
++    END IF;
++
++    -- 5. Verify state_id and priority_id belong to NEW.project_id
++    SELECT * INTO v_state FROM workflow_states WHERE id = NEW.state_id;
++    IF NOT FOUND OR v_state.project_id <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_STATE_PROJECT_MISMATCH';
++    END IF;
++
++    SELECT * INTO v_priority FROM project_priorities WHERE id = NEW.priority_id;
++    IF NOT FOUND OR v_priority.project_id <> NEW.project_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'ISSUE_PRIORITY_PROJECT_MISMATCH';
++    END IF;
++
++    RETURN NEW;
++END;
++$function$
+diff --git a/docs/qa/KANBA-46/subtree-move-sample.txt b/docs/qa/KANBA-46/subtree-move-sample.txt
+new file mode 100644
+index 0000000..fb696f8
+--- /dev/null
++++ b/docs/qa/KANBA-46/subtree-move-sample.txt
+@@ -0,0 +1,13 @@
++=== BEFORE SUBTREE MOVE (A <- B <- C, and X) ===
++Issue X (New Root)        | ID: 11a0402e-167d-4cf7-8693-54e31e6216bc | Parent: None | Path: 11a0402e167d4cf7869354e31e6216bc
++Issue A (Root)            | ID: 8e11a219-54c9-48ef-8858-4863292c90ae | Parent: None | Path: 8e11a21954c948ef88584863292c90ae
++Issue B (Child of A)      | ID: 466d93c0-1f80-47c2-bc31-4f11a5541541 | Parent: 8e11a219-54c9-48ef-8858-4863292c90ae | Path: 8e11a21954c948ef88584863292c90ae.466d93c01f8047c2bc314f11a5541541
++Issue C (Child of B)      | ID: 8de2314a-e1c2-4686-be90-9ba5ae36c191 | Parent: 466d93c0-1f80-47c2-bc31-4f11a5541541 | Path: 8e11a21954c948ef88584863292c90ae.466d93c01f8047c2bc314f11a5541541.8de2314ae1c24686be909ba5ae36c191
++
++Executing: UPDATE issues SET parent_issue_id = X WHERE id = B;
++
++=== AFTER SUBTREE MOVE (B and C rebased under X; A has no descendants) ===
++Issue X (New Root)        | ID: 11a0402e-167d-4cf7-8693-54e31e6216bc | Parent: None | Path: 11a0402e167d4cf7869354e31e6216bc
++Issue B (Child of A)      | ID: 466d93c0-1f80-47c2-bc31-4f11a5541541 | Parent: 11a0402e-167d-4cf7-8693-54e31e6216bc | Path: 11a0402e167d4cf7869354e31e6216bc.466d93c01f8047c2bc314f11a5541541
++Issue C (Child of B)      | ID: 8de2314a-e1c2-4686-be90-9ba5ae36c191 | Parent: 466d93c0-1f80-47c2-bc31-4f11a5541541 | Path: 11a0402e167d4cf7869354e31e6216bc.466d93c01f8047c2bc314f11a5541541.8de2314ae1c24686be909ba5ae36c191
++Issue A (Root)            | ID: 8e11a219-54c9-48ef-8858-4863292c90ae | Parent: None | Path: 8e11a21954c948ef88584863292c90ae
+diff --git a/docs/qa/KANBA-46/unit-test-results.txt b/docs/qa/KANBA-46/unit-test-results.txt
+new file mode 100644
+index 0000000..c7bcd01
+--- /dev/null
++++ b/docs/qa/KANBA-46/unit-test-results.txt
+@@ -0,0 +1,48 @@
++........                                                                 [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                                  Stmts   Miss Branch BrPart  Cover   Missing
++-------------------------------------------------------------------------------------------------
++database/__init__.py                                      1      0      0      0   100%
++database/bootstrap/__init__.py                           25      2      6      3    84%   20, 22->24, 25
++database/migrations/__init__.py                           0      0      0      0   100%
++database/migrations/env.py                               39      5      8      4    81%   14->17, 22-23, 29->32, 47-48, 73
++database/migrations/sqlfile.py                           19      4      4      2    74%   17-18, 22-23
++database/migrations/versions/__init__.py                  0      0      0      0   100%
++database/migrations/versions/p1_01_baseline.py           10      1      0      0    90%   26
++database/migrations/versions/p1_02_objects_spine.py      10      1      0      0    90%   26
++database/migrations/versions/p1_03_principals.py         10      1      0      0    90%   26
++database/migrations/versions/p1_04_projects.py           10      1      0      0    90%   26
++database/migrations/versions/p1_05_issues.py             10      1      0      0    90%   26
++database/migrations/versions/p1_06_parent_dag.py         10      0      0      0   100%
++database/migrations/versions/p1_11_object_links.py       10      1      0      0    90%   26
++database/testing/__init__.py                              0      0      0      0   100%
++database/testing/pg_harness.py                          199     58     54     15    64%   49-50, 70-71, 75, 92-93, 113->exit, 114->113, 120-124, 136->147, 138->141, 142->145, 152-167, 177-186, 204-205, 223-224, 229-253, 259, 262, 268, 337, 354-355, 363->exit
++database/tests/__init__.py                                0      0      0      0   100%
++database/tests/conftest.py                               15      6      0      0    60%   16-18, 30, 36-37
++database/tests/migration_harness.py                      88     15     12      6    79%   69, 73, 91, 95, 105, 107, 121-126, 130-134
++database/tests/migrations/__init__.py                     0      0      0      0   100%
++database/tests/migrations/test_p1_01_migration.py        65     65     12      0     0%   3-132
++database/tests/migrations/test_p1_02_migration.py        26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_03_migration.py        21     21      0      0     0%   3-69
++database/tests/migrations/test_p1_04_migration.py        25     25      0      0     0%   3-87
++database/tests/migrations/test_p1_05_migration.py        20     20      0      0     0%   3-59
++database/tests/migrations/test_p1_06_migration.py        28      0      0      0   100%
++database/tests/migrations/test_p1_11_migration.py        27     27      0      0     0%   3-89
++database/tests/test_harness_benchmark.py                  8      8      0      0     0%   3-19
++database/tests/test_p1_01_baseline.py                   109    109      2      0     0%   3-185
++database/tests/test_p1_02_objects.py                    145    145      0      0     0%   3-319
++database/tests/test_p1_03_principals.py                 196    196      8      0     0%   3-469
++database/tests/test_p1_04_projects.py                   161    161      4      0     0%   3-501
++database/tests/test_p1_05_issues.py                     192    192      0      0     0%   3-535
++database/tests/test_p1_05_sequence_concurrency.py        31     31      0      0     0%   3-75
++database/tests/test_p1_06_parent_concurrency.py          70      0      2      0   100%
++database/tests/test_p1_06_parent_dag.py                 178      0      2      0   100%
++database/tests/test_p1_11_object_links.py               167    167      4      0     0%   3-524
++database/tests/test_pg_harness.py                       120    120      2      0     0%   3-224
++database/tests/test_smoke.py                              3      3      0      0     0%   3-8
++database/tests/test_sqlfile.py                           22     22      0      0     0%   3-36
++-------------------------------------------------------------------------------------------------
++TOTAL                                                  2070   1434    120     30    31%
++8 passed in 1.91s
