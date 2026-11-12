@@ -124,3 +124,32 @@ class UserSession(Base):
     def __str__(self) -> str:
         """Sanitized string representation matching repr."""
         return self.__repr__()
+
+
+class LocalAdminCredential(Base):
+    """Local administrator credential with Argon2id hash and pepper key id (KB-P2-04)."""
+
+    __tablename__ = "local_admin_credentials"
+
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), primary_key=True
+    )
+    username: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    pepper_kid: Mapped[str] = mapped_column(
+        Text, nullable=False, default="pepper-v1", server_default=text("'pepper-v1'")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    def __repr__(self) -> str:
+        """Sanitized representation omitting password_hash."""
+        return (
+            f"<LocalAdminCredential principal_id={self.principal_id} "
+            f"username={self.username!r} pepper_kid={self.pepper_kid!r}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()
