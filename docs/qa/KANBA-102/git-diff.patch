@@ -1,0 +1,2679 @@
+diff --git a/docs/qa/KANBA-102/build-check.txt b/docs/qa/KANBA-102/build-check.txt
+new file mode 100644
+index 0000000..092a6c6
+--- /dev/null
++++ b/docs/qa/KANBA-102/build-check.txt
+@@ -0,0 +1,27 @@
++All checks passed!
++750 files already formatted
++Success: no issues found in 313 source files
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 400 files, 1006 dependencies.
++--------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++mcp forbidden from importing database KEPT
++
++Contracts: 2 kept, 0 broken.
++SUMMARY python=112 node=1 violations=0
++EXIT_CODE=0
+diff --git a/docs/qa/KANBA-102/contract-sample.json b/docs/qa/KANBA-102/contract-sample.json
+new file mode 100644
+index 0000000..699115a
+--- /dev/null
++++ b/docs/qa/KANBA-102/contract-sample.json
+@@ -0,0 +1,624 @@
++{
++  "ticket": "KANBA-102",
++  "exchanges": [
++    {
++      "name": "tab_all_200",
++      "request": {
++        "method": "GET",
++        "path": "/api/v1/issues/ACTV-1/activity?tab=all",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "4447",
++          "content-type": "application/json",
++          "x-request-id": "70fb03052b7a43c381cc7dfbf3077694",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "tab": "all",
++          "counts": {
++            "all": 9,
++            "comments": 4,
++            "history": 3,
++            "gates": 2
++          },
++          "items": [
++            {
++              "id": "01a1cfc4-aa93-7d83-84ef-c48e36500177",
++              "category": "AGENT_GATE",
++              "event_type": "GATE_APPROVED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.867661Z",
++              "payload": {
++                "verdict": "pass",
++                "hook_name": "sec-review",
++                "latency_ms": 145
++              }
++            },
++            {
++              "id": "01a1cfc4-aa91-716c-bc43-651752bfe378",
++              "category": "AGENT_GATE",
++              "event_type": "GATE_PENDING",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.865152Z",
++              "payload": {
++                "to_state": "Done",
++                "hook_name": "sec-review",
++                "from_state": "In Review"
++              }
++            },
++            {
++              "id": "01a1cfc4-aa8d-742b-99ce-6bb5f7059895",
++              "category": "HISTORY",
++              "event_type": "CREATOR_OVERRIDDEN",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.861575Z",
++              "payload": {
++                "reason": "Administrative creator correction",
++                "to_user_id": "01a1cfc4-a81e-7807-9be4-d3355bc9e840",
++                "from_user_id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7"
++              }
++            },
++            {
++              "id": "01a1cfc4-aa6f-7a13-bb07-e6fd1d626e7b",
++              "category": "HISTORY",
++              "event_type": "ISSUE_FIELD_CHANGED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.831279Z",
++              "payload": {
++                "new": "Timeline Feed Target Issue - RENAMED",
++                "old": "Timeline Feed Target Issue",
++                "field": "summary"
++              }
++            },
++            {
++              "id": "01a1cfc4-aa48-7a95-bf72-12e472e8157f",
++              "category": "COMMENT",
++              "event_type": "COMMENT_DELETED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.792512Z",
++              "payload": {
++                "comment_id": "01a1cfc4-aa25-724a-b231-f6e1a7b833b1",
++                "deleted_by": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7"
++              },
++              "comment": {
++                "id": "01a1cfc4-aa25-724a-b231-f6e1a7b833b1",
++                "deleted": true
++              }
++            },
++            {
++              "id": "01a1cfc4-aa2a-7afc-947c-c7ae7ecc5011",
++              "category": "COMMENT",
++              "event_type": "COMMENT_CREATED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.762401Z",
++              "payload": {
++                "comment_id": "01a1cfc4-aa25-724a-b231-f6e1a7b833b1",
++                "body_sha256": "5c5cbe196e7cc2b59731f7f2d0375e8e22280a0d63d25b4accd250940786241d",
++                "parent_comment_id": null,
++                "mentioned_principal_ids": []
++              },
++              "comment": {
++                "id": "01a1cfc4-aa25-724a-b231-f6e1a7b833b1",
++                "deleted": true
++              }
++            },
++            {
++              "id": "01a1cfc4-a9ef-75f6-9499-de9ad16cc8ca",
++              "category": "COMMENT",
++              "event_type": "COMMENT_EDITED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.703644Z",
++              "payload": {
++                "comment_id": "01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "new_sha256": "07bdf0120ee91f6a60f20096103c3e4232705808e4871df3e4eb6e2a8dc760a6",
++                "old_sha256": "edab4da2342c94e0c0ea8fa554ae7b5d186f3cb40626056c0cab1d494369bc4c"
++              },
++              "comment": {
++                "id": "01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "body_markdown": "First comment - EDITED version with updates",
++                "permalink": "/projects/ACTV/issues/ACTV-1#comment-01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "edited_at": "2026-11-12T12:38:54.697348Z",
++                "reactions": [
++                  {
++                    "emoji": "\ud83d\ude80",
++                    "count": 1,
++                    "reacted_by_me": true
++                  }
++                ]
++              }
++            },
++            {
++              "id": "01a1cfc4-a9d2-78b4-9992-f90c302d5850",
++              "category": "COMMENT",
++              "event_type": "COMMENT_CREATED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.674987Z",
++              "payload": {
++                "comment_id": "01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "body_sha256": "edab4da2342c94e0c0ea8fa554ae7b5d186f3cb40626056c0cab1d494369bc4c",
++                "parent_comment_id": null,
++                "mentioned_principal_ids": []
++              },
++              "comment": {
++                "id": "01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "body_markdown": "First comment - EDITED version with updates",
++                "permalink": "/projects/ACTV/issues/ACTV-1#comment-01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "edited_at": "2026-11-12T12:38:54.697348Z",
++                "reactions": [
++                  {
++                    "emoji": "\ud83d\ude80",
++                    "count": 1,
++                    "reacted_by_me": true
++                  }
++                ]
++              }
++            },
++            {
++              "id": "01a1cfc4-a94d-70a0-a0df-60cc6f642cac",
++              "category": "HISTORY",
++              "event_type": "ISSUE_CREATED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.541284Z",
++              "payload": {
++                "key": "ACTV-1",
++                "copied_from": null
++              }
++            }
++          ],
++          "next_cursor": null
++        }
++      }
++    },
++    {
++      "name": "tab_comments_200",
++      "request": {
++        "method": "GET",
++        "path": "/api/v1/issues/ACTV-1/activity?tab=comments",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "2656",
++          "content-type": "application/json",
++          "x-request-id": "5e8f3a9fdeaf4713979c2cbf8f7e0b7a",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "tab": "comments",
++          "counts": {
++            "all": 9,
++            "comments": 4,
++            "history": 3,
++            "gates": 2
++          },
++          "items": [
++            {
++              "id": "01a1cfc4-aa48-7a95-bf72-12e472e8157f",
++              "category": "COMMENT",
++              "event_type": "COMMENT_DELETED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.792512Z",
++              "payload": {
++                "comment_id": "01a1cfc4-aa25-724a-b231-f6e1a7b833b1",
++                "deleted_by": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7"
++              },
++              "comment": {
++                "id": "01a1cfc4-aa25-724a-b231-f6e1a7b833b1",
++                "deleted": true
++              }
++            },
++            {
++              "id": "01a1cfc4-aa2a-7afc-947c-c7ae7ecc5011",
++              "category": "COMMENT",
++              "event_type": "COMMENT_CREATED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.762401Z",
++              "payload": {
++                "comment_id": "01a1cfc4-aa25-724a-b231-f6e1a7b833b1",
++                "body_sha256": "5c5cbe196e7cc2b59731f7f2d0375e8e22280a0d63d25b4accd250940786241d",
++                "parent_comment_id": null,
++                "mentioned_principal_ids": []
++              },
++              "comment": {
++                "id": "01a1cfc4-aa25-724a-b231-f6e1a7b833b1",
++                "deleted": true
++              }
++            },
++            {
++              "id": "01a1cfc4-a9ef-75f6-9499-de9ad16cc8ca",
++              "category": "COMMENT",
++              "event_type": "COMMENT_EDITED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.703644Z",
++              "payload": {
++                "comment_id": "01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "new_sha256": "07bdf0120ee91f6a60f20096103c3e4232705808e4871df3e4eb6e2a8dc760a6",
++                "old_sha256": "edab4da2342c94e0c0ea8fa554ae7b5d186f3cb40626056c0cab1d494369bc4c"
++              },
++              "comment": {
++                "id": "01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "body_markdown": "First comment - EDITED version with updates",
++                "permalink": "/projects/ACTV/issues/ACTV-1#comment-01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "edited_at": "2026-11-12T12:38:54.697348Z",
++                "reactions": [
++                  {
++                    "emoji": "\ud83d\ude80",
++                    "count": 1,
++                    "reacted_by_me": true
++                  }
++                ]
++              }
++            },
++            {
++              "id": "01a1cfc4-a9d2-78b4-9992-f90c302d5850",
++              "category": "COMMENT",
++              "event_type": "COMMENT_CREATED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.674987Z",
++              "payload": {
++                "comment_id": "01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "body_sha256": "edab4da2342c94e0c0ea8fa554ae7b5d186f3cb40626056c0cab1d494369bc4c",
++                "parent_comment_id": null,
++                "mentioned_principal_ids": []
++              },
++              "comment": {
++                "id": "01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "body_markdown": "First comment - EDITED version with updates",
++                "permalink": "/projects/ACTV/issues/ACTV-1#comment-01a1cfc4-a9cb-7a7c-bba5-15723a4ef34c",
++                "edited_at": "2026-11-12T12:38:54.697348Z",
++                "reactions": [
++                  {
++                    "emoji": "\ud83d\ude80",
++                    "count": 1,
++                    "reacted_by_me": true
++                  }
++                ]
++              }
++            }
++          ],
++          "next_cursor": null
++        }
++      }
++    },
++    {
++      "name": "tab_gates_200",
++      "request": {
++        "method": "GET",
++        "path": "/api/v1/issues/ACTV-1/activity?tab=gates",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "778",
++          "content-type": "application/json",
++          "x-request-id": "f52ed53969f147138ecf9ed52dbfec23",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "tab": "gates",
++          "counts": {
++            "all": 9,
++            "comments": 4,
++            "history": 3,
++            "gates": 2
++          },
++          "items": [
++            {
++              "id": "01a1cfc4-aa93-7d83-84ef-c48e36500177",
++              "category": "AGENT_GATE",
++              "event_type": "GATE_APPROVED",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.867661Z",
++              "payload": {
++                "verdict": "pass",
++                "hook_name": "sec-review",
++                "latency_ms": 145
++              }
++            },
++            {
++              "id": "01a1cfc4-aa91-716c-bc43-651752bfe378",
++              "category": "AGENT_GATE",
++              "event_type": "GATE_PENDING",
++              "actor": {
++                "id": "01a1cfc4-a80a-74d0-8484-2b70dfc6afd7",
++                "type": "USER",
++                "handle": "@admin1",
++                "slug": null,
++                "display_name": "Admin1"
++              },
++              "created_at": "2026-11-12T12:38:54.865152Z",
++              "payload": {
++                "to_state": "Done",
++                "hook_name": "sec-review",
++                "from_state": "In Review"
++              }
++            }
++          ],
++          "next_cursor": null
++        }
++      }
++    },
++    {
++      "name": "non_viewer_404",
++      "request": {
++        "method": "GET",
++        "path": "/api/v1/issues/SEC-1/activity",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 404,
++        "headers": {
++          "x-request-id": "c0fba4eb4c3d40d296acce850050a213",
++          "content-length": "139",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:NOT_FOUND",
++          "title": "Not Found",
++          "status": 404,
++          "code": "NOT_FOUND",
++          "request_id": "c0fba4eb4c3d40d296acce850050a213"
++        }
++      }
++    },
++    {
++      "name": "include_hashes_200",
++      "request": {
++        "method": "GET",
++        "path": "/api/v1/issues/HASH-1/activity?include_hashes=true",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "563",
++          "content-type": "application/json",
++          "x-request-id": "09a78b9994964b3eb089dc7fd26e4d55",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "tab": "all",
++          "counts": {
++            "all": 1,
++            "comments": 0,
++            "history": 1,
++            "gates": 0
++          },
++          "items": [
++            {
++              "id": "01a1cfc4-aff5-7d21-b54a-3715d0f9b618",
++              "category": "HISTORY",
++              "event_type": "ISSUE_CREATED",
++              "actor": {
++                "id": "01a1cfc4-af5c-71c2-a965-b4bda6ffc5d5",
++                "type": "USER",
++                "handle": "@auditor",
++                "slug": null,
++                "display_name": "Auditor"
++              },
++              "created_at": "2026-11-12T12:38:56.245253Z",
++              "payload": {
++                "key": "HASH-1",
++                "copied_from": null
++              },
++              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
++              "row_hash": "b4558b57782acd491c9ace3b936c9262277b5acdbd79a670f6a1af95f4c3e913"
++            }
++          ],
++          "next_cursor": null
++        }
++      }
++    },
++    {
++      "name": "invalid_cursor_422",
++      "request": {
++        "method": "GET",
++        "path": "/api/v1/issues/PAGE-1/activity?tab=history&cursor=MDFhMWNmYzQtYjE1NS03OWRmLTk1ZjktOWI5YzU4ZjBhNzA2OmNvbW1lbnRzOmRlc2M6MTc5NDQ4NzEzNzA3MTk2MzkwNDowMWExY2ZjNC1iMzJmLTc3ODAtODdmMS01YjIwOTZkYWM5YWIuNmVlNTgwMDMzNzk1YmEwYTBiNGVmZWUzZmI2NmZkYTY4ZTAzNjVlYmY0YWNkNTQ4Zjk5ODNiYTcxMGEwMDA5MA",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 422,
++        "headers": {
++          "x-request-id": "9136b44fd8a8475f8d3ab0f3f6dc8356",
++          "content-length": "222",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:INVALID_CURSOR",
++          "title": "Invalid Cursor",
++          "status": 422,
++          "code": "INVALID_CURSOR",
++          "detail": "The provided pagination cursor is invalid or mismatched.",
++          "request_id": "9136b44fd8a8475f8d3ab0f3f6dc8356"
++        }
++      }
++    }
++  ]
++}
+diff --git a/docs/qa/KANBA-102/message-to-reality-checker.md b/docs/qa/KANBA-102/message-to-reality-checker.md
+new file mode 100644
+index 0000000..1edf116
+--- /dev/null
++++ b/docs/qa/KANBA-102/message-to-reality-checker.md
+@@ -0,0 +1,28 @@
++# Reality-Checker Audit Note: KANBA-102 (KB-P3-13)
++
++## Architectural Scope & Workflow Implementation
++This ticket (`KANBA-102` / `KB-P3-13`: `[Phase 3 / API] Activity feed API with 4 tabs (All, Comments, History, Agent/Workflow Gates) & cursor pagination`) implements the cursor-paginated activity feed REST API supporting Plane-parity filter tabs, single-query counts aggregation, HMAC-signed cursor keyset pagination, cryptographic hash chain verification exposure, comment hydration with soft-delete sanitization, and access-boundary redaction.
++
++1. **Target Files**:
++   - `kanban/api/v1/activity.py`: Two REST endpoints mounted on `build_v1_router()` wrapped with `timing_floor(floor_ms=25.0)`:
++     * `GET /api/v1/issues/{issue_ref}/activity` (`Capability.VIEW` on issue, status 200)
++     * `GET /api/v1/projects/{project_ref}/activity` (`Capability.VIEW` on project, status 200)
++   - `kanban/api/v1/schemas/activity.py`: Pydantic request/response schemas with `ConfigDict(extra="forbid")`, validating `tab` enum (`all`, `comments`, `history`, `gates`), `order` enum (`desc`, `asc`), `limit` range (`1..100`), `include_hashes` boolean, discriminated `ActorSummary` (`normal` vs `redacted`), `ActiveCommentSummary` vs `SoftDeletedCommentSummary`, and `ActivityFeedResponse` with custom serializer suppressing null hashes.
++   - `kanban/services/activity_feed.py`: Service layer implementing HMAC-SHA256 cursor minting and validation, `get_issue_activity`, `get_project_activity`, single-query counts aggregation under RLS, actor resolution with project membership boundary checks, payload sanitization (masking unreadable linked objects and redacting out-of-boundary principals), and batch comment hydration.
++   - `kanban/services/activity.py`: Added `AGENT_GATE = "AGENT_GATE"` to `ActivityCategory`; registered `CREATOR_OVERRIDDEN`, `WIP_HARD_LIMIT_OVERRIDDEN`, `SYNC_HOOK_REJECTED`, `HOOK_FAIL_OPEN_WARN`, `GATE_PENDING`, `GATE_APPROVED`, `GATE_REJECTED`, `GATE_TIMED_OUT`, `GATE_CANCELLED` under appropriate categories.
++   - `kanban/tests/services/test_activity.py`: Unit tests verifying taxonomy and category mapping.
++   - `kanban/tests/api/test_activity_feed.py`: Comprehensive test suite covering all 5 mandatory feature test cases plus edge cases and branch coverage.
++
++2. **Security & Redaction Invariants**:
++   - **Soft-Deleted Comment Sanitization**: For `COMMENT_CREATED` and `COMMENT_EDITED` events where the associated comment has been soft-deleted (`deleted_at IS NOT NULL`), `body_markdown` is strictly omitted (serializing as `{"id": "...", "deleted": true}`), preventing deleted content leakage even if historical payloads exist.
++   - **Out-of-Boundary Actor Redaction**: Principals lacking effective access on the project scope are scrubbed of usernames, emails, and identifiers, serializing strictly as `{"redacted": true, "label": "1 External Collaborator"}`.
++   - **Unreadable Linked Object Masking**: Linked objects in `LINK_CREATED` / `LINK_DELETED` events that the caller cannot read under RLS are masked as `{"restricted": true, "label": "Restricted Object"}`.
++   - **Anti-Enumeration Equivalence**: Unreadable or nonexistent issues and projects return byte-identical `404 NOT_FOUND` responses.
++   - **HMAC Keyset Cursor Protection**: Opaque base64url cursors carry an HMAC-SHA256 signature binding `scope_id`, `tab`, `order`, `created_at_ns`, and `id`. Tampered or mismatched cursors return `422 INVALID_CURSOR`.
++   - **Cryptographic Hash Chain Exposure**: `prev_hash` and `row_hash` 64-character lowercase hex strings are exposed only when `include_hashes=true`, otherwise omitted.
++
++3. **Verification & Quality Status**:
++   - **Unit Tests**: 6/6 passed in 4.36s with **96.58%** combined branch + line coverage (`kanban.api.v1.activity` 100%, `kanban.services.activity_feed` 96%).
++   - **Static Checks**: Ruff check clean, Ruff format clean (750 files), Mypy strict clean (313 source files), Lint-imports clean (2 kept, 0 broken), License gate clean (violations=0), Zero non-ASCII dashes repo-wide.
++   - **Contract Proof**: `contract-sample.json` captures all required wire exchanges (`tab=all` with `counts`, `tab=comments` with active and soft-deleted comments, `tab=gates`, `include_hashes=true`, `422 INVALID_CURSOR`, and non-viewer `404`).
++   - **UI / Screenshots**: `Screenshots: N/A - Non-UI Ticket`.
+diff --git a/docs/qa/KANBA-102/unit-test-results.txt b/docs/qa/KANBA-102/unit-test-results.txt
+new file mode 100644
+index 0000000..a4922bc
+--- /dev/null
++++ b/docs/qa/KANBA-102/unit-test-results.txt
+@@ -0,0 +1,27 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-102/.venv/bin/python
++rootdir: /tmp/kb-wt-KANBA-102
++configfile: pyproject.toml
++plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, xdist-3.8.0
++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
++collecting ... collected 6 items
++
++kanban/tests/api/test_activity_feed.py::test_case_1_positive_4_tab_filtering_and_counts PASSED [ 16%]
++kanban/tests/api/test_activity_feed.py::test_case_2_deleted_comment_and_redaction_security PASSED [ 33%]
++kanban/tests/api/test_activity_feed.py::test_case_3_project_scoped_rls_filtering PASSED [ 50%]
++kanban/tests/api/test_activity_feed.py::test_case_4_hash_chain_exposure PASSED [ 66%]
++kanban/tests/api/test_activity_feed.py::test_case_5_boundary_and_pagination PASSED [ 83%]
++kanban/tests/api/test_activity_feed.py::test_case_6_edge_cases_and_branch_coverage PASSED [100%]
++
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                               Stmts   Miss Branch BrPart  Cover   Missing
++------------------------------------------------------------------------------
++kanban/api/v1/activity.py             19      0      0      0   100%
++kanban/services/activity_feed.py     311      6    108      9    96%   130-131, 232->241, 260-261, 268-269, 333->344, 446->439, 483->493, 641->634, 652->657, 682->693
++------------------------------------------------------------------------------
++TOTAL                                330      6    108      9    97%
++Required test coverage of 95% reached. Total coverage: 96.58%
++============================== 6 passed in 4.36s ===============================
++EXIT_CODE=0
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index ad4e4b2..4198444 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -4,6 +4,7 @@ from __future__ import annotations
+ 
+ from fastapi import APIRouter
+ 
++from kanban.api.v1.activity import router as activity_router
+ from kanban.api.v1.agent_definitions import router as agent_definitions_router
+ from kanban.api.v1.assignees import router as assignees_router
+ from kanban.api.v1.attachments import router as attachments_router
+@@ -35,6 +36,7 @@ def build_v1_router() -> APIRouter:
+     v1.include_router(links_router)
+     v1.include_router(resolve_router)
+     v1.include_router(comments_router)
++    v1.include_router(activity_router)
+     v1.include_router(auth_session_router)
+     v1.include_router(auth_local_router)
+     v1.include_router(auth_oidc_router)
+diff --git a/kanban/api/v1/activity.py b/kanban/api/v1/activity.py
+new file mode 100644
+index 0000000..4e2c235
+--- /dev/null
++++ b/kanban/api/v1/activity.py
+@@ -0,0 +1,97 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""REST endpoints for 4-tab activity feed with cursor pagination (S7.1, S7.2 8j, S3.4; KB-P3-13)."""
++
++from __future__ import annotations
++
++from typing import Annotated, Final
++
++from fastapi import APIRouter, Depends, Query
++from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime dependency for FastAPI
++
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.timing import timing_floor
++from kanban.api.v1.schemas.activity import (
++    ActivityFeedResponse,
++    ActivityOrder,
++    ActivityTab,
++)
++from kanban.services import activity_feed as svc
++
++__all__ = [
++    "activity_router",
++    "router",
++]
++
++router: Final[APIRouter] = APIRouter(tags=["activity"])
++activity_router: Final[APIRouter] = router
++
++
++@router.get(
++    "/issues/{issue_ref}/activity",
++    response_model=ActivityFeedResponse,
++    summary="List activity feed items for an issue across 4 tabs",
++)
++async def list_issue_activity(  # noqa: PLR0913, PLR0917
++    issue_ref: str,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++    tab: Annotated[
++        ActivityTab, Query(description="Tab filter: all, comments, history, gates")
++    ] = "all",
++    order: Annotated[ActivityOrder, Query(description="Order by timestamp: desc or asc")] = "desc",
++    limit: Annotated[int, Query(ge=1, le=100, description="Items per page (1..100)")] = 50,
++    cursor: Annotated[
++        str | None, Query(max_length=256, description="Opaque HMAC keyset cursor")
++    ] = None,
++    include_hashes: Annotated[  # noqa: FBT002
++        bool, Query(description="Include cryptographic row/prev hashes")
++    ] = False,
++) -> ActivityFeedResponse:
++    """Return paginated activity feed items with counts and hydrated comments for an issue."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.get_issue_activity(
++            session=session,
++            caller=caller,
++            issue_ref=issue_ref,
++            tab=tab,
++            order=order,
++            limit=limit,
++            cursor=cursor,
++            include_hashes=include_hashes,
++        )
++
++
++@router.get(
++    "/projects/{project_ref}/activity",
++    response_model=ActivityFeedResponse,
++    summary="List activity feed items across a project with RLS filtering",
++)
++async def list_project_activity(  # noqa: PLR0913, PLR0917
++    project_ref: str,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++    tab: Annotated[
++        ActivityTab, Query(description="Tab filter: all, comments, history, gates")
++    ] = "all",
++    order: Annotated[ActivityOrder, Query(description="Order by timestamp: desc or asc")] = "desc",
++    limit: Annotated[int, Query(ge=1, le=100, description="Items per page (1..100)")] = 50,
++    cursor: Annotated[
++        str | None, Query(max_length=256, description="Opaque HMAC keyset cursor")
++    ] = None,
++    include_hashes: Annotated[  # noqa: FBT002
++        bool, Query(description="Include cryptographic row/prev hashes")
++    ] = False,
++) -> ActivityFeedResponse:
++    """Return paginated activity feed items across all readable objects in a project."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.get_project_activity(
++            session=session,
++            caller=caller,
++            project_ref=project_ref,
++            tab=tab,
++            order=order,
++            limit=limit,
++            cursor=cursor,
++            include_hashes=include_hashes,
++        )
+diff --git a/kanban/api/v1/schemas/activity.py b/kanban/api/v1/schemas/activity.py
+new file mode 100644
+index 0000000..ac9d0d7
+--- /dev/null
++++ b/kanban/api/v1/schemas/activity.py
+@@ -0,0 +1,144 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Activity feed request and response schemas (S7.1, S7.2 8j, S12.2, S3.4; KB-P3-13)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003  # Runtime import required for Pydantic v2 type evaluation
++from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic v2 type evaluation
++from typing import Any, Literal
++
++from pydantic import (
++    BaseModel,
++    ConfigDict,
++    Field,
++    SerializerFunctionWrapHandler,
++    model_serializer,
++)
++
++from kanban.api.v1.schemas.comments import ReactionSummary  # noqa: TC001
++from kanban.services.activity import ActivityCategory  # noqa: TC001
++
++__all__ = [
++    "ActiveCommentSummary",
++    "ActivityCounts",
++    "ActivityFeedResponse",
++    "ActivityItemResponse",
++    "ActivityOrder",
++    "ActivityTab",
++    "NormalActorSummary",
++    "RedactedActorSummary",
++    "SoftDeletedCommentSummary",
++]
++
++type ActivityTab = Literal["all", "comments", "history", "gates"]
++type ActivityOrder = Literal["desc", "asc"]
++
++
++class ActivityCounts(BaseModel):
++    """Aggregate counts across all 4 activity tabs for drawer badges."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    all: int = Field(ge=0, description="Total matching activity items across all tabs")
++    comments: int = Field(ge=0, description="Total comment-related activity items")
++    history: int = Field(ge=0, description="Total history and lifecycle activity items")
++    gates: int = Field(ge=0, description="Total agent and workflow gate items")
++
++
++class NormalActorSummary(BaseModel):
++    """Visible in-boundary principal metadata for activity actors."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID = Field(description="Principal UUID")
++    type: str = Field(description="Principal type: USER, AGENT, or SERVICE_PRINCIPAL")
++    handle: str | None = Field(default=None, description="User handle with @ prefix")
++    slug: str | None = Field(default=None, description="Agent slug identifier")
++    display_name: str = Field(description="Full display name")
++
++
++class RedactedActorSummary(BaseModel):
++    """Anonymized placeholder for out-of-boundary principals."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    redacted: Literal[True] = Field(default=True, description="Always true for redacted principals")
++    label: str = Field(
++        default="1 External Collaborator",
++        description="Redacted principal summary label",
++    )
++
++
++class ActiveCommentSummary(BaseModel):
++    """Hydrated metadata for an active comment."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID = Field(description="Comment UUID")
++    body_markdown: str = Field(description="Canonical comment markdown body")
++    permalink: str = Field(description="Canonical URL permalink fragment to the comment")
++    edited_at: datetime | None = Field(default=None, description="Timestamp of last edit")
++    reactions: list[ReactionSummary] = Field(
++        default_factory=list, description="Aggregated emoji reactions"
++    )
++
++
++class SoftDeletedCommentSummary(BaseModel):
++    """Tombstone metadata for a soft-deleted comment preventing body leakage."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID = Field(description="Comment UUID")
++    deleted: Literal[True] = Field(default=True, description="Always true for deleted comments")
++
++
++class ActivityItemResponse(BaseModel):
++    """A single activity feed item with actor and comment hydration."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID = Field(description="Activity record UUID")
++    category: ActivityCategory = Field(description="Display category tab grouping")
++    event_type: str = Field(description="Exact activity event type token")
++    actor: NormalActorSummary | RedactedActorSummary | None = Field(
++        default=None, description="Initiating principal or redacted collaborator"
++    )
++    created_at: datetime = Field(description="Timestamp when event was recorded")
++    payload: dict[str, Any] = Field(default_factory=dict, description="Structured event payload")
++    comment: ActiveCommentSummary | SoftDeletedCommentSummary | None = Field(
++        default=None, description="Hydrated comment object for comment events"
++    )
++    prev_hash: str | None = Field(
++        default=None, description="Hex-encoded 32-byte cryptographic predecessor hash"
++    )
++    row_hash: str | None = Field(
++        default=None, description="Hex-encoded 32-byte cryptographic row hash"
++    )
++
++    @model_serializer(mode="wrap")
++    def _strip_optional_omissions(
++        self, handler: SerializerFunctionWrapHandler
++    ) -> dict[str, object]:
++        """Omit null hash fields and comment field when not present."""
++        data: dict[str, object] = handler(self)
++        if data.get("prev_hash") is None:
++            data.pop("prev_hash", None)
++        if data.get("row_hash") is None:
++            data.pop("row_hash", None)
++        if data.get("comment") is None:
++            data.pop("comment", None)
++        return data
++
++
++class ActivityFeedResponse(BaseModel):
++    """Paginated activity feed response with counts and keyset cursor."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    tab: str = Field(description="Active filter tab: all, comments, history, or gates")
++    counts: ActivityCounts = Field(description="Badge counts for all 4 tabs")
++    items: list[ActivityItemResponse] = Field(description="Ordered list of activity items")
++    next_cursor: str | None = Field(
++        default=None, description="Opaque HMAC-signed cursor for keyset pagination"
++    )
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index 9e882ce..f8af16a 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -51,7 +51,8 @@ class ActivityCategory(StrEnum):
+ 
+     COMMENT = "COMMENT"
+     HISTORY = "HISTORY"
+-    GATE = "GATE"
++    AGENT_GATE = "AGENT_GATE"
++    GATE = "AGENT_GATE"
+     SYSTEM = "SYSTEM"
+ 
+ 
+@@ -97,6 +98,15 @@ class ActivityEventType(StrEnum):
+     MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
+     LINK_CREATED = "LINK_CREATED"
+     LINK_DELETED = "LINK_DELETED"
++    CREATOR_OVERRIDDEN = "CREATOR_OVERRIDDEN"
++    WIP_HARD_LIMIT_OVERRIDDEN = "WIP_HARD_LIMIT_OVERRIDDEN"
++    SYNC_HOOK_REJECTED = "SYNC_HOOK_REJECTED"
++    HOOK_FAIL_OPEN_WARN = "HOOK_FAIL_OPEN_WARN"
++    GATE_PENDING = "GATE_PENDING"
++    GATE_APPROVED = "GATE_APPROVED"
++    GATE_REJECTED = "GATE_REJECTED"
++    GATE_TIMED_OUT = "GATE_TIMED_OUT"
++    GATE_CANCELLED = "GATE_CANCELLED"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -140,6 +150,15 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
+         ActivityEventType.LINK_CREATED: ActivityCategory.HISTORY,
+         ActivityEventType.LINK_DELETED: ActivityCategory.HISTORY,
++        ActivityEventType.CREATOR_OVERRIDDEN: ActivityCategory.HISTORY,
++        ActivityEventType.WIP_HARD_LIMIT_OVERRIDDEN: ActivityCategory.HISTORY,
++        ActivityEventType.SYNC_HOOK_REJECTED: ActivityCategory.AGENT_GATE,
++        ActivityEventType.HOOK_FAIL_OPEN_WARN: ActivityCategory.AGENT_GATE,
++        ActivityEventType.GATE_PENDING: ActivityCategory.AGENT_GATE,
++        ActivityEventType.GATE_APPROVED: ActivityCategory.AGENT_GATE,
++        ActivityEventType.GATE_REJECTED: ActivityCategory.AGENT_GATE,
++        ActivityEventType.GATE_TIMED_OUT: ActivityCategory.AGENT_GATE,
++        ActivityEventType.GATE_CANCELLED: ActivityCategory.AGENT_GATE,
+     }
+ )
+ 
+diff --git a/kanban/services/activity_feed.py b/kanban/services/activity_feed.py
+new file mode 100644
+index 0000000..f0becef
+--- /dev/null
++++ b/kanban/services/activity_feed.py
+@@ -0,0 +1,728 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Activity feed service implementing 4-tab filtering and cursor pagination (KB-P3-13)."""
++
++from __future__ import annotations
++
++import base64
++import contextlib
++import hashlib
++import hmac
++import os
++import uuid
++from datetime import UTC, datetime
++from typing import TYPE_CHECKING, Any, Final
++
++from sqlalchemy import func, select
++
++from database.models.activity import ActivityRecord
++from database.models.issues import CommentReaction, Issue, IssueComment
++from database.models.principals import EffectiveResourceAccess, Principal, RoleBinding
++from database.models.projects import Project
++from database.models.spine import ObjectRecord
++from kanban.api.problems import ProblemException
++from kanban.api.v1.schemas.activity import (
++    ActiveCommentSummary,
++    ActivityCounts,
++    ActivityFeedResponse,
++    ActivityItemResponse,
++    NormalActorSummary,
++    RedactedActorSummary,
++    SoftDeletedCommentSummary,
++)
++from kanban.api.v1.schemas.comments import ReactionSummary
++from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
++from kanban.services.activity import (
++    EVENT_CATEGORY,
++    ActivityCategory,
++    ActivityEventType,
++)
++from kanban.services.issue_keys import resolve_issue_ref
++from kanban.services.projects import get_project_or_404
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.api.deps import PrincipalContext
++
++__all__ = [
++    "decode_activity_cursor",
++    "encode_activity_cursor",
++    "get_issue_activity",
++    "get_project_activity",
++]
++
++_DEFAULT_CURSOR_SECRET: Final[bytes] = b"kanban-activity-cursor-hmac-secret-v1"
++_COMMENT_DELETED_STR: Final[str] = ActivityEventType.COMMENT_DELETED.value
++_CURSOR_SEGMENTS: Final[int] = 5
++
++
++def _get_cursor_secret() -> bytes:
++    """Return HMAC secret key for cursor signing."""
++    val = os.environ.get("KB_CURSOR_SECRET")
++    if val:
++        return val.encode("utf-8")
++    return _DEFAULT_CURSOR_SECRET
++
++
++def encode_activity_cursor(
++    scope_id: uuid.UUID,
++    tab: str,
++    order: str,
++    recorded_at: datetime,
++    record_id: uuid.UUID,
++) -> str:
++    """Encode keyset pagination parameters into an opaque URL-safe base64 HMAC token."""
++    ns = int(recorded_at.timestamp() * 1_000_000_000)
++    raw = f"{scope_id}:{tab}:{order}:{ns}:{record_id}".encode("ascii")
++    sig = hmac.new(_get_cursor_secret(), raw, hashlib.sha256).hexdigest().encode("ascii")
++    return base64.urlsafe_b64encode(raw + b"." + sig).decode("ascii").rstrip("=")
++
++
++def _cursor_error() -> ProblemException:
++    return ProblemException(
++        code="INVALID_CURSOR",
++        status=422,
++        title="Invalid Cursor",
++        detail="The provided pagination cursor is invalid or mismatched.",
++    )
++
++
++def _parse_cursor(
++    cursor: str,
++    expected_scope_id: uuid.UUID,
++    expected_tab: str,
++    expected_order: str,
++) -> tuple[datetime, uuid.UUID]:
++    padded = cursor + "=" * (-len(cursor) % 4)
++    data = base64.urlsafe_b64decode(padded.encode("ascii"))
++    if b"." not in data:
++        raise _cursor_error()
++    raw, sig = data.split(b".", 1)
++    expected_sig = hmac.new(_get_cursor_secret(), raw, hashlib.sha256).hexdigest().encode("ascii")
++    if not hmac.compare_digest(sig, expected_sig):
++        raise _cursor_error()
++    parts = raw.decode("utf-8").split(":")
++    if len(parts) != _CURSOR_SEGMENTS:
++        raise _cursor_error()
++    scope_id_str, tab, order, ns_str, id_str = parts
++    if uuid.UUID(scope_id_str) != expected_scope_id:
++        raise _cursor_error()
++    if tab != expected_tab or order != expected_order:
++        raise _cursor_error()
++    ns = int(ns_str)
++    ts = datetime.fromtimestamp(ns / 1_000_000_000, tz=UTC)
++    rid = uuid.UUID(id_str)
++    return ts, rid
++
++
++def decode_activity_cursor(
++    cursor: str,
++    expected_scope_id: uuid.UUID,
++    expected_tab: str,
++    expected_order: str,
++) -> tuple[datetime, uuid.UUID]:
++    """Decode and verify an opaque base64url HMAC token, raising 422 INVALID_CURSOR on mismatch."""
++    try:
++        return _parse_cursor(cursor, expected_scope_id, expected_tab, expected_order)
++    except ProblemException:
++        raise
++    except Exception as exc:
++        raise _cursor_error() from exc
++
++
++COMMENT_EVENT_TYPES: Final[frozenset[str]] = frozenset(
++    event.value for event, cat in EVENT_CATEGORY.items() if cat == ActivityCategory.COMMENT
++)
++GATE_EVENT_TYPES: Final[frozenset[str]] = frozenset(
++    event.value for event, cat in EVENT_CATEGORY.items() if cat == ActivityCategory.AGENT_GATE
++)
++HISTORY_EVENT_TYPES: Final[frozenset[str]] = frozenset(
++    event.value for event, cat in EVENT_CATEGORY.items() if cat == ActivityCategory.HISTORY
++)
++ALL_TAB_EVENT_TYPES: Final[frozenset[str]] = (
++    COMMENT_EVENT_TYPES | GATE_EVENT_TYPES | HISTORY_EVENT_TYPES
++)
++
++TAB_EVENT_TYPES: Final[dict[str, frozenset[str]]] = {
++    "all": ALL_TAB_EVENT_TYPES,
++    "comments": COMMENT_EVENT_TYPES,
++    "history": HISTORY_EVENT_TYPES,
++    "gates": GATE_EVENT_TYPES,
++}
++
++
++def _build_permalink(project_identifier: str, issue_seq: int, comment_id: uuid.UUID) -> str:
++    """Format canonical permalink URL for an issue comment."""
++    ident = project_identifier
++    return f"/projects/{ident}/issues/{ident}-{issue_seq}#comment-{comment_id}"
++
++
++async def _batch_reactions(
++    session: AsyncSession, comment_ids: set[uuid.UUID], caller_id: uuid.UUID
++) -> dict[uuid.UUID, list[ReactionSummary]]:
++    """Batch-aggregate emoji reactions for a collection of comments."""
++    if not comment_ids:
++        return {}
++
++    stmt = (
++        select(
++            CommentReaction.comment_id,
++            CommentReaction.emoji,
++            func.count().label("reaction_count"),
++            func.bool_or(CommentReaction.principal_id == caller_id).label("reacted_by_me"),
++        )
++        .where(CommentReaction.comment_id.in_(comment_ids))
++        .group_by(CommentReaction.comment_id, CommentReaction.emoji)
++    )
++    rows = (await session.execute(stmt)).all()
++
++    result: dict[uuid.UUID, list[ReactionSummary]] = {cid: [] for cid in comment_ids}
++    for cid, emoji, count, reacted_by_me in rows:
++        result[cid].append(
++            ReactionSummary(
++                emoji=emoji,
++                count=count,
++                reacted_by_me=bool(reacted_by_me),
++            )
++        )
++    return result
++
++
++async def _resolve_actors(  # noqa: C901
++    session: AsyncSession,
++    caller: PrincipalContext,
++    actor_ids: set[uuid.UUID],
++    project_id: uuid.UUID | None = None,
++) -> dict[uuid.UUID, NormalActorSummary | RedactedActorSummary]:
++    """Resolve in-boundary actor principals and redact out-of-boundary collaborators."""
++    if not actor_ids:
++        return {}
++
++    p_stmt = select(Principal).where(Principal.id.in_(actor_ids))
++    p_rows = list((await session.execute(p_stmt)).scalars().all())
++    p_map = {p.id: p for p in p_rows}
++
++    # Query workspace roles for these actors (visible to admin or self)
++    rb_stmt = select(RoleBinding.principal_id, RoleBinding.role).where(
++        RoleBinding.principal_id.in_(actor_ids),
++        RoleBinding.workspace_id == caller.workspace_id,
++        RoleBinding.scope_type == "workspace",
++    )
++    rb_rows = list((await session.execute(rb_stmt)).all())
++    role_map: dict[uuid.UUID, str] = {
++        row[0]: (row[1].value if hasattr(row[1], "value") else str(row[1])) for row in rb_rows
++    }
++
++    # Check if caller holds an administrative role
++    caller_is_admin = False
++    caller_rb_stmt = select(RoleBinding.role).where(
++        RoleBinding.principal_id == caller.principal_id,
++        RoleBinding.workspace_id == caller.workspace_id,
++    )
++    caller_roles = list((await session.execute(caller_rb_stmt)).scalars().all())
++    if any(
++        str(r.value if hasattr(r, "value") else r) in ("SERVER_ADMIN", "WORKSPACE_ADMIN")
++        for r in caller_roles
++    ):
++        caller_is_admin = True
++
++    # Query project membership from effective_resource_access if project_id is provided
++    project_members: set[uuid.UUID] = set()
++    if project_id is not None:
++        era_stmt = select(EffectiveResourceAccess.principal_id).where(
++            EffectiveResourceAccess.object_id == project_id,
++            EffectiveResourceAccess.principal_id.in_(actor_ids),
++            EffectiveResourceAccess.effective_mask > 0,
++        )
++        project_members = set((await session.execute(era_stmt)).scalars().all())
++
++    # Query objects spine for handles / slugs
++    obj_stmt = select(ObjectRecord.id, ObjectRecord.canonical_key).where(
++        ObjectRecord.id.in_(actor_ids)
++    )
++    obj_rows = list((await session.execute(obj_stmt)).all())
++    obj_map: dict[uuid.UUID, str] = {row[0]: row[1] for row in obj_rows}
++
++    actors: dict[uuid.UUID, NormalActorSummary | RedactedActorSummary] = {}
++    for aid in actor_ids:
++        principal = p_map.get(aid)
++        if principal is None or principal.workspace_id != caller.workspace_id:
++            actors[aid] = RedactedActorSummary()
++            continue
++
++        if principal.principal_type == "SCRIPT_EPHEMERAL":
++            actors[aid] = RedactedActorSummary()
++            continue
++
++        ws_role = role_map.get(aid)
++        if ws_role == "WORKSPACE_GUEST" and not caller_is_admin:
++            actors[aid] = RedactedActorSummary()
++            continue
++
++        if not caller_is_admin and project_id is not None and aid not in project_members:
++            actors[aid] = RedactedActorSummary()
++            continue
++
++        if principal.status != "ACTIVE" and not caller_is_admin:
++            actors[aid] = RedactedActorSummary()
++            continue
++
++        if principal.principal_type == "USER":
++            raw_key = obj_map.get(aid)
++            handle = f"@{raw_key.lstrip('@')}" if raw_key else f"@{principal.id.hex[:8]}"
++            actors[aid] = NormalActorSummary(
++                id=principal.id,
++                type="USER",
++                handle=handle,
++                display_name=principal.display_name,
++            )
++        else:
++            slug = obj_map.get(aid) or principal.display_name.split()[0].lower()
++            actors[aid] = NormalActorSummary(
++                id=principal.id,
++                type="AGENT",
++                slug=slug,
++                display_name=principal.display_name,
++            )
++
++    return actors
++
++
++async def _sanitize_payload(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    record: ActivityRecord,
++    actors_map: dict[uuid.UUID, NormalActorSummary | RedactedActorSummary],
++    project_id: uuid.UUID | None = None,
++) -> dict[str, Any]:
++    """Sanitize referenced principals, mask unreadable linked objects, and strip deleted bodies."""
++    payload = dict(record.payload)
++
++    # 1. Redact out-of-boundary referenced principals
++    principal_ref_keys = [
++        "from_user_id",
++        "to_user_id",
++        "original_created_by_id",
++        "old_created_by_id",
++        "new_created_by_id",
++        "assignee_id",
++        "actor_principal_id",
++    ]
++    for key in principal_ref_keys:
++        val = payload.get(key)
++        if val is not None and isinstance(val, str):
++            with contextlib.suppress(ValueError, TypeError):
++                ref_uuid = uuid.UUID(val)
++                actor_summary = actors_map.get(ref_uuid)
++                if actor_summary is None:
++                    sub_map = await _resolve_actors(session, caller, {ref_uuid}, project_id)
++                    actor_summary = sub_map.get(ref_uuid)
++                if isinstance(actor_summary, RedactedActorSummary):
++                    payload[key] = {"redacted": True, "label": "1 External Collaborator"}
++
++    # 2. Mask unreadable linked objects in LINK_CREATED / LINK_DELETED
++    if record.event_type in (
++        ActivityEventType.LINK_CREATED.value,
++        ActivityEventType.LINK_DELETED.value,
++        ActivityEventType.LINK_CREATED,
++        ActivityEventType.LINK_DELETED,
++    ):
++        source_id_str = payload.get("source_id")
++        target_id_str = payload.get("target_id")
++        if source_id_str and target_id_str:
++            with contextlib.suppress(ValueError, TypeError):
++                src_u = uuid.UUID(str(source_id_str))
++                tgt_u = uuid.UUID(str(target_id_str))
++                other_id = tgt_u if record.object_id == src_u else src_u
++                caps = await evaluate_capabilities(session, caller, other_id)
++                if Capability.VIEW not in caps:
++                    payload["target"] = {"restricted": True, "label": "Restricted Object"}
++                    payload.pop("target_id", None)
++                    payload.pop("source_id", None)
++
++    return payload
++
++
++async def get_issue_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_ref: str,
++    *,
++    tab: str = "all",
++    order: str = "desc",
++    limit: int = 50,
++    cursor: str | None = None,
++    include_hashes: bool = False,
++) -> ActivityFeedResponse:
++    """Fetch paginated activity feed for a single issue with counts and comment hydration."""
++    if tab not in TAB_EVENT_TYPES:
++        raise ProblemException(
++            code="INVALID_TAB",
++            status=422,
++            title="Invalid Activity Tab",
++            detail=f"Tab must be one of: {', '.join(TAB_EVENT_TYPES.keys())}",
++        )
++
++    if order not in ("desc", "asc"):
++        raise ProblemException(
++            code="INVALID_ORDER",
++            status=422,
++            title="Invalid Sort Order",
++            detail="Order must be 'desc' or 'asc'",
++        )
++
++    issue = await resolve_issue_ref(session, caller, issue_ref)
++    await require_capability(session, caller, issue.id, Capability.VIEW)
++
++    project = await session.get(Project, issue.project_id)
++    project_identifier = project.identifier if project else "KAN"
++
++    # Compute tab counts in 1 single query
++    counts_stmt = select(
++        func.count().filter(ActivityRecord.event_type.in_(COMMENT_EVENT_TYPES)).label("comments"),
++        func.count().filter(ActivityRecord.event_type.in_(HISTORY_EVENT_TYPES)).label("history"),
++        func.count().filter(ActivityRecord.event_type.in_(GATE_EVENT_TYPES)).label("gates"),
++    ).where(
++        ActivityRecord.workspace_id == caller.workspace_id,
++        ActivityRecord.object_id == issue.id,
++    )
++    counts_row = (await session.execute(counts_stmt)).one()
++    c_comments = counts_row.comments or 0
++    c_history = counts_row.history or 0
++    c_gates = counts_row.gates or 0
++    counts = ActivityCounts(
++        all=c_comments + c_history + c_gates,
++        comments=c_comments,
++        history=c_history,
++        gates=c_gates,
++    )
++
++    # Build keyset-paginated items query
++    target_event_types = TAB_EVENT_TYPES[tab]
++    stmt = select(ActivityRecord).where(
++        ActivityRecord.workspace_id == caller.workspace_id,
++        ActivityRecord.object_id == issue.id,
++        ActivityRecord.event_type.in_(target_event_types),
++    )
++
++    if cursor is not None:
++        c_ts, c_id = decode_activity_cursor(cursor, issue.id, tab, order)
++        if order == "desc":
++            stmt = stmt.where(
++                (ActivityRecord.recorded_at < c_ts)
++                | ((ActivityRecord.recorded_at == c_ts) & (ActivityRecord.id < c_id))
++            )
++        else:
++            stmt = stmt.where(
++                (ActivityRecord.recorded_at > c_ts)
++                | ((ActivityRecord.recorded_at == c_ts) & (ActivityRecord.id > c_id))
++            )
++
++    if order == "desc":
++        stmt = stmt.order_by(ActivityRecord.recorded_at.desc(), ActivityRecord.id.desc())
++    else:
++        stmt = stmt.order_by(ActivityRecord.recorded_at.asc(), ActivityRecord.id.asc())
++
++    stmt = stmt.limit(limit + 1)
++    records = list((await session.execute(stmt)).scalars().all())
++
++    has_more = len(records) > limit
++    page_records = records[:limit]
++
++    # Batch resolve actors for issue
++    actor_ids = {r.actor_id for r in page_records if r.actor_id is not None}
++    actors_map = await _resolve_actors(session, caller, actor_ids, issue.project_id)
++
++    # Batch resolve comments
++    comment_ids: set[uuid.UUID] = set()
++    for r in page_records:
++        if r.event_type in (
++            ActivityEventType.COMMENT_CREATED.value,
++            ActivityEventType.COMMENT_EDITED.value,
++            ActivityEventType.COMMENT_DELETED.value,
++        ):
++            cid_val = r.payload.get("comment_id")
++            if cid_val is not None:
++                with contextlib.suppress(ValueError, TypeError):
++                    comment_ids.add(uuid.UUID(str(cid_val)))
++
++    comments_map: dict[uuid.UUID, IssueComment] = {}
++    if comment_ids:
++        c_stmt = select(IssueComment).where(IssueComment.id.in_(comment_ids))
++        c_rows = list((await session.execute(c_stmt)).scalars().all())
++        comments_map = {c.id: c for c in c_rows}
++
++    active_comment_ids = {c.id for c in comments_map.values() if c.deleted_at is None}
++    reactions_map = await _batch_reactions(session, active_comment_ids, caller.principal_id)
++
++    items: list[ActivityItemResponse] = []
++    for r in page_records:
++        actor_summary = actors_map.get(r.actor_id) if r.actor_id else None
++        sanitized_payload = await _sanitize_payload(
++            session, caller, r, actors_map, issue.project_id
++        )
++
++        comment_obj: ActiveCommentSummary | SoftDeletedCommentSummary | None = None
++        cid_val = r.payload.get("comment_id")
++        if cid_val is not None:
++            with contextlib.suppress(ValueError, TypeError):
++                cid = uuid.UUID(str(cid_val))
++                c_model = comments_map.get(cid)
++                is_deleted = (
++                    c_model is None
++                    or c_model.deleted_at is not None
++                    or r.event_type == _COMMENT_DELETED_STR
++                )
++                if is_deleted:
++                    comment_obj = SoftDeletedCommentSummary(id=cid, deleted=True)
++                    sanitized_payload.pop("body_markdown", None)
++                    sanitized_payload.pop("body", None)
++                    sanitized_payload.pop("new_sha256", None)
++                    sanitized_payload.pop("sha256", None)
++                elif c_model is not None:
++                    permalink = _build_permalink(project_identifier, issue.sequence_id, c_model.id)
++                    comment_obj = ActiveCommentSummary(
++                        id=c_model.id,
++                        body_markdown=c_model.body_markdown,
++                        permalink=permalink,
++                        edited_at=c_model.edited_at,
++                        reactions=reactions_map.get(c_model.id, []),
++                    )
++
++        prev_hash_str = r.prev_hash.hex() if include_hashes else None
++        row_hash_str = r.row_hash.hex() if include_hashes else None
++
++        category = EVENT_CATEGORY.get(ActivityEventType(r.event_type), ActivityCategory.HISTORY)
++
++        items.append(
++            ActivityItemResponse(
++                id=r.id,
++                category=category,
++                event_type=r.event_type,
++                actor=actor_summary,
++                created_at=r.recorded_at,
++                payload=sanitized_payload,
++                comment=comment_obj,
++                prev_hash=prev_hash_str,
++                row_hash=row_hash_str,
++            )
++        )
++
++    next_cursor: str | None = None
++    if has_more and page_records:
++        last_rec = page_records[-1]
++        next_cursor = encode_activity_cursor(
++            issue.id,
++            tab,
++            order,
++            last_rec.recorded_at,
++            last_rec.id,
++        )
++
++    return ActivityFeedResponse(
++        tab=tab,
++        counts=counts,
++        items=items,
++        next_cursor=next_cursor,
++    )
++
++
++async def get_project_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    *,
++    tab: str = "all",
++    order: str = "desc",
++    limit: int = 50,
++    cursor: str | None = None,
++    include_hashes: bool = False,
++) -> ActivityFeedResponse:
++    """Fetch paginated activity feed across an entire project, filtering objects through RLS."""
++    if tab not in TAB_EVENT_TYPES:
++        raise ProblemException(
++            code="INVALID_TAB",
++            status=422,
++            title="Invalid Activity Tab",
++            detail=f"Tab must be one of: {', '.join(TAB_EVENT_TYPES.keys())}",
++        )
++
++    if order not in ("desc", "asc"):
++        raise ProblemException(
++            code="INVALID_ORDER",
++            status=422,
++            title="Invalid Sort Order",
++            detail="Order must be 'desc' or 'asc'",
++        )
++
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.VIEW)
++
++    # Compute tab counts across project under RLS
++    counts_stmt = (
++        select(
++            func.count()
++            .filter(ActivityRecord.event_type.in_(COMMENT_EVENT_TYPES))
++            .label("comments"),
++            func.count()
++            .filter(ActivityRecord.event_type.in_(HISTORY_EVENT_TYPES))
++            .label("history"),
++            func.count().filter(ActivityRecord.event_type.in_(GATE_EVENT_TYPES)).label("gates"),
++        )
++        .join(ObjectRecord, ObjectRecord.id == ActivityRecord.object_id)
++        .where(
++            ActivityRecord.workspace_id == caller.workspace_id,
++            ObjectRecord.deleted_at.is_(None),
++            (ObjectRecord.project_id == project.id) | (ObjectRecord.id == project.id),
++        )
++    )
++    counts_row = (await session.execute(counts_stmt)).one()
++    c_comments = counts_row.comments or 0
++    c_history = counts_row.history or 0
++    c_gates = counts_row.gates or 0
++    counts = ActivityCounts(
++        all=c_comments + c_history + c_gates,
++        comments=c_comments,
++        history=c_history,
++        gates=c_gates,
++    )
++
++    # Keyset paginated items query
++    target_event_types = TAB_EVENT_TYPES[tab]
++    stmt = (
++        select(ActivityRecord)
++        .join(ObjectRecord, ObjectRecord.id == ActivityRecord.object_id)
++        .where(
++            ActivityRecord.workspace_id == caller.workspace_id,
++            ObjectRecord.deleted_at.is_(None),
++            (ObjectRecord.project_id == project.id) | (ObjectRecord.id == project.id),
++            ActivityRecord.event_type.in_(target_event_types),
++        )
++    )
++
++    if cursor is not None:
++        c_ts, c_id = decode_activity_cursor(cursor, project.id, tab, order)
++        if order == "desc":
++            stmt = stmt.where(
++                (ActivityRecord.recorded_at < c_ts)
++                | ((ActivityRecord.recorded_at == c_ts) & (ActivityRecord.id < c_id))
++            )
++        else:
++            stmt = stmt.where(
++                (ActivityRecord.recorded_at > c_ts)
++                | ((ActivityRecord.recorded_at == c_ts) & (ActivityRecord.id > c_id))
++            )
++
++    if order == "desc":
++        stmt = stmt.order_by(ActivityRecord.recorded_at.desc(), ActivityRecord.id.desc())
++    else:
++        stmt = stmt.order_by(ActivityRecord.recorded_at.asc(), ActivityRecord.id.asc())
++
++    stmt = stmt.limit(limit + 1)
++    records = list((await session.execute(stmt)).scalars().all())
++
++    has_more = len(records) > limit
++    page_records = records[:limit]
++
++    # Batch resolve actors for project
++    actor_ids = {r.actor_id for r in page_records if r.actor_id is not None}
++    actors_map = await _resolve_actors(session, caller, actor_ids, project.id)
++
++    # Batch resolve comments
++    comment_ids: set[uuid.UUID] = set()
++    for r in page_records:
++        if r.event_type in (
++            ActivityEventType.COMMENT_CREATED.value,
++            ActivityEventType.COMMENT_EDITED.value,
++            ActivityEventType.COMMENT_DELETED.value,
++        ):
++            cid_val = r.payload.get("comment_id")
++            if cid_val is not None:
++                with contextlib.suppress(ValueError, TypeError):
++                    comment_ids.add(uuid.UUID(str(cid_val)))
++
++    comments_map: dict[uuid.UUID, IssueComment] = {}
++    issue_seq_map: dict[uuid.UUID, int] = {}
++    if comment_ids:
++        c_stmt = select(IssueComment).where(IssueComment.id.in_(comment_ids))
++        c_rows = list((await session.execute(c_stmt)).scalars().all())
++        comments_map = {c.id: c for c in c_rows}
++        issue_ids = {c.issue_id for c in c_rows}
++        if issue_ids:
++            iss_stmt = select(Issue.id, Issue.sequence_id).where(Issue.id.in_(issue_ids))
++            iss_rows = list((await session.execute(iss_stmt)).all())
++            issue_seq_map = {row[0]: row[1] for row in iss_rows}
++
++    active_comment_ids = {c.id for c in comments_map.values() if c.deleted_at is None}
++    reactions_map = await _batch_reactions(session, active_comment_ids, caller.principal_id)
++
++    items: list[ActivityItemResponse] = []
++    for r in page_records:
++        actor_summary = actors_map.get(r.actor_id) if r.actor_id else None
++        sanitized_payload = await _sanitize_payload(session, caller, r, actors_map, project.id)
++
++        comment_obj: ActiveCommentSummary | SoftDeletedCommentSummary | None = None
++        cid_val = r.payload.get("comment_id")
++        if cid_val is not None:
++            with contextlib.suppress(ValueError, TypeError):
++                cid = uuid.UUID(str(cid_val))
++                c_model = comments_map.get(cid)
++                is_deleted = (
++                    c_model is None
++                    or c_model.deleted_at is not None
++                    or r.event_type == _COMMENT_DELETED_STR
++                )
++                if is_deleted:
++                    comment_obj = SoftDeletedCommentSummary(id=cid, deleted=True)
++                    sanitized_payload.pop("body_markdown", None)
++                    sanitized_payload.pop("body", None)
++                    sanitized_payload.pop("new_sha256", None)
++                    sanitized_payload.pop("sha256", None)
++                elif c_model is not None:
++                    seq_id = issue_seq_map.get(c_model.issue_id, 1)
++                    permalink = _build_permalink(project.identifier, seq_id, c_model.id)
++                    comment_obj = ActiveCommentSummary(
++                        id=c_model.id,
++                        body_markdown=c_model.body_markdown,
++                        permalink=permalink,
++                        edited_at=c_model.edited_at,
++                        reactions=reactions_map.get(c_model.id, []),
++                    )
++
++        prev_hash_str = r.prev_hash.hex() if include_hashes else None
++        row_hash_str = r.row_hash.hex() if include_hashes else None
++
++        category = EVENT_CATEGORY.get(ActivityEventType(r.event_type), ActivityCategory.HISTORY)
++
++        items.append(
++            ActivityItemResponse(
++                id=r.id,
++                category=category,
++                event_type=r.event_type,
++                actor=actor_summary,
++                created_at=r.recorded_at,
++                payload=sanitized_payload,
++                comment=comment_obj,
++                prev_hash=prev_hash_str,
++                row_hash=row_hash_str,
++            )
++        )
++
++    next_cursor: str | None = None
++    if has_more and page_records:
++        last_rec = page_records[-1]
++        next_cursor = encode_activity_cursor(
++            project.id,
++            tab,
++            order,
++            last_rec.recorded_at,
++            last_rec.id,
++        )
++
++    return ActivityFeedResponse(
++        tab=tab,
++        counts=counts,
++        items=items,
++        next_cursor=next_cursor,
++    )
+diff --git a/kanban/tests/api/test_activity_feed.py b/kanban/tests/api/test_activity_feed.py
+new file mode 100644
+index 0000000..4f1227c
+--- /dev/null
++++ b/kanban/tests/api/test_activity_feed.py
+@@ -0,0 +1,880 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: E501, PLR0915, PT011, B017, ERA001, F841
++"""Comprehensive unit and integration tests for activity feed API (KB-P3-13 / S7.1, S7.2 8j, S12.2, S3.4)."""
++
++from __future__ import annotations
++
++import base64
++import hashlib
++import hmac
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import select, text
++
++from database.models.activity import ActivityRecord
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.api.v1.schemas.activity import RedactedActorSummary
++from kanban.security.permissions import Capability
++from kanban.services.activity import ActivityEventType, record_activity
++from kanban.services.activity_feed import (
++    _get_cursor_secret,
++    _resolve_actors,
++    decode_activity_cursor,
++    encode_activity_cursor,
++    get_issue_activity,
++    get_project_activity,
++)
++from kanban.tests.security.helpers import (
++    add_acl_entry,
++    add_role_binding,
++    create_agent,
++    create_registered_object,
++    create_user,
++    rebuild_era,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++    from kanban.tests.contract import ContractRecorder
++
++pytestmark = pytest.mark.committed_db
++
++
++async def test_case_1_positive_4_tab_filtering_and_counts(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test Case 1: Positive 4-tab filtering, counts summary, and comment hydration."""
++    admin = await make_user("admin1", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("member1", workspace_role="WORKSPACE_MEMBER")
++    _ = await make_project(
++        "ACTV", created_by=admin, roles={admin: "PROJECT_ADMIN", member: "MEMBER"}
++    )
++    client = as_principal(admin)
++
++    # 1. Create target issue (emits ISSUE_CREATED -> 1 history row)
++    issue_resp = await client.post(
++        "/api/v1/projects/ACTV/issues",
++        json={"summary": "Timeline Feed Target Issue", "priority": "none"},
++    )
++    assert issue_resp.status_code == 201, issue_resp.text
++    issue_data = issue_resp.json()
++    issue_key = issue_data["key"]
++    issue_id = uuid.UUID(issue_data["id"])
++
++    # 2. Post Comment 1, then edit it (emits COMMENT_CREATED and COMMENT_EDITED)
++    c1_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "First comment to be edited"},
++    )
++    assert c1_resp.status_code == 201, c1_resp.text
++    c1_id = c1_resp.json()["id"]
++
++    c1_edit_resp = await client.patch(
++        f"/api/v1/comments/{c1_id}",
++        headers={"If-Match": c1_resp.headers["ETag"]},
++        json={"body_markdown": "First comment - EDITED version with updates"},
++    )
++    assert c1_edit_resp.status_code == 200, c1_edit_resp.text
++
++    # Add reaction to Comment 1
++    rx_resp = await client.put(f"/api/v1/comments/{c1_id}/reactions/%F0%9F%9A%80")
++    assert rx_resp.status_code == 200, rx_resp.text
++
++    # 3. Post Comment 2, then soft-delete it (emits COMMENT_CREATED and COMMENT_DELETED)
++    c2_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "Second secret comment to be deleted"},
++    )
++    assert c2_resp.status_code == 201, c2_resp.text
++    c2_id = c2_resp.json()["id"]
++
++    c2_del_resp = await client.delete(f"/api/v1/comments/{c2_id}")
++    assert c2_del_resp.status_code == 204, c2_del_resp.text
++
++    # 4. History changes: update issue summary (ISSUE_FIELD_CHANGED)
++    iss_patch_resp = await client.patch(
++        f"/api/v1/issues/{issue_key}",
++        headers={"If-Match": issue_resp.headers["ETag"]},
++        json={"summary": "Timeline Feed Target Issue - RENAMED"},
++    )
++    assert iss_patch_resp.status_code == 200, iss_patch_resp.text
++
++    # 5. History change: append CREATOR_OVERRIDDEN activity
++    await record_activity(
++        api_env.seed,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.CREATOR_OVERRIDDEN,
++        payload={
++            "from_user_id": str(admin.id),
++            "to_user_id": str(member.id),
++            "reason": "Administrative creator correction",
++        },
++    )
++
++    # 6. Two AGENT_GATE rows: GATE_PENDING, GATE_APPROVED
++    await record_activity(
++        api_env.seed,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.GATE_PENDING,
++        payload={"hook_name": "sec-review", "from_state": "In Review", "to_state": "Done"},
++    )
++    await record_activity(
++        api_env.seed,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.GATE_APPROVED,
++        payload={"hook_name": "sec-review", "verdict": "pass", "latency_ms": 145},
++    )
++    await api_env.seed.commit()
++
++    # Total:
++    # Comments: COMMENT_CREATED (c1), COMMENT_EDITED (c1), COMMENT_CREATED (c2), COMMENT_DELETED (c2) -> 4
++    # History: ISSUE_CREATED, ISSUE_FIELD_CHANGED, CREATOR_OVERRIDDEN -> 3
++    # Gates: GATE_PENDING, GATE_APPROVED -> 2
++    # All: 4 + 3 + 2 = 9
++
++    expected_counts = {"all": 9, "comments": 4, "history": 3, "gates": 2}
++
++    # Verify tab=all
++    resp_all = await client.get(f"/api/v1/issues/{issue_key}/activity?tab=all")
++    contract_recorder.record("tab_all_200", resp_all.request, resp_all)
++    assert resp_all.status_code == 200, resp_all.text
++    body_all = resp_all.json()
++    assert body_all["tab"] == "all"
++    assert body_all["counts"] == expected_counts
++    assert len(body_all["items"]) == 9
++
++    # Verify tab=comments
++    resp_com = await client.get(f"/api/v1/issues/{issue_key}/activity?tab=comments")
++    contract_recorder.record("tab_comments_200", resp_com.request, resp_com)
++    assert resp_com.status_code == 200, resp_com.text
++    body_com = resp_com.json()
++    assert body_com["tab"] == "comments"
++    assert body_com["counts"] == expected_counts
++    assert len(body_com["items"]) == 4
++    for it in body_com["items"]:
++        assert it["category"] == "COMMENT"
++
++    # Verify active comment hydration in comments tab
++    edited_com_item = next(it for it in body_com["items"] if it["event_type"] == "COMMENT_EDITED")
++    assert edited_com_item["comment"] is not None
++    assert edited_com_item["comment"]["id"] == c1_id
++    assert "EDITED version" in edited_com_item["comment"]["body_markdown"]
++    assert edited_com_item["comment"]["reactions"][0]["emoji"] == "🚀"
++
++    # Verify soft-deleted comment hydration in comments tab
++    del_com_item = next(it for it in body_com["items"] if it["event_type"] == "COMMENT_DELETED")
++    assert del_com_item["comment"] is not None
++    assert del_com_item["comment"]["deleted"] is True
++    assert "body_markdown" not in del_com_item["comment"]
++    assert "body_markdown" not in del_com_item["payload"]
++
++    # Verify tab=history
++    resp_hist = await client.get(f"/api/v1/issues/{issue_key}/activity?tab=history")
++    assert resp_hist.status_code == 200, resp_hist.text
++    body_hist = resp_hist.json()
++    assert body_hist["tab"] == "history"
++    assert body_hist["counts"] == expected_counts
++    assert len(body_hist["items"]) == 3
++    for it in body_hist["items"]:
++        assert it["category"] == "HISTORY"
++    assert any(it["event_type"] == "CREATOR_OVERRIDDEN" for it in body_hist["items"])
++
++    # Verify tab=gates
++    resp_gates = await client.get(f"/api/v1/issues/{issue_key}/activity?tab=gates")
++    contract_recorder.record("tab_gates_200", resp_gates.request, resp_gates)
++    assert resp_gates.status_code == 200, resp_gates.text
++    body_gates = resp_gates.json()
++    assert body_gates["tab"] == "gates"
++    assert body_gates["counts"] == expected_counts
++    assert len(body_gates["items"]) == 2
++    for it in body_gates["items"]:
++        assert it["category"] == "AGENT_GATE"
++
++
++async def test_case_2_deleted_comment_and_redaction_security(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test Case 2: Zero body leakage for deleted comments, collaborator redaction, and anti-enumeration 404."""
++    admin = await make_user("admin2", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("SEC", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # 1. Create issue
++    iss_resp = await client.post(
++        "/api/v1/projects/SEC/issues",
++        json={"summary": "Redaction and Deletion Test", "priority": "urgent"},
++    )
++    assert iss_resp.status_code == 201
++    issue_key = iss_resp.json()["key"]
++    issue_id = uuid.UUID(iss_resp.json()["id"])
++
++    # 2. Create comment with sensitive body, then delete it
++    secret_text = "SECRET_CREDENTIAL_DATA_LEAK_TEST"
++    c_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": f"Sensitive data: {secret_text}"},
++    )
++    assert c_resp.status_code == 201
++    c_id = c_resp.json()["id"]
++
++    del_resp = await client.delete(f"/api/v1/comments/{c_id}")
++    assert del_resp.status_code == 204
++
++    # 3. Create out-of-boundary external guest collaborator
++    ext_user_id = await create_user(
++        api_env.seed,
++        api_env.workspace_id,
++        handle="@ext_guest",
++        display_name="External Guest Partner",
++        email="external@partner.corp",
++    )
++    await add_role_binding(
++        api_env.seed,
++        api_env.workspace_id,
++        ext_user_id,
++        role="WORKSPACE_GUEST",
++        scope_type="workspace",
++    )
++    # Direct ACL grant on issue
++    await add_acl_entry(
++        api_env.seed,
++        api_env.workspace_id,
++        issue_id,
++        ext_user_id,
++        effect="ALLOW",
++        capability_mask=Capability.VIEW,
++    )
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++
++    # Record activity where out-of-boundary guest is the actor
++    await record_activity(
++        api_env.seed,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=ext_user_id,
++        event_type=ActivityEventType.ISSUE_FIELD_CHANGED,
++        payload={"field": "description", "reason": "guest review"},
++    )
++    await api_env.seed.commit()
++
++    # 4. Normal member views feed
++    member = await make_user("norm_member", workspace_role="WORKSPACE_MEMBER")
++    await add_role_binding(
++        api_env.seed,
++        api_env.workspace_id,
++        member.id,
++        role="VIEWER",
++        scope_type="project",
++        project_id=proj_id,
++    )
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++    await api_env.seed.commit()
++
++    member_client = as_principal(member)
++    feed_resp = await member_client.get(f"/api/v1/issues/{issue_key}/activity?tab=all")
++    assert feed_resp.status_code == 200, feed_resp.text
++    feed_body = feed_resp.json()
++
++    # Check zero body leakage
++    raw_json_str = feed_resp.text
++    assert secret_text not in raw_json_str
++
++    # Check actor redaction
++    ext_item = next(it for it in feed_body["items"] if it.get("actor", {}).get("redacted") is True)
++    assert ext_item["actor"] == {"redacted": True, "label": "1 External Collaborator"}
++    assert "external@partner.corp" not in raw_json_str
++    assert "ext_guest" not in raw_json_str
++    assert str(ext_user_id) not in raw_json_str
++
++    # 5. Anti-enumeration: non-viewer user gets equalized 404
++    non_viewer = await make_user("outsider", workspace_role="WORKSPACE_GUEST")
++    non_viewer_client = as_principal(non_viewer)
++
++    resp_non_viewer = await non_viewer_client.get(f"/api/v1/issues/{issue_key}/activity")
++    contract_recorder.record("non_viewer_404", resp_non_viewer.request, resp_non_viewer)
++    assert resp_non_viewer.status_code == 404
++
++    resp_non_existent = await non_viewer_client.get("/api/v1/issues/SEC-99999/activity")
++    assert resp_non_existent.status_code == 404
++
++    p1 = resp_non_viewer.json()
++    p2 = resp_non_existent.json()
++    p1.pop("request_id", None)
++    p2.pop("request_id", None)
++    assert p1 == p2
++
++
++async def test_case_3_project_scoped_rls_filtering(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 3: Project-level activity feed filters per-object rows and counts under RLS."""
++    admin = await make_user("proj_admin", workspace_role="WORKSPACE_ADMIN")
++    reader = await make_user("proj_reader", workspace_role="WORKSPACE_MEMBER")
++    proj_id = await make_project(
++        "PROJ",
++        created_by=admin,
++        roles={admin: "PROJECT_ADMIN", reader: "MEMBER"},
++    )
++    client = as_principal(admin)
++
++    # 1. Create Issue 1 (readable by reader)
++    i1_resp = await client.post(
++        "/api/v1/projects/PROJ/issues",
++        json={"summary": "Visible Issue 1", "priority": "low"},
++    )
++    assert i1_resp.status_code == 201
++    i1_id = uuid.UUID(i1_resp.json()["id"])
++    i1_key = i1_resp.json()["key"]
++
++    # 2. Create Issue 2 (to be DENIED to reader)
++    i2_resp = await client.post(
++        "/api/v1/projects/PROJ/issues",
++        json={"summary": "Hidden Restricted Issue 2", "priority": "high"},
++    )
++    assert i2_resp.status_code == 201
++    i2_id = uuid.UUID(i2_resp.json()["id"])
++    i2_key = i2_resp.json()["key"]
++
++    # Explicit DENY VIEW on Issue 2 for reader
++    await add_acl_entry(
++        api_env.seed,
++        api_env.workspace_id,
++        i2_id,
++        reader.id,
++        effect="DENY",
++        capability_mask=Capability.VIEW,
++    )
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++
++    # Add comments on both issues
++    await client.post(
++        f"/api/v1/issues/{i1_key}/comments",
++        json={"body_markdown": "Comment on visible issue 1"},
++    )
++    await client.post(
++        f"/api/v1/issues/{i2_key}/comments",
++        json={"body_markdown": "Comment on hidden issue 2"},
++    )
++    await api_env.seed.commit()
++
++    # Admin sees activity from both issues
++    admin_feed = await client.get("/api/v1/projects/PROJ/activity?tab=all")
++    assert admin_feed.status_code == 200
++    admin_body = admin_feed.json()
++    admin_issue_ids = {it["payload"].get("issue_id") or it["id"] for it in admin_body["items"]}
++    assert admin_body["counts"]["all"] >= 4
++
++    # Reader views project activity
++    reader_client = as_principal(reader)
++    reader_feed = await reader_client.get("/api/v1/projects/PROJ/activity?tab=all")
++    assert reader_feed.status_code == 200, reader_feed.text
++    reader_body = reader_feed.json()
++
++    # Zero rows from Issue 2 should appear
++    for it in reader_body["items"]:
++        # Verify no activity record has object_id == i2_id
++        assert str(i2_id) != str(it.get("object_id"))
++        assert "Hidden Restricted Issue 2" not in str(it)
++
++    # Issue 2 contributes 0 to counts
++    assert reader_body["counts"]["all"] < admin_body["counts"]["all"]
++
++
++async def test_case_4_hash_chain_exposure(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test Case 4: Cryptographic prev_hash and row_hash exposure and omission."""
++    admin = await make_user("auditor", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("HASH", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    iss_resp = await client.post(
++        "/api/v1/projects/HASH/issues",
++        json={"summary": "Hash Chain Audit Target", "priority": "urgent"},
++    )
++    assert iss_resp.status_code == 201
++    issue_key = iss_resp.json()["key"]
++    issue_id = uuid.UUID(iss_resp.json()["id"])
++
++    # 1. Query with include_hashes=true
++    resp_hashes = await client.get(f"/api/v1/issues/{issue_key}/activity?include_hashes=true")
++    contract_recorder.record("include_hashes_200", resp_hashes.request, resp_hashes)
++    assert resp_hashes.status_code == 200, resp_hashes.text
++    body_hashes = resp_hashes.json()
++
++    assert len(body_hashes["items"]) > 0
++    first_item = body_hashes["items"][0]
++    assert "prev_hash" in first_item
++    assert "row_hash" in first_item
++    assert len(first_item["prev_hash"]) == 64
++    assert len(first_item["row_hash"]) == 64
++    assert all(c in "0123456789abcdef" for c in first_item["prev_hash"])
++    assert all(c in "0123456789abcdef" for c in first_item["row_hash"])
++
++    # Compare with database bytes
++    db_rec = await api_env.seed.scalar(
++        select(ActivityRecord).where(ActivityRecord.id == uuid.UUID(first_item["id"]))
++    )
++    assert db_rec is not None
++    assert first_item["prev_hash"] == db_rec.prev_hash.hex()
++    assert first_item["row_hash"] == db_rec.row_hash.hex()
++
++    # 2. Query with include_hashes=false (default)
++    resp_no_hashes = await client.get(f"/api/v1/issues/{issue_key}/activity")
++    assert resp_no_hashes.status_code == 200, resp_no_hashes.text
++    body_no_hashes = resp_no_hashes.json()
++    first_no_hash = body_no_hashes["items"][0]
++    assert "prev_hash" not in first_no_hash
++    assert "row_hash" not in first_no_hash
++
++
++async def test_case_5_boundary_and_pagination(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test Case 5: 65 events across partition boundary, keyset pagination, and cursor rejection."""
++    admin = await make_user("pager", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("PAGE", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    iss_resp = await client.post(
++        "/api/v1/projects/PAGE/issues",
++        json={"summary": "Pagination Test Target Issue", "priority": "none"},
++    )
++    assert iss_resp.status_code == 201
++    issue_key = iss_resp.json()["key"]
++    issue_id = uuid.UUID(iss_resp.json()["id"])
++
++    # Ensure activity partitions for October and November 2026 exist
++    await api_env.seed.execute(
++        text("SELECT ensure_activity_partitions('2026-11-01'::timestamptz, 2, 2)")
++    )
++    await api_env.seed.commit()
++
++    # Seed 65 activity records:
++    # 30 in October 2026, 35 in November 2026
++    t_oct = datetime(2026, 10, 31, 23, 50, 0, tzinfo=UTC)
++    t_nov = datetime(2026, 11, 1, 0, 5, 0, tzinfo=UTC)
++
++    for i in range(30):
++        ts = t_oct + timedelta(seconds=i * 2)
++        await api_env.seed.execute(
++            text(
++                "INSERT INTO activity_records ("
++                "  workspace_id, object_id, object_type, actor_id, event_type, payload, recorded_at"
++                ") VALUES ("
++                "  :ws, :oid, 'issue'::object_kind, :actor, 'ISSUE_FIELD_CHANGED', CAST(:payload AS jsonb), :rec_at"
++                ")"
++            ),
++            {
++                "ws": api_env.workspace_id,
++                "oid": issue_id,
++                "actor": admin.id,
++                "payload": f'{{"idx": {i}, "batch": "oct"}}',
++                "rec_at": ts,
++            },
++        )
++
++    for i in range(35):
++        ts = t_nov + timedelta(seconds=i * 2)
++        await api_env.seed.execute(
++            text(
++                "INSERT INTO activity_records ("
++                "  workspace_id, object_id, object_type, actor_id, event_type, payload, recorded_at"
++                ") VALUES ("
++                "  :ws, :oid, 'issue'::object_kind, :actor, 'ISSUE_FIELD_CHANGED', CAST(:payload AS jsonb), :rec_at"
++                ")"
++            ),
++            {
++                "ws": api_env.workspace_id,
++                "oid": issue_id,
++                "actor": admin.id,
++                "payload": f'{{"idx": {i}, "batch": "nov"}}',
++                "rec_at": ts,
++            },
++        )
++    await api_env.seed.commit()
++
++    # 1. Paginate order=desc with limit=25
++    seen_desc_ids: list[str] = []
++    cursor: str | None = None
++    for expected_count in (25, 25, 16):  # 65 + 1 (initial issue_created) = 66
++        url = f"/api/v1/issues/{issue_key}/activity?order=desc&limit=25"
++        if cursor:
++            url += f"&cursor={cursor}"
++        page_resp = await client.get(url)
++        assert page_resp.status_code == 200, page_resp.text
++        page_body = page_resp.json()
++        assert len(page_body["items"]) == expected_count
++        seen_desc_ids.extend(it["id"] for it in page_body["items"])
++        cursor = page_body["next_cursor"]
++        if expected_count < 25:
++            assert cursor is None
++        else:
++            assert cursor is not None
++
++    assert len(seen_desc_ids) == 66
++    assert len(set(seen_desc_ids)) == 66
++
++    # 2. Paginate order=asc with limit=25
++    seen_asc_ids: list[str] = []
++    cursor = None
++    for expected_count in (25, 25, 16):
++        url = f"/api/v1/issues/{issue_key}/activity?order=asc&limit=25"
++        if cursor:
++            url += f"&cursor={cursor}"
++        page_resp = await client.get(url)
++        assert page_resp.status_code == 200, page_resp.text
++        page_body = page_resp.json()
++        assert len(page_body["items"]) == expected_count
++        seen_asc_ids.extend(it["id"] for it in page_body["items"])
++        cursor = page_body["next_cursor"]
++        if expected_count < 25:
++            assert cursor is None
++        else:
++            assert cursor is not None
++
++    assert len(seen_asc_ids) == 66
++    assert len(set(seen_asc_ids)) == 66
++    assert seen_desc_ids == list(reversed(seen_asc_ids))
++
++    # 3. Validation limits: limit=0 and limit=101 return 422
++    resp_l0 = await client.get(f"/api/v1/issues/{issue_key}/activity?limit=0")
++    assert resp_l0.status_code == 422
++
++    resp_l101 = await client.get(f"/api/v1/issues/{issue_key}/activity?limit=101")
++    assert resp_l101.status_code == 422
++
++    # 4. Mismatched cursor: cursor minted for tab=comments passed to tab=history
++    # Seed 1 comment so next_cursor can be minted
++    for _ in range(3):
++        await client.post(
++            f"/api/v1/issues/{issue_key}/comments",
++            json={"body_markdown": "Paging comment"},
++        )
++
++    com_page = await client.get(f"/api/v1/issues/{issue_key}/activity?tab=comments&limit=1")
++    assert com_page.status_code == 200
++    com_cursor = com_page.json()["next_cursor"]
++    assert com_cursor is not None
++
++    bad_cursor_resp = await client.get(
++        f"/api/v1/issues/{issue_key}/activity?tab=history&cursor={com_cursor}"
++    )
++    contract_recorder.record("invalid_cursor_422", bad_cursor_resp.request, bad_cursor_resp)
++    assert bad_cursor_resp.status_code == 422
++    assert bad_cursor_resp.json()["code"] == "INVALID_CURSOR"
++
++
++async def test_case_6_edge_cases_and_branch_coverage(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Test Case 6: Edge cases, cursor validation errors, linked object masking, and project pagination."""
++    admin = await make_user("edge_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("EDGE", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # 1. Cursor secret from environment
++    monkeypatch.setenv("KB_CURSOR_SECRET", "custom-secret-key-12345")
++    assert _get_cursor_secret() == b"custom-secret-key-12345"
++    monkeypatch.delenv("KB_CURSOR_SECRET", raising=False)
++
++    # 2. Cursor unit validation branches
++    scope = uuid.uuid4()
++    now_dt = datetime.now(UTC)
++    rec_id = uuid.uuid4()
++    valid_cursor = encode_activity_cursor(scope, "all", "desc", now_dt, rec_id)
++
++    # Roundtrip success
++    dec_ts, dec_id = decode_activity_cursor(valid_cursor, scope, "all", "desc")
++    assert dec_id == rec_id
++    assert abs((dec_ts - now_dt).total_seconds()) < 1.0
++
++    # No dot in cursor
++    with pytest.raises(Exception) as exc_info:
++        decode_activity_cursor("nodotinthisbase64string", scope, "all", "desc")
++    assert getattr(exc_info.value, "status_code", 422) == 422
++
++    # Wrong signature
++    corrupted_sig = valid_cursor[:-4] + "AAAA"
++    with pytest.raises(Exception):
++        decode_activity_cursor(corrupted_sig, scope, "all", "desc")
++
++    # Mismatched scope
++    with pytest.raises(Exception):
++        decode_activity_cursor(valid_cursor, uuid.uuid4(), "all", "desc")
++
++    # Mismatched tab
++    with pytest.raises(Exception):
++        decode_activity_cursor(valid_cursor, scope, "comments", "desc")
++
++    # Mismatched order
++    with pytest.raises(Exception):
++        decode_activity_cursor(valid_cursor, scope, "all", "asc")
++
++    # Corrupted / invalid base64
++    with pytest.raises(Exception):
++        decode_activity_cursor("@@@@@@", scope, "all", "desc")
++
++    # Wrong segment count
++    raw_3 = b"only:three:parts"
++    sig_3 = hmac.new(_get_cursor_secret(), raw_3, hashlib.sha256).hexdigest().encode("ascii")
++    tok_3 = base64.urlsafe_b64encode(raw_3 + b"." + sig_3).decode().rstrip("=")
++    with pytest.raises(Exception):
++        decode_activity_cursor(tok_3, scope, "all", "desc")
++
++    # 3. Create target issue for route validation
++    iss_resp = await client.post(
++        "/api/v1/projects/EDGE/issues",
++        json={"summary": "Edge Coverage Target Issue", "priority": "low"},
++    )
++    assert iss_resp.status_code == 201
++    issue_key = iss_resp.json()["key"]
++    issue_id = uuid.UUID(iss_resp.json()["id"])
++
++    # 4. Invalid tab and order error responses on issue endpoint (HTTP 422 validation)
++    resp_bad_tab = await client.get(f"/api/v1/issues/{issue_key}/activity?tab=unknown")
++    assert resp_bad_tab.status_code == 422
++
++    resp_bad_order = await client.get(f"/api/v1/issues/{issue_key}/activity?order=diagonal")
++    assert resp_bad_order.status_code == 422
++
++    # 5. Invalid tab and order error responses on project endpoint
++    resp_proj_bad_tab = await client.get("/api/v1/projects/EDGE/activity?tab=unknown")
++    assert resp_proj_bad_tab.status_code == 422
++
++    resp_proj_bad_order = await client.get("/api/v1/projects/EDGE/activity?order=diagonal")
++    assert resp_proj_bad_order.status_code == 422
++
++    # Direct service calls for coverage on service validation branches
++    caller_ctx = PrincipalContext(
++        principal_id=admin.id, workspace_id=api_env.workspace_id, token_scopes=("session",)
++    )
++    with pytest.raises(ProblemException) as pe_tab:
++        await get_issue_activity(api_env.seed, caller_ctx, issue_key, tab="unknown")
++    assert pe_tab.value.code == "INVALID_TAB"
++
++    with pytest.raises(ProblemException) as pe_ord:
++        await get_issue_activity(api_env.seed, caller_ctx, issue_key, order="diagonal")
++    assert pe_ord.value.code == "INVALID_ORDER"
++
++    with pytest.raises(ProblemException) as pe_ptab:
++        await get_project_activity(api_env.seed, caller_ctx, "EDGE", tab="unknown")
++    assert pe_ptab.value.code == "INVALID_TAB"
++
++    with pytest.raises(ProblemException) as pe_pord:
++        await get_project_activity(api_env.seed, caller_ctx, "EDGE", order="diagonal")
++    assert pe_pord.value.code == "INVALID_ORDER"
++
++    # Empty actors check
++    empty_actors = await _resolve_actors(api_env.seed, caller_ctx, set())
++    assert empty_actors == {}
++
++    # 6. Project-level cursor pagination (desc and asc)
++    # Post 2 comments so project has at least 3 activity records
++    for i in range(2):
++        await client.post(
++            f"/api/v1/issues/{issue_key}/comments",
++            json={"body_markdown": f"Project paging comment {i}"},
++        )
++
++    # Page 1 (desc)
++    proj_p1 = await client.get("/api/v1/projects/EDGE/activity?limit=1&order=desc")
++    assert proj_p1.status_code == 200
++    p1_data = proj_p1.json()
++    assert len(p1_data["items"]) == 1
++    cursor_desc = p1_data["next_cursor"]
++    assert cursor_desc is not None
++
++    # Page 2 (desc) using cursor
++    proj_p2 = await client.get(
++        f"/api/v1/projects/EDGE/activity?limit=1&order=desc&cursor={cursor_desc}"
++    )
++    assert proj_p2.status_code == 200
++    p2_data = proj_p2.json()
++    assert len(p2_data["items"]) == 1
++    assert p2_data["items"][0]["id"] != p1_data["items"][0]["id"]
++
++    # Page 1 (asc)
++    proj_asc1 = await client.get("/api/v1/projects/EDGE/activity?limit=1&order=asc")
++    assert proj_asc1.status_code == 200
++    asc1_data = proj_asc1.json()
++    cursor_asc = asc1_data["next_cursor"]
++    assert cursor_asc is not None
++
++    # Page 2 (asc) using cursor
++    proj_asc2 = await client.get(
++        f"/api/v1/projects/EDGE/activity?limit=1&order=asc&cursor={cursor_asc}"
++    )
++    assert proj_asc2.status_code == 200
++    assert len(proj_asc2.json()["items"]) == 1
++
++    # 7. Agent actor resolution and display
++    agent_id = await create_agent(
++        api_env.seed, api_env.workspace_id, "Edge Coverage Bot", principal_type="AGENT"
++    )
++    await record_activity(
++        api_env.seed,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=agent_id,
++        event_type=ActivityEventType.GATE_APPROVED,
++        payload={"gate": "security-review", "model": "gemini-flash"},
++    )
++    await api_env.seed.commit()
++
++    agent_act_resp = await client.get(f"/api/v1/issues/{issue_key}/activity?tab=gates")
++    assert agent_act_resp.status_code == 200
++    gates_items = agent_act_resp.json()["items"]
++    assert len(gates_items) >= 1
++    gate_actor = gates_items[0]["actor"]
++    assert gate_actor["type"] == "AGENT"
++    assert "edge" in gate_actor["slug"].lower() or "bot" in gate_actor["display_name"].lower()
++
++    # 8. Unreadable linked object masking (LINK_CREATED / LINK_DELETED)
++    # Create a secret doc where caller has no capability
++    secret_doc_id = await create_registered_object(
++        api_env.seed,
++        api_env.workspace_id,
++        kind="doc",
++        key="SEC-DOC-1",
++        title="Restricted Blueprint",
++        project_id=proj_id,
++    )
++    # Explicit DENY VIEW on secret doc for admin
++    await add_acl_entry(
++        api_env.seed,
++        api_env.workspace_id,
++        secret_doc_id,
++        admin.id,
++        effect="DENY",
++        capability_mask=Capability.VIEW,
++    )
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++
++    # Record LINK_CREATED referencing secret_doc_id
++    await record_activity(
++        api_env.seed,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.LINK_CREATED,
++        payload={
++            "source_id": str(issue_id),
++            "target_id": str(secret_doc_id),
++            "link_type": "BLOCKS",
++        },
++    )
++    await api_env.seed.commit()
++
++    link_act_resp = await client.get(f"/api/v1/issues/{issue_key}/activity?tab=history")
++    assert link_act_resp.status_code == 200
++    link_item = next(
++        it
++        for it in link_act_resp.json()["items"]
++        if it["event_type"] == ActivityEventType.LINK_CREATED.value
++    )
++    assert link_item["payload"].get("target") == {"restricted": True, "label": "Restricted Object"}
++    assert "target_id" not in link_item["payload"]
++
++    # 9. Project feed comment hydration (active and soft-deleted with reactions)
++    c_p_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={"body_markdown": "Comment to be deleted in project"},
++    )
++    assert c_p_resp.status_code == 201
++    c_p_id = c_p_resp.json()["id"]
++
++    await client.put(f"/api/v1/comments/{c_p_id}/reactions/%F0%9F%91%8D")
++    await client.delete(f"/api/v1/comments/{c_p_id}")
++
++    proj_comments = await client.get("/api/v1/projects/EDGE/activity?tab=comments")
++    assert proj_comments.status_code == 200
++    assert len(proj_comments.json()["items"]) >= 2
++
++    # 10. Inactive user + SCRIPT_EPHEMERAL + non-existent actor in _resolve_actors
++    ephemeral_id = await create_agent(
++        api_env.seed, api_env.workspace_id, "Eph Bot", principal_type="SCRIPT_EPHEMERAL"
++    )
++    disabled_user_id = await create_user(
++        api_env.seed, api_env.workspace_id, handle="@disabled_user", display_name="Disabled User"
++    )
++    await api_env.seed.execute(
++        text("UPDATE principals SET status = 'DISABLED' WHERE id = :id"),
++        {"id": disabled_user_id},
++    )
++    await api_env.seed.commit()
++
++    viewer_user = await make_user("viewer_cover", workspace_role="WORKSPACE_MEMBER")
++    viewer_ctx = PrincipalContext(
++        principal_id=viewer_user.id, workspace_id=api_env.workspace_id, token_scopes=("session",)
++    )
++    resolved_edge_actors = await _resolve_actors(
++        api_env.seed,
++        viewer_ctx,
++        {uuid.uuid4(), ephemeral_id, disabled_user_id},
++        proj_id,
++    )
++    assert all(
++        isinstance(r, RedactedActorSummary) and r.redacted is True
++        for r in resolved_edge_actors.values()
++    )
++
++    # 11. Referenced principal redaction in payload (assignee_id)
++    await record_activity(
++        api_env.seed,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.ISSUE_FIELD_CHANGED,
++        payload={"assignee_id": str(disabled_user_id), "field": "assignee"},
++    )
++    await api_env.seed.commit()
++
++    viewer_client = as_principal(viewer_user)
++    v_feed = await viewer_client.get(f"/api/v1/issues/{issue_key}/activity?tab=history")
++    assert v_feed.status_code == 200
++    item_assignee = next(
++        it for it in v_feed.json()["items"] if it.get("payload", {}).get("field") == "assignee"
++    )
++    assert item_assignee["payload"]["assignee_id"] == {
++        "redacted": True,
++        "label": "1 External Collaborator",
++    }
+diff --git a/kanban/tests/services/test_activity.py b/kanban/tests/services/test_activity.py
+index a15da7b..111ecd5 100644
+--- a/kanban/tests/services/test_activity.py
++++ b/kanban/tests/services/test_activity.py
+@@ -186,4 +186,4 @@ def test_every_event_type_has_a_category() -> None:
+     """Every ActivityEventType member must be registered in EVENT_CATEGORY."""
+     assert set(EVENT_CATEGORY) == set(ActivityEventType)
+     assert all(isinstance(c, ActivityCategory) for c in EVENT_CATEGORY.values())
+-    assert {c.value for c in ActivityCategory} == {"COMMENT", "HISTORY", "GATE", "SYSTEM"}
++    assert {c.value for c in ActivityCategory} == {"COMMENT", "HISTORY", "AGENT_GATE", "SYSTEM"}

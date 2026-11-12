@@ -51,7 +51,8 @@ class ActivityCategory(StrEnum):
 
     COMMENT = "COMMENT"
     HISTORY = "HISTORY"
-    GATE = "GATE"
+    AGENT_GATE = "AGENT_GATE"
+    GATE = "AGENT_GATE"
     SYSTEM = "SYSTEM"
 
 
@@ -97,6 +98,15 @@ class ActivityEventType(StrEnum):
     MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
     LINK_CREATED = "LINK_CREATED"
     LINK_DELETED = "LINK_DELETED"
+    CREATOR_OVERRIDDEN = "CREATOR_OVERRIDDEN"
+    WIP_HARD_LIMIT_OVERRIDDEN = "WIP_HARD_LIMIT_OVERRIDDEN"
+    SYNC_HOOK_REJECTED = "SYNC_HOOK_REJECTED"
+    HOOK_FAIL_OPEN_WARN = "HOOK_FAIL_OPEN_WARN"
+    GATE_PENDING = "GATE_PENDING"
+    GATE_APPROVED = "GATE_APPROVED"
+    GATE_REJECTED = "GATE_REJECTED"
+    GATE_TIMED_OUT = "GATE_TIMED_OUT"
+    GATE_CANCELLED = "GATE_CANCELLED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -140,6 +150,15 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
         ActivityEventType.LINK_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.LINK_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.CREATOR_OVERRIDDEN: ActivityCategory.HISTORY,
+        ActivityEventType.WIP_HARD_LIMIT_OVERRIDDEN: ActivityCategory.HISTORY,
+        ActivityEventType.SYNC_HOOK_REJECTED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.HOOK_FAIL_OPEN_WARN: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_PENDING: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_APPROVED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_REJECTED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_TIMED_OUT: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_CANCELLED: ActivityCategory.AGENT_GATE,
     }
 )
 

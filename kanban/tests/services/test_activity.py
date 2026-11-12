@@ -186,4 +186,4 @@ def test_every_event_type_has_a_category() -> None:
     """Every ActivityEventType member must be registered in EVENT_CATEGORY."""
     assert set(EVENT_CATEGORY) == set(ActivityEventType)
     assert all(isinstance(c, ActivityCategory) for c in EVENT_CATEGORY.values())
-    assert {c.value for c in ActivityCategory} == {"COMMENT", "HISTORY", "GATE", "SYSTEM"}
+    assert {c.value for c in ActivityCategory} == {"COMMENT", "HISTORY", "AGENT_GATE", "SYSTEM"}
