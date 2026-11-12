@@ -1,0 +1,31 @@
+=== Command (a): Positive FIM stream ===
+$ uv run kanban-agent validate-echo --provider ollama --model qwen2.5-coder:7b --http-cassette tests/fixtures/ai/ollama_fim_stream_ok.yaml
+=== 1. RENDERED CONTEXT ===
+Hello Sparkle
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 0.5ms | Total: 0.6ms | Tokens: 12 in, 8 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok
+Exit Code: 0
+
+=== Command (b): Cloud metadata SSRF hard-deny ===
+$ uv run kanban-agent validate-echo --provider ollama --model qwen2.5-coder:7b --http-cassette tests/fixtures/ai/ollama_fim_stream_ok.yaml --base-url http://169.254.169.254:11434
+=== 1. RENDERED CONTEXT ===
+Hello Sparkle
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 0.1ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: failed
+Error Code: OLLAMA_METADATA_DENIED
+Detail: [OLLAMA_METADATA_DENIED] Host '169.254.169.254' resolves to hard-denied metadata or link-local network
+Exit Code: 2

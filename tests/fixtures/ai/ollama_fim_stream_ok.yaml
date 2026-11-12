@@ -1,0 +1,23 @@
+cassette_version: 1
+matcher: {}
+http_exchanges:
+  - request:
+      method: POST
+      path: /api/generate
+      json_contains:
+        model: "qwen2.5-coder:7b"
+        stream: true
+    response:
+      status: 200
+      headers:
+        content-type: application/x-ndjson
+      ndjson_chunks:
+        - response: "def "
+          done: false
+        - response: "hello():\n"
+          done: false
+        - response: "    return True\n"
+          done: true
+          total_duration: 5000000
+          prompt_eval_count: 12
+          eval_count: 8

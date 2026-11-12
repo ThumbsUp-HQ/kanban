@@ -208,6 +208,91 @@
           "minimum": 0
         }
       }
+    },
+    "http_exchanges": {
+      "type": "array",
+      "description": "Sequence of simulated HTTP request and response exchanges.",
+      "items": {
+        "type": "object",
+        "required": [
+          "request"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "request": {
+            "type": "object",
+            "required": [
+              "method",
+              "path"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "method": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "json_contains": {
+                "type": "object"
+              }
+            }
+          },
+          "response": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "type": "integer",
+                "default": 200
+              },
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "ndjson_chunks": {
+                "type": "array",
+                "items": {}
+              },
+              "sse_chunks": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "json_body": {}
+            }
+          },
+          "fault": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "http_429",
+                  "http_500",
+                  "timeout",
+                  "connect_error",
+                  "malformed_body",
+                  "oversize_line"
+                ]
+              },
+              "status": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

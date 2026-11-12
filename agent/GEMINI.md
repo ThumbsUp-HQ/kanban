@@ -51,3 +51,33 @@ The CLI strictly produces three deterministic integer exit codes:
 - `0` (`ExitCode.OK`): Execution succeeded and schema/policy constraints were fully satisfied.
 - `1` (`ExitCode.RUNTIME_ERROR`): Infrastructure runtime errors, upstream HTTP 4xx/5xx faults, missing cassette files, or uncaught exceptions.
 - `2` (`ExitCode.SCHEMA_OR_POLICY_VIOLATION`): CLI argument errors, cassette mismatch/validation failures, model schema validation failures, safety blocks, policy refusals, or TTFT SLA breaches.
+
+## Ollama Provider Adapter (`OllamaProvider`)
+
+The `OllamaProvider` adapter implements the `@runtime_checkable LLMProvider` protocol for local and self-hosted Ollama daemons, supporting Fill-In-the-Middle (FIM) streaming, structured JSON schema output, and batch vector embeddings.
+
+### Network Contract & SSRF Defenses
+
+1. `resolve_and_pin(url, allowed_cidrs)`:
+   - Synchronously or asynchronously resolves the host to all IPv4 and IPv6 addresses via `getaddrinfo`.
+   - Validates that every resolved address belongs to the configured CIDR allowlist (defaults to `127.0.0.0/8`, `::1/128`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`).
+   - Strictly enforces hard-denied metadata and link-local networks (`169.254.0.0/16`, `fe80::/10`, `fd00:ec2::254/128`, `0.0.0.0/8`, `::/128`, `224.0.0.0/4`, `ff00::/8`, and IPv4-mapped IPv6 `::ffff:169.254.0.0/112`).
+   - If ANY resolved address is hard-denied or falls outside the allowed CIDRs, the request fails immediately to prevent DNS rebinding attacks.
+   - Rewrites outbound request target to the pinned IP with SNI / Host header preserved.
+2. Optional mTLS Transport:
+   - Configurable via `ca_cert_path`, `client_cert_path`, and `client_key_path` in `OllamaSettings`.
+3. Strict Streaming and Size Limits:
+   - Per-line stream size capped at 64 KiB (`LINE_TOO_LARGE` / `ProviderProtocolError` on overflow).
+   - Maximum response payload capped at 16 MiB.
+   - Batch embeddings capped at 512 texts per request.
+   - HTTP redirects (3xx) are strictly refused (`REDIRECT_REFUSED` / `ProviderProtocolError`).
+
+### Specific Error Codes
+
+- `OLLAMA_METADATA_DENIED`: Target host resolves to hard-denied cloud metadata or link-local network.
+- `OLLAMA_CIDR_DENIED`: Target host resolves to an IP outside the configured CIDR allowlist.
+- `MODEL_NOT_ALLOWED`: Requested model name is not in the configured `allowed_models` list.
+- `REDIRECT_REFUSED`: Ollama daemon responded with an HTTP redirect (3xx), which is prohibited.
+- `LINE_TOO_LARGE`: SSE/JSON stream line exceeded the 64 KiB safety threshold.
+- `BATCH_TOO_LARGE`: Batch embedding request exceeded 512 input texts.
+

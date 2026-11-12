@@ -177,6 +177,7 @@ class Cassette(BaseModel):
     embeddings: list[list[float]] | CassetteEmbeddingsGen | None = None
     cli_result: CassetteCLIResult | None = None
     fault: CassetteFault | None = None
+    http_exchanges: list[dict[str, Any]] | None = None
 
 
 _COMPILED_SCHEMA: dict[str, Any] | None = None

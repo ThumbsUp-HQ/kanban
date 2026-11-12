@@ -61,7 +61,7 @@ def get_registered_subcommands() -> Mapping[str, SubcommandSpec]:
 def add_common_agent_flags(
     parser: argparse.ArgumentParser,
     *,
-    available_providers: Sequence[str] = ("fixture",),
+    available_providers: Sequence[str] = ("fixture", "ollama"),
 ) -> None:
     """Add standard provider, model, cassette, and reporting flags to a parser."""
     parser.add_argument(
@@ -81,6 +81,18 @@ def add_common_agent_flags(
         type=str,
         default=None,
         help="Path to YAML fixture cassette for offline replay.",
+    )
+    parser.add_argument(
+        "--http-cassette",
+        type=str,
+        default=None,
+        help="Path to YAML HTTP cassette for offline HTTP provider replay.",
+    )
+    parser.add_argument(
+        "--base-url",
+        type=str,
+        default=None,
+        help="Base URL for remote or local LLM daemon (e.g. http://127.0.0.1:11434).",
     )
     parser.add_argument(
         "--verbose-tools",
