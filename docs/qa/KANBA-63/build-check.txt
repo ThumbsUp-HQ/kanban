@@ -1,0 +1,34 @@
+=== mypy --strict database agent ===
+Success: no issues found in 147 source files
+EXIT: 0
+
+=== ruff check . ===
+All checks passed!
+EXIT: 0
+
+=== lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 177 files, 276 dependencies.
+-------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+EXIT: 0
+
+=== check_no_dashes --all ===
+EXIT: 0
