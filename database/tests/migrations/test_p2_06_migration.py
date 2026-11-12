@@ -12,7 +12,7 @@ async def test_24_oidc_auth_requests_migration_lifecycle() -> None:
     """Verify p2_06 upgrade applies oidc_auth_requests and functions, and downgrade reverts."""
     async with MigrationHarness() as harness:
         prev_rev = harness.previous_of("p2_06_oidc_auth_requests")
-        assert prev_rev == "p2_02_sessions"
+        assert prev_rev == "p5_16_agent_definitions"
 
         # 1. Upgrade to p2_06_oidc_auth_requests
         await harness.upgrade("p2_06_oidc_auth_requests")
@@ -47,8 +47,8 @@ async def test_24_oidc_auth_requests_migration_lifecycle() -> None:
             assert f["owner"] == "kb_auth_owner"
             assert f["prosecdef"] is True
 
-        # 2. Downgrade to p2_02_sessions
-        await harness.downgrade("p2_02_sessions")
+        # 2. Downgrade to previous revision
+        await harness.downgrade(prev_rev)
 
         table_gone = await harness.fetch(
             "SELECT c.relname FROM pg_class c "
