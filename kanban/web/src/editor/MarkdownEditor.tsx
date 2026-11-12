@@ -20,6 +20,8 @@ import {
   createEditorNodeViews,
   type EditorSurfaceKind,
 } from './editorSurfaceFactory';
+import { autoConvertPastePlugin } from './clipboard/autoConvertPaste';
+import { SanitizedPastePill } from './clipboard/SanitizedPastePill';
 import { EmojiHint } from '../components/emoji/EmojiHint';
 import './MarkdownEditor.css';
 
@@ -33,6 +35,8 @@ export interface MarkdownEditorProps {
   placeholder?: string;
   ariaLabel: string;
   testId?: string;
+  projectId?: string;
+  onAnnounce?: (message: string) => void;
 }
 
 const DEFAULT_MAX_BYTES: Record<EditorSurfaceKind, number> = {
@@ -52,14 +56,31 @@ export function MarkdownEditor({
   maxBytes,
   ariaLabel,
   testId = 'markdown-editor',
+  projectId = 'KAN',
+  onAnnounce,
 }: MarkdownEditorProps): JSX.Element {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const originalSourceRef = useRef<string>(value);
   const lastSerializedRef = useRef<string>(value);
+  const valueRef = useRef<string>(value);
+  const onChangeRef = useRef(onChange);
+  const onBlurRef = useRef(onBlur);
+  const onAnnounceRef = useRef(onAnnounce);
 
   const [isRawMode, setIsRawMode] = useState(false);
   const [rawText, setRawText] = useState(value);
+  const rawTextRef = useRef<string>(rawText);
+  const [sanitizedPill, setSanitizedPill] = useState<{ prunedHiddenNodes: number } | null>(null);
+  const [liveAnnouncement, setLiveAnnouncement] = useState<string | null>(null);
+
+  useEffect(() => {
+    valueRef.current = value;
+    onChangeRef.current = onChange;
+    onBlurRef.current = onBlur;
+    onAnnounceRef.current = onAnnounce;
+    rawTextRef.current = rawText;
+  });
 
   const effectiveMaxBytes = maxBytes ?? DEFAULT_MAX_BYTES[surface];
   const currentBytes = getUtf8ByteLength(isRawMode ? rawText : value);
@@ -72,21 +93,41 @@ export function MarkdownEditor({
     setIsRawMode((prev) => {
       if (prev) {
         // Raw -> WYSIWYG: notify parent with current raw text and transition to WYSIWYG
-        lastSerializedRef.current = rawText;
-        onChange(rawText);
+        const nextVal = rawTextRef.current;
+        lastSerializedRef.current = nextVal;
+        onChangeRef.current(nextVal);
         return false;
       } else {
         // WYSIWYG -> Raw: serialize current ProseMirror doc
         const currentView = viewRef.current;
         const currentMarkdown = currentView
           ? serializeMarkdown(currentView.state.doc, originalSourceRef.current)
-          : value;
+          : valueRef.current;
         setRawText(currentMarkdown);
+        rawTextRef.current = currentMarkdown;
         lastSerializedRef.current = currentMarkdown;
         return true;
       }
     });
-  }, [value, rawText, onChange]);
+  }, []);
+
+  const getPlugins = useCallback(() => {
+    return [
+      ...createEditorPlugins(surface, {
+        onToggleRaw: handleToggleRaw,
+      }),
+      autoConvertPastePlugin({
+        projectId,
+        onAnnounce: (msg) => {
+          setLiveAnnouncement(msg);
+          onAnnounceRef.current?.(msg);
+        },
+        onConverted: (info) => {
+          setSanitizedPill({ prunedHiddenNodes: info.prunedHiddenNodes });
+        },
+      }),
+    ];
+  }, [surface, projectId, handleToggleRaw]);
 
   // Initialize and mount ProseMirror EditorView
   useEffect(() => {
@@ -102,9 +143,7 @@ export function MarkdownEditor({
     const state = EditorState.create({
       doc,
       schema: editorSchema,
-      plugins: createEditorPlugins(surface, {
-        onToggleRaw: handleToggleRaw,
-      }),
+      plugins: getPlugins(),
     });
 
     const view = new EditorView(mountRef.current, {
@@ -126,14 +165,12 @@ export function MarkdownEditor({
             originalSourceRef.current,
           );
           lastSerializedRef.current = serialized;
-          onChange(serialized);
+          onChangeRef.current(serialized);
         }
       },
       handleDOMEvents: {
         blur: () => {
-          if (onBlur) {
-            onBlur(lastSerializedRef.current);
-          }
+          onBlurRef.current?.(lastSerializedRef.current);
           return false;
         },
       },
@@ -145,7 +182,7 @@ export function MarkdownEditor({
       view.destroy();
       viewRef.current = null;
     };
-  }, [surface, isRawMode, ariaLabel, readOnly, handleToggleRaw, onChange, onBlur]);
+  }, [surface, isRawMode, ariaLabel, readOnly, getPlugins]);
 
   // Synchronize external value changes with ProseMirror state when in WYSIWYG mode
   useEffect(() => {
@@ -161,22 +198,21 @@ export function MarkdownEditor({
       const newState = EditorState.create({
         doc,
         schema: editorSchema,
-        plugins: createEditorPlugins(surface, {
-          onToggleRaw: handleToggleRaw,
-        }),
+        plugins: getPlugins(),
       });
 
       const tr = newState.tr.setMeta('skipSourceSliceDirty', true);
       viewRef.current.updateState(newState.apply(tr));
     }
-  }, [value, isRawMode, surface, handleToggleRaw]);
+  }, [value, isRawMode, getPlugins]);
 
   // Handle Raw Textarea changes
   const handleRawChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
     const nextText = e.target.value;
     setRawText(nextText);
+    rawTextRef.current = nextText;
     lastSerializedRef.current = nextText;
-    onChange(nextText);
+    onChangeRef.current(nextText);
   };
 
   const handleRawKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -188,9 +224,7 @@ export function MarkdownEditor({
   };
 
   const handleRawBlur = (): void => {
-    if (onBlur) {
-      onBlur(rawText);
-    }
+    onBlurRef.current?.(rawTextRef.current);
   };
 
   return (
@@ -244,6 +278,29 @@ export function MarkdownEditor({
         >
           Maximum size of {effectiveMaxBytes.toLocaleString()} bytes exceeded (
           {currentBytes.toLocaleString()} bytes)
+        </div>
+      )}
+
+      {/* Floating Sanitized Paste Status Pill (🧼) */}
+      {sanitizedPill && (
+        <SanitizedPastePill
+          prunedHiddenNodes={sanitizedPill.prunedHiddenNodes}
+          onDismiss={() => {
+            setSanitizedPill(null);
+          }}
+          testId={`${testId}-sanitized-pill`}
+        />
+      )}
+
+      {/* Screen Reader Live Announcement */}
+      {liveAnnouncement && (
+        <div
+          className="kb-editor__announcement sr-only"
+          role="status"
+          aria-live="polite"
+          data-testid={`${testId}-announcement`}
+        >
+          {liveAnnouncement}
         </div>
       )}
     </div>
