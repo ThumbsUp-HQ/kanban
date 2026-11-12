@@ -1,0 +1,12 @@
+=== CASE 3: RLS CANARY ISOLATION AUDIT PROOF ===
+Target Canary String: SEC-CANARY-7731
+Caller Principal ID : 9c753fd2-6ec3-4113-966d-96293b2f0f3d (Member of project PUB only)
+Unreadable Project  : a52fffaa-9109-43ae-ab64-6c43d3a874bf (Project SEC containing canary sticky)
+Canary Match Count  : 0
+
+--- CAPTURED PROVIDER PROMPT ---
+Working on public documentation...
+--- END PROVIDER PROMPT ---
+
+Grep Canary Exit Code: 1 (grep -c SEC-CANARY-7731 = 0)
+RLS Canary Verification: PASSED (Canary was not retrieved across project boundary)

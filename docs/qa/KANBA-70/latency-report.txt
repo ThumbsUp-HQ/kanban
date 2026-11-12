@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /tmp/kb-wt-KANBA-70
+configfile: pyproject.toml
+plugins: asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 1 item
+
+agent/tests/sparkle/test_latency_budget.py 
+============================================================
+SPARKLE FIM LATENCY BENCHMARK REPORT (200 ITERATIONS)
+============================================================
+Total Iterations : 200
+Minimum Latency  : 1.15 ms
+Mean Latency     : 1.34 ms
+p50 Latency      : 1.27 ms
+p90 Latency      : 1.57 ms
+p95 Latency      : 1.73 ms  (SLA Budget: < 150.0 ms)
+p99 Latency      : 2.04 ms
+Maximum Latency  : 2.10 ms
+============================================================
+SLA Compliance   : PASS (p95 < 150ms)
+============================================================
+
+.
+
+============================== 1 passed in 0.72s ===============================
