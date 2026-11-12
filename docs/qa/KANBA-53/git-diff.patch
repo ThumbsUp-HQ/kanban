@@ -1,0 +1,1705 @@
+diff --git a/database/migrations/sql/p1_16_link_purger.down.sql b/database/migrations/sql/p1_16_link_purger.down.sql
+new file mode 100644
+index 0000000..5e32f73
+--- /dev/null
++++ b/database/migrations/sql/p1_16_link_purger.down.sql
+@@ -0,0 +1,6 @@
++-- Migration: p1_16_link_purger (down)
++-- Drops purge_invalid_object_links function and object_links_flagged_delete_guard_bd trigger
++
++DROP TRIGGER IF EXISTS object_links_flagged_delete_guard_bd_trg ON object_links;
++DROP FUNCTION IF EXISTS object_links_flagged_delete_guard_bd();
++DROP FUNCTION IF EXISTS purge_invalid_object_links(uuid[], uuid, text);
+diff --git a/database/migrations/sql/p1_16_link_purger.up.sql b/database/migrations/sql/p1_16_link_purger.up.sql
+new file mode 100644
+index 0000000..a9acfa5
+--- /dev/null
++++ b/database/migrations/sql/p1_16_link_purger.up.sql
+@@ -0,0 +1,223 @@
++-- Migration: p1_16_link_purger (up)
++-- purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger entry
++
++-- 1. Direct-Delete Guard on Flagged Links
++CREATE OR REPLACE FUNCTION object_links_flagged_delete_guard_bd()
++RETURNS trigger
++LANGUAGE plpgsql
++AS $$
++BEGIN
++    IF OLD.link_state = 'FLAGGED_INVALID'
++       AND COALESCE(current_setting('kb.in_audited_purge', true), '') <> 'on' THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'FLAGGED_LINK_REQUIRES_AUDITED_PURGE';
++    END IF;
++    RETURN OLD;
++END;
++$$;
++
++CREATE TRIGGER object_links_flagged_delete_guard_bd_trg
++BEFORE DELETE ON object_links
++FOR EACH ROW
++EXECUTE FUNCTION object_links_flagged_delete_guard_bd();
++
++-- 2. purge_invalid_object_links function
++CREATE OR REPLACE FUNCTION purge_invalid_object_links(
++    p_audit_ids uuid[],
++    p_actor_id uuid,
++    p_reason text
++)
++RETURNS TABLE(
++    purged_audit_id uuid,
++    purged_link_id uuid,
++    activity_id uuid
++)
++LANGUAGE plpgsql
++VOLATILE
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++#variable_conflict use_column
++DECLARE
++    v_sorted_ids uuid[];
++    v_session_actor uuid;
++    v_ws uuid;
++    v_audit_count integer;
++    v_link_ids uuid[];
++    v_link_count integer;
++    v_rec record;
++    v_obj_id uuid;
++    v_obj_type object_kind;
++    v_audit_ids_for_link jsonb;
++    v_reasons_for_link jsonb;
++    v_act_id uuid;
++    v_aud_id uuid;
++BEGIN
++    -- 1. Validation & Authorization (fail-closed before mutating any row)
++    IF p_audit_ids IS NULL
++       OR coalesce(array_length(p_audit_ids, 1), 0) < 1
++       OR coalesce(array_length(p_audit_ids, 1), 0) > 1000
++       OR array_position(p_audit_ids, NULL) IS NOT NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_AUDIT_IDS_INVALID';
++    END IF;
++
++    -- Deduplicate p_audit_ids preserving deterministic UUID sort order
++    SELECT array_agg(DISTINCT u ORDER BY u)
++    INTO v_sorted_ids
++    FROM unnest(p_audit_ids) AS u;
++
++    IF p_reason IS NULL
++       OR char_length(btrim(p_reason)) < 3
++       OR char_length(btrim(p_reason)) > 1000 THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_REASON_REQUIRED';
++    END IF;
++
++    v_session_actor := app_current_principal_id();
++    v_ws := app_current_workspace_id();
++    IF v_session_actor IS NULL OR v_ws IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'RLS_CONTEXT_REQUIRED';
++    END IF;
++
++    IF v_session_actor IS DISTINCT FROM p_actor_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_ACTOR_MISMATCH';
++    END IF;
++
++    IF NOT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_FORBIDDEN';
++    END IF;
++
++    -- 2. Lock invalid_object_link_audits rows matching id = ANY(v_sorted_ids) ordered by id FOR UPDATE
++    PERFORM 1
++    FROM invalid_object_link_audits a
++    WHERE a.id = ANY(v_sorted_ids)
++    ORDER BY a.id
++    FOR UPDATE;
++    GET DIAGNOSTICS v_audit_count = ROW_COUNT;
++
++    IF v_audit_count < cardinality(v_sorted_ids) OR EXISTS (
++        SELECT 1 FROM invalid_object_link_audits a
++        WHERE a.id = ANY(v_sorted_ids) AND a.workspace_id <> v_ws
++    ) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_AUDIT_NOT_FOUND';
++    END IF;
++
++    IF EXISTS (
++        SELECT 1 FROM invalid_object_link_audits a
++        WHERE a.id = ANY(v_sorted_ids) AND a.purged_at IS NOT NULL
++    ) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_ALREADY_EXECUTED';
++    END IF;
++
++    IF EXISTS (
++        SELECT 1 FROM invalid_object_link_audits a
++        WHERE a.id = ANY(v_sorted_ids) AND a.resolved_at IS NOT NULL
++    ) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_AUDIT_RESOLVED';
++    END IF;
++
++    -- 3. Lock corresponding object_links rows ordered by id FOR UPDATE
++    SELECT array_agg(DISTINCT a.link_id ORDER BY a.link_id)
++    INTO v_link_ids
++    FROM invalid_object_link_audits a
++    WHERE a.id = ANY(v_sorted_ids);
++
++    PERFORM 1
++    FROM object_links ol
++    WHERE ol.id = ANY(v_link_ids)
++    ORDER BY ol.id
++    FOR UPDATE;
++    GET DIAGNOSTICS v_link_count = ROW_COUNT;
++
++    IF v_link_count < cardinality(v_link_ids) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_LINK_MISSING';
++    END IF;
++
++    IF EXISTS (
++        SELECT 1 FROM object_links ol
++        WHERE ol.id = ANY(v_link_ids) AND ol.link_state <> 'FLAGGED_INVALID'
++    ) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_ACTIVE_LINK_REFUSED';
++    END IF;
++
++    -- 4. Delete flagged links under bypass setting
++    PERFORM set_config('kb.in_audited_purge', 'on', true);
++
++    -- Loop over links to collect metadata, delete, update audits, and record activity
++    FOR v_rec IN
++        SELECT ol.id, ol.source_id, ol.source_type, ol.target_id, ol.target_type,
++               ol.source_key_snapshot, ol.target_key_snapshot
++        FROM object_links ol
++        WHERE ol.id = ANY(v_link_ids)
++        ORDER BY ol.id
++    LOOP
++        DELETE FROM object_links WHERE id = v_rec.id;
++
++        -- 5. Update all open invalid_object_link_audits rows on this link
++        UPDATE invalid_object_link_audits
++        SET purged_at = clock_timestamp(),
++            purged_by_id = p_actor_id,
++            purge_reason = btrim(p_reason)
++        WHERE link_id = v_rec.id
++          AND purged_at IS NULL
++          AND resolved_at IS NULL;
++
++        -- 6. Determine activity anchor (v_obj_id, v_obj_type)
++        SELECT id, object_type INTO v_obj_id, v_obj_type
++        FROM objects
++        WHERE id = v_rec.source_id AND object_type = v_rec.source_type AND workspace_id = v_ws;
++
++        IF NOT FOUND THEN
++            SELECT id, object_type INTO v_obj_id, v_obj_type
++            FROM objects
++            WHERE id = v_rec.target_id AND object_type = v_rec.target_type AND workspace_id = v_ws;
++            IF NOT FOUND THEN
++                v_obj_id := NULL;
++                v_obj_type := NULL;
++            END IF;
++        END IF;
++
++        -- Aggregate audit_ids and reasons for this link
++        SELECT jsonb_agg(a.id ORDER BY a.id),
++               jsonb_agg(a.reason::text ORDER BY a.reason::text)
++        INTO v_audit_ids_for_link, v_reasons_for_link
++        FROM invalid_object_link_audits a
++        WHERE a.link_id = v_rec.id
++          AND a.purged_by_id = p_actor_id
++          AND a.purge_reason = btrim(p_reason);
++
++        v_act_id := append_activity(
++            v_ws,
++            v_obj_id,
++            v_obj_type,
++            p_actor_id,
++            'INVALID_OBJECT_LINK_PURGED',
++            jsonb_build_object(
++                'audit_ids', v_audit_ids_for_link,
++                'link_id', v_rec.id,
++                'reasons', v_reasons_for_link,
++                'purge_reason', btrim(p_reason),
++                'source_key_snapshot', v_rec.source_key_snapshot,
++                'target_key_snapshot', v_rec.target_key_snapshot
++            )
++        );
++
++        FOR v_aud_id IN
++            SELECT a.id FROM invalid_object_link_audits a
++            WHERE a.link_id = v_rec.id
++              AND a.purged_by_id = p_actor_id
++              AND a.purge_reason = btrim(p_reason)
++            ORDER BY a.id
++        LOOP
++            purged_audit_id := v_aud_id;
++            purged_link_id := v_rec.id;
++            activity_id := v_act_id;
++            RETURN NEXT;
++        END LOOP;
++    END LOOP;
++
++    PERFORM set_config('kb.in_audited_purge', '', true);
++
++    RETURN;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION purge_invalid_object_links(uuid[], uuid, text) TO kanban_app;
+diff --git a/database/migrations/versions/p1_16_link_purger.py b/database/migrations/versions/p1_16_link_purger.py
+new file mode 100644
+index 0000000..cddabbb
+--- /dev/null
++++ b/database/migrations/versions/p1_16_link_purger.py
+@@ -0,0 +1,26 @@
++"""purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger.
++
++Revision ID: p1_16_link_purger
++Revises: p1_15_link_auditor
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p1_16_link_purger"
++down_revision: str | None = "p1_15_link_auditor"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply purge_invalid_object_links function and delete guard trigger."""
++    execute_sql_file("p1_16_link_purger.up.sql")
++
++
++def downgrade() -> None:
++    """Revert purge_invalid_object_links function and delete guard trigger."""
++    execute_sql_file("p1_16_link_purger.down.sql")
+diff --git a/database/tests/migrations/test_p1_16_migration.py b/database/tests/migrations/test_p1_16_migration.py
+new file mode 100644
+index 0000000..818c449
+--- /dev/null
++++ b/database/tests/migrations/test_p1_16_migration.py
+@@ -0,0 +1,67 @@
++"""Migration lifecycle test for p1_16_link_purger."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_16_link_purger_migration_lifecycle() -> None:
++    """Verify p1_16 upgrade applies purger function and trigger, and downgrade reverts."""
++    async with MigrationHarness() as harness:
++        prev_rev = harness.previous_of("p1_16_link_purger")
++        assert prev_rev == "p1_15_link_auditor"
++
++        # 1. Upgrade to p1_16_link_purger
++        await harness.upgrade("p1_16_link_purger")
++
++        # Verify function exists
++        funcs = await harness.fetch(
++            "SELECT proname FROM pg_proc p "
++            "JOIN pg_namespace n ON n.oid = p.pronamespace "
++            "WHERE n.nspname = 'public' AND proname = 'purge_invalid_object_links'"
++        )
++        assert len(funcs) == 1
++
++        # Verify trigger exists
++        triggers = await harness.fetch(
++            "SELECT tgname FROM pg_trigger "
++            "WHERE tgname = 'object_links_flagged_delete_guard_bd_trg'"
++        )
++        assert len(triggers) == 1
++
++        # 2. Downgrade to previous revision
++        await harness.downgrade(prev_rev)
++
++        # Verify function is dropped
++        funcs_down = await harness.fetch(
++            "SELECT proname FROM pg_proc p "
++            "JOIN pg_namespace n ON n.oid = p.pronamespace "
++            "WHERE n.nspname = 'public' AND proname = 'purge_invalid_object_links'"
++        )
++        assert len(funcs_down) == 0
++
++        # Verify trigger is dropped
++        triggers_down = await harness.fetch(
++            "SELECT tgname FROM pg_trigger "
++            "WHERE tgname = 'object_links_flagged_delete_guard_bd_trg'"
++        )
++        assert len(triggers_down) == 0
++
++        # 3. Re-upgrade to p1_16_link_purger
++        await harness.upgrade("p1_16_link_purger")
++
++        # Verify function exists again
++        funcs_reup = await harness.fetch(
++            "SELECT proname FROM pg_proc p "
++            "JOIN pg_namespace n ON n.oid = p.pronamespace "
++            "WHERE n.nspname = 'public' AND proname = 'purge_invalid_object_links'"
++        )
++        assert len(funcs_reup) == 1
++
++        # Verify trigger exists again
++        triggers_reup = await harness.fetch(
++            "SELECT tgname FROM pg_trigger "
++            "WHERE tgname = 'object_links_flagged_delete_guard_bd_trg'"
++        )
++        assert len(triggers_reup) == 1
+diff --git a/database/tests/test_p1_16_link_purger.py b/database/tests/test_p1_16_link_purger.py
+new file mode 100644
+index 0000000..8c94088
+--- /dev/null
++++ b/database/tests/test_p1_16_link_purger.py
+@@ -0,0 +1,877 @@
++"""Unit tests for Phase 1 purge_invalid_object_links() and delete-guard trigger (KANBA-53)."""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError
++
++from database.tests.conftest import bind_ctx
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++async def _create_workspace(
++    session: AsyncSession,
++    slug: str | None = None,
++    name: str = "Test Workspace",
++) -> uuid.UUID:
++    """Create a test workspace."""
++    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
++    row = await session.execute(
++        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
++        {"slug": ws_slug, "name": name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _create_user(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    *,
++    display_name: str = "Test User",
++) -> uuid.UUID:
++    """Register and insert a user in objects, principals, and users."""
++    u_id = uuid.uuid4()
++    await session.scalar(
++        text("SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, :name, :uid, :id)"),
++        {
++            "ws_id": ws_id,
++            "ckey": f"usr-{u_id.hex[:8]}",
++            "name": display_name,
++            "uid": u_id,
++            "id": u_id,
++        },
++    )
++    await session.execute(
++        text(
++            "INSERT INTO principals (id, workspace_id, principal_type, display_name) "
++            "VALUES (:id, :ws_id, 'USER', :name)"
++        ),
++        {"id": u_id, "ws_id": ws_id, "name": display_name},
++    )
++    await session.execute(
++        text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws_id, :email)"),
++        {"id": u_id, "ws_id": ws_id, "email": f"{u_id.hex[:8]}@example.com"},
++    )
++    return u_id
++
++
++async def _create_service_principal(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    *,
++    display_name: str = "system:trash-purge",
++) -> uuid.UUID:
++    """Insert a SERVICE_PRINCIPAL in principals."""
++    sp_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO principals (id, workspace_id, principal_type, display_name) "
++            "VALUES (:id, :ws_id, 'SERVICE_PRINCIPAL', :name)"
++        ),
++        {"id": sp_id, "ws_id": ws_id, "name": display_name},
++    )
++    return sp_id
++
++
++async def _create_project(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    *,
++    identifier: str = "PRJ",
++    name: str = "Test Project",
++) -> uuid.UUID:
++    """Register and create a project in the database."""
++    u_id = uuid.uuid4()
++    reg_row = await session.execute(
++        text(
++            "SELECT register_object("
++            "  'project'::object_kind, :ws_id, NULL, :identifier, :name, :u_id"
++            ")"
++        ),
++        {"ws_id": ws_id, "identifier": identifier, "name": name, "u_id": u_id},
++    )
++    proj_id = reg_row.scalar_one()
++    assert isinstance(proj_id, uuid.UUID)
++    await session.execute(
++        text(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES (:id, :ws_id, :identifier, :name)"
++        ),
++        {"id": proj_id, "ws_id": ws_id, "identifier": identifier, "name": name},
++    )
++    return proj_id
++
++
++async def _register_obj(  # noqa: PLR0913
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    obj_type: str,
++    canonical_key: str,
++    *,
++    project_id: uuid.UUID | None = None,
++    title: str = "Sample Title",
++    user_id: uuid.UUID | None = None,
++) -> uuid.UUID:
++    """Register an object in the objects spine."""
++    creator = user_id or uuid.uuid4()
++    row = await session.execute(
++        text(
++            "SELECT register_object("
++            "  CAST(:obj_type AS object_kind), :ws_id, :proj_id, :canonical_key, :title, :user_id"
++            ")"
++        ),
++        {
++            "obj_type": obj_type,
++            "ws_id": ws_id,
++            "proj_id": project_id,
++            "canonical_key": canonical_key,
++            "title": title,
++            "user_id": creator,
++        },
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _create_issue(  # noqa: PLR0913
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    proj_id: uuid.UUID,
++    state_id: uuid.UUID,
++    user_id: uuid.UUID,
++    *,
++    summary: str = "Issue Summary",
++) -> uuid.UUID:
++    """Create an issue object and matching issues table row with allocated sequence."""
++    seq = await session.scalar(
++        text("SELECT allocate_issue_sequence(:pid)"),
++        {"pid": proj_id},
++    )
++    assert isinstance(seq, int)
++    p_ident = await session.scalar(
++        text("SELECT identifier FROM projects WHERE id = :id"),
++        {"id": proj_id},
++    )
++    ckey = f"{p_ident}-{seq}"
++    i_id = await _register_obj(
++        session,
++        ws_id,
++        "issue",
++        ckey,
++        project_id=proj_id,
++        title=summary,
++        user_id=user_id,
++    )
++    await session.execute(
++        text(
++            "INSERT INTO issues ("
++            "  id, workspace_id, project_id, sequence_id, summary, "
++            "  description_markdown, state_id, priority_id, "
++            "  created_by_id, original_created_by_id, board_rank"
++            ") VALUES ("
++            "  :id, :ws_id, :proj_id, :seq, :summary, "
++            "  'Desc', :state_id, "
++            "  (SELECT id FROM project_priorities WHERE project_id = :proj_id AND slug = 'none'), "
++            "  :user_id, :user_id, 1.0"
++            ")"
++        ),
++        {
++            "id": i_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "seq": seq,
++            "summary": summary,
++            "state_id": state_id,
++            "user_id": user_id,
++        },
++    )
++    return i_id
++
++
++async def _create_link(  # noqa: PLR0913, PLR0917
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    src_id: uuid.UUID,
++    src_type: str,
++    tgt_id: uuid.UUID,
++    tgt_type: str,
++    link_type: str,
++    user_id: uuid.UUID,
++) -> uuid.UUID:
++    """Create an object_links row."""
++    res = await session.execute(
++        text(
++            "INSERT INTO object_links ("
++            "  workspace_id, source_id, source_type, target_id, target_type, "
++            "  link_type, created_by_id"
++            ") VALUES ("
++            "  :ws_id, :src_id, CAST(:src_type AS object_kind), "
++            "  :tgt_id, CAST(:tgt_type AS object_kind), "
++            "  CAST(:link_type AS link_kind), :user_id"
++            ") RETURNING id"
++        ),
++        {
++            "ws_id": ws_id,
++            "src_id": src_id,
++            "src_type": src_type,
++            "tgt_id": tgt_id,
++            "tgt_type": tgt_type,
++            "link_type": link_type,
++            "user_id": user_id,
++        },
++    )
++    val = res.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _assign_role(  # noqa: PLR0913, PLR0917
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    role: str,
++    scope_type: str = "workspace",
++    project_id: uuid.UUID | None = None,
++) -> None:
++    """Assign a role binding to a principal."""
++    await session.execute(
++        text(
++            "INSERT INTO role_bindings ("
++            "  workspace_id, principal_id, role, scope_type, project_id"
++            ") VALUES (:ws_id, :pid, :role, :scope, :project_id)"
++        ),
++        {
++            "ws_id": ws_id,
++            "pid": principal_id,
++            "role": role,
++            "scope": scope_type,
++            "project_id": project_id,
++        },
++    )
++
++
++async def test_01_positive_purge_two_invalid_links(db_session: AsyncSession) -> None:
++    """Case 1: Flag 2 invalid links, purge as WORKSPACE_ADMIN, verify deleted links, audits."""
++    ws_id = await _create_workspace(db_session)
++    admin_id = await _create_user(db_session, ws_id, display_name="Admin User")
++    await _assign_role(db_session, ws_id, admin_id, "WORKSPACE_ADMIN")
++
++    # Project 1 for link 1 (ARCHIVED_POLICY_VIOLATION)
++    proj1 = await _create_project(db_session, ws_id, identifier="PRJA")
++    st_res1 = await db_session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"),
++        {"p": proj1},
++    )
++    st_id1 = st_res1.scalar_one()
++
++    iss1 = await _create_issue(db_session, ws_id, proj1, st_id1, admin_id, summary="Iss 1")
++    iss2 = await _create_issue(db_session, ws_id, proj1, st_id1, admin_id, summary="Iss 2")
++    link1 = await _create_link(db_session, ws_id, iss1, "issue", iss2, "issue", "BLOCKS", admin_id)
++
++    # Project 2 for link 2 (DANGLING_SOURCE)
++    proj2 = await _create_project(db_session, ws_id, identifier="PRJB")
++    st_res2 = await db_session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"),
++        {"p": proj2},
++    )
++    st_id2 = st_res2.scalar_one()
++
++    iss3 = await _register_obj(db_session, ws_id, "issue", "DNG-SRC", user_id=admin_id)
++    iss4 = await _create_issue(db_session, ws_id, proj2, st_id2, admin_id, summary="Iss 4")
++    link2 = await _create_link(db_session, ws_id, iss3, "issue", iss4, "issue", "BLOCKS", admin_id)
++
++    # Trigger ARCHIVED_POLICY_VIOLATION on link1
++    await db_session.execute(
++        text("UPDATE objects SET archived_at = clock_timestamp() WHERE id = :id"),
++        {"id": iss1},
++    )
++
++    # Trigger DANGLING_SOURCE on link2 under replica mode to simulate catalog/FK corruption
++    await db_session.execute(text("SET LOCAL session_replication_role = replica"))
++    await db_session.execute(text("DELETE FROM objects WHERE id = :id"), {"id": iss3})
++    await db_session.execute(text("SELECT * FROM audit_object_links(:ws)"), {"ws": ws_id})
++    await db_session.execute(text("SET LOCAL session_replication_role = DEFAULT"))
++
++    # Find audit IDs
++    aud_rows = await db_session.execute(
++        text(
++            "SELECT id, link_id, reason FROM invalid_object_link_audits "
++            "WHERE workspace_id = :ws AND purged_at IS NULL ORDER BY detected_at"
++        ),
++        {"ws": ws_id},
++    )
++    audits = aud_rows.mappings().all()
++    assert len(audits) == 2
++    a1 = next(a["id"] for a in audits if a["link_id"] == link1)
++    a2 = next(a["id"] for a in audits if a["link_id"] == link2)
++
++    # Invoke purge_invalid_object_links as WORKSPACE_ADMIN
++    await bind_ctx(db_session, admin_id, ws_id)
++    purge_res = await db_session.execute(
++        text(
++            "SELECT purged_audit_id, purged_link_id, activity_id "
++            "FROM purge_invalid_object_links(:audit_ids, :actor_id, :reason)"
++        ),
++        {
++            "audit_ids": [a1, a2],
++            "actor_id": admin_id,
++            "reason": "Cleanup archived blockers",
++        },
++    )
++    purged = purge_res.mappings().all()
++    assert len(purged) == 2
++    assert {r["purged_audit_id"] for r in purged} == {a1, a2}
++    assert {r["purged_link_id"] for r in purged} == {link1, link2}
++
++    # Verify both object_links rows are deleted
++    links_remaining = await db_session.execute(
++        text("SELECT count(*) FROM object_links WHERE id IN (:l1, :l2)"),
++        {"l1": link1, "l2": link2},
++    )
++    assert links_remaining.scalar_one() == 0
++
++    # Verify both audit rows survive with purged_at, purged_by_id, purge_reason
++    audits_surviving = await db_session.execute(
++        text(
++            "SELECT id, purged_at, purged_by_id, purge_reason "
++            "FROM invalid_object_link_audits WHERE id IN (:a1, :a2)"
++        ),
++        {"a1": a1, "a2": a2},
++    )
++    surv_rows = audits_surviving.mappings().all()
++    assert len(surv_rows) == 2
++    for r in surv_rows:
++        assert r["purged_at"] is not None
++        assert r["purged_by_id"] == admin_id
++        assert r["purge_reason"] == "Cleanup archived blockers"
++
++    # Verify 2 INVALID_OBJECT_LINK_PURGED rows in activity_records
++    act_rows = await db_session.execute(
++        text(
++            "SELECT id, event_type, actor_id, payload "
++            "FROM activity_records "
++            "WHERE workspace_id = :ws AND event_type = 'INVALID_OBJECT_LINK_PURGED' "
++            "ORDER BY chain_seq"
++        ),
++        {"ws": ws_id},
++    )
++    acts = act_rows.mappings().all()
++    assert len(acts) == 2
++    for act in acts:
++        assert act["actor_id"] == admin_id
++        assert act["payload"]["purge_reason"] == "Cleanup archived blockers"
++        assert act["payload"]["link_id"] in (str(link1), str(link2))
++
++    # Verify hash chain validity
++    chain_res = await db_session.execute(
++        text("SELECT is_valid, checked_rows FROM verify_activity_chain(:ws)"),
++        {"ws": ws_id},
++    )
++    chain = chain_res.mappings().one()
++    assert chain["is_valid"] is True
++    assert chain["checked_rows"] >= 2
++
++
++async def test_02_multi_reason_sibling_closure_and_service_principal(
++    db_session: AsyncSession,
++) -> None:
++    """Case 2: Sibling closure under single audit ID; SERVICE_PRINCIPAL succeeds."""
++    ws_id = await _create_workspace(db_session)
++    sp_id = await _create_service_principal(db_session, ws_id, display_name="system:trash-purge")
++    await _assign_role(db_session, ws_id, sp_id, "WORKSPACE_ADMIN")
++
++    user_id = await _create_user(db_session, ws_id, display_name="Regular User")
++    proj_id = await _create_project(db_session, ws_id, identifier="PRJM")
++    await _assign_role(
++        db_session, ws_id, user_id, "MEMBER", scope_type="project", project_id=proj_id
++    )
++
++    st_res = await db_session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"),
++        {"p": proj_id},
++    )
++    st_id = st_res.scalar_one()
++
++    iss1 = await _create_issue(db_session, ws_id, proj_id, st_id, user_id, summary="Iss 1")
++    iss2 = await _create_issue(db_session, ws_id, proj_id, st_id, user_id, summary="Iss 2")
++    link_id = await _create_link(db_session, ws_id, iss1, "issue", iss2, "issue", "BLOCKS", user_id)
++
++    # 1. Archive source issue -> ARCHIVED_POLICY_VIOLATION
++    await db_session.execute(
++        text("UPDATE objects SET archived_at = clock_timestamp() WHERE id = :id"),
++        {"id": iss1},
++    )
++
++    # 2. Add DENY VIEW ACL on target for user -> PERMISSION_SEVERED
++    await db_session.execute(
++        text(
++            "INSERT INTO resource_acl_entries ("
++            "  workspace_id, object_id, principal_id, effect, capability_mask"
++            ") VALUES (:ws_id, :oid, :uid, 'DENY', 1)"
++        ),
++        {"ws_id": ws_id, "oid": iss2, "uid": user_id},
++    )
++
++    # Run audit
++    await db_session.execute(text("SELECT * FROM audit_object_links(:ws)"), {"ws": ws_id})
++
++    # Verify link has 2 open audit rows
++    aud_rows = await db_session.execute(
++        text(
++            "SELECT id, reason FROM invalid_object_link_audits "
++            "WHERE link_id = :lid AND purged_at IS NULL ORDER BY reason"
++        ),
++        {"lid": link_id},
++    )
++    audits = aud_rows.mappings().all()
++    assert len(audits) == 2
++    reasons = {a["reason"] for a in audits}
++    assert reasons == {"ARCHIVED_POLICY_VIOLATION", "PERMISSION_SEVERED"}
++
++    # Pass ONLY ONE audit ID to purge_invalid_object_links
++    chosen_audit_id = audits[0]["id"]
++    sibling_audit_id = audits[1]["id"]
++
++    await bind_ctx(db_session, sp_id, ws_id)
++    purge_res = await db_session.execute(
++        text(
++            "SELECT purged_audit_id, purged_link_id, activity_id "
++            "FROM purge_invalid_object_links(:audit_ids, :actor_id, :reason)"
++        ),
++        {
++            "audit_ids": [chosen_audit_id],
++            "actor_id": sp_id,
++            "reason": "Purging archived and severed link via service principal",
++        },
++    )
++    purged = purge_res.mappings().all()
++    # Both audit rows are returned as closed
++    assert len(purged) == 2
++    assert {r["purged_audit_id"] for r in purged} == {chosen_audit_id, sibling_audit_id}
++    assert all(r["purged_link_id"] == link_id for r in purged)
++
++    # Verify link is deleted
++    link_rem = await db_session.execute(
++        text("SELECT count(*) FROM object_links WHERE id = :id"),
++        {"id": link_id},
++    )
++    assert link_rem.scalar_one() == 0
++
++    # Verify BOTH audits are marked as purged
++    surv_rows = await db_session.execute(
++        text(
++            "SELECT id, purged_at, purged_by_id, purge_reason "
++            "FROM invalid_object_link_audits WHERE link_id = :lid"
++        ),
++        {"lid": link_id},
++    )
++    for r in surv_rows.mappings().all():
++        assert r["purged_at"] is not None
++        assert r["purged_by_id"] == sp_id
++        assert r["purge_reason"] == "Purging archived and severed link via service principal"
++
++    # Exactly 1 activity record created for this link
++    acts = await db_session.execute(
++        text(
++            "SELECT id, event_type, actor_id, payload FROM activity_records "
++            "WHERE workspace_id = :ws AND event_type = 'INVALID_OBJECT_LINK_PURGED'"
++        ),
++        {"ws": ws_id},
++    )
++    act_list = acts.mappings().all()
++    assert len(act_list) == 1
++    assert act_list[0]["actor_id"] == sp_id
++    payload = act_list[0]["payload"]
++    assert set(payload["reasons"]) == {"ARCHIVED_POLICY_VIOLATION", "PERMISSION_SEVERED"}
++
++
++async def test_03_security_bypass_and_role_checks(db_session: AsyncSession) -> None:
++    """Case 3: Direct DELETE guard, ACTIVE deletion, role boundaries, actor match, RLS context."""
++    ws_id = await _create_workspace(db_session)
++    admin_id = await _create_user(db_session, ws_id, display_name="Admin")
++    member_id = await _create_user(db_session, ws_id, display_name="Member")
++    proj_admin_id = await _create_user(db_session, ws_id, display_name="Proj Admin")
++
++    await _assign_role(db_session, ws_id, admin_id, "WORKSPACE_ADMIN")
++    await _assign_role(db_session, ws_id, member_id, "WORKSPACE_MEMBER")
++
++    proj_id = await _create_project(db_session, ws_id, identifier="SEC")
++    await _assign_role(
++        db_session, ws_id, proj_admin_id, "PROJECT_ADMIN", scope_type="project", project_id=proj_id
++    )
++
++    st_res = await db_session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"),
++        {"p": proj_id},
++    )
++    st_id = st_res.scalar_one()
++
++    iss1 = await _create_issue(db_session, ws_id, proj_id, st_id, admin_id, summary="Iss 1")
++    iss2 = await _create_issue(db_session, ws_id, proj_id, st_id, admin_id, summary="Iss 2")
++    iss3 = await _create_issue(db_session, ws_id, proj_id, st_id, admin_id, summary="Iss 3")
++
++    link_active = await _create_link(
++        db_session, ws_id, iss1, "issue", iss2, "issue", "BLOCKS", admin_id
++    )
++    link_flagged = await _create_link(
++        db_session, ws_id, iss2, "issue", iss3, "issue", "BLOCKS", admin_id
++    )
++
++    # Sub-case 3a: Flag link_flagged
++    await db_session.execute(
++        text("UPDATE object_links SET link_state = 'FLAGGED_INVALID' WHERE id = :id"),
++        {"id": link_flagged},
++    )
++
++    # Direct DELETE on FLAGGED_INVALID raises FLAGGED_LINK_REQUIRES_AUDITED_PURGE
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("DELETE FROM object_links WHERE id = :id"),
++                {"id": link_flagged},
++            )
++    assert "FLAGGED_LINK_REQUIRES_AUDITED_PURGE" in str(exc_info.value)
++
++    # Direct DELETE on ACTIVE link succeeds
++    await db_session.execute(
++        text("DELETE FROM object_links WHERE id = :id"),
++        {"id": link_active},
++    )
++    assert (
++        await db_session.scalar(
++            text("SELECT count(*) FROM object_links WHERE id = :id"),
++            {"id": link_active},
++        )
++        == 0
++    )
++
++    # Create audit record for link_flagged so we can test purge_invalid_object_links
++    aud_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO invalid_object_link_audits ("
++            "  id, workspace_id, link_id, reason, link_snapshot"
++            ") VALUES (:id, :ws_id, :lid, 'ARCHIVED_POLICY_VIOLATION', '{\"test\": true}'::jsonb)"
++        ),
++        {"id": aud_id, "ws_id": ws_id, "lid": link_flagged},
++    )
++
++    # Sub-case 3b: WORKSPACE_MEMBER calling purge raises PURGE_FORBIDDEN
++    await bind_ctx(db_session, member_id, ws_id)
++    with pytest.raises(DBAPIError) as exc_member:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'reason text')"),
++                {"aids": [aud_id], "actor": member_id},
++            )
++    assert "PURGE_FORBIDDEN" in str(exc_member.value)
++
++    # Sub-case 3c: PROJECT_ADMIN calling purge raises PURGE_FORBIDDEN
++    await bind_ctx(db_session, proj_admin_id, ws_id)
++    with pytest.raises(DBAPIError) as exc_proj_admin:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'reason text')"),
++                {"aids": [aud_id], "actor": proj_admin_id},
++            )
++    assert "PURGE_FORBIDDEN" in str(exc_proj_admin.value)
++
++    # Sub-case 3d: Actor mismatch raises PURGE_ACTOR_MISMATCH
++    await bind_ctx(db_session, admin_id, ws_id)
++    with pytest.raises(DBAPIError) as exc_mismatch:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'reason text')"),
++                {"aids": [aud_id], "actor": member_id},
++            )
++    assert "PURGE_ACTOR_MISMATCH" in str(exc_mismatch.value)
++
++    # Sub-case 3e: Missing RLS context raises RLS_CONTEXT_REQUIRED
++    await bind_ctx(db_session, None, None)
++    with pytest.raises(DBAPIError) as exc_rls:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'reason text')"),
++                {"aids": [aud_id], "actor": admin_id},
++            )
++    assert "RLS_CONTEXT_REQUIRED" in str(exc_rls.value)
++
++
++async def test_04_active_link_refusal_and_replay(db_session: AsyncSession) -> None:
++    """Case 4: Tampering link_state to ACTIVE aborts purge; replay and resolved audits rejected."""
++    ws_id = await _create_workspace(db_session)
++    admin_id = await _create_user(db_session, ws_id, display_name="Admin")
++    await _assign_role(db_session, ws_id, admin_id, "WORKSPACE_ADMIN")
++
++    proj_id = await _create_project(db_session, ws_id, identifier="ACT")
++    st_res = await db_session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"),
++        {"p": proj_id},
++    )
++    st_id = st_res.scalar_one()
++
++    iss1 = await _create_issue(db_session, ws_id, proj_id, st_id, admin_id, summary="Iss 1")
++    iss2 = await _create_issue(db_session, ws_id, proj_id, st_id, admin_id, summary="Iss 2")
++    link_id = await _create_link(
++        db_session, ws_id, iss1, "issue", iss2, "issue", "BLOCKS", admin_id
++    )
++
++    # Create audit row while link is ACTIVE (simulating tampered state)
++    aud_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO invalid_object_link_audits ("
++            "  id, workspace_id, link_id, reason, link_snapshot"
++            ") VALUES (:id, :ws_id, :lid, 'ARCHIVED_POLICY_VIOLATION', '{\"test\": true}'::jsonb)"
++        ),
++        {"id": aud_id, "ws_id": ws_id, "lid": link_id},
++    )
++
++    await bind_ctx(db_session, admin_id, ws_id)
++
++    # Sub-case 4a: Link is ACTIVE -> PURGE_ACTIVE_LINK_REFUSED, zero rows deleted
++    with pytest.raises(DBAPIError) as exc_active:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'Purge attempt')"),
++                {"aids": [aud_id], "actor": admin_id},
++            )
++    assert "PURGE_ACTIVE_LINK_REFUSED" in str(exc_active.value)
++    assert (
++        await db_session.scalar(
++            text("SELECT count(*) FROM object_links WHERE id = :id"),
++            {"id": link_id},
++        )
++        == 1
++    )
++
++    # Flag the link properly
++    await db_session.execute(
++        text("UPDATE object_links SET link_state = 'FLAGGED_INVALID' WHERE id = :id"),
++        {"id": link_id},
++    )
++
++    # Valid purge succeeds
++    purge_first = await db_session.execute(
++        text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'First purge')"),
++        {"aids": [aud_id], "actor": admin_id},
++    )
++    assert len(purge_first.mappings().all()) == 1
++
++    # Sub-case 4b: Replay with already-purged audit -> PURGE_ALREADY_EXECUTED
++    with pytest.raises(DBAPIError) as exc_replay:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'Replay purge')"),
++                {"aids": [aud_id], "actor": admin_id},
++            )
++    assert "PURGE_ALREADY_EXECUTED" in str(exc_replay.value)
++
++    # Sub-case 4c: Resolved audit -> PURGE_AUDIT_RESOLVED
++    link2 = await _create_link(
++        db_session, ws_id, iss1, "issue", iss2, "issue", "RELATES_TO", admin_id
++    )
++    await db_session.execute(
++        text("UPDATE object_links SET link_state = 'FLAGGED_INVALID' WHERE id = :id"),
++        {"id": link2},
++    )
++    aud2_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO invalid_object_link_audits ("
++            "  id, workspace_id, link_id, reason, link_snapshot, resolved_at"
++            ") VALUES ("
++            "  :id, :ws_id, :lid, 'ARCHIVED_POLICY_VIOLATION', '{\"test\": true}'::jsonb, "
++            "  clock_timestamp()"
++            ")"
++        ),
++        {"id": aud2_id, "ws_id": ws_id, "lid": link2},
++    )
++
++    with pytest.raises(DBAPIError) as exc_resolved:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'Purge resolved')"),
++                {"aids": [aud2_id], "actor": admin_id},
++            )
++    assert "PURGE_AUDIT_RESOLVED" in str(exc_resolved.value)
++
++    # Sub-case 4d: Unknown audit ID -> PURGE_AUDIT_NOT_FOUND
++    with pytest.raises(DBAPIError) as exc_not_found:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'Purge unknown')"),
++                {"aids": [uuid.uuid4()], "actor": admin_id},
++            )
++    assert "PURGE_AUDIT_NOT_FOUND" in str(exc_not_found.value)
++
++    # Sub-case 4e: Cross-workspace audit ID -> PURGE_AUDIT_NOT_FOUND
++    ws2_id = await _create_workspace(db_session)
++    aud_ws2 = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO invalid_object_link_audits ("
++            "  id, workspace_id, link_id, reason, link_snapshot"
++            ") VALUES (:id, :ws_id, :lid, 'ARCHIVED_POLICY_VIOLATION', '{\"test\": true}'::jsonb)"
++        ),
++        {"id": aud_ws2, "ws_id": ws2_id, "lid": link2},
++    )
++
++    with pytest.raises(DBAPIError) as exc_cross_ws:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'Cross ws purge')"),
++                {"aids": [aud_ws2], "actor": admin_id},
++            )
++    assert "PURGE_AUDIT_NOT_FOUND" in str(exc_cross_ws.value)
++
++
++async def test_05_boundary_conditions(db_session: AsyncSession) -> None:
++    """Case 5: Array boundaries, reason boundaries (<3, >1000), duplicate deduplication."""
++    ws_id = await _create_workspace(db_session)
++    admin_id = await _create_user(db_session, ws_id, display_name="Admin")
++    await _assign_role(db_session, ws_id, admin_id, "WORKSPACE_ADMIN")
++
++    proj_id = await _create_project(db_session, ws_id, identifier="BND")
++    st_res = await db_session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"),
++        {"p": proj_id},
++    )
++    st_id = st_res.scalar_one()
++
++    iss1 = await _create_issue(db_session, ws_id, proj_id, st_id, admin_id, summary="Iss 1")
++    iss2 = await _create_issue(db_session, ws_id, proj_id, st_id, admin_id, summary="Iss 2")
++    link_id = await _create_link(
++        db_session, ws_id, iss1, "issue", iss2, "issue", "BLOCKS", admin_id
++    )
++    await db_session.execute(
++        text("UPDATE object_links SET link_state = 'FLAGGED_INVALID' WHERE id = :id"),
++        {"id": link_id},
++    )
++
++    aud_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO invalid_object_link_audits ("
++            "  id, workspace_id, link_id, reason, link_snapshot"
++            ") VALUES (:id, :ws_id, :lid, 'ARCHIVED_POLICY_VIOLATION', '{\"test\": true}'::jsonb)"
++        ),
++        {"id": aud_id, "ws_id": ws_id, "lid": link_id},
++    )
++
++    await bind_ctx(db_session, admin_id, ws_id)
++
++    # 1. Empty array -> PURGE_AUDIT_IDS_INVALID
++    with pytest.raises(DBAPIError) as exc_empty:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "SELECT * FROM purge_invalid_object_links('{}'::uuid[], :actor, 'Valid reason')"
++                ),
++                {"actor": admin_id},
++            )
++    assert "PURGE_AUDIT_IDS_INVALID" in str(exc_empty.value)
++
++    # 2. Array containing NULL -> PURGE_AUDIT_IDS_INVALID
++    with pytest.raises(DBAPIError) as exc_null_item:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "SELECT * FROM purge_invalid_object_links("
++                    "  ARRAY[:id, NULL]::uuid[], :actor, 'Valid reason'"
++                    ")"
++                ),
++                {"id": aud_id, "actor": admin_id},
++            )
++    assert "PURGE_AUDIT_IDS_INVALID" in str(exc_null_item.value)
++
++    # 3. Whitespace-only reason -> PURGE_REASON_REQUIRED
++    with pytest.raises(DBAPIError) as exc_ws_reason:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, '   ')"),
++                {"aids": [aud_id], "actor": admin_id},
++            )
++    assert "PURGE_REASON_REQUIRED" in str(exc_ws_reason.value)
++
++    # 4. Reason too short (2 chars) -> PURGE_REASON_REQUIRED
++    with pytest.raises(DBAPIError) as exc_short:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'ab')"),
++                {"aids": [aud_id], "actor": admin_id},
++            )
++    assert "PURGE_REASON_REQUIRED" in str(exc_short.value)
++
++    # 5. Reason too long (>1000 chars) -> PURGE_REASON_REQUIRED
++    with pytest.raises(DBAPIError) as exc_long:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT * FROM purge_invalid_object_links(:aids, :actor, :reason)"),
++                {"aids": [aud_id], "actor": admin_id, "reason": "x" * 1001},
++            )
++    assert "PURGE_REASON_REQUIRED" in str(exc_long.value)
++
++    # 6. Duplicate IDs in array are deduplicated deterministically and succeed
++    res_dedup = await db_session.execute(
++        text("SELECT * FROM purge_invalid_object_links(:aids, :actor, 'Valid deduplicated purge')"),
++        {"aids": [aud_id, aud_id], "actor": admin_id},
++    )
++    rows = res_dedup.mappings().all()
++    assert len(rows) == 1
++    assert rows[0]["purged_audit_id"] == aud_id
++
++
++async def test_06_verify_catalog_gate_remains_clean(db_session: AsyncSession) -> None:
++    """Case 6: Verify FORCE RLS, trigger presence, security definer catalog status."""
++    # Verify purge_invalid_object_links function signature and security properties
++    proc_info = await db_session.execute(
++        text(
++            "SELECT p.prosecdef, p.provolatile, n.nspname "
++            "FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
++            "WHERE n.nspname = 'public' AND p.proname = 'purge_invalid_object_links'"
++        )
++    )
++    p_row = proc_info.mappings().one()
++    assert p_row["prosecdef"] is True
++    assert p_row["provolatile"] in ("v", b"v")  # VOLATILE
++
++    # Verify execution permission granted to kanban_app
++    has_perm = await db_session.scalar(
++        text(
++            "SELECT has_function_privilege("
++            "  'kanban_app', 'purge_invalid_object_links(uuid[], uuid, text)', 'EXECUTE'"
++            ")"
++        )
++    )
++    assert has_perm is True
++
++    # Verify trigger exists on object_links
++    trg = await db_session.execute(
++        text(
++            "SELECT tgname FROM pg_trigger "
++            "WHERE tgname = 'object_links_flagged_delete_guard_bd_trg' AND NOT tgisinternal"
++        )
++    )
++    assert len(trg.mappings().all()) == 1
++
++    # Verify invalid_object_link_audits FORCE RLS remains enabled
++    rls = await db_session.execute(
++        text(
++            "SELECT c.relrowsecurity, c.relforcerowsecurity "
++            "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
++            "WHERE n.nspname = 'public' AND c.relname = 'invalid_object_link_audits'"
++        )
++    )
++    r_row = rls.mappings().one()
++    assert r_row["relrowsecurity"] is True
++    assert r_row["relforcerowsecurity"] is True
+diff --git a/docs/qa/KANBA-53/alembic-heads.txt b/docs/qa/KANBA-53/alembic-heads.txt
+new file mode 100644
+index 0000000..c3a10da
+--- /dev/null
++++ b/docs/qa/KANBA-53/alembic-heads.txt
+@@ -0,0 +1 @@
++p1_16_link_purger (head)
+diff --git a/docs/qa/KANBA-53/build-check.txt b/docs/qa/KANBA-53/build-check.txt
+new file mode 100644
+index 0000000..15f0930
+--- /dev/null
++++ b/docs/qa/KANBA-53/build-check.txt
+@@ -0,0 +1,42 @@
++=== 1. ruff check database ===
++All checks passed!
++EXIT CODE: 0
++
++=== 2. ruff format --check database ===
++71 files already formatted
++EXIT CODE: 0
++
++=== 3. mypy --strict database ===
++Success: no issues found in 69 source files
++EXIT CODE: 0
++
++=== 4. lint-imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 131 files, 188 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++EXIT CODE: 0
++
++=== 5. check_no_dashes ===
++EXIT CODE: 0
++
++=== 6. license_gate ===
++SUMMARY python=92 node=1 violations=0
++EXIT CODE: 0
+diff --git a/docs/qa/KANBA-53/message-to-reality-checker.md b/docs/qa/KANBA-53/message-to-reality-checker.md
+new file mode 100644
+index 0000000..3cabe08
+--- /dev/null
++++ b/docs/qa/KANBA-53/message-to-reality-checker.md
+@@ -0,0 +1,53 @@
++# Reality-Checker Verification Packet: KANBA-53 (KB-P1-16)
++
++## Ticket Metadata
++- Ticket ID: `KANBA-53`
++- Spec Key: `KB-P1-16`
++- Title: `[Phase 1 / Database] purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger entry`
++- Epic: `KB-E1` (Phase 1 Database Architecture)
++- Spec Sections: `12.3` (`purge_invalid_object_links(p_audit_ids UUID[], p_actor_id UUID, p_reason TEXT)`, `INVALID_OBJECT_LINK_PURGED` activity event), `11.4` (tool 11 `audit_and_purge_object_links`), Requirement `#13j`
++- Dependencies: `KB-P1-15` (`link_auditor`), `KB-P1-12` (`activity_ledger`)
++- Gate: `reality-checker` (Passive Forensic Mode)
++
++---
++
++## User Story
++As a **Workspace or Server Administrator**, I need **`purge_invalid_object_links(p_audit_ids, p_actor_id, p_reason)` that verifies admin privileges, deletes ONLY `FLAGGED_INVALID` links backed by open audit snapshots, stamps the audit rows as purged, blocks raw un-audited `DELETE`s of flagged links, and appends `INVALID_OBJECT_LINK_PURGED` to `activity_records`** so that **invalid graph edges can be cleaned up with a permanent cryptographic audit trail while `ACTIVE` links can never be accidentally purged**.
++
++---
++
++## Scoped Definition of Done Checklist
++- [x] **File Existence & Implementation:** `p1_16_link_purger.py`, `p1_16_link_purger.up.sql`, `p1_16_link_purger.down.sql` exist and define `purge_invalid_object_links`, `object_links_flagged_delete_guard_bd`, `PURGE_FORBIDDEN`, `PURGE_ACTIVE_LINK_REFUSED`, `FLAGGED_LINK_REQUIRES_AUDITED_PURGE`, and `INVALID_OBJECT_LINK_PURGED`.
++- [x] **Direct-Delete Guard:** Trigger `object_links_flagged_delete_guard_bd_trg` on `BEFORE DELETE ON object_links` raises `FLAGGED_LINK_REQUIRES_AUDITED_PURGE` if `link_state = 'FLAGGED_INVALID'` and `kb.in_audited_purge` is not `'on'`. `ACTIVE` links remain deletable through standard operations.
++- [x] **Fail-Closed Validation:** Validates `p_audit_ids` (1-1000 items, non-null, deduplicated preserving UUID sort order), `p_reason` (3-1000 characters post-trim), session RLS context (`RLS_CONTEXT_REQUIRED`), actor identity match (`PURGE_ACTOR_MISMATCH`), and role authorization (`SERVER_ADMIN` or `WORKSPACE_ADMIN`, else `PURGE_FORBIDDEN`).
++- [x] **Audit and Link Locking:** Acquires deterministic `FOR UPDATE` row locks on `invalid_object_link_audits` and `object_links`. Aborts with `PURGE_AUDIT_NOT_FOUND` if count mismatches or workspace differs, `PURGE_ALREADY_EXECUTED` if already purged, `PURGE_AUDIT_RESOLVED` if resolved, `PURGE_LINK_MISSING` if missing from links table, and `PURGE_ACTIVE_LINK_REFUSED` if `link_state <> 'FLAGGED_INVALID'`.
++- [x] **Audited Deletion and Ledger:** Executes `DELETE FROM object_links` under session GUC `kb.in_audited_purge = 'on'`, stamps all open audit rows on deleted links with `purged_at`, `purged_by_id`, `purge_reason` (including sibling open audit reasons), determines activity anchor from surviving endpoints, and calls `append_activity` with `INVALID_OBJECT_LINK_PURGED`.
++- [x] **Single Head:** `uv run alembic -c database/alembic.ini heads` prints exactly one head: `p1_16_link_purger (head)`.
++- [x] **Unit Tests Passing:** `uv run pytest database/tests/test_p1_16_link_purger.py database/tests/migrations/test_p1_16_migration.py -q --cov=database --cov-branch --cov-report=term-missing` passes 7/7 tests with 100% coverage on touched modules (`p1_16_link_purger.py: 100%`, `test_p1_16_link_purger.py: 100%`, `test_p1_16_migration.py: 100%`).
++- [x] **Static Analysis Clean:** `uv run ruff check database && uv run ruff format --check database && uv run mypy --strict database` exits code 0 across 69 source files.
++- [x] **No Forbidden Unicode Dashes:** Repository passes `scripts.check_no_dashes --all` with zero violations.
++- [x] **License Gate Clean:** `make license` passes with 0 violations.
++
++---
++
++## Technical Actions & Implementation Matrix
++
++| Component | Target Location | Description |
++| :--- | :--- | :--- |
++| **Alembic Migration** | `database/migrations/versions/p1_16_link_purger.py` | Migration revision chaining from `p1_15_link_auditor` to `p1_16_link_purger`. |
++| **Delete Guard Trigger** | `database/migrations/sql/p1_16_link_purger.up.sql` | `object_links_flagged_delete_guard_bd` before-delete trigger rejecting raw deletion of `FLAGGED_INVALID` links without `kb.in_audited_purge = 'on'`. |
++| **Purge Function** | `database/migrations/sql/p1_16_link_purger.up.sql` | `purge_invalid_object_links(uuid[], uuid, text)` volatile security definer function returning table of `(purged_audit_id, purged_link_id, activity_id)`. |
++| **Down Migration** | `database/migrations/sql/p1_16_link_purger.down.sql` | Drops function, trigger, and trigger function cleanly. |
++| **Feature Unit Tests** | `database/tests/test_p1_16_link_purger.py` | 6 comprehensive test cases covering positive two-link purge, sibling closure, service principal authorization, direct delete guard, active link refusal, replay protection, boundary conditions, and catalog integrity. |
++| **Migration Lifecycle Tests** | `database/tests/migrations/test_p1_16_migration.py` | Upgrade, downgrade, and re-upgrade lifecycle verification via `MigrationHarness`. |
++
++---
++
++## Forensic Artifacts in `docs/qa/KANBA-53/`
++1. `git-diff.patch`: Complete unified `git diff` for this ticket.
++2. `unit-test-results.txt`: Full output and exit code of `pytest database/tests/test_p1_16_link_purger.py database/tests/migrations/test_p1_16_migration.py -q --cov=database --cov-branch --cov-report=term-missing` (7 passed in 1.55s, 100% coverage on touched modules, EXIT_CODE=0).
++3. `build-check.txt`: Full output of `ruff check database && ruff format --check database && mypy --strict database` (all checks passed, 71 files checked, 69 source files clean, EXIT_CODE=0).
++4. `alembic-heads.txt`: Output of `alembic heads` showing single head `p1_16_link_purger (head)`.
++5. `schema-dump.sql`: Complete PostgreSQL `\sf` definitions of `purge_invalid_object_links` and `object_links_flagged_delete_guard_bd`.
++6. `purge-ledger-sample.txt`: Verified execution output showing return rows from `purge_invalid_object_links`, surviving stamped audit rows, `INVALID_OBJECT_LINK_PURGED` records in `activity_records`, and valid cryptographic activity chain verification.
++7. `message-to-reality-checker.md`: This forensic sign-off document.
+diff --git a/docs/qa/KANBA-53/purge-ledger-sample.txt b/docs/qa/KANBA-53/purge-ledger-sample.txt
+new file mode 100644
+index 0000000..e829835
+--- /dev/null
++++ b/docs/qa/KANBA-53/purge-ledger-sample.txt
+@@ -0,0 +1,60 @@
++=== PURGE_INVALID_OBJECT_LINKS RETURN ROWS ===
++{'purged_audit_id': UUID('01a1ce0b-162c-72b9-a48d-537d8de9cd55'), 'purged_link_id': UUID('01a1ce0b-1628-791f-811e-529bb1096711'), 'activity_id': UUID('01a1ce0b-163a-7065-87eb-43f93eb85942')}
++{'purged_audit_id': UUID('01a1ce0b-1633-7773-bc1a-f35428a9bce7'), 'purged_link_id': UUID('01a1ce0b-1629-7868-8b24-0319f1688462'), 'activity_id': UUID('01a1ce0b-163c-7818-b25c-8b3ccfcd5518')}
++
++=== SURVIVING INVALID_OBJECT_LINK_AUDITS ROWS ===
++{'id': UUID('01a1ce0b-162c-72b9-a48d-537d8de9cd55'), 'link_id': UUID('01a1ce0b-1628-791f-811e-529bb1096711'), 'reason': 'ARCHIVED_POLICY_VIOLATION', 'detected_at': datetime.datetime(2026, 11, 12, 4, 36, 35, 498670, tzinfo=datetime.timezone.utc), 'purged_at': datetime.datetime(2026, 11, 12, 4, 36, 35, 513900, tzinfo=datetime.timezone.utc), 'purged_by_id': UUID('dab2e0d4-fb45-4d89-8594-6a7e99ff31ab'), 'purge_reason': 'Cleanup archived blockers'}
++{'id': UUID('01a1ce0b-1633-7773-bc1a-f35428a9bce7'), 'link_id': UUID('01a1ce0b-1629-7868-8b24-0319f1688462'), 'reason': 'DANGLING_SOURCE', 'detected_at': datetime.datetime(2026, 11, 12, 4, 36, 35, 506296, tzinfo=datetime.timezone.utc), 'purged_at': datetime.datetime(2026, 11, 12, 4, 36, 35, 516134, tzinfo=datetime.timezone.utc), 'purged_by_id': UUID('dab2e0d4-fb45-4d89-8594-6a7e99ff31ab'), 'purge_reason': 'Cleanup archived blockers'}
++
++=== ACTIVITY_RECORDS (INVALID_OBJECT_LINK_PURGED) ===
++{
++  "id": "01a1ce0b-163a-7065-87eb-43f93eb85942",
++  "workspace_id": "01a1ce0b-160a-7a8e-b5ce-7d4ec57a99f8",
++  "chain_seq": 1,
++  "event_type": "INVALID_OBJECT_LINK_PURGED",
++  "actor_id": "dab2e0d4-fb45-4d89-8594-6a7e99ff31ab",
++  "object_id": "01a1ce0b-161c-78b1-815a-4d6a6746ec47",
++  "object_type": "issue",
++  "payload": {
++    "link_id": "01a1ce0b-1628-791f-811e-529bb1096711",
++    "reasons": [
++      "ARCHIVED_POLICY_VIOLATION"
++    ],
++    "audit_ids": [
++      "01a1ce0b-162c-72b9-a48d-537d8de9cd55"
++    ],
++    "purge_reason": "Cleanup archived blockers",
++    "source_key_snapshot": "PRJ-1",
++    "target_key_snapshot": "PRJ-2"
++  },
++  "recorded_at": "2026-11-12 04:36:35.514697+00:00",
++  "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
++  "row_hash": "fa9e3fe8fe6467d707250ae26c2bdb7dab10fc8a6245acbd740c7e7b5e194dfb"
++}
++{
++  "id": "01a1ce0b-163c-7818-b25c-8b3ccfcd5518",
++  "workspace_id": "01a1ce0b-160a-7a8e-b5ce-7d4ec57a99f8",
++  "chain_seq": 2,
++  "event_type": "INVALID_OBJECT_LINK_PURGED",
++  "actor_id": "dab2e0d4-fb45-4d89-8594-6a7e99ff31ab",
++  "object_id": "01a1ce0b-1627-7d68-9b71-c452c63bfbc7",
++  "object_type": "issue",
++  "payload": {
++    "link_id": "01a1ce0b-1629-7868-8b24-0319f1688462",
++    "reasons": [
++      "DANGLING_SOURCE"
++    ],
++    "audit_ids": [
++      "01a1ce0b-1633-7773-bc1a-f35428a9bce7"
++    ],
++    "purge_reason": "Cleanup archived blockers",
++    "source_key_snapshot": "PRJ-DNG",
++    "target_key_snapshot": "PRJ-3"
++  },
++  "recorded_at": "2026-11-12 04:36:35.516411+00:00",
++  "prev_hash": "fa9e3fe8fe6467d707250ae26c2bdb7dab10fc8a6245acbd740c7e7b5e194dfb",
++  "row_hash": "47ffea5c6746aace288c46419a57fdb165cde793fc9a89dea28cec62ccbf19f5"
++}
++
++=== VERIFY_ACTIVITY_CHAIN ===
++{'is_valid': True, 'checked_rows': 2, 'first_broken_seq': None}
+diff --git a/docs/qa/KANBA-53/schema-dump.sql b/docs/qa/KANBA-53/schema-dump.sql
+new file mode 100644
+index 0000000..540b5f2
+--- /dev/null
++++ b/docs/qa/KANBA-53/schema-dump.sql
+@@ -0,0 +1,206 @@
++-- \sf purge_invalid_object_links
++CREATE OR REPLACE FUNCTION public.purge_invalid_object_links(p_audit_ids uuid[], p_actor_id uuid, p_reason text)
++ RETURNS TABLE(purged_audit_id uuid, purged_link_id uuid, activity_id uuid)
++ LANGUAGE plpgsql
++ SECURITY DEFINER
++ SET search_path TO 'pg_catalog', 'public'
++AS $function$
++#variable_conflict use_column
++DECLARE
++    v_sorted_ids uuid[];
++    v_session_actor uuid;
++    v_ws uuid;
++    v_audit_count integer;
++    v_link_ids uuid[];
++    v_link_count integer;
++    v_rec record;
++    v_obj_id uuid;
++    v_obj_type object_kind;
++    v_audit_ids_for_link jsonb;
++    v_reasons_for_link jsonb;
++    v_act_id uuid;
++    v_aud_id uuid;
++BEGIN
++    -- 1. Validation & Authorization (fail-closed before mutating any row)
++    IF p_audit_ids IS NULL
++       OR coalesce(array_length(p_audit_ids, 1), 0) < 1
++       OR coalesce(array_length(p_audit_ids, 1), 0) > 1000
++       OR array_position(p_audit_ids, NULL) IS NOT NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_AUDIT_IDS_INVALID';
++    END IF;
++
++    -- Deduplicate p_audit_ids preserving deterministic UUID sort order
++    SELECT array_agg(DISTINCT u ORDER BY u)
++    INTO v_sorted_ids
++    FROM unnest(p_audit_ids) AS u;
++
++    IF p_reason IS NULL
++       OR char_length(btrim(p_reason)) < 3
++       OR char_length(btrim(p_reason)) > 1000 THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_REASON_REQUIRED';
++    END IF;
++
++    v_session_actor := app_current_principal_id();
++    v_ws := app_current_workspace_id();
++    IF v_session_actor IS NULL OR v_ws IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'RLS_CONTEXT_REQUIRED';
++    END IF;
++
++    IF v_session_actor IS DISTINCT FROM p_actor_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_ACTOR_MISMATCH';
++    END IF;
++
++    IF NOT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_FORBIDDEN';
++    END IF;
++
++    -- 2. Lock invalid_object_link_audits rows matching id = ANY(v_sorted_ids) ordered by id FOR UPDATE
++    PERFORM 1
++    FROM invalid_object_link_audits a
++    WHERE a.id = ANY(v_sorted_ids)
++    ORDER BY a.id
++    FOR UPDATE;
++    GET DIAGNOSTICS v_audit_count = ROW_COUNT;
++
++    IF v_audit_count < cardinality(v_sorted_ids) OR EXISTS (
++        SELECT 1 FROM invalid_object_link_audits a
++        WHERE a.id = ANY(v_sorted_ids) AND a.workspace_id <> v_ws
++    ) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_AUDIT_NOT_FOUND';
++    END IF;
++
++    IF EXISTS (
++        SELECT 1 FROM invalid_object_link_audits a
++        WHERE a.id = ANY(v_sorted_ids) AND a.purged_at IS NOT NULL
++    ) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_ALREADY_EXECUTED';
++    END IF;
++
++    IF EXISTS (
++        SELECT 1 FROM invalid_object_link_audits a
++        WHERE a.id = ANY(v_sorted_ids) AND a.resolved_at IS NOT NULL
++    ) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_AUDIT_RESOLVED';
++    END IF;
++
++    -- 3. Lock corresponding object_links rows ordered by id FOR UPDATE
++    SELECT array_agg(DISTINCT a.link_id ORDER BY a.link_id)
++    INTO v_link_ids
++    FROM invalid_object_link_audits a
++    WHERE a.id = ANY(v_sorted_ids);
++
++    PERFORM 1
++    FROM object_links ol
++    WHERE ol.id = ANY(v_link_ids)
++    ORDER BY ol.id
++    FOR UPDATE;
++    GET DIAGNOSTICS v_link_count = ROW_COUNT;
++
++    IF v_link_count < cardinality(v_link_ids) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_LINK_MISSING';
++    END IF;
++
++    IF EXISTS (
++        SELECT 1 FROM object_links ol
++        WHERE ol.id = ANY(v_link_ids) AND ol.link_state <> 'FLAGGED_INVALID'
++    ) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PURGE_ACTIVE_LINK_REFUSED';
++    END IF;
++
++    -- 4. Delete flagged links under bypass setting
++    PERFORM set_config('kb.in_audited_purge', 'on', true);
++
++    -- Loop over links to collect metadata, delete, update audits, and record activity
++    FOR v_rec IN
++        SELECT ol.id, ol.source_id, ol.source_type, ol.target_id, ol.target_type,
++               ol.source_key_snapshot, ol.target_key_snapshot
++        FROM object_links ol
++        WHERE ol.id = ANY(v_link_ids)
++        ORDER BY ol.id
++    LOOP
++        DELETE FROM object_links WHERE id = v_rec.id;
++
++        -- 5. Update all open invalid_object_link_audits rows on this link
++        UPDATE invalid_object_link_audits
++        SET purged_at = clock_timestamp(),
++            purged_by_id = p_actor_id,
++            purge_reason = btrim(p_reason)
++        WHERE link_id = v_rec.id
++          AND purged_at IS NULL
++          AND resolved_at IS NULL;
++
++        -- 6. Determine activity anchor (v_obj_id, v_obj_type)
++        SELECT id, object_type INTO v_obj_id, v_obj_type
++        FROM objects
++        WHERE id = v_rec.source_id AND object_type = v_rec.source_type AND workspace_id = v_ws;
++
++        IF NOT FOUND THEN
++            SELECT id, object_type INTO v_obj_id, v_obj_type
++            FROM objects
++            WHERE id = v_rec.target_id AND object_type = v_rec.target_type AND workspace_id = v_ws;
++            IF NOT FOUND THEN
++                v_obj_id := NULL;
++                v_obj_type := NULL;
++            END IF;
++        END IF;
++
++        -- Aggregate audit_ids and reasons for this link
++        SELECT jsonb_agg(a.id ORDER BY a.id),
++               jsonb_agg(a.reason::text ORDER BY a.reason::text)
++        INTO v_audit_ids_for_link, v_reasons_for_link
++        FROM invalid_object_link_audits a
++        WHERE a.link_id = v_rec.id
++          AND a.purged_by_id = p_actor_id
++          AND a.purge_reason = btrim(p_reason);
++
++        v_act_id := append_activity(
++            v_ws,
++            v_obj_id,
++            v_obj_type,
++            p_actor_id,
++            'INVALID_OBJECT_LINK_PURGED',
++            jsonb_build_object(
++                'audit_ids', v_audit_ids_for_link,
++                'link_id', v_rec.id,
++                'reasons', v_reasons_for_link,
++                'purge_reason', btrim(p_reason),
++                'source_key_snapshot', v_rec.source_key_snapshot,
++                'target_key_snapshot', v_rec.target_key_snapshot
++            )
++        );
++
++        FOR v_aud_id IN
++            SELECT a.id FROM invalid_object_link_audits a
++            WHERE a.link_id = v_rec.id
++              AND a.purged_by_id = p_actor_id
++              AND a.purge_reason = btrim(p_reason)
++            ORDER BY a.id
++        LOOP
++            purged_audit_id := v_aud_id;
++            purged_link_id := v_rec.id;
++            activity_id := v_act_id;
++            RETURN NEXT;
++        END LOOP;
++    END LOOP;
++
++    PERFORM set_config('kb.in_audited_purge', '', true);
++
++    RETURN;
++END;
++$function$
++;
++
++-- \sf object_links_flagged_delete_guard_bd
++CREATE OR REPLACE FUNCTION public.object_links_flagged_delete_guard_bd()
++ RETURNS trigger
++ LANGUAGE plpgsql
++AS $function$
++BEGIN
++    IF OLD.link_state = 'FLAGGED_INVALID'
++       AND COALESCE(current_setting('kb.in_audited_purge', true), '') <> 'on' THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'FLAGGED_LINK_REQUIRES_AUDITED_PURGE';
++    END IF;
++    RETURN OLD;
++END;
++$function$
++;
+diff --git a/docs/qa/KANBA-53/unit-test-results.txt b/docs/qa/KANBA-53/unit-test-results.txt
+new file mode 100644
+index 0000000..c728a3f
+--- /dev/null
++++ b/docs/qa/KANBA-53/unit-test-results.txt
+@@ -0,0 +1,78 @@
++.......                                                                  [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                                       Stmts   Miss Branch BrPart  Cover   Missing
++------------------------------------------------------------------------------------------------------
++database/__init__.py                                           1      0      0      0   100%
++database/bootstrap/__init__.py                                25      2      6      3    84%   20, 22->24, 25
++database/migrations/__init__.py                                0      0      0      0   100%
++database/migrations/env.py                                    39      5      8      4    81%   14->17, 22-23, 29->32, 47-48, 73
++database/migrations/sqlfile.py                                19      4      4      2    74%   17-18, 22-23
++database/migrations/versions/__init__.py                       0      0      0      0   100%
++database/migrations/versions/p1_01_baseline.py                10      1      0      0    90%   26
++database/migrations/versions/p1_02_objects_spine.py           10      1      0      0    90%   26
++database/migrations/versions/p1_03_principals.py              10      1      0      0    90%   26
++database/migrations/versions/p1_04_projects.py                10      1      0      0    90%   26
++database/migrations/versions/p1_05_issues.py                  10      1      0      0    90%   26
++database/migrations/versions/p1_06_parent_dag.py              10      1      0      0    90%   26
++database/migrations/versions/p1_07_creator_provenance.py      10      1      0      0    90%   26
++database/migrations/versions/p1_08_planning_joins.py          10      1      0      0    90%   26
++database/migrations/versions/p1_09_prose_tables.py            10      1      0      0    90%   26
++database/migrations/versions/p1_10_views.py                   10      1      0      0    90%   26
++database/migrations/versions/p1_11_object_links.py            10      1      0      0    90%   26
++database/migrations/versions/p1_12_activity_ledger.py         10      1      0      0    90%   26
++database/migrations/versions/p1_13_access_control.py          10      1      0      0    90%   26
++database/migrations/versions/p1_14_force_rls.py               10      1      0      0    90%   26
++database/migrations/versions/p1_15_link_auditor.py            10      1      0      0    90%   26
++database/migrations/versions/p1_16_link_purger.py             10      0      0      0   100%
++database/testing/__init__.py                                   0      0      0      0   100%
++database/testing/pg_harness.py                               199     69     54     13    59%   49-50, 70-71, 75, 92-93, 113->exit, 114->113, 120-124, 136->147, 138->141, 142->145, 152-167, 177-186, 204-205, 223-224, 229-253, 259, 262, 268, 337, 352-366
++database/tests/__init__.py                                     0      0      0      0   100%
++database/tests/conftest.py                                    15      3      0      0    80%   30, 36-37
++database/tests/migration_harness.py                           88     15     12      6    79%   69, 73, 91, 95, 105, 107, 121-126, 130-134
++database/tests/migrations/__init__.py                          0      0      0      0   100%
++database/tests/migrations/test_p1_01_migration.py             65     65     12      0     0%   3-132
++database/tests/migrations/test_p1_02_migration.py             26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_03_migration.py             21     21      0      0     0%   3-69
++database/tests/migrations/test_p1_04_migration.py             25     25      0      0     0%   3-87
++database/tests/migrations/test_p1_05_migration.py             20     20      0      0     0%   3-59
++database/tests/migrations/test_p1_06_migration.py             28     28      0      0     0%   3-89
++database/tests/migrations/test_p1_07_migration.py             24     24      0      0     0%   3-83
++database/tests/migrations/test_p1_08_migration.py             21     21      0      0     0%   3-67
++database/tests/migrations/test_p1_09_migration.py             17     17      0      0     0%   3-53
++database/tests/migrations/test_p1_10_migration.py             26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_11_migration.py             27     27      0      0     0%   3-89
++database/tests/migrations/test_p1_12_migration.py             21     21      0      0     0%   3-72
++database/tests/migrations/test_p1_13_migration.py             26     26      0      0     0%   3-103
++database/tests/migrations/test_p1_14_migration.py             21     21      0      0     0%   3-72
++database/tests/migrations/test_p1_15_migration.py             30     30      0      0     0%   3-101
++database/tests/migrations/test_p1_16_migration.py             22      0      0      0   100%
++database/tests/test_harness_benchmark.py                       8      8      0      0     0%   3-19
++database/tests/test_p1_01_baseline.py                        109    109      2      0     0%   3-185
++database/tests/test_p1_02_objects.py                         145    145      0      0     0%   3-319
++database/tests/test_p1_03_principals.py                      196    196      8      0     0%   3-469
++database/tests/test_p1_04_projects.py                        161    161      4      0     0%   3-501
++database/tests/test_p1_05_issues.py                          192    192      0      0     0%   3-535
++database/tests/test_p1_05_sequence_concurrency.py             31     31      0      0     0%   3-75
++database/tests/test_p1_06_parent_concurrency.py               70     70      2      0     0%   3-197
++database/tests/test_p1_06_parent_dag.py                      178    178      2      0     0%   3-450
++database/tests/test_p1_07_creator_provenance.py              226    226      4      0     0%   3-622
++database/tests/test_p1_08_planning.py                        226    226      2      0     0%   3-806
++database/tests/test_p1_09_markdown_only_schema.py             20     20      4      0     0%   3-47
++database/tests/test_p1_09_prose.py                           272    272      2      0     0%   3-714
++database/tests/test_p1_10_views.py                           192    192      2      0     0%   3-571
++database/tests/test_p1_11_object_links.py                    167    167      4      0     0%   3-524
++database/tests/test_p1_12_activity_ledger.py                 218    218     10      0     0%   3-600
++database/tests/test_p1_12_chain_concurrency.py                27     27      2      0     0%   3-67
++database/tests/test_p1_13_access_control.py                  171    171      0      0     0%   3-569
++database/tests/test_p1_14_rls_catalog.py                      16     16      0      0     0%   3-56
++database/tests/test_p1_14_rls_policies.py                    235    235      6      0     0%   11-839
++database/tests/test_p1_15_link_auditor.py                    292    292      4      0     0%   3-930
++database/tests/test_p1_16_link_purger.py                     284      0      6      0   100%
++database/tests/test_pg_harness.py                            120    120      2      0     0%   3-224
++database/tests/test_smoke.py                                   3      3      0      0     0%   3-8
++database/tests/test_sqlfile.py                                22     22      0      0     0%   3-36
++------------------------------------------------------------------------------------------------------
++TOTAL                                                       4547   3808    162     28    17%
++7 passed in 1.55s
