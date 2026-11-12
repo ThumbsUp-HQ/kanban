@@ -1,0 +1,268 @@
+{
+  "ticket": "KANBA-99",
+  "exchanges": [
+    {
+      "name": "unsubscribe_204",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/issues/SUB-1/subscription",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 204,
+        "headers": {
+          "x-request-id": "4f6d530646d148c689b93da78a8835c8",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": null
+      }
+    },
+    {
+      "name": "subscribe_200",
+      "request": {
+        "method": "PUT",
+        "path": "/api/v1/issues/SUB-1/subscription",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "60",
+          "content-type": "application/json",
+          "x-request-id": "fc7becb221a548b288a663ae33136042",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "subscribed": true,
+          "muted_event_types": [],
+          "source": "manual"
+        }
+      }
+    },
+    {
+      "name": "mute_200",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/SUB-1/subscription",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "63",
+          "content-type": "application/json"
+        },
+        "body": {
+          "muted_event_types": [
+            "COMMENT_CREATED",
+            "ISSUE_STATE_CHANGED"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "99",
+          "content-type": "application/json",
+          "x-request-id": "ae94c974c42d4fd18b66d676679221c5",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "subscribed": true,
+          "muted_event_types": [
+            "COMMENT_CREATED",
+            "ISSUE_STATE_CHANGED"
+          ],
+          "source": "manual"
+        }
+      }
+    },
+    {
+      "name": "invalid_mute_422",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/SUB-1/subscription",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "41",
+          "content-type": "application/json"
+        },
+        "body": {
+          "muted_event_types": [
+            "PROJECT_CREATED"
+          ]
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "0f578195fd31406ca8f5bc1eb67dd89d",
+          "content-length": "234",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:EVENT_TYPE_NOT_MUTABLE",
+          "title": "Event Type Not Mutable",
+          "status": 422,
+          "code": "EVENT_TYPE_NOT_MUTABLE",
+          "detail": "Event type 'PROJECT_CREATED' cannot be muted",
+          "request_id": "0f578195fd31406ca8f5bc1eb67dd89d"
+        }
+      }
+    },
+    {
+      "name": "notifications_list_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/notifications?unread=true&limit=10",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "369",
+          "content-type": "application/json",
+          "x-request-id": "d85428e8b13f42d1bf89aba921cf5344",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "items": [
+            {
+              "id": "51c40664-8975-4a42-b5f4-7a5cc8837425",
+              "issue": {
+                "id": "01a1cfc1-c75e-7d91-aad3-29178e05a70e",
+                "key": "NOTIF-1",
+                "summary": "Notification Contract Issue"
+              },
+              "event_type": "COMMENT_CREATED",
+              "actor": {
+                "handle": null,
+                "display_name": null,
+                "redacted": true,
+                "label": "1 External Collaborator"
+              },
+              "created_at": "2026-11-12T12:35:45.677308Z",
+              "read_at": null
+            }
+          ],
+          "next_cursor": null
+        }
+      }
+    },
+    {
+      "name": "foreign_notification_read_404",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/notifications/51c40664-8975-4a42-b5f4-7a5cc8837425/read",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "318e6b67419940b28f30a5f3e009984b",
+          "content-length": "186",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Notification Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "detail": "Notification not found",
+          "request_id": "318e6b67419940b28f30a5f3e009984b"
+        }
+      }
+    }
+  ]
+}

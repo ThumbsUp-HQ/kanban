@@ -16,7 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.models.base import Base, LtreeType, ObjectKind, object_kind_pg_enum
@@ -171,9 +171,13 @@ class IssueSubscription(Base):
     )
     source: Mapped[str] = mapped_column(String, nullable=False)
     is_muted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    muted_event_types: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{}'")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
+    unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class IssueComment(Base):
