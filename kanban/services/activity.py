@@ -66,6 +66,7 @@ class ActivityEventType(StrEnum):
     ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
     ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
     ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
+    CREATOR_OVERRIDDEN = "CREATOR_OVERRIDDEN"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -78,6 +79,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.CREATOR_OVERRIDDEN: ActivityCategory.HISTORY,
     }
 )
 

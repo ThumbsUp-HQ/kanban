@@ -12,6 +12,7 @@ from datetime import date  # noqa: TC003  # Required at runtime by Pydantic
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from kanban.api.v1.schemas.issue_provenance import IssueProvenance  # noqa: TC001
 from kanban.security.access_manifest import AccessManifest  # noqa: TC001  # Pydantic runtime type
 
 
@@ -169,6 +170,7 @@ class IssueResponse(BaseModel):
     module_ids: list[uuid.UUID] = Field(default_factory=list)
     board_rank: str
     created_by_id: uuid.UUID
+    provenance: IssueProvenance
     access_manifest: AccessManifest
     capabilities: list[str]
 

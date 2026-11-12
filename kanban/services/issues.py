@@ -67,6 +67,7 @@ from kanban.security.permissions import (
 )
 from kanban.services.activity import ActivityEventType, JSONValue, record_activity
 from kanban.services.issue_keys import _ISSUE_KEY_RE, resolve_issue_ref
+from kanban.services.issue_provenance import build_issue_provenance
 from kanban.services.projects import get_project_or_404
 
 if TYPE_CHECKING:
@@ -542,6 +543,7 @@ async def serialize_issue(
 
     manifest = await build_access_manifest(session, caller, issue.id)
     caps = await evaluate_capabilities(session, caller, issue.id)
+    provenance = await build_issue_provenance(session, issue)
 
     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
 
@@ -563,6 +565,7 @@ async def serialize_issue(
         module_ids=module_ids,
         board_rank=issue.board_rank,
         created_by_id=issue.created_by_id,
+        provenance=provenance,
         access_manifest=manifest,
         capabilities=capabilities_to_names(caps),
     )

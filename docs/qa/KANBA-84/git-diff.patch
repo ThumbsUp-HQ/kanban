@@ -1,0 +1,2256 @@
+diff --git a/database/migrations/sql/p3_04_creator_override_reason.down.sql b/database/migrations/sql/p3_04_creator_override_reason.down.sql
+new file mode 100644
+index 0000000..3dc13bf
+--- /dev/null
++++ b/database/migrations/sql/p3_04_creator_override_reason.down.sql
+@@ -0,0 +1,65 @@
++-- Revert issues_creator_provenance_bu to p1_07 payload (KB-P3-04)
++
++CREATE OR REPLACE FUNCTION issues_creator_provenance_bu()
++RETURNS trigger
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_actor uuid;
++    v_target_ws uuid;
++BEGIN
++    IF NEW.original_created_by_id IS DISTINCT FROM OLD.original_created_by_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_PROVENANCE_IMMUTABLE';
++    END IF;
++
++    IF NEW.created_by_id IS NOT DISTINCT FROM OLD.created_by_id THEN
++        IF NEW.creator_modified_by_id IS DISTINCT FROM OLD.creator_modified_by_id
++           OR NEW.creator_modified_at IS DISTINCT FROM OLD.creator_modified_at THEN
++            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_PROVENANCE_IMMUTABLE';
++        END IF;
++        RETURN NEW;
++    END IF;
++
++    v_actor := app_current_principal_id();
++    IF v_actor IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'RLS_CONTEXT_REQUIRED';
++    END IF;
++
++    IF NOT app_principal_has_role(NEW.project_id, ARRAY['PROJECT_ADMIN','SERVER_ADMIN']) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_FORBIDDEN';
++    END IF;
++
++    IF NOT EXISTS (SELECT 1 FROM users WHERE id = v_actor) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_ACTOR_NOT_USER';
++    END IF;
++
++    SELECT workspace_id INTO v_target_ws FROM users WHERE id = NEW.created_by_id;
++    IF NOT FOUND OR v_target_ws <> NEW.workspace_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_WORKSPACE_MISMATCH';
++    END IF;
++
++    NEW.creator_modified_by_id := v_actor;
++    NEW.creator_modified_at := clock_timestamp();
++
++    UPDATE objects SET created_by_id = NEW.created_by_id WHERE id = NEW.id;
++
++    PERFORM append_activity(
++        NEW.workspace_id,
++        NEW.id,
++        'issue'::object_kind,
++        v_actor,
++        'CREATOR_OVERRIDDEN',
++        jsonb_build_object(
++            'from_user_id', OLD.created_by_id,
++            'to_user_id', NEW.created_by_id,
++            'original_created_by_id', OLD.original_created_by_id
++        )
++    );
++
++    RETURN NEW;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION issues_creator_provenance_bu() TO kanban_app;
+diff --git a/database/migrations/sql/p3_04_creator_override_reason.up.sql b/database/migrations/sql/p3_04_creator_override_reason.up.sql
+new file mode 100644
+index 0000000..80dd747
+--- /dev/null
++++ b/database/migrations/sql/p3_04_creator_override_reason.up.sql
+@@ -0,0 +1,68 @@
++-- Add reason and old/new creator IDs to CREATOR_OVERRIDDEN activity payload (KB-P3-04)
++
++CREATE OR REPLACE FUNCTION issues_creator_provenance_bu()
++RETURNS trigger
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_actor uuid;
++    v_target_ws uuid;
++BEGIN
++    IF NEW.original_created_by_id IS DISTINCT FROM OLD.original_created_by_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_PROVENANCE_IMMUTABLE';
++    END IF;
++
++    IF NEW.created_by_id IS NOT DISTINCT FROM OLD.created_by_id THEN
++        IF NEW.creator_modified_by_id IS DISTINCT FROM OLD.creator_modified_by_id
++           OR NEW.creator_modified_at IS DISTINCT FROM OLD.creator_modified_at THEN
++            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_PROVENANCE_IMMUTABLE';
++        END IF;
++        RETURN NEW;
++    END IF;
++
++    v_actor := app_current_principal_id();
++    IF v_actor IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'RLS_CONTEXT_REQUIRED';
++    END IF;
++
++    IF NOT app_principal_has_role(NEW.project_id, ARRAY['PROJECT_ADMIN','SERVER_ADMIN']) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_FORBIDDEN';
++    END IF;
++
++    IF NOT EXISTS (SELECT 1 FROM users WHERE id = v_actor) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_ACTOR_NOT_USER';
++    END IF;
++
++    SELECT workspace_id INTO v_target_ws FROM users WHERE id = NEW.created_by_id;
++    IF NOT FOUND OR v_target_ws <> NEW.workspace_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_WORKSPACE_MISMATCH';
++    END IF;
++
++    NEW.creator_modified_by_id := v_actor;
++    NEW.creator_modified_at := clock_timestamp();
++
++    UPDATE objects SET created_by_id = NEW.created_by_id WHERE id = NEW.id;
++
++    PERFORM append_activity(
++        NEW.workspace_id,
++        NEW.id,
++        'issue'::object_kind,
++        v_actor,
++        'CREATOR_OVERRIDDEN',
++        jsonb_build_object(
++            'from_user_id', OLD.created_by_id,
++            'to_user_id', NEW.created_by_id,
++            'old_created_by_id', OLD.created_by_id,
++            'new_created_by_id', NEW.created_by_id,
++            'original_created_by_id', OLD.original_created_by_id,
++            'reason', NULLIF(current_setting('app.override_reason', true), '')
++        )
++    );
++
++    RETURN NEW;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION issues_creator_provenance_bu() TO kanban_app;
+diff --git a/database/migrations/versions/p3_04_creator_override_reason.py b/database/migrations/versions/p3_04_creator_override_reason.py
+new file mode 100644
+index 0000000..a0ac608
+--- /dev/null
++++ b/database/migrations/versions/p3_04_creator_override_reason.py
+@@ -0,0 +1,26 @@
++"""Add reason and old/new creator IDs to CREATOR_OVERRIDDEN activity payload (KB-P3-04).
++
++Revision ID: p3_04_creator_override_reason
++Revises: p2_02_sessions
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p3_04_creator_override_reason"
++down_revision: str | None = "p2_02_sessions"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Update issues_creator_provenance_bu trigger function to record reason."""
++    execute_sql_file("p3_04_creator_override_reason.up.sql")
++
++
++def downgrade() -> None:
++    """Revert issues_creator_provenance_bu trigger function to p1_07 definition."""
++    execute_sql_file("p3_04_creator_override_reason.down.sql")
+diff --git a/database/tests/migrations/test_p3_04_migration.py b/database/tests/migrations/test_p3_04_migration.py
+new file mode 100644
+index 0000000..ccf6eaf
+--- /dev/null
++++ b/database/tests/migrations/test_p3_04_migration.py
+@@ -0,0 +1,52 @@
++"""Migration tests for p3_04_creator_override_reason up/down lifecycle."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_p3_04_creator_override_reason_lifecycle() -> None:
++    """Verify p3_04 upgrade updates trigger with reason, downgrade reverts, and re-upgrade."""
++    async with MigrationHarness() as harness:
++        assert harness.previous_of("p3_04_creator_override_reason") == "p2_02_sessions"
++
++        # 1. Upgrade to p3_04_creator_override_reason
++        await harness.upgrade("p3_04_creator_override_reason")
++
++        # Verify trigger function routine exists and contains 'app.override_reason'
++        rows_up = await harness.fetch(
++            "SELECT routine_definition FROM information_schema.routines "
++            "WHERE routine_schema = 'public' "
++            "  AND routine_name = 'issues_creator_provenance_bu'"
++        )
++        assert len(rows_up) == 1
++        defn_up = rows_up[0]["routine_definition"]
++        assert "app.override_reason" in defn_up
++        assert "old_created_by_id" in defn_up
++        assert "new_created_by_id" in defn_up
++
++        # 2. Downgrade to p2_02_sessions
++        prev_rev = harness.previous_of("p3_04_creator_override_reason")
++        await harness.downgrade(prev_rev)
++
++        rows_down = await harness.fetch(
++            "SELECT routine_definition FROM information_schema.routines "
++            "WHERE routine_schema = 'public' "
++            "  AND routine_name = 'issues_creator_provenance_bu'"
++        )
++        assert len(rows_down) == 1
++        defn_down = rows_down[0]["routine_definition"]
++        assert "app.override_reason" not in defn_down
++
++        # 3. Re-upgrade to p3_04_creator_override_reason succeeds
++        await harness.upgrade("p3_04_creator_override_reason")
++
++        rows_reup = await harness.fetch(
++            "SELECT routine_definition FROM information_schema.routines "
++            "WHERE routine_schema = 'public' "
++            "  AND routine_name = 'issues_creator_provenance_bu'"
++        )
++        assert len(rows_reup) == 1
++        defn_reup = rows_reup[0]["routine_definition"]
++        assert "app.override_reason" in defn_reup
+diff --git a/docs/qa/KANBA-84/activity-row-sample.json b/docs/qa/KANBA-84/activity-row-sample.json
+new file mode 100644
+index 0000000..6246d2c
+--- /dev/null
++++ b/docs/qa/KANBA-84/activity-row-sample.json
+@@ -0,0 +1,20 @@
++{
++  "id": "01a1ced2-b999-7dd3-921f-b4daef510f71",
++  "workspace_id": "01a1ced2-b864-78b4-a5c6-434e5009afd8",
++  "object_id": "01a1ced2-b921-71c8-9a89-0b57fd0acf7b",
++  "object_type": "issue",
++  "actor_id": "01a1ced2-b873-79c9-b69d-3bb0ea19a956",
++  "event_type": "CREATOR_OVERRIDDEN",
++  "chain_seq": 2,
++  "payload": {
++    "reason": "12345678901234567890",
++    "to_user_id": "01a1ced2-b890-7215-a93b-b9a72667c664",
++    "from_user_id": "01a1ced2-b887-7d50-869a-7fe89cb20f92",
++    "new_created_by_id": "01a1ced2-b890-7215-a93b-b9a72667c664",
++    "old_created_by_id": "01a1ced2-b887-7d50-869a-7fe89cb20f92",
++    "original_created_by_id": "01a1ced2-b887-7d50-869a-7fe89cb20f92"
++  },
++  "recorded_at": "2026-11-12T08:14:39.001299+00:00",
++  "prev_hash": "733d8f4ed6eb217ab3fa1033052729e2f5afc665d0241bdbf1d15303a39721da",
++  "row_hash": "95780dedba0258c8d7b3408c9035909b9226c1483fb66d02e3c850fdfa4e869f"
++}
+\ No newline at end of file
+diff --git a/docs/qa/KANBA-84/build-check.txt b/docs/qa/KANBA-84/build-check.txt
+new file mode 100644
+index 0000000..b12b20b
+--- /dev/null
++++ b/docs/qa/KANBA-84/build-check.txt
+@@ -0,0 +1,33 @@
++=== Ruff Check ===
++All checks passed!
++=== Ruff Format Check ===
++237 files already formatted
++=== Mypy Strict ===
++Success: no issues found in 233 source files
++=== Lint Imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 320 files, 703 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++mcp forbidden from importing database KEPT
++
++Contracts: 2 kept, 0 broken.
++=== Check No Unicode Dashes ===
++=== Make License ===
++uv run python -m scripts.license_gate
++SUMMARY python=110 node=1 violations=0
+diff --git a/docs/qa/KANBA-84/contract-sample.json b/docs/qa/KANBA-84/contract-sample.json
+new file mode 100644
+index 0000000..cc5c9e4
+--- /dev/null
++++ b/docs/qa/KANBA-84/contract-sample.json
+@@ -0,0 +1,436 @@
++{
++  "ticket": "KANBA-84",
++  "exchanges": [
++    {
++      "name": "override_creator_200",
++      "request": {
++        "method": "PATCH",
++        "path": "/api/v1/issues/PROV-1/created-by",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "61",
++          "content-type": "application/json"
++        },
++        "body": {
++          "created_by": "@new_creator",
++          "reason": "12345678901234567890"
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "2053",
++          "content-type": "application/json",
++          "etag": "\"f1bcb45139ff4ab37eb3c8a5f01ffe9ef80dfa272c478228113de18e75657c75\"",
++          "x-request-id": "31ae4dfab388440fbb521cb3c1bf0a13",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "id": "01a1ced1-e796-71d4-ba8e-b88f6180aebd",
++          "key": "PROV-1",
++          "summary": "Original issue summary",
++          "description_markdown": "# Provenance test",
++          "description_sha256": "f1bcb45139ff4ab37eb3c8a5f01ffe9ef80dfa272c478228113de18e75657c75",
++          "state": {
++            "id": "01a1ced1-e70e-7ef1-8a5f-03e210fc2cf2",
++            "name": "Backlog",
++            "group": "backlog"
++          },
++          "priority": {
++            "slug": "none",
++            "label": "None",
++            "emoji": null
++          },
++          "start_date": null,
++          "due_date": null,
++          "cycle_id": null,
++          "parent": null,
++          "labels": [],
++          "module_ids": [],
++          "board_rank": "a000001",
++          "created_by_id": "01a1ced1-e706-73a9-84b9-c5e3c15ec3b2",
++          "provenance": {
++            "created_by": {
++              "id": "01a1ced1-e706-73a9-84b9-c5e3c15ec3b2",
++              "handle": "new_creator"
++            },
++            "original_created_by": {
++              "id": "01a1ced1-e6ff-7cb4-8fbe-394d34d0b74e",
++              "handle": "original_creator"
++            },
++            "overridden": true,
++            "creator_modified_by": {
++              "id": "01a1ced1-e6e9-7cc5-82b8-f7e97aef0571",
++              "handle": "admin"
++            },
++            "creator_modified_at": "2026-11-12T08:13:45.377409+00:00",
++            "reason": "12345678901234567890"
++          },
++          "access_manifest": {
++            "pill_label": "Project",
++            "explicit_grant_count": 0,
++            "inherited_scope": {
++              "kind": "project",
++              "scope_label": "Project: PROV",
++              "workspace_id": "01a1ced1-e6da-701b-b73a-6c9a731aa2a4",
++              "workspace_name": "Engineering",
++              "project_id": "01a1ced1-e70c-78b1-8cf1-126b8c36b66a",
++              "project_key": "PROV",
++              "project_name": "PROV project"
++            },
++            "users": [
++              {
++                "principal_id": "01a1ced1-e6e9-7cc5-82b8-f7e97aef0571",
++                "handle": "@admin",
++                "display_name": "Admin",
++                "capabilities": [
++                  "VIEW",
++                  "COMMENT",
++                  "EDIT",
++                  "TRANSITION",
++                  "LINK",
++                  "SHARE",
++                  "ADMIN",
++                  "DELETE"
++                ],
++                "grant_source": "project_owner"
++              },
++              {
++                "principal_id": "01a1ced1-e6ff-7cb4-8fbe-394d34d0b74e",
++                "handle": "@original_creator",
++                "display_name": "Original_Creator",
++                "capabilities": [
++                  "VIEW",
++                  "COMMENT",
++                  "EDIT",
++                  "TRANSITION",
++                  "LINK"
++                ],
++                "grant_source": "project_role"
++              },
++              {
++                "principal_id": "01a1ced1-e706-73a9-84b9-c5e3c15ec3b2",
++                "handle": "@new_creator",
++                "display_name": "New_Creator",
++                "capabilities": [
++                  "VIEW",
++                  "COMMENT",
++                  "EDIT",
++                  "TRANSITION",
++                  "LINK"
++                ],
++                "grant_source": "project_role"
++              }
++            ],
++            "groups": [],
++            "agents": [],
++            "deny_overrides": [],
++            "redacted_entries": [],
++            "redacted_count": 0
++          },
++          "capabilities": [
++            "VIEW",
++            "COMMENT",
++            "EDIT",
++            "TRANSITION",
++            "LINK",
++            "SHARE",
++            "ADMIN",
++            "DELETE"
++          ]
++        }
++      }
++    },
++    {
++      "name": "override_creator_403_insufficient_capability",
++      "request": {
++        "method": "PATCH",
++        "path": "/api/v1/issues/SEC-1/created-by",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "91",
++          "content-type": "application/json"
++        },
++        "body": {
++          "created_by": "01a1ced1-e8a4-7410-a13a-318794790751",
++          "reason": "Valid reason exceeding ten"
++        }
++      },
++      "response": {
++        "status": 403,
++        "headers": {
++          "x-request-id": "bec9dd3e6e144cf498dd0ad637af9698",
++          "content-length": "226",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:INSUFFICIENT_CAPABILITY",
++          "title": "Forbidden",
++          "status": 403,
++          "code": "INSUFFICIENT_CAPABILITY",
++          "detail": "Caller lacks PROJECT_ADMIN or SERVER_ADMIN role",
++          "request_id": "bec9dd3e6e144cf498dd0ad637af9698"
++        }
++      }
++    },
++    {
++      "name": "override_creator_404_not_found",
++      "request": {
++        "method": "PATCH",
++        "path": "/api/v1/issues/SEC-1/created-by",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "91",
++          "content-type": "application/json"
++        },
++        "body": {
++          "created_by": "01a1ced1-e8a4-7410-a13a-318794790751",
++          "reason": "Valid reason exceeding ten"
++        }
++      },
++      "response": {
++        "status": 404,
++        "headers": {
++          "x-request-id": "f1452d567eeb47a6a0b52487fcff2f4e",
++          "content-length": "139",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:NOT_FOUND",
++          "title": "Not Found",
++          "status": 404,
++          "code": "NOT_FOUND",
++          "request_id": "f1452d567eeb47a6a0b52487fcff2f4e"
++        }
++      }
++    },
++    {
++      "name": "override_creator_403_aal2_required",
++      "request": {
++        "method": "PATCH",
++        "path": "/api/v1/issues/SEC-1/created-by",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "91",
++          "content-type": "application/json"
++        },
++        "body": {
++          "created_by": "01a1ced1-e8a4-7410-a13a-318794790751",
++          "reason": "Valid reason exceeding ten"
++        }
++      },
++      "response": {
++        "status": 403,
++        "headers": {
++          "x-request-id": "f75d375ebe5d4c638c6932e60d4c13cf",
++          "content-length": "212",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:AAL2_REQUIRED",
++          "title": "Forbidden",
++          "status": 403,
++          "code": "AAL2_REQUIRED",
++          "detail": "AAL2 verification required for administrative actions",
++          "request_id": "f75d375ebe5d4c638c6932e60d4c13cf"
++        }
++      }
++    },
++    {
++      "name": "override_creator_422_reason_required",
++      "request": {
++        "method": "PATCH",
++        "path": "/api/v1/issues/BND-1/created-by",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "74",
++          "content-type": "application/json"
++        },
++        "body": {
++          "created_by": "01a1ced1-e9fd-7e7d-bd72-2c44edbac6d3",
++          "reason": "123456789"
++        }
++      },
++      "response": {
++        "status": 422,
++        "headers": {
++          "x-request-id": "97393b96551e4382be1448af71ca73a2",
++          "content-length": "235",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:REASON_REQUIRED",
++          "title": "Unprocessable Entity",
++          "status": 422,
++          "code": "REASON_REQUIRED",
++          "detail": "Reason must be between 10 and 500 characters",
++          "request_id": "97393b96551e4382be1448af71ca73a2",
++          "field": "reason"
++        }
++      }
++    },
++    {
++      "name": "override_creator_422_creator_unchanged",
++      "request": {
++        "method": "PATCH",
++        "path": "/api/v1/issues/BND-1/created-by",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "91",
++          "content-type": "application/json"
++        },
++        "body": {
++          "created_by": "01a1ced1-e9f3-7474-ae7b-97315ee0d34a",
++          "reason": "Valid reason exceeding ten"
++        }
++      },
++      "response": {
++        "status": 422,
++        "headers": {
++          "x-request-id": "858310ac41ed441dbf319a68324e7716",
++          "content-length": "242",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:CREATOR_UNCHANGED",
++          "title": "Unprocessable Entity",
++          "status": 422,
++          "code": "CREATOR_UNCHANGED",
++          "detail": "Target creator is already the issue creator",
++          "request_id": "858310ac41ed441dbf319a68324e7716",
++          "field": "created_by"
++        }
++      }
++    },
++    {
++      "name": "override_creator_422_creator_not_eligible",
++      "request": {
++        "method": "PATCH",
++        "path": "/api/v1/issues/BND-1/created-by",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "x-csrf-token": "<redacted>",
++          "cookie": "<redacted>",
++          "content-length": "91",
++          "content-type": "application/json"
++        },
++        "body": {
++          "created_by": "01a1ced1-ea02-76c6-bd31-1619e897c7a1",
++          "reason": "Valid reason exceeding ten"
++        }
++      },
++      "response": {
++        "status": 422,
++        "headers": {
++          "x-request-id": "1e57dfb36b16494aade204ea58084dc3",
++          "content-length": "271",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:CREATOR_NOT_ELIGIBLE",
++          "title": "Unprocessable Entity",
++          "status": 422,
++          "code": "CREATOR_NOT_ELIGIBLE",
++          "detail": "Target creator must be an active user eligible to view the project",
++          "request_id": "1e57dfb36b16494aade204ea58084dc3",
++          "field": "created_by"
++        }
++      }
++    }
++  ]
++}
+diff --git a/docs/qa/KANBA-84/git-diff.patch b/docs/qa/KANBA-84/git-diff.patch
+new file mode 100644
+index 0000000..0f98a47
+--- /dev/null
++++ b/docs/qa/KANBA-84/git-diff.patch
+@@ -0,0 +1,107 @@
++diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
++index 85f8b3b..3bb7ae4 100644
++--- a/kanban/api/v1/__init__.py
+++++ b/kanban/api/v1/__init__.py
++@@ -6,6 +6,7 @@ from fastapi import APIRouter
++ 
++ from kanban.api.v1.auth_session import router as auth_session_router
++ from kanban.api.v1.health import router as health_router
+++from kanban.api.v1.issue_provenance import router as issue_provenance_router
++ from kanban.api.v1.issues import router as issues_router
++ from kanban.api.v1.media_proxy import router as media_proxy_router
++ from kanban.api.v1.objects_access import router as objects_access_router
++@@ -21,6 +22,7 @@ def build_v1_router() -> APIRouter:
++     v1.include_router(objects_access_router)
++     v1.include_router(projects_router)
++     v1.include_router(issues_router)
+++    v1.include_router(issue_provenance_router)
++     v1.include_router(resolve_router)
++     v1.include_router(auth_session_router)
++     return v1
++diff --git a/kanban/api/v1/schemas/issues.py b/kanban/api/v1/schemas/issues.py
++index 189569b..e3346ff 100644
++--- a/kanban/api/v1/schemas/issues.py
+++++ b/kanban/api/v1/schemas/issues.py
++@@ -12,6 +12,7 @@ from datetime import date  # noqa: TC003  # Required at runtime by Pydantic
++ 
++ from pydantic import BaseModel, ConfigDict, Field, field_validator
++ 
+++from kanban.api.v1.schemas.issue_provenance import IssueProvenance  # noqa: TC001
++ from kanban.security.access_manifest import AccessManifest  # noqa: TC001  # Pydantic runtime type
++ 
++ 
++@@ -169,6 +170,7 @@ class IssueResponse(BaseModel):
++     module_ids: list[uuid.UUID] = Field(default_factory=list)
++     board_rank: str
++     created_by_id: uuid.UUID
+++    provenance: IssueProvenance
++     access_manifest: AccessManifest
++     capabilities: list[str]
++ 
++diff --git a/kanban/services/activity.py b/kanban/services/activity.py
++index 02a5c5a..adf0935 100644
++--- a/kanban/services/activity.py
+++++ b/kanban/services/activity.py
++@@ -66,6 +66,7 @@ class ActivityEventType(StrEnum):
++     ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
++     ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
++     ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
+++    CREATOR_OVERRIDDEN = "CREATOR_OVERRIDDEN"
++ 
++ 
++ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
++@@ -78,6 +79,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
++         ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
++         ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
++         ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
+++        ActivityEventType.CREATOR_OVERRIDDEN: ActivityCategory.HISTORY,
++     }
++ )
++ 
++diff --git a/kanban/services/issues.py b/kanban/services/issues.py
++index 68955cd..5ae5de8 100644
++--- a/kanban/services/issues.py
+++++ b/kanban/services/issues.py
++@@ -67,6 +67,7 @@ from kanban.security.permissions import (
++ )
++ from kanban.services.activity import ActivityEventType, JSONValue, record_activity
++ from kanban.services.issue_keys import _ISSUE_KEY_RE, resolve_issue_ref
+++from kanban.services.issue_provenance import build_issue_provenance
++ from kanban.services.projects import get_project_or_404
++ 
++ if TYPE_CHECKING:
++@@ -542,6 +543,7 @@ async def serialize_issue(
++ 
++     manifest = await build_access_manifest(session, caller, issue.id)
++     caps = await evaluate_capabilities(session, caller, issue.id)
+++    provenance = await build_issue_provenance(session, issue)
++ 
++     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
++ 
++@@ -563,6 +565,7 @@ async def serialize_issue(
++         module_ids=module_ids,
++         board_rank=issue.board_rank,
++         created_by_id=issue.created_by_id,
+++        provenance=provenance,
++         access_manifest=manifest,
++         capabilities=capabilities_to_names(caps),
++     )
++diff --git a/kanban/tests/api/conftest.py b/kanban/tests/api/conftest.py
++index 50b2169..d1e7af4 100644
++--- a/kanban/tests/api/conftest.py
+++++ b/kanban/tests/api/conftest.py
++@@ -208,12 +208,14 @@ def as_principal(api_env: ApiEnv) -> Callable[..., httpx.AsyncClient]:
++         *,
++         scopes: tuple[str, ...] = ("session",),
++         agent_principal_id: uuid.UUID | None = None,
+++        aal_level: int = 1,
++     ) -> httpx.AsyncClient:
++         api_env.resolver.principal = PrincipalContext(
++             principal_id=user.id,
++             workspace_id=user.workspace_id,
++             token_scopes=scopes,
++             agent_principal_id=agent_principal_id,
+++            aal_level=aal_level,
++         )
++         return api_env.client
++ 
+diff --git a/docs/qa/KANBA-84/message-to-reality-checker.md b/docs/qa/KANBA-84/message-to-reality-checker.md
+new file mode 100644
+index 0000000..64f847a
+--- /dev/null
++++ b/docs/qa/KANBA-84/message-to-reality-checker.md
+@@ -0,0 +1,32 @@
++# Forensic Audit Context: KANBA-84 (KB-P3-04)
++
++## Overview and Scope
++- Ticket: `KANBA-84` (`KB-P3-04`: `[Phase 3 / API] Created-by admin override endpoint & provenance serializer`)
++- Worktree: `/tmp/kb-wt-KANBA-84` on branch `feat/KANBA-84` (branched from `feat/KANBA-76`)
++- Test Coverage: `kanban.api.v1.issue_provenance` (100.00%) and `kanban.services.issue_provenance` (100.00%), combined 100.00% statement and branch coverage (114/114 stmts, 28/28 branches).
++
++## Implementation Summary
++1. **Target Files**:
++   - `kanban/api/v1/issue_provenance.py`: Registered `PATCH /api/v1/issues/{issue_ref}/created-by` endpoint wrapped in `timing_floor(floor_ms=25.0)`.
++   - `kanban/api/v1/schemas/issue_provenance.py`: Pydantic models `IssueOverrideCreatorRequest`, `IssueProvenance`, `CreatorPrincipalSummary`, `RedactedCreatorSummary`, `CreatorSummary` (all with `extra="forbid"`).
++   - `kanban/services/issue_provenance.py`: Core business logic implementing `resolve_creator_summary`, `build_issue_provenance`, and `override_issue_created_by`.
++   - `kanban/api/v1/schemas/issues.py`: Extended `IssueResponse` to include `provenance: IssueProvenance`.
++   - `kanban/services/issues.py`: Updated `serialize_issue` to populate `provenance = await build_issue_provenance(session, issue)`.
++   - `kanban/services/activity.py`: Added `CREATOR_OVERRIDDEN` to `ActivityEventType` with category `HISTORY`.
++   - `database/migrations/sql/p3_04_creator_override_reason.up.sql`: Replaced `issues_creator_provenance_bu` trigger function to include `'reason'`, `'old_created_by_id'`, and `'new_created_by_id'` in the `CREATOR_OVERRIDDEN` activity payload.
++   - `database/migrations/sql/p3_04_creator_override_reason.down.sql`: Reverts trigger function back to `p1_07` baseline.
++   - `database/migrations/versions/p3_04_creator_override_reason.py`: Chained Alembic revision from `p2_02_sessions`.
++   - `database/tests/migrations/test_p3_04_migration.py`: Lifecycle migration test verifying upgrade -> downgrade -> upgrade.
++
++2. **Authorization Order & Enforcement Invariants**:
++   - (a) Lacks `VIEW` capability -> `404 NOT_FOUND` (timing equalized via `timing_floor`).
++   - (b) Lacks `PROJECT_ADMIN` on project and `SERVER_ADMIN` -> `403 INSUFFICIENT_CAPABILITY`.
++   - (c) Session `app.aal_level < 2` -> `403 AAL2_REQUIRED`.
++   - Validation bounds: `reason` between 10 and 500 characters (`422 REASON_REQUIRED`); `created_by` active `USER` principal eligible to view the project (`422 CREATOR_NOT_ELIGIBLE`); unchanged creator (`422 CREATOR_UNCHANGED`).
++   - RLS Transaction: Sets `SELECT set_config('app.override_reason', :reason, true)` then updates `issues`. Trigger function `issues_creator_provenance_bu` enforces admin role, sets `creator_modified_by_id`/`creator_modified_at`, preserves `original_created_by_id`, and writes the single `CREATOR_OVERRIDDEN` ledger entry. The API never writes a duplicate activity row.
++   - Identity map refresh: After raw update, `session.refresh(issue)` ensures cached ORM attributes reflect database state before serialization.
++   - Redaction per S3.4: Users outside caller visibility boundary serialize as `{"redacted": true, "label": "1 External Collaborator"}`.
++
++3. **Specialist Review & Gate Status**:
++   - `ui-specialist-review.md`: Dual specialist gate for UI ergonomics and frontend tooltip feeding (`🔄`).
++   - `api-specialist-review.md`: Dual specialist gate for REST API schema and security authorization.
+diff --git a/docs/qa/KANBA-84/unit-test-results.txt b/docs/qa/KANBA-84/unit-test-results.txt
+new file mode 100644
+index 0000000..43436fa
+--- /dev/null
++++ b/docs/qa/KANBA-84/unit-test-results.txt
+@@ -0,0 +1,27 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-84/.venv/bin/python
++rootdir: /tmp/kb-wt-KANBA-84
++configfile: pyproject.toml
++plugins: asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
++collecting ... collected 8 items
++
++kanban/tests/api/test_issue_provenance.py::test_case_1_positive_admin_override_and_provenance PASSED [ 12%]
++kanban/tests/api/test_issue_provenance.py::test_case_2_security_authorization_and_trigger_guards PASSED [ 25%]
++kanban/tests/api/test_issue_provenance.py::test_case_3_validation_boundaries PASSED [ 37%]
++kanban/tests/api/test_issue_provenance.py::test_case_4_redaction_for_out_of_boundary_viewer PASSED [ 50%]
++kanban/tests/api/test_issue_provenance.py::test_case_5_second_override_preserves_original_creator PASSED [ 62%]
++kanban/tests/api/test_issue_provenance.py::test_provenance_services_validation_edge_cases PASSED [ 75%]
++kanban/tests/api/test_issue_provenance.py::test_provenance_services_execution_and_trigger_guards PASSED [ 87%]
++kanban/tests/api/test_issue_provenance.py::test_provenance_trigger_error_mappings PASSED [100%]
++
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                  Stmts   Miss Branch BrPart  Cover   Missing
++---------------------------------------------------------------------------------
++kanban/api/v1/issue_provenance.py        18      0      0      0   100%
++kanban/services/issue_provenance.py      96      0     28      0   100%
++---------------------------------------------------------------------------------
++TOTAL                                   114      0     28      0   100%
++============================== 8 passed in 2.66s ===============================
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 85f8b3b..3bb7ae4 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -6,6 +6,7 @@ from fastapi import APIRouter
+ 
+ from kanban.api.v1.auth_session import router as auth_session_router
+ from kanban.api.v1.health import router as health_router
++from kanban.api.v1.issue_provenance import router as issue_provenance_router
+ from kanban.api.v1.issues import router as issues_router
+ from kanban.api.v1.media_proxy import router as media_proxy_router
+ from kanban.api.v1.objects_access import router as objects_access_router
+@@ -21,6 +22,7 @@ def build_v1_router() -> APIRouter:
+     v1.include_router(objects_access_router)
+     v1.include_router(projects_router)
+     v1.include_router(issues_router)
++    v1.include_router(issue_provenance_router)
+     v1.include_router(resolve_router)
+     v1.include_router(auth_session_router)
+     return v1
+diff --git a/kanban/api/v1/issue_provenance.py b/kanban/api/v1/issue_provenance.py
+new file mode 100644
+index 0000000..4b94c5c
+--- /dev/null
++++ b/kanban/api/v1/issue_provenance.py
+@@ -0,0 +1,40 @@
++"""Administrative creator override and provenance endpoint (KB-P3-04, S7.2 8d, S11.4)."""
++
++from __future__ import annotations
++
++from typing import Annotated
++
++from fastapi import APIRouter, Depends, Response
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.timing import timing_floor
++from kanban.api.v1.schemas.issue_provenance import (
++    IssueOverrideCreatorRequest,  # noqa: TC001  # Required at runtime by FastAPI
++)
++from kanban.api.v1.schemas.issues import IssueResponse
++from kanban.services import issue_provenance as svc
++
++router = APIRouter(tags=["issues"])
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++@router.patch(
++    "/issues/{issue_ref}/created-by",
++    response_model=IssueResponse,
++    response_model_exclude_none=False,
++)
++async def patch_issue_created_by(
++    issue_ref: str,
++    body: IssueOverrideCreatorRequest,
++    caller: Caller,
++    session: Session,
++    response: Response,
++) -> IssueResponse:
++    """Override created_by on an issue under administrative authorization (S7.2 8d)."""
++    async with timing_floor(floor_ms=25.0):
++        result, etag = await svc.override_issue_created_by(session, caller, issue_ref, body)
++        response.headers["ETag"] = etag
++        return result
+diff --git a/kanban/api/v1/schemas/issue_provenance.py b/kanban/api/v1/schemas/issue_provenance.py
+new file mode 100644
+index 0000000..97ddf41
+--- /dev/null
++++ b/kanban/api/v1/schemas/issue_provenance.py
+@@ -0,0 +1,67 @@
++"""Pydantic schemas for issue provenance and creator override endpoint (KB-P3-04)."""
++
++from __future__ import annotations
++
++from typing import Annotated, Literal
++
++from pydantic import BaseModel, ConfigDict, Field
++
++
++class CreatorPrincipalSummary(BaseModel):
++    """Summary of a visible user principal in provenance."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: str = Field(..., description="UUID of the user principal")
++    handle: str = Field(..., description="Display handle or username without leading @")
++
++
++class RedactedCreatorSummary(BaseModel):
++    """Redacted placeholder for principals outside the caller's visibility boundary."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    redacted: Literal[True] = Field(
++        default=True,
++        description="Always true for redacted placeholders",
++    )
++    label: str = Field(
++        default="1 External Collaborator",
++        description="Redacted label per Section 3.4",
++    )
++
++
++type CreatorSummary = Annotated[
++    CreatorPrincipalSummary | RedactedCreatorSummary,
++    Field(discriminator=None),
++]
++
++
++class IssueProvenance(BaseModel):
++    """Provenance tracking for issue creator and administrative overrides."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    created_by: CreatorSummary = Field(..., description="Current effective creator summary")
++    original_created_by: CreatorSummary = Field(
++        ..., description="Original creator at issue creation time"
++    )
++    overridden: bool = Field(..., description="Whether created_by has been overridden by an admin")
++    creator_modified_by: CreatorSummary | None = Field(
++        default=None, description="Admin user who performed the override"
++    )
++    creator_modified_at: str | None = Field(
++        default=None, description="ISO-8601 timestamp when override occurred"
++    )
++    reason: str | None = Field(
++        default=None, description="Mandatory admin reason provided for the override"
++    )
++
++
++class IssueOverrideCreatorRequest(BaseModel):
++    """Request payload for administrative creator override endpoint."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    created_by: str = Field(..., description="UUID or @handle of the new creator")
++    reason: str = Field(..., description="Mandatory administrative justification for override")
+diff --git a/kanban/api/v1/schemas/issues.py b/kanban/api/v1/schemas/issues.py
+index 189569b..e3346ff 100644
+--- a/kanban/api/v1/schemas/issues.py
++++ b/kanban/api/v1/schemas/issues.py
+@@ -12,6 +12,7 @@ from datetime import date  # noqa: TC003  # Required at runtime by Pydantic
+ 
+ from pydantic import BaseModel, ConfigDict, Field, field_validator
+ 
++from kanban.api.v1.schemas.issue_provenance import IssueProvenance  # noqa: TC001
+ from kanban.security.access_manifest import AccessManifest  # noqa: TC001  # Pydantic runtime type
+ 
+ 
+@@ -169,6 +170,7 @@ class IssueResponse(BaseModel):
+     module_ids: list[uuid.UUID] = Field(default_factory=list)
+     board_rank: str
+     created_by_id: uuid.UUID
++    provenance: IssueProvenance
+     access_manifest: AccessManifest
+     capabilities: list[str]
+ 
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index 02a5c5a..adf0935 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -66,6 +66,7 @@ class ActivityEventType(StrEnum):
+     ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
+     ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
+     ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
++    CREATOR_OVERRIDDEN = "CREATOR_OVERRIDDEN"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -78,6 +79,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
+         ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
+         ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
++        ActivityEventType.CREATOR_OVERRIDDEN: ActivityCategory.HISTORY,
+     }
+ )
+ 
+diff --git a/kanban/services/issue_provenance.py b/kanban/services/issue_provenance.py
+new file mode 100644
+index 0000000..1d47d2b
+--- /dev/null
++++ b/kanban/services/issue_provenance.py
+@@ -0,0 +1,314 @@
++"""Issue provenance service and administrative creator override logic (KB-P3-04)."""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING, Final
++
++from sqlalchemy import func, select, text
++from sqlalchemy.exc import DBAPIError, IntegrityError
++
++from database.models.activity import ActivityRecord
++from database.models.base import ObjectKind
++from database.models.spine import ObjectRecord
++from kanban.api.problems import ProblemException
++from kanban.api.v1.schemas.issue_provenance import (
++    CreatorPrincipalSummary,
++    CreatorSummary,
++    IssueOverrideCreatorRequest,
++    IssueProvenance,
++    RedactedCreatorSummary,
++)
++from kanban.content.normalize import normalize_plain_text
++from kanban.services.activity import ActivityEventType
++from kanban.services.issue_keys import resolve_issue_ref
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from database.models.issues import Issue
++    from kanban.api.deps import PrincipalContext
++    from kanban.api.v1.schemas.issues import IssueResponse
++
++MIN_REASON_LEN: Final = 10
++MAX_REASON_LEN: Final = 500
++REQUIRED_AAL_LEVEL: Final = 2
++
++
++async def resolve_creator_summary(
++    session: AsyncSession,
++    principal_id: uuid.UUID | None,
++) -> CreatorSummary | None:
++    """Resolve a principal UUID to a CreatorSummary or RedactedCreatorSummary under RLS."""
++    if principal_id is None:
++        return None
++
++    stmt = select(ObjectRecord.canonical_key).where(
++        ObjectRecord.id == principal_id,
++        ObjectRecord.object_type == ObjectKind.USER,
++    )
++    row = (await session.execute(stmt)).first()
++    if row is None or not row[0]:
++        return RedactedCreatorSummary(redacted=True, label="1 External Collaborator")
++
++    handle = row[0].lstrip("@")
++    return CreatorPrincipalSummary(id=str(principal_id), handle=handle)
++
++
++async def build_issue_provenance(
++    session: AsyncSession,
++    issue: Issue,
++) -> IssueProvenance:
++    """Build canonical IssueProvenance for an issue response."""
++    created_by_summary = await resolve_creator_summary(
++        session, issue.created_by_id
++    ) or RedactedCreatorSummary(redacted=True, label="1 External Collaborator")
++
++    orig_created_by_id = issue.original_created_by_id
++    orig_summary = await resolve_creator_summary(
++        session, orig_created_by_id
++    ) or RedactedCreatorSummary(redacted=True, label="1 External Collaborator")
++
++    overridden = bool(
++        issue.created_by_id != orig_created_by_id or issue.creator_modified_at is not None
++    )
++
++    creator_modified_by: CreatorSummary | None = None
++    creator_modified_at: str | None = None
++    reason: str | None = None
++
++    if overridden:
++        creator_modified_by = await resolve_creator_summary(session, issue.creator_modified_by_id)
++        if issue.creator_modified_at is not None:
++            creator_modified_at = issue.creator_modified_at.isoformat()
++
++        # Query latest CREATOR_OVERRIDDEN activity row
++        act_stmt = (
++            select(ActivityRecord.payload)
++            .where(
++                ActivityRecord.object_id == issue.id,
++                ActivityRecord.event_type == ActivityEventType.CREATOR_OVERRIDDEN.value,
++            )
++            .order_by(ActivityRecord.recorded_at.desc(), ActivityRecord.chain_seq.desc())
++            .limit(1)
++        )
++        act_row = (await session.execute(act_stmt)).first()
++        if act_row and isinstance(act_row[0], dict):
++            reason = act_row[0].get("reason")
++
++    return IssueProvenance(
++        created_by=created_by_summary,
++        original_created_by=orig_summary,
++        overridden=overridden,
++        creator_modified_by=creator_modified_by,
++        creator_modified_at=creator_modified_at,
++        reason=reason,
++    )
++
++
++async def _verify_admin_override_auth(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_id: uuid.UUID,
++) -> None:
++    """Verify PROJECT_ADMIN/SERVER_ADMIN and AAL2 requirements."""
++    has_admin_role = (
++        await session.execute(
++            text(
++                "SELECT app_principal_has_role(:project_id, ARRAY['PROJECT_ADMIN','SERVER_ADMIN'])"
++            ),
++            {"project_id": project_id},
++        )
++    ).scalar_one()
++    if not has_admin_role:
++        raise ProblemException(
++            status=403,
++            code="INSUFFICIENT_CAPABILITY",
++            title="Forbidden",
++            detail="Caller lacks PROJECT_ADMIN or SERVER_ADMIN role",
++        )
++
++    if caller.aal_level < REQUIRED_AAL_LEVEL:
++        raise ProblemException(
++            status=403,
++            code="AAL2_REQUIRED",
++            title="Forbidden",
++            detail="AAL2 verification required for administrative actions",
++        )
++
++
++def _validate_override_reason(raw_reason: str | None) -> str:
++    """Validate that reason is plain text and between MIN_REASON_LEN and MAX_REASON_LEN."""
++    reason_str = raw_reason or ""
++    clean_reason = normalize_plain_text(reason_str).strip()
++    if len(clean_reason) < MIN_REASON_LEN or len(clean_reason) > MAX_REASON_LEN:
++        raise ProblemException(
++            status=422,
++            code="REASON_REQUIRED",
++            title="Unprocessable Entity",
++            detail="Reason must be between 10 and 500 characters",
++            field="reason",
++        )
++    return clean_reason
++
++
++async def _resolve_target_creator_id(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    target_str: str,
++) -> uuid.UUID:
++    """Resolve target creator handle or UUID string to a valid user principal ID."""
++    clean_target = target_str.strip()
++    try:
++        return uuid.UUID(clean_target)
++    except ValueError:
++        clean_handle = clean_target.lstrip("@").lower()
++        obj_stmt = select(ObjectRecord.id).where(
++            ObjectRecord.workspace_id == workspace_id,
++            ObjectRecord.object_type == ObjectKind.USER,
++            func.lower(ObjectRecord.canonical_key) == clean_handle,
++        )
++        resolved_id = (await session.execute(obj_stmt)).scalar_one_or_none()
++        if resolved_id is not None:
++            return resolved_id
++
++    raise ProblemException(
++        status=422,
++        code="CREATOR_NOT_ELIGIBLE",
++        title="Unprocessable Entity",
++        detail="Target creator must be an active user eligible to view the project",
++        field="created_by",
++    )
++
++
++async def _validate_target_creator_eligibility(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    project_id: uuid.UUID,
++    target_user_id: uuid.UUID,
++    current_created_by_id: uuid.UUID | None,
++) -> None:
++    """Validate that target creator is an active user, has project VIEW, and is different."""
++    valid_user = (
++        await session.execute(
++            text(
++                "SELECT 1 FROM principals p "
++                "JOIN users u ON u.id = p.id "
++                "WHERE p.id = :uid "
++                "  AND p.workspace_id = :ws "
++                "  AND p.principal_type = 'USER' "
++                "  AND p.status = 'ACTIVE'"
++            ),
++            {"uid": target_user_id, "ws": workspace_id},
++        )
++    ).scalar_one_or_none()
++    if not valid_user:
++        raise ProblemException(
++            status=422,
++            code="CREATOR_NOT_ELIGIBLE",
++            title="Unprocessable Entity",
++            detail="Target creator must be an active user eligible to view the project",
++            field="created_by",
++        )
++
++    has_view = (
++        await session.execute(
++            text(
++                "SELECT 1 FROM effective_resource_access era "
++                "WHERE era.object_id = :proj_id "
++                "  AND era.principal_id = :uid "
++                "  AND era.workspace_id = :ws "
++                "  AND (era.allow_mask & 1) = 1 "
++                "  AND (era.deny_mask & 1) = 0"
++            ),
++            {"proj_id": project_id, "uid": target_user_id, "ws": workspace_id},
++        )
++    ).scalar_one_or_none()
++    if not has_view:
++        raise ProblemException(
++            status=422,
++            code="CREATOR_NOT_ELIGIBLE",
++            title="Unprocessable Entity",
++            detail="Target creator must be an active user eligible to view the project",
++            field="created_by",
++        )
++
++    if target_user_id == current_created_by_id:
++        raise ProblemException(
++            status=422,
++            code="CREATOR_UNCHANGED",
++            title="Unprocessable Entity",
++            detail="Target creator is already the issue creator",
++            field="created_by",
++        )
++
++
++async def override_issue_created_by(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_ref: str,
++    body: IssueOverrideCreatorRequest,
++) -> tuple[IssueResponse, str]:
++    """Execute administrative creator override under strict authorization and DB trigger."""
++    # (a) caller lacks VIEW -> 404 NOT_FOUND (equalized)
++    issue = await resolve_issue_ref(session, caller, issue_ref)
++
++    # (b) caller lacks PROJECT_ADMIN on issue's project and SERVER_ADMIN -> 403
++    # (c) session app.aal_level < 2 -> 403 AAL2_REQUIRED
++    await _verify_admin_override_auth(session, caller, issue.project_id)
++
++    # Validation: reason plain text, length 10..500 else 422 REASON_REQUIRED
++    clean_reason = _validate_override_reason(body.reason)
++
++    # Validation: target creator exists, active user, project VIEW, not unchanged
++    target_user_id = await _resolve_target_creator_id(session, caller.workspace_id, body.created_by)
++    await _validate_target_creator_eligibility(
++        session,
++        caller.workspace_id,
++        issue.project_id,
++        target_user_id,
++        issue.created_by_id,
++    )
++
++    # In the RLS transaction run:
++    # SELECT set_config('app.override_reason', :reason, true)
++    # UPDATE issues SET created_by_id = :new WHERE id = :id
++    await session.execute(
++        text("SELECT set_config('app.override_reason', :reason, true)"),
++        {"reason": clean_reason},
++    )
++    try:
++        await session.execute(
++            text("UPDATE issues SET created_by_id = :new WHERE id = :id"),
++            {"new": target_user_id, "id": issue.id},
++        )
++        await session.flush()
++    except (IntegrityError, DBAPIError) as exc:
++        err_msg = str(exc)
++        if "CREATOR_OVERRIDE_FORBIDDEN" in err_msg or "RLS_CONTEXT_REQUIRED" in err_msg:
++            raise ProblemException(
++                status=403,
++                code="INSUFFICIENT_CAPABILITY",
++                title="Forbidden",
++                detail="Caller lacks permission to override creator",
++            ) from exc
++        if "CREATOR_OVERRIDE_WORKSPACE_MISMATCH" in err_msg:
++            raise ProblemException(
++                status=422,
++                code="CREATOR_NOT_ELIGIBLE",
++                title="Unprocessable Entity",
++                detail="Target creator must belong to the same workspace",
++                field="created_by",
++            ) from exc
++        raise
++
++    # Re-fetch updated issue
++    await session.refresh(issue)
++
++    from kanban.services.issues import (  # noqa: PLC0415  # Break circular dependency
++        serialize_issue,
++    )
++
++    resp = await serialize_issue(session, caller, issue)
++    sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
++    return resp, f'"{sha256_hex}"'
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index 68955cd..5ae5de8 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -67,6 +67,7 @@ from kanban.security.permissions import (
+ )
+ from kanban.services.activity import ActivityEventType, JSONValue, record_activity
+ from kanban.services.issue_keys import _ISSUE_KEY_RE, resolve_issue_ref
++from kanban.services.issue_provenance import build_issue_provenance
+ from kanban.services.projects import get_project_or_404
+ 
+ if TYPE_CHECKING:
+@@ -542,6 +543,7 @@ async def serialize_issue(
+ 
+     manifest = await build_access_manifest(session, caller, issue.id)
+     caps = await evaluate_capabilities(session, caller, issue.id)
++    provenance = await build_issue_provenance(session, issue)
+ 
+     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
+ 
+@@ -563,6 +565,7 @@ async def serialize_issue(
+         module_ids=module_ids,
+         board_rank=issue.board_rank,
+         created_by_id=issue.created_by_id,
++        provenance=provenance,
+         access_manifest=manifest,
+         capabilities=capabilities_to_names(caps),
+     )
+diff --git a/kanban/tests/api/conftest.py b/kanban/tests/api/conftest.py
+index 50b2169..d1e7af4 100644
+--- a/kanban/tests/api/conftest.py
++++ b/kanban/tests/api/conftest.py
+@@ -208,12 +208,14 @@ def as_principal(api_env: ApiEnv) -> Callable[..., httpx.AsyncClient]:
+         *,
+         scopes: tuple[str, ...] = ("session",),
+         agent_principal_id: uuid.UUID | None = None,
++        aal_level: int = 1,
+     ) -> httpx.AsyncClient:
+         api_env.resolver.principal = PrincipalContext(
+             principal_id=user.id,
+             workspace_id=user.workspace_id,
+             token_scopes=scopes,
+             agent_principal_id=agent_principal_id,
++            aal_level=aal_level,
+         )
+         return api_env.client
+ 
+diff --git a/kanban/tests/api/test_issue_provenance.py b/kanban/tests/api/test_issue_provenance.py
+new file mode 100644
+index 0000000..1be47e2
+--- /dev/null
++++ b/kanban/tests/api/test_issue_provenance.py
+@@ -0,0 +1,777 @@
++"""Unit and integration tests for created-by admin override and provenance serializer (KB-P3-04)."""
++
++from __future__ import annotations
++
++import json
++import uuid
++from pathlib import Path
++from typing import TYPE_CHECKING
++from unittest.mock import patch
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError, IntegrityError
++from sqlalchemy.ext.asyncio import AsyncEngine
++
++from database.models.issues import Issue
++from database.session import RLSContext, RLSSessionFactory
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.api.v1.schemas.issue_provenance import IssueOverrideCreatorRequest
++from kanban.api.v1.schemas.issues import IssueCreate
++from kanban.services.issue_provenance import (
++    build_issue_provenance,
++    override_issue_created_by,
++    resolve_creator_summary,
++)
++from kanban.services.issues import create_issue
++from kanban.tests.security.helpers import add_acl_entry, create_agent, rebuild_era
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++    from kanban.tests.contract import ContractRecorder
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _count(env: ApiEnv, sql: str, params: dict[str, object] | None = None) -> int:
++    """Execute count query directly."""
++    row = await env.seed.execute(text(sql), params or {})
++    return int(row.scalar_one())
++
++
++async def test_case_1_positive_admin_override_and_provenance(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 1: AAL2 project admin overrides creator with a 20-char reason.
++
++    Response provenance.overridden == true, original_created_by unchanged,
++    exactly one CREATOR_OVERRIDDEN row with reason.
++    """
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    original_creator = await make_user("original_creator", workspace_role="WORKSPACE_MEMBER")
++    new_creator = await make_user("new_creator", workspace_role="WORKSPACE_MEMBER")
++    await make_project(
++        "PROV",
++        created_by=admin,
++        roles={admin: "PROJECT_ADMIN", original_creator: "MEMBER", new_creator: "MEMBER"},
++    )
++
++    # Original creator creates an issue
++    client_orig = as_principal(original_creator)
++    create_resp = await client_orig.post(
++        "/api/v1/projects/PROV/issues",
++        json={
++            "summary": "Original issue summary",
++            "description_markdown": "# Provenance test",
++        },
++    )
++    assert create_resp.status_code == 201
++    issue_data = create_resp.json()
++    assert issue_data["provenance"]["overridden"] is False
++    assert issue_data["provenance"]["created_by"]["handle"] == "original_creator"
++    assert issue_data["provenance"]["original_created_by"]["handle"] == "original_creator"
++    assert issue_data["provenance"]["creator_modified_by"] is None
++    assert issue_data["provenance"]["reason"] is None
++
++    # AAL2 Admin overrides creator
++    client_admin = as_principal(admin, aal_level=2)
++    override_reason = "12345678901234567890"  # Exactly 20 chars
++    patch_resp = await client_admin.patch(
++        "/api/v1/issues/PROV-1/created-by",
++        json={
++            "created_by": "@new_creator",
++            "reason": override_reason,
++        },
++    )
++    contract_recorder.record("override_creator_200", patch_resp.request, patch_resp)
++    assert patch_resp.status_code == 200
++    patched_data = patch_resp.json()
++
++    # Assert provenance response fields
++    prov = patched_data["provenance"]
++    assert prov["overridden"] is True
++    assert prov["created_by"]["id"] == str(new_creator.id)
++    assert prov["created_by"]["handle"] == "new_creator"
++    assert prov["original_created_by"]["id"] == str(original_creator.id)
++    assert prov["original_created_by"]["handle"] == "original_creator"
++    assert prov["creator_modified_by"]["id"] == str(admin.id)
++    assert prov["creator_modified_by"]["handle"] == "admin"
++    assert prov["creator_modified_at"] is not None
++    assert prov["reason"] == override_reason
++
++    # Verify exactly one CREATOR_OVERRIDDEN activity row
++    select_act_sql = (
++        "SELECT id, workspace_id, object_id, object_type, actor_id, event_type, "
++        "payload, prev_hash, row_hash, chain_seq, recorded_at "
++        "FROM activity_records WHERE object_id = :obj AND event_type = 'CREATOR_OVERRIDDEN'"
++    )
++    act_rows = (
++        (
++            await api_env.seed.execute(
++                text(select_act_sql),
++                {"obj": issue_data["id"]},
++            )
++        )
++        .mappings()
++        .all()
++    )
++    assert len(act_rows) == 1
++    act = act_rows[0]
++    assert act["event_type"] == "CREATOR_OVERRIDDEN"
++    assert act["actor_id"] == admin.id
++    assert act["payload"]["old_created_by_id"] == str(original_creator.id)
++    assert act["payload"]["new_created_by_id"] == str(new_creator.id)
++    assert act["payload"]["original_created_by_id"] == str(original_creator.id)
++    assert act["payload"]["reason"] == override_reason
++    assert len(bytes(act["prev_hash"])) == 32
++    assert len(bytes(act["row_hash"])) == 32
++
++    # Save raw activity row sample proof
++    raw_sample = {
++        "id": str(act["id"]),
++        "workspace_id": str(act["workspace_id"]),
++        "object_id": str(act["object_id"]),
++        "object_type": str(act["object_type"]),
++        "actor_id": str(act["actor_id"]),
++        "event_type": act["event_type"],
++        "chain_seq": act["chain_seq"],
++        "payload": act["payload"],
++        "recorded_at": act["recorded_at"].isoformat(),
++        "prev_hash": bytes(act["prev_hash"]).hex(),
++        "row_hash": bytes(act["row_hash"]).hex(),
++    }
++    proof_path = Path("/tmp/kb-wt-KANBA-84/docs/qa/KANBA-84/activity-row-sample.json")
++    proof_path.parent.mkdir(parents=True, exist_ok=True)
++    proof_path.write_text(json.dumps(raw_sample, indent=2), encoding="utf-8")  # noqa: ASYNC240
++
++
++async def test_case_2_security_authorization_and_trigger_guards(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 2: Security checks for role, AAL level, visibility, and DB trigger regression guard."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("member", workspace_role="WORKSPACE_MEMBER")
++    outsider = await make_user("outsider")
++    target_user = await make_user("target_user")
++    await make_project(
++        "SEC",
++        created_by=admin,
++        roles={admin: "PROJECT_ADMIN", member: "MEMBER", target_user: "MEMBER"},
++    )
++
++    # Admin creates issue SEC-1
++    client_admin = as_principal(admin, aal_level=2)
++    res = await client_admin.post(
++        "/api/v1/projects/SEC/issues",
++        json={"summary": "Security test issue", "description_markdown": "desc"},
++    )
++    assert res.status_code == 201
++
++    # 2a: EDIT member gets 403 INSUFFICIENT_CAPABILITY
++    client_member = as_principal(member, aal_level=2)
++    resp_member = await client_member.patch(
++        "/api/v1/issues/SEC-1/created-by",
++        json={"created_by": str(target_user.id), "reason": "Valid reason exceeding ten"},
++    )
++    contract_recorder.record(
++        "override_creator_403_insufficient_capability", resp_member.request, resp_member
++    )
++    assert resp_member.status_code == 403
++    assert resp_member.json()["code"] == "INSUFFICIENT_CAPABILITY"
++
++    # 2b: Non-viewer outsider gets 404 NOT_FOUND
++    client_outsider = as_principal(outsider, aal_level=2)
++    resp_outsider = await client_outsider.patch(
++        "/api/v1/issues/SEC-1/created-by",
++        json={"created_by": str(target_user.id), "reason": "Valid reason exceeding ten"},
++    )
++    contract_recorder.record("override_creator_404_not_found", resp_outsider.request, resp_outsider)
++    assert resp_outsider.status_code == 404
++    assert resp_outsider.json()["code"] == "NOT_FOUND"
++
++    # 2c: AAL1 admin gets 403 AAL2_REQUIRED
++    client_admin_aal1 = as_principal(admin, aal_level=1)
++    resp_aal1 = await client_admin_aal1.patch(
++        "/api/v1/issues/SEC-1/created-by",
++        json={"created_by": str(target_user.id), "reason": "Valid reason exceeding ten"},
++    )
++    contract_recorder.record("override_creator_403_aal2_required", resp_aal1.request, resp_aal1)
++    assert resp_aal1.status_code == 403
++    assert resp_aal1.json()["code"] == "AAL2_REQUIRED"
++
++    # 2d: Direct UPDATE issues SET created_by_id as non-admin session is rejected by trigger
++    bind = api_env.seed.bind
++    assert isinstance(bind, AsyncEngine)
++    factory = RLSSessionFactory(bind)
++    async with factory.session(
++        RLSContext(principal_id=member.id, workspace_id=api_env.workspace_id, aal_level=1)
++    ) as session:
++        update_sql = "UPDATE issues SET created_by_id = :u WHERE summary = 'Security test issue'"
++        with pytest.raises((IntegrityError, DBAPIError)) as exc_info:
++            async with session.begin_nested():
++                await session.execute(text(update_sql), {"u": target_user.id})
++        assert "CREATOR_OVERRIDE_FORBIDDEN" in str(exc_info.value)
++
++
++async def test_case_3_validation_boundaries(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 3: Reason bounds (9, 10, 501), creator unchanged, non-viewer target."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    target_user = await make_user("target_user")
++    outsider_user = await make_user("outsider_user")
++    await make_project(
++        "BND",
++        created_by=admin,
++        roles={admin: "PROJECT_ADMIN", target_user: "MEMBER"},
++    )
++
++    client = as_principal(admin, aal_level=2)
++    c_resp = await client.post(
++        "/api/v1/projects/BND/issues",
++        json={"summary": "Boundary test issue", "description_markdown": "desc"},
++    )
++    assert c_resp.status_code == 201
++
++    # 3a: Reason of 9 chars returns 422 REASON_REQUIRED
++    resp_9 = await client.patch(
++        "/api/v1/issues/BND-1/created-by",
++        json={"created_by": str(target_user.id), "reason": "123456789"},
++    )
++    contract_recorder.record("override_creator_422_reason_required", resp_9.request, resp_9)
++    assert resp_9.status_code == 422
++    assert resp_9.json()["code"] == "REASON_REQUIRED"
++
++    # 3b: Reason of 501 chars returns 422 REASON_REQUIRED
++    resp_501 = await client.patch(
++        "/api/v1/issues/BND-1/created-by",
++        json={"created_by": str(target_user.id), "reason": "a" * 501},
++    )
++    assert resp_501.status_code == 422
++    assert resp_501.json()["code"] == "REASON_REQUIRED"
++
++    # 3c: Same creator returns 422 CREATOR_UNCHANGED
++    resp_same = await client.patch(
++        "/api/v1/issues/BND-1/created-by",
++        json={"created_by": str(admin.id), "reason": "Valid reason exceeding ten"},
++    )
++    contract_recorder.record("override_creator_422_creator_unchanged", resp_same.request, resp_same)
++    assert resp_same.status_code == 422
++    assert resp_same.json()["code"] == "CREATOR_UNCHANGED"
++
++    # 3d: Non-viewer target user returns 422 CREATOR_NOT_ELIGIBLE identical to random UUID
++    resp_non_viewer = await client.patch(
++        "/api/v1/issues/BND-1/created-by",
++        json={"created_by": str(outsider_user.id), "reason": "Valid reason exceeding ten"},
++    )
++    contract_recorder.record(
++        "override_creator_422_creator_not_eligible", resp_non_viewer.request, resp_non_viewer
++    )
++    assert resp_non_viewer.status_code == 422
++    assert resp_non_viewer.json()["code"] == "CREATOR_NOT_ELIGIBLE"
++
++    random_id = uuid.uuid4()
++    resp_random = await client.patch(
++        "/api/v1/issues/BND-1/created-by",
++        json={"created_by": str(random_id), "reason": "Valid reason exceeding ten"},
++    )
++    assert resp_random.status_code == 422
++    assert resp_random.json()["code"] == "CREATOR_NOT_ELIGIBLE"
++    assert resp_random.json()["detail"] == resp_non_viewer.json()["detail"]
++
++    # 3e: Reason of exactly 10 chars succeeds
++    resp_10 = await client.patch(
++        "/api/v1/issues/BND-1/created-by",
++        json={"created_by": str(target_user.id), "reason": "1234567890"},
++    )
++    assert resp_10.status_code == 200
++    assert resp_10.json()["provenance"]["reason"] == "1234567890"
++
++
++async def test_case_4_redaction_for_out_of_boundary_viewer(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Case 4: Viewer outside admin's boundary sees creator_modified_by as redacted: true."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    target_user = await make_user("target_user")
++    viewer = await make_user("viewer", workspace_role="WORKSPACE_MEMBER")
++
++    await make_project(
++        "RED",
++        created_by=admin,
++        roles={admin: "PROJECT_ADMIN", target_user: "MEMBER", viewer: "MEMBER"},
++    )
++
++    client_admin = as_principal(admin, aal_level=2)
++    c_res = await client_admin.post(
++        "/api/v1/projects/RED/issues",
++        json={"summary": "Redaction issue", "description_markdown": "desc"},
++    )
++    assert c_res.status_code == 201
++
++    # Override creator so creator_modified_by is admin
++    ov_res = await client_admin.patch(
++        "/api/v1/issues/RED-1/created-by",
++        json={"created_by": str(target_user.id), "reason": "Overridden by admin"},
++    )
++    assert ov_res.status_code == 200
++
++    # Add explicit DENY ACL on admin user object for viewer
++    await add_acl_entry(
++        api_env.seed,
++        api_env.workspace_id,
++        admin.id,
++        viewer.id,
++        effect="DENY",
++        capability_mask=1,
++    )
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++    await api_env.seed.commit()
++
++    # Viewer fetches issue RED-1
++    client_viewer = as_principal(viewer)
++    get_res = await client_viewer.get("/api/v1/issues/RED-1")
++    assert get_res.status_code == 200
++    prov = get_res.json()["provenance"]
++
++    assert prov["overridden"] is True
++    assert prov["creator_modified_by"]["redacted"] is True
++    assert prov["creator_modified_by"]["label"] == "1 External Collaborator"
++    assert "handle" not in prov["creator_modified_by"]
++    assert "id" not in prov["creator_modified_by"]
++
++
++async def test_case_5_second_override_preserves_original_creator(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Case 5: Second override keeps original_created_by_id and writes a second activity row."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    u1 = await make_user("u1")
++    u2 = await make_user("u2")
++    u3 = await make_user("u3")
++
++    await make_project(
++        "MULTI",
++        created_by=admin,
++        roles={admin: "PROJECT_ADMIN", u1: "MEMBER", u2: "MEMBER", u3: "MEMBER"},
++    )
++
++    client_u1 = as_principal(u1)
++    c_res = await client_u1.post(
++        "/api/v1/projects/MULTI/issues",
++        json={"summary": "Multi override issue", "description_markdown": "desc"},
++    )
++    assert c_res.status_code == 201
++
++    # First override: u1 -> u2
++    client_admin = as_principal(admin, aal_level=2)
++    ov1 = await client_admin.patch(
++        "/api/v1/issues/MULTI-1/created-by",
++        json={"created_by": str(u2.id), "reason": "First override reason 123"},
++    )
++    assert ov1.status_code == 200
++    assert ov1.json()["provenance"]["original_created_by"]["id"] == str(u1.id)
++    assert ov1.json()["provenance"]["created_by"]["id"] == str(u2.id)
++    assert ov1.json()["provenance"]["reason"] == "First override reason 123"
++
++    # Second override: u2 -> u3
++    ov2 = await client_admin.patch(
++        "/api/v1/issues/MULTI-1/created-by",
++        json={"created_by": str(u3.id), "reason": "Second override reason 456"},
++    )
++    assert ov2.status_code == 200
++    assert ov2.json()["provenance"]["original_created_by"]["id"] == str(u1.id)
++    assert ov2.json()["provenance"]["created_by"]["id"] == str(u3.id)
++    assert ov2.json()["provenance"]["reason"] == "Second override reason 456"
++
++    # Verify exactly 2 CREATOR_OVERRIDDEN activity records
++    count_sql = (
++        "SELECT count(*) FROM activity_records WHERE event_type = 'CREATOR_OVERRIDDEN' "
++        "AND object_id = (SELECT id FROM objects WHERE canonical_key = 'MULTI-1')"
++    )
++    act_count = await _count(api_env, count_sql)
++    assert act_count == 2
++
++
++async def test_provenance_services_validation_edge_cases(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Direct unit tests for service validation, authorization, and summary helpers."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    u1 = await make_user("u1", workspace_role="WORKSPACE_MEMBER")
++    await make_project("VAL", created_by=admin, roles={admin: "PROJECT_ADMIN", u1: "MEMBER"})
++
++    bind = api_env.seed.bind
++    assert isinstance(bind, AsyncEngine)
++    factory = RLSSessionFactory(bind)
++
++    # Create an issue VAL-1
++    async with factory.session(
++        RLSContext(principal_id=admin.id, workspace_id=api_env.workspace_id, aal_level=2)
++    ) as session:
++        await create_issue(
++            session,
++            PrincipalContext(
++                principal_id=admin.id,
++                workspace_id=api_env.workspace_id,
++                token_scopes=("session",),
++                aal_level=2,
++            ),
++            "VAL",
++            IssueCreate(summary="Validation test issue", description_markdown="desc"),
++        )
++        await session.commit()
++
++    async with factory.session(
++        RLSContext(
++            principal_id=admin.id,
++            workspace_id=api_env.workspace_id,
++            token_scopes=("session",),
++            aal_level=2,
++        )
++    ) as session:
++        # 1. resolve_creator_summary with None
++        summary_none = await resolve_creator_summary(session, None)
++        assert summary_none is None
++
++        # 2. resolve_creator_summary with non-existent id
++        summary_missing = await resolve_creator_summary(session, uuid.uuid4())
++        assert summary_missing is not None
++        assert summary_missing.model_dump()["redacted"] is True
++
++        caller_ctx = PrincipalContext(
++            principal_id=admin.id,
++            workspace_id=api_env.workspace_id,
++            token_scopes=("session",),
++            aal_level=2,
++        )
++
++        # 3. override_issue_created_by with non-existent issue
++        with pytest.raises(ProblemException) as exc_404:
++            await override_issue_created_by(
++                session,
++                caller_ctx,
++                "NONEXISTENT-9999",
++                IssueOverrideCreatorRequest(
++                    created_by=str(u1.id),
++                    reason="Valid reason exceeding ten",
++                ),
++            )
++        assert exc_404.value.status == 404
++
++        # 4. Reason validation length < 10
++        with pytest.raises(ProblemException) as exc_reason_short:
++            await override_issue_created_by(
++                session,
++                caller_ctx,
++                "VAL-1",
++                IssueOverrideCreatorRequest(created_by=str(u1.id), reason="short"),
++            )
++        assert exc_reason_short.value.status == 422
++        assert exc_reason_short.value.code == "REASON_REQUIRED"
++
++        # 5. Caller lacking admin role
++        async with factory.session(
++            RLSContext(
++                principal_id=u1.id,
++                workspace_id=api_env.workspace_id,
++                token_scopes=("session",),
++                aal_level=2,
++            )
++        ) as member_session:
++            member_ctx = PrincipalContext(
++                principal_id=u1.id,
++                workspace_id=api_env.workspace_id,
++                token_scopes=("session",),
++                aal_level=2,
++            )
++            with pytest.raises(ProblemException) as exc_role:
++                await override_issue_created_by(
++                    member_session,
++                    member_ctx,
++                    "VAL-1",
++                    IssueOverrideCreatorRequest(
++                        created_by=str(admin.id),
++                        reason="Valid reason exceeding ten",
++                    ),
++                )
++            assert exc_role.value.status == 403
++            assert exc_role.value.code == "INSUFFICIENT_CAPABILITY"
++
++        # 6. Caller with AAL1
++        aal1_ctx = PrincipalContext(
++            principal_id=admin.id,
++            workspace_id=api_env.workspace_id,
++            token_scopes=("session",),
++            aal_level=1,
++        )
++        with pytest.raises(ProblemException) as exc_aal:
++            await override_issue_created_by(
++                session,
++                aal1_ctx,
++                "VAL-1",
++                IssueOverrideCreatorRequest(
++                    created_by=str(u1.id),
++                    reason="Valid reason exceeding ten",
++                ),
++            )
++        assert exc_aal.value.status == 403
++        assert exc_aal.value.code == "AAL2_REQUIRED"
++
++
++async def test_provenance_services_execution_and_trigger_guards(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Direct unit tests for eligibility, trigger error mappings, and fallback branches."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    u1 = await make_user("u1", workspace_role="WORKSPACE_MEMBER")
++    other_user = await make_user("other_user")
++    await make_project("EXEC", created_by=admin, roles={admin: "PROJECT_ADMIN", u1: "MEMBER"})
++
++    bind = api_env.seed.bind
++    assert isinstance(bind, AsyncEngine)
++    factory = RLSSessionFactory(bind)
++
++    async with factory.session(
++        RLSContext(principal_id=admin.id, workspace_id=api_env.workspace_id, aal_level=2)
++    ) as session:
++        await create_issue(
++            session,
++            PrincipalContext(
++                principal_id=admin.id,
++                workspace_id=api_env.workspace_id,
++                token_scopes=("session",),
++                aal_level=2,
++            ),
++            "EXEC",
++            IssueCreate(summary="Exec test issue", description_markdown="desc"),
++        )
++        await session.commit()
++
++    async with factory.session(
++        RLSContext(
++            principal_id=admin.id,
++            workspace_id=api_env.workspace_id,
++            token_scopes=("session",),
++            aal_level=2,
++        )
++    ) as session:
++        caller_ctx = PrincipalContext(
++            principal_id=admin.id,
++            workspace_id=api_env.workspace_id,
++            token_scopes=("session",),
++            aal_level=2,
++        )
++
++        # 7. Target user not found by handle
++        with pytest.raises(ProblemException) as exc_no_user:
++            await override_issue_created_by(
++                session,
++                caller_ctx,
++                "EXEC-1",
++                IssueOverrideCreatorRequest(
++                    created_by="@does_not_exist",
++                    reason="Valid reason exceeding ten",
++                ),
++            )
++        assert exc_no_user.value.status == 422
++        assert exc_no_user.value.code == "CREATOR_NOT_ELIGIBLE"
++
++        # 8. Target user who is an agent
++        agent_id = await create_agent(api_env.seed, api_env.workspace_id, "Test Agent")
++        await api_env.seed.commit()
++        with pytest.raises(ProblemException) as exc_agent:
++            await override_issue_created_by(
++                session,
++                caller_ctx,
++                "EXEC-1",
++                IssueOverrideCreatorRequest(
++                    created_by=str(agent_id),
++                    reason="Valid reason exceeding ten",
++                ),
++            )
++        assert exc_agent.value.status == 422
++        assert exc_agent.value.code == "CREATOR_NOT_ELIGIBLE"
++
++        # 9. Target user who lacks VIEW on project
++        with pytest.raises(ProblemException) as exc_no_view:
++            await override_issue_created_by(
++                session,
++                caller_ctx,
++                "EXEC-1",
++                IssueOverrideCreatorRequest(
++                    created_by=str(other_user.id),
++                    reason="Valid reason exceeding ten",
++                ),
++            )
++        assert exc_no_view.value.status == 422
++        assert exc_no_view.value.code == "CREATOR_NOT_ELIGIBLE"
++
++        # 10. Target user who is already creator
++        with pytest.raises(ProblemException) as exc_same:
++            await override_issue_created_by(
++                session,
++                caller_ctx,
++                "EXEC-1",
++                IssueOverrideCreatorRequest(
++                    created_by=str(admin.id),
++                    reason="Valid reason exceeding ten",
++                ),
++            )
++        assert exc_same.value.status == 422
++        assert exc_same.value.code == "CREATOR_UNCHANGED"
++
++        # 11. Fake issue provenance without creator_modified_at and without reason
++        fake_issue = Issue(
++            id=uuid.uuid4(),
++            project_id=uuid.uuid4(),
++            sequence_id=999,
++            summary="Fake Issue",
++            created_by_id=u1.id,
++            original_created_by_id=admin.id,
++            creator_modified_by_id=None,
++            creator_modified_at=None,
++        )
++        fake_prov = await build_issue_provenance(session, fake_issue)
++        assert fake_prov.overridden is True
++        assert fake_prov.creator_modified_at is None
++        assert fake_prov.reason is None
++
++
++async def test_provenance_trigger_error_mappings(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Direct unit tests for trigger exception mappings."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    u1 = await make_user("u1", workspace_role="WORKSPACE_MEMBER")
++    await make_project("TRIG", created_by=admin, roles={admin: "PROJECT_ADMIN", u1: "MEMBER"})
++
++    bind = api_env.seed.bind
++    assert isinstance(bind, AsyncEngine)
++    factory = RLSSessionFactory(bind)
++
++    async with factory.session(
++        RLSContext(principal_id=admin.id, workspace_id=api_env.workspace_id, aal_level=2)
++    ) as session:
++        await create_issue(
++            session,
++            PrincipalContext(
++                principal_id=admin.id,
++                workspace_id=api_env.workspace_id,
++                token_scopes=("session",),
++                aal_level=2,
++            ),
++            "TRIG",
++            IssueCreate(summary="Trig test issue", description_markdown="desc"),
++        )
++        await session.commit()
++
++    async with factory.session(
++        RLSContext(
++            principal_id=admin.id,
++            workspace_id=api_env.workspace_id,
++            token_scopes=("session",),
++            aal_level=2,
++        )
++    ) as session:
++        caller_ctx = PrincipalContext(
++            principal_id=admin.id,
++            workspace_id=api_env.workspace_id,
++            token_scopes=("session",),
++            aal_level=2,
++        )
++
++        orig_execute = session.execute
++
++        async def mock_exec_forbid(stmt: object, *args: object, **kwargs: object) -> object:
++            if "UPDATE issues" in str(stmt):
++                msg = "UPDATE"
++                err = Exception("CREATOR_OVERRIDE_FORBIDDEN")
++                raise DBAPIError(msg, {}, err)
++            return await orig_execute(stmt, *args, **kwargs)  # type: ignore[call-overload]
++
++        with (
++            patch.object(session, "execute", side_effect=mock_exec_forbid),
++            pytest.raises(ProblemException) as exc_trig_forbid,
++        ):
++            await override_issue_created_by(
++                session,
++                caller_ctx,
++                "TRIG-1",
++                IssueOverrideCreatorRequest(
++                    created_by=str(u1.id),
++                    reason="Valid reason exceeding ten",
++                ),
++            )
++        assert exc_trig_forbid.value.status == 403
++
++        async def mock_exec_ws(stmt: object, *args: object, **kwargs: object) -> object:
++            if "UPDATE issues" in str(stmt):
++                msg = "UPDATE"
++                err = Exception("CREATOR_OVERRIDE_WORKSPACE_MISMATCH")
++                raise DBAPIError(msg, {}, err)
++            return await orig_execute(stmt, *args, **kwargs)  # type: ignore[call-overload]
++
++        with (
++            patch.object(session, "execute", side_effect=mock_exec_ws),
++            pytest.raises(ProblemException) as exc_trig_ws,
++        ):
++            await override_issue_created_by(
++                session,
++                caller_ctx,
++                "TRIG-1",
++                IssueOverrideCreatorRequest(
++                    created_by=str(u1.id),
++                    reason="Valid reason exceeding ten",
++                ),
++            )
++        assert exc_trig_ws.value.status == 422
++
++        async def mock_exec_other(stmt: object, *args: object, **kwargs: object) -> object:
++            if "UPDATE issues" in str(stmt):
++                msg = "UPDATE"
++                err = Exception("OTHER_DB_ERROR")
++                raise DBAPIError(msg, {}, err)
++            return await orig_execute(stmt, *args, **kwargs)  # type: ignore[call-overload]
++
++        with (
++            patch.object(session, "execute", side_effect=mock_exec_other),
++            pytest.raises(DBAPIError),
++        ):
++            await override_issue_created_by(
++                session,
++                caller_ctx,
++                "TRIG-1",
++                IssueOverrideCreatorRequest(
++                    created_by=str(u1.id),
++                    reason="Valid reason exceeding ten",
++                ),
++            )
