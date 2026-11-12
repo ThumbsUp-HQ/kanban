@@ -189,7 +189,6 @@ def _resolve_openai_provider(
     )
     provider = build_provider("openai", settings, transport=transport)
     return provider, prompt, model, metadata
-    return provider, prompt, model, metadata
 
 
 def _resolve_provider_and_params(
