@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kanban.hackedyour.info/schemas/ai-cassette-v1.json",
+  "title": "AICassette",
+  "description": "Deterministic AI and CLI response fixture cassette schema for offline tests.",
+  "type": "object",
+  "required": [
+    "cassette_version",
+    "matcher"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "cassette_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Cassette specification format version; strictly 1."
+    },
+    "matcher": {
+      "type": "object",
+      "description": "Request matching predicates; all specified keys must match for cassette replay.",
+      "additionalProperties": false,
+      "properties": {
+        "agent_slug": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "transition_to": {
+          "type": "string"
+        },
+        "prompt_contains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stdin_contains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "argv_prefix": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "tool_script": {
+      "type": "array",
+      "description": "Sequence of simulated MCP/repo tool calls performed during agent execution.",
+      "items": {
+        "type": "object",
+        "required": [
+          "call"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "call": {
+            "type": "object",
+            "required": [
+              "tool",
+              "args"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "tool": {
+                "type": "string"
+              },
+              "args": {
+                "type": "object"
+              }
+            }
+          },
+          "returns": {}
+        }
+      }
+    },
+    "simulated_ttft_ms": {
+      "type": "number",
+      "minimum": 0,
+      "default": 5.0,
+      "description": "Simulated time-to-first-token in milliseconds."
+    },
+    "usage": {
+      "type": "object",
+      "description": "Simulated token consumption metrics.",
+      "additionalProperties": false,
+      "properties": {
+        "prompt_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "completion_tokens": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "stream_chunks": {
+      "type": "array",
+      "description": "Sequential text chunks to emit in stream_complete.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "final_verdict": {
+      "type": "object",
+      "description": "Final verdict payload for workflow interceptors."
+    },
+    "structured_output": {
+      "type": "object",
+      "description": "Structured JSON payload to parse into response_model."
+    },
+    "embeddings": {
+      "description": "Static embeddings vectors or deterministic generator parameters.",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "dimension",
+            "seed"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "dimension": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "seed": {
+              "type": "integer"
+            }
+          }
+        }
+      ]
+    },
+    "cli_result": {
+      "type": "object",
+      "description": "CLI runner execution output for zero-shell process simulation.",
+      "required": [
+        "stdout",
+        "stderr",
+        "exit_code",
+        "duration_ms"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stdout": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "fault": {
+      "type": "object",
+      "description": "Simulated fault injection configuration.",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "http_429",
+            "http_500",
+            "http_503",
+            "timeout",
+            "ttft_sla_breach",
+            "unavailable",
+            "schema_error",
+            "safety_block",
+            "refusal",
+            "malformed_stdout",
+            "stream_error_after_chunk"
+          ]
+        },
+        "retry_after_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "after_chunks": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

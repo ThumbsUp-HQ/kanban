@@ -1,0 +1,102 @@
+{
+  "positive_cases": [
+    {
+      "id": "sk_legacy",
+      "input": "API key: sk-abc123DEF456ghi789JKL012mno345PQR for service access",
+      "expected_redacted": true,
+      "expected_count": 1,
+      "expected_text": "API key: [REDACTED:API_KEY] for service access",
+      "expected_kinds": ["API_KEY"]
+    },
+    {
+      "id": "sk_project",
+      "input": "Use sk-proj-1234567890abcdefghijklmnopqrstuvwxyzAB in production",
+      "expected_redacted": true,
+      "expected_count": 1,
+      "expected_text": "Use [REDACTED:API_KEY] in production",
+      "expected_kinds": ["API_KEY"]
+    },
+    {
+      "id": "sk_anthropic",
+      "input": "Model key sk-ant-api03-abcdef123456GHIJKL7890mnopqrstUV ready",
+      "expected_redacted": true,
+      "expected_count": 1,
+      "expected_text": "Model key [REDACTED:API_KEY] ready",
+      "expected_kinds": ["API_KEY"]
+    },
+    {
+      "id": "github_tokens",
+      "input": "Keys: ghp_111122223333444455556666777788889999 and github_pat_1111222233334444555566_secret",
+      "expected_redacted": true,
+      "expected_count": 2,
+      "expected_text": "Keys: [REDACTED:GITHUB_TOKEN] and [REDACTED:GITHUB_TOKEN]",
+      "expected_kinds": ["GITHUB_TOKEN", "GITHUB_TOKEN"]
+    },
+    {
+      "id": "aws_keys",
+      "input": "Deploy with AKIAIOSFODNN7EXAMPLE and ASIAI44QH8DHBEXAMPLE",
+      "expected_redacted": true,
+      "expected_count": 2,
+      "expected_text": "Deploy with [REDACTED:AWS_ACCESS_KEY] and [REDACTED:AWS_ACCESS_KEY]",
+      "expected_kinds": ["AWS_ACCESS_KEY", "AWS_ACCESS_KEY"]
+    },
+    {
+      "id": "bearer_and_jwt",
+      "input": "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+      "expected_redacted": true,
+      "expected_count": 1,
+      "expected_text": "Authorization: Bearer [REDACTED:BEARER_TOKEN]",
+      "expected_kinds": ["BEARER_TOKEN"]
+    },
+    {
+      "id": "kanban_keys",
+      "input": "Agent keys kb_agt_0123456789abcdef and kb_adm_feedfacecafebeef0123",
+      "expected_redacted": true,
+      "expected_count": 2,
+      "expected_text": "Agent keys [REDACTED:KANBAN_KEY] and [REDACTED:KANBAN_KEY]",
+      "expected_kinds": ["KANBAN_KEY", "KANBAN_KEY"]
+    }
+  ],
+  "false_positive_cases": [
+    {
+      "id": "uuidv7",
+      "input": "Entity ID: 01965a8e-7c12-7000-8000-112233445566"
+    },
+    {
+      "id": "git_commit_sha",
+      "input": "Commit: 9f2c8b1e4d3a7c6b5e0f1a2b3c4d5e6f7a8b9c0d"
+    },
+    {
+      "id": "ticket_keys",
+      "input": "Fixes KAN-142, relates to KB-P2-17 and AKIA-12"
+    },
+    {
+      "id": "css_identifiers",
+      "input": "var(--sk-primary-button-background)"
+    },
+    {
+      "id": "short_sk_ident",
+      "input": "sk-short123"
+    },
+    {
+      "id": "code_variable_ident",
+      "input": "task_list_item_identifier_name = 'test'"
+    },
+    {
+      "id": "bearer_word_variable",
+      "input": "bearer_of_bad_news = True"
+    },
+    {
+      "id": "file_path",
+      "input": "Configured in /home/user/kanban/security/scrubber.py"
+    },
+    {
+      "id": "url",
+      "input": "See https://kanban.hackedyour.info/kanban/projects/KAN/issues/142"
+    },
+    {
+      "id": "public_x509_cert",
+      "input": "-----BEGIN CERTIFICATE-----\nMIIDXTCCAkWgAwIBAgIJALabcdef1234567890==\n-----END CERTIFICATE-----"
+    }
+  ]
+}

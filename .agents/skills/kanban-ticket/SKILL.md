@@ -62,13 +62,13 @@ As a **[persona/role]**, I need **[specific capability or component]** so that *
 
 ### Forensic Verification Proof (Passive Audit Bundle for Reality-Checker)
 The implementing sub-agent MUST populate `docs/qa/<TICKET_ID>/` with the following raw, unedited artifacts (no summaries) so `reality-checker` can audit the ticket without executing commands:
-1. `docs/qa/<TICKET_ID>/git-diff.patch` — Complete unified `git diff` showing all code and test additions/modifications for `<TICKET_ID>`.
-2. `docs/qa/<TICKET_ID>/unit-test-results.txt` — Full, unedited console output (`stdout`/`stderr` and exit code) of running `[exact unit test command]`.
-3. `docs/qa/<TICKET_ID>/build-check.txt` — Full, unedited console output of `[exact build/typecheck/syntax command]`.
-4. `[Ticket-Specific Artifact]` — e.g., `docs/qa/<TICKET_ID>/screenshots/*.png` (for UI tickets) or `docs/qa/<TICKET_ID>/contract-sample.json` (for API/wire tickets).
-5. `docs/qa/<TICKET_ID>/ui-specialist-review.md` *(Mandatory for all UI and API tickets)* — Raw audit and sign-off from the project-local UI specialist (`.agents/agents/ui-designer.md` or `.agents/agents/ux-architect.md`).
-6. `docs/qa/<TICKET_ID>/api-specialist-review.md` *(Mandatory for all API and MCP tickets)* — Raw audit and sign-off from the project-local API specialist (`.agents/agents/backend-architect.md` or `.agents/agents/api-tester.md`).
-7. `docs/qa/<TICKET_ID>/message-to-reality-checker.md` *(Optional)* — Clarifies any architectural context or non-applicable UI sections (e.g., explaining why a pure internal database migration ticket has no browser screenshots).
+1. `docs/qa/<TICKET_ID>/git-diff.patch` - Complete unified `git diff` showing all code and test additions/modifications for `<TICKET_ID>`.
+2. `docs/qa/<TICKET_ID>/unit-test-results.txt` - Full, unedited console output (`stdout`/`stderr` and exit code) of running `[exact unit test command]`.
+3. `docs/qa/<TICKET_ID>/build-check.txt` - Full, unedited console output of `[exact build/typecheck/syntax command]`.
+4. `[Ticket-Specific Artifact]` - e.g., `docs/qa/<TICKET_ID>/screenshots/*.png` (for UI tickets) or `docs/qa/<TICKET_ID>/contract-sample.json` (for API/wire tickets).
+5. `docs/qa/<TICKET_ID>/ui-specialist-review.md` *(Mandatory for all UI and API tickets)* - Raw audit and sign-off from the project-local UI specialist (`.agents/agents/ui-designer.md` or `.agents/agents/ux-architect.md`).
+6. `docs/qa/<TICKET_ID>/api-specialist-review.md` *(Mandatory for all API and MCP tickets)* - Raw audit and sign-off from the project-local API specialist (`.agents/agents/backend-architect.md` or `.agents/agents/api-tester.md`).
+7. `docs/qa/<TICKET_ID>/message-to-reality-checker.md` *(Optional)* - Clarifies any architectural context or non-applicable UI sections (e.g., explaining why a pure internal database migration ticket has no browser screenshots).
 ```
 
 ---

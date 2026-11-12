@@ -21,7 +21,7 @@ All tickets managed under this workflow should conform to the companion [`kanban
 2. **Update Comments & Status on Tickets**:
    - Record sub-agent assignments, forensic proof locations, `reality-checker` QA reports, and remediation cycles on the ticket via Kanban MCP tools (`begin_work`, `transition_ticket`, `complete_work`, `update_ticket`). All comments are recorded under the user's identity.
 3. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
-   - When an implementing sub-agent claims a ticket is done—or **even if the sub-agent closes the ticket itself**—you **MUST keep the ticket open** (immediately reopen/transition it back to `In Progress` via `transition_ticket` if a sub-agent closed it).
+   - When an implementing sub-agent claims a ticket is done - or **even if the sub-agent closes the ticket itself** - you **MUST keep the ticket open** (immediately reopen/transition it back to `In Progress` via `transition_ticket` if a sub-agent closed it).
    - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after the `reality-checker` sub-agent certifies it as **grade-A `READY`**.
 4. **Run the `reality-checker` QA Gate on a Fast Model**:
    - Invoke a dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
@@ -33,7 +33,7 @@ All tickets managed under this workflow should conform to the companion [`kanban
    - `reality-checker` does **not** audit unit test coverage percentages.
    - Once a feature ticket is implemented (or completed), assign a dedicated testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
 7. **Continuous Gap Detection & Ticket Creation**:
-   - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review—such as a missing feature, unhandled edge case, security weakness, or testing gap—immediately create a new Kanban ticket for it using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
+   - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - immediately create a new Kanban ticket for it using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
 
 ---
 

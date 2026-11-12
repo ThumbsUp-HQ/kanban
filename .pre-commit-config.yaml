@@ -1,0 +1,39 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: (\.patch$|^docs/qa/)
+      - id: end-of-file-fixer
+        exclude: (\.patch$|^docs/qa/)
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix --force-exclude
+        language: system
+        types: [python]
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types: [python]
+
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      - id: no-unicode-dashes
+        name: no unicode dashes
+        entry: uv run python -m scripts.check_no_dashes
+        language: system
+        files: ^(docs|\.agents)/
+        exclude: \.patch$

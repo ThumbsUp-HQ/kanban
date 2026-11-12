@@ -8,13 +8,16 @@ version = "0.0.0"
 description = "Universal Object Graph, FORCE RLS, Link Auditor, and PostgreSQL schema for Kanban platform"
 requires-python = ">=3.12,<3.13"
 license = "Apache-2.0"
-dependencies = []
+dependencies = [
+    "asyncpg==0.30.0",
+    "sqlalchemy[asyncio]==2.0.38",
+]
 
 [tool.hatch.build.targets.wheel.sources]
 "" = "database"
 
 [tool.hatch.build.targets.wheel]
-include = ["*.py", "**/*.py"]
+include = ["*.py", "**/*.py", "**/*.sql"]
 exclude = [
     "tests",
     "pyproject.toml",

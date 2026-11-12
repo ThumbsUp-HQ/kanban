@@ -1,0 +1,6 @@
+CREATE SCHEMA IF NOT EXISTS kb_harness;
+
+CREATE TABLE IF NOT EXISTS kb_harness.probe (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    note text NOT NULL
+);

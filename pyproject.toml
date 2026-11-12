@@ -25,7 +25,49 @@ dev = [
     "pytest-cov==7.1.0",
     "import-linter==2.16",
     "hatchling==1.33.0",
+    "ruff==0.17.4",
+    "mypy==2.4.1",
+    "pre-commit==4.7.0",
+    "pytest-asyncio==1.4.1.post1",
+    "pytest-xdist==3.8.0",
+    "pytest-socket==0.8.1",
+    "types-PyYAML==6.0.12.20261111",
+    "types-jsonschema==4.26.0.20261006",
 ]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["docs/tickets/publish_to_board.py"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D203",   # conflicts with D211 (no blank line before class docstring)
+    "D213",   # conflicts with D212 (multi-line summary first line)
+    "COM812", # conflicts with ruff formatter
+    "ISC001", # conflicts with ruff formatter
+    "CPY001", # project copyright and license are declared centrally in LICENSE and NOTICE
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004", "S603", "S607", "S108", "S105"]     # assert, magic values, subprocess calls, /tmp paths, and test credentials in tests
+"**/tests/**" = ["S101", "PLR2004", "S603", "S607", "S108", "S105"]  # assert, magic values, subprocess calls, /tmp paths, and test credentials in tests
+"database/testing/**" = ["S108", "ASYNC240"]                          # test harness uses /tmp sockets and initialization file reads
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+packages = ["database", "kanban", "mcp", "agent", "scripts"]
+
+[tool.pytest.ini_options]
+addopts = "--disable-socket --allow-unix-socket -p no:cacheprovider --strict-markers"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["committed_db: test commits real transactions; TRUNCATE cleanup applied"]
 
 [tool.importlinter]
 root_packages = ["agent", "mcp", "kanban", "database"]
