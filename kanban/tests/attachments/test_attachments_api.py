@@ -15,6 +15,12 @@ from sqlalchemy import text
 from kanban.attachments.service import AttachmentService
 from kanban.attachments.sniff import MAX_ATTACHMENT_BYTES
 from kanban.attachments.storage import LocalFilesystemBlobStore
+from kanban.auth.sessions.csrf import (
+    CSRF_COOKIE_NAME,
+    CSRF_HEADER_NAME,
+    PRE_SESSION_ID,
+    generate_csrf_token,
+)
 from kanban.security.keys import KeyMaterial
 from kanban.security.ratelimit.pg import PgRateLimiter
 from kanban.tests.attachments.test_sniff_and_raster import _create_synthetic_png_header
@@ -72,6 +78,11 @@ def _setup_api_app_state(
     # Use database rate limiter backed by pg_worker_db
     app_engine = app.state.session_factory._engine
     app.state.rate_limiter = PgRateLimiter(engine=app_engine)
+
+    # Supply CSRF token and cookie for mutating API requests (KB-P2-02 CsrfMiddleware)
+    csrf_tok = generate_csrf_token(PRE_SESSION_ID, km.session_hmac_key)
+    env.client.headers[CSRF_HEADER_NAME] = csrf_tok
+    env.client.cookies.set(CSRF_COOKIE_NAME, csrf_tok)
     return km, blob_store
 
 
@@ -692,6 +703,10 @@ async def test_case_10_app_state_fallback(
     user = await make_user("fallbackuser")
     await make_project("FALLPROJ", created_by=user, roles={user: "MEMBER"})
     client = as_principal(user)
+
+    fallback_csrf = generate_csrf_token(PRE_SESSION_ID, b"\x00" * 32)
+    client.headers[CSRF_HEADER_NAME] = fallback_csrf
+    client.cookies.set(CSRF_COOKIE_NAME, fallback_csrf)
 
     im = Image.new("RGB", (10, 10))
     buf = io.BytesIO()

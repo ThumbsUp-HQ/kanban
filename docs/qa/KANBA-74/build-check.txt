@@ -1,10 +1,10 @@
-=== 1. ruff check ===
+=== Ruff Check ===
 All checks passed!
-=== 2. ruff format check ===
-584 files already formatted
-=== 3. mypy --strict ===
-Success: no issues found in 251 source files
-=== 4. lint-imports ===
+=== Ruff Format Check ===
+635 files already formatted
+=== Mypy Strict ===
+Success: no issues found in 236 source files
+=== Lint Imports ===
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
 ╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
@@ -20,14 +20,13 @@ Success: no issues found in 251 source files
 Contracts
 ---------
 
-Analyzed 289 files, 561 dependencies.
+Analyzed 323 files, 687 dependencies.
 -------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT
 mcp forbidden from importing database KEPT
 
 Contracts: 2 kept, 0 broken.
-=== 5. license_gate.py ===
+=== Dash Check ===
+=== License Gate ===
 SUMMARY python=111 node=1 violations=0
-=== 6. check_no_dashes --all ===
-=== ALL BUILD CHECKS PASSED ===
