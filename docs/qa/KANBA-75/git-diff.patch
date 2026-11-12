@@ -245,6 +245,142 @@ index 0000000..418942a
 +
 +        # 4. Re-upgrade to head
 +        await harness.upgrade("head")
+diff --git a/docs/qa/KANBA-75/api-specialist-review.md b/docs/qa/KANBA-75/api-specialist-review.md
+new file mode 100644
+index 0000000..b3469c4
+--- /dev/null
++++ b/docs/qa/KANBA-75/api-specialist-review.md
+@@ -0,0 +1,130 @@
++# API Specialist Gate Final Audit: APPROVED for KANBA-75 (KB-P3-01b)
++
++- Auditor: arch-reviewer (Swarm Systems/Backend Architect & API Specialist Gate)
++- Worktree: `/tmp/kb-wt-KANBA-75`
++- Branch: `feat/KANBA-75`
++- Commit: `f238045`
++- Ticket: `KANBA-75` (`KB-P3-01b`: `[Phase 3 / API] Project architect API (part b): workflow states, custom priorities, labels with exclusive groups & WIP limits`)
++
++---
++
++### 1. Executive Summary & Verification Matrix
++
++A comprehensive systems architecture, API transport, database schema, and concurrency audit was conducted for `KANBA-75` (`KB-P3-01b`) in worktree `/tmp/kb-wt-KANBA-75`. The implementation was evaluated against specification sections 7.2 (items 8c, 8i), 6.4 (item 3), and 12.2. All 12 REST endpoints under `/api/v1/projects/{project_ref}/states|priorities|labels`, DDL migration with WIP limit check constraints, RLS permission policies, single-default invariants, delete guards with bounded issue migrations, and activity ledger logging were forensically verified.
++
++| Verification Dimension | Specification Target | Observed Implementation | Verdict |
++| :--- | :--- | :--- | :--- |
++| **REST Endpoints Coverage** | All 12 configuration endpoints | 4 state, 4 priority, 4 label endpoints in `kanban/api/v1/project_config.py` | PASS |
++| **DDL & CHECK Constraints** | Soft/hard WIP limits on `workflow_states` | Added `wip_soft_limit`, `wip_hard_limit` (1..999) and `wip_soft_le_hard` constraint | PASS |
++| **Inline Label Creation Permission** | S7.2 8i permission relaxation | `project_labels_insert_rls` updated to allow capability 4 (`EDIT`) on project | PASS |
++| **Single Default Invariant** | Exactly one default state and priority | Setting `is_default=true` atomically clears previous defaults in same transaction | PASS |
++| **Delete Invariants & Guards** | Prevent deletion of defaults & last in group | `409 DEFAULT_STATE`, `409 DEFAULT_PRIORITY`, `409 LAST_STATE_IN_GROUP` enforced | PASS |
++| **Bounded Issue Migration** | Migrate in-use states/priorities (<= 500) | `migrate_to` moves issues; rejects if unprovided (`409 IN_USE`) or > 500 (`409 MIGRATION_TOO_LARGE`) | PASS |
++| **Label Exclusive Groups** | Slug format & conflict prevention | Validates `exclusive_group` regex `^[a-z0-9][a-z0-9_-]{0,31}$`; rejects invalid chars (`422`) | PASS |
++| **Anti-Enumeration Protection** | S3.4 25.0ms timing floor + 404 | Endpoints run under `timing_floor(floor_ms=25.0)`; cross-project IDs return 404 | PASS |
++| **Activity Ledger Auditing** | Category `HISTORY` event types | Emits 9 project config events on project + `ISSUE_FIELD_CHANGED` on migrated issues | PASS |
++| **Automated Test Coverage** | Mandatory Feature Tests (>= 95%) | 11/11 passed in 86.38s; 97.19% combined coverage across target modules | PASS |
++| **Quality & Static Analysis** | Zero-Tolerance Quality Mandate | Ruff clean, Ruff format clean (575 files), Mypy strict clean (205 files), Lint-imports clean | PASS |
++
++---
++
++### 2. Forensic Architectural & REST Contract Audit
++
++#### A. Comprehensive REST Endpoint Topology (`kanban/api/v1/project_config.py`)
++All 12 endpoints required by `KB-P3-01b` are implemented and mounted on the canonical API router:
++1. `GET /api/v1/projects/{project_ref}/states`:
++   - Requires `Capability.VIEW`.
++   - Returns states ordered by `sort_order ASC, name ASC`.
++   - Includes real-time `issue_count` (non-archived, non-deleted issues) for Kanban WIP badge rendering.
++2. `POST /api/v1/projects/{project_ref}/states`:
++   - Requires `Capability.ADMIN` on target project.
++   - Enforces unique name per project case-insensitively (`409 STATE_NAME_TAKEN`).
++   - Returns `201 Created` with `Location` header.
++3. `PATCH /api/v1/projects/{project_ref}/states/{state_id}`:
++   - Requires `Capability.ADMIN`.
++   - Validates WIP limit bounds and cross-field constraints.
++4. `DELETE /api/v1/projects/{project_ref}/states/{state_id}?migrate_to=`:
++   - Requires `Capability.ADMIN`.
++   - Prevents deleting the default state (`409 DEFAULT_STATE`) or the only state in a group (`409 LAST_STATE_IN_GROUP`).
++   - If issues exist and `migrate_to` is omitted, rejects with `409 STATE_IN_USE`.
++   - If issues exist and `migrate_to` is provided, verifies `migrate_to` belongs to the same project (`422 MIGRATE_TARGET_INVALID`) and moves issues atomically. Bounded to <= 500 issues (`409 MIGRATION_TOO_LARGE`).
++5. `GET /api/v1/projects/{project_ref}/priorities`:
++   - Requires `Capability.VIEW`. Ordered by `sort_order ASC, slug ASC`.
++6. `POST /api/v1/projects/{project_ref}/priorities`:
++   - Requires `Capability.ADMIN`. Enforces unique slug per project (`409 PRIORITY_SLUG_TAKEN`).
++7. `PATCH /api/v1/projects/{project_ref}/priorities/{priority_id}`:
++   - Requires `Capability.ADMIN`.
++8. `DELETE /api/v1/projects/{project_ref}/priorities/{priority_id}?migrate_to=`:
++   - Requires `Capability.ADMIN`. Prevents deleting default priority (`409 DEFAULT_PRIORITY`).
++   - Enforces in-use migration up to 500 issues.
++9. `GET /api/v1/projects/{project_ref}/labels`:
++   - Requires `Capability.VIEW`. Ordered by `name ASC`.
++10. `POST /api/v1/projects/{project_ref}/labels`:
++    - Permits `Capability.EDIT` (S7.2 item 8i) or `Capability.ADMIN`, allowing authorized members to create labels directly from the ticket drawer.
++    - Enforces unique label name per project (`409 LABEL_NAME_TAKEN`).
++11. `PATCH /api/v1/projects/{project_ref}/labels/{label_id}`:
++    - Requires `Capability.ADMIN`.
++12. `DELETE /api/v1/projects/{project_ref}/labels/{label_id}`:
++    - Requires `Capability.ADMIN`. Cascades removal of `issue_labels` associations.
++
++#### B. Database Schema, DDL Migration & RLS Updates (`database/migrations/`)
++- **Schema Migration (`p3_01b_workflow_state_wip_limits.up.sql`)**:
++  - Adds `wip_soft_limit` (integer, 1..999, nullable).
++  - Adds `wip_hard_limit` (integer, 1..999, nullable).
++  - Adds CHECK constraint `wip_soft_le_hard` (`wip_soft_limit IS NULL OR wip_hard_limit IS NULL OR wip_soft_limit <= wip_hard_limit`).
++  - Updates RLS policy `project_labels_insert_rls` on `project_labels` to permit capability 4 (`EDIT`) alongside capability 64 (`ADMIN`), matching S7.2 requirement 8i.
++- **Migration Test (`test_migration_wip_limits.py`)**:
++  - Validates that upgrading and downgrading the migration restores the exact pre-migration catalog state.
++
++#### C. Single Default Invariant & Delete Safety (`kanban/services/project_config.py`)
++- **Single Default Guarantee**:
++  - When creating or patching a state or priority with `is_default=true`, all existing default records in the project are cleared within the same atomic database transaction.
++  - Exactly one state and priority remains the default.
++  - Deleting the active default is strictly prohibited (`409 DEFAULT_STATE`, `409 DEFAULT_PRIORITY`).
++- **Bounded Issue Migration (`MAX_MIGRATION_ISSUES = 500`)**:
++  - Migrating issues during state/priority deletion runs inside the same transaction as the deletion.
++  - If more than 500 issues are assigned to the target entity, the service rejects the request with RFC 7807 409 `MIGRATION_TOO_LARGE`, preventing long database locks and transaction buffer exhaustion.
++
++#### D. Anti-Enumeration & Cross-Project Isolation (S3.4)
++- **Timing Equalization**:
++  - All 12 endpoints execute within `async with timing_floor(floor_ms=25.0):`.
++  - Non-existent projects and projects the user cannot view return indistinguishable 404 Problem Details.
++- **Cross-Project Reference Protection**:
++  - Attempting to access, modify, or delete a state, priority, or label using an ID that belongs to another project immediately returns 404, preventing cross-tenant existence enumeration.
++
++#### E. Activity Ledger Auditing
++- **Project-Level Records**:
++  - Emits 9 fine-grained activity event types under category `HISTORY`: `STATE_CREATED`, `STATE_UPDATED`, `STATE_DELETED`, `PRIORITY_CREATED`, `PRIORITY_UPDATED`, `PRIORITY_DELETED`, `LABEL_CREATED`, `LABEL_UPDATED`, `LABEL_DELETED`.
++- **Issue-Level Mutation Records**:
++  - For each issue moved during state or priority deletion, an `ISSUE_FIELD_CHANGED` event is recorded on the issue with reason `state_deleted` or `priority_deleted`.
++
++---
++
++### 3. Test Suite & Verification Matrix
++
++1. **Mandatory Test Cases Verified**:
++   - Case 1 (Positive Lifecycle): Create `started` state with `wip_soft_limit=3`, `wip_hard_limit=5`; GET returns `issue_count: 0`; `STATE_CREATED` activity logged.
++   - Case 2 (Negative / Security): Member with `EDIT` gets 403 on state creation; non-member gets 404; cross-project label ID returns 404.
++   - Case 3 (Exclusive Groups): Creating label with valid group succeeds; invalid regex characters return 422.
++   - Case 4 (Boundaries & Transitions): `soft > hard` WIP returns 422; 999 accepted, 1000 rejected; deleting last state in group returns 409 `LAST_STATE_IN_GROUP`; deleting in-use state without migration returns 409 `STATE_IN_USE`, with valid migration returns 204.
++   - Case 5 (Default Invariants): Setting new default clears old default; deleting default priority returns 409 `DEFAULT_PRIORITY`.
++   - Case 6 (Migration Test): Upgrade then downgrade catalog comparison passes.
++2. **Execution Results**:
++   - Test suite: 11/11 passed in 86.38s across `test_project_config.py` and `test_migration_wip_limits.py`.
++   - Coverage: **97.19%** combined branch+line coverage across target modules (`kanban.api.v1.project_config`: 100%, `kanban.services.project_config`: 97%).
++3. **Static Quality Verification**:
++   - `uv run ruff check kanban database`: Clean (0 errors).
++   - `uv run ruff format --check .`: Clean (575 files).
++   - `uv run mypy --strict kanban database`: Clean (0 errors across 205 source files).
++   - `uv run lint-imports`: Clean (2 kept, 0 broken).
++   - `python -m scripts.check_no_dashes --all`: Clean (0 non-ASCII dashes repo-wide).
++   - `make license`: Clean (violations=0).
++4. **Typography**: Plain ASCII hyphens `-` only throughout. Zero non-ASCII Unicode dashes (`U+2014` / `U+2013`).
++
++---
++
++### 4. Gate Sign-Off
++
++The project configuration API, WIP limits migration, and workflow management implementation in `/tmp/kb-wt-KANBA-75` fully satisfies all architectural, security, database constraint, and contract requirements of ticket `KANBA-75` (`KB-P3-01b`).
++
++Verdict: APPROVED
 diff --git a/docs/qa/KANBA-75/build-check.txt b/docs/qa/KANBA-75/build-check.txt
 new file mode 100644
 index 0000000..0f22faa
@@ -613,6 +749,673 @@ index 0000000..884a3cb
 +    }
 +  ]
 +}
+diff --git a/docs/qa/KANBA-75/git-diff.patch b/docs/qa/KANBA-75/git-diff.patch
+new file mode 100644
+index 0000000..79d341d
+--- /dev/null
++++ b/docs/qa/KANBA-75/git-diff.patch
+@@ -0,0 +1,660 @@
++diff --git a/database/migrations/sql/p3_01b_workflow_state_wip_limits.down.sql b/database/migrations/sql/p3_01b_workflow_state_wip_limits.down.sql
++new file mode 100644
++index 0000000..2b37a6b
++--- /dev/null
+++++ b/database/migrations/sql/p3_01b_workflow_state_wip_limits.down.sql
++@@ -0,0 +1,15 @@
+++-- Migration Downgrade: p3_01b_workflow_state_wip_limits (KB-P3-01b)
+++-- Revert soft/hard WIP limits and ordering constraint from workflow_states.
+++-- Restore project_labels INSERT policy to ADMIN capability (mask 64).
+++
+++DROP POLICY IF EXISTS project_labels_insert_rls ON project_labels;
+++CREATE POLICY project_labels_insert_rls ON project_labels
+++    FOR INSERT WITH CHECK (
+++        workspace_id = app_current_workspace_id()
+++        AND app_has_object_capability(project_id, 64)
+++    );
+++
+++ALTER TABLE workflow_states
+++  DROP CONSTRAINT IF EXISTS wip_soft_le_hard,
+++  DROP COLUMN IF EXISTS wip_hard_limit,
+++  DROP COLUMN IF EXISTS wip_soft_limit;
++diff --git a/database/migrations/sql/p3_01b_workflow_state_wip_limits.up.sql b/database/migrations/sql/p3_01b_workflow_state_wip_limits.up.sql
++new file mode 100644
++index 0000000..d1296fb
++--- /dev/null
+++++ b/database/migrations/sql/p3_01b_workflow_state_wip_limits.up.sql
++@@ -0,0 +1,15 @@
+++-- Migration: p3_01b_workflow_state_wip_limits (KB-P3-01b)
+++-- Add soft/hard WIP limits and ordering constraint to workflow_states.
+++-- Update project_labels INSERT policy to permit EDIT capability (mask 4) per S7.2 item 8i.
+++
+++ALTER TABLE workflow_states
+++  ADD COLUMN wip_soft_limit INTEGER CHECK (wip_soft_limit IS NULL OR wip_soft_limit BETWEEN 1 AND 999),
+++  ADD COLUMN wip_hard_limit INTEGER CHECK (wip_hard_limit IS NULL OR wip_hard_limit BETWEEN 1 AND 999),
+++  ADD CONSTRAINT wip_soft_le_hard CHECK (wip_soft_limit IS NULL OR wip_hard_limit IS NULL OR wip_soft_limit <= wip_hard_limit);
+++
+++DROP POLICY IF EXISTS project_labels_insert_rls ON project_labels;
+++CREATE POLICY project_labels_insert_rls ON project_labels
+++    FOR INSERT WITH CHECK (
+++        workspace_id = app_current_workspace_id()
+++        AND app_has_object_capability(project_id, 4)
+++    );
++diff --git a/database/migrations/versions/p3_01b_workflow_state_wip_limits.py b/database/migrations/versions/p3_01b_workflow_state_wip_limits.py
++new file mode 100644
++index 0000000..1d17ba7
++--- /dev/null
+++++ b/database/migrations/versions/p3_01b_workflow_state_wip_limits.py
++@@ -0,0 +1,26 @@
+++"""Workflow states WIP limits (KB-P3-01b).
+++
+++Revision ID: p3_01b_workflow_state_wip_limits
+++Revises: p2_18_rate_limit_buckets
+++Create Date: 2026-11-12 00:00:00.000000
+++"""
+++
+++from collections.abc import Sequence
+++
+++from database.migrations.sqlfile import execute_sql_file
+++
+++# revision identifiers, used by Alembic.
+++revision: str = "p3_01b_workflow_state_wip_limits"
+++down_revision: str | None = "p2_18_rate_limit_buckets"
+++branch_labels: str | Sequence[str] | None = None
+++depends_on: str | Sequence[str] | None = None
+++
+++
+++def upgrade() -> None:
+++    """Apply WIP limits columns and constraint to workflow_states."""
+++    execute_sql_file("p3_01b_workflow_state_wip_limits.up.sql")
+++
+++
+++def downgrade() -> None:
+++    """Revert WIP limits columns and constraint from workflow_states."""
+++    execute_sql_file("p3_01b_workflow_state_wip_limits.down.sql")
++diff --git a/database/models/projects.py b/database/models/projects.py
++index bcbcaa4..445e80f 100644
++--- a/database/models/projects.py
+++++ b/database/models/projects.py
++@@ -83,6 +83,8 @@ class WorkflowState(Base):
++     color_hex: Mapped[str] = mapped_column(String, nullable=False)
++     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
++     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+++    wip_soft_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+++    wip_hard_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
++ 
++ 
++ class ProjectPriority(Base):
++diff --git a/database/tests/test_migration_wip_limits.py b/database/tests/test_migration_wip_limits.py
++new file mode 100644
++index 0000000..418942a
++--- /dev/null
+++++ b/database/tests/test_migration_wip_limits.py
++@@ -0,0 +1,154 @@
+++# Copyright 2026 Kanban Platform Contributors
+++# Apache-2.0 License. See LICENSE for details.
+++"""Migration lifecycle and constraint tests for p3_01b_workflow_state_wip_limits."""
+++
+++import asyncpg  # type: ignore[import-untyped]  # asyncpg does not distribute PEP 561 py.typed marker
+++import pytest
+++
+++from database.tests.migration_harness import MigrationHarness
+++
+++
+++@pytest.mark.asyncio
+++async def test_migration_wip_limits_lifecycle_and_constraints() -> None:
+++    """Verify upgrade adds WIP limits and constraint, downgrade restores catalog identically."""
+++    async with MigrationHarness() as harness:
+++        # 1. Upgrade to revision prior to p3_01b
+++        await harness.upgrade("p2_18_rate_limit_buckets")
+++
+++        # Snapshot workflow_states columns before upgrade
+++        pre_cols_rows = await harness.fetch(
+++            "SELECT column_name, data_type, is_nullable "
+++            "FROM information_schema.columns "
+++            "WHERE table_name = 'workflow_states' "
+++            "ORDER BY ordinal_position"
+++        )
+++        pre_columns = [(r["column_name"], r["data_type"], r["is_nullable"]) for r in pre_cols_rows]
+++        pre_col_names = {c[0] for c in pre_columns}
+++        assert "wip_soft_limit" not in pre_col_names
+++        assert "wip_hard_limit" not in pre_col_names
+++
+++        # 2. Upgrade to p3_01b_workflow_state_wip_limits
+++        await harness.upgrade("p3_01b_workflow_state_wip_limits")
+++
+++        post_cols_rows = await harness.fetch(
+++            "SELECT column_name, data_type, is_nullable "
+++            "FROM information_schema.columns "
+++            "WHERE table_name = 'workflow_states' "
+++            "ORDER BY ordinal_position"
+++        )
+++        post_col_names = {r["column_name"] for r in post_cols_rows}
+++        assert "wip_soft_limit" in post_col_names
+++        assert "wip_hard_limit" in post_col_names
+++
+++        # Check constraint existence
+++        constraints = await harness.fetch(
+++            "SELECT conname FROM pg_constraint "
+++            "WHERE conrelid = 'workflow_states'::regclass "
+++            "  AND conname = 'wip_soft_le_hard'"
+++        )
+++        assert len(constraints) == 1
+++
+++        # Check project_labels policy allows capability 4 post-upgrade
+++        pol_rows = await harness.fetch(
+++            "SELECT polname, pg_get_expr(polwithcheck, polrelid) as with_check "
+++            "FROM pg_policy "
+++            "WHERE polrelid = 'project_labels'::regclass AND polname = 'project_labels_insert_rls'"
+++        )
+++        assert len(pol_rows) == 1
+++        assert "4" in pol_rows[0]["with_check"]
+++
+++        # Verify CHECK constraint enforcement in DB
+++        # Seed minimal workspace and project to test constraint on workflow_states
+++        seed_ws = await harness.fetch(
+++            "INSERT INTO workspaces (id, name, slug) "
+++            "VALUES (uuidv7(), 'Test WS', 'test-ws') RETURNING id"
+++        )
+++        ws_id = seed_ws[0]["id"]
+++        proj_uuid = await harness.fetch("SELECT uuidv7() AS id")
+++        proj_id = proj_uuid[0]["id"]
+++        user_uuid = await harness.fetch("SELECT uuidv7() AS id")
+++        user_id = user_uuid[0]["id"]
+++
+++        await harness.execute(
+++            "INSERT INTO objects "
+++            "(id, object_type, workspace_id, canonical_key, display_title, created_by_id) "
+++            "VALUES ($1, 'project', $2, 'WIPPROJ', 'WIP Test Project', $3)",
+++            proj_id,
+++            ws_id,
+++            user_id,
+++        )
+++        await harness.execute(
+++            "INSERT INTO projects (id, workspace_id, identifier, name) "
+++            "VALUES ($1, $2, 'WIPPROJ', 'WIP Test Project')",
+++            proj_id,
+++            ws_id,
+++        )
+++
+++        cols = (
+++            "(id, workspace_id, project_id, name, state_group, color_hex, "
+++            "sort_order, is_default, wip_soft_limit, wip_hard_limit) "
+++        )
+++
+++        # Valid WIP limits
+++        await harness.execute(
+++            f"INSERT INTO workflow_states {cols}"
+++            "VALUES (uuidv7(), $1, $2, 'Valid WIP', 'started', '#3B82F6', 10, false, 3, 5)",
+++            ws_id,
+++            proj_id,
+++        )
+++
+++        # Soft limit greater than hard limit violates wip_soft_le_hard constraint
+++        with pytest.raises(asyncpg.exceptions.CheckViolationError):
+++            await harness.execute(
+++                f"INSERT INTO workflow_states {cols}"
+++                "VALUES (uuidv7(), $1, $2, 'Invalid LE', 'started', '#3B82F6', 20, false, 6, 5)",
+++                ws_id,
+++                proj_id,
+++            )
+++
+++        # Soft limit greater than 999 boundary violates range check
+++        with pytest.raises(asyncpg.exceptions.CheckViolationError):
+++            await harness.execute(
+++                f"INSERT INTO workflow_states {cols}"
+++                "VALUES (uuidv7(), $1, $2, 'Invalid Range', 'started', "
+++                "'#3B82F6', 30, false, 1000, 1000)",
+++                ws_id,
+++                proj_id,
+++            )
+++
+++        # 3. Downgrade to p2_18_rate_limit_buckets
+++        await harness.downgrade("p2_18_rate_limit_buckets")
+++
+++        # Snapshot workflow_states columns after downgrade
+++        reverted_cols_rows = await harness.fetch(
+++            "SELECT column_name, data_type, is_nullable "
+++            "FROM information_schema.columns "
+++            "WHERE table_name = 'workflow_states' "
+++            "ORDER BY ordinal_position"
+++        )
+++        reverted_columns = [
+++            (r["column_name"], r["data_type"], r["is_nullable"]) for r in reverted_cols_rows
+++        ]
+++
+++        # Verify catalog is 100% identical to pre-upgrade
+++        assert reverted_columns == pre_columns
+++
+++        # Verify constraint removed
+++        no_constraints = await harness.fetch(
+++            "SELECT conname FROM pg_constraint "
+++            "WHERE conrelid = 'workflow_states'::regclass "
+++            "  AND conname = 'wip_soft_le_hard'"
+++        )
+++        assert len(no_constraints) == 0
+++
+++        # Check project_labels policy restored to capability 64
+++        reverted_pol_rows = await harness.fetch(
+++            "SELECT polname, pg_get_expr(polwithcheck, polrelid) as with_check "
+++            "FROM pg_policy "
+++            "WHERE polrelid = 'project_labels'::regclass AND polname = 'project_labels_insert_rls'"
+++        )
+++        assert len(reverted_pol_rows) == 1
+++        assert "64" in reverted_pol_rows[0]["with_check"]
+++
+++        # 4. Re-upgrade to head
+++        await harness.upgrade("head")
++diff --git a/docs/qa/KANBA-75/api-specialist-review.md b/docs/qa/KANBA-75/api-specialist-review.md
++new file mode 100644
++index 0000000..b3469c4
++--- /dev/null
+++++ b/docs/qa/KANBA-75/api-specialist-review.md
++@@ -0,0 +1,130 @@
+++# API Specialist Gate Final Audit: APPROVED for KANBA-75 (KB-P3-01b)
+++
+++- Auditor: arch-reviewer (Swarm Systems/Backend Architect & API Specialist Gate)
+++- Worktree: `/tmp/kb-wt-KANBA-75`
+++- Branch: `feat/KANBA-75`
+++- Commit: `f238045`
+++- Ticket: `KANBA-75` (`KB-P3-01b`: `[Phase 3 / API] Project architect API (part b): workflow states, custom priorities, labels with exclusive groups & WIP limits`)
+++
+++---
+++
+++### 1. Executive Summary & Verification Matrix
+++
+++A comprehensive systems architecture, API transport, database schema, and concurrency audit was conducted for `KANBA-75` (`KB-P3-01b`) in worktree `/tmp/kb-wt-KANBA-75`. The implementation was evaluated against specification sections 7.2 (items 8c, 8i), 6.4 (item 3), and 12.2. All 12 REST endpoints under `/api/v1/projects/{project_ref}/states|priorities|labels`, DDL migration with WIP limit check constraints, RLS permission policies, single-default invariants, delete guards with bounded issue migrations, and activity ledger logging were forensically verified.
+++
+++| Verification Dimension | Specification Target | Observed Implementation | Verdict |
+++| :--- | :--- | :--- | :--- |
+++| **REST Endpoints Coverage** | All 12 configuration endpoints | 4 state, 4 priority, 4 label endpoints in `kanban/api/v1/project_config.py` | PASS |
+++| **DDL & CHECK Constraints** | Soft/hard WIP limits on `workflow_states` | Added `wip_soft_limit`, `wip_hard_limit` (1..999) and `wip_soft_le_hard` constraint | PASS |
+++| **Inline Label Creation Permission** | S7.2 8i permission relaxation | `project_labels_insert_rls` updated to allow capability 4 (`EDIT`) on project | PASS |
+++| **Single Default Invariant** | Exactly one default state and priority | Setting `is_default=true` atomically clears previous defaults in same transaction | PASS |
+++| **Delete Invariants & Guards** | Prevent deletion of defaults & last in group | `409 DEFAULT_STATE`, `409 DEFAULT_PRIORITY`, `409 LAST_STATE_IN_GROUP` enforced | PASS |
+++| **Bounded Issue Migration** | Migrate in-use states/priorities (<= 500) | `migrate_to` moves issues; rejects if unprovided (`409 IN_USE`) or > 500 (`409 MIGRATION_TOO_LARGE`) | PASS |
+++| **Label Exclusive Groups** | Slug format & conflict prevention | Validates `exclusive_group` regex `^[a-z0-9][a-z0-9_-]{0,31}$`; rejects invalid chars (`422`) | PASS |
+++| **Anti-Enumeration Protection** | S3.4 25.0ms timing floor + 404 | Endpoints run under `timing_floor(floor_ms=25.0)`; cross-project IDs return 404 | PASS |
+++| **Activity Ledger Auditing** | Category `HISTORY` event types | Emits 9 project config events on project + `ISSUE_FIELD_CHANGED` on migrated issues | PASS |
+++| **Automated Test Coverage** | Mandatory Feature Tests (>= 95%) | 11/11 passed in 86.38s; 97.19% combined coverage across target modules | PASS |
+++| **Quality & Static Analysis** | Zero-Tolerance Quality Mandate | Ruff clean, Ruff format clean (575 files), Mypy strict clean (205 files), Lint-imports clean | PASS |
+++
+++---
+++
+++### 2. Forensic Architectural & REST Contract Audit
+++
+++#### A. Comprehensive REST Endpoint Topology (`kanban/api/v1/project_config.py`)
+++All 12 endpoints required by `KB-P3-01b` are implemented and mounted on the canonical API router:
+++1. `GET /api/v1/projects/{project_ref}/states`:
+++   - Requires `Capability.VIEW`.
+++   - Returns states ordered by `sort_order ASC, name ASC`.
+++   - Includes real-time `issue_count` (non-archived, non-deleted issues) for Kanban WIP badge rendering.
+++2. `POST /api/v1/projects/{project_ref}/states`:
+++   - Requires `Capability.ADMIN` on target project.
+++   - Enforces unique name per project case-insensitively (`409 STATE_NAME_TAKEN`).
+++   - Returns `201 Created` with `Location` header.
+++3. `PATCH /api/v1/projects/{project_ref}/states/{state_id}`:
+++   - Requires `Capability.ADMIN`.
+++   - Validates WIP limit bounds and cross-field constraints.
+++4. `DELETE /api/v1/projects/{project_ref}/states/{state_id}?migrate_to=`:
+++   - Requires `Capability.ADMIN`.
+++   - Prevents deleting the default state (`409 DEFAULT_STATE`) or the only state in a group (`409 LAST_STATE_IN_GROUP`).
+++   - If issues exist and `migrate_to` is omitted, rejects with `409 STATE_IN_USE`.
+++   - If issues exist and `migrate_to` is provided, verifies `migrate_to` belongs to the same project (`422 MIGRATE_TARGET_INVALID`) and moves issues atomically. Bounded to <= 500 issues (`409 MIGRATION_TOO_LARGE`).
+++5. `GET /api/v1/projects/{project_ref}/priorities`:
+++   - Requires `Capability.VIEW`. Ordered by `sort_order ASC, slug ASC`.
+++6. `POST /api/v1/projects/{project_ref}/priorities`:
+++   - Requires `Capability.ADMIN`. Enforces unique slug per project (`409 PRIORITY_SLUG_TAKEN`).
+++7. `PATCH /api/v1/projects/{project_ref}/priorities/{priority_id}`:
+++   - Requires `Capability.ADMIN`.
+++8. `DELETE /api/v1/projects/{project_ref}/priorities/{priority_id}?migrate_to=`:
+++   - Requires `Capability.ADMIN`. Prevents deleting default priority (`409 DEFAULT_PRIORITY`).
+++   - Enforces in-use migration up to 500 issues.
+++9. `GET /api/v1/projects/{project_ref}/labels`:
+++   - Requires `Capability.VIEW`. Ordered by `name ASC`.
+++10. `POST /api/v1/projects/{project_ref}/labels`:
+++    - Permits `Capability.EDIT` (S7.2 item 8i) or `Capability.ADMIN`, allowing authorized members to create labels directly from the ticket drawer.
+++    - Enforces unique label name per project (`409 LABEL_NAME_TAKEN`).
+++11. `PATCH /api/v1/projects/{project_ref}/labels/{label_id}`:
+++    - Requires `Capability.ADMIN`.
+++12. `DELETE /api/v1/projects/{project_ref}/labels/{label_id}`:
+++    - Requires `Capability.ADMIN`. Cascades removal of `issue_labels` associations.
+++
+++#### B. Database Schema, DDL Migration & RLS Updates (`database/migrations/`)
+++- **Schema Migration (`p3_01b_workflow_state_wip_limits.up.sql`)**:
+++  - Adds `wip_soft_limit` (integer, 1..999, nullable).
+++  - Adds `wip_hard_limit` (integer, 1..999, nullable).
+++  - Adds CHECK constraint `wip_soft_le_hard` (`wip_soft_limit IS NULL OR wip_hard_limit IS NULL OR wip_soft_limit <= wip_hard_limit`).
+++  - Updates RLS policy `project_labels_insert_rls` on `project_labels` to permit capability 4 (`EDIT`) alongside capability 64 (`ADMIN`), matching S7.2 requirement 8i.
+++- **Migration Test (`test_migration_wip_limits.py`)**:
+++  - Validates that upgrading and downgrading the migration restores the exact pre-migration catalog state.
+++
+++#### C. Single Default Invariant & Delete Safety (`kanban/services/project_config.py`)
+++- **Single Default Guarantee**:
+++  - When creating or patching a state or priority with `is_default=true`, all existing default records in the project are cleared within the same atomic database transaction.
+++  - Exactly one state and priority remains the default.
+++  - Deleting the active default is strictly prohibited (`409 DEFAULT_STATE`, `409 DEFAULT_PRIORITY`).
+++- **Bounded Issue Migration (`MAX_MIGRATION_ISSUES = 500`)**:
+++  - Migrating issues during state/priority deletion runs inside the same transaction as the deletion.
+++  - If more than 500 issues are assigned to the target entity, the service rejects the request with RFC 7807 409 `MIGRATION_TOO_LARGE`, preventing long database locks and transaction buffer exhaustion.
+++
+++#### D. Anti-Enumeration & Cross-Project Isolation (S3.4)
+++- **Timing Equalization**:
+++  - All 12 endpoints execute within `async with timing_floor(floor_ms=25.0):`.
+++  - Non-existent projects and projects the user cannot view return indistinguishable 404 Problem Details.
+++- **Cross-Project Reference Protection**:
+++  - Attempting to access, modify, or delete a state, priority, or label using an ID that belongs to another project immediately returns 404, preventing cross-tenant existence enumeration.
+++
+++#### E. Activity Ledger Auditing
+++- **Project-Level Records**:
+++  - Emits 9 fine-grained activity event types under category `HISTORY`: `STATE_CREATED`, `STATE_UPDATED`, `STATE_DELETED`, `PRIORITY_CREATED`, `PRIORITY_UPDATED`, `PRIORITY_DELETED`, `LABEL_CREATED`, `LABEL_UPDATED`, `LABEL_DELETED`.
+++- **Issue-Level Mutation Records**:
+++  - For each issue moved during state or priority deletion, an `ISSUE_FIELD_CHANGED` event is recorded on the issue with reason `state_deleted` or `priority_deleted`.
+++
+++---
+++
+++### 3. Test Suite & Verification Matrix
+++
+++1. **Mandatory Test Cases Verified**:
+++   - Case 1 (Positive Lifecycle): Create `started` state with `wip_soft_limit=3`, `wip_hard_limit=5`; GET returns `issue_count: 0`; `STATE_CREATED` activity logged.
+++   - Case 2 (Negative / Security): Member with `EDIT` gets 403 on state creation; non-member gets 404; cross-project label ID returns 404.
+++   - Case 3 (Exclusive Groups): Creating label with valid group succeeds; invalid regex characters return 422.
+++   - Case 4 (Boundaries & Transitions): `soft > hard` WIP returns 422; 999 accepted, 1000 rejected; deleting last state in group returns 409 `LAST_STATE_IN_GROUP`; deleting in-use state without migration returns 409 `STATE_IN_USE`, with valid migration returns 204.
+++   - Case 5 (Default Invariants): Setting new default clears old default; deleting default priority returns 409 `DEFAULT_PRIORITY`.
+++   - Case 6 (Migration Test): Upgrade then downgrade catalog comparison passes.
+++2. **Execution Results**:
+++   - Test suite: 11/11 passed in 86.38s across `test_project_config.py` and `test_migration_wip_limits.py`.
+++   - Coverage: **97.19%** combined branch+line coverage across target modules (`kanban.api.v1.project_config`: 100%, `kanban.services.project_config`: 97%).
+++3. **Static Quality Verification**:
+++   - `uv run ruff check kanban database`: Clean (0 errors).
+++   - `uv run ruff format --check .`: Clean (575 files).
+++   - `uv run mypy --strict kanban database`: Clean (0 errors across 205 source files).
+++   - `uv run lint-imports`: Clean (2 kept, 0 broken).
+++   - `python -m scripts.check_no_dashes --all`: Clean (0 non-ASCII dashes repo-wide).
+++   - `make license`: Clean (violations=0).
+++4. **Typography**: Plain ASCII hyphens `-` only throughout. Zero non-ASCII Unicode dashes (`U+2014` / `U+2013`).
+++
+++---
+++
+++### 4. Gate Sign-Off
+++
+++The project configuration API, WIP limits migration, and workflow management implementation in `/tmp/kb-wt-KANBA-75` fully satisfies all architectural, security, database constraint, and contract requirements of ticket `KANBA-75` (`KB-P3-01b`).
+++
+++Verdict: APPROVED
++diff --git a/docs/qa/KANBA-75/build-check.txt b/docs/qa/KANBA-75/build-check.txt
++new file mode 100644
++index 0000000..0f22faa
++--- /dev/null
+++++ b/docs/qa/KANBA-75/build-check.txt
++@@ -0,0 +1,33 @@
+++=== ruff check kanban database ===
+++All checks passed!
+++=== ruff format --check . ===
+++575 files already formatted
+++=== mypy --strict kanban database ===
+++Success: no issues found in 205 source files
+++=== lint-imports ===
+++
+++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+++  └──▶║║                    ▲ 
+++      ╚╝────────────────────┘
+++
+++
+++---------
+++Contracts
+++---------
+++
+++Analyzed 280 files, 527 dependencies.
+++-------------------------------------
+++
+++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+++mcp forbidden from importing database KEPT
+++
+++Contracts: 2 kept, 0 broken.
+++=== check_no_dashes --all ===
+++=== make license ===
+++uv run python -m scripts.license_gate
+++SUMMARY python=110 node=1 violations=0
++diff --git a/docs/qa/KANBA-75/contract-sample.json b/docs/qa/KANBA-75/contract-sample.json
++new file mode 100644
++index 0000000..884a3cb
++--- /dev/null
+++++ b/docs/qa/KANBA-75/contract-sample.json
++@@ -0,0 +1,323 @@
+++{
+++  "ticket": "KANBA-75",
+++  "exchanges": [
+++    {
+++      "name": "create_state_201",
+++      "request": {
+++        "method": "POST",
+++        "path": "/api/v1/projects/TC1/states",
+++        "headers": {
+++          "host": "test",
+++          "accept": "*/*",
+++          "accept-encoding": "gzip, deflate",
+++          "connection": "keep-alive",
+++          "user-agent": "python-httpx/0.28.1",
+++          "content-length": "133",
+++          "content-type": "application/json"
+++        },
+++        "body": {
+++          "name": "In Review",
+++          "group": "started",
+++          "color_hex": "#3B82F6",
+++          "sort_order": 30,
+++          "is_default": false,
+++          "wip_soft_limit": 3,
+++          "wip_hard_limit": 5
+++        }
+++      },
+++      "response": {
+++        "status": 201,
+++        "headers": {
+++          "content-length": "245",
+++          "content-type": "application/json",
+++          "location": "/api/v1/projects/TC1/states/01a1ceb3-79e3-7bb1-836b-0ae45726c0a2",
+++          "x-request-id": "055b17e3816b4306ba45fc4ab6d7db3b",
+++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+++          "x-content-type-options": "nosniff",
+++          "referrer-policy": "no-referrer",
+++          "x-frame-options": "DENY",
+++          "cross-origin-opener-policy": "same-origin",
+++          "cross-origin-resource-policy": "same-origin",
+++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+++          "strict-transport-security": "max-age=63072000; includeSubDomains"
+++        },
+++        "body": {
+++          "id": "01a1ceb3-79e3-7bb1-836b-0ae45726c0a2",
+++          "project_id": "01a1ceb3-7937-7141-90d9-6c2fc51b4dca",
+++          "name": "In Review",
+++          "group": "started",
+++          "color_hex": "#3B82F6",
+++          "sort_order": 30,
+++          "is_default": false,
+++          "wip_soft_limit": 3,
+++          "wip_hard_limit": 5,
+++          "issue_count": 0
+++        }
+++      }
+++    },
+++    {
+++      "name": "post_state_edit_user_403",
+++      "request": {
+++        "method": "POST",
+++        "path": "/api/v1/projects/TC2A/states",
+++        "headers": {
+++          "host": "test",
+++          "accept": "*/*",
+++          "accept-encoding": "gzip, deflate",
+++          "connection": "keep-alive",
+++          "user-agent": "python-httpx/0.28.1",
+++          "content-length": "66",
+++          "content-type": "application/json"
+++        },
+++        "body": {
+++          "name": "Forbidden State",
+++          "group": "started",
+++          "color_hex": "#10B981"
+++        }
+++      },
+++      "response": {
+++        "status": 403,
+++        "headers": {
+++          "x-request-id": "91f2edeab05c4d45aaf2b673be2b6ea9",
+++          "content-length": "181",
+++          "content-type": "application/problem+json",
+++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+++          "x-content-type-options": "nosniff",
+++          "referrer-policy": "no-referrer",
+++          "x-frame-options": "DENY",
+++          "cross-origin-opener-policy": "same-origin",
+++          "cross-origin-resource-policy": "same-origin",
+++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+++          "strict-transport-security": "max-age=63072000; includeSubDomains"
+++        },
+++        "body": {
+++          "type": "urn:kanban:problem:INSUFFICIENT_CAPABILITY",
+++          "title": "Insufficient Capability",
+++          "status": 403,
+++          "code": "INSUFFICIENT_CAPABILITY",
+++          "request_id": "91f2edeab05c4d45aaf2b673be2b6ea9"
+++        }
+++      }
+++    },
+++    {
+++      "name": "cross_project_id_404",
+++      "request": {
+++        "method": "PATCH",
+++        "path": "/api/v1/projects/TC2A/labels/01a1ceb3-7b58-7fe1-9c26-1064411fb6a7",
+++        "headers": {
+++          "host": "test",
+++          "accept": "*/*",
+++          "accept-encoding": "gzip, deflate",
+++          "connection": "keep-alive",
+++          "user-agent": "python-httpx/0.28.1",
+++          "content-length": "18",
+++          "content-type": "application/json"
+++        },
+++        "body": {
+++          "name": "renamed"
+++        }
+++      },
+++      "response": {
+++        "status": 404,
+++        "headers": {
+++          "x-request-id": "18b3afcc9cc04260bae23175854a95d8",
+++          "content-length": "139",
+++          "content-type": "application/problem+json",
+++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+++          "x-content-type-options": "nosniff",
+++          "referrer-policy": "no-referrer",
+++          "x-frame-options": "DENY",
+++          "cross-origin-opener-policy": "same-origin",
+++          "cross-origin-resource-policy": "same-origin",
+++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+++          "strict-transport-security": "max-age=63072000; includeSubDomains"
+++        },
+++        "body": {
+++          "type": "urn:kanban:problem:NOT_FOUND",
+++          "title": "Not Found",
+++          "status": 404,
+++          "code": "NOT_FOUND",
+++          "request_id": "18b3afcc9cc04260bae23175854a95d8"
+++        }
+++      }
+++    },
+++    {
+++      "name": "create_label_edit_user_201",
+++      "request": {
+++        "method": "POST",
+++        "path": "/api/v1/projects/TC3/labels",
+++        "headers": {
+++          "host": "test",
+++          "accept": "*/*",
+++          "accept-encoding": "gzip, deflate",
+++          "connection": "keep-alive",
+++          "user-agent": "python-httpx/0.28.1",
+++          "content-length": "66",
+++          "content-type": "application/json"
+++        },
+++        "body": {
+++          "name": "type:bug",
+++          "color_hex": "#EF4444",
+++          "exclusive_group": "type"
+++        }
+++      },
+++      "response": {
+++        "status": 201,
+++        "headers": {
+++          "content-length": "162",
+++          "content-type": "application/json",
+++          "location": "/api/v1/projects/TC3/labels/01a1ceb3-7c89-7a75-84a9-6d8cb17244a2",
+++          "x-request-id": "a2b1ea66e81048c08c5f01b3ab1a9372",
+++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+++          "x-content-type-options": "nosniff",
+++          "referrer-policy": "no-referrer",
+++          "x-frame-options": "DENY",
+++          "cross-origin-opener-policy": "same-origin",
+++          "cross-origin-resource-policy": "same-origin",
+++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+++          "strict-transport-security": "max-age=63072000; includeSubDomains"
+++        },
+++        "body": {
+++          "id": "01a1ceb3-7c89-7a75-84a9-6d8cb17244a2",
+++          "project_id": "01a1ceb3-7c03-7c10-ac02-d6933e16c280",
+++          "name": "type:bug",
+++          "color_hex": "#EF4444",
+++          "exclusive_group": "type"
+++        }
+++      }
+++    },
+++    {
+++      "name": "wip_invalid_422",
+++      "request": {
+++        "method": "POST",
+++        "path": "/api/v1/projects/TC4/states",
+++        "headers": {
+++          "host": "test",
+++          "accept": "*/*",
+++          "accept-encoding": "gzip, deflate",
+++          "connection": "keep-alive",
+++          "user-agent": "python-httpx/0.28.1",
+++          "content-length": "100",
+++          "content-type": "application/json"
+++        },
+++        "body": {
+++          "name": "Invalid WIP",
+++          "group": "started",
+++          "color_hex": "#EF4444",
+++          "wip_soft_limit": 6,
+++          "wip_hard_limit": 5
+++        }
+++      },
+++      "response": {
+++        "status": 422,
+++        "headers": {
+++          "x-request-id": "edbaf936e45a4b969d6d975ccebbea07",
+++          "content-length": "312",
+++          "content-type": "application/problem+json",
+++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+++          "x-content-type-options": "nosniff",
+++          "referrer-policy": "no-referrer",
+++          "x-frame-options": "DENY",
+++          "cross-origin-opener-policy": "same-origin",
+++          "cross-origin-resource-policy": "same-origin",
+++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+++          "strict-transport-security": "max-age=63072000; includeSubDomains"
+++        },
+++        "body": {
+++          "type": "urn:kanban:problem:VALIDATION_FAILED",
+++          "title": "Validation Failed",
+++          "status": 422,
+++          "code": "VALIDATION_FAILED",
+++          "detail": "Request validation failed",
+++          "request_id": "edbaf936e45a4b969d6
+\ No newline at end of file
 diff --git a/docs/qa/KANBA-75/message-to-reality-checker.md b/docs/qa/KANBA-75/message-to-reality-checker.md
 new file mode 100644
 index 0000000..ec3dd3e
@@ -1056,6 +1859,79 @@ index 0000000..12f5ba4
 +
 +\unrestrict gA6BFtlZ0bQmjFTdSE2cJK1gQUDkXZybgWvKJfuRh8AB8MCcKwWurZlW2c53MkC
 +
+diff --git a/docs/qa/KANBA-75/ui-specialist-review.md b/docs/qa/KANBA-75/ui-specialist-review.md
+new file mode 100644
+index 0000000..dec0d52
+--- /dev/null
++++ b/docs/qa/KANBA-75/ui-specialist-review.md
+@@ -0,0 +1,66 @@
++# UI Specialist Gate Final Audit: APPROVED for KANBA-75 (KB-P3-01b)
++
++- Auditor: ui-specialist (UI & UX Architecture Specialist Gate)
++- Worktree: `/tmp/kb-wt-KANBA-75`
++- Branch: `feat/KANBA-75`
++- Ticket: `KANBA-75` (`KB-P3-01b`: `[Phase 3 / API] Project architect API (part b): workflow states, custom priorities, labels with exclusive groups & WIP limits`)
++
++---
++
++### 1. Executive Summary & Verification Matrix
++A comprehensive frontend contract, UX ergonomics, and state management audit was conducted for `KANBA-75` in `/tmp/kb-wt-KANBA-75`. While `KB-P3-01b` is a backend REST API and database ticket without direct frontend screenshots (Screenshots: N/A - Non-UI Ticket per KB-P3-01b proof criteria), it establishes the foundational data contracts for the Project Settings Workflow View (`KB-P3-39`), Kanban Board Columns (`KB-P3-33`), and Issue Drawer Configuration Modals (`KB-P3-36`). All request/response schemas, WIP limit boundaries, exclusive label group constraints, emoji bounds, single-default invariants, and issue migration ergonomics were forensically evaluated against S7.2, S6.1, and Section 5.4 architecture specifications.
++
++| Verification Dimension | Specification Target | Observed Status | Verdict |
++| :--- | :--- | :--- | :--- |
++| **Board Column Ergonomics** | Ordered states with pre-aggregated issue counts | `GET .../states` returns states ordered by `sort_order, name` with real-time `issue_count` | PASS |
++| **WIP Limit Visual Ergonomics** | 1..999 bounds and soft <= hard validation | Validated via Pydantic model validator and DDL constraint `wip_soft_le_hard`; returns clean 422 | PASS |
++| **Label Exclusive Groups** | Clean identifier format for pill grouping | Enforces regex `^[a-z0-9][a-z0-9_-]{0,31}$`, preventing syntax issues in UI label filters | PASS |
++| **Priority Emoji Safety** | 1..8 code point bounds for icons | `MAX_EMOJI_LENGTH = 8` allows multi-code-point composite glyphs while preventing payload bloat | PASS |
++| **Inline Label Creation** | S7.2 item 8i permission relaxation | `project_labels_insert_rls` allows capability 4 (`EDIT`), enabling inline tag creation in drawer | PASS |
++| **Issue Migration Safety** | Guard in-use state/priority deletion | Requires `migrate_to` parameter; caps batch migrations at 500 issues (`409 MIGRATION_TOO_LARGE`) | PASS |
++| **Unit Test Coverage** | Mandatory Feature Tests (>=95%) | 11/11 passed in 81.64s; 97.81% combined coverage (`kanban.api.v1.project_config` 100%, schemas 100%, service 97%) | PASS |
++| **Build, Typecheck & Quality** | Zero-Tolerance Quality Mandate | Ruff clean, Ruff format clean (575 files), Mypy strict clean (205 files), Lint-imports clean (2 kept, 0 broken) | PASS |
++
++---
++
++### 2. Frontend Contract & UX Ergonomics Audit
++
++1. **Kanban Board Column Ergonomics (`StateResponse`):**
++   - In the Kanban Board View (`KB-P3-33`), rendering board columns requires knowing column ordering, theme color, category grouping, and active workload.
++   - `GET /api/v1/projects/{project_ref}/states` orders states by `sort_order ASC, name ASC` and pre-aggregates non-archived, non-deleted issues into `issue_count`.
++   - *UX Impact:* The board header can render state chips with matching `color_hex` and display dynamic WIP pills (`issue_count / wip_hard_limit`) without executing secondary aggregation queries. The frontend can apply yellow warning highlights when `issue_count >= wip_soft_limit` and red restriction badges when `issue_count >= wip_hard_limit`.
++
++2. **WIP Limit Boundaries & Form Validation:**
++   - Both `wip_soft_limit` and `wip_hard_limit` accept integer values in the range 1..999 or `null` to clear.
++   - The condition `wip_soft_limit <= wip_hard_limit` is enforced bidirectionally at both the Pydantic schema level (`StateCreate`, `StatePatch`) and the database layer (`wip_soft_le_hard` CHECK constraint).
++   - *UX Impact:* Project admin forms receive explicit RFC 7807 problem details with error path `body` and message `"wip_soft_limit must be less than or equal to wip_hard_limit"`, allowing the project settings view to highlight conflicting input boxes directly.
++
++3. **Label Exclusive Groups Ergonomics (`LabelResponse`):**
++   - The `exclusive_group` attribute enforces regex `^[a-z0-9][a-z0-9_-]{0,31}$`.
++   - *UX Impact:* In the issue drawer label picker, labels sharing the same exclusive group (e.g. `severity:critical` and `severity:low` under group `severity`) behave as mutually exclusive radio options rather than multi-select checkboxes. Restricting group slugs to clean lowercase alphanumeric tokens ensures that grouping headers and filter pills remain visually tidy and URL-friendly.
++
++4. **Priority Customization & Emoji Icon Bounds:**
++   - Custom project priorities support a display `label`, `slug` (`^[a-z][a-z0-9_-]{0,31}$`), `color_hex`, `sort_order`, and an optional `emoji`.
++   - Emoji values are bounded to 1..8 Unicode code points (`MAX_EMOJI_LENGTH = 8`).
++   - *UX Impact:* This permits modern composite emoji sequences (e.g., flags, modifier sequences) while strictly preventing arbitrarily long text strings from distorting compact priority pills on Kanban cards.
++
++5. **Inline Label Creation Permission (S7.2 Item 8i):**
++   - While workflow states and custom priorities remain restricted to Project `ADMIN` capability (capability 64), label creation (`POST /api/v1/projects/{project_ref}/labels`) permits Project `EDIT` capability (capability 4).
++   - *UX Impact:* Team members drafting or triaging issues in the drawer can create missing labels without needing elevated administrative privileges, dramatically streamlining everyday board ergonomics.
++
++6. **State Deletion Safety & Issue Migration Guard:**
++   - Deleting a state or priority currently assigned to issues is prevented with `409 STATE_IN_USE` / `409 PRIORITY_IN_USE`.
++   - Supplying `?migrate_to=<target_id>` safely re-points assigned issues, capped at 500 issues per operation (`MAX_MIGRATION_ISSUES`). If more than 500 issues are assigned, the API rejects with `409 MIGRATION_TOO_LARGE`.
++   - *UX Impact:* This prevents long database locks and UI freezes when restructuring workflow states in active projects, giving the user actionable feedback to reassign issues progressively.
++
++---
++
++### 3. Formatting & Typography Compliance
++- Strictly plain ASCII hyphens `-` used throughout. Zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) detected.
++
++---
++
++### 4. Gate Sign-Off
++I have written this audit to `/tmp/kb-wt-KANBA-75/docs/qa/KANBA-75/ui-specialist-review.md`. Please commit it to your branch `feat/KANBA-75`.
++
++Verdict: APPROVED
+\ No newline at end of file
 diff --git a/docs/qa/KANBA-75/unit-test-results.txt b/docs/qa/KANBA-75/unit-test-results.txt
 new file mode 100644
 index 0000000..e636698
