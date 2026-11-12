@@ -21,7 +21,7 @@ from kanban.security.keys import derive_subkey
 
 if TYPE_CHECKING:
     from starlette.requests import Request
-    from starlette.types import ASGIApp
+    from starlette.types import ASGIApp, Receive, Scope, Send
 
 __all__ = [
     "CSRF_COOKIE_NAME",
@@ -118,6 +118,24 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         """Initialize middleware with key material for token verification."""
         super().__init__(app)
         self._session_hmac_key = session_hmac_key
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Fast-path bypass for non-HTTP, safe methods, and exempt paths for streaming."""
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method", "GET")
+        path = scope.get("path", "")
+        if (
+            method in ("GET", "HEAD", "OPTIONS", "TRACE")
+            or not path.startswith("/api/")
+            or path in CSRF_EXEMPT_PATHS
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        await super().__call__(scope, receive, send)
 
     def _get_key(self, request: Request) -> bytes:
         """Resolve session HMAC key from instance attribute or request app state."""

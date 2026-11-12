@@ -69,6 +69,16 @@ class ContractRecorder:
             }
         )
 
+    def record_raw(self, name: str, request: Any, response: Any) -> None:  # noqa: ANN401
+        """Store one raw exchange (e.g. for WebSocket or SSE message frames)."""
+        self.exchanges.append(
+            {
+                "name": name,
+                "request": request,
+                "response": response,
+            }
+        )
+
     def to_document(self) -> dict[str, Any]:
         """Return the JSON-serializable contract document."""
         return {"ticket": self.ticket, "exchanges": list(self.exchanges)}

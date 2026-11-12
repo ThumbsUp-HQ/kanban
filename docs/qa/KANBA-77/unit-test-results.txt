@@ -1,0 +1,74 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-77/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-77
+configfile: pyproject.toml
+plugins: socket-0.8.1, asyncio-1.4.1.post1, cov-7.1.0, anyio-4.16.0, xdist-3.8.0, platformdirs-4.14.5
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 50 items
+
+kanban/tests/realtime/test_hub_unit.py::test_sse_connection_methods PASSED [  2%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_connection_registration_and_lookup PASSED [  4%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_channel_viewable_validation PASSED [  6%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_unsubscribe_handling PASSED [  8%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_subscribe_with_replay PASSED [ 10%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_security_event_handling PASSED [ 12%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_dispatch_envelope_variations PASSED [ 14%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_drain_and_background_loops PASSED [ 16%]
+kanban/tests/realtime/test_hub_unit.py::test_replay_service_unit_edge_cases PASSED [ 18%]
+kanban/tests/realtime/test_hub_unit.py::test_ws_origin_allowed_unit PASSED [ 20%]
+kanban/tests/realtime/test_hub_unit.py::test_session_resolution_edge_cases PASSED [ 22%]
+kanban/tests/realtime/test_hub_unit.py::test_ws_frame_parsing_and_error_handling PASSED [ 24%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_broker_listener_loop PASSED [ 26%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_heartbeat_loop_with_sse_and_ws PASSED [ 28%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_session_recheck_loop PASSED [ 30%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_dispatch_envelope_doc_revocation PASSED [ 32%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_subscribe_with_replay_events_dispatch PASSED [ 34%]
+kanban/tests/realtime/test_hub_unit.py::test_outbox_replayer_retention_and_capacity_edges PASSED [ 36%]
+kanban/tests/realtime/test_hub_unit.py::test_ws_and_sse_auto_init_and_mfa_pending PASSED [ 38%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_drain_timeout_branch PASSED [ 40%]
+kanban/tests/realtime/test_hub_unit.py::test_hub_check_channel_viewable_allow_and_deny PASSED [ 42%]
+kanban/tests/realtime/test_hub_unit.py::test_outbox_replayer_overall_max_retention_branch PASSED [ 44%]
+kanban/tests/realtime/test_hub_unit.py::test_ws_additional_frame_handling PASSED [ 46%]
+kanban/tests/realtime/test_rls_event_filter.py::test_redact_event_payload_when_visible PASSED [ 48%]
+kanban/tests/realtime/test_rls_event_filter.py::test_redact_event_payload_when_outside_boundary PASSED [ 50%]
+kanban/tests/realtime/test_rls_event_filter.py::test_redact_event_payload_without_actor_key PASSED [ 52%]
+kanban/tests/realtime/test_rls_event_filter.py::test_authorize_event_recipients_empty_candidates PASSED [ 54%]
+kanban/tests/realtime/test_rls_event_filter.py::test_authorize_event_recipients_batched_view_and_deny PASSED [ 56%]
+kanban/tests/realtime/test_rls_event_filter.py::test_authorize_event_recipients_fallback_to_project PASSED [ 58%]
+kanban/tests/realtime/test_rls_event_filter.py::test_authorize_event_recipients_no_target_id_authorizes_all PASSED [ 60%]
+kanban/tests/realtime/test_rls_event_filter.py::test_authorize_event_recipients_without_workspace_id PASSED [ 62%]
+kanban/tests/realtime/test_sse_resume.py::test_sse_unauthenticated_returns_401 PASSED [ 64%]
+kanban/tests/realtime/test_sse_resume.py::test_sse_channel_limit_exceeded_returns_422 PASSED [ 66%]
+kanban/tests/realtime/test_sse_resume.py::test_sse_connection_limit_16_exceeded_returns_429 PASSED [ 68%]
+kanban/tests/realtime/test_sse_resume.py::test_sse_headers_and_anti_enumeration_filtering PASSED [ 70%]
+kanban/tests/realtime/test_sse_resume.py::test_sse_replay_and_anti_harvesting PASSED [ 72%]
+kanban/tests/realtime/test_sse_resume.py::test_sse_live_delivery_and_heartbeat PASSED [ 74%]
+kanban/tests/realtime/test_sse_resume.py::test_sse_client_disconnect_unregisters_connection PASSED [ 76%]
+kanban/tests/realtime/test_ws_hub.py::test_handshake_unauthenticated_rejects_with_4401 PASSED [ 78%]
+kanban/tests/realtime/test_ws_hub.py::test_handshake_origin_mismatch_rejects_with_4403 PASSED [ 80%]
+kanban/tests/realtime/test_ws_hub.py::test_handshake_expired_session_rejects_with_4401 PASSED [ 82%]
+kanban/tests/realtime/test_ws_hub.py::test_subscribe_anti_enumeration_not_found PASSED [ 84%]
+kanban/tests/realtime/test_ws_hub.py::test_channel_limit_exceeded PASSED [ 86%]
+kanban/tests/realtime/test_ws_hub.py::test_connection_limit_16_exceeded PASSED [ 88%]
+kanban/tests/realtime/test_ws_hub.py::test_frame_size_limit_4096_bytes PASSED [ 90%]
+kanban/tests/realtime/test_ws_hub.py::test_invalid_frames_and_pong_handling PASSED [ 92%]
+kanban/tests/realtime/test_ws_hub.py::test_security_event_session_revoked_closes_ws_immediately PASSED [ 94%]
+kanban/tests/realtime/test_ws_hub.py::test_lifespan_drain_broadcasts_server_draining PASSED [ 96%]
+kanban/tests/realtime/test_ws_hub.py::test_mid_session_acl_revocation_security PASSED [ 98%]
+kanban/tests/realtime/test_ws_hub.py::test_positive_fanout_and_delivery PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                            Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------
+kanban/api/sse.py                  81      2     30      2    96%   149->162, 207, 210
+kanban/api/ws.py                  138      4     40      1    97%   241->194, 286-289
+kanban/realtime/__init__.py         5      0      0      0   100%
+kanban/realtime/hub.py            320     13     96     12    94%   257-258, 315-316, 480->483, 483->469, 515->506, 523, 525->exit, 527->525, 528->527, 539-541, 545->exit, 555->551, 560-561, 565->exit, 577, 590->575, 595-596
+kanban/realtime/replay.py         109      0     32      0   100%
+kanban/realtime/rls_filter.py      46      0     16      0   100%
+---------------------------------------------------------------------------
+TOTAL                             699     19    214     15    96%
+Required test coverage of 95% reached. Total coverage: 96.28%
+============================== 50 passed in 2.34s ==============================

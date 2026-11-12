@@ -6,7 +6,10 @@ pre-compressed single page application static assets, and security middleware.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, FastAPI, WebSocket
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
+
+from fastapi import APIRouter, FastAPI, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -20,11 +23,30 @@ from kanban.api.problems import (
     validation_exception_handler,
 )
 from kanban.api.request_id import RequestIdMiddleware
+from kanban.api.sse import handle_sse_endpoint
 from kanban.api.v1 import build_v1_router
+from kanban.api.ws import handle_ws_connection
 from kanban.auth.sessions.csrf import CsrfMiddleware
 from kanban.security.headers import SecurityHeadersMiddleware
 from kanban.settings import Settings
 from kanban.web_static import PrecompressedSPAStaticApp
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from starlette.responses import Response
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Manage application lifespan, starting background workers and draining on shutdown."""
+    hub = getattr(app.state, "realtime_hub", None)
+    if hub is not None:
+        await hub.start()
+    yield
+    hub = getattr(app.state, "realtime_hub", None)
+    if hub is not None:
+        await hub.drain(timeout_seconds=3.0)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -37,11 +59,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=None,
         redoc_url=None,
         openapi_url="/api/openapi.json",
+        lifespan=lifespan,
     )
 
     # Initialize default state dependencies
+    app.state.settings = settings
     app.state.principal_resolver = DenyAllResolver()
     app.state.session_factory = None
+    app.state.session_service = None
+    app.state.broker = None
+    app.state.realtime_hub = None
 
     # Register RFC 7807 problem exception handlers
     app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
@@ -74,23 +101,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(api_router)
 
-    # WebSocket route: closes with code 1008 immediately before accept
+    # Authenticated WebSocket realtime endpoint (/ws)
     @app.websocket("/ws")
     async def ws_endpoint(websocket: WebSocket) -> None:
-        await websocket.close(code=1008)
+        await handle_ws_connection(websocket)
 
-    # Server-Sent Events placeholder: 501 Not Implemented
+    # Authenticated Server-Sent Events endpoint (/sse)
     @app.get("/sse", include_in_schema=False)
-    async def sse_endpoint() -> JSONResponse:
-        return JSONResponse(
-            status_code=501,
-            content={
-                "type": "about:blank",
-                "title": "Not Implemented",
-                "status": 501,
-            },
-            media_type="application/problem+json",
-        )
+    async def sse_endpoint(request: Request) -> Response:
+        return await handle_sse_endpoint(request)
 
     # MCP placeholders (/mcp/agent, /mcp/docs, /mcp/admin and subpaths): 501 Not Implemented
     @app.api_route(
