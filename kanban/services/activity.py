@@ -69,6 +69,9 @@ class ActivityEventType(StrEnum):
     PAGE_MOVED = "PAGE_MOVED"
     PAGE_VERSION_RESTORED = "PAGE_VERSION_RESTORED"
     PAGE_TRASHED = "PAGE_TRASHED"
+    AGENT_DEFINITION_CREATED = "AGENT_DEFINITION_CREATED"
+    AGENT_DEFINITION_UPDATED = "AGENT_DEFINITION_UPDATED"
+    AGENT_DEFINITION_DELETED = "AGENT_DEFINITION_DELETED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -84,6 +87,9 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.PAGE_MOVED: ActivityCategory.HISTORY,
         ActivityEventType.PAGE_VERSION_RESTORED: ActivityCategory.HISTORY,
         ActivityEventType.PAGE_TRASHED: ActivityCategory.HISTORY,
+        ActivityEventType.AGENT_DEFINITION_CREATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AGENT_DEFINITION_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AGENT_DEFINITION_DELETED: ActivityCategory.SYSTEM,
     }
 )
 
