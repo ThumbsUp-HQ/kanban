@@ -134,6 +134,10 @@ class ActivityEventType(StrEnum):
     STICKY_PROMOTED_TO_DOC = "STICKY_PROMOTED_TO_DOC"
     STICKY_UNARCHIVED_COPY = "STICKY_UNARCHIVED_COPY"
     STICKY_TRASHED = "STICKY_TRASHED"
+    WEBAUTHN_REGISTERED = "WEBAUTHN_REGISTERED"
+    WEBAUTHN_VERIFIED = "WEBAUTHN_VERIFIED"
+    WEBAUTHN_DELETED = "WEBAUTHN_DELETED"
+    WEBAUTHN_SIGN_COUNT_REGRESSION = "WEBAUTHN_SIGN_COUNT_REGRESSION"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -214,6 +218,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.STICKY_PROMOTED_TO_DOC: ActivityCategory.HISTORY,
         ActivityEventType.STICKY_UNARCHIVED_COPY: ActivityCategory.HISTORY,
         ActivityEventType.STICKY_TRASHED: ActivityCategory.HISTORY,
+        ActivityEventType.WEBAUTHN_REGISTERED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_VERIFIED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_DELETED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_SIGN_COUNT_REGRESSION: ActivityCategory.SYSTEM,
     }
 )
 

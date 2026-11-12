@@ -1,0 +1,164 @@
+{
+  "registration_options": {
+    "request": {
+      "method": "POST",
+      "url": "/api/v1/auth/webauthn/register/options"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "publicKey": {
+          "challenge": "B9F_Z8h5mKp0wQv7T1yLxU4nC3eR6pA2dE5gH7jK0lM",
+          "rp": {
+            "name": "👍kanban",
+            "id": "kanban.example.com"
+          },
+          "user": {
+            "id": "AY9sfowBcHCBgAAAAAAA4Q",
+            "name": "admin@kanban.example.com",
+            "displayName": "admin@kanban.example.com"
+          },
+          "pubKeyCredParams": [
+            {
+              "type": "public-key",
+              "alg": -7
+            },
+            {
+              "type": "public-key",
+              "alg": -8
+            },
+            {
+              "type": "public-key",
+              "alg": -257
+            }
+          ],
+          "timeout": 300000,
+          "attestation": "none",
+          "excludeCredentials": [],
+          "authenticatorSelection": {
+            "userVerification": "required",
+            "residentKey": "preferred"
+          }
+        }
+      }
+    }
+  },
+  "registration_verify": {
+    "request": {
+      "method": "POST",
+      "url": "/api/v1/auth/webauthn/register/verify",
+      "body": {
+        "credential": {
+          "id": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+          "rawId": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+          "response": {
+            "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiQjlGX1o4aDVtS3Awd1F2N1QxeUx4VTRuQzNlUjZwQTJkRTVnSDdqSzBsTSIsIm9yaWdpbiI6Imh0dHBzOi8va2FuYmFuLmV4YW1wbGUuY29tIn0",
+            "attestationObject": "o2NmbXRkbm9uZWVhdHRTdG10oGhhdXRoRGF0YViUY657H8B6q9rWj_m7...",
+            "transports": ["internal", "hybrid"]
+          },
+          "type": "public-key"
+        },
+        "nickname": "YubiKey 5C NFC"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "status": "ok",
+        "credential_id": "018f6c38-8c01-7000-8000-000000000001",
+        "aal_level": 2
+      }
+    }
+  },
+  "authentication_options": {
+    "request": {
+      "method": "POST",
+      "url": "/api/v1/auth/webauthn/authenticate/options"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "publicKey": {
+          "challenge": "X3m8L2pQ9vR4wE7tY1uI6oP5aS0dF2gH4jK8lZ1xN6c",
+          "timeout": 300000,
+          "rpId": "kanban.example.com",
+          "allowCredentials": [
+            {
+              "type": "public-key",
+              "id": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+              "transports": ["internal", "hybrid"]
+            }
+          ],
+          "userVerification": "required"
+        }
+      }
+    }
+  },
+  "authentication_verify": {
+    "request": {
+      "method": "POST",
+      "url": "/api/v1/auth/webauthn/authenticate/verify",
+      "body": {
+        "credential": {
+          "id": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+          "rawId": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+          "response": {
+            "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiWDNtOEwycFE5dlI0d0U3dFkxdUk2b1A1YVMwZEYyZ0g0aks4bFoxeE42YyIsIm9yaWdpbiI6Imh0dHBzOi8va2FuYmFuLmV4YW1wbGUuY29tIn0",
+            "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2NBAAAAAQ",
+            "signature": "MEQCIF6N1U_r_a_2vX12_fake_signature_bytes_here",
+            "userHandle": "AY9sfowBcHCBgAAAAAAA4Q"
+          },
+          "type": "public-key"
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "status": "ok",
+        "aal_level": 2
+      }
+    }
+  },
+  "mfa_invalid_error": {
+    "request": {
+      "method": "POST",
+      "url": "/api/v1/auth/webauthn/authenticate/verify",
+      "body": {
+        "credential": {
+          "id": "invalid-cred-id",
+          "response": {
+            "clientDataJSON": "invalid-client-data"
+          },
+          "type": "public-key"
+        }
+      }
+    },
+    "response": {
+      "status": 401,
+      "headers": {
+        "content-type": "application/problem+json"
+      },
+      "body": {
+        "type": "https://errors.kanban.example.com/MFA_INVALID",
+        "title": "MFA Invalid",
+        "status": 401,
+        "detail": "WebAuthn verification failed.",
+        "code": "MFA_INVALID",
+        "request_id": "018f6c38-8c01-7000-8000-000000000002"
+      }
+    }
+  }
+}
