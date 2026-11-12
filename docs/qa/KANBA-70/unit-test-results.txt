@@ -1,0 +1,23 @@
+...........................................                              [100%]
+=============================== warnings summary ===============================
+agent/tests/sparkle/test_router_endpoint.py::test_csrf_validation_missing_and_mismatch
+agent/tests/sparkle/test_router_endpoint.py::test_csrf_validation_missing_and_mismatch
+  /tmp/kb-wt-KANBA-70/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+agent/asgi.py                       18      0      6      0   100%
+agent/sparkle/__init__.py            5      0      0      0   100%
+agent/sparkle/output_filter.py      29      0     12      0   100%
+agent/sparkle/pipeline.py          101      0     20      2    98%   191->193, 212->214
+agent/sparkle/retrieval.py          93      0     32      0   100%
+agent/sparkle/router.py             94      6     26      2    92%   119, 127-128, 140, 175-176
+----------------------------------------------------------------------------
+TOTAL                              340      6     96      4    97%
+Required test coverage of 95% reached. Total coverage: 97.25%
+43 passed, 2 warnings in 2.14s

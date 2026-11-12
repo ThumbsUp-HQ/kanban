@@ -194,3 +194,38 @@ The `validate-qa-packet` subcommand performs deterministic passive proof-bundle 
 - Spotlight Isolation: Isolates scrubbed ticket specification and proof artifacts within randomized `<<<UNTRUSTED_QA_EVIDENCE_<hex> >>>` delimiters.
 - Hard Anti-Fantasy Invariant: Enforced in code (never trusted to model alone): if any deterministic check failed, OR `verdict.grade != "A"`, OR `len(verdict.critical_issues) > 0`, OR any `dod_verdicts` item has `passed == False`, any claimed `readiness == "READY"` is overridden to `readiness = "NEEDS_WORK"` with `policy_override = "FANTASY_APPROVAL_BLOCKED"`.
 
+## Sparkle FIM Completion Engine (`agent.sparkle`, `agent.asgi`)
+
+The Sparkle (`✨`) FIM engine delivers low-latency, permission-isolated inline completions for Markdown surfaces (Summary, Description, Comment, Sticky, Doc) across the web interface.
+
+### Performance Budgets
+
+- End-to-End Ghost Text Latency: p95 < 150ms over 200 iterations.
+- Context Retrieval Database Ceiling: Hard <= 18ms statement_timeout executed under least-privilege `app_rls_reader` and `SET LOCAL TRANSACTION READ ONLY`.
+- Provider Streaming TTFT SLA: 115ms time-to-first-token deadline.
+- Overall Pipeline Execution Timeout: Hard 130ms overall timeout (`asyncio.timeout(0.130)`).
+- Input Payload Bound: Maximum 16 KiB HTTP request body (larger payloads rejected with RFC 7807 413).
+- Token Budget: 1-48 tokens generated at temperature = 0.15, capped at 400 characters.
+
+### Defense-in-Depth Pipeline Order
+
+1. Truncate Input: Keeps the last 1,500 characters of prefix and first 500 characters of suffix.
+2. Scrub-First Mandate: Evaluates prefix and suffix with `outbound_secret_scrubber` before any network or database I/O. Detection of any secret or API key halts execution immediately, returning `status="secret_scrubbed"` with zero embedder, DB, or provider invocations.
+3. Local Vector Embedding: Generates a 384-dimensional dense vector over the last 512 characters of scrubbed prefix using the in-process Int8 ONNX embedder (`bge-small-en-v1.5`).
+4. RLS-Pinned Context Retrieval: Executes a dedicated session as role `app_rls_reader` under `READ ONLY` and `statement_timeout = '18ms'`. Session context (`principal_id`, `workspace_id`, `token_scopes`, `aal_level`) is bound strictly from the authenticated `PrincipalContext`. Retrieves up to 4 nearest chunks from `object_embeddings` in the same project and resolves chunk markdown through RLS-protected base tables (`issues`, `docs`, `stickies`, `pages`). Snippets are capped at 400 characters, re-scrubbed, and isolated within per-request random delimiters `<<<UNTRUSTED_CONTEXT_<16 hex>>>>`.
+5. Streaming FIM Completion: Streams completion tokens from the configured `ProviderRouter` candidate within residency tier rules.
+6. Output Filtering & Defense: Buffers completion tokens before emission. Strips all HTML tags and entity-decoded markup (`<...>`), removes invisible zero-width and unicode tag plane characters (`U+200B..U+200F`, `U+E0000..U+E007F`), rejects prompt-override patterns (e.g. `ignore previous instructions`, `system:`, `[INST]`), and runs `outbound_secret_scrubber` on output (dropping completion if any secret was echoed). Empty outputs return `status="empty"`.
+7. SSE Streaming Endpoint: Emits exactly one `event: completion` (when `ok`) and one `event: done` carrying status, TTFT, and total latency. Cache-Control is pinned to `no-store` and `X-Accel-Buffering: no`. Client disconnect cleanly cancels the in-flight pipeline task and provider stream.
+
+### Failure Modes and Fallback Semantics
+
+- Secret Scrubbed: Inbound secret detected in prefix/suffix -> returns `event: done` with `status="secret_scrubbed"` (editor remains IDLE).
+- Context Retrieval Timeout: Database statement exceeds 18ms -> `QueryCanceled` caught gracefully, continuing with zero context snippets and `retrieval_status="timeout"`.
+- Provider Timeout / SLA Breach: Upstream LLM exceeds 115ms TTFT or 130ms overall timeout -> provider stream closed via `aclose()`, returning `event: done` with `status="timeout"`.
+- Provider Unavailable / 429 / 5xx: Upstream provider rate limits or server errors -> trips circuit breaker and returns `event: done` with `status="unavailable"` (HTTP 200, never 5xx).
+- Output Filter Rejection: Output contained HTML tags, prompt injection, echoed secret, or empty content -> returns `event: done` with `status="empty"`.
+- CSRF Protection: Missing or mismatched `X-CSRF-Token` against cookie `__Host-kb_csrf` -> RFC 7807 403 Forbidden.
+- Permission Check: Caller lacks EDIT on `object_id` (when provided) or VIEW on `project_id` -> timing-equalized RFC 7807 404 Not Found.
+- Body Size Overflow: Request body exceeds 16 KiB -> RFC 7807 413 Payload Too Large.
+
+
