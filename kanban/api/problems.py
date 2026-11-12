@@ -57,7 +57,6 @@ class Problem(BaseModel):
         default=None,
         description="Candidate suggestions when identifier resolution is ambiguous",
     )
-    )
 
 
 class ProblemException(Exception):  # noqa: N818
