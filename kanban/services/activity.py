@@ -86,6 +86,7 @@ class ActivityEventType(StrEnum):
     LABEL_CREATED = "LABEL_CREATED"
     LABEL_UPDATED = "LABEL_UPDATED"
     LABEL_DELETED = "LABEL_DELETED"
+    ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -118,6 +119,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.LABEL_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.LABEL_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.LABEL_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
     }
 )
 

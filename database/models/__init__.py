@@ -2,6 +2,7 @@
 
 from database.models.activity import ActivityChainHead, ActivityRecord
 from database.models.agent_definition import AgentDefinition
+from database.models.attachments import Attachment
 from database.models.auth import AuthProviderCard, UserSession
 from database.models.base import (
     Base,
@@ -56,6 +57,7 @@ __all__ = [
     "ActivityChainHead",
     "ActivityRecord",
     "AgentDefinition",
+    "Attachment",
     "AuthProviderCard",
     "Base",
     "Cycle",

@@ -52,9 +52,9 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
     pg_tables = {row[0] for row in result.all()}
     orm_tables = set(Base.metadata.tables.keys())
 
-    # Exact set equality across all tables (incl. auth, embeddings, limits, sessions, agent defs)
+    # Exact set equality across all tables (incl. auth, limits, sessions, agents, attachments)
     assert orm_tables == pg_tables
-    assert len(orm_tables) == 39
+    assert len(orm_tables) == 40
 
 
 async def _setup_test_project_spine(

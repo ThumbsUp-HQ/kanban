@@ -1,0 +1,34 @@
+=== ruff check . ===
+All checks passed!
+=== ruff format --check . ===
+686 files already formatted
+=== mypy --strict kanban database ===
+Success: no issues found in 270 source files
+=== lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 357 files, 797 dependencies.
+-------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT
+
+Contracts: 2 kept, 0 broken.
+=== check_no_dashes --all ===
+OK: 0 files with non-ASCII dashes found.
+=== make license ===
+uv run python -m scripts.license_gate
+SUMMARY python=111 node=1 violations=0
