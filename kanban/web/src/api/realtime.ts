@@ -350,8 +350,8 @@ export class RealtimeClient {
         return;
       case 'channel.revoked': {
         const channel = typeof obj.channel === 'string' ? obj.channel : '';
-        this.subscriptions.delete(channel);
         this.emit({ id: `revoked:${channel}`, channel, type: kind, payload: {} }, false);
+        this.subscriptions.delete(channel);
         return;
       }
       default:

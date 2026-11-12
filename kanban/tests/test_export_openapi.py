@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from kanban.tools.export_openapi import export_openapi, main
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
 
 
 def test_export_openapi_valid_json() -> None:
@@ -39,7 +43,7 @@ def test_export_openapi_contains_issue_routes() -> None:
     assert "patch" in paths["/api/v1/issues/{issue_key}"]
 
 
-def test_export_openapi_cli_to_file(tmp_path: Path, monkeypatch: Any) -> None:
+def test_export_openapi_cli_to_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify CLI main exports document to target file when argument provided."""
     target_file = tmp_path / "openapi.json"
     monkeypatch.setattr("sys.argv", ["export_openapi", str(target_file)])

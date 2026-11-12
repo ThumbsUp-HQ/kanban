@@ -1,0 +1,88 @@
+### CMD: pnpm --dir kanban/web exec vitest run --coverage --coverage.include='src/api/**' --coverage.exclude='src/api/schema.gen.ts' --coverage.exclude='**/*.test.*' src/api
+
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-92/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/api/problem.test.ts (10 tests) 11ms
+ ✓ src/api/queryKeys.test.ts (2 tests) 12ms
+ ✓ src/api/client.test.ts (20 tests) 48ms
+ ✓ src/api/realtime.test.ts (32 tests) 73ms
+ ✓ src/api/RealtimeStatus.test.tsx (8 tests) 108ms
+stdout | src/api/optimistic.test.tsx > useOptimisticMutation > 500-issue synchronous apply median is under 12ms (20 runs)
+OPTIMISTIC_BENCHMARK runs=20 median_ms=0.0377 max_ms=0.0685 min_ms=0.0372
+
+ ✓ src/api/optimistic.test.tsx (4 tests) 181ms
+
+ Test Files  6 passed (6)
+      Tests  76 passed (76)
+   Start at  04:33:08
+   Duration  1.59s (environment 76%, import 11%, tests 7%, worker 5%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    97.96 |     100 |     100 |                   
+ ...timeStatus.css |       0 |        0 |       0 |       0 |                   
+ ...timeStatus.tsx |     100 |      100 |     100 |     100 |                   
+ client.ts         |     100 |    98.18 |     100 |     100 | 15                
+ optimistic.ts     |     100 |       75 |     100 |     100 | 39                
+ problem.ts        |     100 |      100 |     100 |     100 |                   
+ queryClient.ts    |     100 |      100 |     100 |     100 |                   
+ queryKeys.ts      |     100 |      100 |     100 |     100 |                   
+ realtime.ts       |     100 |    98.16 |     100 |     100 | 200,315           
+-------------------|---------|----------|---------|---------|-------------------
+EXIT_CODE=0
+
+### CMD: uv run pytest kanban/tests/test_export_openapi.py -q
+....                                                                     [100%]
+4 passed in 1.29s
+EXIT_CODE=0
+
+### CMD (full web suite, global 95% thresholds): pnpm --dir kanban/web exec vitest run --coverage
+  realtime.ts      |     100 |    98.16 |     100 |     100 | 200,315           
+ ...mponents/emoji |     100 |    95.83 |     100 |     100 |                   
+  EmojiHint.tsx    |     100 |     93.8 |     100 |     100 | ...13,227-241,264 
+  HintPortal.tsx   |     100 |      100 |     100 |     100 |                   
+  emojiRegistry.ts |     100 |      100 |     100 |     100 |                   
+  hintTiming.ts    |     100 |    98.41 |     100 |     100 | 101               
+  positionHint.ts  |     100 |      100 |     100 |     100 |                   
+ src/dev           |   60.52 |    65.38 |      70 |   62.96 |                   
+  EditorStory.tsx  |   27.45 |    28.57 |   44.44 |   28.26 | ...92-104,108-120 
+  EmojiStory.tsx   |     100 |      100 |     100 |     100 |                   
+  MediaStory.tsx   |   27.27 |        0 |       0 |      30 | 34-46             
+  ...timeStory.tsx |     100 |      100 |     100 |     100 |                   
+  TokenStory.tsx   |     100 |      100 |     100 |     100 |                   
+ src/editor        |   99.64 |    98.45 |   98.93 |   99.63 |                   
+  ...ownEditor.tsx |    97.8 |    95.91 |   94.11 |    97.8 | 131-132           
+  ...aceFactory.ts |     100 |    95.12 |     100 |     100 | 224-238           
+  parseMarkdown.ts |     100 |    97.72 |     100 |     100 | 92,134-136        
+  schema.ts        |     100 |      100 |     100 |     100 |                   
+  ...zeMarkdown.ts |     100 |      100 |     100 |     100 |                   
+  ...licePlugin.ts |     100 |      100 |     100 |     100 |                   
+ ...itor/clipboard |     100 |    99.63 |     100 |     100 |                   
+  ...PastePill.tsx |     100 |      100 |     100 |     100 |                   
+  ...nvertPaste.ts |     100 |      100 |     100 |     100 |                   
+  ...nDomPruner.ts |     100 |      100 |     100 |     100 |                   
+  ...pperBypass.ts |     100 |    97.56 |     100 |     100 | 77                
+  ...ownDensity.ts |     100 |      100 |     100 |     100 |                   
+  trustedTypes.ts  |     100 |      100 |     100 |     100 |                   
+ src/editor/media  |     100 |    95.53 |     100 |     100 |                   
+  ...aLightbox.tsx |     100 |      100 |     100 |     100 |                   
+  ...NodeViews.tsx |     100 |      100 |     100 |     100 |                   
+  ...aViewport.tsx |     100 |    92.85 |     100 |     100 | 99-111,125,180    
+  ...rlResolver.ts |     100 |      100 |     100 |     100 |                   
+  panZoomMath.ts   |     100 |      100 |     100 |     100 |                   
+  safeSvg.ts       |     100 |    93.58 |     100 |     100 | ...86,222,307-308 
+ ...editor/sparkle |   99.12 |    96.28 |     100 |     100 |                   
+  ...tionPlugin.ts |   98.76 |    94.07 |     100 |     100 | ...56,384,396,441 
+  ...layPortal.tsx |   97.67 |    94.11 |     100 |     100 | 50,65             
+  index.ts         |     100 |      100 |     100 |     100 |                   
+  sparkleClient.ts |     100 |     97.5 |     100 |     100 | 137,149           
+  ...kleMachine.ts |     100 |      100 |     100 |     100 |                   
+ src/styles        |     100 |      100 |     100 |     100 |                   
+  breakpoints.ts   |     100 |      100 |     100 |     100 |                   
+ src/theme         |     100 |      100 |     100 |     100 |                   
+  ...eProvider.tsx |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
+EXIT_CODE=0

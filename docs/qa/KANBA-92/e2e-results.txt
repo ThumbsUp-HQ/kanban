@@ -1,0 +1,23 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 12 tests using 10 workers
+
+  ✓   2 [tablet] › e2e/api/realtime-status.spec.ts:96:3 › Realtime status chip (KB-P3-33) › chip never steals focus when state changes (710ms)
+  ✓   1 [desktop] › e2e/api/realtime-status.spec.ts:96:3 › Realtime status chip (KB-P3-33) › chip never steals focus when state changes (739ms)
+  ✓   3 [desktop] › e2e/api/realtime-status.spec.ts:61:3 › Realtime status chip (KB-P3-33) › 02: sse-fallback chip is a polite status region (970ms)
+  ✓   8 [desktop] › e2e/api/realtime-status.spec.ts:77:3 › Realtime status chip (KB-P3-33) › 03: offline chip appears and hides again when open (957ms)
+  ✓   9 [tablet] › e2e/api/realtime-status.spec.ts:61:3 › Realtime status chip (KB-P3-33) › 02: sse-fallback chip is a polite status region (943ms)
+  ✓   4 [mobile] › e2e/api/realtime-status.spec.ts:61:3 › Realtime status chip (KB-P3-33) › 02: sse-fallback chip is a polite status region (1.0s)
+  ✓  10 [tablet] › e2e/api/realtime-status.spec.ts:77:3 › Realtime status chip (KB-P3-33) › 03: offline chip appears and hides again when open (878ms)
+  ✓  12 [mobile] › e2e/api/realtime-status.spec.ts:96:3 › Realtime status chip (KB-P3-33) › chip never steals focus when state changes (311ms)
+  ✓  11 [mobile] › e2e/api/realtime-status.spec.ts:77:3 › Realtime status chip (KB-P3-33) › 03: offline chip appears and hides again when open (514ms)
+  ✓   6 [tablet] › e2e/api/realtime-status.spec.ts:21:3 › Realtime status chip (KB-P3-33) › 01: reconnecting chip shows elapsed counter, 24px offset, and no overlay (2.3s)
+  ✓   5 [desktop] › e2e/api/realtime-status.spec.ts:21:3 › Realtime status chip (KB-P3-33) › 01: reconnecting chip shows elapsed counter, 24px offset, and no overlay (2.4s)
+  ✓   7 [mobile] › e2e/api/realtime-status.spec.ts:21:3 › Realtime status chip (KB-P3-33) › 01: reconnecting chip shows elapsed counter, 24px offset, and no overlay (2.4s)
+
+  12 passed (10.9s)
+EXIT_CODE=0

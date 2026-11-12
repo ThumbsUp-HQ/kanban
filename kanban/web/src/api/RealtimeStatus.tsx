@@ -22,28 +22,35 @@ export interface RealtimeStatusProps {
   state?: RealtimeState;
 }
 
-interface Tick {
-  forState: RealtimeState;
-  seconds: number;
+const CHIP_ATTRS = { role: 'status', 'aria-live': 'polite' } as const;
+
+/** Owns the elapsed counter so it restarts from zero on every (re)mount. */
+function ReconnectingChip() {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
+
+  return (
+    <div className="realtime-status-chip" {...CHIP_ATTRS} data-state="reconnecting">
+      {seconds > 0 ? `Reconnecting... ${String(seconds)}s` : 'Reconnecting...'}
+    </div>
+  );
 }
 
-function chipText(state: RealtimeState, seconds: number): string | null {
-  switch (state) {
-    case 'reconnecting':
-      return seconds > 0 ? `Reconnecting... ${String(seconds)}s` : 'Reconnecting...';
-    case 'sse-fallback':
-      return 'Live updates via fallback channel';
-    case 'closed':
-      return 'Offline - changes will sync when reconnected';
-    case 'connecting':
-    case 'open':
-      return null;
-  }
-}
+const STATIC_TEXT: Partial<Record<RealtimeState, string>> = {
+  'sse-fallback': 'Live updates via fallback channel',
+  closed: 'Offline - changes will sync when reconnected',
+};
 
 export function RealtimeStatus({ state = 'open' }: RealtimeStatusProps) {
   const [announcement, setAnnouncement] = useState('');
-  const [tick, setTick] = useState<Tick>({ forState: state, seconds: 0 });
 
   useEffect(() => {
     const listener: AnnounceListener = (message) => {
@@ -55,31 +62,17 @@ export function RealtimeStatus({ state = 'open' }: RealtimeStatusProps) {
     };
   }, []);
 
-  useEffect(() => {
-    if (state !== 'reconnecting') {
-      return undefined;
-    }
-    const timer = setInterval(() => {
-      setTick((prev) => ({
-        forState: state,
-        seconds: prev.forState === state ? prev.seconds + 1 : 1,
-      }));
-    }, 1000);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [state]);
-
-  const text = chipText(state, tick.forState === state ? tick.seconds : 0);
+  const staticText = STATIC_TEXT[state];
 
   return (
     <>
       <div className="realtime-live-region" role="status" aria-live="polite">
         {announcement}
       </div>
-      {text !== null && (
-        <div className="realtime-status-chip" role="status" aria-live="polite" data-state={state}>
-          {text}
+      {state === 'reconnecting' && <ReconnectingChip />}
+      {staticText !== undefined && (
+        <div className="realtime-status-chip" {...CHIP_ATTRS} data-state={state}>
+          {staticText}
         </div>
       )}
     </>

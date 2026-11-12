@@ -1,0 +1,27 @@
+{
+  "ticket": "KANBA-92",
+  "realtime_event_envelope_issue_updated": {
+    "type": "event",
+    "topic": "issue.updated",
+    "channel": "project:8e9bdc95-00d4-4531-a407-dc8ac07e5235",
+    "event_id": "11",
+    "object_id": "103b35f6-c309-4b3b-bfcd-e521fe12accf",
+    "payload": {"key": "KAN-1", "project_key": "KAN"}
+  },
+  "normalized_client_event": {
+    "id": "11",
+    "channel": "project:8e9bdc95-00d4-4531-a407-dc8ac07e5235",
+    "type": "issue.updated",
+    "payload": {"key": "KAN-1", "project_key": "KAN"}
+  },
+  "rfc7807_problem_body": {
+    "type": "about:blank",
+    "title": "Precondition Failed",
+    "status": 412,
+    "code": "PRECONDITION_FAILED",
+    "detail": "description ETag mismatch",
+    "instance": "/api/v1/issues/KAN-1",
+    "current_etag": "9f2c"
+  },
+  "client_subscribe_frame": {"op": "subscribe", "req_id": "c1", "channels": ["project:8e9bdc95-00d4-4531-a407-dc8ac07e5235"], "last_event_id": "10"}
+}
