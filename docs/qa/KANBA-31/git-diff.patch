@@ -1,0 +1,877 @@
+diff --git a/database/migrations/sql/p1_02_objects_spine.down.sql b/database/migrations/sql/p1_02_objects_spine.down.sql
+new file mode 100644
+index 0000000..70d01b0
+--- /dev/null
++++ b/database/migrations/sql/p1_02_objects_spine.down.sql
+@@ -0,0 +1,8 @@
++DROP FUNCTION IF EXISTS register_object(object_kind, uuid, uuid, text, text, uuid, uuid);
++DROP TRIGGER IF EXISTS objects_guard_bu_trg ON objects;
++DROP FUNCTION IF EXISTS objects_guard_bu();
++DROP TRIGGER IF EXISTS objects_set_updated_at ON objects;
++DROP TRIGGER IF EXISTS workspaces_set_updated_at ON workspaces;
++DROP TABLE IF EXISTS objects CASCADE;
++DROP TYPE IF EXISTS object_kind CASCADE;
++DROP TABLE IF EXISTS workspaces CASCADE;
+diff --git a/database/migrations/sql/p1_02_objects_spine.up.sql b/database/migrations/sql/p1_02_objects_spine.up.sql
+new file mode 100644
+index 0000000..6435dd8
+--- /dev/null
++++ b/database/migrations/sql/p1_02_objects_spine.up.sql
+@@ -0,0 +1,83 @@
++CREATE TABLE workspaces (
++    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
++    slug                  TEXT NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'),
++    name                  TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 200),
++    trash_retention_days  INTEGER NOT NULL DEFAULT 30 CHECK (trash_retention_days BETWEEN 1 AND 3650),
++    created_at            TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    updated_at            TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++CREATE TYPE object_kind AS ENUM (
++    'issue', 'sticky', 'doc', 'user', 'project', 'cycle', 'module', 'view', 'page'
++);
++
++CREATE TABLE objects (
++    id              UUID PRIMARY KEY DEFAULT uuidv7(),
++    object_type     object_kind NOT NULL,
++    workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE RESTRICT,
++    project_id      UUID,
++    canonical_key   TEXT NOT NULL CHECK (char_length(canonical_key) BETWEEN 1 AND 200),
++    display_title   TEXT NOT NULL CHECK (char_length(display_title) BETWEEN 1 AND 500),
++    created_by_id   UUID NOT NULL,
++    created_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    updated_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    archived_at     TIMESTAMPTZ,
++    deleted_at      TIMESTAMPTZ,
++    UNIQUE (id, object_type),
++    UNIQUE (workspace_id, object_type, canonical_key)
++);
++
++CREATE INDEX objects_project_idx ON objects (project_id) WHERE project_id IS NOT NULL;
++CREATE INDEX objects_ws_type_live_idx ON objects (workspace_id, object_type) WHERE deleted_at IS NULL;
++
++CREATE TRIGGER objects_set_updated_at BEFORE UPDATE ON objects FOR EACH ROW EXECUTE FUNCTION set_updated_at();
++CREATE TRIGGER workspaces_set_updated_at BEFORE UPDATE ON workspaces FOR EACH ROW EXECUTE FUNCTION set_updated_at();
++
++CREATE FUNCTION objects_guard_bu() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++  IF NEW.object_type IS DISTINCT FROM OLD.object_type THEN
++    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'OBJECT_TYPE_IMMUTABLE';
++  END IF;
++  IF NEW.id IS DISTINCT FROM OLD.id THEN
++    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'OBJECT_ID_IMMUTABLE';
++  END IF;
++  IF NEW.created_at IS DISTINCT FROM OLD.created_at THEN
++    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'OBJECT_CREATED_AT_IMMUTABLE';
++  END IF;
++  RETURN NEW;
++END $$;
++
++CREATE TRIGGER objects_guard_bu_trg BEFORE UPDATE ON objects FOR EACH ROW EXECUTE FUNCTION objects_guard_bu();
++
++CREATE FUNCTION register_object(
++    p_object_type object_kind,
++    p_workspace_id uuid,
++    p_project_id uuid,
++    p_canonical_key text,
++    p_display_title text,
++    p_created_by_id uuid,
++    p_id uuid DEFAULT NULL
++) RETURNS uuid LANGUAGE plpgsql VOLATILE SECURITY INVOKER AS $$
++DECLARE
++    v_id uuid;
++BEGIN
++    IF p_workspace_id IS NULL OR p_canonical_key IS NULL OR p_display_title IS NULL OR p_created_by_id IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'REGISTER_OBJECT_NULL_ARGUMENT';
++    END IF;
++
++    IF p_object_type IN ('project', 'user') AND p_project_id IS NOT NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'REGISTER_OBJECT_PROJECT_NOT_ALLOWED';
++    END IF;
++
++    v_id := COALESCE(p_id, uuidv7());
++
++    INSERT INTO objects (
++        id, object_type, workspace_id, project_id, canonical_key, display_title, created_by_id
++    ) VALUES (
++        v_id, p_object_type, p_workspace_id, p_project_id, p_canonical_key, p_display_title, p_created_by_id
++    );
++
++    RETURN v_id;
++END $$;
++
++GRANT EXECUTE ON FUNCTION register_object(object_kind, uuid, uuid, text, text, uuid, uuid) TO kanban_app;
+diff --git a/database/migrations/versions/p1_02_objects_spine.py b/database/migrations/versions/p1_02_objects_spine.py
+new file mode 100644
+index 0000000..9003b96
+--- /dev/null
++++ b/database/migrations/versions/p1_02_objects_spine.py
+@@ -0,0 +1,26 @@
++"""Workspaces and objects spine, object_kind enum, and register_object.
++
++Revision ID: p1_02_objects_spine
++Revises: p1_01_baseline
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p1_02_objects_spine"
++down_revision: str | None = "p1_01_baseline"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply workspaces, object_kind, objects spine, and register_object."""
++    execute_sql_file("p1_02_objects_spine.up.sql")
++
++
++def downgrade() -> None:
++    """Revert workspaces, object_kind, objects spine, and register_object."""
++    execute_sql_file("p1_02_objects_spine.down.sql")
+diff --git a/database/tests/migrations/test_p1_02_migration.py b/database/tests/migrations/test_p1_02_migration.py
+new file mode 100644
+index 0000000..a49ce42
+--- /dev/null
++++ b/database/tests/migrations/test_p1_02_migration.py
+@@ -0,0 +1,82 @@
++"""Migration tests for p1_02_objects_spine up/down lifecycle."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++EXPECTED_ENUM_LABELS = [
++    "issue",
++    "sticky",
++    "doc",
++    "user",
++    "project",
++    "cycle",
++    "module",
++    "view",
++    "page",
++]
++
++
++@pytest.mark.migration
++async def test_08_objects_spine_migration_lifecycle() -> None:
++    """Verify p1_02 upgrade creates objects and enum, downgrade removes them, and re-up works."""
++    async with MigrationHarness() as harness:
++        assert harness.previous_of("p1_02_objects_spine") == "p1_01_baseline"
++
++        # 1. Upgrade to p1_02_objects_spine
++        await harness.upgrade("p1_02_objects_spine")
++
++        # Verify object_kind enum has exactly the 9 labels in spec order
++        enum_rows = await harness.fetch(
++            "SELECT e.enumlabel "
++            "FROM pg_enum e "
++            "JOIN pg_type t ON e.enumtypid = t.oid "
++            "WHERE t.typname = 'object_kind' "
++            "ORDER BY e.enumsortorder"
++        )
++        labels = [r["enumlabel"] for r in enum_rows]
++        assert labels == EXPECTED_ENUM_LABELS
++
++        # Verify tables and function exist
++        tables_up = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name IN ('workspaces', 'objects')"
++        )
++        assert {r["table_name"] for r in tables_up} == {"workspaces", "objects"}
++
++        funcs_up = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name = 'register_object'"
++        )
++        assert len(funcs_up) == 1
++
++        # 2. Downgrade to p1_01_baseline
++        prev_rev = harness.previous_of("p1_02_objects_spine")
++        await harness.downgrade(prev_rev)
++
++        # Verify tables, enum, and function are absent
++        tables_down = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name IN ('workspaces', 'objects')"
++        )
++        assert len(tables_down) == 0
++
++        types_down = await harness.fetch(
++            "SELECT typname FROM pg_type WHERE typname = 'object_kind'"
++        )
++        assert len(types_down) == 0
++
++        funcs_down = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name = 'register_object'"
++        )
++        assert len(funcs_down) == 0
++
++        # 3. Re-upgrade to p1_02_objects_spine succeeds
++        await harness.upgrade("p1_02_objects_spine")
++
++        tables_reup = await harness.fetch(
++            "SELECT table_name FROM information_schema.tables "
++            "WHERE table_schema = 'public' AND table_name IN ('workspaces', 'objects')"
++        )
++        assert {r["table_name"] for r in tables_reup} == {"workspaces", "objects"}
+diff --git a/database/tests/test_p1_02_objects.py b/database/tests/test_p1_02_objects.py
+new file mode 100644
+index 0000000..a7a6c18
+--- /dev/null
++++ b/database/tests/test_p1_02_objects.py
+@@ -0,0 +1,319 @@
++"""Unit tests for Phase 1 workspaces, objects spine, and register_object."""
++
++import asyncio
++import uuid
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DataError, DBAPIError, IntegrityError, ProgrammingError
++from sqlalchemy.ext.asyncio import AsyncSession
++
++
++async def _create_workspace(
++    session: AsyncSession,
++    slug: str | None = None,
++    name: str = "Test Workspace",
++) -> uuid.UUID:
++    """Create a test workspace."""
++    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
++    row = await session.execute(
++        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
++        {"slug": ws_slug, "name": name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def test_01_register_object_positive(db_session: AsyncSession) -> None:
++    """Verify register_object creates an object with object_type and RFC 9562 v7 UUID."""
++    ws_id = await _create_workspace(db_session)
++    user_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++
++    res = await db_session.execute(
++        text(
++            "SELECT register_object("
++            "  'issue'::object_kind, :ws_id, :proj_id, 'KAN-1', 'Sample Issue', :user_id"
++            ")"
++        ),
++        {"ws_id": ws_id, "proj_id": proj_id, "user_id": user_id},
++    )
++    obj_id = res.scalar_one()
++    assert isinstance(obj_id, uuid.UUID)
++
++    # Verify RFC 9562 version 7 nibble and variant 10xx
++    raw = obj_id.bytes
++    version_nibble = (raw[6] >> 4) & 0x0F
++    variant_bits = (raw[8] >> 6) & 0x03
++    assert version_nibble == 7
++    assert variant_bits == 2
++
++    # Query row
++    row = await db_session.execute(
++        text(
++            "SELECT object_type, workspace_id, project_id, canonical_key, "
++            "display_title, created_by_id FROM objects WHERE id = :id"
++        ),
++        {"id": obj_id},
++    )
++    record = row.mappings().one()
++    assert record["object_type"] == "issue"
++    assert record["workspace_id"] == ws_id
++    assert record["project_id"] == proj_id
++    assert record["canonical_key"] == "KAN-1"
++    assert record["display_title"] == "Sample Issue"
++    assert record["created_by_id"] == user_id
++
++
++async def test_02_canonical_key_independence(db_session: AsyncSession) -> None:
++    """Verify same canonical_key allowed across different object_types and workspaces."""
++    ws1 = await _create_workspace(db_session, slug="ws-one")
++    ws2 = await _create_workspace(db_session, slug="ws-two")
++    user_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++
++    # 1. Same canonical_key for two different object_types in ws1
++    id_issue = await db_session.scalar(
++        text("SELECT register_object('issue'::object_kind, :ws, :proj, 'SHARED-1', 'Issue 1', :u)"),
++        {"ws": ws1, "proj": proj_id, "u": user_id},
++    )
++    id_doc = await db_session.scalar(
++        text("SELECT register_object('doc'::object_kind, :ws, :proj, 'SHARED-1', 'Doc 1', :u)"),
++        {"ws": ws1, "proj": proj_id, "u": user_id},
++    )
++    assert id_issue is not None
++    assert id_doc is not None
++    assert id_issue != id_doc
++
++    # 2. Same canonical_key for same object_type in ws2
++    id_ws2_issue = await db_session.scalar(
++        text(
++            "SELECT register_object('issue'::object_kind, :ws, :proj, 'SHARED-1', 'Issue WS2', :u)"
++        ),
++        {"ws": ws2, "proj": proj_id, "u": user_id},
++    )
++    assert id_ws2_issue is not None
++    assert id_ws2_issue != id_issue
++
++
++async def test_03_canonical_key_collision_raises_23505(db_session: AsyncSession) -> None:
++    """Verify duplicate (workspace_id, object_type, canonical_key) raises 23505."""
++    ws = await _create_workspace(db_session)
++    user_id = uuid.uuid4()
++
++    await db_session.execute(
++        text("SELECT register_object('issue'::object_kind, :ws, NULL, 'DUP-1', 'Initial', :u)"),
++        {"ws": ws, "u": user_id},
++    )
++
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "SELECT register_object("
++                    "'issue'::object_kind, :ws, NULL, 'DUP-1', 'Duplicate', :u)"
++                ),
++                {"ws": ws, "u": user_id},
++            )
++    orig = getattr(exc_info.value, "orig", None)
++    pgcode = getattr(orig, "sqlstate", None) or getattr(exc_info.value, "code", None)
++    assert pgcode == "23505" or "unique constraint" in str(exc_info.value).lower()
++
++
++async def test_04_invalid_enum_raises_22p02(db_session: AsyncSession) -> None:
++    """Verify invalid object_kind enum literal raises 22P02."""
++    ws = await _create_workspace(db_session)
++    user_id = uuid.uuid4()
++
++    with pytest.raises((DataError, DBAPIError)) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO objects (object_type, workspace_id, "
++                    "canonical_key, display_title, created_by_id) "
++                    "VALUES ('epic'::object_kind, :ws, 'EPIC-1', 'Invalid Enum', :u)"
++                ),
++                {"ws": ws, "u": user_id},
++            )
++    orig = getattr(exc_info.value, "orig", None)
++    pgcode = getattr(orig, "sqlstate", None) or getattr(exc_info.value, "code", None)
++    assert pgcode == "22P02" or "invalid input value for enum" in str(exc_info.value).lower()
++
++
++async def test_05_immutability_and_registration_guards(db_session: AsyncSession) -> None:
++    """Verify objects_guard_bu trigger and register_object argument validations."""
++    ws = await _create_workspace(db_session)
++    user_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++
++    obj_id = await db_session.scalar(
++        text("SELECT register_object('issue'::object_kind, :ws, :proj, 'IMM-1', 'Original', :u)"),
++        {"ws": ws, "proj": proj_id, "u": user_id},
++    )
++    assert obj_id is not None
++
++    # Guard 1: object_type cannot be modified
++    with pytest.raises((ProgrammingError, DBAPIError)) as exc_type:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE objects SET object_type = 'doc'::object_kind WHERE id = :id"),
++                {"id": obj_id},
++            )
++    assert "OBJECT_TYPE_IMMUTABLE" in str(exc_type.value)
++
++    # Guard 2: id cannot be modified
++    with pytest.raises((ProgrammingError, DBAPIError)) as exc_id:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE objects SET id = :new_id WHERE id = :id"),
++                {"new_id": uuid.uuid4(), "id": obj_id},
++            )
++    assert "OBJECT_ID_IMMUTABLE" in str(exc_id.value)
++
++    # Guard 3: project/user object_type cannot have non-null project_id
++    with pytest.raises((ProgrammingError, DBAPIError)) as exc_proj:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "SELECT register_object("
++                    "'project'::object_kind, :ws, :proj, 'PRJ-1', 'Project', :u)"
++                ),
++                {"ws": ws, "proj": proj_id, "u": user_id},
++            )
++    assert "REGISTER_OBJECT_PROJECT_NOT_ALLOWED" in str(exc_proj.value)
++
++    # Guard 4: NULL display_title raises REGISTER_OBJECT_NULL_ARGUMENT
++    with pytest.raises((ProgrammingError, DBAPIError)) as exc_null:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "SELECT register_object('issue'::object_kind, :ws, :proj, 'NULL-1', NULL, :u)"
++                ),
++                {"ws": ws, "proj": proj_id, "u": user_id},
++            )
++    assert "REGISTER_OBJECT_NULL_ARGUMENT" in str(exc_null.value)
++
++
++async def test_06_boundary_lengths_and_slug_pattern(db_session: AsyncSession) -> None:
++    """Verify CHECK constraints on canonical_key (200), display_title (500), and slug regex."""
++    ws = await _create_workspace(db_session)
++    user_id = uuid.uuid4()
++
++    # canonical_key: 200 chars accepted, 201 rejected
++    key_200 = "k" * 200
++    obj_200 = await db_session.scalar(
++        text("SELECT register_object('issue'::object_kind, :ws, NULL, :k, 'Title', :u)"),
++        {"ws": ws, "k": key_200, "u": user_id},
++    )
++    assert obj_200 is not None
++
++    key_201 = "k" * 201
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_key:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT register_object('issue'::object_kind, :ws, NULL, :k, 'Title', :u)"),
++                {"ws": ws, "k": key_201, "u": user_id},
++            )
++    orig_key = getattr(exc_key.value, "orig", None)
++    pgcode_key = getattr(orig_key, "sqlstate", None) or getattr(exc_key.value, "code", None)
++    assert pgcode_key == "23514" or "check constraint" in str(exc_key.value).lower()
++
++    # display_title: 500 chars accepted, 501 rejected
++    title_500 = "t" * 500
++    obj_500 = await db_session.scalar(
++        text("SELECT register_object('issue'::object_kind, :ws, NULL, 'KEY-500', :t, :u)"),
++        {"ws": ws, "t": title_500, "u": user_id},
++    )
++    assert obj_500 is not None
++
++    title_501 = "t" * 501
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_title:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT register_object('issue'::object_kind, :ws, NULL, 'KEY-501', :t, :u)"),
++                {"ws": ws, "t": title_501, "u": user_id},
++            )
++    orig_title = getattr(exc_title.value, "orig", None)
++    pgcode_title = getattr(orig_title, "sqlstate", None) or getattr(exc_title.value, "code", None)
++    assert pgcode_title == "23514" or "check constraint" in str(exc_title.value).lower()
++
++    # workspace slug: 1 char rejected (slug ~ '^[a-z0-9][a-z0-9-]{1,62}$')
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_slug_short:
++        async with db_session.begin_nested():
++            await _create_workspace(db_session, slug="a")
++    orig_short = getattr(exc_slug_short.value, "orig", None)
++    code_short = getattr(orig_short, "sqlstate", None) or getattr(
++        exc_slug_short.value, "code", None
++    )
++    assert code_short == "23514" or "check constraint" in str(exc_slug_short.value).lower()
++
++    # 63 chars accepted
++    slug_63 = "a" + ("b" * 62)
++    ws_63 = await _create_workspace(db_session, slug=slug_63)
++    assert ws_63 is not None
++
++    # 64 chars rejected
++    slug_64 = "a" + ("b" * 63)
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_slug_long:
++        async with db_session.begin_nested():
++            await _create_workspace(db_session, slug=slug_64)
++    orig_long = getattr(exc_slug_long.value, "orig", None)
++    code_long = getattr(orig_long, "sqlstate", None) or getattr(exc_slug_long.value, "code", None)
++    assert code_long == "23514" or "check constraint" in str(exc_slug_long.value).lower()
++
++
++async def test_07_updated_at_trigger_and_fk_constraint(db_session: AsyncSession) -> None:
++    """Verify updated_at triggers fire and non-existent workspace FK raises 23503."""
++    ws = await _create_workspace(db_session, name="Original Workspace")
++    user_id = uuid.uuid4()
++
++    # Part A: Workspace updated_at > created_at
++    await asyncio.sleep(0.005)
++    await db_session.execute(
++        text("UPDATE workspaces SET name = 'Updated Workspace' WHERE id = :id"),
++        {"id": ws},
++    )
++    ws_times = (
++        await db_session.execute(
++            text("SELECT created_at, updated_at FROM workspaces WHERE id = :id"),
++            {"id": ws},
++        )
++    ).one()
++    assert ws_times[1] > ws_times[0]
++
++    # Part B: Object updated_at > created_at
++    obj_id = await db_session.scalar(
++        text("SELECT register_object('issue'::object_kind, :ws, NULL, 'TRG-1', 'Initial', :u)"),
++        {"ws": ws, "u": user_id},
++    )
++    assert obj_id is not None
++
++    await asyncio.sleep(0.005)
++    await db_session.execute(
++        text("UPDATE objects SET display_title = 'Updated Title' WHERE id = :id"),
++        {"id": obj_id},
++    )
++    obj_times = (
++        await db_session.execute(
++            text("SELECT created_at, updated_at FROM objects WHERE id = :id"),
++            {"id": obj_id},
++        )
++    ).one()
++    assert obj_times[1] > obj_times[0]
++
++    # Part C: Non-existent workspace FK raises 23503
++    non_existent_ws = uuid.uuid4()
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_fk:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO objects (workspace_id, object_type, "
++                    "canonical_key, display_title, created_by_id) "
++                    "VALUES (:ws, 'issue'::object_kind, 'NO-WS', 'Title', :u)"
++                ),
++                {"ws": non_existent_ws, "u": user_id},
++            )
++    orig_fk = getattr(exc_fk.value, "orig", None)
++    pgcode_fk = getattr(orig_fk, "sqlstate", None) or getattr(exc_fk.value, "code", None)
++    assert pgcode_fk == "23503" or "foreign key constraint" in str(exc_fk.value).lower()
+diff --git a/docs/qa/KANBA-31/alembic-heads.txt b/docs/qa/KANBA-31/alembic-heads.txt
+new file mode 100644
+index 0000000..0e0336d
+--- /dev/null
++++ b/docs/qa/KANBA-31/alembic-heads.txt
+@@ -0,0 +1 @@
++p1_02_objects_spine (head)
+diff --git a/docs/qa/KANBA-31/build-check.txt b/docs/qa/KANBA-31/build-check.txt
+new file mode 100644
+index 0000000..29a6919
+--- /dev/null
++++ b/docs/qa/KANBA-31/build-check.txt
+@@ -0,0 +1,3 @@
++All checks passed!
++24 files already formatted
++Success: no issues found in 22 source files
+diff --git a/docs/qa/KANBA-31/message-to-reality-checker.md b/docs/qa/KANBA-31/message-to-reality-checker.md
+new file mode 100644
+index 0000000..8fb194e
+--- /dev/null
++++ b/docs/qa/KANBA-31/message-to-reality-checker.md
+@@ -0,0 +1,73 @@
++# Forensic QA Handoff: KANBA-31
++
++- Ticket ID: KANBA-31 (`KB-P1-02`)
++- Title: [Phase 1 / Database] workspaces + objects spine, object_kind enum & register_object()
++- Wave: W02
++- Author: builder-18
++
++---
++
++## 1. Architectural Implementation Summary
++
++This ticket delivers the core universal object spine for the Kanban graph platform:
++
++1. **Table `workspaces` (`p1_02_objects_spine.up.sql`):**
++   - Implements UUID primary key defaulting to `uuidv7()`.
++   - Enforces slug regex constraint `slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'`.
++   - Enforces name length constraint `char_length(btrim(name)) BETWEEN 1 AND 200`.
++   - Enforces trash retention constraint `trash_retention_days BETWEEN 1 AND 3650` (default 30 days per S7.2).
++   - Configures automatic timestamp maintenance via `workspaces_set_updated_at` trigger calling `set_updated_at()`.
++
++2. **Enum `object_kind` (`p1_02_objects_spine.up.sql`):**
++   - Implements PostgreSQL ENUM with exactly 9 labels in authoritative specification order:
++     `'issue', 'sticky', 'doc', 'user', 'project', 'cycle', 'module', 'view', 'page'`.
++
++3. **Table `objects` Spine (`p1_02_objects_spine.up.sql`):**
++   - Implements UUID primary key defaulting to `uuidv7()`.
++   - References `workspaces(id)` with `ON DELETE RESTRICT`.
++   - Declares dual unique constraints per S12.1:
++     * `UNIQUE (id, object_type)` (type-pinned composite key for downstream entity table FKs).
++     * `UNIQUE (workspace_id, object_type, canonical_key)` (scoped canonical key deduplication).
++   - Enforces `canonical_key` length (1-200) and `display_title` length (1-500).
++   - Partial indexes:
++     * `objects_project_idx` ON objects (project_id) WHERE project_id IS NOT NULL.
++     * `objects_ws_type_live_idx` ON objects (workspace_id, object_type) WHERE deleted_at IS NULL.
++   - Configures automatic timestamp maintenance via `objects_set_updated_at` trigger.
++
++4. **Immutability Guard Trigger (`objects_guard_bu`):**
++   - BEFORE UPDATE trigger on `objects` rejecting changes to:
++     * `object_type` (raises `OBJECT_TYPE_IMMUTABLE`).
++     * `id` (raises `OBJECT_ID_IMMUTABLE`).
++     * `created_at` (raises `OBJECT_CREATED_AT_IMMUTABLE`).
++
++5. **Helper Function `register_object()` (`p1_02_objects_spine.up.sql`):**
++   - Declared `SECURITY INVOKER` so caller session context and Row-Level Security policies apply.
++   - Validates non-null `p_workspace_id`, `p_canonical_key`, `p_display_title`, `p_created_by_id` (`REGISTER_OBJECT_NULL_ARGUMENT`).
++   - Forbids assigning `p_project_id` when `object_type` is `project` or `user` (`REGISTER_OBJECT_PROJECT_NOT_ALLOWED`).
++   - Assigns `COALESCE(p_id, uuidv7())` and returns object UUID.
++   - Granted execution permission to `kanban_app`.
++
++6. **Reversible Down Migration (`p1_02_objects_spine.down.sql`):**
++   - Drops function `register_object`, trigger `objects_guard_bu_trg`, function `objects_guard_bu`, triggers `objects_set_updated_at` and `workspaces_set_updated_at`, table `objects`, enum `object_kind`, and table `workspaces` in reverse order.
++
++---
++
++## 2. Test Execution & Coverage Evidence
++
++- Mandatory feature unit tests in `database/tests/test_p1_02_objects.py` and `database/tests/migrations/test_p1_02_migration.py`:
++  * 8 passed in 0.54s.
++  * 100% statement and branch coverage on touched test and migration modules.
++- Full test suite regression check: 233 passed in 11.80s.
++
++---
++
++## 3. Linter, Formatter, and Strict Type Safety
++
++- Command: `uv run ruff check database && uv run ruff format --check database && uv run mypy --strict database`
++- Status: Exit code 0, zero warnings, zero errors. All 22 source files checked with mypy strict mode.
++
++---
++
++## 4. UI Exemption Notice
++
++This ticket is strictly a database infrastructure and schema migration ticket (`KB-P1-02`). There are no web UI components, frontend templates, or browser interactions modified; Playwright screenshot capture is not applicable.
+diff --git a/docs/qa/KANBA-31/schema-dump.sql b/docs/qa/KANBA-31/schema-dump.sql
+new file mode 100644
+index 0000000..8aaa08e
+--- /dev/null
++++ b/docs/qa/KANBA-31/schema-dump.sql
+@@ -0,0 +1,187 @@
++--
++-- PostgreSQL database dump
++--
++
++\restrict 3gSk5TMSZvDhRHiZVPNiDUSIEeaNJCnY4Ot22NqWHVbKRE17zZeEqd1LkWbWi1m
++
++-- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
++-- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
++
++SET statement_timeout = 0;
++SET lock_timeout = 0;
++SET idle_in_transaction_session_timeout = 0;
++SET client_encoding = 'UTF8';
++SET standard_conforming_strings = on;
++SELECT pg_catalog.set_config('search_path', '', false);
++SET check_function_bodies = false;
++SET xmloption = content;
++SET client_min_messages = warning;
++SET row_security = off;
++
++SET default_tablespace = '';
++
++SET default_table_access_method = heap;
++
++--
++-- Name: objects; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.objects (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    object_type public.object_kind NOT NULL,
++    workspace_id uuid NOT NULL,
++    project_id uuid,
++    canonical_key text NOT NULL,
++    display_title text NOT NULL,
++    created_by_id uuid NOT NULL,
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    updated_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    archived_at timestamp with time zone,
++    deleted_at timestamp with time zone,
++    CONSTRAINT objects_canonical_key_check CHECK (((char_length(canonical_key) >= 1) AND (char_length(canonical_key) <= 200))),
++    CONSTRAINT objects_display_title_check CHECK (((char_length(display_title) >= 1) AND (char_length(display_title) <= 500)))
++);
++
++
++ALTER TABLE public.objects OWNER TO kanban_migrator;
++
++--
++-- Name: workspaces; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.workspaces (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    slug text NOT NULL,
++    name text NOT NULL,
++    trash_retention_days integer DEFAULT 30 NOT NULL,
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    updated_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    CONSTRAINT workspaces_name_check CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 200))),
++    CONSTRAINT workspaces_slug_check CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'::text)),
++    CONSTRAINT workspaces_trash_retention_days_check CHECK (((trash_retention_days >= 1) AND (trash_retention_days <= 3650)))
++);
++
++
++ALTER TABLE public.workspaces OWNER TO kanban_migrator;
++
++--
++-- Name: objects objects_id_object_type_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.objects
++    ADD CONSTRAINT objects_id_object_type_key UNIQUE (id, object_type);
++
++
++--
++-- Name: objects objects_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.objects
++    ADD CONSTRAINT objects_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: objects objects_workspace_id_object_type_canonical_key_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.objects
++    ADD CONSTRAINT objects_workspace_id_object_type_canonical_key_key UNIQUE (workspace_id, object_type, canonical_key);
++
++
++--
++-- Name: workspaces workspaces_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.workspaces
++    ADD CONSTRAINT workspaces_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: workspaces workspaces_slug_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.workspaces
++    ADD CONSTRAINT workspaces_slug_key UNIQUE (slug);
++
++
++--
++-- Name: objects_project_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX objects_project_idx ON public.objects USING btree (project_id) WHERE (project_id IS NOT NULL);
++
++
++--
++-- Name: objects_ws_type_live_idx; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX objects_ws_type_live_idx ON public.objects USING btree (workspace_id, object_type) WHERE (deleted_at IS NULL);
++
++
++--
++-- Name: objects objects_guard_bu_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER objects_guard_bu_trg BEFORE UPDATE ON public.objects FOR EACH ROW EXECUTE FUNCTION public.objects_guard_bu();
++
++
++--
++-- Name: objects objects_set_updated_at; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER objects_set_updated_at BEFORE UPDATE ON public.objects FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
++
++
++--
++-- Name: workspaces workspaces_set_updated_at; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER workspaces_set_updated_at BEFORE UPDATE ON public.workspaces FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
++
++
++--
++-- Name: objects objects_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.objects
++    ADD CONSTRAINT objects_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: TABLE objects; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.objects TO kanban_app;
++GRANT SELECT ON TABLE public.objects TO app_rls_reader;
++
++
++--
++-- Name: TABLE workspaces; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.workspaces TO kanban_app;
++GRANT SELECT ON TABLE public.workspaces TO app_rls_reader;
++
++
++--
++-- PostgreSQL database dump complete
++--
++
++\unrestrict 3gSk5TMSZvDhRHiZVPNiDUSIEeaNJCnY4Ot22NqWHVbKRE17zZeEqd1LkWbWi1m
++
++
++-- \dT+ object_kind
++                                             List of data types
++ Schema |    Name     | Internal name | Size | Elements |      Owner      | Access privileges | Description 
++--------+-------------+---------------+------+----------+-----------------+-------------------+-------------
++ public | object_kind | object_kind   | 4    | issue   +| kanban_migrator |                   | 
++        |             |               |      | sticky  +|                 |                   | 
++        |             |               |      | doc     +|                 |                   | 
++        |             |               |      | user    +|                 |                   | 
++        |             |               |      | project +|                 |                   | 
++        |             |               |      | cycle   +|                 |                   | 
++        |             |               |      | module  +|                 |                   | 
++        |             |               |      | view    +|                 |                   | 
++        |             |               |      | page     |                 |                   | 
++(1 row)
++
+diff --git a/docs/qa/KANBA-31/unit-test-results.txt b/docs/qa/KANBA-31/unit-test-results.txt
+new file mode 100644
+index 0000000..32d8ed3
+--- /dev/null
++++ b/docs/qa/KANBA-31/unit-test-results.txt
+@@ -0,0 +1,35 @@
++INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
++INFO  [alembic.runtime.migration] Will assume transactional DDL.
++INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
++INFO  [alembic.runtime.migration] Running upgrade p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
++........                                                                 [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                                  Stmts   Miss Branch BrPart  Cover   Missing
++-------------------------------------------------------------------------------------------------
++database/__init__.py                                      1      0      0      0   100%
++database/bootstrap/__init__.py                           25      2      6      3    84%   20, 22->24, 25
++database/migrations/__init__.py                           0      0      0      0   100%
++database/migrations/env.py                               39      5      8      4    81%   14->17, 22-23, 29->32, 47-48, 73
++database/migrations/sqlfile.py                           19      4      4      2    74%   17-18, 22-23
++database/migrations/versions/__init__.py                  0      0      0      0   100%
++database/migrations/versions/p1_01_baseline.py           10      1      0      0    90%   26
++database/migrations/versions/p1_02_objects_spine.py      10      0      0      0   100%
++database/testing/__init__.py                              0      0      0      0   100%
++database/testing/pg_harness.py                          199     34     54     19    76%   49-50, 70-71, 75, 92-93, 113->exit, 114->113, 120-124, 136->147, 138->141, 142->145, 161, 165, 183->181, 204-205, 221, 234->239, 235->234, 239->243, 259, 262, 268, 337, 352-366
++database/tests/__init__.py                                0      0      0      0   100%
++database/tests/conftest.py                               15      6      0      0    60%   16-18, 30, 36-37
++database/tests/migration_harness.py                      88     15     12      6    79%   69, 73, 91, 95, 105, 107, 121-126, 130-134
++database/tests/migrations/__init__.py                     0      0      0      0   100%
++database/tests/migrations/test_p1_01_migration.py        61     61     10      0     0%   3-123
++database/tests/migrations/test_p1_02_migration.py        26      0      0      0   100%
++database/tests/test_harness_benchmark.py                  8      8      0      0     0%   3-19
++database/tests/test_p1_01_baseline.py                   109    109      2      0     0%   3-185
++database/tests/test_p1_02_objects.py                    145      0      0      0   100%
++database/tests/test_pg_harness.py                       120    120      2      0     0%   3-224
++database/tests/test_smoke.py                              3      3      0      0     0%   3-8
++database/tests/test_sqlfile.py                           22     22      0      0     0%   3-36
++-------------------------------------------------------------------------------------------------
++TOTAL                                                   900    390     98     34    55%
++8 passed in 0.54s
