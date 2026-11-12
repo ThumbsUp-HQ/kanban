@@ -1,0 +1,18 @@
+{
+  "name": "sparkle_stream_unknown_event",
+  "status_code": 200,
+  "headers": {
+    "content-type": "text/event-stream",
+    "cache-control": "no-store",
+    "x-accel-buffering": "no"
+  },
+  "events": [
+    {
+      "event": "unknown_event_type",
+      "data": {
+        "payload": "unsupported"
+      }
+    }
+  ],
+  "raw": "event: unknown_event_type\ndata: {\"payload\": \"unsupported\"}\n\n"
+}
