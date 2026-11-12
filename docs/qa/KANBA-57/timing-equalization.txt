@@ -1,0 +1,18 @@
+KANBA-57 / KB-P2-01 Timing Equalization Statistical Verification (S3.4)
+=========================================================================
+Total requests: 200 (100 non-existent, 100 unreadable alternating)
+Configured timing floor: 25.0 ms
+
+Group A (Non-existent object UUID):
+  Count:  100
+  Median: 28.76 ms
+  P95:    29.64 ms
+
+Group B (Existing object, unreadable under PostgreSQL RLS):
+  Count:  100
+  Median: 28.75 ms
+  P95:    29.90 ms
+
+Absolute Median Delta: 0.00 ms
+Requirement: abs(median(a) - median(b)) <= 5.0 ms
+Status: PASS (Delta 0.00 ms <= 5.0 ms threshold)
