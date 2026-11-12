@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives import serialization
 from kanban.auth.ldap.asn1_ber import (
     MAX_BER_MESSAGE_SIZE,
     RESULT_CODE_SUCCESS,
+    LdapError,
     LdapProtocolError,
     build_bind_request,
     build_search_request,
@@ -50,10 +51,6 @@ DEFAULT_OP_TIMEOUT: Final[float] = 5.0
 DEFAULT_TOTAL_TIMEOUT: Final[float] = 8.0
 DEFAULT_LDAP_PORT: Final[int] = 389
 DEFAULT_LDAPS_PORT: Final[int] = 636
-
-
-class LdapError(Exception):
-    """Base exception for LDAP client operations."""
 
 
 class LdapTlsError(LdapError):
@@ -97,10 +94,12 @@ class LdapTlsHardClient:
         self,
         config: LdapCardConfig,
         unix_socket_path: str | None = None,
+        op_timeout: float = DEFAULT_OP_TIMEOUT,
     ) -> None:
         """Initialize client with provider configuration and optional test socket override."""
         self._config = config
         self._unix_socket_path = unix_socket_path
+        self._op_timeout = op_timeout
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._tls_established: bool = False
@@ -201,13 +200,20 @@ class LdapTlsHardClient:
         self._writer = writer
         self._tls_established = False
 
-        # Send StartTLS extended operation as messageID=1
-        starttls_bytes = build_starttls_request(1)
-        writer.write(starttls_bytes)
-        await writer.drain()
+        # Send StartTLS extended operation as sequential messageID
+        starttls_msg_id = self._next_msg_id()
+        starttls_bytes = build_starttls_request(starttls_msg_id)
+        async with asyncio.timeout(self._op_timeout):
+            writer.write(starttls_bytes)
+            await writer.drain()
+            resp_bytes = await read_ber_packet(reader, MAX_BER_MESSAGE_SIZE)
 
-        resp_bytes = await read_ber_packet(reader, MAX_BER_MESSAGE_SIZE)
-        _msg_id, op_name, op_val = decode_ldap_message(resp_bytes)
+        resp_msg_id, op_name, op_val = decode_ldap_message(resp_bytes)
+        if resp_msg_id != starttls_msg_id:
+            msg = (
+                f"Mismatched messageID for StartTLS: expected {starttls_msg_id}, got {resp_msg_id}"
+            )
+            raise LdapProtocolError(msg)
         if op_name != "extendedResp":
             _raise_invalid_starttls_op(op_name)
 
@@ -216,20 +222,21 @@ class LdapTlsHardClient:
             diag = str(op_val["diagnosticMessage"])
             _raise_starttls_rejected(result_code, diag)
 
-        # Upgrade plain transport to TLS 1.2+
+        # Check buffer before upgrade (CVE-2011-0411 plaintext injection prevention)
+        if (hasattr(reader, "_buffer") and len(reader._buffer) > 0) or reader.at_eof():  # noqa: SLF001
+            msg = "STARTTLS_BUFFER_INJECTION: unexpected plain bytes or EOF after StartTLS response"
+            raise LdapTlsError(msg)
+
+        # Upgrade plain transport to TLS 1.2+ using StreamWriter.start_tls (Python 3.12 API)
         ssl_ctx = self._create_ssl_context()
-        loop = asyncio.get_running_loop()
-        server_transport = writer.transport
-        protocol = server_transport.get_protocol()
-        new_transport = await loop.start_tls(
-            server_transport,
-            protocol,
-            ssl_ctx,
-            server_side=False,
-            server_hostname=host,
-        )
-        # Assign upgraded transport
-        writer._transport = new_transport  # type: ignore[attr-defined]  # noqa: SLF001
+        async with asyncio.timeout(self._op_timeout):
+            await writer.start_tls(ssl_ctx, server_hostname=host)
+
+        # Re-check buffer after upgrade
+        if hasattr(reader, "_buffer") and len(reader._buffer) > 0:  # noqa: SLF001
+            msg = "STARTTLS_BUFFER_INJECTION: unexpected bytes in buffer after TLS upgrade"
+            raise LdapTlsError(msg)
+
         self._tls_established = True
         self._verify_spki_pin(writer)
 
@@ -263,14 +270,19 @@ class LdapTlsHardClient:
             raise LdapBindError(msg)
 
         raw_pwd = bytes(password_bytes)
-        req_bytes = build_bind_request(self._next_msg_id(), bind_dn, raw_pwd)
+        req_msg_id = self._next_msg_id()
+        req_bytes = build_bind_request(req_msg_id, bind_dn, raw_pwd)
         del raw_pwd
 
-        self._writer.write(req_bytes)
-        await self._writer.drain()
+        async with asyncio.timeout(self._op_timeout):
+            self._writer.write(req_bytes)
+            await self._writer.drain()
+            resp_bytes = await read_ber_packet(self._reader, MAX_BER_MESSAGE_SIZE)
 
-        resp_bytes = await read_ber_packet(self._reader, MAX_BER_MESSAGE_SIZE)
-        _msg_id, op_name, op_val = decode_ldap_message(resp_bytes)
+        resp_msg_id, op_name, op_val = decode_ldap_message(resp_bytes)
+        if resp_msg_id != req_msg_id:
+            msg = f"Mismatched messageID: expected {req_msg_id}, got {resp_msg_id}"
+            raise LdapProtocolError(msg)
         if op_name != "bindResponse":
             msg = f"Expected bindResponse, got '{op_name}'"
             raise LdapProtocolError(msg)
@@ -281,7 +293,7 @@ class LdapTlsHardClient:
             msg = f"Bind failed with resultCode {result_code}: {diag}"
             raise LdapBindError(msg)
 
-    async def search(
+    async def search(  # noqa: C901
         self,
         base_dn: str,
         filter_node_or_str: FilterNode | str,
@@ -297,22 +309,31 @@ class LdapTlsHardClient:
             msg = "Client is not connected"
             raise LdapError(msg)
 
+        req_msg_id = self._next_msg_id()
         req_bytes = build_search_request(
-            self._next_msg_id(),
+            req_msg_id,
             base_dn,
             filter_node_or_str,
             attributes,
             size_limit=size_limit,
             time_limit=time_limit,
         )
-        self._writer.write(req_bytes)
-        await self._writer.drain()
+        async with asyncio.timeout(self._op_timeout):
+            self._writer.write(req_bytes)
+            await self._writer.drain()
 
         entries: list[SearchEntry] = []
         while True:
-            resp_packet = await read_ber_packet(self._reader, MAX_BER_MESSAGE_SIZE)
-            _msg_id, op_name, op_val = decode_ldap_message(resp_packet)
+            async with asyncio.timeout(self._op_timeout):
+                resp_packet = await read_ber_packet(self._reader, MAX_BER_MESSAGE_SIZE)
+            resp_msg_id, op_name, op_val = decode_ldap_message(resp_packet)
+            if resp_msg_id != req_msg_id:
+                msg = f"Mismatched messageID in search: expected {req_msg_id}, got {resp_msg_id}"
+                raise LdapProtocolError(msg)
             if op_name == "searchResEntry":
+                if len(entries) >= size_limit:
+                    msg = f"SIZE_LIMIT_EXCEEDED: server returned more than {size_limit} entries"
+                    raise LdapSearchError(msg)
                 entry_dn = str(op_val["objectName"])
                 attr_dict: dict[str, list[bytes]] = {}
                 for item in op_val["attributes"]:

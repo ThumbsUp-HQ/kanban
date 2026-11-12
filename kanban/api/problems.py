@@ -61,6 +61,10 @@ class Problem(BaseModel):
         default=None,
         description="List of mentioned users who lack access to the resource",
     )
+    retry_after_seconds: int | None = Field(
+        default=None,
+        description="Numeric seconds after which the client may retry rate-limited requests",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -80,6 +84,7 @@ class ProblemException(Exception):  # noqa: N818
         candidates: list[dict[str, str]] | None = None,
         unauthorized_mentions: list[dict[str, str]] | None = None,
         type_uri: str | None = None,
+        retry_after_seconds: int | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -97,6 +102,7 @@ class ProblemException(Exception):  # noqa: N818
         self.candidates = candidates
         self.unauthorized_mentions = unauthorized_mentions
         self.type_uri = type_uri
+        self.retry_after_seconds = retry_after_seconds
 
 
 def not_found() -> NoReturn:
@@ -132,6 +138,7 @@ async def problem_exception_handler(
         field=exc.field,
         candidates=exc.candidates,
         unauthorized_mentions=exc.unauthorized_mentions,
+        retry_after_seconds=exc.retry_after_seconds,
     )
     response_headers = {"x-request-id": req_id}
     if exc.headers:

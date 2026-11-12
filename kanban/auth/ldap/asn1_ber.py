@@ -43,6 +43,7 @@ __all__ = [
     "ExtendedRequest",
     "ExtendedResponse",
     "LDAPMessage",
+    "LdapError",
     "LdapProtocolError",
     "PartialAttribute",
     "PartialAttributeList",
@@ -103,7 +104,11 @@ BER_SHORT_LEN_MAX: Final[int] = 0x80
 MAX_LEN_OCTETS: Final[int] = 4
 
 
-class LdapProtocolError(Exception):
+class LdapError(Exception):
+    """Base exception for LDAP protocol and client operations."""
+
+
+class LdapProtocolError(LdapError):
     """Raised when an LDAP wire protocol error or message boundary violation occurs."""
 
 

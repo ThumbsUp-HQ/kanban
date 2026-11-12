@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-# ruff: noqa: ICN001, PLR0917, D107, FBT001, FBT002, PTH108, PTH110, C901, PLR0912, PLR0915, BLE001, SIM113, SIM105, ASYNC240, E501
+# ruff: noqa: ICN001, PLR0917, D107, FBT001, FBT002, PTH108, PTH110, C901, PLR0912, PLR0915, BLE001, SIM113, SIM105, ASYNC240
 """In-memory TLS/StartTLS LDAPv3 mock server for offline unit tests (KB-P2-07)."""
 
 from __future__ import annotations
@@ -9,10 +9,12 @@ import asyncio
 import datetime
 import hashlib
 import os
+import re
 import ssl
 import tempfile
+import warnings
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Final, Self
+from typing import TYPE_CHECKING, Any, Final, Self
 from uuid import uuid4
 
 from cryptography import x509
@@ -231,6 +233,15 @@ class FakeLdapServer:
         max_tls_version: ssl.TLSVersion = ssl.TLSVersion.TLSv1_3,
         accept_anonymous_bind: bool = False,
         oversized_response_bytes: int = 0,
+        inject_buffer_after_starttls: bytes | None = None,
+        mismatch_starttls_msg_id: int | None = None,
+        mismatch_bind_msg_id: int | None = None,
+        mismatch_search_msg_id: int | None = None,
+        stall_after_tcp: bool = False,
+        stall_after_starttls: bool = False,
+        stall_mid_search: bool = False,
+        ignore_size_limit: bool = False,
+        malformed_bind_response: bool = False,
     ) -> None:
         self.certs = certs
         self.mode = mode
@@ -240,10 +251,20 @@ class FakeLdapServer:
         self.max_tls_version = max_tls_version
         self.accept_anonymous_bind = accept_anonymous_bind
         self.oversized_response_bytes = oversized_response_bytes
+        self.inject_buffer_after_starttls = inject_buffer_after_starttls
+        self.mismatch_starttls_msg_id = mismatch_starttls_msg_id
+        self.mismatch_bind_msg_id = mismatch_bind_msg_id
+        self.mismatch_search_msg_id = mismatch_search_msg_id
+        self.stall_after_tcp = stall_after_tcp
+        self.stall_after_starttls = stall_after_starttls
+        self.stall_mid_search = stall_mid_search
+        self.ignore_size_limit = ignore_size_limit
+        self.malformed_bind_response = malformed_bind_response
 
         self.directory = FakeLdapDirectory()
         self.sock_path = f"/tmp/fake_ldap_{uuid4().hex[:12]}.sock"
         self._server: asyncio.Server | None = None
+        self._conn_tasks: set[asyncio.Task[Any]] = set()
 
         # Spy metrics for test verification
         self.raw_pre_tls_bytes = bytearray()
@@ -253,8 +274,10 @@ class FakeLdapServer:
 
     def _create_server_ssl_context(self) -> ssl.SSLContext:
         ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ctx.minimum_version = self.min_tls_version
-        ctx.maximum_version = self.max_tls_version
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            ctx.minimum_version = self.min_tls_version
+            ctx.maximum_version = self.max_tls_version
 
         cert_pem = (
             self.certs.mismatch_server_cert_pem
@@ -287,7 +310,14 @@ class FakeLdapServer:
         writer: asyncio.StreamWriter,
     ) -> None:
         """Handle incoming LDAP connection session."""
+        cur_task = asyncio.current_task()
+        if cur_task is not None:
+            self._conn_tasks.add(cur_task)
         is_tls = self.mode == "ldaps"
+
+        if self.stall_after_tcp:
+            await asyncio.sleep(10.0)
+            return
 
         try:
             while not reader.at_eof():
@@ -318,17 +348,32 @@ class FakeLdapServer:
                 if op_name == "extendedReq":
                     oid = str(op_val["requestName"])
                     if oid == STARTTLS_OID:
+                        if self.stall_after_starttls:
+                            await asyncio.sleep(10.0)
+                            return
                         if self.reject_starttls:
+                            resp_id = (
+                                self.mismatch_starttls_msg_id
+                                if self.mismatch_starttls_msg_id is not None
+                                else msg_id
+                            )
                             resp = _make_extended_response(
-                                msg_id,
+                                resp_id,
                                 result_code=RESULT_CODE_UNAVAILABLE,
                                 diag="StartTLS unavailable",
                             )
                             writer.write(resp)
                             await writer.drain()
                         else:
-                            resp = _make_extended_response(msg_id, result_code=RESULT_CODE_SUCCESS)
+                            resp_id = (
+                                self.mismatch_starttls_msg_id
+                                if self.mismatch_starttls_msg_id is not None
+                                else msg_id
+                            )
+                            resp = _make_extended_response(resp_id, result_code=RESULT_CODE_SUCCESS)
                             writer.write(resp)
+                            if self.inject_buffer_after_starttls is not None:
+                                writer.write(self.inject_buffer_after_starttls)
                             await writer.drain()
 
                             # Upgrade transport
@@ -346,17 +391,28 @@ class FakeLdapServer:
                             is_tls = True
 
                 elif op_name == "bindRequest":
+                    if self.malformed_bind_response:
+                        writer.write(b"\x30\x05\x02\x01\x01\x00\x00")
+                        await writer.drain()
+                        return
+
                     bind_dn = str(op_val["name"]).lower()
                     auth_bytes = bytes(op_val["authentication"].asOctets())
                     self.bind_calls.append((bind_dn, auth_bytes))
 
+                    resp_id = (
+                        self.mismatch_bind_msg_id
+                        if self.mismatch_bind_msg_id is not None
+                        else msg_id
+                    )
+
                     if len(auth_bytes) == 0:
                         if self.accept_anonymous_bind:
-                            writer.write(_make_bind_response(msg_id, RESULT_CODE_SUCCESS))
+                            writer.write(_make_bind_response(resp_id, RESULT_CODE_SUCCESS))
                         else:
                             writer.write(
                                 _make_bind_response(
-                                    msg_id,
+                                    resp_id,
                                     RESULT_CODE_INVALID_CREDENTIALS,
                                     "Anonymous bind prohibited",
                                 )
@@ -365,11 +421,11 @@ class FakeLdapServer:
                         pwd_str = auth_bytes.decode("utf-8", errors="replace")
                         expected_pwd = self.directory.passwords.get(bind_dn)
                         if expected_pwd is not None and expected_pwd == pwd_str:
-                            writer.write(_make_bind_response(msg_id, RESULT_CODE_SUCCESS))
+                            writer.write(_make_bind_response(resp_id, RESULT_CODE_SUCCESS))
                         else:
                             writer.write(
                                 _make_bind_response(
-                                    msg_id,
+                                    resp_id,
                                     RESULT_CODE_INVALID_CREDENTIALS,
                                     "Invalid credentials",
                                 )
@@ -377,51 +433,85 @@ class FakeLdapServer:
                     await writer.drain()
 
                 elif op_name == "searchRequest":
+                    if self.stall_mid_search:
+                        await asyncio.sleep(10.0)
+                        return
+
                     deref = int(op_val["derefAliases"])
                     self.deref_aliases_seen.append(deref)
                     size_limit = int(op_val["sizeLimit"])
+
+                    resp_id = (
+                        self.mismatch_search_msg_id
+                        if self.mismatch_search_msg_id is not None
+                        else msg_id
+                    )
 
                     # Match filter against directory entries
                     # Extract filter string representation or check attributes
                     raw_filter_bytes = bytes(op_val["filter"].asOctets())
                     matched_entries: list[tuple[str, dict[str, list[bytes]]]] = []
 
+                    filter_tokens = [
+                        t
+                        for t in re.findall(rb"[a-zA-Z0-9_-]+", raw_filter_bytes)
+                        if t.lower()
+                        not in (
+                            b"uid",
+                            b"cn",
+                            b"mail",
+                            b"samaccountname",
+                            b"entryuuid",
+                            b"objectclass",
+                            b"person",
+                        )
+                    ]
+
                     for dn, attrs in self.directory.entries.items():
-                        # Match identity attributes (uid, cn, mail, sAMAccountName) against filter bytes
                         matched = False
-                        for attr_name, vals in attrs.items():
-                            if attr_name.lower() in (
-                                "uid",
-                                "cn",
-                                "mail",
-                                "samaccountname",
-                                "entryuuid",
-                            ):
-                                for v in vals:
-                                    if v and v in raw_filter_bytes:
-                                        matched = True
-                                        break
-                            if matched:
-                                break
+                        if raw_filter_bytes in (b"*", b"(objectclass=*)") or not filter_tokens:
+                            matched = True
+                        else:
+                            for attr_name, vals in attrs.items():
+                                if attr_name.lower() in (
+                                    "uid",
+                                    "cn",
+                                    "mail",
+                                    "samaccountname",
+                                    "entryuuid",
+                                ):
+                                    for v in vals:
+                                        if not v:
+                                            continue
+                                        for token in filter_tokens:
+                                            if token in v or v.startswith(token) or v in token:
+                                                matched = True
+                                                break
+                                        if matched:
+                                            break
+                                if matched:
+                                    break
                         if matched:
                             matched_entries.append((dn, attrs))
 
-                    # Send matched entries up to sizeLimit
+                    # Send matched entries up to sizeLimit unless ignoring sizeLimit
                     count = 0
                     for dn, attrs in matched_entries:
-                        if size_limit > 0 and count >= size_limit:
+                        if not self.ignore_size_limit and size_limit > 0 and count >= size_limit:
                             break
-                        writer.write(_make_search_entry(msg_id, dn, attrs))
+                        writer.write(_make_search_entry(resp_id, dn, attrs))
                         await writer.drain()
                         count += 1
 
-                    writer.write(_make_search_done(msg_id, RESULT_CODE_SUCCESS))
+                    writer.write(_make_search_done(resp_id, RESULT_CODE_SUCCESS))
                     await writer.drain()
 
                 elif op_name == "unbindRequest":
                     break
 
         finally:
+            if cur_task is not None:
+                self._conn_tasks.discard(cur_task)
             writer.close()
             try:
                 await writer.wait_closed()
@@ -445,6 +535,11 @@ class FakeLdapServer:
 
     async def stop(self) -> None:
         """Stop server and clean up socket file."""
+        if self._conn_tasks:
+            for t in list(self._conn_tasks):
+                t.cancel()
+            await asyncio.gather(*self._conn_tasks, return_exceptions=True)
+            self._conn_tasks.clear()
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()

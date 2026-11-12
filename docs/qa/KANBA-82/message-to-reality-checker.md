@@ -9,41 +9,53 @@
 
 ---
 
-## Technical Actions & File Manifest
+## Technical Actions & Specialist Review Resolution
 
-1. **Database Migration & Models**:
-   - `database/migrations/versions/p2_07_ldap_group_mappings.py` (`down_revision = "p2_06_account_linking_recovery"`)
-   - `database/migrations/sql/p2_07_ldap_group_mappings.up.sql`
-   - `database/migrations/sql/p2_07_ldap_group_mappings.down.sql`
-   - Table `ldap_group_mappings` created with `ENABLE` and `FORCE ROW LEVEL SECURITY` where `workspace_id = current_setting('app.workspace_id')::uuid` with index on `(card_id, normalized_dn)`.
-   - ORM model `LdapGroupMapping` mapped in `database/models/auth.py` and exported in `database/models/__init__.py`. Table count in `database/tests/test_p1_17_models.py` updated to 43 tables (`len(orm_tables) == 43`). Migration test verified in `database/tests/migrations/test_p2_07_migration.py`.
+### 1. Resolution of Specialist Review Feedback (B1 - B5)
+- **B1 (CVE-2011-0411 Plaintext Injection & MessageID Validation)**:
+  * Implemented pre- and post-upgrade buffer checks in `_connect_starttls` to reject injected frames before/after TLS upgrade with `LdapTlsError("STARTTLS_BUFFER_INJECTION")`.
+  * Migrated transport upgrade to official Python 3.12 `await writer.start_tls(ssl_ctx, server_hostname=host)`.
+  * Enforced strict response `messageID` validation across `StartTLS`, `bind()`, and `search()` operations, raising `LdapProtocolError` on mismatch.
+  * Verified via dedicated test `test_b1_starttls_buffer_injection_and_msg_id`.
+- **B2 (Hostile Wire Timeouts & Search Bounds)**:
+  * Added `op_timeout` wrapping for `read_ber_packet`, `write/drain`, and TLS upgrade in `asyncio.timeout(DEFAULT_OP_TIMEOUT)`.
+  * Added `DEFAULT_TOTAL_TIMEOUT` wrapping across the network phase of `LdapAuthService.authenticate()`, mapping timeouts uniformly to 401 `INVALID_CREDENTIALS`.
+  * Enforced `size_limit` check during search streaming, raising `LdapSearchError("SIZE_LIMIT_EXCEEDED")` if the server returns more than requested entries.
+  * Verified via dedicated test `test_b2_hostile_wire_timeouts_and_size_limit`.
+- **B3 (Uniform 401 Failure & LdapProtocolError Hierarchy)**:
+  * Made `LdapProtocolError` subclass `LdapError`.
+  * Mapped all protocol errors, search failures, bind rejections, and timeouts in `service.authenticate()` to RFC 7807 401 `INVALID_CREDENTIALS` (`"Authentication Failed"` / `"Invalid credentials"`), preventing account enumeration or information leakage.
+  * Verified via dedicated test `test_b3_uniform_failure_and_malformed_bind_response` and `test_ui_b2_byte_identical_401_responses`.
+- **B4 (Admin Test Route Authorization & Error Sanitization)**:
+  * Protected `POST /api/v1/admin/auth-cards/{card_id}/ldap-test` with `require_admin_aal2` dependency (verified with `assert_admin_routes_protected`).
+  * Added 25ms timing floor `timing_floor(floor_ms=25.0)`.
+  * Sanitized failure responses: returns allowlisted error codes (`TLS_HANDSHAKE_FAILED`, `SPKI_PIN_MISMATCH`, `BIND_FAILED`, `TIMEOUT`, `CONNECTION_FAILED`) without raw exception disclosure.
+  * Implemented generic 404 `CARD_NOT_FOUND` with detail `"Authentication provider card not found"` without echoing `card_id` for missing and non-LDAP cards.
+  * Verified via full authorization matrix test `test_admin_ldap_test_connection_endpoint` (401 anonymous, 403 member, 403 admin AAL1, 200 admin AAL2, 404 anti-enumeration).
+- **B5 (Session Issuance & CSRF Protection)**:
+  * Integrated with `SessionService.create_after_login()` to issue server-side session, returning `__Host-kb_session` and CSRF cookie headers on login success.
+  * Added `retry_after_seconds` integer member and `Retry-After` HTTP header to 429 `RATE_LIMITED` responses in `kanban/api/problems.py`.
+  * Enforced `extra="forbid"` on `LdapLoginRequest` and synchronized username trimming.
+  * Verified via tests `test_b4_machine_readable_429`, `test_b5_session_issuance_and_csrf_cookie`, and `test_ui_b3_csrf_protection_with_csrf_middleware`.
 
-2. **Core LDAP Implementation (`kanban/auth/ldap/`)**:
-   - `config.py`: `LdapCardConfig` Pydantic model (`extra="forbid"`) enforcing `url` protocol validation, SSRF egress protection (`127.0.0.0/8`, `::1`, `169.254.0.0/16`, `fe80::/10` rejected unless private egress allowed), X.509 PEM bundle verification, and SPKI SHA-256 public key pin format validation.
-   - `escape.py`: RFC 4515 filter escaping (`*`, `(`, `)`, `\`, `\x00` escaped to `\2a`, `\28`, `\29`, `\5c`, `\00`) and RFC 4514 DN parsing and normalization (`normalize_dn`, `escape_dn_value`, `unescape_dn_value`). Structural AST invariance check verifies that user filter substitution does not alter the operator count or tree depth.
-   - `asn1_ber.py`: RFC 4511 BER streaming codec for LDAPv3 messages with strict streaming bounds (`MAX_BER_MESSAGE_SIZE = 262,144` bytes), rejection of indefinite length encodings, and support for `StartTLS` ExtendedRequest, `BindRequest`, `SearchRequest`, and `UnbindRequest`.
-   - `client.py`: `LdapTlsHardClient` implementing the `TLS_HARD` invariant:
-     * `ldaps`: Establishes TLS immediately on connect with TLS >= 1.2 and certificate verification.
-     * `starttls`: Opens TCP, sends ONLY `ExtendedRequest(StartTLS)` as `messageID=1`, verifies `resultCode == 0`, upgrades transport via `loop.start_tls()` prior to constructing or dispatching any `BindRequest`.
-     * SPKI Pinning: Extracts leaf certificate DER `SubjectPublicKeyInfo`, computes SHA-256 digest, and enforces match against configured `spki_sha256_pins` before bind.
-   - `service.py`: `LdapAuthService.authenticate` executing service search, ephemeral user bind, mutable `bytearray` zeroization in `finally`, 120ms timing floor, uniform 401 `INVALID_CREDENTIALS` error mapping, and handoff to `IdentityResolver`.
-   - `sync.py`: `sync_ldap_groups` reconciling directory group DNs into workspace groups (`principals(type='GROUP')` and `principal_group_edges`), automatically provisioning new edges, revoking removed card-managed group edges, and leaving local non-LDAP group memberships untouched.
-   - `protocol.py` and `group_sync.py`: Interface re-exports.
-   - `router.py` & `kanban/api/v1/auth_ldap.py`: HTTP routes `POST /api/v1/auth/ldap/{slug}/login` and alias `POST /api/v1/auth/cards/{slug}/ldap-login` with CSRF validation, rate limiting (`AUTH_LOGIN_IP`, `AUTH_LOGIN_ACCOUNT`), timing floor, and admin test endpoint `POST /api/v1/admin/auth-cards/{card_id}/ldap-test`.
-   - `kanban/tests/fixtures/fake_ldap.py`: In-memory mock LDAPv3 server supporting LDAPS and StartTLS over Unix domain sockets.
+---
 
-3. **Mandatory Test Suite & Verification Proof**:
-   - `kanban/tests/auth/test_ldap_escape.py`: 14/14 tests passing.
-   - `kanban/tests/auth/test_ldap_tls_and_bind.py`: 19/19 tests passing (covers all 12 mandatory test cases from ticket spec).
-   - `kanban/tests/auth/test_ldap_group_sync.py`: 4/4 tests passing.
-   - `database/tests/migrations/test_p2_07_migration.py`: 1/1 migration test passing.
-   - Total coverage: **96.03%** branch+line coverage across target modules (exceeds 95.0% threshold).
+## Mandatory Test Suite & Verification Proof
 
-4. **Forensic Proof Manifest (`docs/qa/KANBA-82/`)**:
-   - `git-diff.patch`: Complete git diff against base.
-   - `unit-test-results.txt`: Full pytest execution log showing 38 passed in 7.65s with 96.03% coverage.
-   - `build-check.txt`: Static analysis verification showing ruff clean, ruff format clean, mypy strict clean (280 source files), lint-imports clean (2 kept, 0 broken), license gate clean (`violations=0`), check_no_dashes clean, and zero hits for banned library `ldap3`.
-   - `wire-tls-proof.txt`: Captured socket byte traces from test cases 2, 3, and 5 showing zero `0x60` BindRequest tags on unencrypted wire, zero cleartext passwords, and verified SPKI SHA-256 digest validation.
-   - `contract-sample.json`: Wire exchanges for successful login (200), invalid credentials (401), rate limited (429), admin card test (200), and resolver assertion handoff.
-   - `dependency-evaluation.md`: Pinned `pyasn1` evaluation (`BSD-2-Clause`), sha256 lockfile hashes, and justification for rejecting `ldap3` (`LGPL-3.0`) and `python-ldap` (native C).
-   - `message-to-reality-checker.md`: This forensic manifest.
+- `kanban/tests/auth/test_ldap_escape.py`: 14/14 tests passing.
+- `kanban/tests/auth/test_ldap_tls_and_bind.py`: 26/26 tests passing.
+- `kanban/tests/auth/test_ldap_group_sync.py`: 4/4 tests passing.
+- `database/tests/migrations/test_p2_07_migration.py`: 1/1 migration test passing.
+- Total suite: **45 passed in 9.84s** with **95.57%** branch+line coverage (exceeds 95.0% threshold). Zero warnings.
+
+---
+
+## Forensic Proof Manifest (`docs/qa/KANBA-82/`)
+
+- `git-diff.patch`: Complete git diff against main.
+- `unit-test-results.txt`: Full pytest execution log showing 45 passed with 95.57% coverage.
+- `build-check.txt`: Static analysis verification showing ruff clean, ruff format clean, mypy strict clean (369 source files), lint-imports clean (2 kept, 0 broken), license gate clean (`violations=0`), and check_no_dashes clean.
+- `wire-tls-proof.txt`: Captured socket byte traces from test cases showing zero `0x60` BindRequest tags on unencrypted wire, zero cleartext passwords, and verified SPKI SHA-256 digest validation.
+- `contract-sample.json`: Faithful wire exchanges recorded from real test client runs for login success (200), invalid credentials (401), rate limited (429), admin test success (200), admin test not found (404), admin test connection failure (200), and CSRF validation failed (403).
+- `dependency-evaluation.md`: Pinned `pyasn1` evaluation (`BSD-2-Clause`), sha256 lockfile hashes, and justification for rejecting `ldap3` (`LGPL-3.0`) and `python-ldap` (native C).
+- `message-to-reality-checker.md`: This forensic manifest.
