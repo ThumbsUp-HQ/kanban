@@ -29,6 +29,22 @@ describe('App component', () => {
     }
   });
 
+  it('renders EmojiStory when pathname is /__dev/emoji', () => {
+    const originalPathname = window.location.pathname;
+    try {
+      window.history.pushState({}, '', '/__dev/emoji');
+      render(
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>,
+      );
+      const story = screen.getByTestId('emoji-story');
+      expect(story).toBeDefined();
+    } finally {
+      window.history.pushState({}, '', originalPathname);
+    }
+  });
+
   describe('isStoryEnabled helper logic', () => {
     it('returns true when devMode is true regardless of env variable', () => {
       expect(isStoryEnabled(true, undefined)).toBe(true);

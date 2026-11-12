@@ -1,0 +1,141 @@
+/* ==========================================================================
+   EmojiStory Visual Development Gallery Styling (KB-P3-31)
+   Uses S6.1 breathable tokens: --card-pad (16px 18px), --card-gap (12px).
+   ========================================================================== */
+
+.emoji-story {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap, 32px);
+  padding: var(--board-canvas-pad, 24px 28px);
+  padding-bottom: 600px;
+  background-color: var(--bg-canvas);
+  min-height: 100vh;
+  box-sizing: border-box;
+  color: var(--fg-primary);
+  font-family: var(--font-sans);
+}
+
+.emoji-story-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4, 16px);
+  padding-bottom: var(--space-4, 16px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.emoji-story-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.emoji-story-subtitle {
+  margin: 4px 0 0 0;
+  font-size: var(--text-body, 0.9375rem);
+  color: var(--fg-secondary);
+  line-height: var(--leading-prose, 1.73);
+}
+
+.emoji-story-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.emoji-story-section h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+/* 21-Emoji Responsive Grid */
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--card-gap, 12px);
+}
+
+.emoji-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  padding: var(--card-pad, 16px 18px);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 10px);
+  box-sizing: border-box;
+  transition: border-color 120ms ease;
+}
+
+.emoji-card:hover {
+  border-color: var(--border-strong);
+}
+
+.emoji-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+}
+
+.emoji-card-key {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.emoji-card-domain {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.emoji-card-body {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--fg-secondary);
+}
+
+/* Interactive Sample Section */
+.interactive-sample-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 16px);
+  padding: var(--card-pad, 16px 18px);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 10px);
+  width: fit-content;
+}
+
+.activation-log {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 6px);
+  min-width: 160px;
+}
+
+/* Edge Flip Section */
+.edge-flip-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  margin-bottom: 300px;
+}
+
+.edge-flip-box {
+  display: flex;
+  justify-content: flex-end;
+  padding: 40px 16px;
+  background-color: var(--bg-surface);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-lg, 10px);
+}

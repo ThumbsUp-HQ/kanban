@@ -1,0 +1,129 @@
+/* ==========================================================================
+   EmojiHint Component & Popup Styling (KB-P3-31, S6.1, S6.2)
+   Enforces breathable tokens, 24x24 trigger, 44px coarse hit area, 360px max width.
+   Zero inline styles or dynamic <style> injection (CSP style-src 'self').
+   ========================================================================== */
+
+/* Trigger button: crisp 24px x 24px interactive emoji pill */
+.emoji-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--emoji-pill, 24px);
+  height: var(--emoji-pill, 24px);
+  padding: 0;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 6px);
+  background: transparent;
+  color: var(--fg-primary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  vertical-align: middle;
+  box-sizing: border-box;
+  transition: background-color 100ms ease;
+}
+
+.emoji-hint:hover {
+  background-color: var(--bg-hover);
+}
+
+.emoji-hint:focus-visible {
+  outline: var(--focus-ring-w, 2px) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Inner glyph wrapper */
+.emoji-hint-glyph {
+  display: inline-block;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Minimum 44px hit area on coarse touch pointers without layout shift */
+@media (pointer: coarse) {
+  .emoji-hint::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: var(--tap-min, 44px);
+    height: var(--tap-min, 44px);
+    min-width: var(--tap-min, 44px);
+    min-height: var(--tap-min, 44px);
+  }
+}
+
+/* Elaboration popup: 360px max-width, 12px 14px padding */
+.emoji-hint-popup {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  max-width: var(--hint-max-w, 360px);
+  width: max-content;
+  padding: var(--hint-pad, 12px 14px);
+  font-family: var(--font-sans);
+  font-size: var(--text-body, 0.9375rem);
+  line-height: var(--leading-prose, 1.73);
+  color: var(--fg-primary);
+  background-color: var(--bg-surface-raised, #ffffff);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  user-select: text;
+  -webkit-user-select: text;
+  box-sizing: border-box;
+  opacity: 1;
+  transition: opacity 120ms ease;
+  overflow-wrap: break-word;
+}
+
+/* Interactive dialog variant */
+.emoji-hint-popup--interactive {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+/* Interactive touch / popup action button */
+.emoji-hint-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--space-2, 8px);
+  padding: 6px 12px;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent-primary-fg, #ffffff);
+  background-color: var(--accent-primary, #1d4ed8);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.emoji-hint-action-btn:hover {
+  opacity: 0.92;
+}
+
+.emoji-hint-action-btn:focus-visible {
+  outline: var(--focus-ring-w, 2px) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Reduced motion guard */
+@media (prefers-reduced-motion: reduce) {
+  .emoji-hint,
+  .emoji-hint-popup {
+    transition: none;
+  }
+}
