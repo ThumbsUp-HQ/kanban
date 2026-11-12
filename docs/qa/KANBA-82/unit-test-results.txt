@@ -1,0 +1,20 @@
+..................................................                       [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+kanban/auth/ldap/__init__.py         8      0      0      0   100%
+kanban/auth/ldap/asn1_ber.py       214     11     34      3    94%   326-332, 351-352, 375-376
+kanban/auth/ldap/client.py         229      6     60      4    97%   159->exit, 218, 237-238, 353, 367-368
+kanban/auth/ldap/config.py         153      7     52      4    95%   26-27, 62-63, 82, 100, 129
+kanban/auth/ldap/escape.py         249      1    130      3    99%   173, 212->exit, 373->371
+kanban/auth/ldap/group_sync.py       2      0      0      0   100%
+kanban/auth/ldap/protocol.py         3      0      0      0   100%
+kanban/auth/ldap/router.py         165     12     42      7    90%   87-90, 263-264, 295->316, 297->316, 333-334, 336-337, 342-343
+kanban/auth/ldap/service.py        119      4     30      3    95%   60-61, 127->164, 151-152, 157->160, 254->263
+kanban/auth/ldap/sync.py            51      0     16      0   100%
+----------------------------------------------------------------------------
+TOTAL                             1193     41    364     24    96%
+Required test coverage of 95% reached. Total coverage: 95.57%
+50 passed in 5.55s

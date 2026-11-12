@@ -65,6 +65,14 @@ warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 packages = ["database", "kanban", "mcp", "agent", "scripts", "deploy"]
 
+[[tool.mypy.overrides]]
+module = ["pyasn1.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["kanban.auth.ldap.asn1_ber"]
+disallow_subclassing_any = false
+
 [tool.coverage.run]
 # SQLAlchemy asyncio runs coroutine frames inside greenlets; without this setting coverage.py
 # loses line tracking after the first awaited DB call and under-reports service/route modules.

@@ -5,6 +5,7 @@ from database.models.agent_definition import AgentDefinition
 from database.models.attachments import Attachment
 from database.models.auth import (
     AuthProviderCard,
+    LdapGroupMapping,
     LocalAdminCredential,
     OidcAuthRequest,
     RecoveryCode,
@@ -82,6 +83,7 @@ __all__ = [
     "IssueLabel",
     "IssueModule",
     "IssueSubscription",
+    "LdapGroupMapping",
     "LinkKind",
     "LinkTypeMatrix",
     "LocalAdminCredential",

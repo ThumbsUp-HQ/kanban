@@ -75,6 +75,10 @@ class Problem(BaseModel):
         default=None,
         description="Count of open sub-issues hidden by RLS",
     )
+    retry_after_seconds: int | None = Field(
+        default=None,
+        description="Numeric seconds after which the client may retry rate-limited requests",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -98,6 +102,7 @@ class ProblemException(Exception):  # noqa: N818
         hidden_open_count: int | None = None,
         type_uri: str | None = None,
         extra: dict[str, Any] | None = None,
+        retry_after_seconds: int | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -119,6 +124,7 @@ class ProblemException(Exception):  # noqa: N818
         self.hidden_open_count = hidden_open_count
         self.type_uri = type_uri
         self.extra = extra
+        self.retry_after_seconds = retry_after_seconds
 
 
 def not_found() -> NoReturn:
@@ -158,6 +164,7 @@ async def problem_exception_handler(
         state_group=exc.state_group,
         open_subissue_keys=exc.open_subissue_keys,
         hidden_open_count=exc.hidden_open_count,
+        retry_after_seconds=exc.retry_after_seconds,
         **extra_fields,
     )
     response_headers = {"x-request-id": req_id}
