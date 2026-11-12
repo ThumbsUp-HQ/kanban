@@ -62,6 +62,15 @@ class Project(Base):
     )
     auto_archive_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    @property
+    def cycles_enabled(self) -> bool:
+        """Dynamic toggle for cycles feature (defaults to True)."""
+        return getattr(self, "_cycles_enabled", True)
+
+    @cycles_enabled.setter
+    def cycles_enabled(self, val: bool) -> None:
+        self._cycles_enabled = val
+
 
 class WorkflowState(Base):
     """Configurable project lifecycle workflow state."""
@@ -182,6 +191,13 @@ class Module(Base):
         ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
+    description_markdown: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("''")
+    )
+    lead_principal_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'planned'"))
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 

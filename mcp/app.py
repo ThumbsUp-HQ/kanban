@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Final
 from starlette.applications import Starlette
 from starlette.routing import Mount, Route
 
+from mcp.auth import McpAuthMiddleware
 from mcp.internal_client import KanbanApiClient
 from mcp.protocol import InMemorySessionStore, McpProtocolHandler
 from mcp.registry import Surface, ToolRegistry, create_placeholder_tool
@@ -135,5 +136,12 @@ def create_mcp_app(
     app.state.agent_registry = agent_registry
     app.state.docs_registry = docs_registry
     app.state.admin_registry = admin_registry
+
+    if active_settings.auth_enabled:
+        app.add_middleware(
+            McpAuthMiddleware,
+            internal_client=internal_client,
+            settings=active_settings,
+        )
 
     return app

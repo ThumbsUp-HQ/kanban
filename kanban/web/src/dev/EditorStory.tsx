@@ -1,5 +1,5 @@
 /**
- * Dev Story Showcase for Breathable ProseMirror GFM Editor (KB-P3-45).
+ * Dev Story Showcase for Breathable ProseMirror GFM Editor (KB-P3-45, KB-P3-47).
  * Mounted at /__dev/editor during development and E2E visual verification.
  */
 
@@ -29,8 +29,41 @@ export function demo(): string {
 
 [1]: https://kanban.hackedyour.info`;
 
+export const MERMAID_SAMPLE_MARKDOWN = `# Architectural Specification
+
+## System Topology
+\`\`\`mermaid
+flowchart TD
+  Client[Web Client] --> Gateway[API Gateway]
+  Gateway --> DB[(PostgreSQL)]
+\`\`\`
+
+## Authentication Flow
+\`\`\`mermaid
+sequenceDiagram
+  autonumber
+  Client->>Auth: POST /api/v1/auth/login
+  Auth-->>Client: 200 OK Set-Cookie
+\`\`\`
+`;
+
+export function generateOverlimitMarkdown(): string {
+  let res = '## Overlimit Node Cap Fallback\n\n```mermaid\nflowchart TD\n';
+  for (let i = 0; i <= 400; i++) {
+    res += `  N${String(i)}["Node ${String(i)}"]\n`;
+  }
+  res += '```\n';
+  return res;
+}
+
 export function EditorStory(): JSX.Element {
   const [markdown, setMarkdown] = useState(INITIAL_STORY_MARKDOWN);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof document !== 'undefined') {
+      return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    }
+    return 'light';
+  });
 
   const isByteEqual = markdown === INITIAL_STORY_MARKDOWN;
 
@@ -120,12 +153,28 @@ export function EditorStory(): JSX.Element {
     el.dispatchEvent(evt);
   };
 
+  const handleLoadMermaid = (): void => {
+    setMarkdown(MERMAID_SAMPLE_MARKDOWN);
+  };
+
+  const handleLoadFallback = (): void => {
+    setMarkdown(generateOverlimitMarkdown());
+  };
+
+  const handleToggleTheme = (): void => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', nextTheme);
+    }
+  };
+
   return (
     <div className="kb-editor-story" data-testid="editor-story">
       <header className="kb-editor-story__header">
         <h1 className="kb-editor-story__title">ProseMirror GFM Editor Showcase</h1>
         <p className="kb-editor-story__desc">
-          Breathable typography, lossless sourceSlice preservation, and raw Markdown toggle (📝).
+          Breathable typography, lossless sourceSlice preservation, and raw Markdown toggle.
         </p>
       </header>
 
@@ -178,6 +227,36 @@ export function EditorStory(): JSX.Element {
         >
           Undo (Cmd+Z)
         </button>
+        <button
+          type="button"
+          className="kb-editor-story__btn"
+          data-testid="btn-load-mermaid"
+          onClick={handleLoadMermaid}
+        >
+          Load Mermaid Diagrams
+        </button>
+        <button
+          type="button"
+          className="kb-editor-story__btn"
+          data-testid="btn-load-fallback"
+          onClick={handleLoadFallback}
+        >
+          Simulate Fallback Diagram
+        </button>
+        <button
+          type="button"
+          className="kb-editor-story__btn"
+          data-testid="btn-toggle-theme"
+          onClick={handleToggleTheme}
+        >
+          Toggle Theme ({theme === 'light' ? 'Dark' : 'Light'})
+        </button>
+        <div
+          className="kb-editor-story__theme-badge"
+          data-testid="theme-indicator"
+        >
+          {theme === 'dark' ? 'Dark' : 'Light'}
+        </div>
         <div
           className={`kb-editor-story__status${isByteEqual ? ' is-identical' : ''}`}
           data-testid="byte-equality-status"
@@ -193,6 +272,7 @@ export function EditorStory(): JSX.Element {
           onChange={setMarkdown}
           ariaLabel="Editorial description editor"
           testId="story-editor"
+          placeholder="Type markdown or paste rich text..."
         />
       </main>
 

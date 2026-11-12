@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { EditorState } from 'prosemirror-state';
+import { EditorState, TextSelection } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { editorSchema } from '../../schema';
 import {
@@ -72,6 +72,7 @@ describe('SparkleOverlayPortal Component', () => {
     // Transition into READY_BLINKING
     act(() => {
       const tr = editorView.state.tr;
+      tr.setSelection(TextSelection.create(tr.doc, currentPos));
       tr.setMeta(sparklePluginKey, {
         type: 'SET_MACHINE_STATE',
         machine: {
@@ -102,6 +103,7 @@ describe('SparkleOverlayPortal Component', () => {
 
     act(() => {
       const tr = editorView.state.tr;
+      tr.setSelection(TextSelection.create(tr.doc, currentPos));
       tr.setMeta(sparklePluginKey, {
         type: 'SET_MACHINE_STATE',
         machine: {
@@ -126,6 +128,88 @@ describe('SparkleOverlayPortal Component', () => {
     const badge = screen.getByTestId('test-sparkle');
     fireEvent.click(badge);
     expect(acceptSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('right-click pointerdown button 2 on badge calls onAccept or acceptSparkleSuggestion', () => {
+    const editorView = createTestEditor();
+    const currentPos = editorView.state.doc.content.size - 1;
+    const acceptSpy = vi.fn();
+
+    act(() => {
+      const tr = editorView.state.tr;
+      tr.setSelection(TextSelection.create(tr.doc, currentPos));
+      tr.setMeta(sparklePluginKey, {
+        type: 'SET_MACHINE_STATE',
+        machine: {
+          name: 'READY_BLINKING',
+          context: { typedCount: 4, suggestion: ' text', requestId: 'req-1', error: null },
+        },
+        activeSuggestion: ' text',
+        activePos: currentPos,
+        coords: { top: 50, left: 100 },
+      });
+      editorView.dispatch(tr);
+    });
+
+    const { rerender } = render(
+      <SparkleOverlayPortal
+        view={editorView}
+        onAccept={acceptSpy}
+        testId="test-sparkle"
+      />,
+    );
+
+    const badge = screen.getByTestId('test-sparkle');
+
+    // Non-secondary pointerdown (button 0) does not accept
+    fireEvent.pointerDown(badge, { button: 0 });
+    expect(acceptSpy).toHaveBeenCalledTimes(0);
+
+    // Right-click pointerdown (button 2)
+    fireEvent.pointerDown(badge, { button: 2 });
+    expect(acceptSpy).toHaveBeenCalledTimes(1);
+
+    // Subsequent contextmenu on badge is prevented and suppression consumed
+    const cmEvent = fireEvent.contextMenu(badge);
+    expect(cmEvent).toBe(false); // defaultPrevented is true
+
+    // ContextMenu with Shift key allows native menu (not prevented)
+    const shiftCmEvent = fireEvent.contextMenu(badge, { shiftKey: true });
+    expect(shiftCmEvent).toBe(true); // defaultPrevented is false
+
+    // ContextMenu directly when onAccept provided calls onAccept
+    fireEvent.contextMenu(badge);
+    expect(acceptSpy).toHaveBeenCalledTimes(2);
+
+    // ContextMenu directly without prior pointerdown and without onAccept accepts via view
+    rerender(
+      <SparkleOverlayPortal
+        view={editorView}
+        testId="test-sparkle"
+      />,
+    );
+    fireEvent.contextMenu(badge);
+    expect(editorView.state.doc.textContent).toBe('Initial content text');
+
+    // Pointerdown button 2 without onAccept accepts via view
+    const newPos = editorView.state.doc.content.size - 1;
+    act(() => {
+      const tr = editorView.state.tr;
+      tr.setSelection(TextSelection.create(tr.doc, newPos));
+      tr.setMeta(sparklePluginKey, {
+        type: 'SET_MACHINE_STATE',
+        machine: {
+          name: 'READY_BLINKING',
+          context: { typedCount: 4, suggestion: ' more', requestId: 'req-2', error: null },
+        },
+        activeSuggestion: ' more',
+        activePos: newPos,
+        coords: { top: 50, left: 100 },
+      });
+      editorView.dispatch(tr);
+    });
+    fireEvent.pointerDown(badge, { button: 2 });
+    expect(editorView.state.doc.textContent).toBe('Initial content text more');
   });
 
   it('Case 8: Reduced motion query sets animation-name to none', () => {

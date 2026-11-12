@@ -1,0 +1,116 @@
+/**
+ * Mermaid Block View Styles (KB-P3-47, S5.3).
+ * Clean, calm Jira/Plane-style whitespace with responsive MediaViewport
+ * embedding and non-crashing fallback source view.
+ */
+
+.mermaid-block {
+  margin: 1rem 0;
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: 8px;
+  background-color: var(--bg-surface, #ffffff);
+  overflow: hidden;
+  position: relative;
+}
+
+.mermaid-block__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.75rem;
+  background-color: var(--bg-canvas, #f7f8fa);
+  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+  font-size: 0.75rem;
+  color: var(--fg-muted, #525866);
+}
+
+.mermaid-block__badge {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-secondary, #4b5563);
+}
+
+.mermaid-block__toggle-btn {
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-strong, #d1d5db);
+  border-radius: 4px;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-primary, #111827);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.mermaid-block__toggle-btn:hover {
+  background-color: var(--bg-hover, #f1f3f5);
+  border-color: var(--accent-primary, #1d4ed8);
+}
+
+.mermaid-block__preview {
+  position: relative;
+  min-height: 120px;
+}
+
+.mermaid-block .media-viewport {
+  border: none;
+  border-radius: 0;
+}
+
+.mermaid-block img {
+  max-height: 520px;
+  width: auto;
+  object-fit: contain;
+}
+
+.mermaid-fallback-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--warn-bg, #fef3c7);
+  color: var(--warn-fg, #78350f);
+  font-size: 0.8125rem;
+  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+}
+
+.mermaid-fallback-banner__icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.mermaid-fallback-banner__msg {
+  font-weight: 500;
+}
+
+.mermaid-block__source {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  background-color: var(--bg-canvas, #f7f8fa);
+  color: var(--fg-primary, #111827);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mermaid-block__source code {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.mermaid-block--edit .mermaid-block__preview {
+  display: none;
+}
+
+.mermaid-block--preview:not(.mermaid-block--fallback) .mermaid-block__source {
+  display: none;
+}
+
+.mermaid-block--fallback .mermaid-block__preview {
+  min-height: 0;
+}

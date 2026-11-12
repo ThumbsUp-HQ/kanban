@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 from starlette.responses import JSONResponse, Response
 
+from mcp.auth import SCOPE_REQUIREMENTS, hash_mcp_api_key
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
 from mcp.yaml_out import dump_yaml
@@ -48,13 +49,14 @@ class Session:
     surface: Surface
     created_at_s: float
     last_seen_s: float
+    token_sha256: bytes | None = None
 
 
 @runtime_checkable
 class SessionStore(Protocol):
     """Protocol for MCP session lifecycle management."""
 
-    def create_session(self, surface: Surface) -> Session:
+    def create_session(self, surface: Surface, *, token_sha256: bytes | None = None) -> Session:
         """Create and store a newly initialized session."""
         ...
 
@@ -91,7 +93,7 @@ class InMemorySessionStore:
         )
         self._sessions: OrderedDict[str, Session] = OrderedDict()
 
-    def create_session(self, surface: Surface) -> Session:
+    def create_session(self, surface: Surface, *, token_sha256: bytes | None = None) -> Session:
         """Create and store a new session with URL-safe random ID, evicting oldest if full."""
         now = self._time_provider()
         session_id = secrets.token_urlsafe(32)
@@ -100,6 +102,7 @@ class InMemorySessionStore:
             surface=surface,
             created_at_s=now,
             last_seen_s=now,
+            token_sha256=token_sha256,
         )
 
         # LRU eviction: if full, evict oldest session (first in OrderedDict)
@@ -263,10 +266,14 @@ class McpProtocolHandler:
         params = payload.get("params") or {}
 
         if method == "initialize":
-            return await self._handle_initialize(req_id)
+            return await self._handle_initialize(req_id, request=request)
 
         session_id = request.headers.get("mcp-session-id")
-        if not session_id or self.session_store.get_session(session_id) is None:
+        if not session_id:
+            return Response("Session not found or expired; please re-initialize", status_code=404)
+
+        session = self.session_store.get_session(session_id)
+        if session is None:
             return Response("Session not found or expired; please re-initialize", status_code=404)
 
         raw_auth = request.headers.get("x-kb-subject-token") or request.headers.get("authorization")
@@ -276,12 +283,27 @@ class McpProtocolHandler:
             else raw_auth
         )
 
+        current_token_sha256 = getattr(request.state, "mcp_token_sha256", None)
+        if current_token_sha256 is None and subject_token:
+            current_token_sha256 = hash_mcp_api_key(subject_token)
+
+        # Enforce session token binding: if session was bound to a token, token must match
+        if (
+            session.token_sha256 is not None
+            and current_token_sha256 is not None
+            and session.token_sha256 != current_token_sha256
+        ):
+            return Response("Session bound to different token", status_code=404)
+
+        caller_scopes = getattr(request.state, "mcp_scopes", None)
+
         return await self._dispatch_method(
             method,
             req_id,
             params,
             session_id=session_id,
             subject_token=subject_token,
+            caller_scopes=caller_scopes,
         )
 
     def _handle_delete_session(self, request: Request) -> Response:
@@ -290,8 +312,25 @@ class McpProtocolHandler:
             return Response("Session not found", status_code=404)
         return Response(status_code=204)
 
-    async def _handle_initialize(self, req_id: object) -> Response:
-        session = self.session_store.create_session(self.surface)
+    async def _handle_initialize(
+        self, req_id: object, *, request: Request | None = None
+    ) -> Response:
+        token_sha256: bytes | None = None
+        if request is not None:
+            token_sha256 = getattr(request.state, "mcp_token_sha256", None)
+            if token_sha256 is None:
+                raw_auth = request.headers.get("x-kb-subject-token") or request.headers.get(
+                    "authorization"
+                )
+                subject_token = (
+                    raw_auth[7:].strip()
+                    if raw_auth and raw_auth.lower().startswith("bearer ")
+                    else raw_auth
+                )
+                if subject_token:
+                    token_sha256 = hash_mcp_api_key(subject_token)
+
+        session = self.session_store.create_session(self.surface, token_sha256=token_sha256)
         result: dict[str, Any] = {
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {
@@ -309,7 +348,7 @@ class McpProtocolHandler:
             headers={"Mcp-Session-Id": session.session_id},
         )
 
-    async def _dispatch_method(
+    async def _dispatch_method(  # noqa: PLR0913
         self,
         method: str,
         req_id: object,
@@ -317,6 +356,7 @@ class McpProtocolHandler:
         *,
         session_id: str | None = None,
         subject_token: str | None = None,
+        caller_scopes: frozenset[str] | None = None,
     ) -> Response:
         # Notifications (no id)
         if req_id is None:
@@ -326,7 +366,7 @@ class McpProtocolHandler:
             return JSONResponse({"jsonrpc": "2.0", "id": req_id, "result": {}})
 
         if method == "tools/list":
-            return self._handle_tools_list(req_id)
+            return self._handle_tools_list(req_id, caller_scopes=caller_scopes)
 
         if method == "tools/call":
             return await self._handle_tools_call(
@@ -334,6 +374,7 @@ class McpProtocolHandler:
                 params,
                 session_id=session_id,
                 subject_token=subject_token,
+                caller_scopes=caller_scopes,
             )
 
         # Unknown method
@@ -346,14 +387,27 @@ class McpProtocolHandler:
             status_code=200,
         )
 
-    def _handle_tools_list(self, req_id: object) -> JSONResponse:
+    def _handle_tools_list(
+        self, req_id: object, *, caller_scopes: frozenset[str] | None = None
+    ) -> JSONResponse:
+        specs = self.registry.list_specs()
+        if caller_scopes is not None:
+            specs = [
+                s
+                for s in specs
+                if (
+                    SCOPE_REQUIREMENTS.get(s.name) is None
+                    or SCOPE_REQUIREMENTS[s.name].issubset(caller_scopes)
+                )
+            ]
+
         tools_list: list[dict[str, Any]] = [
             {
                 "name": spec.name,
                 "description": spec.description,
                 "inputSchema": spec.input_schema,
             }
-            for spec in self.registry.list_specs()
+            for spec in specs
         ]
         return JSONResponse(
             {
@@ -393,13 +447,14 @@ class McpProtocolHandler:
             )
         return str(params["name"]), arguments
 
-    async def _handle_tools_call(
+    async def _handle_tools_call(  # noqa: C901, PLR0911
         self,
         req_id: object,
         params: object,
         *,
         session_id: str | None = None,
         subject_token: str | None = None,
+        caller_scopes: frozenset[str] | None = None,
     ) -> JSONResponse:
         validated = self._validate_tools_call_params(req_id, params)
         if isinstance(validated, JSONResponse):
@@ -414,6 +469,26 @@ class McpProtocolHandler:
                 message=f"Tool '{tool_name}' not found on surface '{self.surface.value}'",
                 hint="Verify tool name or switch to appropriate MCP surface endpoint",
             )
+            return JSONResponse(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "content": [{"type": "text", "text": err.to_yaml()}],
+                        "isError": True,
+                    },
+                }
+            )
+
+        # Check required scopes
+        req_scopes = SCOPE_REQUIREMENTS.get(tool_name)
+        if (
+            caller_scopes is not None
+            and req_scopes is not None
+            and not req_scopes.issubset(caller_scopes)
+        ):
+            msg = f"Caller lacks required scope(s) {sorted(req_scopes)} for tool '{tool_name}'"
+            err = KbMcpError(code=McpErrorCode.INSUFFICIENT_SCOPE, message=msg)
             return JSONResponse(
                 {
                     "jsonrpc": "2.0",

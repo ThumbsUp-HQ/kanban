@@ -1,0 +1,89 @@
+{
+  "totp_enroll_200": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/auth/mfa/totp/enroll"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "otpauth_uri": "otpauth://totp/Kanban:alice?secret=<REDACTED>&issuer=Kanban&algorithm=SHA1&digits=6&period=30",
+        "secret": "<REDACTED>"
+      }
+    }
+  },
+  "totp_verify_200": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/auth/mfa/verify",
+      "body": {
+        "method": "totp",
+        "code": "******"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "verified": true,
+        "aal_level": 2,
+        "session_id": "01a1ceee-c592-71f7-aefa-50ebc9d0acc5",
+        "csrf_token": "j9xarIm3FnuwvzrqutJhvQ.NSvQMen4sRLKPs3GbDX07YUXHCpJu0Xabxfzi-Sxcg8"
+      }
+    }
+  },
+  "mfa_invalid_401": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/auth/mfa/verify",
+      "body": {
+        "method": "totp",
+        "code": "000000"
+      }
+    },
+    "response": {
+      "status": 401,
+      "body": {
+        "type": "urn:kanban:problem:MFA_INVALID",
+        "title": "Invalid MFA Code",
+        "status": 401,
+        "code": "MFA_INVALID",
+        "detail": "The provided code is invalid, expired, or already used.",
+        "request_id": "e71b424f0ada44d499b1d4da834bafe5"
+      }
+    }
+  },
+  "aal2_required_403": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/admin/test/route"
+    },
+    "response": {
+      "status": 403,
+      "body": {
+        "type": "urn:kanban:problem:AAL2_REQUIRED",
+        "title": "AAL2 Authentication Required",
+        "status": 403,
+        "code": "AAL2_REQUIRED",
+        "detail": "Administrative routes require multi-factor authentication (AAL2).",
+        "request_id": "1ff3554a4349460bb9d2132c024e29f6"
+      }
+    }
+  },
+  "mfa_enrollment_required_403": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/admin/test/route"
+    },
+    "response": {
+      "status": 403,
+      "body": {
+        "type": "urn:kanban:problem:MFA_ENROLLMENT_REQUIRED",
+        "title": "MFA Enrollment Required",
+        "status": 403,
+        "code": "MFA_ENROLLMENT_REQUIRED",
+        "detail": "Administrators must enroll and confirm a second authentication factor.",
+        "request_id": "77ec6814532b4b67822fac3ab106b3c3"
+      }
+    }
+  }
+}

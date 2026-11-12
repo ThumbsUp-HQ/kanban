@@ -5,8 +5,11 @@ from database.models.agent_definition import AgentDefinition
 from database.models.attachments import Attachment
 from database.models.auth import (
     AuthProviderCard,
+    LdapGroupMapping,
     LocalAdminCredential,
     OidcAuthRequest,
+    RecoveryCode,
+    TotpFactor,
     UserSession,
 )
 from database.models.base import (
@@ -29,6 +32,8 @@ from database.models.issues import (
     IssueSubscription,
 )
 from database.models.knowledge import Doc, Page, PageVersion, Sticky
+from database.models.mcp_api_key import McpApiKey
+from database.models.notifications import Notification
 from database.models.outbox import OutboxEvent
 from database.models.principals import (
     EffectiveResourceAccess,
@@ -79,11 +84,14 @@ __all__ = [
     "IssueLabel",
     "IssueModule",
     "IssueSubscription",
+    "LdapGroupMapping",
     "LinkKind",
     "LinkTypeMatrix",
     "LocalAdminCredential",
     "LtreeType",
+    "McpApiKey",
     "Module",
+    "Notification",
     "ObjectEmbedding",
     "ObjectKind",
     "ObjectLink",
@@ -101,9 +109,11 @@ __all__ = [
     "ProjectPriority",
     "RateLimitBucket",
     "RbacRole",
+    "RecoveryCode",
     "ResourceAclEntry",
     "RoleBinding",
     "Sticky",
+    "TotpFactor",
     "User",
     "UserSession",
     "View",

@@ -1,0 +1,241 @@
+{
+  "ticket": "KANBA-95",
+  "feature": "Scoped kb_* API keys, surface binding, scopes and token introspection (KB-P4-02a)",
+  "samples": [
+    {
+      "name": "mint_mcp_api_key_201",
+      "description": "POST /api/v1/admin/mcp-keys creates a surface-bound MCP key, returns plaintext token once, and records MCP_KEY_MINTED activity",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/mcp-keys",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "surface": "agent",
+          "scopes": [
+            "agent:read",
+            "agent:write"
+          ],
+          "expires_in_days": 90
+        }
+      },
+      "response": {
+        "status_code": 201,
+        "headers": {
+          "Location": "/api/v1/admin/mcp-keys/0192e21b-1234-7000-8000-000000000001",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": "0192e21b-1234-7000-8000-000000000001",
+          "workspace_id": "0192e21b-0000-7000-8000-000000000001",
+          "principal_id": "0192e21b-0001-7000-8000-000000000001",
+          "surface": "agent",
+          "key_prefix": "kb_agt_",
+          "display_hint": "9a1b",
+          "scopes": [
+            "agent:read",
+            "agent:write"
+          ],
+          "created_by_id": "0192e21b-0001-7000-8000-000000000001",
+          "created_at": "2026-11-12T04:00:00Z",
+          "expires_at": "2027-02-10T04:00:00Z",
+          "revoked_at": null,
+          "last_used_at": null,
+          "token": "<REDACTED:KANBAN_KEY>"
+        }
+      }
+    },
+    {
+      "name": "list_mcp_api_keys_200",
+      "description": "GET /api/v1/admin/mcp-keys lists active keys without revealing plaintext tokens or SHA-256 digests",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/admin/mcp-keys?surface=agent"
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": [
+          {
+            "id": "0192e21b-1234-7000-8000-000000000001",
+            "workspace_id": "0192e21b-0000-7000-8000-000000000001",
+            "principal_id": "0192e21b-0001-7000-8000-000000000001",
+            "surface": "agent",
+            "key_prefix": "kb_agt_",
+            "display_hint": "9a1b",
+            "scopes": [
+              "agent:read",
+              "agent:write"
+            ],
+            "created_by_id": "0192e21b-0001-7000-8000-000000000001",
+            "created_at": "2026-11-12T04:00:00Z",
+            "expires_at": "2027-02-10T04:00:00Z",
+            "revoked_at": null,
+            "last_used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "delete_mcp_api_key_204",
+      "description": "DELETE /api/v1/admin/mcp-keys/{key_id} revokes an MCP key immediately with HTTP 204 No Content",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/admin/mcp-keys/0192e21b-1234-7000-8000-000000000001"
+      },
+      "response": {
+        "status_code": 204,
+        "headers": {},
+        "body": null
+      }
+    },
+    {
+      "name": "mcp_introspect_active_200",
+      "description": "POST /internal/v1/mcp/introspect validates token digest via security definer function and returns active identity",
+      "request": {
+        "method": "POST",
+        "path": "/internal/v1/mcp/introspect",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-KB-Internal-Auth": "t=1731384000,v1=9f8e7d6c5b4a3928170f..."
+        },
+        "body": {
+          "token": "<REDACTED:KANBAN_KEY>",
+          "surface": "agent"
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "active": true,
+          "principal_id": "0192e21b-0001-7000-8000-000000000001",
+          "workspace_id": "0192e21b-0000-7000-8000-000000000001",
+          "surface": "agent",
+          "scopes": [
+            "agent:read",
+            "agent:write"
+          ],
+          "token_kind": "api_key",
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "mcp_introspect_surface_mismatch_200",
+      "description": "POST /internal/v1/mcp/introspect detects surface mismatch and returns active: false with SURFACE_KEY_MISMATCH reason",
+      "request": {
+        "method": "POST",
+        "path": "/internal/v1/mcp/introspect",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-KB-Internal-Auth": "t=1731384000,v1=9f8e7d6c5b4a3928170f..."
+        },
+        "body": {
+          "token": "<REDACTED:KANBAN_KEY>",
+          "surface": "admin"
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "active": false,
+          "principal_id": null,
+          "workspace_id": null,
+          "surface": null,
+          "scopes": null,
+          "token_kind": null,
+          "reason": "SURFACE_KEY_MISMATCH"
+        }
+      }
+    },
+    {
+      "name": "mcp_introspect_unauthenticated_401",
+      "description": "POST /internal/v1/mcp/introspect without gateway authentication header or client certificate returns 401",
+      "request": {
+        "method": "POST",
+        "path": "/internal/v1/mcp/introspect",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "token": "<REDACTED:KANBAN_KEY>",
+          "surface": "agent"
+        }
+      },
+      "response": {
+        "status_code": 401,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "status": 401,
+          "title": "Authentication Required",
+          "detail": "Internal gateway authentication header or client certificate required."
+        }
+      }
+    },
+    {
+      "name": "mcp_middleware_challenge_401",
+      "description": "POST /mcp/{surface} without bearer token returns 401 with WWW-Authenticate header carrying protected-resource metadata URL",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "method": "tools/list"
+        }
+      },
+      "response": {
+        "status_code": 401,
+        "headers": {
+          "WWW-Authenticate": "Bearer realm=\"kanban-mcp\", resource_metadata=\"https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent\"",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "unauthorized",
+          "message": "Bearer authentication required"
+        }
+      }
+    },
+    {
+      "name": "mcp_middleware_surface_mismatch_403",
+      "description": "POST /mcp/{surface} with token prefix mismatch is rejected locally with HTTP 403 and zero upstream calls",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent",
+        "headers": {
+          "Authorization": "Bearer <REDACTED:KANBAN_KEY>",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "method": "tools/list"
+        }
+      },
+      "response": {
+        "status_code": 403,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "SURFACE_KEY_MISMATCH"
+        }
+      }
+    }
+  ]
+}

@@ -229,3 +229,50 @@ The Sparkle (`✨`) FIM engine delivers low-latency, permission-isolated inline 
 - Body Size Overflow: Request body exceeds 16 KiB -> RFC 7807 413 Payload Too Large.
 
 
+## Sparkle Manual CLI Validation (`kanban-agent validate-sparkle`)
+
+The `validate-sparkle` CLI tool exercises the exact production `run_sparkle_pipeline()` from the terminal for a given Markdown string with a `|` cursor marker, executing strictly within a specified user's RLS scope against live or fixture providers.
+
+### Usage and Flags
+
+```bash
+uv run kanban-agent validate-sparkle \
+  --provider {ollama,gemini,openai,fixture} \
+  --input-markdown "Enforce PKCE S256 on OAuth2 cards and verify | before LDAP bind." \
+  --project KAN \
+  --as-user "@adam" \
+  [--model MODEL] \
+  [--cassette PATH] \
+  [--http-cassette PATH] \
+  [--iterations N] \
+  [--surface {summary,description,comment,sticky,doc}] \
+  [--report {text,json}] \
+  [--database-url URL] \
+  [--verbose-tools]
+```
+
+### Key Technical Contracts
+
+1. Cursor Marker Parsing:
+   - Exactly one unescaped `|` pipe character is required.
+   - Escaped `\|` sequences are preserved as literal pipe characters.
+   - Zero or multiple unescaped markers reject with exit code 2 and status `CURSOR_MARKER_INVALID`.
+2. Strict RLS Scope & Non-Bypass Enforcement:
+   - Evaluates caller role via `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`.
+   - If connected role has `rolsuper = true` or `rolbypassrls = true`, execution halts immediately with exit code 2 and status `RLS_BYPASS_ROLE_REFUSED`.
+   - Resolves `--as-user @handle` and `--project KEY` within the tenant workspace. Unknown users or projects trigger exit code 2 with `PRINCIPAL_NOT_FOUND` or `PROJECT_NOT_FOUND`.
+   - Binds `PrincipalContext(principal_id, workspace_id)` and retrieves nearest embeddings strictly through `RLSSessionFactory`, preventing cross-tenant or unauthorized canary leakage.
+3. Secret Scrub-First Mandate:
+   - Inbound text is scrubbed before pipeline execution. If an API token or credential is detected, execution halts with exit code 2 and status `secret_scrubbed` with zero provider calls.
+   - Raw secrets are never printed to terminal stdout or serialized JSON reports.
+4. Structured 4-Section Output & JSON Schema:
+   - Text report renders Section 1 (Rendered Context), Section 2 (Tool Trace), Section 3 (Latency & Tokens), Section 4 (Schema & Policy Status), and Section 5 (Route Trace).
+   - Multi-iteration runs (`--iterations N`, 1..500) print percentile statistics (`p50`, `p90`, `p95`, `p99`). If `p95 > 150.0ms`, the command fails with exit code 2 and status `LATENCY_SLA_BREACH`.
+   - JSON report (`--report json`) validates strictly against schema `kb-sparkle-report/v1` with `additionalProperties: false`.
+5. Deterministic Exit Codes:
+   - `0`: Valid completion accepted (`status == "ok"`).
+   - `1`: Infrastructure runtime error (`DATABASE_UNREACHABLE`, `PROVIDER_UNAVAILABLE`).
+   - `2`: Schema/policy refusal (`CURSOR_MARKER_INVALID`, `RLS_BYPASS_ROLE_REFUSED`, `PRINCIPAL_NOT_FOUND`, `PROJECT_NOT_FOUND`, `SECRET_SCRUBBED`, `TTFT_TIMEOUT`, `LATENCY_SLA_BREACH`, output filter drops).
+
+
+

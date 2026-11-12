@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
 
 import httpx
 from google import genai
@@ -404,7 +404,7 @@ class GeminiProvider(LLMProvider):
         try:
             resp = await self._client.aio.models.embed_content(
                 model=req.model,
-                contents=list(req.inputs),
+                contents=cast("Any", list(req.inputs)),
             )
         except Exception as exc:
             raise self._translate_error(exc) from exc
