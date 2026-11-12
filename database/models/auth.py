@@ -124,3 +124,40 @@ class UserSession(Base):
     def __str__(self) -> str:
         """Sanitized string representation matching repr."""
         return self.__repr__()
+
+
+class OidcAuthRequest(Base):
+    """Temporary OIDC and OAuth2 authentication request and state tracking (KB-P2-06)."""
+
+    __tablename__ = "oidc_auth_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    card_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("auth_provider_cards.id", ondelete="CASCADE"), nullable=False
+    )
+    state_hash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, unique=True)
+    nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    code_verifier_sealed: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    browser_binding_hash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    return_to: Mapped[str] = mapped_column(
+        Text, nullable=False, default="/", server_default=text("'/'")
+    )
+    link_intent_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    def __repr__(self) -> str:
+        """Sanitized representation omitting sensitive cryptographic hashes."""
+        return (
+            f"<OidcAuthRequest id={self.id} card_id={self.card_id} "
+            f"expires_at={self.expires_at} consumed_at={self.consumed_at}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()
