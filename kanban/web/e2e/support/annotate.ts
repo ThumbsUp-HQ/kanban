@@ -102,10 +102,26 @@ export async function annotatedScreenshot(
     if (count === 0) {
       throw new Error(`Annotation element not found: selector "${ann.selector}"`);
     }
-    const box = await locator.boundingBox();
+
+    let box: { x: number; y: number; width: number; height: number } | null = null;
+    if (typeof locator.evaluate === 'function') {
+      try {
+        box = await locator.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        });
+      } catch {
+        box = null;
+      }
+    }
+    if (!box && typeof locator.boundingBox === 'function') {
+      box = await locator.boundingBox();
+    }
+
     if (!box || box.width === 0 || box.height === 0) {
       throw new Error(`Annotation element has zero dimensions: selector "${ann.selector}"`);
     }
+
     const badgePos = computeBadgePosition(box.x, box.y, viewport.width, viewport.height);
     evaluatedBoxes.push({
       x: box.x,

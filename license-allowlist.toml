@@ -1,7 +1,7 @@
 # License Allowlist
 # Each exception MUST name ecosystem, package, exact version, license, and justification.
 #
-# Example format:
+# Format:
 # [[exception]]
 # ecosystem = "python"   # or "node"
 # package = "example"
@@ -9,3 +9,17 @@
 # license = "LGPL-3.0"
 # linkage = "dynamic"    # required when license starts with LGPL; static is never accepted
 # justification = "Loaded as a separate shared object; not statically linked. Reviewed by architect on 2026-01-01."
+
+[[exception]]
+ecosystem = "node"
+package = "inter-variable-font"
+version = "4.1"
+license = "OFL-1.1"
+justification = "Vendored static variable font assets for self-hosted UI typography under S6.1; no code execution."
+
+[[exception]]
+ecosystem = "node"
+package = "jetbrains-mono-variable-font"
+version = "2.304"
+license = "OFL-1.1"
+justification = "Vendored static variable font assets for tabular issue keys under S6.1; no code execution."

@@ -1,0 +1,88 @@
+:root {
+  /* Light Theme Semantic Palette (Default) */
+  --bg-canvas: #f7f8fa;
+  --bg-surface: #ffffff;
+  --bg-surface-raised: #ffffff;
+  --bg-hover: #f1f3f5;
+  --fg-primary: #111827;
+  --fg-secondary: #4b5563;
+  --fg-muted: #525866;
+  --border-subtle: #e5e7eb;
+  --border-strong: #d1d5db;
+  --accent-primary: #1d4ed8;
+  --accent-primary-fg: #ffffff;
+  --focus-ring: #2563eb;
+  --warn-bg: #fef3c7;
+  --warn-fg: #78350f;
+  --danger-bg: #ffe4e6;
+  --danger-fg: #881337;
+  --ok-fg: #059669;
+
+  /* Sticky Palette (6 Colors per S8.1) */
+  --sticky-amber: #fef3c7;
+  --sticky-mint: #d1fae5;
+  --sticky-sky: #e0f2fe;
+  --sticky-lavender: #ede9fe;
+  --sticky-coral: #ffe4e6;
+  --sticky-slate: #f1f5f9;
+}
+
+[data-theme="dark"] {
+  /* Dark Theme Semantic Palette */
+  --bg-canvas: #0f1115;
+  --bg-surface: #16181d;
+  --bg-surface-raised: #1f232b;
+  --bg-hover: #262b35;
+  --fg-primary: #f9fafb;
+  --fg-secondary: #9ca3af;
+  --fg-muted: #94a3b8;
+  --border-subtle: #2d333f;
+  --border-strong: #3f4756;
+  --accent-primary: #1d4ed8;
+  --accent-primary-fg: #ffffff;
+  --focus-ring: #3b82f6;
+  --warn-bg: #451a03;
+  --warn-fg: #fde68a;
+  --danger-bg: #4c0519;
+  --danger-fg: #fecdd3;
+  --ok-fg: #34d399;
+
+  /* Sticky Palette (Dark Mode Tones) */
+  --sticky-amber: #78350f;
+  --sticky-mint: #064e3b;
+  --sticky-sky: #0c4a6e;
+  --sticky-lavender: #4c1d95;
+  --sticky-coral: #881337;
+  --sticky-slate: #334155;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* Dark Theme Semantic Palette for System Preference */
+    --bg-canvas: #0f1115;
+    --bg-surface: #16181d;
+    --bg-surface-raised: #1f232b;
+    --bg-hover: #262b35;
+    --fg-primary: #f9fafb;
+    --fg-secondary: #9ca3af;
+    --fg-muted: #94a3b8;
+    --border-subtle: #2d333f;
+    --border-strong: #3f4756;
+    --accent-primary: #1d4ed8;
+    --accent-primary-fg: #ffffff;
+    --focus-ring: #3b82f6;
+    --warn-bg: #451a03;
+    --warn-fg: #fde68a;
+    --danger-bg: #4c0519;
+    --danger-fg: #fecdd3;
+    --ok-fg: #34d399;
+
+    /* Sticky Palette (Dark Mode Tones) */
+    --sticky-amber: #78350f;
+    --sticky-mint: #064e3b;
+    --sticky-sky: #0c4a6e;
+    --sticky-lavender: #4c1d95;
+    --sticky-coral: #881337;
+    --sticky-slate: #334155;
+  }
+}
