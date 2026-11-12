@@ -3,7 +3,7 @@
 """Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
 
 Revision ID: p3_10b_modules
-Revises: p2_06_oidc_auth_requests
+Revises: p3_05_comment_threads_reactions
 Create Date: 2026-11-12 00:00:00.000000
 """
 
@@ -13,7 +13,7 @@ from database.migrations.sqlfile import execute_sql_file
 
 # revision identifiers, used by Alembic.
 revision: str = "p3_10b_modules"
-down_revision: str | None = "p2_06_oidc_auth_requests"
+down_revision: str | None = "p3_05_comment_threads_reactions"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
