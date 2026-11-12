@@ -1,0 +1,25 @@
+=== STANDALONE CONTAINER BOOT TIMING MEASUREMENT ===
+Date: Thu Nov 12 02:51:15 AM UTC 2026
+Image: kanban:latest
+Port: 18081
+Volume: kanban-data-timing
+
+kanban-data-timing
+kanban-data-timing
+--- STEP 1: Creating container with named volume ---
+9f5d1cbacf3959947409b2aff47fba87a10a862e040476bd80c50e4ce87b991f
+--- STEP 2: Cold boot timing (first run with initdb + migrations) ---
+kanban-timing-test
+Cold boot elapsed time: 3.007363423s (target: < 10.0s)
+--- STEP 3: Stopping container gracefully ---
+kanban-timing-test
+--- STEP 4: Warm boot timing (second run against existing cluster) ---
+kanban-timing-test
+Warm boot elapsed time: 2.194180663s (target: < 3.0s)
+WARM BOOT RESULT: PASS (< 3.0s)
+--- STEP 5: Cleanup ---
+kanban-timing-test
+kanban-timing-test
+kanban-data-timing
+
+Boot timing verification completed successfully.

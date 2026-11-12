@@ -106,6 +106,8 @@ def start_postgres(pgdata: Path, run_dir: str = DEFAULT_RUN_DIR) -> None:
         BIN_PG_CTL,
         "-D",
         str(pgdata),
+        "-l",
+        str(pgdata / "postgresql.log"),
         "-w",
         "-t",
         "10",
@@ -168,14 +170,21 @@ def bootstrap_database(run_dir: str = DEFAULT_RUN_DIR) -> None:
     role_sql = """
     DO $$
     BEGIN
-      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kanban_migrator') THEN
-        CREATE ROLE kanban_migrator LOGIN NOSUPERUSER NOCREATEROLE NOBYPASSRLS;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kanban_migrator') THEN
+        CREATE ROLE kanban_migrator LOGIN;
       END IF;
-      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kanban_app') THEN
-        CREATE ROLE kanban_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kanban_app') THEN
+        CREATE ROLE kanban_app LOGIN;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_rls_reader') THEN
+        CREATE ROLE app_rls_reader LOGIN;
       END IF;
     END
     $$;
+    ALTER ROLE kanban_migrator NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS;
+    ALTER ROLE kanban_app      NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+    ALTER ROLE app_rls_reader  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+    ALTER ROLE app_rls_reader  SET default_transaction_read_only = on;
     """
     run_psql_script(role_sql, dbname="postgres", run_dir=run_dir)
 
@@ -207,6 +216,9 @@ def bootstrap_database(run_dir: str = DEFAULT_RUN_DIR) -> None:
     CREATE EXTENSION IF NOT EXISTS pg_trgm;
     CREATE EXTENSION IF NOT EXISTS btree_gist;
     CREATE EXTENSION IF NOT EXISTS vector;
+    REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+    GRANT USAGE, CREATE ON SCHEMA public TO kanban_migrator;
+    GRANT USAGE ON SCHEMA public TO kanban_app, app_rls_reader;
     ALTER ROLE kanban_migrator LOGIN;
     """
     run_psql_script(ext_sql, dbname="kanban", run_dir=run_dir)

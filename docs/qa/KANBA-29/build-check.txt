@@ -1,0 +1,34 @@
+=== DOCKER BUILD ===
+DOCKER_BUILD_EXIT_CODE: 0
+
+=== MAKE CHECK ===
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+272 files already formatted
+uv run mypy
+Success: no issues found in 73 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 55 files, 56 dependencies.
+-----------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+MAKE_CHECK_EXIT_CODE: 0

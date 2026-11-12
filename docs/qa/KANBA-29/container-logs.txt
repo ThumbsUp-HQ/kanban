@@ -1,0 +1,23 @@
+[kanban-standalone] [00000ms] mode: MODE=standalone_embedded_pg
+[kanban-standalone] [00000ms] initdb: initializing new database cluster
+[kanban-standalone] [00613ms] pg_start: starting embedded PostgreSQL
+[kanban-standalone] [00830ms] pg_start: PostgreSQL is ready on /run/postgresql
+[kanban-standalone] [00830ms] bootstrap_sql: creating roles and kanban database
+[kanban-standalone] [01033ms] bootstrap_sql: roles, database, and extensions initialized
+[kanban-standalone] [01033ms] migrations: running alembic upgrade head
+[kanban-standalone] [01845ms] migrations: schema migrations applied successfully
+[kanban-standalone] [01870ms] migrations: privilege dropped: kanban_migrator set to NOLOGIN
+[kanban-standalone] [01870ms] uvicorn_spawn: spawning uvicorn as UID 65532
+INFO:     Started server process [45]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+INFO:     172.17.0.1:37338 - "GET / HTTP/1.1" 200 OK
+[kanban-standalone] [02976ms] shutdown: shutdown signal received; terminating services
+[kanban-standalone] [02976ms] shutdown: sending SIGTERM to uvicorn
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [45]
+[kanban-standalone] [03176ms] shutdown: uvicorn terminated cleanly
+[kanban-standalone] [03176ms] pg_stop: stopping PostgreSQL (mode=fast)

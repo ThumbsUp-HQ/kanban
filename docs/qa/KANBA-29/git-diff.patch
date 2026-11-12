@@ -1,0 +1,1309 @@
+diff --git a/Dockerfile b/Dockerfile
+index a627ce7..9266a20 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -43,6 +43,7 @@ COPY --chown=65532:65532 kanban/ /opt/kanban/kanban/
+ COPY --chown=65532:65532 mcp/ /opt/kanban/mcp/
+ COPY --chown=65532:65532 agent/ /opt/kanban/agent/
+ COPY --chown=65532:65532 deploy/ /opt/kanban/deploy/
++COPY --chown=65532:65532 alembic.ini /opt/kanban/alembic.ini
+ COPY --chown=65532:65532 --from=web-builder /app/kanban/web/dist /opt/kanban/web/dist
+ ENV PATH=/opt/kanban/.venv/bin:$PATH \
+     PYTHONDONTWRITEBYTECODE=1 \
+@@ -78,8 +79,9 @@ RUN apt-get update && \
+         util-linux && \
+     apt-get purge -y --auto-remove curl gnupg && \
+     rm -rf /var/lib/apt/lists/*
+-RUN install -d -o postgres -g postgres -m 0700 /var/lib/kanban/data/pgdata && \
+-    install -d -o postgres -g postgres -m 2775 /run/postgresql
++RUN usermod -aG kanban postgres && \
++    install -d -o postgres -g postgres -m 0700 /var/lib/kanban/data/pgdata && \
++    install -d -o postgres -g kanban -m 2775 /run/postgresql
+ EXPOSE 8080
+ VOLUME /var/lib/kanban/data
+ ENTRYPOINT ["/usr/bin/tini", "--", "/opt/kanban/.venv/bin/python", "/opt/kanban/deploy/standalone/entrypoint.py"]
+diff --git a/alembic.ini b/alembic.ini
+new file mode 100644
+index 0000000..52b1210
+--- /dev/null
++++ b/alembic.ini
+@@ -0,0 +1,41 @@
++# Alembic configuration for kanban platform standalone deployment
++[alembic]
++script_location = database/migrations
++file_template = %%(rev)s_%%(slug)s
++prepend_sys_path = .
++path_separator = os
++version_path_separator = os
++
++[loggers]
++keys = root,sqlalchemy,alembic
++
++[handlers]
++keys = console
++
++[formatters]
++keys = generic
++
++[logger_root]
++level = WARN
++handlers = console
++qualname =
++
++[logger_sqlalchemy]
++level = WARN
++handlers =
++qualname = sqlalchemy.engine
++
++[logger_alembic]
++level = INFO
++handlers =
++qualname = alembic
++
++[handler_console]
++class = StreamHandler
++args = (sys.stderr,)
++level = NOTSET
++formatter = generic
++
++[formatter_generic]
++format = %(levelname)-5.5s [%(name)s] %(message)s
++datefmt = %H:%M:%S
+diff --git a/deploy/__init__.py b/deploy/__init__.py
+new file mode 100644
+index 0000000..e379e89
+--- /dev/null
++++ b/deploy/__init__.py
+@@ -0,0 +1 @@
++"""Deployment modules and orchestration entrypoints."""
+diff --git a/deploy/standalone/__init__.py b/deploy/standalone/__init__.py
+new file mode 100644
+index 0000000..0802040
+--- /dev/null
++++ b/deploy/standalone/__init__.py
+@@ -0,0 +1 @@
++"""Standalone single-container embedded PostgreSQL and Uvicorn deployment."""
+diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
+new file mode 100644
+index 0000000..a5ffc5e
+--- /dev/null
++++ b/deploy/standalone/entrypoint.py
+@@ -0,0 +1,393 @@
++"""Standalone single-container entrypoint for embedded PostgreSQL and Uvicorn.
++
++Initializes an embedded PostgreSQL 16 instance accessible strictly via Unix domain
++sockets, applies migrations under a dedicated migration role, drops privileges to
++UID 65532 to run Uvicorn, and coordinates graceful shutdown under tini.
++"""
++
++from __future__ import annotations
++
++import os
++import signal
++import subprocess
++import sys
++import time
++from pathlib import Path
++from typing import TYPE_CHECKING
++
++from deploy.standalone.pg_config import configure_postgres
++
++if TYPE_CHECKING:
++    from collections.abc import Sequence
++
++# Binary paths
++BIN_SETPRIV: str = "/usr/bin/setpriv"
++BIN_INITDB: str = "/usr/lib/postgresql/16/bin/initdb"
++BIN_PG_CTL: str = "/usr/lib/postgresql/16/bin/pg_ctl"
++BIN_PG_ISREADY: str = "/usr/lib/postgresql/16/bin/pg_isready"
++BIN_PSQL: str = "/usr/lib/postgresql/16/bin/psql"
++BIN_ALEMBIC: str = "/opt/kanban/.venv/bin/alembic"
++BIN_UVICORN: str = "/opt/kanban/.venv/bin/uvicorn"
++
++DEFAULT_PGDATA: Path = Path("/var/lib/kanban/data/pgdata")
++DEFAULT_RUN_DIR: str = "/run/postgresql"
++DEFAULT_ALEMBIC_INI: Path = Path("/opt/kanban/alembic.ini")
++
++PG_CHECK_INTERVAL_SEC: float = 2.0
++SHUTDOWN_TIMEOUT_SEC: float = 10.0
++
++START_TIME: float = time.monotonic()
++
++
++def log_phase(phase: str, message: str) -> None:
++    """Log a phase transition with monotonic elapsed milliseconds."""
++    elapsed_ms = int((time.monotonic() - START_TIME) * 1000)
++    sys.stdout.write(f"[kanban-standalone] [{elapsed_ms:05d}ms] {phase}: {message}\n")
++    sys.stdout.flush()
++
++
++def run_as_postgres(
++    cmd: list[str],
++    *,
++    timeout: float = 30.0,
++    check: bool = True,
++    env: dict[str, str] | None = None,
++) -> subprocess.CompletedProcess[str]:
++    """Execute a command as OS user 'postgres' via setpriv."""
++    full_cmd = [
++        BIN_SETPRIV,
++        "--reuid=postgres",
++        "--regid=postgres",
++        "--init-groups",
++        "--inh-caps=-all",
++        "--no-new-privs",
++        "--",
++        *cmd,
++    ]
++    return subprocess.run(  # noqa: S603
++        full_cmd,
++        capture_output=True,
++        text=True,
++        timeout=timeout,
++        check=check,
++        env=env,
++    )
++
++
++def initialize_cluster(pgdata: Path) -> None:
++    """Initialize a new PostgreSQL database cluster if PG_VERSION is absent."""
++    if (pgdata / "PG_VERSION").is_file():
++        log_phase("initdb", "existing cluster detected, skipping initdb")
++        return
++
++    log_phase("initdb", "initializing new database cluster")
++    pgdata.mkdir(parents=True, exist_ok=True)
++    cmd = [
++        BIN_INITDB,
++        "-D",
++        str(pgdata),
++        "--encoding=UTF8",
++        "--locale=C.UTF-8",
++        "--auth-local=peer",
++        "--auth-host=reject",
++        "--username=postgres",
++    ]
++    try:
++        run_as_postgres(cmd, timeout=60.0)
++    except subprocess.CalledProcessError as exc:
++        sys.stderr.write(f"INITDB_FAILED: {exc.stderr}\n")
++        raise
++
++
++def start_postgres(pgdata: Path, run_dir: str = DEFAULT_RUN_DIR) -> None:
++    """Start PostgreSQL and wait for socket readiness."""
++    log_phase("pg_start", "starting embedded PostgreSQL")
++    cmd = [
++        BIN_PG_CTL,
++        "-D",
++        str(pgdata),
++        "-w",
++        "-t",
++        "10",
++        "start",
++        "-o",
++        f"-c config_file={pgdata}/postgresql.conf",
++    ]
++    run_as_postgres(cmd, timeout=30.0)
++
++    # Poll pg_isready until available or 10s deadline
++    deadline = time.monotonic() + 10.0
++    isready_cmd = [BIN_PG_ISREADY, "-h", run_dir]
++    ready = False
++
++    while time.monotonic() < deadline:
++        res = run_as_postgres(isready_cmd, timeout=2.0, check=False)
++        if res.returncode == 0:
++            ready = True
++            break
++        time.sleep(0.2)
++
++    if not ready:
++        sys.stderr.write("PG_START_TIMEOUT: postgres failed to start within 10s\n")
++        stop_postgres(pgdata, mode="immediate")
++        sys.exit(70)
++
++    log_phase("pg_start", f"PostgreSQL is ready on {run_dir}")
++
++
++def stop_postgres(pgdata: Path, mode: str = "fast") -> None:
++    """Stop PostgreSQL via pg_ctl."""
++    log_phase("pg_stop", f"stopping PostgreSQL (mode={mode})")
++    cmd = [BIN_PG_CTL, "-D", str(pgdata), "stop", "-m", mode, "-t", "10"]
++    run_as_postgres(cmd, timeout=15.0, check=False)
++
++
++def run_psql_script(sql: str, dbname: str = "postgres", run_dir: str = DEFAULT_RUN_DIR) -> None:
++    """Execute SQL commands via psql as postgres user."""
++    cmd = [
++        BIN_PSQL,
++        "-h",
++        run_dir,
++        "-U",
++        "postgres",
++        "-v",
++        "ON_ERROR_STOP=1",
++        "-d",
++        dbname,
++        "-c",
++        sql,
++    ]
++    run_as_postgres(cmd, timeout=30.0)
++
++
++def bootstrap_database(run_dir: str = DEFAULT_RUN_DIR) -> None:
++    """Create roles, database, and extensions idempotently."""
++    log_phase("bootstrap_sql", "creating roles and kanban database")
++
++    # 1. Create roles if missing
++    role_sql = """
++    DO $$
++    BEGIN
++      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kanban_migrator') THEN
++        CREATE ROLE kanban_migrator LOGIN NOSUPERUSER NOCREATEROLE NOBYPASSRLS;
++      END IF;
++      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kanban_app') THEN
++        CREATE ROLE kanban_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
++      END IF;
++    END
++    $$;
++    """
++    run_psql_script(role_sql, dbname="postgres", run_dir=run_dir)
++
++    # 2. Create database kanban if missing
++    db_check = run_as_postgres(
++        [
++            BIN_PSQL,
++            "-h",
++            run_dir,
++            "-U",
++            "postgres",
++            "-tAc",
++            "SELECT 1 FROM pg_database WHERE datname = 'kanban'",
++            "postgres",
++        ],
++        timeout=10.0,
++    )
++    if "1" not in db_check.stdout:
++        run_psql_script(
++            "CREATE DATABASE kanban OWNER kanban_migrator ENCODING 'UTF8' TEMPLATE template0;",
++            dbname="postgres",
++            run_dir=run_dir,
++        )
++
++    # 3. Create extensions and enable migrator login on kanban db
++    ext_sql = """
++    CREATE EXTENSION IF NOT EXISTS pgcrypto;
++    CREATE EXTENSION IF NOT EXISTS ltree;
++    CREATE EXTENSION IF NOT EXISTS pg_trgm;
++    CREATE EXTENSION IF NOT EXISTS btree_gist;
++    CREATE EXTENSION IF NOT EXISTS vector;
++    ALTER ROLE kanban_migrator LOGIN;
++    """
++    run_psql_script(ext_sql, dbname="kanban", run_dir=run_dir)
++    log_phase("bootstrap_sql", "roles, database, and extensions initialized")
++
++
++def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_DIR) -> None:
++    """Run Alembic migrations under kanban_migrator and revoke login privilege afterwards."""
++    if not alembic_ini.is_file():
++        log_phase("migrations", "MIGRATIONS_SKIPPED_NO_ALEMBIC_INI")
++        return
++
++    log_phase("migrations", "running alembic upgrade head")
++    migrator_dsn = f"postgresql+asyncpg://kanban_migrator@/kanban?host={run_dir}"
++    mig_env = {
++        "PATH": "/opt/kanban/.venv/bin:/usr/local/bin:/usr/bin:/bin",
++        "DATABASE_URL": migrator_dsn,
++        "KANBAN_MIGRATOR_DATABASE_URL": migrator_dsn,
++        "LANG": "C.UTF-8",
++    }
++    cmd = [BIN_ALEMBIC, "-c", str(alembic_ini), "upgrade", "head"]
++
++    res = run_as_postgres(cmd, timeout=120.0, check=False, env=mig_env)
++    if res.returncode != 0:
++        sys.stderr.write(f"MIGRATION_FAILED: {res.stderr}\n")
++        stop_postgres(pgdata, mode="fast")
++        sys.exit(70)
++
++    log_phase("migrations", "schema migrations applied successfully")
++
++    # Privilege drop: revoke LOGIN on kanban_migrator
++    run_psql_script("ALTER ROLE kanban_migrator NOLOGIN;", dbname="kanban", run_dir=run_dir)
++    log_phase("migrations", "privilege dropped: kanban_migrator set to NOLOGIN")
++
++
++def build_uvicorn_command() -> list[str]:
++    """Construct the setpriv argv list for spawning Uvicorn as UID 65532."""
++    return [
++        BIN_SETPRIV,
++        "--reuid=65532",
++        "--regid=65532",
++        "--clear-groups",
++        "--inh-caps=-all",
++        "--no-new-privs",
++        "--",
++        BIN_UVICORN,
++        "kanban.app:create_app",
++        "--factory",
++        "--host",
++        "0.0.0.0",  # noqa: S104
++        "--port",
++        "8080",
++        "--proxy-headers",
++        '--forwarded-allow-ips=""',
++    ]
++
++
++def build_child_env(db_url: str | None = None) -> dict[str, str]:
++    """Build the explicit allowlist child environment for Uvicorn."""
++    effective_url = db_url or "postgresql+asyncpg://kanban_app@/kanban?host=/run/postgresql"
++    return {
++        "PATH": "/opt/kanban/.venv/bin:/usr/local/bin:/usr/bin:/bin",
++        "KB_WEB_DIST": os.environ.get("KB_WEB_DIST", "/opt/kanban/web/dist"),
++        "KB_DEPLOYMENT_MODE": "standalone",
++        "DATABASE_URL": effective_url,
++        "LANG": "C.UTF-8",
++    }
++
++
++def supervisor_loop(
++    uvicorn_proc: subprocess.Popen[str],
++    pgdata: Path,
++) -> int:
++    """Supervise Uvicorn and PostgreSQL until termination."""
++    last_pg_check = time.monotonic()
++
++    while True:
++        # Check Uvicorn process health
++        ret = uvicorn_proc.poll()
++        if ret is not None:
++            log_phase("supervisor", f"uvicorn exited with code {ret}")
++            stop_postgres(pgdata, mode="fast")
++            return ret
++
++        # Poll PostgreSQL postmaster every 2s
++        now = time.monotonic()
++        if now - last_pg_check >= PG_CHECK_INTERVAL_SEC:
++            last_pg_check = now
++            status_cmd = [BIN_PG_CTL, "-D", str(pgdata), "status"]
++            res = run_as_postgres(status_cmd, timeout=5.0, check=False)
++            if res.returncode != 0:
++                sys.stderr.write("PG_DIED: postgres postmaster process died\n")
++                shutdown_uvicorn(uvicorn_proc)
++                return 70
++
++        time.sleep(0.5)
++
++
++def shutdown_uvicorn(proc: subprocess.Popen[str]) -> None:
++    """Gracefully terminate Uvicorn with SIGTERM, escalating to SIGKILL after 10s."""
++    if proc.poll() is not None:
++        return
++
++    log_phase("shutdown", "sending SIGTERM to uvicorn")
++    proc.send_signal(signal.SIGTERM)
++
++    deadline = time.monotonic() + SHUTDOWN_TIMEOUT_SEC
++    while time.monotonic() < deadline:
++        if proc.poll() is not None:
++            log_phase("shutdown", "uvicorn terminated cleanly")
++            return
++        time.sleep(0.2)
++
++    log_phase("shutdown", "uvicorn did not terminate within 10s; sending SIGKILL")
++    proc.kill()
++    proc.wait()
++
++
++def main(_argv: Sequence[str] | None = None) -> int:
++    """Coordinate standalone single-container startup."""
++    # 1. Mode selection
++    database_url = os.environ.get("DATABASE_URL")
++    if database_url:
++        log_phase("mode", "MODE=external_db")
++        child_env = build_child_env(db_url=database_url)
++        cmd = build_uvicorn_command()
++        os.execv(cmd[0], cmd)  # noqa: S606
++
++    log_phase("mode", "MODE=standalone_embedded_pg")
++
++    # Check root UID
++    if os.getuid() != 0:
++        sys.stderr.write(
++            "STANDALONE_REQUIRES_ROOT_ENTRYPOINT: Standalone mode requires UID 0 entrypoint\n"
++        )
++        return 78
++
++    pgdata = Path(os.environ.get("KB_PGDATA_DIR", str(DEFAULT_PGDATA)))
++    run_dir = os.environ.get("KB_RUN_DIR", DEFAULT_RUN_DIR)
++    alembic_ini = Path(os.environ.get("KB_ALEMBIC_INI", str(DEFAULT_ALEMBIC_INI)))
++
++    # 2. Cluster Init
++    initialize_cluster(pgdata)
++
++    # 3. Write configuration
++    configure_postgres(pgdata, run_dir=run_dir)
++
++    # 4. Start PostgreSQL
++    start_postgres(pgdata, run_dir=run_dir)
++
++    # 5. Bootstrap SQL
++    bootstrap_database(run_dir=run_dir)
++
++    # 6. Migrations & Privilege drop
++    run_migrations(pgdata, alembic_ini, run_dir=run_dir)
++
++    # 7. Spawn Uvicorn as UID 65532
++    log_phase("uvicorn_spawn", "spawning uvicorn as UID 65532")
++    uvicorn_cmd = build_uvicorn_command()
++    child_env = build_child_env()
++
++    uvicorn_proc = subprocess.Popen(  # noqa: S603
++        uvicorn_cmd,
++        env=child_env,
++        shell=False,
++        text=True,
++    )
++
++    # Install signal handlers
++    def handle_signal(_signum: int, _frame: object) -> None:
++        log_phase("shutdown", "shutdown signal received; terminating services")
++        shutdown_uvicorn(uvicorn_proc)
++        stop_postgres(pgdata, mode="fast")
++        sys.exit(0)
++
++    signal.signal(signal.SIGTERM, handle_signal)
++    signal.signal(signal.SIGINT, handle_signal)
++
++    # 8. Enter supervisor loop
++    return supervisor_loop(uvicorn_proc, pgdata)
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/deploy/standalone/pg_config.py b/deploy/standalone/pg_config.py
+new file mode 100644
+index 0000000..7165dc3
+--- /dev/null
++++ b/deploy/standalone/pg_config.py
+@@ -0,0 +1,72 @@
++"""PostgreSQL configuration writer for standalone single-container deployment.
++
++Enforces Unix-socket-only access, peer authentication mapping, and isolated
++database roles with zero TCP socket listeners.
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++PG_HBA_CONTENT = """\
++# PostgreSQL Client Authentication Configuration File
++# Standalone mode: Unix-socket only, zero TCP host listeners permitted
++local  all     postgres                         peer
++local  kanban  kanban_migrator                  peer map=kanban_map
++local  kanban  kanban_app                       peer map=kanban_map
++"""
++
++PG_IDENT_CONTENT = """\
++# PostgreSQL User Name Mapping Configuration File
++# Maps OS users to PostgreSQL roles via peer authentication
++kanban_map postgres kanban_migrator
++kanban_map kanban kanban_app
++"""
++
++KANBAN_CONF_CONTENT = """\
++# Standalone single-container configuration for kanban
++listen_addresses = ''
++unix_socket_directories = '{run_dir}'
++unix_socket_permissions = 0770
++unix_socket_group = 'kanban'
++shared_buffers = 128MB
++fsync = on
++"""
++
++
++def configure_postgres(pgdata: Path, run_dir: str = "/run/postgresql") -> None:
++    """Idempotently write PostgreSQL configuration, pg_hba.conf, and pg_ident.conf.
++
++    Args:
++        pgdata: Path to the PostgreSQL data directory.
++        run_dir: Path to the directory where Unix domain sockets reside.
++
++    """
++    conf_dir = pgdata / "conf.d"
++    conf_dir.mkdir(parents=True, exist_ok=True)
++
++    # Write conf.d/kanban.conf
++    kanban_conf = conf_dir / "kanban.conf"
++    kanban_conf.write_text(
++        KANBAN_CONF_CONTENT.format(run_dir=run_dir),
++        encoding="utf-8",
++    )
++
++    # Ensure postgresql.conf includes conf.d if it exists
++    main_conf = pgdata / "postgresql.conf"
++    if main_conf.is_file():
++        existing = main_conf.read_text(encoding="utf-8")
++        if "include_dir = 'conf.d'" not in existing and 'include_dir = "conf.d"' not in existing:
++            with main_conf.open("a", encoding="utf-8") as f:
++                f.write("\ninclude_dir = 'conf.d'\n")
++
++    # Rewrite pg_hba.conf (zero host lines)
++    hba_conf = pgdata / "pg_hba.conf"
++    hba_conf.write_text(PG_HBA_CONTENT, encoding="utf-8")
++
++    # Rewrite pg_ident.conf
++    ident_conf = pgdata / "pg_ident.conf"
++    ident_conf.write_text(PG_IDENT_CONTENT, encoding="utf-8")
+diff --git a/pyproject.toml b/pyproject.toml
+index 52ba90b..e529e6b 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -34,6 +34,7 @@ dev = [
+     "types-PyYAML==6.0.12.20261111",
+     "types-jsonschema==4.26.0.20261006",
+     "pip-licenses==5.5.5",
++    "httpx==0.28.1",
+ ]
+ 
+ [tool.ruff]
+@@ -61,7 +62,7 @@ python_version = "3.12"
+ strict = true
+ warn_unreachable = true
+ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+-packages = ["database", "kanban", "mcp", "agent", "scripts"]
++packages = ["database", "kanban", "mcp", "agent", "scripts", "deploy"]
+ 
+ [tool.pytest.ini_options]
+ addopts = "--disable-socket --allow-unix-socket -p no:cacheprovider --strict-markers"
+@@ -71,6 +72,7 @@ asyncio_default_test_loop_scope = "session"
+ markers = [
+     "committed_db: test commits real transactions; TRUNCATE cleanup applied",
+     "migration: test runs alembic migrations against an isolated test database",
++    "container: docker container integration test",
+ ]
+ 
+ [tool.importlinter]
+diff --git a/tests/deploy/test_standalone_container.py b/tests/deploy/test_standalone_container.py
+new file mode 100644
+index 0000000..502504a
+--- /dev/null
++++ b/tests/deploy/test_standalone_container.py
+@@ -0,0 +1,147 @@
++"""Container integration smoke tests for standalone single-container deployment.
++
++Requires Docker daemon and pre-built kanban:latest image.
++"""
++
++from __future__ import annotations
++
++import subprocess
++import time
++import urllib.error
++import urllib.request
++from typing import TYPE_CHECKING
++
++import pytest
++
++if TYPE_CHECKING:
++    from collections.abc import Generator
++
++CONTAINER_NAME = "kanban-smoke-test"
++HOST_PORT = 18080
++TARGET_URL = f"http://127.0.0.1:{HOST_PORT}/"
++
++
++@pytest.fixture
++def standalone_container() -> Generator[str, None, None]:
++    """Fixture to manage the lifecycle of the standalone smoke container."""
++    # Ensure no leftover container from previous runs
++    subprocess.run(
++        ["docker", "rm", "-f", CONTAINER_NAME],
++        capture_output=True,
++        check=False,
++    )
++
++    # Run container
++    run_cmd = [
++        "docker",
++        "run",
++        "-d",
++        "--name",
++        CONTAINER_NAME,
++        "-p",
++        f"{HOST_PORT}:8080",
++        "kanban:latest",
++    ]
++    proc = subprocess.run(run_cmd, capture_output=True, text=True, check=True)
++    container_id = proc.stdout.strip()
++
++    try:
++        yield container_id
++    finally:
++        subprocess.run(
++            ["docker", "rm", "-f", CONTAINER_NAME],
++            capture_output=True,
++            check=False,
++        )
++
++
++@pytest.mark.container
++@pytest.mark.enable_socket
++@pytest.mark.usefixtures("standalone_container")
++def test_standalone_container_smoke() -> None:
++    """Validate that standalone container boots within 10s and has zero TCP DB listeners."""
++    # 1. Wait for HTTP 200 within 10s
++    deadline = time.monotonic() + 10.0
++    status_code = None
++
++    while time.monotonic() < deadline:
++        try:
++            req = urllib.request.Request(TARGET_URL)
++            with urllib.request.urlopen(req, timeout=1.0) as resp:  # noqa: S310
++                status_code = resp.status
++                if status_code == 200:
++                    break
++        except (OSError, urllib.error.URLError):
++            time.sleep(0.3)
++
++    assert status_code == 200, f"Expected HTTP 200 within 10s, got {status_code}"
++
++    # 2. Check /proc/net/tcp and /proc/net/tcp6: zero listeners on port 5432 (hex 1538)
++    net_proc = subprocess.run(
++        ["docker", "exec", CONTAINER_NAME, "cat", "/proc/net/tcp", "/proc/net/tcp6"],
++        capture_output=True,
++        text=True,
++        check=True,
++    )
++    tcp_output = net_proc.stdout
++
++    # Check for listening sockets on 5432 (port 5432 in hex is 1538; state 0A is LISTEN)
++    for line in tcp_output.splitlines():
++        parts = line.split()
++        if len(parts) >= 4 and parts[3] == "0A":
++            local_address = parts[1]
++            assert ":1538" not in local_address, f"Found TCP DB listener: {line}"
++
++    # 3. Check process UIDs: uvicorn as 65532, postgres as postgres UID (non-root, non-65532)
++    ps_proc = subprocess.run(
++        ["docker", "exec", CONTAINER_NAME, "ps", "-o", "uid,comm"],
++        capture_output=True,
++        text=True,
++        check=True,
++    )
++    ps_output = ps_proc.stdout
++
++    uvicorn_found = False
++    postgres_found = False
++
++    for line in ps_output.splitlines():
++        parts = line.split()
++        if len(parts) >= 2:
++            uid, comm = parts[0], parts[1]
++            if "uvicorn" in comm:
++                assert uid == "65532", f"Uvicorn must run as UID 65532, got {uid}"
++                uvicorn_found = True
++            elif "postgres" in comm or "postmaster" in comm:
++                assert uid not in ("0", "65532"), (
++                    f"PostgreSQL must not run as root or kanban: {uid}"
++                )
++                postgres_found = True
++
++    assert uvicorn_found, "Uvicorn process was not found in container"
++    assert postgres_found, "PostgreSQL process was not found in container"
++
++    # 4. Graceful stop within 15s and verification of shutdown order
++    stop_start = time.monotonic()
++    subprocess.run(
++        ["docker", "stop", "-t", "15", CONTAINER_NAME],
++        capture_output=True,
++        check=True,
++        timeout=20.0,
++    )
++    stop_duration = time.monotonic() - stop_start
++    assert stop_duration <= 15.0, f"docker stop took {stop_duration}s (> 15s)"
++
++    # 5. Check logs show Uvicorn stopped before PostgreSQL
++    log_proc = subprocess.run(
++        ["docker", "logs", CONTAINER_NAME],
++        capture_output=True,
++        text=True,
++        check=True,
++    )
++    logs = log_proc.stdout + log_proc.stderr
++
++    assert "shutdown: sending SIGTERM to uvicorn" in logs
++    assert "pg_stop: stopping PostgreSQL" in logs
++    uvicorn_stop_idx = logs.find("shutdown: sending SIGTERM to uvicorn")
++    pg_stop_idx = logs.find("pg_stop: stopping PostgreSQL")
++    assert uvicorn_stop_idx < pg_stop_idx, "Uvicorn must stop before PostgreSQL"
+diff --git a/tests/deploy/test_standalone_entrypoint.py b/tests/deploy/test_standalone_entrypoint.py
+new file mode 100644
+index 0000000..7ff619f
+--- /dev/null
++++ b/tests/deploy/test_standalone_entrypoint.py
+@@ -0,0 +1,559 @@
++"""Unit tests for deploy.standalone entrypoint and configuration writer."""
++
++from __future__ import annotations
++
++import signal
++import subprocess
++from typing import TYPE_CHECKING, Any
++from unittest.mock import MagicMock
++
++import pytest
++
++from deploy.standalone.entrypoint import (
++    BIN_ALEMBIC,
++    BIN_INITDB,
++    BIN_PG_CTL,
++    BIN_PG_ISREADY,
++    BIN_SETPRIV,
++    BIN_UVICORN,
++    bootstrap_database,
++    build_child_env,
++    build_uvicorn_command,
++    initialize_cluster,
++    log_phase,
++    main,
++    run_as_postgres,
++    run_migrations,
++    shutdown_uvicorn,
++    start_postgres,
++    supervisor_loop,
++)
++from deploy.standalone.pg_config import configure_postgres
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++
++# -----------------------------------------------------------------------------
++# Case 1: Positive First Boot
++# -----------------------------------------------------------------------------
++def test_case_1_first_boot(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """First boot (no PG_VERSION) runs initdb, pg_ctl, bootstrap, migrations, and uvicorn."""
++    pgdata = tmp_path / "pgdata"
++    alembic_ini = tmp_path / "alembic.ini"
++    alembic_ini.write_text("[alembic]\n", encoding="utf-8")
++
++    recorded_runs: list[dict[str, Any]] = []
++
++    def mock_run(
++        cmd: list[str],
++        *,
++        timeout: float = 30.0,
++        check: bool = True,
++        env: dict[str, str] | None = None,
++    ) -> subprocess.CompletedProcess[str]:
++        recorded_runs.append(
++            {
++                "cmd": cmd,
++                "timeout": timeout,
++                "check": check,
++                "env": env,
++            }
++        )
++        stdout = "1" if "-tAc" in cmd else ""
++        return subprocess.CompletedProcess(cmd, returncode=0, stdout=stdout, stderr="")
++
++    mock_proc = MagicMock()
++    mock_proc.poll.return_value = 0
++    mock_proc.returncode = 0
++
++    def mock_popen(
++        cmd: list[str],
++        env: dict[str, str] | None = None,
++        *,
++        shell: bool = False,
++        text: bool = True,
++    ) -> MagicMock:
++        recorded_runs.append({"popen_cmd": cmd, "env": env, "shell": shell, "text": text})
++        return mock_proc
++
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
++    monkeypatch.setattr(subprocess, "Popen", mock_popen)
++    monkeypatch.setattr("os.getuid", lambda: 0)
++
++    monkeypatch.setenv("KB_PGDATA_DIR", str(pgdata))
++    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
++    monkeypatch.setenv("KB_ALEMBIC_INI", str(alembic_ini))
++    monkeypatch.delenv("DATABASE_URL", raising=False)
++
++    rc = main([])
++    assert rc == 0
++
++    commands = [r.get("cmd") for r in recorded_runs if "cmd" in r]
++
++    # 1. Assert initdb command structure
++    initdb_calls = [c for c in commands if c and BIN_INITDB in c]
++    assert len(initdb_calls) == 1
++    assert "--encoding=UTF8" in initdb_calls[0]
++    assert "--locale=C.UTF-8" in initdb_calls[0]
++    assert "--auth-host=reject" in initdb_calls[0]
++
++    # 2. Assert pg_ctl start called
++    pg_start_calls = [c for c in commands if c and BIN_PG_CTL in c and "start" in c]
++    assert len(pg_start_calls) == 1
++
++    # 3. Assert alembic upgrade head called
++    alembic_calls = [c for c in commands if c and BIN_ALEMBIC in c]
++    assert len(alembic_calls) == 1
++    assert "upgrade" in alembic_calls[0]
++    assert "head" in alembic_calls[0]
++
++    # 4. Assert ALTER ROLE kanban_migrator NOLOGIN called
++    nologin_calls = [c for c in commands if c and "ALTER ROLE kanban_migrator NOLOGIN;" in c]
++    assert len(nologin_calls) == 1
++
++    # 5. Assert Uvicorn Popen called
++    popen_calls = [r for r in recorded_runs if "popen_cmd" in r]
++    assert len(popen_calls) == 1
++    assert popen_calls[0]["popen_cmd"][0] == BIN_SETPRIV
++    assert BIN_UVICORN in popen_calls[0]["popen_cmd"]
++
++
++# -----------------------------------------------------------------------------
++# Case 2: Positive Warm Boot and External DB
++# -----------------------------------------------------------------------------
++def test_case_2_warm_boot_skips_initdb(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Warm boot with existing PG_VERSION skips initdb and runs migrations if present."""
++    pgdata = tmp_path / "pgdata"
++    pgdata.mkdir(parents=True)
++    (pgdata / "PG_VERSION").write_text("16\n", encoding="utf-8")
++
++    recorded_cmds: list[list[str]] = []
++
++    def mock_run(
++        cmd: list[str],
++        *,
++        timeout: float = 30.0,
++        check: bool = True,
++        env: dict[str, str] | None = None,
++    ) -> subprocess.CompletedProcess[str]:
++        _ = (timeout, check, env)
++        recorded_cmds.append(cmd)
++        stdout = "1" if "-tAc" in cmd else ""
++        return subprocess.CompletedProcess(cmd, returncode=0, stdout=stdout, stderr="")
++
++    mock_proc = MagicMock()
++    mock_proc.poll.return_value = 0
++    mock_proc.returncode = 0
++
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
++    monkeypatch.setattr(subprocess, "Popen", MagicMock(return_value=mock_proc))
++    monkeypatch.setattr("os.getuid", lambda: 0)
++
++    monkeypatch.setenv("KB_PGDATA_DIR", str(pgdata))
++    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
++    monkeypatch.setenv("KB_ALEMBIC_INI", str(tmp_path / "missing_alembic.ini"))
++    monkeypatch.delenv("DATABASE_URL", raising=False)
++
++    rc = main([])
++    assert rc == 0
++
++    # Assert initdb was NEVER called
++    initdb_calls = [c for c in recorded_cmds if BIN_INITDB in c]
++    assert len(initdb_calls) == 0
++
++
++def test_case_2_external_db_mode(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """When DATABASE_URL is set, MODE=external_db execv Uvicorn with zero PG commands."""
++    recorded_execv: list[tuple[str, list[str]]] = []
++
++    def mock_execv(path: str, args: list[str]) -> None:
++        recorded_execv.append((path, args))
++        raise SystemExit(0)
++
++    monkeypatch.setattr("os.execv", mock_execv)
++    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://remote-db:5432/kanban")
++
++    with pytest.raises(SystemExit) as exc_info:
++        main([])
++
++    assert exc_info.value.code == 0
++    assert len(recorded_execv) == 1
++    path, args = recorded_execv[0]
++    assert path == BIN_SETPRIV
++    assert "--reuid=65532" in args
++    assert BIN_UVICORN in args
++
++
++# -----------------------------------------------------------------------------
++# Case 3: Security Configuration, Conf, Ident, Child Env, No Shell
++# -----------------------------------------------------------------------------
++def test_case_3_security_configuration(tmp_path: Path) -> None:
++    """Validate zero host lines in pg_hba.conf, listen_addresses empty, and strict child env."""
++    pgdata = tmp_path / "pgdata"
++    run_dir = str(tmp_path / "run")
++
++    # Create dummy postgresql.conf
++    pgdata.mkdir(parents=True)
++    main_conf = pgdata / "postgresql.conf"
++    main_conf.write_text("# main config\n", encoding="utf-8")
++
++    configure_postgres(pgdata, run_dir=run_dir)
++
++    # 1. Assert pg_hba.conf contains zero host lines
++    hba_text = (pgdata / "pg_hba.conf").read_text(encoding="utf-8")
++    for line in hba_text.splitlines():
++        stripped = line.strip()
++        if stripped and not stripped.startswith("#"):
++            assert not stripped.startswith("host"), f"Forbidden host line: {stripped}"
++            assert stripped.startswith("local")
++
++    # 2. Assert kanban.conf has listen_addresses = ''
++    kanban_conf = (pgdata / "conf.d" / "kanban.conf").read_text(encoding="utf-8")
++    assert "listen_addresses = ''" in kanban_conf
++    assert f"unix_socket_directories = '{run_dir}'" in kanban_conf
++    assert "unix_socket_permissions = 0770" in kanban_conf
++
++    # 3. Assert postgresql.conf has include_dir = 'conf.d'
++    updated_main = main_conf.read_text(encoding="utf-8")
++    assert "include_dir = 'conf.d'" in updated_main
++
++    # Re-run configure_postgres to verify idempotency when include_dir already exists
++    configure_postgres(pgdata, run_dir=run_dir)
++    assert main_conf.read_text(encoding="utf-8").count("include_dir = 'conf.d'") == 1
++
++    # 4. Assert Uvicorn command contains security flags
++    cmd = build_uvicorn_command()
++    assert cmd[0] == BIN_SETPRIV
++    assert "--reuid=65532" in cmd
++    assert "--regid=65532" in cmd
++    assert "--clear-groups" in cmd
++    assert "--inh-caps=-all" in cmd
++    assert "--no-new-privs" in cmd
++
++    # 5. Assert child env allowlist strictly enforced
++    child_env = build_child_env()
++    assert set(child_env.keys()) == {
++        "PATH",
++        "KB_WEB_DIST",
++        "KB_DEPLOYMENT_MODE",
++        "DATABASE_URL",
++        "LANG",
++    }
++    assert child_env["KB_DEPLOYMENT_MODE"] == "standalone"
++
++
++# -----------------------------------------------------------------------------
++# Case 4: Negative Error Handlers (Non-root, Timeout, Migration Failure)
++# -----------------------------------------------------------------------------
++def test_case_4_non_root_uid_exits_78(
++    monkeypatch: pytest.MonkeyPatch,
++    capsys: pytest.CaptureFixture[str],
++) -> None:
++    """Non-root UID in standalone mode exits 78 with STANDALONE_REQUIRES_ROOT_ENTRYPOINT."""
++    monkeypatch.setattr("os.getuid", lambda: 1000)
++    monkeypatch.delenv("DATABASE_URL", raising=False)
++
++    rc = main([])
++    captured = capsys.readouterr()
++
++    assert rc == 78
++    assert "STANDALONE_REQUIRES_ROOT_ENTRYPOINT" in captured.err
++
++
++def test_case_4_pg_start_timeout_exits_70(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """pg_isready never succeeding within timeout calls pg_ctl stop and exits 70."""
++    pgdata = tmp_path / "pgdata"
++    pgdata.mkdir(parents=True)
++    (pgdata / "postgresql.conf").write_text("", encoding="utf-8")
++
++    stopped_calls: list[list[str]] = []
++
++    def mock_run(
++        cmd: list[str],
++        *,
++        timeout: float = 30.0,
++        check: bool = True,
++        env: dict[str, str] | None = None,
++    ) -> subprocess.CompletedProcess[str]:
++        _ = (timeout, check, env)
++        if BIN_PG_ISREADY in cmd:
++            return subprocess.CompletedProcess(cmd, returncode=1, stdout="", stderr="")
++        if BIN_PG_CTL in cmd and "stop" in cmd:
++            stopped_calls.append(cmd)
++        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
++
++    simulated_time = 0.0
++
++    def mock_monotonic() -> float:
++        nonlocal simulated_time
++        simulated_time += 4.0
++        return simulated_time
++
++    monkeypatch.setattr("time.monotonic", mock_monotonic)
++    monkeypatch.setattr("time.sleep", lambda _s: None)
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
++
++    with pytest.raises(SystemExit) as exc_info:
++        start_postgres(pgdata, run_dir=str(tmp_path / "run"))
++
++    assert exc_info.value.code == 70
++    assert len(stopped_calls) == 1
++    assert "stop" in stopped_calls[0]
++    assert "immediate" in stopped_calls[0]
++
++
++def test_case_4_migration_failure_exits_70(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Alembic upgrade failure calls pg_ctl stop and exits 70."""
++    pgdata = tmp_path / "pgdata"
++    alembic_ini = tmp_path / "alembic.ini"
++    alembic_ini.write_text("[alembic]\n", encoding="utf-8")
++
++    stopped_calls: list[list[str]] = []
++
++    def mock_run(
++        cmd: list[str],
++        *,
++        timeout: float = 30.0,
++        check: bool = True,
++        env: dict[str, str] | None = None,
++    ) -> subprocess.CompletedProcess[str]:
++        _ = (timeout, check, env)
++        if BIN_ALEMBIC in cmd:
++            return subprocess.CompletedProcess(
++                cmd, returncode=1, stdout="", stderr="Migration failed syntax error"
++            )
++        if BIN_PG_CTL in cmd and "stop" in cmd:
++            stopped_calls.append(cmd)
++        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
++
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
++
++    with pytest.raises(SystemExit) as exc_info:
++        run_migrations(pgdata, alembic_ini, run_dir=str(tmp_path / "run"))
++
++    assert exc_info.value.code == 70
++    assert len(stopped_calls) == 1
++    assert "fast" in stopped_calls[0]
++
++
++# -----------------------------------------------------------------------------
++# Case 5: Boundary Signals, Termination Escalation, and Postmaster Death
++# -----------------------------------------------------------------------------
++def test_case_5_shutdown_uvicorn_escalates_to_sigkill(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Uvicorn ignoring SIGTERM for > 10s receives SIGKILL."""
++    mock_proc = MagicMock()
++    mock_proc.poll.return_value = None
++
++    simulated_time = 0.0
++
++    def mock_monotonic() -> float:
++        nonlocal simulated_time
++        simulated_time += 4.0
++        return simulated_time
++
++    monkeypatch.setattr("time.monotonic", mock_monotonic)
++    monkeypatch.setattr("time.sleep", lambda _s: None)
++
++    shutdown_uvicorn(mock_proc)
++
++    mock_proc.send_signal.assert_called_once()
++    mock_proc.kill.assert_called_once()
++    mock_proc.wait.assert_called_once()
++
++
++def test_case_5_shutdown_uvicorn_clean_exit() -> None:
++    """Uvicorn exiting cleanly after SIGTERM does not receive SIGKILL."""
++    mock_proc = MagicMock()
++    # First call None, subsequent call 0 (terminated)
++    mock_proc.poll.side_effect = [None, 0]
++
++    shutdown_uvicorn(mock_proc)
++
++    mock_proc.send_signal.assert_called_once()
++    mock_proc.kill.assert_not_called()
++
++
++def test_case_5_shutdown_uvicorn_already_dead() -> None:
++    """shutdown_uvicorn on an already terminated process is a no-op."""
++    mock_proc = MagicMock()
++    mock_proc.poll.return_value = 0
++
++    shutdown_uvicorn(mock_proc)
++    mock_proc.send_signal.assert_not_called()
++
++
++def test_case_5_supervisor_detects_postmaster_death(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++    capsys: pytest.CaptureFixture[str],
++) -> None:
++    """When PostgreSQL postmaster dies during supervisor loop, Uvicorn terminates and exits 70."""
++    pgdata = tmp_path / "pgdata"
++    mock_proc = MagicMock()
++    mock_proc.poll.return_value = None
++
++    def mock_run(
++        cmd: list[str],
++        *,
++        timeout: float = 30.0,
++        check: bool = True,
++        env: dict[str, str] | None = None,
++    ) -> subprocess.CompletedProcess[str]:
++        _ = (timeout, check, env)
++        if BIN_PG_CTL in cmd and "status" in cmd:
++            return subprocess.CompletedProcess(
++                cmd, returncode=3, stdout="", stderr="no server running"
++            )
++        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
++
++    simulated_time = 0.0
++
++    def mock_monotonic() -> float:
++        nonlocal simulated_time
++        simulated_time += 1.0
++        return simulated_time
++
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
++    monkeypatch.setattr("time.monotonic", mock_monotonic)
++    monkeypatch.setattr("time.sleep", lambda _s: None)
++
++    rc = supervisor_loop(mock_proc, pgdata)
++    captured = capsys.readouterr()
++
++    assert rc == 70
++    assert "PG_DIED" in captured.err
++    mock_proc.send_signal.assert_called_once()
++
++
++def test_signal_handler_clean_exit(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Directly test the signal handler installed in main."""
++    registered_handlers: dict[int, Any] = {}
++
++    def mock_signal(sig: int, handler: object) -> None:
++        registered_handlers[sig] = handler
++
++    monkeypatch.setattr(signal, "signal", mock_signal)
++    monkeypatch.setattr("deploy.standalone.entrypoint.supervisor_loop", lambda *_args: 0)
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", MagicMock())
++    monkeypatch.setattr("deploy.standalone.entrypoint.start_postgres", MagicMock())
++    monkeypatch.setattr("deploy.standalone.entrypoint.initialize_cluster", MagicMock())
++    monkeypatch.setattr("deploy.standalone.entrypoint.bootstrap_database", MagicMock())
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_migrations", MagicMock())
++    monkeypatch.setattr("deploy.standalone.entrypoint.configure_postgres", MagicMock())
++    monkeypatch.setattr(subprocess, "Popen", MagicMock())
++    monkeypatch.setattr("os.getuid", lambda: 0)
++
++    main([])
++    assert signal.SIGTERM in registered_handlers
++
++    # Invoke signal handler
++    stopped_pg: list[str] = []
++    monkeypatch.setattr(
++        "deploy.standalone.entrypoint.stop_postgres",
++        lambda _p, **_k: stopped_pg.append("stopped"),
++    )
++
++    with pytest.raises(SystemExit) as exc_info:
++        registered_handlers[signal.SIGTERM](signal.SIGTERM, None)
++
++    assert exc_info.value.code == 0
++    assert len(stopped_pg) == 1
++
++
++# -----------------------------------------------------------------------------
++# Additional Unit Coverage Tests
++# -----------------------------------------------------------------------------
++def test_log_phase(capsys: pytest.CaptureFixture[str]) -> None:
++    """Log phase output matches expected formatting."""
++    log_phase("test_phase", "sample message")
++    captured = capsys.readouterr()
++    assert "[kanban-standalone]" in captured.out
++    assert "test_phase: sample message" in captured.out
++
++
++def test_initialize_cluster_called_process_error(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Initdb error raises CalledProcessError and writes INITDB_FAILED."""
++    pgdata = tmp_path / "pgdata"
++
++    def mock_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
++        raise subprocess.CalledProcessError(1, ["initdb"], stderr="initdb failed")
++
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
++
++    with pytest.raises(subprocess.CalledProcessError):
++        initialize_cluster(pgdata)
++
++
++def test_bootstrap_database_creates_database_when_missing(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Bootstrap_database executes CREATE DATABASE when check returns not found."""
++    recorded_psql: list[str] = []
++
++    def mock_run(
++        cmd: list[str],
++        *,
++        timeout: float = 30.0,
++        check: bool = True,
++        env: dict[str, str] | None = None,
++    ) -> subprocess.CompletedProcess[str]:
++        _ = (timeout, check, env)
++        if "-tAc" in cmd:
++            return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
++        if "-c" in cmd:
++            idx = cmd.index("-c")
++            recorded_psql.append(cmd[idx + 1])
++        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
++
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
++    bootstrap_database(run_dir=str(tmp_path))
++
++    create_db_calls = [s for s in recorded_psql if "CREATE DATABASE kanban" in s]
++    assert len(create_db_calls) == 1
++
++
++def test_run_as_postgres_real_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify run_as_postgres wraps commands with setpriv correctly."""
++    recorded_full: list[list[str]] = []
++
++    def mock_sub_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
++        recorded_full.append(cmd)
++        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
++
++    monkeypatch.setattr(subprocess, "run", mock_sub_run)
++    run_as_postgres(["echo", "hello"], timeout=5.0)
++
++    assert len(recorded_full) == 1
++    assert recorded_full[0][:7] == [
++        BIN_SETPRIV,
++        "--reuid=postgres",
++        "--regid=postgres",
++        "--init-groups",
++        "--inh-caps=-all",
++        "--no-new-privs",
++        "--",
++    ]
++    assert recorded_full[0][7:] == ["echo", "hello"]

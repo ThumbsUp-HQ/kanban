@@ -94,7 +94,7 @@ def test_standalone_container_smoke() -> None:
 
     # 3. Check process UIDs: uvicorn as 65532, postgres as postgres UID (non-root, non-65532)
     ps_proc = subprocess.run(
-        ["docker", "exec", CONTAINER_NAME, "ps", "-o", "uid,comm"],
+        ["docker", "exec", CONTAINER_NAME, "ps", "-eo", "uid,comm"],
         capture_output=True,
         text=True,
         check=True,
