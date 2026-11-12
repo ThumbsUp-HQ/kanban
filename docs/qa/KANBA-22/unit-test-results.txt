@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 9 items
+
+tests/deploy/test_dockerfile.py::test_dockerfile_stages_and_sha256_pinning PASSED [ 11%]
+tests/deploy/test_dockerfile.py::test_runtime_slim_and_standalone_directives PASSED [ 22%]
+tests/deploy/test_dockerfile.py::test_security_zero_secrets_and_no_remote_add PASSED [ 33%]
+tests/deploy/test_dockerfile.py::test_dockerignore_entries PASSED        [ 44%]
+tests/deploy/test_dockerfile.py::test_runtime_slim_apt_install_packages PASSED [ 55%]
+tests/deploy/test_dockerfile.py::test_get_logical_lines_continuations PASSED [ 66%]
+tests/deploy/test_dockerfile.py::test_extract_env_arg_names_variants PASSED [ 77%]
+tests/deploy/test_dockerfile.py::test_security_rules_on_synthetic_samples PASSED [ 88%]
+tests/deploy/test_dockerfile.py::test_parse_dockerfile_stages_structure PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                              Stmts   Miss Branch BrPart  Cover
+-------------------------------------------------------------------
+tests/deploy/__init__.py              0      0      0      0   100%
+tests/deploy/test_dockerfile.py     167      2     68      4    97%
+-------------------------------------------------------------------
+TOTAL                               167      2     68      4    97%
+Required test coverage of 95% reached. Total coverage: 97.45%
+============================== 9 passed in 0.08s ===============================
+Exit Code: 0

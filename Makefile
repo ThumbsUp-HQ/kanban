@@ -1,4 +1,4 @@
-.PHONY: check fmt testdb-up testdb-down license
+.PHONY: check fmt testdb-up testdb-down license image-slim image-standalone hadolint
 
 check:
 	uv run ruff check .
@@ -7,13 +7,12 @@ check:
 	uv run lint-imports
 	uv run python -m scripts.check_no_dashes --all
 
-license:
-	uv run python -m scripts.license_gate
-
-
 fmt:
 	uv run ruff format .
 	uv run ruff check --fix .
+
+license:
+	uv run python -m scripts.license_gate
 
 testdb-up:
 	install -d -m 0700 $${KB_TEST_PGSOCKET_DIR:-/tmp/kb-pgsock} 2>/dev/null || test -d $${KB_TEST_PGSOCKET_DIR:-/tmp/kb-pgsock}
@@ -21,3 +20,12 @@ testdb-up:
 
 testdb-down:
 	docker compose -f docker-compose.test.yml down
+
+image-slim:
+	docker build --target runtime-slim -t kanban:runtime-slim .
+
+image-standalone:
+	docker build -t kanban:latest .
+
+hadolint:
+	docker run --rm -i hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d < Dockerfile
