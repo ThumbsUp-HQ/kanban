@@ -8,6 +8,7 @@ import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, HttpUrl, SecretStr
 
@@ -20,6 +21,7 @@ from agent.cli_report import (
     default_context_scrubber,
     map_exception_to_exit_code,
 )
+from agent.providers.air_gap import AirGapGuard
 from agent.providers.base import (
     CompletionRequest,
     LLMProvider,
@@ -29,6 +31,7 @@ from agent.providers.gemini import GeminiSettings
 from agent.providers.ollama import OllamaSettings
 from agent.providers.openai_provider import OpenAISettings
 from agent.providers.registry import build_provider
+from agent.providers.router import ProviderRouter, RouteCandidate
 from agent.testing.fixtures import (
     FixtureLLMProvider,
     load_cassette,
@@ -191,6 +194,80 @@ def _resolve_openai_provider(
     return provider, prompt, model, metadata
 
 
+def _resolve_router_provider(
+    args: argparse.Namespace,
+    prompt: str,
+    model: str,
+    metadata: dict[str, str],
+) -> tuple[LLMProvider, str, str, dict[str, str]]:
+    route_kinds_str = getattr(args, "route", "fixture,fixture") or "fixture,fixture"
+    route_kinds = [k.strip() for k in route_kinds_str.split(",") if k.strip()]
+    if not route_kinds:
+        route_kinds = ["fixture", "fixture"]
+
+    candidates: list[RouteCandidate] = []
+    cassette_arg = getattr(args, "cassette", None)
+    primary_cassette_path = Path(cassette_arg) if cassette_arg else _DEFAULT_CASSETTE
+    if not primary_cassette_path.exists():
+        msg = f"Cassette file not found: {primary_cassette_path}"
+        raise FileNotFoundError(msg)
+
+    primary_cas = load_cassette(primary_cassette_path)
+    fallback_cas = load_cassette(_DEFAULT_CASSETTE)
+
+    if args.prompt == "Hello Sparkle" and primary_cas.matcher.prompt_contains:
+        prompt = " ".join(primary_cas.matcher.prompt_contains)
+
+    allowed_cidrs = (
+        ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"),
+        ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("::1/128"),
+    )
+
+    for idx, kind in enumerate(route_kinds):
+        cid = uuid4()
+        prov: LLMProvider
+        if kind == "fixture":
+            cas = primary_cas if idx == 0 else fallback_cas
+            prov = FixtureLLMProvider(cas)
+            candidates.append(
+                RouteCandidate(
+                    provider_config_id=cid,
+                    provider=prov,
+                    residency_tier="fixture",
+                    priority=idx,
+                )
+            )
+        elif kind == "ollama":
+            settings = OllamaSettings(
+                base_url=HttpUrl("http://127.0.0.1:11434"),
+                allowed_ollama_cidrs=allowed_cidrs,
+                model_allowlist=(model,),
+            )
+            prov = build_provider("ollama", settings)
+            candidates.append(
+                RouteCandidate(
+                    provider_config_id=cid,
+                    provider=prov,
+                    residency_tier="local",
+                    priority=idx,
+                )
+            )
+        else:
+            msg = f"Unsupported route candidate kind: {kind}"
+            raise ValueError(msg)
+
+    air_gap_flag = getattr(args, "air_gap", False)
+    router = ProviderRouter(
+        workspace_id=uuid4(),
+        candidates=candidates,
+        air_gap_mode=air_gap_flag,
+    )
+    return router, prompt, model, metadata
+
+
 def _resolve_provider_and_params(
     args: argparse.Namespace,
 ) -> tuple[LLMProvider, str, str, dict[str, str]]:
@@ -198,11 +275,17 @@ def _resolve_provider_and_params(
     model = str(args.model)
     metadata: dict[str, str] = {}
 
+    air_gap_flag = getattr(args, "air_gap", False)
+    if air_gap_flag and args.provider != "router":
+        AirGapGuard.check(str(args.provider), air_gap_mode=True)
+
+    if args.provider == "router":
+        return _resolve_router_provider(args, prompt, model, metadata)
+
     if args.provider == "ollama":
         return _resolve_ollama_provider(args, prompt, model, metadata)
     if args.provider == "openai":
         return _resolve_openai_provider(args, prompt, model, metadata)
-
     if args.provider == "gemini":
         return _resolve_gemini_provider(args, prompt, model, metadata)
 
@@ -229,6 +312,7 @@ async def _stream_echo(
     except Exception as err:  # noqa: BLE001  # Map provider exception to Section 4 details
         total_ms = (time.perf_counter() - t0) * 1000.0
         code = map_exception_to_exit_code(err)
+        route_trace = tuple(getattr(provider, "last_route_trace", ()))
         report = ValidationReport(
             command="validate-echo",
             rendered_context=rendered_context,
@@ -238,6 +322,7 @@ async def _stream_echo(
                 total_latency_ms=total_ms,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
+                route_trace=route_trace,
             ),
             schema_status=SchemaStatus(
                 valid=False,
@@ -249,6 +334,7 @@ async def _stream_echo(
         return report, code
 
     total_ms = (time.perf_counter() - t0) * 1000.0
+    route_trace = tuple(getattr(provider, "last_route_trace", ()))
     report = ValidationReport(
         command="validate-echo",
         rendered_context=rendered_context,
@@ -258,6 +344,7 @@ async def _stream_echo(
             total_latency_ms=total_ms,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
+            route_trace=route_trace,
         ),
         schema_status=SchemaStatus(valid=True, status="ok"),
     )
@@ -275,6 +362,7 @@ async def _structured_echo(
     except Exception as err:  # noqa: BLE001  # Map provider exception to Section 4 details
         total_ms = (time.perf_counter() - t0) * 1000.0
         code = map_exception_to_exit_code(err)
+        route_trace = tuple(getattr(provider, "last_route_trace", ()))
         report = ValidationReport(
             command="validate-echo",
             rendered_context=rendered_context,
@@ -282,6 +370,7 @@ async def _structured_echo(
             metrics=ReportMetrics(
                 ttft_ms=None,
                 total_latency_ms=total_ms,
+                route_trace=route_trace,
             ),
             schema_status=SchemaStatus(
                 valid=False,
@@ -293,6 +382,7 @@ async def _structured_echo(
         return report, code
 
     total_ms = (time.perf_counter() - t0) * 1000.0
+    route_trace = tuple(getattr(provider, "last_route_trace", ()))
     report = ValidationReport(
         command="validate-echo",
         rendered_context=rendered_context,
@@ -302,6 +392,7 @@ async def _structured_echo(
             total_latency_ms=total_ms,
             prompt_tokens=resp.prompt_tokens,
             completion_tokens=resp.completion_tokens,
+            route_trace=route_trace,
         ),
         schema_status=SchemaStatus(valid=True, status="ok"),
     )

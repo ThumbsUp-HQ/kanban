@@ -1,0 +1,11 @@
+cassette_version: 1
+matcher:
+  prompt_contains:
+    - "stream-error-after-first"
+simulated_ttft_ms: 10.0
+fault:
+  kind: "stream_error_after_chunk"
+  after_chunks: 1
+stream_chunks:
+  - "First chunk valid"
+  - "Second chunk should fail"

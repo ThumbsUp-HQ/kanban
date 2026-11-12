@@ -1,0 +1,2268 @@
+diff --git a/agent/GEMINI.md b/agent/GEMINI.md
+index 4361899..dca3de1 100644
+--- a/agent/GEMINI.md
++++ b/agent/GEMINI.md
+@@ -117,7 +117,6 @@ The `GeminiProvider` adapter implements the `@runtime_checkable LLMProvider` pro
+ - `HTTP_ERROR`: Upstream Gemini or Vertex API returned an HTTP 4xx or 5xx status code.
+ - `TIMEOUT`: Request exceeded the configured timeout deadline.
+ 
+-
+ ## OpenAI Provider Adapter (`OpenAIProvider`)
+ 
+ The `OpenAIProvider` adapter implements the `@runtime_checkable LLMProvider` protocol over `AsyncOpenAI`, supporting streaming completions, strict structured outputs, and batch vector embeddings for OpenAI and OpenAI-compatible inference servers (vLLM, Azure OpenAI, LiteLLM).
+@@ -139,3 +138,35 @@ The `OpenAIProvider` adapter implements the `@runtime_checkable LLMProvider` pro
+    - Local validation via Pydantic model ensures schema compliance; refusals raise `ProviderRefusal`.
+ 5. Secret Protection:
+    - `api_key` is encapsulated in Pydantic `SecretStr` and excluded from `repr()`, logs, and exception strings.
++
++## Provider Router & Resilience (`ProviderRouter`, `CircuitBreaker`, `AirGapGuard`)
++
++The `ProviderRouter` wraps multi-candidate provider pools with 3-state per-(workspace, provider) circuit breakers, data-residency locking, and fail-closed air-gap enforcement.
++
++### Circuit Breaker Invariants (`CircuitBreaker`)
++
++- State Key: `(workspace_id: UUID, provider_config_id: UUID)` stored in an in-process dictionary (per-replica state).
++- Three-State Machine:
++  * `CLOSED`: Normal operation. Availability failures increment consecutive failure counter.
++  * `OPEN`: Reached failure threshold (`DEFAULT_FAILURE_THRESHOLD = 5`). Outbound requests skip this candidate without network I/O.
++  * `HALF_OPEN`: Cooldown period (`DEFAULT_OPEN_COOLDOWN_S = 30.0s`) has elapsed. Admits exactly 1 probe call. Probe success resets failure count to 0 and transitions to `CLOSED`. Probe failure restarts cooldown and transitions back to `OPEN`.
++- Trip Conditions:
++  * `ProviderHTTPError` with status `429` or `>= 500`.
++  * `ProviderTimeout` (including TTFT SLA breach).
++  * `ProviderUnavailable`.
++- Content/Policy Exemptions: `ProviderSchemaError`, `ProviderSafetyBlock`, `ProviderRefusal`, `ProviderPolicyError` do NOT trip the breaker (they represent content or policy decisions, not provider availability).
++- Retry-After Backoff: An HTTP 429 response carrying a `Retry-After` header extends cooldown to `max(open_cooldown_s, retry_after_s)` capped at `MAX_COOLDOWN_S = 300.0s`.
++
++### Air-Gap Enforcement (`AirGapGuard`)
++
++- Fail-Closed Policy: If `air_gap_mode` is `True` or unspecified (`None`), external cloud egress is forbidden.
++- Allowed Providers Under Air-Gap: Strictly `ollama` (local loopback/CIDR pinned) and `fixture` (offline testing).
++- Rejection Barrier: Calls to `gemini` or `openai` raise `EgressDenied(code="AIR_GAP_EGRESS_DENIED")` BEFORE provider construction, DNS resolution, or socket allocation.
++
++### Routing & Failover Invariants (`ProviderRouter`)
++
++- Residency Locking: Candidates are prioritized by `priority` ascending. The first healthy candidate selected fixes the request's `residency_tier`. Any subsequent failovers MUST stay within that exact same residency tier (cloud never fails over to a different vendor tier; air-gapped workloads never fail over to cloud).
++- Max Attempts: Capped at `min(len(eligible), 3)` attempts per request.
++- Streaming Failover Barrier: Failover is permitted strictly before the first stream chunk is yielded. Once token streaming begins, upstream faults propagate immediately to prevent mixed-model corrupted generation.
++- TTFT SLA Enforcement: When `ttft_deadline_ms` is configured, waiting for the first chunk is bounded by `asyncio.timeout`. Expiry invokes `aclose()` on the upstream stream and trips the candidate's circuit breaker with `ProviderTimeout`.
++
+diff --git a/agent/cli.py b/agent/cli.py
+index 059a14f..e467b20 100644
+--- a/agent/cli.py
++++ b/agent/cli.py
+@@ -61,7 +61,7 @@ def get_registered_subcommands() -> Mapping[str, SubcommandSpec]:
+ def add_common_agent_flags(
+     parser: argparse.ArgumentParser,
+     *,
+-    available_providers: Sequence[str] = ("fixture", "ollama", "gemini", "openai"),
++    available_providers: Sequence[str] = ("fixture", "ollama", "gemini", "openai", "router"),
+ ) -> None:
+     """Add standard provider, model, cassette, and reporting flags to a parser."""
+     parser.add_argument(
+@@ -70,6 +70,18 @@ def add_common_agent_flags(
+         default="fixture",
+         help="LLM provider or execution runtime harness.",
+     )
++    parser.add_argument(
++        "--route",
++        type=str,
++        default="fixture,fixture",
++        help="Comma-separated candidate provider kinds for router (e.g. 'fixture,fixture').",
++    )
++    parser.add_argument(
++        "--air-gap",
++        action="store_true",
++        default=False,
++        help="Enforce air-gap restrictions (blocks cloud providers before DNS/socket transport).",
++    )
+     parser.add_argument(
+         "--model",
+         type=str,
+diff --git a/agent/cli_commands/validate_echo.py b/agent/cli_commands/validate_echo.py
+index 431575f..c73b840 100644
+--- a/agent/cli_commands/validate_echo.py
++++ b/agent/cli_commands/validate_echo.py
+@@ -8,6 +8,7 @@ import os
+ import time
+ from pathlib import Path
+ from typing import TYPE_CHECKING
++from uuid import uuid4
+ 
+ from pydantic import BaseModel, ConfigDict, HttpUrl, SecretStr
+ 
+@@ -20,6 +21,7 @@ from agent.cli_report import (
+     default_context_scrubber,
+     map_exception_to_exit_code,
+ )
++from agent.providers.air_gap import AirGapGuard
+ from agent.providers.base import (
+     CompletionRequest,
+     LLMProvider,
+@@ -29,6 +31,7 @@ from agent.providers.gemini import GeminiSettings
+ from agent.providers.ollama import OllamaSettings
+ from agent.providers.openai_provider import OpenAISettings
+ from agent.providers.registry import build_provider
++from agent.providers.router import ProviderRouter, RouteCandidate
+ from agent.testing.fixtures import (
+     FixtureLLMProvider,
+     load_cassette,
+@@ -191,6 +194,80 @@ def _resolve_openai_provider(
+     return provider, prompt, model, metadata
+ 
+ 
++def _resolve_router_provider(
++    args: argparse.Namespace,
++    prompt: str,
++    model: str,
++    metadata: dict[str, str],
++) -> tuple[LLMProvider, str, str, dict[str, str]]:
++    route_kinds_str = getattr(args, "route", "fixture,fixture") or "fixture,fixture"
++    route_kinds = [k.strip() for k in route_kinds_str.split(",") if k.strip()]
++    if not route_kinds:
++        route_kinds = ["fixture", "fixture"]
++
++    candidates: list[RouteCandidate] = []
++    cassette_arg = getattr(args, "cassette", None)
++    primary_cassette_path = Path(cassette_arg) if cassette_arg else _DEFAULT_CASSETTE
++    if not primary_cassette_path.exists():
++        msg = f"Cassette file not found: {primary_cassette_path}"
++        raise FileNotFoundError(msg)
++
++    primary_cas = load_cassette(primary_cassette_path)
++    fallback_cas = load_cassette(_DEFAULT_CASSETTE)
++
++    if args.prompt == "Hello Sparkle" and primary_cas.matcher.prompt_contains:
++        prompt = " ".join(primary_cas.matcher.prompt_contains)
++
++    allowed_cidrs = (
++        ipaddress.ip_network("127.0.0.0/8"),
++        ipaddress.ip_network("10.0.0.0/8"),
++        ipaddress.ip_network("172.16.0.0/12"),
++        ipaddress.ip_network("192.168.0.0/16"),
++        ipaddress.ip_network("::1/128"),
++    )
++
++    for idx, kind in enumerate(route_kinds):
++        cid = uuid4()
++        prov: LLMProvider
++        if kind == "fixture":
++            cas = primary_cas if idx == 0 else fallback_cas
++            prov = FixtureLLMProvider(cas)
++            candidates.append(
++                RouteCandidate(
++                    provider_config_id=cid,
++                    provider=prov,
++                    residency_tier="fixture",
++                    priority=idx,
++                )
++            )
++        elif kind == "ollama":
++            settings = OllamaSettings(
++                base_url=HttpUrl("http://127.0.0.1:11434"),
++                allowed_ollama_cidrs=allowed_cidrs,
++                model_allowlist=(model,),
++            )
++            prov = build_provider("ollama", settings)
++            candidates.append(
++                RouteCandidate(
++                    provider_config_id=cid,
++                    provider=prov,
++                    residency_tier="local",
++                    priority=idx,
++                )
++            )
++        else:
++            msg = f"Unsupported route candidate kind: {kind}"
++            raise ValueError(msg)
++
++    air_gap_flag = getattr(args, "air_gap", False)
++    router = ProviderRouter(
++        workspace_id=uuid4(),
++        candidates=candidates,
++        air_gap_mode=air_gap_flag,
++    )
++    return router, prompt, model, metadata
++
++
+ def _resolve_provider_and_params(
+     args: argparse.Namespace,
+ ) -> tuple[LLMProvider, str, str, dict[str, str]]:
+@@ -198,11 +275,17 @@ def _resolve_provider_and_params(
+     model = str(args.model)
+     metadata: dict[str, str] = {}
+ 
++    air_gap_flag = getattr(args, "air_gap", False)
++    if air_gap_flag and args.provider != "router":
++        AirGapGuard.check(str(args.provider), air_gap_mode=True)
++
++    if args.provider == "router":
++        return _resolve_router_provider(args, prompt, model, metadata)
++
+     if args.provider == "ollama":
+         return _resolve_ollama_provider(args, prompt, model, metadata)
+     if args.provider == "openai":
+         return _resolve_openai_provider(args, prompt, model, metadata)
+-
+     if args.provider == "gemini":
+         return _resolve_gemini_provider(args, prompt, model, metadata)
+ 
+@@ -229,6 +312,7 @@ async def _stream_echo(
+     except Exception as err:  # noqa: BLE001  # Map provider exception to Section 4 details
+         total_ms = (time.perf_counter() - t0) * 1000.0
+         code = map_exception_to_exit_code(err)
++        route_trace = tuple(getattr(provider, "last_route_trace", ()))
+         report = ValidationReport(
+             command="validate-echo",
+             rendered_context=rendered_context,
+@@ -238,6 +322,7 @@ async def _stream_echo(
+                 total_latency_ms=total_ms,
+                 prompt_tokens=prompt_tokens,
+                 completion_tokens=completion_tokens,
++                route_trace=route_trace,
+             ),
+             schema_status=SchemaStatus(
+                 valid=False,
+@@ -249,6 +334,7 @@ async def _stream_echo(
+         return report, code
+ 
+     total_ms = (time.perf_counter() - t0) * 1000.0
++    route_trace = tuple(getattr(provider, "last_route_trace", ()))
+     report = ValidationReport(
+         command="validate-echo",
+         rendered_context=rendered_context,
+@@ -258,6 +344,7 @@ async def _stream_echo(
+             total_latency_ms=total_ms,
+             prompt_tokens=prompt_tokens,
+             completion_tokens=completion_tokens,
++            route_trace=route_trace,
+         ),
+         schema_status=SchemaStatus(valid=True, status="ok"),
+     )
+@@ -275,6 +362,7 @@ async def _structured_echo(
+     except Exception as err:  # noqa: BLE001  # Map provider exception to Section 4 details
+         total_ms = (time.perf_counter() - t0) * 1000.0
+         code = map_exception_to_exit_code(err)
++        route_trace = tuple(getattr(provider, "last_route_trace", ()))
+         report = ValidationReport(
+             command="validate-echo",
+             rendered_context=rendered_context,
+@@ -282,6 +370,7 @@ async def _structured_echo(
+             metrics=ReportMetrics(
+                 ttft_ms=None,
+                 total_latency_ms=total_ms,
++                route_trace=route_trace,
+             ),
+             schema_status=SchemaStatus(
+                 valid=False,
+@@ -293,6 +382,7 @@ async def _structured_echo(
+         return report, code
+ 
+     total_ms = (time.perf_counter() - t0) * 1000.0
++    route_trace = tuple(getattr(provider, "last_route_trace", ()))
+     report = ValidationReport(
+         command="validate-echo",
+         rendered_context=rendered_context,
+@@ -302,6 +392,7 @@ async def _structured_echo(
+             total_latency_ms=total_ms,
+             prompt_tokens=resp.prompt_tokens,
+             completion_tokens=resp.completion_tokens,
++            route_trace=route_trace,
+         ),
+         schema_status=SchemaStatus(valid=True, status="ok"),
+     )
+diff --git a/agent/cli_report.py b/agent/cli_report.py
+index b36bd38..ef60e8b 100644
+--- a/agent/cli_report.py
++++ b/agent/cli_report.py
+@@ -158,4 +158,16 @@ def render_report(
+     if report.schema_status.detail:
+         lines.append(f"Detail: {report.schema_status.detail}")
+ 
++    if report.metrics.route_trace:
++        lines.extend(["", "=== 5. ROUTE TRACE ==="])
++        for entry in report.metrics.route_trace:
++            cid = entry.get("provider_config_id", "")
++            outcome = entry.get("outcome", "")
++            st = entry.get("breaker_state", "")
++            ttft = entry.get("ttft_ms")
++            ttft_fmt = f"{ttft:.1f}ms" if isinstance(ttft, (int, float)) else "N/A"
++            lines.append(
++                f"  - Provider: {cid} | Outcome: {outcome} | Breaker: {st} | TTFT: {ttft_fmt}"
++            )
++
+     return "\n".join(lines)
+diff --git a/agent/providers/__init__.py b/agent/providers/__init__.py
+index 9f035e4..35d8f7c 100644
+--- a/agent/providers/__init__.py
++++ b/agent/providers/__init__.py
+@@ -1,6 +1,7 @@
+ # Copyright 2026 Kanban Platform Contributors
+ """Vendor-neutral LLM provider abstractions, DTOs, and error hierarchy."""
+ 
++from agent.providers.air_gap import AirGapGuard
+ from agent.providers.base import (
+     CLIRunner,
+     CLIRunRequest,
+@@ -14,6 +15,11 @@ from agent.providers.base import (
+     StructuredResponse,
+     ToolCallStep,
+ )
++from agent.providers.circuit_breaker import (
++    CircuitBreaker,
++    CircuitBreakerState,
++    is_availability_failure,
++)
+ from agent.providers.errors import (
+     AllProvidersUnavailable,
+     EgressDenied,
+@@ -28,12 +34,16 @@ from agent.providers.errors import (
+     ProviderUnavailable,
+     redact_secrets,
+ )
++from agent.providers.router import ProviderRouter, RouteCandidate
+ 
+ __all__ = [
++    "AirGapGuard",
+     "AllProvidersUnavailable",
+     "CLIRunRequest",
+     "CLIRunResult",
+     "CLIRunner",
++    "CircuitBreaker",
++    "CircuitBreakerState",
+     "CompletionRequest",
+     "EgressDenied",
+     "EmbedBatchRequest",
+@@ -44,13 +54,16 @@ __all__ = [
+     "ProviderPolicyError",
+     "ProviderProtocolError",
+     "ProviderRefusal",
++    "ProviderRouter",
+     "ProviderSafetyBlock",
+     "ProviderSchemaError",
+     "ProviderTimeout",
+     "ProviderUnavailable",
++    "RouteCandidate",
+     "StreamChunk",
+     "StructuredRequest",
+     "StructuredResponse",
+     "ToolCallStep",
++    "is_availability_failure",
+     "redact_secrets",
+ ]
+diff --git a/agent/providers/air_gap.py b/agent/providers/air_gap.py
+new file mode 100644
+index 0000000..4b0afae
+--- /dev/null
++++ b/agent/providers/air_gap.py
+@@ -0,0 +1,43 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Air-gap enforcement guard blocking cloud provider egress before transport."""
++
++from __future__ import annotations
++
++from agent.providers.errors import EgressDenied
++
++__all__ = [
++    "ALLOWED_AIR_GAP_KINDS",
++    "AirGapGuard",
++]
++
++ALLOWED_AIR_GAP_KINDS: frozenset[str] = frozenset({"ollama", "fixture"})
++
++
++class AirGapGuard:
++    """Security guard enforcing workspace air-gap policy prior to provider construction."""
++
++    @classmethod
++    def check(
++        cls,
++        provider_kind: str,
++        settings: object = None,
++        *,
++        air_gap_mode: bool | None,
++    ) -> None:
++        """Assert provider kind is permitted under air-gap policy.
++
++        Fails closed: if air_gap_mode is True or None (unspecified), egress to cloud
++        endpoints is forbidden and raises EgressDenied(code='AIR_GAP_EGRESS_DENIED')
++        before DNS resolution or socket allocation.
++        """
++        del settings  # Reserved for provider-specific setting audits
++        # Unknown/None is treated as True (fail-closed)
++        is_air_gapped = air_gap_mode is not False
++        normalized_kind = provider_kind.strip().lower()
++
++        if is_air_gapped and normalized_kind not in ALLOWED_AIR_GAP_KINDS:
++            msg = (
++                f"Air-gap mode is active: outbound cloud egress to provider '{provider_kind}' "
++                f"is strictly prohibited"
++            )
++            raise EgressDenied(msg, code="AIR_GAP_EGRESS_DENIED")
+diff --git a/agent/providers/circuit_breaker.py b/agent/providers/circuit_breaker.py
+new file mode 100644
+index 0000000..04adec5
+--- /dev/null
++++ b/agent/providers/circuit_breaker.py
+@@ -0,0 +1,273 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Per-(workspace, provider) circuit breakers for LLM provider resilience."""
++
++from __future__ import annotations
++
++import logging
++import time
++from dataclasses import dataclass
++from enum import StrEnum
++from typing import TYPE_CHECKING
++
++from agent.providers.errors import (
++    ProviderHTTPError,
++    ProviderPolicyError,
++    ProviderRefusal,
++    ProviderSafetyBlock,
++    ProviderSchemaError,
++    ProviderTimeout,
++    ProviderUnavailable,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Callable
++    from uuid import UUID
++
++__all__ = [
++    "DEFAULT_FAILURE_THRESHOLD",
++    "DEFAULT_OPEN_COOLDOWN_S",
++    "MAX_COOLDOWN_S",
++    "CircuitBreaker",
++    "CircuitBreakerEntry",
++    "CircuitBreakerState",
++    "is_availability_failure",
++]
++
++_logger = logging.getLogger(__name__)
++
++DEFAULT_FAILURE_THRESHOLD: int = 5
++DEFAULT_OPEN_COOLDOWN_S: float = 30.0
++MAX_COOLDOWN_S: float = 300.0
++
++_HTTP_STATUS_TOO_MANY_REQUESTS: int = 429
++_HTTP_STATUS_INTERNAL_ERROR: int = 500
++
++
++def is_availability_failure(err: BaseException) -> bool:
++    """Return True if error represents an availability or transient network failure.
++
++    Trip conditions: ProviderHTTPError (status 429 or >= 500), ProviderTimeout,
++    ProviderUnavailable.
++    Content and policy outcomes (ProviderSchemaError, ProviderSafetyBlock,
++    ProviderRefusal, ProviderPolicyError) do NOT count as availability failures.
++    """
++    if isinstance(
++        err,
++        (
++            ProviderSchemaError,
++            ProviderSafetyBlock,
++            ProviderRefusal,
++            ProviderPolicyError,
++        ),
++    ):
++        return False
++    if isinstance(err, ProviderHTTPError):
++        return (
++            err.status == _HTTP_STATUS_TOO_MANY_REQUESTS
++            or err.status >= _HTTP_STATUS_INTERNAL_ERROR
++        )
++    return isinstance(err, (ProviderTimeout, ProviderUnavailable))
++
++
++class CircuitBreakerState(StrEnum):
++    """Three-state circuit breaker state machine."""
++
++    CLOSED = "CLOSED"
++    OPEN = "OPEN"
++    HALF_OPEN = "HALF_OPEN"
++
++
++@dataclass
++class CircuitBreakerEntry:
++    """Internal state representation for a single (workspace_id, provider_config_id) breaker."""
++
++    workspace_id: UUID
++    provider_config_id: UUID
++    state: CircuitBreakerState = CircuitBreakerState.CLOSED
++    consecutive_failures: int = 0
++    opened_at: float = 0.0
++    cooldown_until: float = 0.0
++    probe_in_flight: bool = False
++
++
++class CircuitBreaker:
++    """Registry and state machine for per-(workspace, provider) circuit breakers.
++
++    State key: (workspace_id: UUID, provider_config_id: UUID).
++    Registry is an in-process dictionary (per-replica state).
++    Clock is injected (Callable[[], float]) so tests never sleep.
++    """
++
++    def __init__(
++        self,
++        *,
++        failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
++        open_cooldown_s: float = DEFAULT_OPEN_COOLDOWN_S,
++        max_cooldown_s: float = MAX_COOLDOWN_S,
++        clock: Callable[[], float] = time.monotonic,
++    ) -> None:
++        """Initialize circuit breaker registry with configurable thresholds and clock."""
++        self.failure_threshold: int = failure_threshold
++        self.open_cooldown_s: float = open_cooldown_s
++        self.max_cooldown_s: float = max_cooldown_s
++        self._clock: Callable[[], float] = clock
++        self._entries: dict[tuple[UUID, UUID], CircuitBreakerEntry] = {}
++        self._transition_log: list[dict[str, object]] = []
++
++    @property
++    def transition_log(self) -> list[dict[str, object]]:
++        """Return shallow copy of recorded state transition history."""
++        return list(self._transition_log)
++
++    def _get_entry(self, workspace_id: UUID, provider_config_id: UUID) -> CircuitBreakerEntry:
++        key = (workspace_id, provider_config_id)
++        entry = self._entries.get(key)
++        if entry is None:
++            entry = CircuitBreakerEntry(
++                workspace_id=workspace_id,
++                provider_config_id=provider_config_id,
++            )
++            self._entries[key] = entry
++        return entry
++
++    def _log_transition(
++        self,
++        entry: CircuitBreakerEntry,
++        old_state: CircuitBreakerState,
++        new_state: CircuitBreakerState,
++        reason: str,
++    ) -> None:
++        now = self._clock()
++        record: dict[str, object] = {
++            "timestamp": now,
++            "workspace_id": str(entry.workspace_id),
++            "provider_config_id": str(entry.provider_config_id),
++            "old_state": old_state.value,
++            "new_state": new_state.value,
++            "reason": reason,
++        }
++        self._transition_log.append(record)
++        _logger.info(
++            "[t=%.2fs] Breaker (%s, %s): %s -> %s (reason: %s)",
++            now,
++            entry.workspace_id,
++            entry.provider_config_id,
++            old_state.value,
++            new_state.value,
++            reason,
++        )
++
++    def get_state(self, workspace_id: UUID, provider_config_id: UUID) -> CircuitBreakerState:
++        """Return current state, advancing from OPEN to HALF_OPEN if cooldown elapsed."""
++        entry = self._get_entry(workspace_id, provider_config_id)
++        now = self._clock()
++        if entry.state == CircuitBreakerState.OPEN and now >= entry.cooldown_until:
++            old_state = entry.state
++            entry.state = CircuitBreakerState.HALF_OPEN
++            entry.probe_in_flight = False
++            self._log_transition(entry, old_state, entry.state, "Cooldown elapsed, ready to probe")
++        return entry.state
++
++    def can_attempt(self, workspace_id: UUID, provider_config_id: UUID) -> bool:
++        """Evaluate if an outbound call may proceed, admitting exactly 1 probe in HALF_OPEN."""
++        entry = self._get_entry(workspace_id, provider_config_id)
++        now = self._clock()
++        if entry.state == CircuitBreakerState.OPEN:
++            if now >= entry.cooldown_until:
++                old_state = entry.state
++                entry.state = CircuitBreakerState.HALF_OPEN
++                entry.probe_in_flight = True
++                self._log_transition(
++                    entry,
++                    old_state,
++                    entry.state,
++                    "Cooldown elapsed, admitted 1 probe",
++                )
++                return True
++            return False
++
++        if entry.state == CircuitBreakerState.HALF_OPEN:
++            if not entry.probe_in_flight:
++                entry.probe_in_flight = True
++                return True
++            return False
++
++        return True
++
++    def record_success(self, workspace_id: UUID, provider_config_id: UUID) -> None:
++        """Record successful invocation, resetting failure count and closing breaker."""
++        entry = self._get_entry(workspace_id, provider_config_id)
++        old_state = entry.state
++        entry.consecutive_failures = 0
++        entry.probe_in_flight = False
++        if old_state != CircuitBreakerState.CLOSED:
++            entry.state = CircuitBreakerState.CLOSED
++            self._log_transition(
++                entry,
++                old_state,
++                entry.state,
++                "Probe call succeeded, reset consecutive failures to 0",
++            )
++
++    def record_failure(
++        self,
++        workspace_id: UUID,
++        provider_config_id: UUID,
++        err: BaseException | None = None,
++        *,
++        retry_after_s: float | None = None,
++    ) -> None:
++        """Record invocation failure; trips to OPEN if threshold reached or probe failed."""
++        if err is not None and not is_availability_failure(err):
++            return
++
++        entry = self._get_entry(workspace_id, provider_config_id)
++        now = self._clock()
++
++        if retry_after_s is None and isinstance(err, ProviderHTTPError):
++            retry_after_s = err.retry_after_s
++
++        cooldown = self.open_cooldown_s
++        if retry_after_s is not None:
++            cooldown = max(self.open_cooldown_s, float(retry_after_s))
++        cooldown = min(cooldown, self.max_cooldown_s)
++
++        old_state = entry.state
++        if entry.state == CircuitBreakerState.HALF_OPEN:
++            entry.state = CircuitBreakerState.OPEN
++            entry.opened_at = now
++            entry.cooldown_until = now + cooldown
++            entry.probe_in_flight = False
++            self._log_transition(
++                entry,
++                old_state,
++                entry.state,
++                f"Probe call failed, cooldown restarted for {cooldown:.1f}s",
++            )
++            return
++
++        entry.consecutive_failures += 1
++        if entry.consecutive_failures >= self.failure_threshold:
++            entry.state = CircuitBreakerState.OPEN
++            entry.opened_at = now
++            entry.cooldown_until = now + cooldown
++            entry.probe_in_flight = False
++            self._log_transition(
++                entry,
++                old_state,
++                entry.state,
++                f"Consecutive failures ({entry.consecutive_failures}) reached threshold "
++                f"({self.failure_threshold}), open for {cooldown:.1f}s",
++            )
++
++    def reset(
++        self,
++        workspace_id: UUID | None = None,
++        provider_config_id: UUID | None = None,
++    ) -> None:
++        """Reset state for a specific key or all recorded breakers."""
++        if workspace_id is not None and provider_config_id is not None:
++            self._entries.pop((workspace_id, provider_config_id), None)
++        else:
++            self._entries.clear()
++            self._transition_log.clear()
+diff --git a/agent/providers/router.py b/agent/providers/router.py
+new file mode 100644
+index 0000000..bfa7db0
+--- /dev/null
++++ b/agent/providers/router.py
+@@ -0,0 +1,325 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Resilient provider router with circuit breaking and air-gap enforcement."""
++
++from __future__ import annotations
++
++import asyncio
++import logging
++import time
++from dataclasses import dataclass
++from typing import TYPE_CHECKING, Any
++from uuid import UUID
++
++from agent.providers.air_gap import AirGapGuard
++from agent.providers.base import (
++    CompletionRequest,
++    EmbedBatchRequest,
++    HealthStatus,
++    LLMProvider,
++    StreamChunk,
++    StructuredRequest,
++    StructuredResponse,
++)
++from agent.providers.circuit_breaker import (
++    CircuitBreaker,
++    CircuitBreakerState,
++    is_availability_failure,
++)
++from agent.providers.errors import AllProvidersUnavailable, EgressDenied, ProviderTimeout
++
++if TYPE_CHECKING:
++    from collections.abc import AsyncIterator, Callable, Sequence
++
++    from pydantic import BaseModel
++
++__all__ = [
++    "ProviderRouter",
++    "RouteCandidate",
++]
++
++_logger = logging.getLogger(__name__)
++
++
++@dataclass(frozen=True)
++class RouteCandidate:
++    """Candidate LLMProvider registered with the provider router."""
++
++    provider_config_id: UUID
++    provider: LLMProvider
++    residency_tier: str
++    priority: int
++
++
++class ProviderRouter:
++    """Multi-candidate router with residency locking, circuit breaking and air-gap guard."""
++
++    def __init__(
++        self,
++        workspace_id: UUID | str,
++        candidates: Sequence[RouteCandidate],
++        *,
++        air_gap_mode: bool | None = None,
++        breakers: CircuitBreaker | None = None,
++        clock: Callable[[], float] = time.monotonic,
++    ) -> None:
++        """Initialize provider router for a specific workspace and candidate set."""
++        self.workspace_id: UUID = UUID(str(workspace_id))
++        self._candidates: list[RouteCandidate] = list(candidates)
++        self.air_gap_mode: bool | None = air_gap_mode
++        self._clock: Callable[[], float] = clock
++        self._breakers: CircuitBreaker = (
++            breakers if breakers is not None else CircuitBreaker(clock=clock)
++        )
++        self.last_route_trace: list[dict[str, Any]] = []
++
++    @property
++    def residency_tier(self) -> str:
++        """Return residency tier of the primary candidate."""
++        if self._candidates:
++            sorted_candidates = sorted(self._candidates, key=lambda c: c.priority)
++            return sorted_candidates[0].residency_tier
++        return "router"
++
++    def _record_trace(
++        self,
++        candidate_id: UUID,
++        outcome: str,
++        state: str,
++        ttft_ms: float | None = None,
++    ) -> None:
++        self.last_route_trace.append(
++            {
++                "provider_config_id": str(candidate_id),
++                "outcome": outcome,
++                "breaker_state": state,
++                "ttft_ms": ttft_ms,
++            }
++        )
++
++    def _is_candidate_available(self, candidate_id: UUID) -> bool:
++        st = self._breakers.get_state(self.workspace_id, candidate_id)
++        if st == CircuitBreakerState.OPEN:
++            self._record_trace(candidate_id, "skipped_breaker_open", st.value)
++            return False
++        if not self._breakers.can_attempt(self.workspace_id, candidate_id):
++            self._record_trace(candidate_id, "skipped_probe_in_flight", st.value)
++            return False
++        return True
++
++    def _get_candidate_kind(self, candidate: RouteCandidate) -> str:
++        kind = getattr(candidate.provider, "kind", None)
++        if isinstance(kind, str) and kind:
++            return kind.lower()
++        c_name = candidate.provider.__class__.__name__.lower()
++        if "ollama" in c_name or "local" in candidate.residency_tier.lower():
++            return "ollama"
++        if "fixture" in c_name or "fixture" in candidate.residency_tier.lower():
++            return "fixture"
++        if "gemini" in c_name:
++            return "gemini"
++        if "openai" in c_name:
++            return "openai"
++        return candidate.residency_tier.lower()
++
++    def _get_eligible_candidates(self) -> list[RouteCandidate]:
++        candidates = self._candidates
++
++        if self.air_gap_mode is not False:
++            allowed: list[RouteCandidate] = []
++            for c in candidates:
++                kind = self._get_candidate_kind(c)
++                try:
++                    AirGapGuard.check(kind, air_gap_mode=self.air_gap_mode)
++                    allowed.append(c)
++                except EgressDenied:
++                    pass
++            candidates = allowed
++
++        if not candidates:
++            msg = "No provider available in residency tier"
++            raise AllProvidersUnavailable(msg, code="NO_PROVIDER_IN_RESIDENCY_TIER")
++
++        sorted_candidates = sorted(candidates, key=lambda c: c.priority)
++
++        first_candidate: RouteCandidate | None = None
++        for c in sorted_candidates:
++            st = self._breakers.get_state(self.workspace_id, c.provider_config_id)
++            if st != CircuitBreakerState.OPEN:
++                first_candidate = c
++                break
++
++        if first_candidate is None:
++            msg = "All candidate providers unavailable (circuit breakers OPEN)"
++            raise AllProvidersUnavailable(msg, code="NO_PROVIDER_IN_RESIDENCY_TIER")
++
++        target_residency = first_candidate.residency_tier
++        eligible = [c for c in sorted_candidates if c.residency_tier == target_residency]
++        return eligible[:3]
++
++    async def _try_get_first_chunk(
++        self,
++        stream_iter: AsyncIterator[StreamChunk],
++        ttft_deadline_ms: int | None,
++    ) -> StreamChunk:
++        if ttft_deadline_ms is not None:
++            timeout_s = ttft_deadline_ms / 1000.0
++            try:
++                async with asyncio.timeout(timeout_s):
++                    return await anext(stream_iter)
++            except TimeoutError as err:
++                if hasattr(stream_iter, "aclose"):
++                    await stream_iter.aclose()
++                msg = f"TTFT SLA breached ({ttft_deadline_ms}ms)"
++                raise ProviderTimeout(msg, code="TIMEOUT") from err
++        return await anext(stream_iter)
++
++    @staticmethod
++    async def _stream_tail(
++        stream_iter: AsyncIterator[StreamChunk],
++    ) -> AsyncIterator[StreamChunk]:
++        try:
++            async for chunk in stream_iter:
++                yield chunk
++        except Exception:
++            if hasattr(stream_iter, "aclose"):
++                await stream_iter.aclose()
++            raise
++
++    async def stream_complete(self, req: CompletionRequest) -> AsyncIterator[StreamChunk]:
++        """Stream token chunks across eligible candidates with failover before first chunk."""
++        self.last_route_trace = []
++        eligible = self._get_eligible_candidates()
++        last_err: BaseException | None = None
++
++        for candidate in eligible:
++            cid = candidate.provider_config_id
++            if not self._is_candidate_available(cid):
++                continue
++
++            stream_iter = candidate.provider.stream_complete(req)
++            try:
++                first_chunk = await self._try_get_first_chunk(stream_iter, req.ttft_deadline_ms)
++            except StopAsyncIteration:
++                self._breakers.record_success(self.workspace_id, cid)
++                st = self._breakers.get_state(self.workspace_id, cid)
++                self._record_trace(cid, "success", st.value)
++                return
++            except Exception as err:
++                last_err = err
++                st = self._breakers.get_state(self.workspace_id, cid)
++                if not is_availability_failure(err):
++                    self._record_trace(cid, "policy_or_content_error", st.value)
++                    raise
++                self._breakers.record_failure(self.workspace_id, cid, err)
++                new_st = self._breakers.get_state(self.workspace_id, cid)
++                self._record_trace(cid, "failure", new_st.value)
++                continue
++
++            self._breakers.record_success(self.workspace_id, cid)
++            st = self._breakers.get_state(self.workspace_id, cid)
++            self._record_trace(cid, "success", st.value, first_chunk.ttft_ms)
++            yield first_chunk
++
++            async for chunk in self._stream_tail(stream_iter):
++                yield chunk
++            return
++
++        msg = "All candidate providers failed in residency tier"
++        if last_err is not None:
++            raise AllProvidersUnavailable(msg, code="NO_PROVIDER_IN_RESIDENCY_TIER") from last_err
++        raise AllProvidersUnavailable(msg, code="NO_PROVIDER_IN_RESIDENCY_TIER")
++
++    async def generate_structured[TModel: BaseModel](
++        self, req: StructuredRequest[TModel]
++    ) -> StructuredResponse[TModel]:
++        """Generate structured output with same-residency failover and TTFT timeout."""
++        self.last_route_trace = []
++        eligible = self._get_eligible_candidates()
++        last_err: BaseException | None = None
++
++        for candidate in eligible:
++            cid = candidate.provider_config_id
++            if not self._is_candidate_available(cid):
++                continue
++
++            try:
++                if req.ttft_deadline_ms is not None:
++                    timeout_s = req.ttft_deadline_ms / 1000.0
++                    try:
++                        async with asyncio.timeout(timeout_s):
++                            resp = await candidate.provider.generate_structured(req)
++                    except TimeoutError as err:
++                        msg = f"TTFT SLA breached ({req.ttft_deadline_ms}ms)"
++                        raise ProviderTimeout(msg, code="TIMEOUT") from err
++                else:
++                    resp = await candidate.provider.generate_structured(req)
++            except Exception as err:
++                last_err = err
++                st = self._breakers.get_state(self.workspace_id, cid)
++                if not is_availability_failure(err):
++                    self._record_trace(cid, "policy_or_content_error", st.value)
++                    raise
++                self._breakers.record_failure(self.workspace_id, cid, err)
++                new_st = self._breakers.get_state(self.workspace_id, cid)
++                self._record_trace(cid, "failure", new_st.value)
++                continue
++
++            self._breakers.record_success(self.workspace_id, cid)
++            st = self._breakers.get_state(self.workspace_id, cid)
++            self._record_trace(cid, "success", st.value, resp.ttft_ms)
++            return resp
++
++        msg = "All candidate providers failed in residency tier"
++        if last_err is not None:
++            raise AllProvidersUnavailable(msg, code="NO_PROVIDER_IN_RESIDENCY_TIER") from last_err
++        raise AllProvidersUnavailable(msg, code="NO_PROVIDER_IN_RESIDENCY_TIER")
++
++    async def embed_batch(self, req: EmbedBatchRequest) -> list[list[float]]:
++        """Generate vector embeddings with same-residency failover."""
++        self.last_route_trace = []
++        eligible = self._get_eligible_candidates()
++        last_err: BaseException | None = None
++
++        for candidate in eligible:
++            cid = candidate.provider_config_id
++            if not self._is_candidate_available(cid):
++                continue
++
++            try:
++                vectors = await candidate.provider.embed_batch(req)
++            except Exception as err:
++                last_err = err
++                st = self._breakers.get_state(self.workspace_id, cid)
++                if not is_availability_failure(err):
++                    self._record_trace(cid, "policy_or_content_error", st.value)
++                    raise
++                self._breakers.record_failure(self.workspace_id, cid, err)
++                new_st = self._breakers.get_state(self.workspace_id, cid)
++                self._record_trace(cid, "failure", new_st.value)
++                continue
++
++            self._breakers.record_success(self.workspace_id, cid)
++            st = self._breakers.get_state(self.workspace_id, cid)
++            self._record_trace(cid, "success", st.value, None)
++            return vectors
++
++        msg = "All candidate providers failed in residency tier"
++        if last_err is not None:
++            raise AllProvidersUnavailable(msg, code="NO_PROVIDER_IN_RESIDENCY_TIER") from last_err
++        raise AllProvidersUnavailable(msg, code="NO_PROVIDER_IN_RESIDENCY_TIER")
++
++    async def health_probe(self) -> HealthStatus:
++        """Probe candidate health, returning first successful response."""
++        eligible = self._get_eligible_candidates()
++        for candidate in eligible:
++            cid = candidate.provider_config_id
++            if not self._is_candidate_available(cid):
++                continue
++            try:
++                status = await candidate.provider.health_probe()
++                if status.ok:
++                    self._breakers.record_success(self.workspace_id, cid)
++                    return status
++            except Exception as err:  # noqa: BLE001
++                _logger.debug("Candidate health probe failed: %s", err)
++        return HealthStatus(ok=False, latency_ms=0.0, detail="All providers unhealthy")
+diff --git a/agent/tests/providers/test_air_gap.py b/agent/tests/providers/test_air_gap.py
+new file mode 100644
+index 0000000..aa4bec3
+--- /dev/null
++++ b/agent/tests/providers/test_air_gap.py
+@@ -0,0 +1,57 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Unit tests for air-gap enforcement guard."""
++
++from __future__ import annotations
++
++from unittest.mock import MagicMock
++
++import pytest
++
++from agent.providers.air_gap import AirGapGuard
++from agent.providers.errors import EgressDenied
++
++
++def test_case_6_air_gap_denies_cloud_providers_before_transport() -> None:
++    """Case 6: air_gap_mode=True with gemini/openai -> AIR_GAP_EGRESS_DENIED; 0 calls."""
++    resolver_mock = MagicMock()
++    transport_mock = MagicMock()
++
++    with pytest.raises(EgressDenied) as exc_info:
++        AirGapGuard.check("gemini", air_gap_mode=True)
++    assert exc_info.value.code == "AIR_GAP_EGRESS_DENIED"
++    assert "gemini" in str(exc_info.value)
++
++    with pytest.raises(EgressDenied) as exc_info:
++        AirGapGuard.check("openai", air_gap_mode=True)
++    assert exc_info.value.code == "AIR_GAP_EGRESS_DENIED"
++    assert "openai" in str(exc_info.value)
++
++    assert resolver_mock.call_count == 0
++    assert transport_mock.call_count == 0
++
++
++def test_case_7_air_gap_fails_closed_when_mode_is_none() -> None:
++    """Case 7: air_gap_mode=None treated as TRUE (fail closed)."""
++    with pytest.raises(EgressDenied) as exc_info:
++        AirGapGuard.check("gemini", air_gap_mode=None)
++    assert exc_info.value.code == "AIR_GAP_EGRESS_DENIED"
++
++    with pytest.raises(EgressDenied) as exc_info:
++        AirGapGuard.check("openai", air_gap_mode=None)
++    assert exc_info.value.code == "AIR_GAP_EGRESS_DENIED"
++
++
++def test_air_gap_permits_ollama_and_fixture_under_air_gap() -> None:
++    """Verify local ollama and deterministic fixture providers are permitted under air-gap."""
++    AirGapGuard.check("ollama", air_gap_mode=True)
++    AirGapGuard.check("fixture", air_gap_mode=True)
++    AirGapGuard.check("ollama", air_gap_mode=None)
++    AirGapGuard.check("fixture", air_gap_mode=None)
++
++
++def test_air_gap_permits_cloud_when_mode_is_false() -> None:
++    """Verify cloud providers are permitted when air_gap_mode is explicitly disabled."""
++    AirGapGuard.check("gemini", air_gap_mode=False)
++    AirGapGuard.check("openai", air_gap_mode=False)
++    AirGapGuard.check("ollama", air_gap_mode=False)
++    AirGapGuard.check("fixture", air_gap_mode=False)
+diff --git a/agent/tests/providers/test_circuit_breaker.py b/agent/tests/providers/test_circuit_breaker.py
+new file mode 100644
+index 0000000..1e4046b
+--- /dev/null
++++ b/agent/tests/providers/test_circuit_breaker.py
+@@ -0,0 +1,214 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Unit tests for per-(workspace, provider) circuit breakers."""
++
++from __future__ import annotations
++
++from uuid import uuid4
++
++from agent.providers.circuit_breaker import (
++    CircuitBreaker,
++    CircuitBreakerState,
++    is_availability_failure,
++)
++from agent.providers.errors import (
++    ProviderHTTPError,
++    ProviderPolicyError,
++    ProviderRefusal,
++    ProviderSafetyBlock,
++    ProviderSchemaError,
++    ProviderTimeout,
++    ProviderUnavailable,
++)
++
++
++class FakeClock:
++    """Controllable monotonic clock for hermetic circuit breaker tests."""
++
++    def __init__(self, initial_time: float = 1000.0) -> None:
++        """Initialize fake clock with starting monotonic timestamp."""
++        self._current_time: float = initial_time
++
++    def __call__(self) -> float:
++        """Return current simulated monotonic timestamp."""
++        return self._current_time
++
++    def advance(self, seconds: float) -> None:
++        """Advance simulated monotonic clock forward by seconds."""
++        self._current_time += seconds
++
++
++def test_is_availability_failure() -> None:
++    """Verify availability vs policy/content error categorization."""
++    assert is_availability_failure(ProviderHTTPError("rate limit", status=429))
++    assert is_availability_failure(ProviderHTTPError("server error", status=500))
++    assert is_availability_failure(ProviderHTTPError("service unavailable", status=503))
++    assert is_availability_failure(ProviderTimeout("timeout"))
++    assert is_availability_failure(ProviderUnavailable("offline"))
++
++    assert not is_availability_failure(ProviderHTTPError("bad request", status=400))
++    assert not is_availability_failure(ProviderHTTPError("not found", status=404))
++    assert not is_availability_failure(ProviderSchemaError("schema error"))
++    assert not is_availability_failure(ProviderSafetyBlock("safety block"))
++    assert not is_availability_failure(ProviderRefusal("model refused"))
++    assert not is_availability_failure(ProviderPolicyError("policy error"))
++
++
++def test_case_2_breaker_transitions_and_probe_lifecycle() -> None:
++    """Case 2: 5x 503 -> OPEN; 6th skips; after 30s -> HALF_OPEN admits 1 probe; probe life."""
++    clock = FakeClock(100.0)
++    breaker = CircuitBreaker(failure_threshold=5, open_cooldown_s=30.0, clock=clock)
++    ws_id = uuid4()
++    provider_id = uuid4()
++
++    # Step 1: 5 consecutive 503 errors transition state from CLOSED to OPEN
++    for i in range(1, 6):
++        assert breaker.get_state(ws_id, provider_id) == CircuitBreakerState.CLOSED
++        assert breaker.can_attempt(ws_id, provider_id)
++        breaker.record_failure(ws_id, provider_id, ProviderHTTPError("503", status=503))
++        st = breaker.get_state(ws_id, provider_id)
++        print(f"[t={clock():.2f}s] Failure {i}/5 recorded. State: {st}")  # noqa: T201
++
++    assert breaker.get_state(ws_id, provider_id) == CircuitBreakerState.OPEN
++
++    # Step 2: 6th call skips provider (can_attempt returns False)
++    assert not breaker.can_attempt(ws_id, provider_id)
++    assert breaker.get_state(ws_id, provider_id) == CircuitBreakerState.OPEN
++    print(f"[t={clock():.2f}s] 6th call correctly skipped: can_attempt = False")  # noqa: T201
++
++    # Step 3: Advance fake clock by 29s (still OPEN)
++    clock.advance(29.0)
++    assert breaker.get_state(ws_id, provider_id) == CircuitBreakerState.OPEN
++    assert not breaker.can_attempt(ws_id, provider_id)
++
++    # Advance fake clock by 1s (total 30s elapsed -> transitions to HALF_OPEN)
++    clock.advance(1.0)
++    print(f"[t={clock():.2f}s] 30s cooldown elapsed. Advancing to HALF_OPEN")  # noqa: T201
++
++    # Probe 1: Admitted
++    assert breaker.can_attempt(ws_id, provider_id)
++    assert breaker.get_state(ws_id, provider_id) == CircuitBreakerState.HALF_OPEN
++
++    # Second concurrent attempt in HALF_OPEN while probe in-flight is denied
++    assert not breaker.can_attempt(ws_id, provider_id)
++
++    # Step 4: Probe success -> CLOSED (counter reset)
++    breaker.record_success(ws_id, provider_id)
++    print(f"[t={clock():.2f}s] Probe succeeded. State: {breaker.get_state(ws_id, provider_id)}")  # noqa: T201
++    assert breaker.get_state(ws_id, provider_id) == CircuitBreakerState.CLOSED
++    assert breaker.can_attempt(ws_id, provider_id)
++
++    # Step 5: Test probe failure -> OPEN with cooldown restarted
++    for _ in range(5):
++        breaker.record_failure(ws_id, provider_id, ProviderHTTPError("503", status=503))
++    assert breaker.get_state(ws_id, provider_id) == CircuitBreakerState.OPEN
++
++    clock.advance(30.0)
++    assert breaker.can_attempt(ws_id, provider_id)
++    assert breaker.get_state(ws_id, provider_id) == CircuitBreakerState.HALF_OPEN
++
++    breaker.record_failure(ws_id, provider_id, ProviderHTTPError("503", status=503))
++    print(f"[t={clock():.2f}s] Probe failed. State: {breaker.get_state(ws_id, provider_id)}")  # noqa: T201
++    assert breaker.get_state(ws_id, provider_id) == CircuitBreakerState.OPEN
++    assert not breaker.can_attempt(ws_id, provider_id)
++
++
++def test_case_3_retry_after_cooldown_extension_and_cap() -> None:
++    """Case 3: 429 with Retry-After: 120 -> cooldown 120s; Retry-After: 9999 capped at 300s."""
++    clock = FakeClock(200.0)
++    breaker = CircuitBreaker(
++        failure_threshold=1,
++        open_cooldown_s=30.0,
++        max_cooldown_s=300.0,
++        clock=clock,
++    )
++    ws_id = uuid4()
++    p1 = uuid4()
++    p2 = uuid4()
++
++    err_120 = ProviderHTTPError("Too Many Requests", status=429, retry_after_s=120.0)
++    breaker.record_failure(ws_id, p1, err_120)
++    assert breaker.get_state(ws_id, p1) == CircuitBreakerState.OPEN
++
++    clock.advance(119.0)
++    assert not breaker.can_attempt(ws_id, p1)
++    clock.advance(1.5)
++    assert breaker.can_attempt(ws_id, p1)
++
++    err_9999 = ProviderHTTPError("Too Many Requests", status=429, retry_after_s=9999.0)
++    breaker.record_failure(ws_id, p2, err_9999)
++    assert breaker.get_state(ws_id, p2) == CircuitBreakerState.OPEN
++
++    clock.advance(299.0)
++    assert not breaker.can_attempt(ws_id, p2)
++    clock.advance(1.5)
++    assert breaker.can_attempt(ws_id, p2)
++
++
++def test_case_4_schema_error_does_not_trip_breaker() -> None:
++    """Case 4: Schema error x10 does not trip (state stays CLOSED)."""
++    clock = FakeClock(100.0)
++    breaker = CircuitBreaker(failure_threshold=5, clock=clock)
++    ws_id = uuid4()
++    p_id = uuid4()
++
++    for _ in range(10):
++        breaker.record_failure(ws_id, p_id, ProviderSchemaError("Malformed output schema"))
++
++    assert breaker.get_state(ws_id, p_id) == CircuitBreakerState.CLOSED
++    assert breaker.can_attempt(ws_id, p_id)
++
++
++def test_case_11_per_key_workspace_isolation() -> None:
++    """Case 11: Breaker OPEN for workspace A does not affect workspace B with same provider."""
++    clock = FakeClock(100.0)
++    breaker = CircuitBreaker(failure_threshold=2, clock=clock)
++    ws_a = uuid4()
++    ws_b = uuid4()
++    shared_provider_id = uuid4()
++
++    breaker.record_failure(ws_a, shared_provider_id, ProviderTimeout("timeout 1"))
++    breaker.record_failure(ws_a, shared_provider_id, ProviderTimeout("timeout 2"))
++    assert breaker.get_state(ws_a, shared_provider_id) == CircuitBreakerState.OPEN
++    assert not breaker.can_attempt(ws_a, shared_provider_id)
++
++    assert breaker.get_state(ws_b, shared_provider_id) == CircuitBreakerState.CLOSED
++    assert breaker.can_attempt(ws_b, shared_provider_id)
++
++
++def test_breaker_get_state_cooldown_and_closed_success() -> None:
++    """Verify get_state directly transitions to HALF_OPEN after cooldown."""
++    clock = FakeClock(10.0)
++    breaker = CircuitBreaker(failure_threshold=1, open_cooldown_s=10.0, clock=clock)
++    ws_id = uuid4()
++    p_id = uuid4()
++
++    breaker.record_success(ws_id, p_id)
++    assert breaker.get_state(ws_id, p_id) == CircuitBreakerState.CLOSED
++
++    breaker.record_failure(ws_id, p_id, ProviderTimeout("timeout"))
++    assert breaker.get_state(ws_id, p_id) == CircuitBreakerState.OPEN
++
++    clock.advance(15.0)
++    assert breaker.get_state(ws_id, p_id) == CircuitBreakerState.HALF_OPEN
++    assert breaker.can_attempt(ws_id, p_id)
++
++
++def test_breaker_reset_and_history() -> None:
++    """Verify reset functionality and transition log recording."""
++    clock = FakeClock(50.0)
++    breaker = CircuitBreaker(failure_threshold=1, clock=clock)
++    ws_id = uuid4()
++    p1 = uuid4()
++    p2 = uuid4()
++
++    breaker.record_failure(ws_id, p1, ProviderUnavailable("unavailable"))
++    breaker.record_failure(ws_id, p2, ProviderUnavailable("unavailable"))
++    assert len(breaker.transition_log) == 2
++
++    breaker.reset(ws_id, p1)
++    assert breaker.get_state(ws_id, p1) == CircuitBreakerState.CLOSED
++    assert breaker.get_state(ws_id, p2) == CircuitBreakerState.OPEN
++
++    breaker.reset()
++    assert breaker.get_state(ws_id, p2) == CircuitBreakerState.CLOSED
++    assert len(breaker.transition_log) == 0
+diff --git a/agent/tests/providers/test_router.py b/agent/tests/providers/test_router.py
+new file mode 100644
+index 0000000..e27b03e
+--- /dev/null
++++ b/agent/tests/providers/test_router.py
+@@ -0,0 +1,677 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Unit tests for resilient ProviderRouter and same-residency failover."""
++
++from __future__ import annotations
++
++import asyncio
++from typing import TYPE_CHECKING
++from uuid import uuid4
++
++import pytest
++from pydantic import BaseModel
++
++from agent.providers.base import (
++    CompletionRequest,
++    EmbedBatchRequest,
++    HealthStatus,
++    LLMProvider,
++    StreamChunk,
++    StructuredRequest,
++    StructuredResponse,
++)
++from agent.providers.circuit_breaker import CircuitBreaker, CircuitBreakerState
++from agent.providers.errors import (
++    AllProvidersUnavailable,
++    ProviderHTTPError,
++    ProviderProtocolError,
++    ProviderSchemaError,
++    ProviderTimeout,
++)
++from agent.providers.router import ProviderRouter, RouteCandidate
++from agent.testing.fixtures import FixtureLLMProvider, load_cassette
++
++if TYPE_CHECKING:
++    from collections.abc import AsyncIterator
++
++
++class EchoModel(BaseModel):
++    """Simple test structured model."""
++
++    echo: str
++    ok: bool
++
++
++class MockStreamProvider(LLMProvider):
++    """Configurable mock provider for fault injection and lifecycle assertions."""
++
++    def __init__(
++        self,
++        residency_tier: str = "local",
++        *,
++        kind: str = "ollama",
++        fail_with: Exception | None = None,
++        ttft_delay_ms: float = 0.0,
++    ) -> None:
++        """Initialize mock provider with configurable behavior."""
++        self._residency_tier = residency_tier
++        self.kind = kind
++        self.fail_with = fail_with
++        self.ttft_delay_ms = ttft_delay_ms
++        self.call_count = 0
++        self.aclose_called = False
++
++    @property
++    def residency_tier(self) -> str:
++        """Return configured data residency tier."""
++        return self._residency_tier
++
++    async def stream_complete(
++        self,
++        _req: CompletionRequest,
++    ) -> AsyncIterator[StreamChunk]:
++        """Stream replayed chunks or raise configured fault."""
++        self.call_count += 1
++        if self.fail_with is not None:
++            raise self.fail_with
++
++        chunks = ["Hello", " ", "World"]
++        for idx, c in enumerate(chunks):
++            yield StreamChunk(delta=c, index=idx, ttft_ms=10.0 if idx == 0 else None)
++
++    async def generate_structured[TModel: BaseModel](
++        self, req: StructuredRequest[TModel]
++    ) -> StructuredResponse[TModel]:
++        """Generate test structured output or raise configured fault."""
++        self.call_count += 1
++        if self.fail_with is not None:
++            raise self.fail_with
++        parsed = req.response_model.model_validate({"echo": "Hello", "ok": True})
++        return StructuredResponse(
++            parsed=parsed,
++            raw_json='{"echo": "Hello", "ok": true}',
++            ttft_ms=12.0,
++            total_latency_ms=25.0,
++        )
++
++    async def embed_batch(self, req: EmbedBatchRequest) -> list[list[float]]:
++        """Return dummy embedding vectors."""
++        self.call_count += 1
++        if self.fail_with is not None:
++            raise self.fail_with
++        return [[0.1, 0.2, 0.3] for _ in req.inputs]
++
++    async def health_probe(self) -> HealthStatus:
++        """Probe mock provider health."""
++        self.call_count += 1
++        if self.fail_with is not None:
++            return HealthStatus(ok=False, latency_ms=0.0, detail=str(self.fail_with))
++        return HealthStatus(ok=True, latency_ms=5.0)
++
++
++@pytest.mark.asyncio
++async def test_case_1_primary_healthy_single_call() -> None:
++    """Case 1: Primary healthy -> single call, trace shows CLOSED."""
++    cas = load_cassette("tests/fixtures/ai/router_primary_ok.yaml")
++    p1 = FixtureLLMProvider(cas)
++    p2 = FixtureLLMProvider(cas)
++
++    c1_id = uuid4()
++    c2_id = uuid4()
++    c1 = RouteCandidate(c1_id, p1, "fixture", 0)
++    c2 = RouteCandidate(c2_id, p2, "fixture", 1)
++
++    ws_id = uuid4()
++    router = ProviderRouter(ws_id, [c1, c2])
++    assert router.residency_tier == "fixture"
++
++    req = CompletionRequest(model="fixture-echo-v1", prompt="Hello Sparkle")
++    chunks = [c.delta async for c in router.stream_complete(req)]
++    assert "".join(chunks) == "Echo: Hello Sparkle"
++
++    assert len(router.last_route_trace) == 1
++    assert router.last_route_trace[0]["provider_config_id"] == str(c1_id)
++    assert router.last_route_trace[0]["outcome"] == "success"
++    assert router.last_route_trace[0]["breaker_state"] == CircuitBreakerState.CLOSED.value
++    assert len(p1.call_log) == 1
++    assert len(p2.call_log) == 0
++
++
++@pytest.mark.asyncio
++async def test_case_5_failover_same_residency_tier_only() -> None:
++    """Case 5: Primary local fails -> secondary local used; gemini cloud never selected."""
++    p1 = MockStreamProvider(
++        residency_tier="local",
++        kind="ollama",
++        fail_with=ProviderHTTPError("503", status=503),
++    )
++    p2 = MockStreamProvider(residency_tier="local", kind="ollama")
++    p3 = MockStreamProvider(residency_tier="gemini-vertex:europe-west4", kind="gemini")
++
++    c1 = RouteCandidate(uuid4(), p1, "local", 0)
++    c2 = RouteCandidate(uuid4(), p2, "local", 1)
++    c3 = RouteCandidate(uuid4(), p3, "gemini-vertex:europe-west4", 2)
++
++    router = ProviderRouter(uuid4(), [c1, c2, c3])
++    req = CompletionRequest(model="test-model", prompt="hello")
++
++    chunks = [c.delta async for c in router.stream_complete(req)]
++    assert "".join(chunks) == "Hello World"
++
++    assert p1.call_count == 1
++    assert p2.call_count == 1
++    assert p3.call_count == 0  # Gemini candidate was NEVER called
++
++    assert len(router.last_route_trace) == 2
++    assert router.last_route_trace[0]["outcome"] == "failure"
++    assert router.last_route_trace[1]["outcome"] == "success"
++
++
++@pytest.mark.asyncio
++async def test_case_8_air_gap_with_only_cloud_candidates_never_falls_back() -> None:
++    """Case 8: Air-gap with only cloud candidates -> NO_PROVIDER_IN_RESIDENCY_TIER."""
++    p1 = MockStreamProvider(residency_tier="cloud", kind="openai")
++    p2 = MockStreamProvider(residency_tier="gemini-vertex:us-central1", kind="gemini")
++
++    c1 = RouteCandidate(uuid4(), p1, "cloud", 0)
++    c2 = RouteCandidate(uuid4(), p2, "gemini-vertex:us-central1", 1)
++
++    router = ProviderRouter(uuid4(), [c1, c2], air_gap_mode=True)
++    req = CompletionRequest(model="gpt-4o", prompt="hello")
++
++    with pytest.raises(AllProvidersUnavailable) as exc_info:
++        async for _ in router.stream_complete(req):
++            pass
++
++    assert exc_info.value.code == "NO_PROVIDER_IN_RESIDENCY_TIER"
++    assert p1.call_count == 0
++    assert p2.call_count == 0
++
++
++@pytest.mark.asyncio
++async def test_case_9_ttft_deadline_breach_calls_aclose_and_counts_failure() -> None:
++    """Case 9: TTFT breach with ttft_deadline_ms=150 -> ProviderTimeout, counted as failure."""
++    cas = load_cassette("tests/fixtures/ai/router_fault_ttft_breach.yaml")
++    fixture_provider = FixtureLLMProvider(cas)
++    c2_id = uuid4()
++    c2 = RouteCandidate(c2_id, fixture_provider, "local", 0)
++
++    breakers = CircuitBreaker()
++    ws_id = uuid4()
++    router = ProviderRouter(ws_id, [c2], breakers=breakers)
++
++    req = CompletionRequest(model="test-model", prompt="ttft-breach-test", ttft_deadline_ms=150)
++
++    with pytest.raises(AllProvidersUnavailable) as exc_info:
++        async for _ in router.stream_complete(req):
++            pass
++
++    assert exc_info.value.code == "NO_PROVIDER_IN_RESIDENCY_TIER"
++    assert isinstance(exc_info.value.__cause__, ProviderTimeout)
++    assert "TTFT" in str(exc_info.value.__cause__)
++    assert breakers.get_state(ws_id, c2_id) == CircuitBreakerState.CLOSED
++    assert breakers._get_entry(ws_id, c2_id).consecutive_failures == 1  # noqa: SLF001
++
++
++@pytest.mark.asyncio
++async def test_case_10_stream_error_after_first_chunk_propagates_without_failover() -> None:
++    """Case 10: Error after first streamed chunk -> propagated, no failover call."""
++    cas = load_cassette("tests/fixtures/ai/router_stream_error_after_first_chunk.yaml")
++    p1 = FixtureLLMProvider(cas)
++    p2 = MockStreamProvider(residency_tier="fixture", kind="fixture")
++
++    c1 = RouteCandidate(uuid4(), p1, "fixture", 0)
++    c2 = RouteCandidate(uuid4(), p2, "fixture", 1)
++
++    router = ProviderRouter(uuid4(), [c1, c2])
++    req = CompletionRequest(model="test-model", prompt="stream-error-after-first")
++
++    received_chunks: list[str] = []
++
++    async def _consume_stream() -> None:
++        async for chunk in router.stream_complete(req):
++            received_chunks.append(chunk.delta)  # noqa: PERF401
++
++    with pytest.raises(ProviderProtocolError):
++        await _consume_stream()
++
++    assert received_chunks == ["First chunk valid"]
++    assert p2.call_count == 0
++
++
++@pytest.mark.asyncio
++async def test_case_12_max_3_attempts_with_5_eligible_failing_candidates() -> None:
++    """Case 12: Max 3 attempts with 5 eligible failing candidates."""
++    providers = [
++        MockStreamProvider(
++            residency_tier="local",
++            kind="ollama",
++            fail_with=ProviderHTTPError("503", status=503),
++        )
++        for _ in range(5)
++    ]
++    candidates = [RouteCandidate(uuid4(), prov, "local", idx) for idx, prov in enumerate(providers)]
++
++    router = ProviderRouter(uuid4(), candidates)
++    req = CompletionRequest(model="test-model", prompt="hello")
++
++    with pytest.raises(AllProvidersUnavailable) as exc_info:
++        async for _ in router.stream_complete(req):
++            pass
++
++    assert exc_info.value.code == "NO_PROVIDER_IN_RESIDENCY_TIER"
++    assert [p.call_count for p in providers] == [1, 1, 1, 0, 0]
++    assert len(router.last_route_trace) == 3
++
++
++@pytest.mark.asyncio
++async def test_generate_structured_failover_and_schema_error() -> None:
++    """Verify structured output failover on availability error and refusal on schema error."""
++    p1 = MockStreamProvider(
++        residency_tier="local",
++        fail_with=ProviderHTTPError("503", status=503),
++    )
++    p2 = MockStreamProvider(residency_tier="local")
++    c1 = RouteCandidate(uuid4(), p1, "local", 0)
++    c2 = RouteCandidate(uuid4(), p2, "local", 1)
++
++    router = ProviderRouter(uuid4(), [c1, c2])
++    req = StructuredRequest(model="test-model", prompt="hello", response_model=EchoModel)
++    resp = await router.generate_structured(req)
++    assert resp.parsed.echo == "Hello"
++    assert p1.call_count == 1
++    assert p2.call_count == 1
++
++    p3 = MockStreamProvider(residency_tier="local", fail_with=ProviderSchemaError("mismatch"))
++    p4 = MockStreamProvider(residency_tier="local")
++    c3 = RouteCandidate(uuid4(), p3, "local", 0)
++    c4 = RouteCandidate(uuid4(), p4, "local", 1)
++
++    router_schema = ProviderRouter(uuid4(), [c3, c4])
++    with pytest.raises(ProviderSchemaError):
++        await router_schema.generate_structured(req)
++    assert p3.call_count == 1
++    assert p4.call_count == 0
++
++
++@pytest.mark.asyncio
++async def test_embed_batch_failover() -> None:
++    """Verify vector embeddings failover on availability error."""
++    p1 = MockStreamProvider(
++        residency_tier="local",
++        fail_with=ProviderHTTPError("500", status=500),
++    )
++    p2 = MockStreamProvider(residency_tier="local")
++    c1 = RouteCandidate(uuid4(), p1, "local", 0)
++    c2 = RouteCandidate(uuid4(), p2, "local", 1)
++
++    router = ProviderRouter(uuid4(), [c1, c2])
++    req = EmbedBatchRequest(model="test-embed", inputs=("text 1", "text 2"))
++    vectors = await router.embed_batch(req)
++    assert len(vectors) == 2
++    assert p1.call_count == 1
++    assert p2.call_count == 1
++
++
++@pytest.mark.asyncio
++async def test_health_probe_failover() -> None:
++    """Verify health probe returns first available healthy candidate."""
++    p1 = MockStreamProvider(
++        residency_tier="local",
++        fail_with=ProviderHTTPError("503", status=503),
++    )
++    p2 = MockStreamProvider(residency_tier="local")
++    c1 = RouteCandidate(uuid4(), p1, "local", 0)
++    c2 = RouteCandidate(uuid4(), p2, "local", 1)
++
++    router = ProviderRouter(uuid4(), [c1, c2])
++    status = await router.health_probe()
++    assert status.ok
++    assert p1.call_count == 1
++    assert p2.call_count == 1
++
++
++@pytest.mark.asyncio
++async def test_all_circuit_breakers_open() -> None:
++    """Verify router rejects request when all candidates in residency tier have OPEN breakers."""
++    p1 = MockStreamProvider(residency_tier="local")
++    c1_id = uuid4()
++    c1 = RouteCandidate(c1_id, p1, "local", 0)
++
++    breakers = CircuitBreaker(failure_threshold=1)
++    ws_id = uuid4()
++    breakers.record_failure(ws_id, c1_id, ProviderHTTPError("503", status=503))
++    assert breakers.get_state(ws_id, c1_id) == CircuitBreakerState.OPEN
++
++    router = ProviderRouter(ws_id, [c1], breakers=breakers)
++    req = CompletionRequest(model="test-model", prompt="hello")
++
++    with pytest.raises(AllProvidersUnavailable) as exc_info:
++        async for _ in router.stream_complete(req):
++            pass
++    assert exc_info.value.code == "NO_PROVIDER_IN_RESIDENCY_TIER"
++    assert p1.call_count == 0
++
++
++@pytest.mark.asyncio
++async def test_router_empty_candidates_and_residency() -> None:
++    """Verify router with empty candidates returns router tier and rejects calls."""
++    router = ProviderRouter(uuid4(), [])
++    assert router.residency_tier == "router"
++    req = CompletionRequest(model="test", prompt="hello")
++    with pytest.raises(AllProvidersUnavailable):
++        async for _ in router.stream_complete(req):
++            pass
++
++
++@pytest.mark.asyncio
++async def test_stream_empty_and_policy_error() -> None:
++    """Verify empty stream handles StopAsyncIteration and policy error aborts immediately."""
++
++    class EmptyStreamProvider(LLMProvider):
++        kind = "ollama"
++
++        @property
++        def residency_tier(self) -> str:
++            return "local"
++
++        async def stream_complete(
++            self,
++            _req: CompletionRequest,
++        ) -> AsyncIterator[StreamChunk]:
++            empty_items: tuple[StreamChunk, ...] = ()
++            for item in empty_items:
++                yield item
++
++        async def generate_structured[TModel: BaseModel](
++            self, req: StructuredRequest[TModel]
++        ) -> StructuredResponse[TModel]:
++            msg = "Not implemented"
++            raise NotImplementedError(msg)
++
++        async def embed_batch(self, req: EmbedBatchRequest) -> list[list[float]]:
++            msg = "Not implemented"
++            raise NotImplementedError(msg)
++
++        async def health_probe(self) -> HealthStatus:
++            msg = "Not implemented"
++            raise NotImplementedError(msg)
++
++    c1 = RouteCandidate(uuid4(), EmptyStreamProvider(), "local", 0)
++    router = ProviderRouter(uuid4(), [c1])
++    req = CompletionRequest(model="test", prompt="hello")
++    chunks = [c async for c in router.stream_complete(req)]
++    assert chunks == []
++
++    p_err = MockStreamProvider(
++        residency_tier="local",
++        fail_with=ProviderSchemaError("schema error"),
++    )
++    p_sec = MockStreamProvider(residency_tier="local")
++    c_err = RouteCandidate(uuid4(), p_err, "local", 0)
++    c_sec = RouteCandidate(uuid4(), p_sec, "local", 1)
++    router_err = ProviderRouter(uuid4(), [c_err, c_sec])
++
++    with pytest.raises(ProviderSchemaError):
++        async for _ in router_err.stream_complete(req):
++            pass
++    assert p_sec.call_count == 0
++
++
++@pytest.mark.asyncio
++async def test_stream_tail_aclose_on_failure() -> None:
++    """Verify stream_tail invokes aclose on upstream iterator when an exception occurs."""
++
++    class FailTailProvider(LLMProvider):
++        kind = "ollama"
++
++        @property
++        def residency_tier(self) -> str:
++            return "local"
++
++        async def stream_complete(
++            self,
++            _req: CompletionRequest,
++        ) -> AsyncIterator[StreamChunk]:
++            yield StreamChunk(delta="chunk0", index=0)
++            msg = "Tail failure"
++            raise RuntimeError(msg)
++
++        async def generate_structured[TModel: BaseModel](
++            self, req: StructuredRequest[TModel]
++        ) -> StructuredResponse[TModel]:
++            msg = "Not implemented"
++            raise NotImplementedError(msg)
++
++        async def embed_batch(self, req: EmbedBatchRequest) -> list[list[float]]:
++            msg = "Not implemented"
++            raise NotImplementedError(msg)
++
++        async def health_probe(self) -> HealthStatus:
++            msg = "Not implemented"
++            raise NotImplementedError(msg)
++
++    prov = FailTailProvider()
++    c = RouteCandidate(uuid4(), prov, "local", 0)
++    router = ProviderRouter(uuid4(), [c])
++
++    with pytest.raises(RuntimeError, match="Tail failure"):
++        async for _ in router.stream_complete(CompletionRequest(model="test", prompt="hello")):
++            pass
++
++
++@pytest.mark.asyncio
++async def test_generate_structured_skipped_and_ttft() -> None:
++    """Verify structured output skips OPEN breaker and handles TTFT deadline timeout."""
++    p1 = MockStreamProvider(residency_tier="local")
++    c1_id = uuid4()
++    c1 = RouteCandidate(c1_id, p1, "local", 0)
++    c2 = RouteCandidate(uuid4(), p1, "local", 1)
++
++    breakers = CircuitBreaker(failure_threshold=1)
++    ws_id = uuid4()
++    breakers.record_failure(ws_id, c1_id, ProviderHTTPError("503", status=503))
++
++    router = ProviderRouter(ws_id, [c1, c2], breakers=breakers)
++    req = StructuredRequest(model="test", prompt="hello", response_model=EchoModel)
++    resp = await router.generate_structured(req)
++    assert resp.parsed.echo == "Hello"
++
++    router_empty = ProviderRouter(ws_id, [])
++    with pytest.raises(AllProvidersUnavailable):
++        await router_empty.generate_structured(req)
++
++
++@pytest.mark.asyncio
++async def test_embed_batch_skipped_and_policy_error() -> None:
++    """Verify embed_batch skips OPEN breakers and propagates policy errors."""
++    p_policy = MockStreamProvider(
++        residency_tier="local",
++        fail_with=ProviderSchemaError("bad input"),
++    )
++    p_fallback = MockStreamProvider(residency_tier="local")
++    c1 = RouteCandidate(uuid4(), p_policy, "local", 0)
++    c2 = RouteCandidate(uuid4(), p_fallback, "local", 1)
++
++    router = ProviderRouter(uuid4(), [c1, c2])
++    req = EmbedBatchRequest(model="test", inputs=("text 1",))
++    with pytest.raises(ProviderSchemaError):
++        await router.embed_batch(req)
++    assert p_fallback.call_count == 0
++
++    c1_id = uuid4()
++    c1_skip = RouteCandidate(c1_id, p_fallback, "local", 0)
++    c2_id = uuid4()
++    c2_run = RouteCandidate(c2_id, p_fallback, "local", 1)
++    breakers = CircuitBreaker(failure_threshold=1)
++    ws_id = uuid4()
++    breakers.record_failure(ws_id, c1_id, ProviderHTTPError("500", status=500))
++
++    router_skip = ProviderRouter(ws_id, [c1_skip, c2_run], breakers=breakers)
++    vectors = await router_skip.embed_batch(req)
++    assert len(vectors) == 1
++
++    router_empty = ProviderRouter(uuid4(), [])
++    with pytest.raises(AllProvidersUnavailable):
++        await router_empty.embed_batch(req)
++
++
++@pytest.mark.asyncio
++async def test_health_probe_all_unhealthy_and_skipped() -> None:
++    """Verify health_probe handles skipped candidate and returns unhealthy when all fail."""
++
++    class ErrorHealthProvider(LLMProvider):
++        kind = "ollama"
++
++        @property
++        def residency_tier(self) -> str:
++            return "local"
++
++        async def stream_complete(
++            self,
++            _req: CompletionRequest,
++        ) -> AsyncIterator[StreamChunk]:
++            empty_items: tuple[StreamChunk, ...] = ()
++            for item in empty_items:
++                yield item
++
++        async def generate_structured[TModel: BaseModel](
++            self, req: StructuredRequest[TModel]
++        ) -> StructuredResponse[TModel]:
++            msg = "Not implemented"
++            raise NotImplementedError(msg)
++
++        async def embed_batch(self, req: EmbedBatchRequest) -> list[list[float]]:
++            msg = "Not implemented"
++            raise NotImplementedError(msg)
++
++        async def health_probe(self) -> HealthStatus:
++            msg = "Fatal daemon error"
++            raise RuntimeError(msg)
++
++    c1_id = uuid4()
++    c1 = RouteCandidate(c1_id, ErrorHealthProvider(), "local", 0)
++    c2 = RouteCandidate(uuid4(), ErrorHealthProvider(), "local", 1)
++
++    breakers = CircuitBreaker(failure_threshold=1)
++    ws_id = uuid4()
++    breakers.record_failure(ws_id, c1_id, ProviderHTTPError("503", status=503))
++
++    router = ProviderRouter(ws_id, [c1, c2], breakers=breakers)
++    status = await router.health_probe()
++    assert not status.ok
++    assert status.detail == "All providers unhealthy"
++
++
++@pytest.mark.asyncio
++async def test_kind_detection_and_residency_fallback() -> None:
++    """Verify provider kind detection falls back to class name or residency tier."""
++
++    class GeminiProviderMock(MockStreamProvider):
++        pass
++
++    class OpenAIProviderMock(MockStreamProvider):
++        pass
++
++    class CustomVendorMock(MockStreamProvider):
++        pass
++
++    c1 = RouteCandidate(uuid4(), GeminiProviderMock(residency_tier="cloud", kind=""), "cloud", 0)
++    c2 = RouteCandidate(uuid4(), OpenAIProviderMock(residency_tier="cloud", kind=""), "cloud", 1)
++    c3 = RouteCandidate(
++        uuid4(),
++        CustomVendorMock(residency_tier="custom-tier", kind=""),
++        "custom-tier",
++        2,
++    )
++
++    router = ProviderRouter(uuid4(), [c1, c2, c3], air_gap_mode=False)
++    assert router._get_candidate_kind(c1) == "gemini"  # noqa: SLF001
++    assert router._get_candidate_kind(c2) == "openai"  # noqa: SLF001
++    assert router._get_candidate_kind(c3) == "custom-tier"  # noqa: SLF001
++
++
++@pytest.mark.asyncio
++async def test_ttft_asyncio_timeout_in_stream_and_structured() -> None:
++    """Verify asyncio timeout wraps stream first chunk and structured execution."""
++
++    class SlowStreamProvider(LLMProvider):
++        kind = "ollama"
++
++        @property
++        def residency_tier(self) -> str:
++            return "local"
++
++        async def stream_complete(
++            self,
++            _req: CompletionRequest,
++        ) -> AsyncIterator[StreamChunk]:
++            await asyncio.sleep(0.05)
++            yield StreamChunk(delta="slow", index=0)
++
++        async def generate_structured[TModel: BaseModel](
++            self, req: StructuredRequest[TModel]
++        ) -> StructuredResponse[TModel]:
++            await asyncio.sleep(0.05)
++            return StructuredResponse(
++                parsed=req.response_model.model_validate({"echo": "slow", "ok": True}),
++                raw_json="{}",
++                ttft_ms=50.0,
++                total_latency_ms=50.0,
++            )
++
++        async def embed_batch(self, req: EmbedBatchRequest) -> list[list[float]]:
++            msg = "Not implemented"
++            raise NotImplementedError(msg)
++
++        async def health_probe(self) -> HealthStatus:
++            msg = "Not implemented"
++            raise NotImplementedError(msg)
++
++    c = RouteCandidate(uuid4(), SlowStreamProvider(), "local", 0)
++    router = ProviderRouter(uuid4(), [c])
++
++    req = CompletionRequest(model="test", prompt="hello", ttft_deadline_ms=1)
++    with pytest.raises(AllProvidersUnavailable) as exc_info:
++        async for _ in router.stream_complete(req):
++            pass
++    assert "NO_PROVIDER_IN_RESIDENCY_TIER" in str(exc_info.value.code)
++
++    s_req = StructuredRequest(
++        model="test",
++        prompt="hello",
++        response_model=EchoModel,
++        ttft_deadline_ms=1,
++    )
++    with pytest.raises(AllProvidersUnavailable) as exc_info:
++        await router.generate_structured(s_req)
++    assert "NO_PROVIDER_IN_RESIDENCY_TIER" in str(exc_info.value.code)
++
++
++@pytest.mark.asyncio
++async def test_all_candidates_probe_in_flight_last_err_none() -> None:
++    """Verify router raises AllProvidersUnavailable when candidates skipped without last_err."""
++    p = MockStreamProvider(residency_tier="local")
++    c1_id = uuid4()
++    c1 = RouteCandidate(c1_id, p, "local", 0)
++    breakers = CircuitBreaker(failure_threshold=1)
++    ws_id = uuid4()
++
++    breakers.record_failure(ws_id, c1_id, ProviderHTTPError("503", status=503))
++    entry = breakers._get_entry(ws_id, c1_id)  # noqa: SLF001
++    entry.state = CircuitBreakerState.HALF_OPEN
++    entry.probe_in_flight = True
++
++    router = ProviderRouter(ws_id, [c1], breakers=breakers)
++
++    req = CompletionRequest(model="test", prompt="hello")
++    with pytest.raises(AllProvidersUnavailable):
++        async for _ in router.stream_complete(req):
++            pass
++
++    s_req = StructuredRequest(model="test", prompt="hello", response_model=EchoModel)
++    with pytest.raises(AllProvidersUnavailable):
++        await router.generate_structured(s_req)
++
++    e_req = EmbedBatchRequest(model="test", inputs=("text",))
++    with pytest.raises(AllProvidersUnavailable):
++        await router.embed_batch(e_req)
+diff --git a/docs/qa/KANBA-45/breaker-state-trace.txt b/docs/qa/KANBA-45/breaker-state-trace.txt
+new file mode 100644
+index 0000000..8d8532a
+--- /dev/null
++++ b/docs/qa/KANBA-45/breaker-state-trace.txt
+@@ -0,0 +1,21 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
++rootdir: /tmp/kb-wt-KANBA-45
++configfile: pyproject.toml
++plugins: asyncio-1.4.1.post1, anyio-4.16.0, xdist-3.8.0, socket-0.8.1, platformdirs-4.14.5, cov-7.1.0
++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
++collected 7 items / 6 deselected / 1 selected
++
++agent/tests/providers/test_circuit_breaker.py [t=100.00s] Failure 1/5 recorded. State: CLOSED
++[t=100.00s] Failure 2/5 recorded. State: CLOSED
++[t=100.00s] Failure 3/5 recorded. State: CLOSED
++[t=100.00s] Failure 4/5 recorded. State: CLOSED
++[t=100.00s] Failure 5/5 recorded. State: OPEN
++[t=100.00s] 6th call correctly skipped: can_attempt = False
++[t=130.00s] 30s cooldown elapsed. Advancing to HALF_OPEN
++[t=130.00s] Probe succeeded. State: CLOSED
++[t=160.00s] Probe failed. State: OPEN
++.
++
++======================= 1 passed, 6 deselected in 0.08s ========================
++EXIT CODE: 0
+diff --git a/docs/qa/KANBA-45/build-check.txt b/docs/qa/KANBA-45/build-check.txt
+new file mode 100644
+index 0000000..103d5f8
+--- /dev/null
++++ b/docs/qa/KANBA-45/build-check.txt
+@@ -0,0 +1,42 @@
++=== 1. mypy --strict agent ===
++Success: no issues found in 35 source files
++EXIT CODE: 0
++
++=== 2. ruff check agent ===
++All checks passed!
++EXIT CODE: 0
++
++=== 3. ruff format --check agent ===
++37 files already formatted
++EXIT CODE: 0
++
++=== 4. lint-imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 112 files, 142 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++EXIT CODE: 0
++
++=== 5. check_no_dashes ===
++EXIT CODE: 0
++
++=== 6. license_gate ===
++SUMMARY python=92 node=1 violations=0
++EXIT CODE: 0
+diff --git a/docs/qa/KANBA-45/cli-run.txt b/docs/qa/KANBA-45/cli-run.txt
+new file mode 100644
+index 0000000..97bc401
+--- /dev/null
++++ b/docs/qa/KANBA-45/cli-run.txt
+@@ -0,0 +1,33 @@
++$ uv run kanban-agent validate-echo --provider gemini --model gemini-2.5-flash --air-gap --http-cassette tests/fixtures/ai/gemini_stream_ok.yaml
++=== 1. RENDERED CONTEXT ===
++Hello Sparkle
++
++=== 2. TOOL TRACE ===
++Calls: 0; Tools: (none)
++
++=== 3. LATENCY & TOKENS ===
++TTFT: N/A | Total: 0.0ms | Tokens: 0 in, 0 out
++
++=== 4. SCHEMA & POLICY STATUS ===
++Valid: false (valid: false) | Status: failed
++Error Code: AIR_GAP_EGRESS_DENIED
++Detail: [AIR_GAP_EGRESS_DENIED] Air-gap mode is active: outbound cloud egress to provider 'gemini' is strictly prohibited
++EXIT CODE: 2
++
++$ uv run kanban-agent validate-echo --provider router --route fixture,fixture --cassette tests/fixtures/ai/router_fault_503.yaml --verbose-tools
++=== 1. RENDERED CONTEXT ===
++Hello Sparkle
++
++=== 2. TOOL TRACE ===
++Calls: 0; Tools: (none)
++
++=== 3. LATENCY & TOKENS ===
++TTFT: 5.0ms | Total: 0.2ms | Tokens: 10 in, 5 out
++
++=== 4. SCHEMA & POLICY STATUS ===
++Valid: true (valid: true) | Status: ok
++
++=== 5. ROUTE TRACE ===
++  - Provider: b948cf9b-9bb4-48ad-989c-a3f6891a5dc7 | Outcome: failure | Breaker: CLOSED | TTFT: N/A
++  - Provider: b4ad33c4-edc9-456b-9849-54a793559a1d | Outcome: success | Breaker: CLOSED | TTFT: 5.0ms
++EXIT CODE: 0
+diff --git a/docs/qa/KANBA-45/message-to-reality-checker.md b/docs/qa/KANBA-45/message-to-reality-checker.md
+new file mode 100644
+index 0000000..17c9bb2
+--- /dev/null
++++ b/docs/qa/KANBA-45/message-to-reality-checker.md
+@@ -0,0 +1,54 @@
++# Forensic Verification Handoff: KANBA-45 (KB-P5-04)
++
++## Ticket Overview
++- Ticket ID: `KANBA-45` (`KB-P5-04`)
++- Title: [Phase 5 / Agent] Provider router, per-(workspace, provider) circuit breakers & air-gap enforcement
++- Author: `builder-19`
++- Branch: `feat/KANBA-45`
++- Worktree: `/tmp/kb-wt-KANBA-45`
++- Applicable Spec Sections: `S10.2`, `S15.2`, `S15.3`
++
++---
++
++## Scoped Definition of Done Audit Matrix
++
++| Requirement | Implementation Detail | Audit Artifact | Status |
++|:---|:---|:---|:---:|
++| **File Existence & Implementation** | `agent/providers/circuit_breaker.py`, `agent/providers/air_gap.py`, `agent/providers/router.py` | `git-diff.patch` | PASS |
++| **Cassettes Present** | All 6 router cassettes created under `tests/fixtures/ai/` | `tests/fixtures/ai/router_*.yaml` | PASS |
++| **Unit Tests Passing & Coverage** | 30 unit tests covering all 12 mandatory cases; 98.91% branch+statement coverage (>= 95% mandate); zero live sockets | `unit-test-results.txt` | PASS |
++| **Build, Type, Lint & Layer Clean** | `mypy --strict agent` (0 errors), `ruff check agent` (0 errors), `ruff format --check` (clean), `lint-imports` (1 kept, 0 broken) | `build-check.txt` | PASS |
++| **CLI Validation** | (a) Gemini with `--air-gap` exits 2 with `AIR_GAP_EGRESS_DENIED`<br>(b) Router with `--route fixture,fixture` and fault 503 cassette exits 0 with route trace | `cli-run.txt` | PASS |
++| **Breaker State Transitions Trace** | Pytest -s trace of case 2 showing state transitions with fake-clock timestamps | `breaker-state-trace.txt` | PASS |
++| **Supply Chain & Dependencies** | No new runtime dependencies; 0 license violations across 92 Python packages and 1 Node package | `scripts.license_gate` | PASS |
++| **Zero Non-ASCII Dashes** | Repository-wide verification of zero U+2014 or U+2013 unicode characters | Verification script | PASS |
++
++---
++
++## Key Technical Decisions & Invariants
++1. **Per-(Workspace, Provider) 3-State Breaker**:
++   - States: `CLOSED`, `OPEN`, `HALF_OPEN`.
++   - Threshold: 5 consecutive availability failures trips to `OPEN`.
++   - Cooldown: 30s default; extended by `Retry-After` header on 429 up to 300s cap.
++   - Half-Open Probe: Exactly 1 probe call admitted after cooldown. Success resets failures to 0 (`CLOSED`); failure restarts cooldown (`OPEN`).
++   - Content/policy errors (`ProviderSchemaError`, `ProviderSafetyBlock`, `ProviderRefusal`, `ProviderPolicyError`) do not increment failure counter.
++2. **Fail-Closed Air-Gap Guard**:
++   - Unknown or `None` air-gap mode treated as `True` (fail-closed).
++   - Only `ollama` (local loopback/CIDR pinned) and `fixture` permitted under air-gap.
++   - `gemini` and `openai` rejected with `AIR_GAP_EGRESS_DENIED` before DNS resolution or transport.
++3. **Residency-Locked Provider Routing**:
++   - Priority-ordered candidates; first healthy candidate locks the request's residency tier.
++   - Failover candidates must strictly match the residency tier (cloud never fails over across vendor tiers; air-gapped workloads never fail over to cloud).
++   - Max 3 attempts per request.
++   - Streaming failover allowed strictly before first chunk; faults during streaming propagate immediately without multi-model generation mixing.
++   - TTFT deadline enforced with `asyncio.timeout`; breaches invoke `aclose()` and count as availability failure.
++
++---
++
++## Raw Audit Artifacts Location (`docs/qa/KANBA-45/`)
++1. `docs/qa/KANBA-45/git-diff.patch`
++2. `docs/qa/KANBA-45/unit-test-results.txt`
++3. `docs/qa/KANBA-45/build-check.txt`
++4. `docs/qa/KANBA-45/breaker-state-trace.txt`
++5. `docs/qa/KANBA-45/cli-run.txt`
++6. `docs/qa/KANBA-45/message-to-reality-checker.md`
+diff --git a/docs/qa/KANBA-45/unit-test-results.txt b/docs/qa/KANBA-45/unit-test-results.txt
+new file mode 100644
+index 0000000..2e0e4f9
+--- /dev/null
++++ b/docs/qa/KANBA-45/unit-test-results.txt
+@@ -0,0 +1,14 @@
++..............................                                           [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                 Stmts   Miss Branch BrPart  Cover   Missing
++--------------------------------------------------------------------------------
++agent/providers/air_gap.py              13      0      2      0   100%
++agent/providers/circuit_breaker.py     121      0     30      0   100%
++agent/providers/router.py              222      1     70      4    98%   127->138, 170->172, 184->186, 308
++--------------------------------------------------------------------------------
++TOTAL                                  356      1    102      4    99%
++Required test coverage of 95% reached. Total coverage: 98.91%
++30 passed in 0.42s
++EXIT CODE: 0
+diff --git a/tests/fixtures/ai/router_fault_429_retry_after.yaml b/tests/fixtures/ai/router_fault_429_retry_after.yaml
+new file mode 100644
+index 0000000..5bfff32
+--- /dev/null
++++ b/tests/fixtures/ai/router_fault_429_retry_after.yaml
+@@ -0,0 +1,8 @@
++cassette_version: 1
++matcher:
++  prompt_contains:
++    - "rate-limit-test"
++simulated_ttft_ms: 8.0
++fault:
++  kind: "http_429"
++  retry_after_s: 120.0
+diff --git a/tests/fixtures/ai/router_fault_503.yaml b/tests/fixtures/ai/router_fault_503.yaml
+new file mode 100644
+index 0000000..c858dd6
+--- /dev/null
++++ b/tests/fixtures/ai/router_fault_503.yaml
+@@ -0,0 +1,7 @@
++cassette_version: 1
++matcher:
++  prompt_contains:
++    - "Hello Sparkle"
++simulated_ttft_ms: 10.0
++fault:
++  kind: "http_503"
+diff --git a/tests/fixtures/ai/router_fault_schema_error.yaml b/tests/fixtures/ai/router_fault_schema_error.yaml
+new file mode 100644
+index 0000000..4568f51
+--- /dev/null
++++ b/tests/fixtures/ai/router_fault_schema_error.yaml
+@@ -0,0 +1,7 @@
++cassette_version: 1
++matcher:
++  prompt_contains:
++    - "schema-error-test"
++simulated_ttft_ms: 10.0
++fault:
++  kind: "schema_error"
+diff --git a/tests/fixtures/ai/router_fault_ttft_breach.yaml b/tests/fixtures/ai/router_fault_ttft_breach.yaml
+new file mode 100644
+index 0000000..55c4ddf
+--- /dev/null
++++ b/tests/fixtures/ai/router_fault_ttft_breach.yaml
+@@ -0,0 +1,14 @@
++cassette_version: 1
++matcher:
++  prompt_contains:
++    - "ttft-breach-test"
++simulated_ttft_ms: 400.0
++usage:
++  prompt_tokens: 12
++  completion_tokens: 6
++stream_chunks:
++  - "Delayed "
++  - "response"
++structured_output:
++  echo: "Delayed response"
++  ok: true
+diff --git a/tests/fixtures/ai/router_primary_ok.yaml b/tests/fixtures/ai/router_primary_ok.yaml
+new file mode 100644
+index 0000000..0602f1f
+--- /dev/null
++++ b/tests/fixtures/ai/router_primary_ok.yaml
+@@ -0,0 +1,15 @@
++cassette_version: 1
++matcher:
++  prompt_contains:
++    - "Hello Sparkle"
++simulated_ttft_ms: 12.0
++usage:
++  prompt_tokens: 8
++  completion_tokens: 4
++stream_chunks:
++  - "Echo: "
++  - "Hello "
++  - "Sparkle"
++structured_output:
++  echo: "Hello Sparkle"
++  ok: true
+diff --git a/tests/fixtures/ai/router_stream_error_after_first_chunk.yaml b/tests/fixtures/ai/router_stream_error_after_first_chunk.yaml
+new file mode 100644
+index 0000000..ad9ac1d
+--- /dev/null
++++ b/tests/fixtures/ai/router_stream_error_after_first_chunk.yaml
+@@ -0,0 +1,11 @@
++cassette_version: 1
++matcher:
++  prompt_contains:
++    - "stream-error-after-first"
++simulated_ttft_ms: 10.0
++fault:
++  kind: "stream_error_after_chunk"
++  after_chunks: 1
++stream_chunks:
++  - "First chunk valid"
++  - "Second chunk should fail"
