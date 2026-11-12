@@ -1,0 +1,44 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /tmp/kb-wt-KANBA-82
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 38 items
+
+kanban/tests/auth/test_ldap_escape.py ..............                     [ 36%]
+kanban/tests/auth/test_ldap_tls_and_bind.py ...................          [ 86%]
+kanban/tests/auth/test_ldap_group_sync.py ....                           [ 97%]
+database/tests/migrations/test_p2_07_migration.py ./tmp/kb-wt-KANBA-82/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.auth_ldap was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+                      [100%]
+
+=============================== warnings summary ===============================
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_04_tls_version_and_cert_verification
+  /tmp/kb-wt-KANBA-82/kanban/tests/fixtures/fake_ldap.py:256: DeprecationWarning: ssl.TLSVersion.TLSv1_1 is deprecated
+    ctx.minimum_version = self.min_tls_version
+
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_04_tls_version_and_cert_verification
+  /tmp/kb-wt-KANBA-82/kanban/tests/fixtures/fake_ldap.py:257: DeprecationWarning: ssl.TLSVersion.TLSv1_1 is deprecated
+    ctx.maximum_version = self.max_tls_version
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+kanban/auth/ldap/__init__.py         8      0      0      0   100%
+kanban/auth/ldap/asn1_ber.py       213     11     34      3    94%   321-327, 346-347, 370-371
+kanban/auth/ldap/client.py         207      8     48      3    96%   160->exit, 212, 332, 346-347, 365-366, 375-376
+kanban/auth/ldap/config.py         153      7     52      4    95%   26-27, 62-63, 82, 100, 129
+kanban/auth/ldap/escape.py         249      1    130      3    99%   173, 212->exit, 373->371
+kanban/auth/ldap/group_sync.py       2      0      0      0   100%
+kanban/auth/ldap/protocol.py         3      0      0      0   100%
+kanban/auth/ldap/router.py         124      4     28      3    94%   76-79, 244->265, 246->265
+kanban/auth/ldap/service.py        115      4     28      3    95%   58-59, 124->161, 148-149, 154->157, 249->258
+kanban/auth/ldap/sync.py            51      0     16      0   100%
+----------------------------------------------------------------------------
+TOTAL                             1125     35    336     19    96%
+Required test coverage of 95% reached. Total coverage: 96.03%
+======================== 38 passed, 2 warnings in 7.65s ========================

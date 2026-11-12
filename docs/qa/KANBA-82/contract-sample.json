@@ -1,0 +1,117 @@
+{
+  "ldap_login_success_200": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/auth/ldap/corp-directory/login",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": "csrf-valid-token-string"
+      },
+      "body": {
+        "username": "alice",
+        "password": "[REDACTED]"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "status": "authenticated",
+        "card_id": "c1a1ceee-0000-0000-0000-000000000001",
+        "subject": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "email": "alice@corp.example",
+        "display_name": "Alice Developer",
+        "groups": [
+          "Core Backend",
+          "DevOps"
+        ],
+        "principal_id": "01928374-abcd-ef01-2345-6789abcdef01",
+        "workspace_id": "01928374-abcd-ef01-2345-6789abcdef00",
+        "aal_level": 1
+      }
+    }
+  },
+  "ldap_login_invalid_credentials_401": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/auth/ldap/corp-directory/login",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": "csrf-valid-token-string"
+      },
+      "body": {
+        "username": "alice",
+        "password": "[REDACTED]"
+      }
+    },
+    "response": {
+      "status": 401,
+      "body": {
+        "type": "urn:kanban:problem:INVALID_CREDENTIALS",
+        "title": "Invalid Credentials",
+        "status": 401,
+        "code": "INVALID_CREDENTIALS",
+        "detail": "The provided credentials are invalid or the account is inactive.",
+        "instance": "/api/v1/auth/ldap/corp-directory/login"
+      }
+    }
+  },
+  "ldap_login_rate_limited_429": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/auth/ldap/corp-directory/login",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": "csrf-valid-token-string"
+      },
+      "body": {
+        "username": "alice",
+        "password": "[REDACTED]"
+      }
+    },
+    "response": {
+      "status": 429,
+      "body": {
+        "type": "urn:kanban:problem:RATE_LIMITED",
+        "title": "Rate Limit Exceeded",
+        "status": 429,
+        "code": "RATE_LIMITED",
+        "detail": "Rate limit exceeded. Retry after 60 seconds.",
+        "instance": "/api/v1/auth/ldap/corp-directory/login"
+      }
+    }
+  },
+  "admin_card_test_success_200": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/admin/auth-cards/c1a1ceee-0000-0000-0000-000000000001/ldap-test"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "transport_mode": "ldaps",
+        "spki_sha256": "39bd5a26531a0948bc6b9df31160df134d3ab88ce75c1c9782d0adb7f839eb2b",
+        "latency_ms": 14.28
+      }
+    }
+  },
+  "resolver_assertion_handoff": {
+    "assertion": {
+      "provider_kind": "LDAP",
+      "card_id": "c1a1ceee-0000-0000-0000-000000000001",
+      "subject": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+      "email": "alice@corp.example",
+      "email_verified": true,
+      "display_name": "Alice Developer",
+      "groups": [
+        "Core Backend",
+        "DevOps"
+      ]
+    },
+    "resolved_login": {
+      "principal_id": "01928374-abcd-ef01-2345-6789abcdef01",
+      "workspace_id": "01928374-abcd-ef01-2345-6789abcdef00",
+      "aal_level": 1
+    }
+  }
+}

@@ -161,3 +161,36 @@ class OidcAuthRequest(Base):
     def __str__(self) -> str:
         """Sanitized string representation matching repr."""
         return self.__repr__()
+
+
+class LdapGroupMapping(Base):
+    """LDAP group DN to workspace group mapping (KB-P2-07)."""
+
+    __tablename__ = "ldap_group_mappings"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    card_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("auth_provider_cards.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    ldap_dn: Mapped[str] = mapped_column(Text, nullable=False)
+    group_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    def __repr__(self) -> str:
+        """Sanitized representation of LDAP group mapping."""
+        return (
+            f"<LdapGroupMapping id={self.id} card_id={self.card_id} "
+            f"ldap_dn={self.ldap_dn!r} group_name={self.group_name!r}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()
