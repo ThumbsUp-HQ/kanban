@@ -1,0 +1,288 @@
+{
+  "total_vectors": 27,
+  "passed": 27,
+  "results": [
+    {
+      "id": "xss-script-tag",
+      "category": "xss",
+      "description": "Embedded script element with alert payload",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 1,
+      "stripped_attrs": 0,
+      "output_bytes": 87,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "xss-foreign-object",
+      "category": "xss",
+      "description": "Embedded foreignObject element with HTML body and onload handler",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 1,
+      "stripped_attrs": 0,
+      "output_bytes": 85,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "xss-iframe",
+      "category": "xss",
+      "description": "Embedded iframe targeting external script or exfiltration endpoint",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 1,
+      "stripped_attrs": 0,
+      "output_bytes": 85,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "xss-style-import",
+      "category": "xss",
+      "description": "Embedded style element attempting CSS exfiltration via @import",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 1,
+      "stripped_attrs": 0,
+      "output_bytes": 85,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "xss-smil-animate",
+      "category": "xss",
+      "description": "SMIL animate element targeting javascript URI execution",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 1,
+      "stripped_attrs": 0,
+      "output_bytes": 85,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "xss-smil-set",
+      "category": "xss",
+      "description": "SMIL set element modifying attributes dynamically",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 1,
+      "stripped_attrs": 0,
+      "output_bytes": 85,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "xss-anchor-javascript",
+      "category": "xss",
+      "description": "SVG anchor element wrapping geometry with javascript pseudo-protocol",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 1,
+      "stripped_attrs": 0,
+      "output_bytes": 90,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "xss-event-handlers",
+      "category": "xss",
+      "description": "Inline event handler attributes on valid geometry elements",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 0,
+      "stripped_attrs": 3,
+      "output_bytes": 87,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "xss-style-attribute",
+      "category": "xss",
+      "description": "Inline style attribute with CSS expression or payload",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 0,
+      "stripped_attrs": 1,
+      "output_bytes": 87,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "ssrf-image-imds",
+      "category": "ssrf",
+      "description": "Image element attempting AWS/GCP IMDS cloud metadata extraction",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 1,
+      "stripped_attrs": 0,
+      "output_bytes": 85,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "ssrf-use-external-sprite",
+      "category": "ssrf",
+      "description": "Use element referencing an external SVG sprite over HTTP",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 0,
+      "stripped_attrs": 1,
+      "output_bytes": 53,
+      "max_use_depth": 1,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "ssrf-use-data-uri",
+      "category": "ssrf",
+      "description": "Use element with embedded data URI payload",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 0,
+      "stripped_attrs": 1,
+      "output_bytes": 53,
+      "max_use_depth": 1,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "ssrf-fill-url-external",
+      "category": "ssrf",
+      "description": "Fill attribute with external URL reference beacon",
+      "expected_action": "strip",
+      "status": "PASS",
+      "stripped_elements": 0,
+      "stripped_attrs": 1,
+      "output_bytes": 87,
+      "max_use_depth": 0,
+      "expanded_nodes": 2
+    },
+    {
+      "id": "xxe-file-disclosure",
+      "category": "xxe",
+      "description": "XXE payload attempting local filesystem read via SYSTEM entity",
+      "expected_action": "reject",
+      "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
+      "actual_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
+      "status": "PASS"
+    },
+    {
+      "id": "xxe-quadratic-blowup",
+      "category": "xxe",
+      "description": "Classic quadratic XML entity expansion bomb (billion laughs)",
+      "expected_action": "reject",
+      "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
+      "actual_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
+      "status": "PASS"
+    },
+    {
+      "id": "xxe-cdata-block",
+      "category": "xxe",
+      "description": "Pre-parse CDATA block attempting parser desynchronization",
+      "expected_action": "reject",
+      "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
+      "actual_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
+      "status": "PASS"
+    },
+    {
+      "id": "xxe-xml-stylesheet",
+      "category": "xxe",
+      "description": "XML stylesheet processing instruction invoking remote XSLT",
+      "expected_action": "reject",
+      "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
+      "actual_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
+      "status": "PASS"
+    },
+    {
+      "id": "cycle-self-use",
+      "category": "cycle",
+      "description": "Direct self-referencing use element inside target group",
+      "expected_action": "reject",
+      "expected_error": "SVG_USE_CYCLE",
+      "actual_error": "SVG_USE_CYCLE",
+      "status": "PASS"
+    },
+    {
+      "id": "cycle-mutual-use",
+      "category": "cycle",
+      "description": "Mutual two-element use cycle (a -> b -> a)",
+      "expected_action": "reject",
+      "expected_error": "SVG_USE_CYCLE",
+      "actual_error": "SVG_USE_CYCLE",
+      "status": "PASS"
+    },
+    {
+      "id": "cycle-ancestor-use",
+      "category": "cycle",
+      "description": "Nested use referencing enclosing ancestor group",
+      "expected_action": "reject",
+      "expected_error": "SVG_USE_CYCLE",
+      "actual_error": "SVG_USE_CYCLE",
+      "status": "PASS"
+    },
+    {
+      "id": "depth-chain-5",
+      "category": "depth",
+      "description": "Use reference chain of depth 5 exceeding maximum permitted depth of 4",
+      "expected_action": "reject",
+      "expected_error": "SVG_USE_DEPTH_EXCEEDED",
+      "actual_error": "SVG_USE_DEPTH_EXCEEDED",
+      "status": "PASS"
+    },
+    {
+      "id": "expansion-billion-laughs",
+      "category": "expansion",
+      "description": "SVG use expansion bomb with branching factor 5 exceeding 500 nodes",
+      "expected_action": "reject",
+      "expected_error": "SVG_EXPANSION_LIMIT_EXCEEDED",
+      "actual_error": "SVG_EXPANSION_LIMIT_EXCEEDED",
+      "status": "PASS"
+    },
+    {
+      "id": "boundary-duplicate-id",
+      "category": "boundary",
+      "description": "Two elements with identical id attribute creating shadow ambiguity",
+      "expected_action": "reject",
+      "expected_error": "SVG_DUPLICATE_ID",
+      "actual_error": "SVG_DUPLICATE_ID",
+      "status": "PASS"
+    },
+    {
+      "id": "boundary-non-svg-root",
+      "category": "boundary",
+      "description": "Non-SVG root element such as HTML or foreign XML",
+      "expected_action": "reject",
+      "expected_error": "SVG_ROOT_INVALID",
+      "actual_error": "SVG_ROOT_INVALID",
+      "status": "PASS"
+    },
+    {
+      "id": "boundary-excessive-viewbox",
+      "category": "boundary",
+      "description": "ViewBox coordinates exceeding safe maximum 32768 dimension limit",
+      "expected_action": "reject",
+      "expected_error": "SVG_DIMENSIONS_INVALID",
+      "actual_error": "SVG_DIMENSIONS_INVALID",
+      "status": "PASS"
+    },
+    {
+      "id": "boundary-negative-dimension",
+      "category": "boundary",
+      "description": "Negative width attribute on SVG canvas",
+      "expected_action": "reject",
+      "expected_error": "SVG_DIMENSIONS_INVALID",
+      "actual_error": "SVG_DIMENSIONS_INVALID",
+      "status": "PASS"
+    },
+    {
+      "id": "malformed-unclosed-tag",
+      "category": "malformed",
+      "description": "Syntactically malformed XML with unclosed tag",
+      "expected_action": "reject",
+      "expected_error": "SVG_MALFORMED_XML",
+      "actual_error": "SVG_MALFORMED_XML",
+      "status": "PASS"
+    }
+  ]
+}

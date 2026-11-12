@@ -1,0 +1,59 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-65/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-65
+configfile: pyproject.toml
+plugins: platformdirs-4.14.5, anyio-4.16.0, asyncio-1.4.1.post1, xdist-3.8.0, socket-0.8.1, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 39 items
+
+kanban/tests/content/test_svg_sanitizer.py::test_case_1_positive_clean_diagram PASSED [  2%]
+kanban/tests/content/test_svg_sanitizer.py::test_case_2_security_active_content_strip PASSED [  5%]
+kanban/tests/content/test_svg_sanitizer.py::test_case_3_security_external_ssrf_and_tracking_pixel PASSED [  7%]
+kanban/tests/content/test_svg_sanitizer.py::test_case_4_security_xxe_and_entity_expansion_forbidden PASSED [ 10%]
+kanban/tests/content/test_svg_sanitizer.py::test_case_5_security_use_cycle_detected PASSED [ 12%]
+kanban/tests/content/test_svg_sanitizer.py::test_case_6_boundary_use_depth_cap PASSED [ 15%]
+kanban/tests/content/test_svg_sanitizer.py::test_case_7_boundary_use_expansion_cap PASSED [ 17%]
+kanban/tests/content/test_svg_sanitizer.py::test_case_8_boundary_size_encoding_and_duplicate_ids PASSED [ 20%]
+kanban/tests/content/test_svg_sanitizer.py::test_hostile_svg_corpus_audit PASSED [ 23%]
+kanban/tests/content/test_svg_sanitizer.py::test_excessive_viewbox_coordinates_rejected PASSED [ 25%]
+kanban/tests/content/test_svg_sanitizer.py::test_excessive_width_height_coordinates_rejected PASSED [ 28%]
+kanban/tests/content/test_svg_sanitizer.py::test_xml_nesting_depth_cap_exceeded PASSED [ 30%]
+kanban/tests/content/test_svg_sanitizer.py::test_xml_raw_element_count_cap_exceeded PASSED [ 33%]
+kanban/tests/content/test_svg_sanitizer.py::test_malformed_xml_syntax_raises PASSED [ 35%]
+kanban/tests/content/test_svg_sanitizer.py::test_unicode_surrogate_and_invisible_chars PASSED [ 38%]
+kanban/tests/content/test_svg_sanitizer.py::test_invalid_id_format_stripped_safely PASSED [ 41%]
+kanban/tests/content/test_svg_sanitizer.py::test_foreign_attribute_stripped PASSED [ 43%]
+kanban/tests/content/test_svg_sanitizer.py::test_bytes_input_handled_identically PASSED [ 46%]
+kanban/tests/content/test_svg_sanitizer.py::test_coverage_edge_cases_encoding_and_dimensions PASSED [ 48%]
+kanban/tests/content/test_svg_sanitizer.py::test_coverage_edge_cases_attributes_and_expansion PASSED [ 51%]
+kanban/tests/content/test_svg_use_dag.py::test_svg_dag_result_integer_behavior PASSED [ 53%]
+kanban/tests/content/test_svg_use_dag.py::test_svg_sanitize_error_attributes PASSED [ 56%]
+kanban/tests/content/test_svg_use_dag.py::test_clean_svg_without_references PASSED [ 58%]
+kanban/tests/content/test_svg_use_dag.py::test_clean_single_level_use_reference PASSED [ 61%]
+kanban/tests/content/test_svg_use_dag.py::test_multiple_independent_uses_share_target PASSED [ 64%]
+kanban/tests/content/test_svg_use_dag.py::test_depth_chain_4_succeeds PASSED [ 66%]
+kanban/tests/content/test_svg_use_dag.py::test_depth_chain_5_raises_use_depth_exceeded PASSED [ 69%]
+kanban/tests/content/test_svg_use_dag.py::test_exact_500_expansion_succeeds PASSED [ 71%]
+kanban/tests/content/test_svg_use_dag.py::test_501_expansion_raises_expansion_limit_exceeded PASSED [ 74%]
+kanban/tests/content/test_svg_use_dag.py::test_use_expansion_exact_500_nodes PASSED [ 76%]
+kanban/tests/content/test_svg_use_dag.py::test_use_expansion_501_nodes_raises PASSED [ 79%]
+kanban/tests/content/test_svg_use_dag.py::test_billion_laughs_expansion_bomb_rejected PASSED [ 82%]
+kanban/tests/content/test_svg_use_dag.py::test_cycle_direct_self_reference PASSED [ 84%]
+kanban/tests/content/test_svg_use_dag.py::test_cycle_mutual_two_nodes PASSED [ 87%]
+kanban/tests/content/test_svg_use_dag.py::test_cycle_ancestor_containment PASSED [ 89%]
+kanban/tests/content/test_svg_use_dag.py::test_cycle_direct_use_self_loop PASSED [ 92%]
+kanban/tests/content/test_svg_use_dag.py::test_cycle_gradient_href_loop PASSED [ 94%]
+kanban/tests/content/test_svg_use_dag.py::test_cycle_clip_path_url_loop PASSED [ 97%]
+kanban/tests/content/test_svg_use_dag.py::test_missing_target_treated_safely PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                              Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------
+kanban/content/svg_dag.py           121      2     52      2    98%   188, 195
+kanban/content/svg_sanitizer.py     242      7    100      2    97%   201, 227-228, 294-297, 464->463
+-----------------------------------------------------------------------------
+TOTAL                               363      9    152      4    97%
+Required test coverage of 95% reached. Total coverage: 97.09%
+============================== 39 passed in 5.31s ==============================

@@ -1,0 +1,2693 @@
+diff --git a/docs/qa/KANBA-65/build-check.txt b/docs/qa/KANBA-65/build-check.txt
+new file mode 100644
+index 0000000..3e1ad2a
+--- /dev/null
++++ b/docs/qa/KANBA-65/build-check.txt
+@@ -0,0 +1,37 @@
++=== 1. ruff check . ===
++All checks passed!
++
++=== 2. ruff format --check . ===
++467 files already formatted
++
++=== 3. mypy --strict kanban ===
++Success: no issues found in 41 source files
++
++=== 4. lint-imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 190 files, 303 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++mcp forbidden from importing database KEPT
++
++Contracts: 2 kept, 0 broken.
++
++=== 5. python scripts/license_gate.py ===
++SUMMARY python=100 node=1 violations=0
++
++=== 6. check_no_dashes --all ===
+diff --git a/docs/qa/KANBA-65/dependency-evaluation.md b/docs/qa/KANBA-65/dependency-evaluation.md
+new file mode 100644
+index 0000000..dcc673b
+--- /dev/null
++++ b/docs/qa/KANBA-65/dependency-evaluation.md
+@@ -0,0 +1,59 @@
++# Dependency Evaluation: defusedxml (KANBA-65 / KB-P2-14)
++
++## Evaluated Packages
++
++### 1. defusedxml (Runtime Dependency)
++- **Package**: `defusedxml`
++- **Version**: `0.7.1` (pinned in `kanban/pyproject.toml` and `uv.lock`)
++- **License**: `PSF-2.0` / `Python-2.0` (100% Permissive, Apache-2.0 compatible)
++- **Cryptographic Hashes (uv.lock)**:
++  - Wheel: `sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61`
++  - Sdist: `sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69`
++- **Purpose**: Hardened XML parser that explicitly disallows entity expansion bombs (billion laughs), DTD parameter entities, and external entity injection (XXE).
++
++### 2. types-defusedxml (Development Typing Stubs)
++- **Package**: `types-defusedxml`
++- **Version**: `0.7.0.20260504` (pinned in root `pyproject.toml` dev dependency group and `uv.lock`)
++- **License**: `Apache-2.0` (100% Permissive)
++- **Cryptographic Hashes (uv.lock)**:
++  - Wheel: `sha256:a959e3a0a43b93e464bd625d91ec9193a2703ddc10443bdd627792485fae0b10`
++  - Sdist: `sha256:2ab2828a3f97111ba1c16cee273ad4124a831fc9198c41bf8368ff6ea48ad300`
++- **Purpose**: Type annotations enabling strict mypy compliance (`mypy --strict kanban`) without untyped import warnings.
++
++---
++
++## Architectural Rationale: roxmltree vs. defusedxml
++
++In the Authoritative Architecture and Product Specification (`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` S2.5 and S5.4), `roxmltree` is referenced as a non-entity, read-only XML parser. `roxmltree` is a Rust crate with zero entity expansion support by design, but it does not provide an official Python package on PyPI.
++
++In Python, the identical non-entity XML boundary is achieved with `defusedxml` paired with our strict pre-parse firewall:
++1. **Pre-Parse Byte Scanner**: Case-insensitive regex scans raw bytes/text to reject `<!DOCTYPE`, `<!ENTITY`, `<![CDATA[`, and `<?xml-stylesheet` before any XML parsing engine executes, failing closed with `SVG_DTD_OR_ENTITY_FORBIDDEN`.
++2. **defusedxml Parser Hardening**: Invoked with `forbid_dtd=True`, `forbid_entities=True`, and `forbid_external=True` to eliminate entity expansion, quadratic blowup, and external entity resolution.
++3. **Pure Geometry Allowlist**: Strips all non-vector geometry tags (`<script>`, `<foreignObject>`, `<style>`, `<image>`, etc.) and `on*` event handlers.
++4. **Local Acyclic DAG Validator (`svg_dag.py`)**: Enforces cycle-free references, maximum `<use>` chain depth <= 4, and maximum expanded DOM nodes <= 500.
++
++---
++
++## Alternatives Considered and Rejected
++
++1. **Standard Library `xml.etree.ElementTree` alone**:
++   - *Rejected*: Inherently vulnerable to XML Entity Expansion (billion laughs) and DTD parameter entity retrieval bombs. Untrusted XML must never be parsed directly by standard library parsers.
++2. **`lxml` (Python bindings to C `libxml2`)**:
++   - *Rejected*: Massive attack surface, complex native C library build dependencies, and a long history of memory safety vulnerabilities and CVEs in `libxml2`.
++3. **Raw Regex Sanitization**:
++   - *Rejected*: XML cannot be safely parsed with regular expressions alone due to nested structures, XML namespaces, comments, and CDATA boundaries.
++
++---
++
++## Specialist Reviews and Approvals
++
++Pre-approved under the Swarm Board Dependency Evaluation Batch for Waves W10-W17:
++
++1. **Systems/Backend Architect (`@arch-reviewer`, Swarm Message #116)**:
++   > "SVG uploads present severe XSS and XXE attack surfaces. Standard Python xml.etree is vulnerable to XML Entity Expansion (Billion Laughs) and DTD retrieval bombs. defusedxml strictly disables entity expansion and external DTD resolution. Combined with our geometry allowlist and acyclic <use> DAG validator, it provides rock-solid SVG sanitization. Verdict: APPROVED."
++
++2. **Application & Supply-Chain Security Engineer (`@sec-eng`, Swarm Message #118)**:
++   > "Target: defusedxml (PSF-2.0). License & Supply-Chain: 100% permissive (PSF-2.0). Neutralizes XML External Entity (XXE) attacks, entity expansion bombs (billion laughs), and DTD parsing exploits. Pre-parse scanner rejects <!DOCTYPE and <!ENTITY before parser invocation. svg_dag.py validates <use> references as an acyclic local DAG with maximum depth <= 4 and total expanded nodes <= 500. Verdict: APPROVED."
++
++3. **Test & Build Quality Engineer (`@qa-eng`, Swarm Message #120)**:
++   > "Target: defusedxml (Python-2.0, permissive). License: Python Software Foundation License (PSF-2.0 / Python-2.0). 100% Apache-2.0 compatible. Hardens XML and SVG processing against entity expansion bombs (billion laughs), quadratic blowup, DTD parameter entity attacks, and external entity injection (XXE). Verdict: APPROVED."
+diff --git a/docs/qa/KANBA-65/hostile-svg-corpus-results.json b/docs/qa/KANBA-65/hostile-svg-corpus-results.json
+new file mode 100644
+index 0000000..e87e546
+--- /dev/null
++++ b/docs/qa/KANBA-65/hostile-svg-corpus-results.json
+@@ -0,0 +1,288 @@
++{
++  "total_vectors": 27,
++  "passed": 27,
++  "results": [
++    {
++      "id": "xss-script-tag",
++      "category": "xss",
++      "description": "Embedded script element with alert payload",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 1,
++      "stripped_attrs": 0,
++      "output_bytes": 87,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "xss-foreign-object",
++      "category": "xss",
++      "description": "Embedded foreignObject element with HTML body and onload handler",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 1,
++      "stripped_attrs": 0,
++      "output_bytes": 85,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "xss-iframe",
++      "category": "xss",
++      "description": "Embedded iframe targeting external script or exfiltration endpoint",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 1,
++      "stripped_attrs": 0,
++      "output_bytes": 85,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "xss-style-import",
++      "category": "xss",
++      "description": "Embedded style element attempting CSS exfiltration via @import",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 1,
++      "stripped_attrs": 0,
++      "output_bytes": 85,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "xss-smil-animate",
++      "category": "xss",
++      "description": "SMIL animate element targeting javascript URI execution",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 1,
++      "stripped_attrs": 0,
++      "output_bytes": 85,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "xss-smil-set",
++      "category": "xss",
++      "description": "SMIL set element modifying attributes dynamically",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 1,
++      "stripped_attrs": 0,
++      "output_bytes": 85,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "xss-anchor-javascript",
++      "category": "xss",
++      "description": "SVG anchor element wrapping geometry with javascript pseudo-protocol",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 1,
++      "stripped_attrs": 0,
++      "output_bytes": 90,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "xss-event-handlers",
++      "category": "xss",
++      "description": "Inline event handler attributes on valid geometry elements",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 0,
++      "stripped_attrs": 3,
++      "output_bytes": 87,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "xss-style-attribute",
++      "category": "xss",
++      "description": "Inline style attribute with CSS expression or payload",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 0,
++      "stripped_attrs": 1,
++      "output_bytes": 87,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "ssrf-image-imds",
++      "category": "ssrf",
++      "description": "Image element attempting AWS/GCP IMDS cloud metadata extraction",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 1,
++      "stripped_attrs": 0,
++      "output_bytes": 85,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "ssrf-use-external-sprite",
++      "category": "ssrf",
++      "description": "Use element referencing an external SVG sprite over HTTP",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 0,
++      "stripped_attrs": 1,
++      "output_bytes": 53,
++      "max_use_depth": 1,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "ssrf-use-data-uri",
++      "category": "ssrf",
++      "description": "Use element with embedded data URI payload",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 0,
++      "stripped_attrs": 1,
++      "output_bytes": 53,
++      "max_use_depth": 1,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "ssrf-fill-url-external",
++      "category": "ssrf",
++      "description": "Fill attribute with external URL reference beacon",
++      "expected_action": "strip",
++      "status": "PASS",
++      "stripped_elements": 0,
++      "stripped_attrs": 1,
++      "output_bytes": 87,
++      "max_use_depth": 0,
++      "expanded_nodes": 2
++    },
++    {
++      "id": "xxe-file-disclosure",
++      "category": "xxe",
++      "description": "XXE payload attempting local filesystem read via SYSTEM entity",
++      "expected_action": "reject",
++      "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
++      "actual_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
++      "status": "PASS"
++    },
++    {
++      "id": "xxe-quadratic-blowup",
++      "category": "xxe",
++      "description": "Classic quadratic XML entity expansion bomb (billion laughs)",
++      "expected_action": "reject",
++      "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
++      "actual_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
++      "status": "PASS"
++    },
++    {
++      "id": "xxe-cdata-block",
++      "category": "xxe",
++      "description": "Pre-parse CDATA block attempting parser desynchronization",
++      "expected_action": "reject",
++      "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
++      "actual_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
++      "status": "PASS"
++    },
++    {
++      "id": "xxe-xml-stylesheet",
++      "category": "xxe",
++      "description": "XML stylesheet processing instruction invoking remote XSLT",
++      "expected_action": "reject",
++      "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
++      "actual_error": "SVG_DTD_OR_ENTITY_FORBIDDEN",
++      "status": "PASS"
++    },
++    {
++      "id": "cycle-self-use",
++      "category": "cycle",
++      "description": "Direct self-referencing use element inside target group",
++      "expected_action": "reject",
++      "expected_error": "SVG_USE_CYCLE",
++      "actual_error": "SVG_USE_CYCLE",
++      "status": "PASS"
++    },
++    {
++      "id": "cycle-mutual-use",
++      "category": "cycle",
++      "description": "Mutual two-element use cycle (a -> b -> a)",
++      "expected_action": "reject",
++      "expected_error": "SVG_USE_CYCLE",
++      "actual_error": "SVG_USE_CYCLE",
++      "status": "PASS"
++    },
++    {
++      "id": "cycle-ancestor-use",
++      "category": "cycle",
++      "description": "Nested use referencing enclosing ancestor group",
++      "expected_action": "reject",
++      "expected_error": "SVG_USE_CYCLE",
++      "actual_error": "SVG_USE_CYCLE",
++      "status": "PASS"
++    },
++    {
++      "id": "depth-chain-5",
++      "category": "depth",
++      "description": "Use reference chain of depth 5 exceeding maximum permitted depth of 4",
++      "expected_action": "reject",
++      "expected_error": "SVG_USE_DEPTH_EXCEEDED",
++      "actual_error": "SVG_USE_DEPTH_EXCEEDED",
++      "status": "PASS"
++    },
++    {
++      "id": "expansion-billion-laughs",
++      "category": "expansion",
++      "description": "SVG use expansion bomb with branching factor 5 exceeding 500 nodes",
++      "expected_action": "reject",
++      "expected_error": "SVG_EXPANSION_LIMIT_EXCEEDED",
++      "actual_error": "SVG_EXPANSION_LIMIT_EXCEEDED",
++      "status": "PASS"
++    },
++    {
++      "id": "boundary-duplicate-id",
++      "category": "boundary",
++      "description": "Two elements with identical id attribute creating shadow ambiguity",
++      "expected_action": "reject",
++      "expected_error": "SVG_DUPLICATE_ID",
++      "actual_error": "SVG_DUPLICATE_ID",
++      "status": "PASS"
++    },
++    {
++      "id": "boundary-non-svg-root",
++      "category": "boundary",
++      "description": "Non-SVG root element such as HTML or foreign XML",
++      "expected_action": "reject",
++      "expected_error": "SVG_ROOT_INVALID",
++      "actual_error": "SVG_ROOT_INVALID",
++      "status": "PASS"
++    },
++    {
++      "id": "boundary-excessive-viewbox",
++      "category": "boundary",
++      "description": "ViewBox coordinates exceeding safe maximum 32768 dimension limit",
++      "expected_action": "reject",
++      "expected_error": "SVG_DIMENSIONS_INVALID",
++      "actual_error": "SVG_DIMENSIONS_INVALID",
++      "status": "PASS"
++    },
++    {
++      "id": "boundary-negative-dimension",
++      "category": "boundary",
++      "description": "Negative width attribute on SVG canvas",
++      "expected_action": "reject",
++      "expected_error": "SVG_DIMENSIONS_INVALID",
++      "actual_error": "SVG_DIMENSIONS_INVALID",
++      "status": "PASS"
++    },
++    {
++      "id": "malformed-unclosed-tag",
++      "category": "malformed",
++      "description": "Syntactically malformed XML with unclosed tag",
++      "expected_action": "reject",
++      "expected_error": "SVG_MALFORMED_XML",
++      "actual_error": "SVG_MALFORMED_XML",
++      "status": "PASS"
++    }
++  ]
++}
+\ No newline at end of file
+diff --git a/docs/qa/KANBA-65/message-to-reality-checker.md b/docs/qa/KANBA-65/message-to-reality-checker.md
+new file mode 100644
+index 0000000..59d63d5
+--- /dev/null
++++ b/docs/qa/KANBA-65/message-to-reality-checker.md
+@@ -0,0 +1,47 @@
++# Reality-Checker Verification Packet: KANBA-65 (KB-P2-14)
++
++### Metadata
++- **Ticket ID**: `KANBA-65` (`KB-P2-14`)
++- **Title**: `[Phase 2 / Content] Server SVG sanitizer: geometry allowlist, strip script/foreignObject/style/SMIL/on*/external href & <use> acyclic DAG guard`
++- **Epic**: `KB-E2` (Phase 2 Kanban API & Core Business Engine)
++- **Author**: Implementation Author (`builder-17`)
++- **Target Worktree**: `/tmp/kb-wt-KANBA-65` on branch `feat/KANBA-65`
++- **Base Commit**: `a8a688f95343f987d754b0972a8c02dbc7369214` (KANBA-60 merge base)
++
++---
++
++### Definition of Done Checklist
++
++| DoD Requirement | Target Standard | Observed Status | Verification Reference |
++| :--- | :--- | :--- | :--- |
++| **1. Target Files & Core Components** | `svg_sanitizer.py`, `svg_dag.py`, `kanban/pyproject.toml`, `pyproject.toml`, `uv.lock` | All target files implemented and cleanly integrated | `git-diff.patch` |
++| **2. Exported Interfaces** | `ALLOWED_SVG_ELEMENTS`, `ALLOWED_SVG_ATTRS`, `SvgSanitizeError`, `SvgSanitizeReport`, `validate_svg_use_dag`, `sanitize_svg`, `sanitize_svg_with_report` | All exported from `kanban.content` and modules | `kanban/content/__init__.py` |
++| **3. Unit Test Execution & Coverage** | 8 mandatory test cases; >= 95% branch+line coverage across target files | 39/39 tests passed in 4.78s; 97.09% overall statement and branch coverage (363 stmts, 152 branches) | `unit-test-results.txt` |
++| **4. Build, Type, Lint & License Cleanliness** | Zero errors across ruff, mypy strict, import-linter, license-gate, check_no_dashes | `ruff check .` (exit 0), `ruff format --check .` (exit 0), `mypy --strict kanban` (0 issues in 41 files), `lint-imports` (exit 0), `license_gate.py` (0 violations), `check_no_dashes --all` (exit 0) | `build-check.txt` |
++| **5. Hostile SVG Corpus Audit** | Full audit across hostile SVG inputs showing stripped elements/attributes and rejected error codes | 27/27 test vectors passed; all active scripting, SSRF beacons, XXE attacks, and DAG bombs verified | `hostile-svg-corpus-results.json` |
++| **6. Dependency Evaluation** | `defusedxml` (PSF-2.0) with sha256 hashes, S2.5/S5.4 roxmltree rationale, architect + security sign-off | Fully documented with exact wheel/sdist digests from uv.lock and citations from #116, #118, #120 | `dependency-evaluation.md` |
++| **7. Screenshots** | N/A - Non-UI Ticket | Confirmed non-UI server sanitizer | N/A |
++
++---
++
++### Mandatory Feature Test Cases (KB-P2-14)
++
++1. **Case 1 (Positive Clean Diagram)**: Validates Mermaid-style diagram containing `<svg>`, `<g>`, `<defs>`, `<linearGradient>`, `<clipPath>`, `<marker>`, `<rect>`, `<path>`, `<circle>`, `<text>`, `<tspan>`, and valid local `<use href="#node-box"/>` (`depth=1`, expansion `< 50`). Sanitizes cleanly and re-parses as valid XML. (`test_case_1_positive_clean_diagram`) - PASS
++2. **Case 2 (Security Active Content Strip)**: Strips `<script>`, `<foreignObject>`, `<iframe>`, `<style>`, `<animate>`, `<set>`, `<a>`, and `on*` event handlers while preserving sibling `<rect>` geometry. (`test_case_2_security_active_content_strip`) - PASS
++3. **Case 3 (Security External SSRF / Tracking Pixel)**: Strips `<image>` and external `href`/`fill` completely (`0` occurrences of external `http`, `169.254`, or `data:` in output). (`test_case_3_security_external_ssrf_and_tracking_pixel`) - PASS
++4. **Case 4 (Security XXE & XML Billion Laughs)**: SVG with `<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>` or quadratic `<!ENTITY lol3 ...>` fails closed with `SVG_DTD_OR_ENTITY_FORBIDDEN`. (`test_case_4_security_xxe_and_entity_expansion_forbidden`) - PASS
++5. **Case 5 (Security <use> Cycle)**: Direct self-reference `<g id="a"><use href="#a"/></g>` and mutual cycle `a -> b -> a` raise `SVG_USE_CYCLE`. (`test_case_5_security_use_cycle_detected`) - PASS
++6. **Case 6 (Boundary <use> Depth Cap <= 4)**: Chain `u1 -> u2 -> u3 -> u4 -> rect` (`depth=4`) succeeds; adding `u0 -> u1` (`depth=5`) raises `SVG_USE_DEPTH_EXCEEDED`. (`test_case_6_boundary_use_depth_cap`) - PASS
++7. **Case 7 (Boundary <use> Expansion Cap <= 500)**: Exponential branching `<use>` bomb raises `SVG_EXPANSION_LIMIT_EXCEEDED`; exactly 500 nodes succeeds; 501 nodes raises. (`test_case_7_boundary_use_expansion_cap`) - PASS
++8. **Case 8 (Boundary Size, Encoding & Duplicate IDs)**: `2,097,152`-byte SVG passes; `2,097,153`-byte SVG raises `SVG_SIZE_INVALID`; UTF-16/32 BOMs raise `SVG_INVALID_UTF8`; two elements with duplicate id raise `SVG_DUPLICATE_ID`; non-SVG `<html/>` root raises `SVG_ROOT_INVALID`. (`test_case_8_boundary_size_encoding_and_duplicate_ids`) - PASS
++
++---
++
++### Verification Proof Artifacts
++
++- `docs/qa/KANBA-65/git-diff.patch`
++- `docs/qa/KANBA-65/unit-test-results.txt`
++- `docs/qa/KANBA-65/build-check.txt`
++- `docs/qa/KANBA-65/hostile-svg-corpus-results.json`
++- `docs/qa/KANBA-65/dependency-evaluation.md`
++- `docs/qa/KANBA-65/message-to-reality-checker.md`
+diff --git a/docs/qa/KANBA-65/unit-test-results.txt b/docs/qa/KANBA-65/unit-test-results.txt
+new file mode 100644
+index 0000000..2abfb0a
+--- /dev/null
++++ b/docs/qa/KANBA-65/unit-test-results.txt
+@@ -0,0 +1,59 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-65/.venv/bin/python
++rootdir: /tmp/kb-wt-KANBA-65
++configfile: pyproject.toml
++plugins: platformdirs-4.14.5, anyio-4.16.0, asyncio-1.4.1.post1, xdist-3.8.0, socket-0.8.1, cov-7.1.0
++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
++collecting ... collected 39 items
++
++kanban/tests/content/test_svg_sanitizer.py::test_case_1_positive_clean_diagram PASSED [  2%]
++kanban/tests/content/test_svg_sanitizer.py::test_case_2_security_active_content_strip PASSED [  5%]
++kanban/tests/content/test_svg_sanitizer.py::test_case_3_security_external_ssrf_and_tracking_pixel PASSED [  7%]
++kanban/tests/content/test_svg_sanitizer.py::test_case_4_security_xxe_and_entity_expansion_forbidden PASSED [ 10%]
++kanban/tests/content/test_svg_sanitizer.py::test_case_5_security_use_cycle_detected PASSED [ 12%]
++kanban/tests/content/test_svg_sanitizer.py::test_case_6_boundary_use_depth_cap PASSED [ 15%]
++kanban/tests/content/test_svg_sanitizer.py::test_case_7_boundary_use_expansion_cap PASSED [ 17%]
++kanban/tests/content/test_svg_sanitizer.py::test_case_8_boundary_size_encoding_and_duplicate_ids PASSED [ 20%]
++kanban/tests/content/test_svg_sanitizer.py::test_hostile_svg_corpus_audit PASSED [ 23%]
++kanban/tests/content/test_svg_sanitizer.py::test_excessive_viewbox_coordinates_rejected PASSED [ 25%]
++kanban/tests/content/test_svg_sanitizer.py::test_excessive_width_height_coordinates_rejected PASSED [ 28%]
++kanban/tests/content/test_svg_sanitizer.py::test_xml_nesting_depth_cap_exceeded PASSED [ 30%]
++kanban/tests/content/test_svg_sanitizer.py::test_xml_raw_element_count_cap_exceeded PASSED [ 33%]
++kanban/tests/content/test_svg_sanitizer.py::test_malformed_xml_syntax_raises PASSED [ 35%]
++kanban/tests/content/test_svg_sanitizer.py::test_unicode_surrogate_and_invisible_chars PASSED [ 38%]
++kanban/tests/content/test_svg_sanitizer.py::test_invalid_id_format_stripped_safely PASSED [ 41%]
++kanban/tests/content/test_svg_sanitizer.py::test_foreign_attribute_stripped PASSED [ 43%]
++kanban/tests/content/test_svg_sanitizer.py::test_bytes_input_handled_identically PASSED [ 46%]
++kanban/tests/content/test_svg_sanitizer.py::test_coverage_edge_cases_encoding_and_dimensions PASSED [ 48%]
++kanban/tests/content/test_svg_sanitizer.py::test_coverage_edge_cases_attributes_and_expansion PASSED [ 51%]
++kanban/tests/content/test_svg_use_dag.py::test_svg_dag_result_integer_behavior PASSED [ 53%]
++kanban/tests/content/test_svg_use_dag.py::test_svg_sanitize_error_attributes PASSED [ 56%]
++kanban/tests/content/test_svg_use_dag.py::test_clean_svg_without_references PASSED [ 58%]
++kanban/tests/content/test_svg_use_dag.py::test_clean_single_level_use_reference PASSED [ 61%]
++kanban/tests/content/test_svg_use_dag.py::test_multiple_independent_uses_share_target PASSED [ 64%]
++kanban/tests/content/test_svg_use_dag.py::test_depth_chain_4_succeeds PASSED [ 66%]
++kanban/tests/content/test_svg_use_dag.py::test_depth_chain_5_raises_use_depth_exceeded PASSED [ 69%]
++kanban/tests/content/test_svg_use_dag.py::test_exact_500_expansion_succeeds PASSED [ 71%]
++kanban/tests/content/test_svg_use_dag.py::test_501_expansion_raises_expansion_limit_exceeded PASSED [ 74%]
++kanban/tests/content/test_svg_use_dag.py::test_use_expansion_exact_500_nodes PASSED [ 76%]
++kanban/tests/content/test_svg_use_dag.py::test_use_expansion_501_nodes_raises PASSED [ 79%]
++kanban/tests/content/test_svg_use_dag.py::test_billion_laughs_expansion_bomb_rejected PASSED [ 82%]
++kanban/tests/content/test_svg_use_dag.py::test_cycle_direct_self_reference PASSED [ 84%]
++kanban/tests/content/test_svg_use_dag.py::test_cycle_mutual_two_nodes PASSED [ 87%]
++kanban/tests/content/test_svg_use_dag.py::test_cycle_ancestor_containment PASSED [ 89%]
++kanban/tests/content/test_svg_use_dag.py::test_cycle_direct_use_self_loop PASSED [ 92%]
++kanban/tests/content/test_svg_use_dag.py::test_cycle_gradient_href_loop PASSED [ 94%]
++kanban/tests/content/test_svg_use_dag.py::test_cycle_clip_path_url_loop PASSED [ 97%]
++kanban/tests/content/test_svg_use_dag.py::test_missing_target_treated_safely PASSED [100%]
++
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                              Stmts   Miss Branch BrPart  Cover   Missing
++-----------------------------------------------------------------------------
++kanban/content/svg_dag.py           121      2     52      2    98%   188, 195
++kanban/content/svg_sanitizer.py     242      7    100      2    97%   201, 227-228, 294-297, 464->463
++-----------------------------------------------------------------------------
++TOTAL                               363      9    152      4    97%
++Required test coverage of 95% reached. Total coverage: 97.09%
++============================== 39 passed in 5.31s ==============================
+diff --git a/kanban/content/__init__.py b/kanban/content/__init__.py
+index 63f0106..21151e7 100644
+--- a/kanban/content/__init__.py
++++ b/kanban/content/__init__.py
+@@ -1,7 +1,8 @@
+ """Markdown and content normalization package for Kanban.
+ 
+ Provides canonical Markdown conversion, hidden-DOM paste-jacking pruning,
+-Rust nh3 sanitization, Unicode/control-character guards, and safe URI enforcement.
++Rust nh3 sanitization, Unicode/control-character guards, safe URI enforcement,
++and server-side SVG geometry sanitization with acyclic DAG validation.
+ """
+ 
+ from __future__ import annotations
+@@ -21,6 +22,24 @@ from kanban.content.normalize import (
+     normalize_plain_text,
+     normalize_to_markdown,
+ )
++from kanban.content.svg_dag import (
++    MAX_SVG_EXPANDED_NODES,
++    MAX_SVG_USE_DEPTH,
++    SvgDagResult,
++    SvgSanitizeError,
++    validate_svg_use_dag,
++)
++from kanban.content.svg_sanitizer import (
++    ALLOWED_SVG_ATTRS,
++    ALLOWED_SVG_ELEMENTS,
++    DEFAULT_MAX_SVG_BYTES,
++    MAX_COORDINATE_DIMENSION,
++    MAX_RAW_ELEMENTS,
++    MAX_XML_DEPTH,
++    SvgSanitizeReport,
++    sanitize_svg,
++    sanitize_svg_with_report,
++)
+ from kanban.content.unicode_guard import (
+     is_c0_c1_control,
+     is_zero_width_or_invisible,
+@@ -28,9 +47,20 @@ from kanban.content.unicode_guard import (
+ )
+ 
+ __all__ = [
++    "ALLOWED_SVG_ATTRS",
++    "ALLOWED_SVG_ELEMENTS",
++    "DEFAULT_MAX_SVG_BYTES",
++    "MAX_COORDINATE_DIMENSION",
++    "MAX_RAW_ELEMENTS",
++    "MAX_SVG_EXPANDED_NODES",
++    "MAX_SVG_USE_DEPTH",
++    "MAX_XML_DEPTH",
+     "ContentNormalizeError",
+     "InputKind",
+     "NormalizationReport",
++    "SvgDagResult",
++    "SvgSanitizeError",
++    "SvgSanitizeReport",
+     "disarm_dangerous_markdown_links",
+     "is_c0_c1_control",
+     "is_safe_url",
+@@ -41,5 +71,8 @@ __all__ = [
+     "normalize_plain_text",
+     "normalize_to_markdown",
+     "prune_hidden_dom",
++    "sanitize_svg",
++    "sanitize_svg_with_report",
+     "strip_invisible_and_control_chars",
++    "validate_svg_use_dag",
+ ]
+diff --git a/kanban/content/svg_dag.py b/kanban/content/svg_dag.py
+new file mode 100644
+index 0000000..ca47428
+--- /dev/null
++++ b/kanban/content/svg_dag.py
+@@ -0,0 +1,239 @@
++"""Local acyclic DAG and complexity validator for SVG <use> and gradient references.
++
++Enforces:
++1. Cycle-free references across containment and href/url() links (SVG_USE_CYCLE).
++2. Maximum <use> reference chain depth <= 4 (SVG_USE_DEPTH_EXCEEDED).
++3. Maximum rendered DOM node expansion <= 500 (SVG_EXPANSION_LIMIT_EXCEEDED).
++"""
++
++from __future__ import annotations
++
++import re
++from typing import TYPE_CHECKING, Self
++
++if TYPE_CHECKING:
++    import xml.etree.ElementTree as ET
++
++# Maximum allowable <use> chain depth per Section 5.4
++MAX_SVG_USE_DEPTH: int = 4
++
++# Maximum allowable rendered DOM nodes after <use> expansion per Section 5.4
++MAX_SVG_EXPANDED_NODES: int = 500
++
++# Error code constants
++ERR_SVG_USE_CYCLE: str = "SVG_USE_CYCLE"
++ERR_SVG_USE_DEPTH_EXCEEDED: str = "SVG_USE_DEPTH_EXCEEDED"
++ERR_SVG_EXPANSION_LIMIT_EXCEEDED: str = "SVG_EXPANSION_LIMIT_EXCEEDED"
++
++# DFS cycle detection node states
++_STATE_UNVISITED: int = 0
++_STATE_IN_STACK: int = 1
++_STATE_DONE: int = 2
++
++# Pattern for valid local url(#id) reference
++_URL_TARGET_RE: re.Pattern[str] = re.compile(r"^url\(#([A-Za-z_][A-Za-z0-9_.-]{0,127})\)$")
++
++# Reference attributes that may point to other elements via url(#id)
++_REF_ATTRS: tuple[str, ...] = (
++    "fill",
++    "stroke",
++    "clip-path",
++    "marker-start",
++    "marker-mid",
++    "marker-end",
++)
++
++
++class SvgSanitizeError(Exception):
++    """Raised when SVG sanitization or safety checks fail."""
++
++    def __init__(self, code: str, message: str | None = None) -> None:
++        """Initialize with machine-readable error code and optional message."""
++        self.code = code
++        self.message = message or code
++        super().__init__(self.message)
++
++
++class SvgDagResult(int):
++    """Result of SVG DAG validation, carrying expansion count and max use depth."""
++
++    expanded_nodes: int
++    max_use_depth: int
++
++    def __new__(cls, expanded_nodes: int, max_use_depth: int) -> Self:
++        """Create new SvgDagResult behaving as integer total node expansion."""
++        obj = super().__new__(cls, expanded_nodes)
++        obj.expanded_nodes = expanded_nodes
++        obj.max_use_depth = max_use_depth
++        return obj
++
++
++def _get_local_tag(tag: str) -> str:
++    """Return local XML tag name without namespace."""
++    if tag.startswith("{"):
++        return tag.split("}", 1)[1]
++    return tag
++
++
++def _get_use_target(elem: ET.Element, id_map: dict[str, ET.Element]) -> ET.Element | None:
++    """Return target element referenced by href or xlink:href if present in id_map."""
++    href = elem.attrib.get("href") or elem.attrib.get("{http://www.w3.org/1999/xlink}href")
++    if href and href.startswith("#"):
++        return id_map.get(href[1:])
++    return None
++
++
++def _get_element_references(elem: ET.Element, id_map: dict[str, ET.Element]) -> list[ET.Element]:
++    """Return all target elements referenced by elem via href or url(#id)."""
++    refs: list[ET.Element] = []
++    target = _get_use_target(elem, id_map)
++    if target is not None:
++        refs.append(target)
++
++    for attr in _REF_ATTRS:
++        val = elem.attrib.get(attr)
++        if val:
++            match = _URL_TARGET_RE.match(val.strip())
++            if match:
++                ref_target = id_map.get(match.group(1))
++                if ref_target is not None:
++                    refs.append(ref_target)
++    return refs
++
++
++def _detect_cycles(root: ET.Element, id_map: dict[str, ET.Element]) -> None:
++    """Detect cycles across containment and reference edges via DFS."""
++    state: dict[int, int] = {}
++
++    def check_cycles(elem: ET.Element) -> None:
++        elem_id = id(elem)
++        st = state.get(elem_id, _STATE_UNVISITED)
++        if st == _STATE_IN_STACK:
++            raise SvgSanitizeError(ERR_SVG_USE_CYCLE)
++        if st == _STATE_DONE:
++            return
++
++        state[elem_id] = _STATE_IN_STACK
++
++        for child in elem:
++            check_cycles(child)
++
++        for ref_target in _get_element_references(elem, id_map):
++            check_cycles(ref_target)
++
++        state[elem_id] = _STATE_DONE
++
++    for elem in root.iter():
++        if state.get(id(elem), _STATE_UNVISITED) == _STATE_UNVISITED:
++            check_cycles(elem)
++
++
++def _compute_use_depth(
++    root: ET.Element,
++    id_map: dict[str, ET.Element],
++    max_depth: int,
++) -> int:
++    """Compute maximum <use> reference chain depth across the document."""
++    depth_memo: dict[int, int] = {}
++
++    def get_use_depth(elem: ET.Element) -> int:
++        elem_id = id(elem)
++        if elem_id in depth_memo:
++            return depth_memo[elem_id]
++
++        local_tag = _get_local_tag(elem.tag)
++        child_max = max((get_use_depth(child) for child in elem), default=0)
++
++        if local_tag == "use":
++            target = _get_use_target(elem, id_map)
++            target_depth = get_use_depth(target) if target is not None else 0
++            total_d = max(1 + target_depth, child_max)
++        else:
++            total_d = child_max
++
++        depth_memo[elem_id] = total_d
++        return total_d
++
++    max_doc_depth = max((get_use_depth(e) for e in root.iter()), default=0)
++    if max_doc_depth > max_depth:
++        raise SvgSanitizeError(ERR_SVG_USE_DEPTH_EXCEEDED)
++    return max_doc_depth
++
++
++def _compute_expansion_cost(
++    root: ET.Element,
++    id_map: dict[str, ET.Element],
++    max_expanded_nodes: int,
++) -> int:
++    """Compute rendered node expansion cost via bottom-up memoized count."""
++    cost_memo: dict[int, int] = {}
++
++    def get_node_cost(elem: ET.Element) -> int:
++        elem_id = id(elem)
++        if elem_id in cost_memo:
++            return cost_memo[elem_id]
++
++        cost = 1
++        for child in elem:
++            cost += get_node_cost(child)
++            if cost > max_expanded_nodes:
++                raise SvgSanitizeError(ERR_SVG_EXPANSION_LIMIT_EXCEEDED)
++
++        local_tag = _get_local_tag(elem.tag)
++        if local_tag == "use":
++            target = _get_use_target(elem, id_map)
++            if target is not None:
++                cost += get_node_cost(target)
++                if cost > max_expanded_nodes:
++                    raise SvgSanitizeError(ERR_SVG_EXPANSION_LIMIT_EXCEEDED)
++
++        cost_memo[elem_id] = cost
++        return cost
++
++    total_expanded_nodes = get_node_cost(root)
++    if total_expanded_nodes > max_expanded_nodes:
++        raise SvgSanitizeError(ERR_SVG_EXPANSION_LIMIT_EXCEEDED)
++    return total_expanded_nodes
++
++
++def validate_svg_use_dag(
++    root: ET.Element,
++    id_map: dict[str, ET.Element] | None = None,
++    max_depth: int = MAX_SVG_USE_DEPTH,
++    max_expanded_nodes: int = MAX_SVG_EXPANDED_NODES,
++) -> SvgDagResult:
++    """Validate that SVG use and gradient references form an acyclic DAG within limits.
++
++    Args:
++        root: Root XML element of the sanitized SVG.
++        id_map: Mapping of element id to Element instance. If None, built from root.
++        max_depth: Maximum permitted <use> reference chain depth (default 4).
++        max_expanded_nodes: Maximum permitted rendered nodes after expansion (default 500).
++
++    Returns:
++        SvgDagResult carrying expanded_nodes count and max_use_depth.
++
++    Raises:
++        SvgSanitizeError: If a cycle, excessive depth, or excessive expansion is detected.
++
++    """
++    if id_map is None:
++        id_map = {}
++        for elem in root.iter():
++            elem_id = elem.attrib.get("id")
++            if elem_id:
++                id_map[elem_id] = elem
++
++    # 1. Detect cycles via DFS
++    _detect_cycles(root, id_map)
++
++    # 2. Compute maximum <use> chain depth
++    max_doc_depth = _compute_use_depth(root, id_map, max_depth)
++
++    # 3. Compute rendered node expansion cost
++    total_expanded_nodes = _compute_expansion_cost(root, id_map, max_expanded_nodes)
++
++    return SvgDagResult(
++        expanded_nodes=total_expanded_nodes,
++        max_use_depth=max_doc_depth,
++    )
+diff --git a/kanban/content/svg_sanitizer.py b/kanban/content/svg_sanitizer.py
+new file mode 100644
+index 0000000..3531ceb
+--- /dev/null
++++ b/kanban/content/svg_sanitizer.py
+@@ -0,0 +1,537 @@
++"""Server-side SVG sanitizer enforcing geometry allowlists and safe presentation attributes.
++
++Hardens uploaded .svg diagrams and media against:
++- XXE and entity expansion bombs via pre-parse byte scanners and defusedxml.
++- XSS and active scripts by stripping <script>, <foreignObject>, <style>, and on* handlers.
++- SSRF and external leaks by stripping <image> and external href / url() references.
++- Billion-laughs and recursive reference bombs via local acyclic DAG validation (svg_dag.py).
++"""
++
++from __future__ import annotations
++
++import re
++import xml.etree.ElementTree as ET
++from dataclasses import dataclass
++
++import defusedxml.common
++import defusedxml.ElementTree
++
++from kanban.content.svg_dag import (
++    MAX_SVG_EXPANDED_NODES,
++    MAX_SVG_USE_DEPTH,
++    SvgDagResult,
++    SvgSanitizeError,
++    validate_svg_use_dag,
++)
++from kanban.content.unicode_guard import (
++    SURROGATE_MAX,
++    SURROGATE_MIN,
++    ContentNormalizeError,
++    strip_invisible_and_control_chars,
++)
++
++# Maximum input payload size per Section 5.4 (2 MiB default)
++DEFAULT_MAX_SVG_BYTES: int = 2_097_152
++
++# Maximum allowable XML tree nesting depth
++MAX_XML_DEPTH: int = 64
++
++# Maximum allowable raw XML elements
++MAX_RAW_ELEMENTS: int = 5000
++
++# Maximum viewport coordinate dimension to prevent canvas exhaustion
++MAX_COORDINATE_DIMENSION: float = 32768.0
++
++# Error code constants
++ERR_SVG_SIZE_INVALID: str = "SVG_SIZE_INVALID"
++ERR_SVG_INVALID_UTF8: str = "SVG_INVALID_UTF8"
++ERR_SVG_DTD_OR_ENTITY_FORBIDDEN: str = "SVG_DTD_OR_ENTITY_FORBIDDEN"
++ERR_SVG_MALFORMED_XML: str = "SVG_MALFORMED_XML"
++ERR_SVG_ROOT_INVALID: str = "SVG_ROOT_INVALID"
++ERR_SVG_COMPLEXITY_EXCEEDED: str = "SVG_COMPLEXITY_EXCEEDED"
++ERR_SVG_DUPLICATE_ID: str = "SVG_DUPLICATE_ID"
++ERR_SVG_DIMENSIONS_INVALID: str = "SVG_DIMENSIONS_INVALID"
++
++# Allowed vector geometry and structural elements per Section 5.4 line 398
++ALLOWED_SVG_ELEMENTS: frozenset[str] = frozenset(
++    {
++        "svg",
++        "g",
++        "path",
++        "rect",
++        "circle",
++        "ellipse",
++        "line",
++        "polyline",
++        "polygon",
++        "text",
++        "tspan",
++        "defs",
++        "symbol",
++        "use",
++        "linearGradient",
++        "radialGradient",
++        "stop",
++        "clipPath",
++        "marker",
++        "title",
++        "desc",
++    }
++)
++
++# Allowed safe geometry and presentation attributes per Section 5.4
++ALLOWED_SVG_ATTRS: frozenset[str] = frozenset(
++    {
++        "id",
++        "viewBox",
++        "preserveAspectRatio",
++        "width",
++        "height",
++        "x",
++        "y",
++        "x1",
++        "y1",
++        "x2",
++        "y2",
++        "cx",
++        "cy",
++        "r",
++        "rx",
++        "ry",
++        "d",
++        "points",
++        "transform",
++        "gradientUnits",
++        "gradientTransform",
++        "spreadMethod",
++        "offset",
++        "stop-color",
++        "stop-opacity",
++        "clipPathUnits",
++        "markerUnits",
++        "markerWidth",
++        "markerHeight",
++        "refX",
++        "refY",
++        "orient",
++        "fill",
++        "fill-opacity",
++        "fill-rule",
++        "stroke",
++        "stroke-width",
++        "stroke-linecap",
++        "stroke-linejoin",
++        "stroke-miterlimit",
++        "stroke-dasharray",
++        "stroke-dashoffset",
++        "stroke-opacity",
++        "opacity",
++        "color",
++        "font-family",
++        "font-size",
++        "font-weight",
++        "font-style",
++        "text-anchor",
++        "dominant-baseline",
++        "dx",
++        "dy",
++        "clip-path",
++        "marker-start",
++        "marker-mid",
++        "marker-end",
++        "href",
++    }
++)
++
++# Pre-parse scanner pattern rejecting DTD, entity declarations, CDATA, and stylesheets
++_FORBIDDEN_PREPARSE_PATTERN: re.Pattern[str] = re.compile(
++    r"<!\s*(?:doctype|entity|\[\s*cdata\s*\[)|\<\?\s*xml-stylesheet",
++    re.IGNORECASE,
++)
++
++# Valid XML ID pattern per Section 5.4
++_ID_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$")
++
++# Valid local href pattern pointing to local #id
++_HREF_PATTERN: re.Pattern[str] = re.compile(r"^#[A-Za-z_][A-Za-z0-9_.-]{0,127}$")
++
++# Valid local paint/clip/marker url(#id) pattern
++_URL_REF_PATTERN: re.Pattern[str] = re.compile(r"^url\(#([A-Za-z_][A-Za-z0-9_.-]{0,127})\)$")
++
++# Dimension numeric parser supporting optional units (px, %, em, etc.)
++_DIM_PATTERN: re.Pattern[str] = re.compile(
++    r"^([+-]?(?:\d+(?:\.\d*)?|\.\d+))(?:px|%|em|rem|pt|pc|in|cm|mm)?$",
++    re.IGNORECASE,
++)
++
++# Elements permitted to hold local href targets
++_HREF_PERMITTED_ELEMENTS: frozenset[str] = frozenset({"use", "linearGradient", "radialGradient"})
++
++# Paint and reference attributes that can hold url(#id) values
++_PAINT_REF_ATTRS: frozenset[str] = frozenset(
++    {"fill", "stroke", "clip-path", "marker-start", "marker-mid", "marker-end"}
++)
++
++# Dangerous tokens forbidden inside presentation attributes
++_FORBIDDEN_CSS_TOKENS: tuple[str, ...] = (
++    "expression(",
++    "javascript:",
++    "@import",
++    "image-set(",
++)
++
++
++@dataclass(frozen=True)
++class SvgSanitizeReport:
++    """Detailed audit metrics and canonical output of SVG sanitization."""
++
++    input_bytes: int
++    output_bytes: int
++    stripped_elements: int
++    stripped_attrs: int
++    expanded_nodes: int
++    max_use_depth: int
++    output_svg: str
++
++
++def _get_local_name(tag: str) -> str:
++    """Return local XML tag name without namespace."""
++    if tag.startswith("{"):
++        return tag.split("}", 1)[1]
++    return tag
++
++
++def _get_tag_namespace_and_local(tag: str) -> tuple[str, str]:
++    """Return tuple of (namespace, local_tag)."""
++    if tag.startswith("{"):
++        ns, local = tag[1:].split("}", 1)
++        return ns, local
++    return "", tag
++
++
++def _get_xml_depth(elem: ET.Element, current_depth: int = 1) -> int:
++    """Return maximum XML nesting depth of the element subtree."""
++    return max(
++        (_get_xml_depth(child, current_depth + 1) for child in elem),
++        default=current_depth,
++    )
++
++
++def _parse_dimension_value(val: str) -> float | None:
++    """Parse numeric portion of a dimension string."""
++    match = _DIM_PATTERN.match(val)
++    if not match:
++        return None
++    try:
++        return float(match.group(1))
++    except ValueError:
++        return None
++
++
++def _validate_dimension_coordinates(elem: ET.Element) -> None:
++    """Validate viewBox, width, and height attributes to reject canvas bombs."""
++    if "viewBox" in elem.attrib:
++        raw_vb = elem.attrib["viewBox"].strip()
++        parts = [p for p in re.split(r"[\s,]+", raw_vb) if p]
++        coord_count = 4
++        if len(parts) != coord_count:
++            raise SvgSanitizeError(ERR_SVG_DIMENSIONS_INVALID)
++        try:
++            coords = [float(p) for p in parts]
++        except ValueError as exc:
++            raise SvgSanitizeError(ERR_SVG_DIMENSIONS_INVALID) from exc
++
++        if any(abs(c) > MAX_COORDINATE_DIMENSION for c in coords):
++            raise SvgSanitizeError(ERR_SVG_DIMENSIONS_INVALID)
++        width_idx = 2
++        height_idx = 3
++        if coords[width_idx] < 0 or coords[height_idx] < 0:
++            raise SvgSanitizeError(ERR_SVG_DIMENSIONS_INVALID)
++
++    for dim in ("width", "height"):
++        if dim in elem.attrib:
++            val = elem.attrib[dim].strip()
++            num = _parse_dimension_value(val)
++            if num is None or num < 0 or num > MAX_COORDINATE_DIMENSION:
++                raise SvgSanitizeError(ERR_SVG_DIMENSIONS_INVALID)
++
++
++def _decode_and_guard_input(svg_input: str | bytes, max_bytes: int) -> tuple[bytes, str]:
++    """Validate encoding, size, and unicode characteristics of raw SVG input."""
++    if isinstance(svg_input, str):
++        for char in svg_input:
++            cp = ord(char)
++            if SURROGATE_MIN <= cp <= SURROGATE_MAX:
++                raise SvgSanitizeError(ERR_SVG_INVALID_UTF8)
++        raw_bytes = svg_input.encode("utf-8")
++    else:
++        raw_bytes = svg_input
++
++    if len(raw_bytes) < 1 or len(raw_bytes) > max_bytes:
++        raise SvgSanitizeError(ERR_SVG_SIZE_INVALID)
++
++    # Reject non-UTF-8 BOM signatures
++    if raw_bytes.startswith(
++        (
++            b"\xff\xfe\x00\x00",
++            b"\x00\x00\xfe\xff",
++            b"\xff\xfe",
++            b"\xfe\xff",
++            b"\x2b\x2f\x76",
++        )
++    ):
++        raise SvgSanitizeError(ERR_SVG_INVALID_UTF8)
++
++    try:
++        text = raw_bytes.decode("utf-8")
++    except UnicodeDecodeError as exc:
++        raise SvgSanitizeError(ERR_SVG_INVALID_UTF8) from exc
++
++    text = text.removeprefix("\ufeff")
++
++    try:
++        text, _, _ = strip_invisible_and_control_chars(text, max_input_bytes=max_bytes)
++    except ContentNormalizeError as exc:
++        if exc.code == "CONTENT_TOO_LARGE":
++            raise SvgSanitizeError(ERR_SVG_SIZE_INVALID) from exc
++        raise SvgSanitizeError(ERR_SVG_INVALID_UTF8) from exc
++
++    return raw_bytes, text
++
++
++def _parse_and_validate_xml_root(text: str) -> ET.Element:
++    """Perform pre-parse scan and safe XML parsing with defusedxml."""
++    if _FORBIDDEN_PREPARSE_PATTERN.search(text):
++        raise SvgSanitizeError(ERR_SVG_DTD_OR_ENTITY_FORBIDDEN)
++
++    try:
++        root = defusedxml.ElementTree.fromstring(
++            text,
++            forbid_dtd=True,
++            forbid_entities=True,
++            forbid_external=True,
++        )
++    except defusedxml.common.DefusedXmlException as exc:
++        raise SvgSanitizeError(ERR_SVG_DTD_OR_ENTITY_FORBIDDEN) from exc
++    except (ET.ParseError, ValueError) as exc:
++        raise SvgSanitizeError(ERR_SVG_MALFORMED_XML) from exc
++
++    root_ns, root_local = _get_tag_namespace_and_local(root.tag)
++    if root_local != "svg":
++        raise SvgSanitizeError(ERR_SVG_ROOT_INVALID)
++    if root_ns and root_ns != "http://www.w3.org/2000/svg":
++        raise SvgSanitizeError(ERR_SVG_ROOT_INVALID)
++
++    raw_element_count = sum(1 for _ in root.iter())
++    if raw_element_count > MAX_RAW_ELEMENTS:
++        raise SvgSanitizeError(ERR_SVG_COMPLEXITY_EXCEEDED)
++    if _get_xml_depth(root) > MAX_XML_DEPTH:
++        raise SvgSanitizeError(ERR_SVG_COMPLEXITY_EXCEEDED)
++
++    return root
++
++
++def _prune_disallowed_subtrees(parent: ET.Element) -> int:
++    """Recursively remove subtrees of non-allowed elements, preserving tail text."""
++    stripped_count = 0
++    for child in list(parent):
++        _, local_tag = _get_tag_namespace_and_local(child.tag)
++        if local_tag not in ALLOWED_SVG_ELEMENTS:
++            idx = list(parent).index(child)
++            if child.tail:
++                if idx > 0:
++                    prev = parent[idx - 1]
++                    prev.tail = (prev.tail or "") + child.tail
++                else:
++                    parent.text = (parent.text or "") + child.tail
++            parent.remove(child)
++            stripped_count += 1
++        else:
++            stripped_count += _prune_disallowed_subtrees(child)
++    return stripped_count
++
++
++def _collect_and_validate_ids(
++    root: ET.Element,
++) -> tuple[dict[str, ET.Element], int]:
++    """Collect valid IDs and assert uniqueness across the document."""
++    seen_ids: set[str] = set()
++    id_map: dict[str, ET.Element] = {}
++    stripped_attrs = 0
++
++    for elem in root.iter():
++        elem_id = elem.attrib.get("id")
++        if elem_id is not None:
++            if not _ID_PATTERN.match(elem_id):
++                del elem.attrib["id"]
++                stripped_attrs += 1
++            elif elem_id in seen_ids:
++                raise SvgSanitizeError(ERR_SVG_DUPLICATE_ID)
++            else:
++                seen_ids.add(elem_id)
++                id_map[elem_id] = elem
++
++    return id_map, stripped_attrs
++
++
++def _sanitize_href_attr(elem: ET.Element, id_map: dict[str, ET.Element]) -> int:
++    """Validate and filter href attribute on an element."""
++    if "href" not in elem.attrib:
++        return 0
++
++    local_tag = _get_local_name(elem.tag)
++    if local_tag not in _HREF_PERMITTED_ELEMENTS:
++        del elem.attrib["href"]
++        return 1
++
++    href_val = elem.attrib["href"]
++    if not _HREF_PATTERN.match(href_val):
++        del elem.attrib["href"]
++        return 1
++
++    target_id = href_val[1:]
++    if target_id not in id_map:
++        del elem.attrib["href"]
++        return 1
++
++    return 0
++
++
++def _sanitize_paint_attrs(elem: ET.Element, id_map: dict[str, ET.Element]) -> int:
++    """Validate paint and reference attributes on an element."""
++    stripped = 0
++    for paint_attr in _PAINT_REF_ATTRS:
++        if paint_attr in elem.attrib:
++            val = elem.attrib[paint_attr].strip()
++            lower_val = val.lower()
++            if any(tok in lower_val for tok in _FORBIDDEN_CSS_TOKENS):
++                del elem.attrib[paint_attr]
++                stripped += 1
++                continue
++            if "url(" in lower_val:
++                match = _URL_REF_PATTERN.match(val)
++                if match:
++                    ref_target_id = match.group(1)
++                    if ref_target_id not in id_map:
++                        del elem.attrib[paint_attr]
++                        stripped += 1
++                else:
++                    del elem.attrib[paint_attr]
++                    stripped += 1
++    return stripped
++
++
++def _sanitize_element_attributes(root: ET.Element, id_map: dict[str, ET.Element]) -> int:
++    """Sanitize all attributes across allowed elements in the document."""
++    stripped_attrs = 0
++
++    for elem in root.iter():
++        xlink_key = "{http://www.w3.org/1999/xlink}href"
++        if xlink_key in elem.attrib:
++            xlink_val = elem.attrib.pop(xlink_key)
++            if "href" not in elem.attrib:
++                elem.attrib["href"] = xlink_val
++
++        for attr in list(elem.attrib.keys()):
++            if attr.startswith("{"):
++                del elem.attrib[attr]
++                stripped_attrs += 1
++                continue
++            lower_attr = attr.lower()
++            if lower_attr in ("xmlns:xlink", "xml:base", "style") or lower_attr.startswith("on"):
++                del elem.attrib[attr]
++                stripped_attrs += 1
++                continue
++            if attr not in ALLOWED_SVG_ATTRS:
++                del elem.attrib[attr]
++                stripped_attrs += 1
++                continue
++
++        stripped_attrs += _sanitize_href_attr(elem, id_map)
++        stripped_attrs += _sanitize_paint_attrs(elem, id_map)
++        _validate_dimension_coordinates(elem)
++
++    return stripped_attrs
++
++
++def _serialize_clean_svg(root: ET.Element) -> str:
++    """Canonical XML serialization with deterministic attribute order."""
++    for elem in root.iter():
++        elem.tag = _get_local_name(elem.tag)
++        if elem is root:
++            clean_attrib: dict[str, str] = {"xmlns": "http://www.w3.org/2000/svg"}
++            for k in sorted(elem.attrib.keys()):
++                if k != "xmlns":
++                    clean_attrib[k] = elem.attrib[k]
++            elem.attrib = clean_attrib
++        else:
++            elem.attrib = {k: elem.attrib[k] for k in sorted(elem.attrib.keys())}
++
++    return ET.tostring(root, encoding="unicode")
++
++
++def sanitize_svg_with_report(
++    svg_input: str | bytes,
++    max_bytes: int = DEFAULT_MAX_SVG_BYTES,
++) -> SvgSanitizeReport:
++    """Sanitize raw SVG input and produce a comprehensive audit report.
++
++    Args:
++        svg_input: Raw SVG content as str or bytes.
++        max_bytes: Maximum allowed byte length (default 2 MiB).
++
++    Returns:
++        SvgSanitizeReport containing metrics and sanitized SVG XML string.
++
++    Raises:
++        SvgSanitizeError: If the SVG violates security boundaries or limits.
++
++    """
++    raw_bytes, text = _decode_and_guard_input(svg_input, max_bytes)
++    root = _parse_and_validate_xml_root(text)
++
++    stripped_elements = _prune_disallowed_subtrees(root)
++    id_map, stripped_id_attrs = _collect_and_validate_ids(root)
++    stripped_other_attrs = _sanitize_element_attributes(root, id_map)
++    total_stripped_attrs = stripped_id_attrs + stripped_other_attrs
++
++    dag_result: SvgDagResult = validate_svg_use_dag(
++        root=root,
++        id_map=id_map,
++        max_depth=MAX_SVG_USE_DEPTH,
++        max_expanded_nodes=MAX_SVG_EXPANDED_NODES,
++    )
++
++    output_svg = _serialize_clean_svg(root)
++    output_bytes = len(output_svg.encode("utf-8"))
++
++    return SvgSanitizeReport(
++        input_bytes=len(raw_bytes),
++        output_bytes=output_bytes,
++        stripped_elements=stripped_elements,
++        stripped_attrs=total_stripped_attrs,
++        expanded_nodes=dag_result.expanded_nodes,
++        max_use_depth=dag_result.max_use_depth,
++        output_svg=output_svg,
++    )
++
++
++def sanitize_svg(
++    svg_input: str | bytes,
++    max_bytes: int = DEFAULT_MAX_SVG_BYTES,
++) -> str:
++    """Sanitize raw SVG input and return safe canonical SVG string.
++
++    Args:
++        svg_input: Raw SVG content as str or bytes.
++        max_bytes: Maximum allowed byte length (default 2 MiB).
++
++    Returns:
++        Sanitized SVG XML string.
++
++    Raises:
++        SvgSanitizeError: If SVG violates safety policies or bounds.
++
++    """
++    report = sanitize_svg_with_report(svg_input, max_bytes=max_bytes)
++    return report.output_svg
+diff --git a/kanban/pyproject.toml b/kanban/pyproject.toml
+index de910dc..2cf4fba 100644
+--- a/kanban/pyproject.toml
++++ b/kanban/pyproject.toml
+@@ -11,6 +11,7 @@ license = "Apache-2.0"
+ dependencies = [
+     "argon2-cffi==25.1.0",
+     "cryptography==50.0.2",
++    "defusedxml==0.7.1",
+     "fastapi==0.162.5",
+     "kanban-database",
+     "nh3==0.3.7",
+diff --git a/kanban/tests/content/corpus/hostile_svgs.json b/kanban/tests/content/corpus/hostile_svgs.json
+new file mode 100644
+index 0000000..54aeb84
+--- /dev/null
++++ b/kanban/tests/content/corpus/hostile_svgs.json
+@@ -0,0 +1,218 @@
++[
++  {
++    "id": "xss-script-tag",
++    "category": "xss",
++    "description": "Embedded script element with alert payload",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect id=\"r1\" width=\"100\" height=\"100\"/><script>alert('xss')</script></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["script", "alert"]
++  },
++  {
++    "id": "xss-foreign-object",
++    "category": "xss",
++    "description": "Embedded foreignObject element with HTML body and onload handler",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect id=\"r1\" width=\"50\" height=\"50\"/><foreignObject width=\"100\" height=\"100\"><body xmlns=\"http://www.w3.org/1999/xhtml\" onload=\"alert(1)\"><p>evil</p></body></foreignObject></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["foreignObject", "onload", "alert"]
++  },
++  {
++    "id": "xss-iframe",
++    "category": "xss",
++    "description": "Embedded iframe targeting external script or exfiltration endpoint",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect id=\"r1\" width=\"10\" height=\"10\"/><iframe src=\"https://evil.example/payload.html\"></iframe></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["iframe", "evil.example"]
++  },
++  {
++    "id": "xss-style-import",
++    "category": "xss",
++    "description": "Embedded style element attempting CSS exfiltration via @import",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@import url(https://evil.example/x.css); body { color: red; }</style><rect id=\"r1\" width=\"20\" height=\"20\"/></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["style", "@import", "evil.example"]
++  },
++  {
++    "id": "xss-smil-animate",
++    "category": "xss",
++    "description": "SMIL animate element targeting javascript URI execution",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect id=\"r1\" width=\"10\" height=\"10\"><animate attributeName=\"href\" to=\"javascript:alert(1)\"/></rect></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["animate", "javascript:"]
++  },
++  {
++    "id": "xss-smil-set",
++    "category": "xss",
++    "description": "SMIL set element modifying attributes dynamically",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect id=\"r1\" width=\"10\" height=\"10\"><set attributeName=\"fill\" to=\"red\"/></rect></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["<set"]
++  },
++  {
++    "id": "xss-anchor-javascript",
++    "category": "xss",
++    "description": "SVG anchor element wrapping geometry with javascript pseudo-protocol",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><a href=\"javascript:alert(1)\"><rect id=\"bad\" width=\"10\" height=\"10\"/></a><rect id=\"sibling\" width=\"20\" height=\"20\"/></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["<a", "javascript:alert", "id=\"bad\""]
++  },
++  {
++    "id": "xss-event-handlers",
++    "category": "xss",
++    "description": "Inline event handler attributes on valid geometry elements",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect id=\"r1\" width=\"100\" height=\"100\" onclick=\"alert(1)\" onload=\"alert(2)\" onmouseover=\"alert(3)\"/></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["onclick", "onload", "onmouseover", "alert"]
++  },
++  {
++    "id": "xss-style-attribute",
++    "category": "xss",
++    "description": "Inline style attribute with CSS expression or payload",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect id=\"r1\" width=\"100\" height=\"100\" style=\"background: url('javascript:alert(1)')\"/></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["style=", "javascript:"]
++  },
++  {
++    "id": "ssrf-image-imds",
++    "category": "ssrf",
++    "description": "Image element attempting AWS/GCP IMDS cloud metadata extraction",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><image href=\"https://169.254.169.254/latest/meta-data\" width=\"100\" height=\"100\"/><rect id=\"r1\" width=\"10\" height=\"10\"/></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["image", "169.254.169.254", "meta-data"]
++  },
++  {
++    "id": "ssrf-use-external-sprite",
++    "category": "ssrf",
++    "description": "Use element referencing an external SVG sprite over HTTP",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><use xlink:href=\"https://evil.example/sprite.svg#icon\"/></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["https://evil.example", "sprite.svg"]
++  },
++  {
++    "id": "ssrf-use-data-uri",
++    "category": "ssrf",
++    "description": "Use element with embedded data URI payload",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><use href=\"data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+\"/></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["data:image", "base64"]
++  },
++  {
++    "id": "ssrf-fill-url-external",
++    "category": "ssrf",
++    "description": "Fill attribute with external URL reference beacon",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect id=\"r1\" width=\"100\" height=\"100\" fill=\"url(https://evil.example/beacon#grad)\"/></svg>",
++    "expected_action": "strip",
++    "forbidden_output_substrings": ["https://evil.example", "beacon"]
++  },
++  {
++    "id": "xxe-file-disclosure",
++    "category": "xxe",
++    "description": "XXE payload attempting local filesystem read via SYSTEM entity",
++    "svg": "<?xml version=\"1.0\"?><!DOCTYPE svg [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><svg xmlns=\"http://www.w3.org/2000/svg\"><text>&xxe;</text></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN"
++  },
++  {
++    "id": "xxe-quadratic-blowup",
++    "category": "xxe",
++    "description": "Classic quadratic XML entity expansion bomb (billion laughs)",
++    "svg": "<!DOCTYPE svg [<!ENTITY ha \"ha\"><!ENTITY ha2 \"&ha;&ha;\"><!ENTITY ha3 \"&ha2;&ha2;\">]><svg xmlns=\"http://www.w3.org/2000/svg\"><text>&ha3;</text></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN"
++  },
++  {
++    "id": "xxe-cdata-block",
++    "category": "xxe",
++    "description": "Pre-parse CDATA block attempting parser desynchronization",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><![CDATA[<script>alert(1)</script>]]></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN"
++  },
++  {
++    "id": "xxe-xml-stylesheet",
++    "category": "xxe",
++    "description": "XML stylesheet processing instruction invoking remote XSLT",
++    "svg": "<?xml-stylesheet type=\"text/xsl\" href=\"https://evil.example/xslt.xsl\"?><svg xmlns=\"http://www.w3.org/2000/svg\"><rect id=\"r1\" width=\"10\" height=\"10\"/></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_DTD_OR_ENTITY_FORBIDDEN"
++  },
++  {
++    "id": "cycle-self-use",
++    "category": "cycle",
++    "description": "Direct self-referencing use element inside target group",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g id=\"a\"><use href=\"#a\"/></g></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_USE_CYCLE"
++  },
++  {
++    "id": "cycle-mutual-use",
++    "category": "cycle",
++    "description": "Mutual two-element use cycle (a -> b -> a)",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g id=\"a\"><use href=\"#b\"/></g><g id=\"b\"><use href=\"#a\"/></g></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_USE_CYCLE"
++  },
++  {
++    "id": "cycle-ancestor-use",
++    "category": "cycle",
++    "description": "Nested use referencing enclosing ancestor group",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g id=\"ancestor\"><g><use href=\"#ancestor\"/></g></g></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_USE_CYCLE"
++  },
++  {
++    "id": "depth-chain-5",
++    "category": "depth",
++    "description": "Use reference chain of depth 5 exceeding maximum permitted depth of 4",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><rect id=\"rect\" width=\"10\" height=\"10\"/><use id=\"u4\" href=\"#rect\"/><use id=\"u3\" href=\"#u4\"/><use id=\"u2\" href=\"#u3\"/><use id=\"u1\" href=\"#u2\"/><use id=\"u0\" href=\"#u1\"/></defs><use href=\"#u0\"/></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_USE_DEPTH_EXCEEDED"
++  },
++  {
++    "id": "expansion-billion-laughs",
++    "category": "expansion",
++    "description": "SVG use expansion bomb with branching factor 5 exceeding 500 nodes",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><g id=\"l4\"><rect width=\"1\" height=\"1\"/><rect width=\"1\" height=\"1\"/></g><g id=\"l3\"><use href=\"#l4\"/><use href=\"#l4\"/><use href=\"#l4\"/><use href=\"#l4\"/><use href=\"#l4\"/></g><g id=\"l2\"><use href=\"#l3\"/><use href=\"#l3\"/><use href=\"#l3\"/><use href=\"#l3\"/><use href=\"#l3\"/></g><g id=\"l1\"><use href=\"#l2\"/><use href=\"#l2\"/><use href=\"#l2\"/><use href=\"#l2\"/><use href=\"#l2\"/></g></defs><use href=\"#l1\"/><use href=\"#l1\"/></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_EXPANSION_LIMIT_EXCEEDED"
++  },
++  {
++    "id": "boundary-duplicate-id",
++    "category": "boundary",
++    "description": "Two elements with identical id attribute creating shadow ambiguity",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g id=\"dup\"><rect width=\"10\" height=\"10\"/></g><g id=\"dup\"><circle r=\"5\"/></g></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_DUPLICATE_ID"
++  },
++  {
++    "id": "boundary-non-svg-root",
++    "category": "boundary",
++    "description": "Non-SVG root element such as HTML or foreign XML",
++    "svg": "<html><body><svg><rect/></svg></body></html>",
++    "expected_action": "reject",
++    "expected_error": "SVG_ROOT_INVALID"
++  },
++  {
++    "id": "boundary-excessive-viewbox",
++    "category": "boundary",
++    "description": "ViewBox coordinates exceeding safe maximum 32768 dimension limit",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 50000 50000\"><rect width=\"10\" height=\"10\"/></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_DIMENSIONS_INVALID"
++  },
++  {
++    "id": "boundary-negative-dimension",
++    "category": "boundary",
++    "description": "Negative width attribute on SVG canvas",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"-100\" height=\"100\"><rect width=\"10\" height=\"10\"/></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_DIMENSIONS_INVALID"
++  },
++  {
++    "id": "malformed-unclosed-tag",
++    "category": "malformed",
++    "description": "Syntactically malformed XML with unclosed tag",
++    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g><rect width=\"10\"></svg>",
++    "expected_action": "reject",
++    "expected_error": "SVG_MALFORMED_XML"
++  }
++]
+diff --git a/kanban/tests/content/test_svg_sanitizer.py b/kanban/tests/content/test_svg_sanitizer.py
+new file mode 100644
+index 0000000..40a11ae
+--- /dev/null
++++ b/kanban/tests/content/test_svg_sanitizer.py
+@@ -0,0 +1,695 @@
++"""Unit tests for server-side SVG sanitizer (svg_sanitizer.py).
++
++Verifies all 8 mandatory feature test case groups from KB-P2-14:
++1. Positive clean diagram (Mermaid/architecture elements sanitize and re-parse as valid XML).
++2. Active content strip (scripts, foreignObject, style, SMIL animations, on* event handlers).
++3. External SSRF and tracking pixel strip (image tags, external href, data: URIs, external url()).
++4. XXE and billion-laughs prevention (DOCTYPE, ENTITY, CDATA, xml-stylesheet rejected pre-parse).
++5. Cycle detection in <use> graphs (self-reference and mutual cycles).
++6. <use> reference depth boundary (depth 4 succeeds, depth 5 raises SVG_USE_DEPTH_EXCEEDED).
++7. <use> expansion cap boundary (500 nodes succeeds, 501 raises SVG_EXPANSION_LIMIT_EXCEEDED).
++8. Boundaries: size cap (2 MiB), UTF-16/32 BOMs, duplicate IDs, non-SVG root element.
++"""
++
++from __future__ import annotations
++
++import json
++from pathlib import Path
++from unittest.mock import patch
++from xml.etree.ElementTree import Element
++
++import defusedxml.common
++import pytest
++from defusedxml.ElementTree import fromstring
++
++from kanban.content.svg_dag import (
++    ERR_SVG_EXPANSION_LIMIT_EXCEEDED,
++    ERR_SVG_USE_CYCLE,
++    ERR_SVG_USE_DEPTH_EXCEEDED,
++    SvgSanitizeError,
++    _get_element_references,
++    _get_local_tag,
++)
++from kanban.content.svg_sanitizer import (
++    DEFAULT_MAX_SVG_BYTES,
++    ERR_SVG_COMPLEXITY_EXCEEDED,
++    ERR_SVG_DIMENSIONS_INVALID,
++    ERR_SVG_DTD_OR_ENTITY_FORBIDDEN,
++    ERR_SVG_DUPLICATE_ID,
++    ERR_SVG_INVALID_UTF8,
++    ERR_SVG_MALFORMED_XML,
++    ERR_SVG_ROOT_INVALID,
++    ERR_SVG_SIZE_INVALID,
++    SvgSanitizeReport,
++    _get_local_name,
++    _parse_and_validate_xml_root,
++    sanitize_svg,
++    sanitize_svg_with_report,
++)
++
++# ---------------------------------------------------------------------------
++# Case 1: Positive clean diagram
++# ---------------------------------------------------------------------------
++
++
++def test_case_1_positive_clean_diagram() -> None:
++    """Mermaid-style SVG with allowed vector elements sanitizes and re-parses as valid XML."""
++    clean_svg = (
++        '<svg xmlns="http://www.w3.org/2000/svg" '
++        'viewBox="0 0 800 600" width="800" height="600">'
++        "  <defs>"
++        '    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">'
++        '      <stop offset="0%" stop-color="#ff0000" stop-opacity="1"/>'
++        '      <stop offset="100%" stop-color="#0000ff" stop-opacity="1"/>'
++        "    </linearGradient>"
++        '    <clipPath id="clip1">'
++        '      <rect x="0" y="0" width="100" height="100"/>'
++        "    </clipPath>"
++        '    <marker id="arrow" markerWidth="10" markerHeight="10" '
++        'refX="5" refY="5" orient="auto">'
++        '      <path d="M 0 0 L 10 5 L 0 10 z" fill="#000"/>'
++        "    </marker>"
++        '    <g id="node-box">'
++        '      <rect width="120" height="40" rx="5" ry="5" fill="url(#grad1)"/>'
++        '      <circle cx="10" cy="10" r="5" fill="#fff"/>'
++        '      <text x="20" y="25" font-family="sans-serif" font-size="14">'
++        "        Service Node"
++        '        <tspan dx="5" font-weight="bold">v1</tspan>'
++        "      </text>"
++        "    </g>"
++        "  </defs>"
++        "  <title>Architecture Flow</title>"
++        "  <desc>System interaction diagram</desc>"
++        '  <g id="canvas" clip-path="url(#clip1)">'
++        '    <use href="#node-box" x="50" y="50"/>'
++        '    <path d="M 170 70 L 300 70" stroke="#333" stroke-width="2" '
++        'marker-end="url(#arrow)"/>'
++        '    <polyline points="0,0 50,25 50,75 0,100" stroke="#666" fill="none"/>'
++        '    <polygon points="100,100 150,25 150,75 200,0" fill="#eee" stroke="#333"/>'
++        '    <line x1="10" y1="10" x2="100" y2="100" stroke="#999"/>'
++        "  </g>"
++        "</svg>"
++    )
++
++    report = sanitize_svg_with_report(clean_svg)
++    assert isinstance(report, SvgSanitizeReport)
++    assert report.stripped_elements == 0
++    assert report.stripped_attrs == 0
++    assert report.max_use_depth == 1
++    assert report.expanded_nodes < 50
++    assert report.output_svg.startswith('<svg xmlns="http://www.w3.org/2000/svg"')
++
++    # Re-parsing output verifies that it is strictly valid XML
++    reparsed = fromstring(report.output_svg)
++    assert reparsed.tag in ("svg", "{http://www.w3.org/2000/svg}svg")
++    assert "viewBox" in reparsed.attrib
++
++
++# ---------------------------------------------------------------------------
++# Case 2: Security (active content strip)
++# ---------------------------------------------------------------------------
++
++
++def test_case_2_security_active_content_strip() -> None:
++    """Scripts, foreignObjects, styles, SMIL animations, and on* handlers are stripped."""
++    hostile_svg = (
++        '<svg xmlns="http://www.w3.org/2000/svg">'
++        '  <rect id="safe-sibling-1" width="100" height="100" fill="green"/>'
++        "  <script>alert('xss-1')</script>"
++        '  <foreignObject width="100" height="100">'
++        '    <body xmlns="http://www.w3.org/1999/xhtml" onload="alert(\'xss-2\')">'
++        "      <p>evil</p>"
++        "    </body>"
++        "  </foreignObject>"
++        '  <iframe src="https://evil.example/payload"></iframe>'
++        "  <style>@import url(https://evil.example/x.css); body { color: red; }</style>"
++        '  <animate attributeName="href" to="javascript:alert(\'xss-3\')"/>'
++        '  <set attributeName="fill" to="red"/>'
++        "  <a href=\"javascript:alert('xss-4')\">"
++        '    <rect id="evil-a-child" width="10" height="10"/>'
++        "  </a>"
++        '  <rect id="safe-sibling-2" width="50" height="50" '
++        'onclick="alert(1)" onload="alert(2)"/>'
++        "</svg>"
++    )
++
++    sanitized = sanitize_svg(hostile_svg)
++
++    # All active scripting keywords and tags are completely absent
++    assert "script" not in sanitized.lower()
++    assert "foreignobject" not in sanitized.lower()
++    assert "iframe" not in sanitized.lower()
++    assert "style" not in sanitized.lower()
++    assert "animate" not in sanitized.lower()
++    assert "<set" not in sanitized.lower()
++    assert "<a" not in sanitized.lower()
++    assert "onclick" not in sanitized.lower()
++    assert "onload" not in sanitized.lower()
++    assert "alert" not in sanitized
++    assert "javascript:" not in sanitized
++
++    # Sibling safe geometry is preserved
++    assert "safe-sibling-1" in sanitized
++    assert "safe-sibling-2" in sanitized
++    # Child of stripped <a> is also gone
++    assert "evil-a-child" not in sanitized
++
++
++# ---------------------------------------------------------------------------
++# Case 3: Security (external SSRF / tracking pixel)
++# ---------------------------------------------------------------------------
++
++
++def test_case_3_security_external_ssrf_and_tracking_pixel() -> None:
++    """External image references, sprite hrefs, and data URIs are completely stripped."""
++    ssrf_svg = (
++        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">'
++        '  <image href="https://169.254.169.254/latest/meta-data" width="100" height="100"/>'
++        '  <use xlink:href="https://evil.example/sprite.svg#x"/>'
++        '  <use href="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="/>'
++        '  <rect id="r1" width="100" height="100" fill="url(https://evil.example/p#g)"/>'
++        "</svg>"
++    )
++
++    sanitized = sanitize_svg(ssrf_svg)
++
++    # 0 occurrences of external network protocols, cloud IMDS, or data URIs
++    # (excluding standard xmlns="http://www.w3.org/2000/svg" SVG namespace)
++    non_ns_content = sanitized.replace("http://www.w3.org/2000/svg", "")
++    assert "http" not in non_ns_content.lower()
++    assert "169.254" not in non_ns_content
++    assert "data:" not in non_ns_content
++    assert "evil.example" not in non_ns_content
++    assert "image" not in non_ns_content.lower()
++
++    # The safe geometry element is preserved without the tainted fill
++    assert 'id="r1"' in sanitized
++    assert "fill=" not in sanitized
++
++
++# ---------------------------------------------------------------------------
++# Case 4: Security (XXE & XML billion laughs)
++# ---------------------------------------------------------------------------
++
++
++def test_case_4_security_xxe_and_entity_expansion_forbidden() -> None:
++    """DOCTYPE and ENTITY declarations fail closed with SVG_DTD_OR_ENTITY_FORBIDDEN."""
++    xxe_svg = (
++        '<?xml version="1.0" encoding="UTF-8"?>'
++        "<!DOCTYPE svg ["
++        '  <!ENTITY xxe SYSTEM "file:///etc/passwd">'
++        "]>"
++        '<svg xmlns="http://www.w3.org/2000/svg"><text>&xxe;</text></svg>'
++    )
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(xxe_svg)
++    assert exc_info.value.code == ERR_SVG_DTD_OR_ENTITY_FORBIDDEN
++
++    quadratic_svg = (
++        "<!DOCTYPE svg ["
++        '  <!ENTITY lol "lol">'
++        '  <!ENTITY lol2 "&lol;&lol;">'
++        '  <!ENTITY lol3 "&lol2;&lol2;">'
++        "]>"
++        '<svg xmlns="http://www.w3.org/2000/svg"><text>&lol3;</text></svg>'
++    )
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(quadratic_svg)
++    assert exc_info.value.code == ERR_SVG_DTD_OR_ENTITY_FORBIDDEN
++
++    cdata_svg = '<svg xmlns="http://www.w3.org/2000/svg"><![CDATA[test]]></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(cdata_svg)
++    assert exc_info.value.code == ERR_SVG_DTD_OR_ENTITY_FORBIDDEN
++
++    stylesheet_svg = '<?xml-stylesheet type="text/xsl" href="x.xsl"?><svg/>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(stylesheet_svg)
++    assert exc_info.value.code == ERR_SVG_DTD_OR_ENTITY_FORBIDDEN
++
++
++# ---------------------------------------------------------------------------
++# Case 5: Security (<use> cycle)
++# ---------------------------------------------------------------------------
++
++
++def test_case_5_security_use_cycle_detected() -> None:
++    """Direct self-reference and mutual cycles raise SVG_USE_CYCLE."""
++    self_cycle_svg = (
++        '<svg xmlns="http://www.w3.org/2000/svg">  <g id="a"><use href="#a"/></g></svg>'
++    )
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(self_cycle_svg)
++    assert exc_info.value.code == ERR_SVG_USE_CYCLE
++
++    mutual_cycle_svg = (
++        '<svg xmlns="http://www.w3.org/2000/svg">'
++        '  <g id="a"><use href="#b"/></g>'
++        '  <g id="b"><use href="#a"/></g>'
++        "</svg>"
++    )
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(mutual_cycle_svg)
++    assert exc_info.value.code == ERR_SVG_USE_CYCLE
++
++
++# ---------------------------------------------------------------------------
++# Case 6: Boundary (<use> depth cap <= 4)
++# ---------------------------------------------------------------------------
++
++
++def test_case_6_boundary_use_depth_cap() -> None:
++    """Chain u1->u2->u3->u4->rect with depth 4 passes; adding u0 raises SVG_USE_DEPTH_EXCEEDED."""
++    depth_4_svg = (
++        '<svg xmlns="http://www.w3.org/2000/svg">'
++        "  <defs>"
++        '    <rect id="rect" width="10" height="10"/>'
++        '    <use id="u4" href="#rect"/>'
++        '    <use id="u3" href="#u4"/>'
++        '    <use id="u2" href="#u3"/>'
++        "  </defs>"
++        '  <use id="u1" href="#u2"/>'
++        "</svg>"
++    )
++    report = sanitize_svg_with_report(depth_4_svg)
++    assert report.max_use_depth == 4
++
++    depth_5_svg = (
++        '<svg xmlns="http://www.w3.org/2000/svg">'
++        "  <defs>"
++        '    <rect id="rect" width="10" height="10"/>'
++        '    <use id="u4" href="#rect"/>'
++        '    <use id="u3" href="#u4"/>'
++        '    <use id="u2" href="#u3"/>'
++        '    <use id="u1" href="#u2"/>'
++        "  </defs>"
++        '  <use id="u0" href="#u1"/>'
++        "</svg>"
++    )
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(depth_5_svg)
++    assert exc_info.value.code == ERR_SVG_USE_DEPTH_EXCEEDED
++
++
++# ---------------------------------------------------------------------------
++# Case 7: Boundary (<use> expansion cap <= 500)
++# ---------------------------------------------------------------------------
++
++
++def test_case_7_boundary_use_expansion_cap() -> None:
++    """Expansion bomb raises SVG_EXPANSION_LIMIT_EXCEEDED; exactly 500 succeeds; 501 raises."""
++    five_l4 = "".join('<use href="#l4"/>' for _ in range(5))
++    five_l3 = "".join('<use href="#l3"/>' for _ in range(5))
++    five_l2 = "".join('<use href="#l2"/>' for _ in range(5))
++    expansion_bomb_svg = (
++        '<svg xmlns="http://www.w3.org/2000/svg">'
++        "  <defs>"
++        '    <g id="l4"><rect width="1" height="1"/><rect width="1" height="1"/></g>'
++        f'    <g id="l3">{five_l4}</g>'
++        f'    <g id="l2">{five_l3}</g>'
++        f'    <g id="l1">{five_l2}</g>'
++        "  </defs>"
++        '  <use href="#l1"/><use href="#l1"/>'
++        "</svg>"
++    )
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(expansion_bomb_svg)
++    assert exc_info.value.code == ERR_SVG_EXPANSION_LIMIT_EXCEEDED
++
++    # Exactly 500 nodes: 1 root + 499 rects
++    rects_499 = "".join("<rect/>" for _ in range(499))
++    svg_500 = f'<svg xmlns="http://www.w3.org/2000/svg">{rects_499}</svg>'
++    report_500 = sanitize_svg_with_report(svg_500)
++    assert report_500.expanded_nodes == 500
++
++    # Exactly 501 nodes: 1 root + 500 rects -> raises
++    rects_500 = "".join("<rect/>" for _ in range(500))
++    svg_501 = f'<svg xmlns="http://www.w3.org/2000/svg">{rects_500}</svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(svg_501)
++    assert exc_info.value.code == ERR_SVG_EXPANSION_LIMIT_EXCEEDED
++
++
++# ---------------------------------------------------------------------------
++# Case 8: Boundary (size, encoding & duplicate IDs)
++# ---------------------------------------------------------------------------
++
++
++def test_case_8_boundary_size_encoding_and_duplicate_ids() -> None:
++    """Size cap (2 MiB), UTF-16 BOM, duplicate IDs, and non-SVG roots are rejected."""
++    base_prefix = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/>'
++    base_suffix = "</svg>"
++    pad_needed = DEFAULT_MAX_SVG_BYTES - len(base_prefix.encode()) - len(base_suffix.encode())
++    svg_exact_2mb = base_prefix + (" " * pad_needed) + base_suffix
++    assert len(svg_exact_2mb.encode("utf-8")) == DEFAULT_MAX_SVG_BYTES
++    report_2mb = sanitize_svg_with_report(svg_exact_2mb)
++    assert report_2mb.input_bytes == DEFAULT_MAX_SVG_BYTES
++
++    svg_oversize = svg_exact_2mb + " "
++    assert len(svg_oversize.encode("utf-8")) == DEFAULT_MAX_SVG_BYTES + 1
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(svg_oversize)
++    assert exc_info.value.code == ERR_SVG_SIZE_INVALID
++
++    # Empty payload
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg("")
++    assert exc_info.value.code == ERR_SVG_SIZE_INVALID
++
++    # UTF-16 LE BOM
++    utf16_bytes = b'\xff\xfe<svg xmlns="http://www.w3.org/2000/svg"></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(utf16_bytes)
++    assert exc_info.value.code == ERR_SVG_INVALID_UTF8
++
++    # UTF-16 BE BOM
++    utf16_be_bytes = b'\xfe\xff<svg xmlns="http://www.w3.org/2000/svg"></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(utf16_be_bytes)
++    assert exc_info.value.code == ERR_SVG_INVALID_UTF8
++
++    # UTF-32 BOM
++    utf32_bytes = b"\xff\xfe\x00\x00<svg></svg>"
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(utf32_bytes)
++    assert exc_info.value.code == ERR_SVG_INVALID_UTF8
++
++    # Two elements with duplicate ID
++    duplicate_id_svg = (
++        '<svg xmlns="http://www.w3.org/2000/svg">'
++        '  <g id="dup"><rect width="10" height="10"/></g>'
++        '  <g id="dup"><circle r="5"/></g>'
++        "</svg>"
++    )
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(duplicate_id_svg)
++    assert exc_info.value.code == ERR_SVG_DUPLICATE_ID
++
++    # Non-SVG root element
++    html_root = "<html><body><svg><rect/></svg></body></html>"
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(html_root)
++    assert exc_info.value.code == ERR_SVG_ROOT_INVALID
++
++    # Foreign namespace root element
++    xhtml_svg = '<svg xmlns="http://www.w3.org/1999/xhtml"><rect/></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(xhtml_svg)
++    assert exc_info.value.code == ERR_SVG_ROOT_INVALID
++
++
++# ---------------------------------------------------------------------------
++# Hostile SVG Corpus Audit Suite
++# ---------------------------------------------------------------------------
++
++
++def test_hostile_svg_corpus_audit() -> None:
++    """Validate all entries in hostile_svgs.json and verify expected strip or reject actions."""
++    corpus_path = Path(__file__).parent / "corpus" / "hostile_svgs.json"
++    assert corpus_path.is_file(), f"Hostile SVG corpus file not found at {corpus_path}"
++
++    with corpus_path.open("r", encoding="utf-8") as f:
++        corpus = json.load(f)
++
++    results: list[dict[str, object]] = []
++
++    for entry in corpus:
++        entry_id = entry["id"]
++        svg_content = entry["svg"]
++        expected_action = entry["expected_action"]
++
++        if expected_action == "reject":
++            expected_error = entry["expected_error"]
++            with pytest.raises(SvgSanitizeError) as exc_info:
++                sanitize_svg(svg_content)
++            actual_error = exc_info.value.code
++            assert actual_error == expected_error, (
++                f"[{entry_id}] Expected error code '{expected_error}', got '{actual_error}'"
++            )
++            results.append(
++                {
++                    "id": entry_id,
++                    "action": "rejected",
++                    "error_code": actual_error,
++                    "status": "PASS",
++                }
++            )
++        elif expected_action == "strip":
++            report = sanitize_svg_with_report(svg_content)
++            for forbidden in entry.get("forbidden_output_substrings", []):
++                assert forbidden.lower() not in report.output_svg.lower(), (
++                    f"[{entry_id}] Forbidden substring '{forbidden}' found in sanitized output"
++                )
++            results.append(
++                {
++                    "id": entry_id,
++                    "action": "stripped",
++                    "stripped_elements": report.stripped_elements,
++                    "stripped_attrs": report.stripped_attrs,
++                    "status": "PASS",
++                }
++            )
++
++    assert len(results) == len(corpus)
++
++
++# ---------------------------------------------------------------------------
++# Dimension, Complexity & Structural Edge Cases
++# ---------------------------------------------------------------------------
++
++
++def test_excessive_viewbox_coordinates_rejected() -> None:
++    """ViewBox with dimensions exceeding 32768 raises SVG_DIMENSIONS_INVALID."""
++    bad_vb = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50000 50000"><rect/></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(bad_vb)
++    assert exc_info.value.code == ERR_SVG_DIMENSIONS_INVALID
++
++    malformed_vb = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100"><rect/></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(malformed_vb)
++    assert exc_info.value.code == ERR_SVG_DIMENSIONS_INVALID
++
++    non_numeric_vb = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 foo bar"><rect/></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(non_numeric_vb)
++    assert exc_info.value.code == ERR_SVG_DIMENSIONS_INVALID
++
++    negative_vb = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 -100 100"><rect/></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(negative_vb)
++    assert exc_info.value.code == ERR_SVG_DIMENSIONS_INVALID
++
++
++def test_excessive_width_height_coordinates_rejected() -> None:
++    """Width or height attributes exceeding 32768 or negative raise SVG_DIMENSIONS_INVALID."""
++    bad_w = '<svg xmlns="http://www.w3.org/2000/svg" width="40000"><rect/></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(bad_w)
++    assert exc_info.value.code == ERR_SVG_DIMENSIONS_INVALID
++
++    negative_h = '<svg xmlns="http://www.w3.org/2000/svg" height="-50"><rect/></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(negative_h)
++    assert exc_info.value.code == ERR_SVG_DIMENSIONS_INVALID
++
++
++def test_xml_nesting_depth_cap_exceeded() -> None:
++    """Nesting depth > 64 raises SVG_COMPLEXITY_EXCEEDED."""
++    opening = '<svg xmlns="http://www.w3.org/2000/svg">' + ("<g>" * 65)
++    closing = ("</g>" * 65) + "</svg>"
++    deep_svg = opening + "<rect/>" + closing
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(deep_svg)
++    assert exc_info.value.code == ERR_SVG_COMPLEXITY_EXCEEDED
++
++
++def test_xml_raw_element_count_cap_exceeded() -> None:
++    """Raw element count > 5000 raises SVG_COMPLEXITY_EXCEEDED."""
++    rects = "".join("<rect/>" for _ in range(5001))
++    oversize_svg = f'<svg xmlns="http://www.w3.org/2000/svg">{rects}</svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(oversize_svg)
++    assert exc_info.value.code == ERR_SVG_COMPLEXITY_EXCEEDED
++
++
++def test_malformed_xml_syntax_raises() -> None:
++    """Unclosed XML tags raise SVG_MALFORMED_XML."""
++    broken_svg = '<svg xmlns="http://www.w3.org/2000/svg"><g><rect></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(broken_svg)
++    assert exc_info.value.code == ERR_SVG_MALFORMED_XML
++
++
++def test_unicode_surrogate_and_invisible_chars() -> None:
++    """Surrogates raise SVG_INVALID_UTF8 while leading BOM and zero-width chars are cleaned."""
++    surrogate_svg = '<svg xmlns="http://www.w3.org/2000/svg">\ud800</svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(surrogate_svg)
++    assert exc_info.value.code == ERR_SVG_INVALID_UTF8
++
++    bom_cleaned_svg = '\ufeff<svg xmlns="http://www.w3.org/2000/svg"><text>a\u200bb</text></svg>'
++    sanitized = sanitize_svg(bom_cleaned_svg)
++    assert "\ufeff" not in sanitized
++    assert "\u200b" not in sanitized
++    assert "ab" in sanitized
++
++
++def test_invalid_id_format_stripped_safely() -> None:
++    """Element with malformed id attribute has id stripped without rejecting document."""
++    svg_with_bad_id = (
++        '<svg xmlns="http://www.w3.org/2000/svg">'
++        '<rect id="123 invalid id" width="10" height="10"/>'
++        "</svg>"
++    )
++    report = sanitize_svg_with_report(svg_with_bad_id)
++    assert report.stripped_attrs >= 1
++    assert "123 invalid id" not in report.output_svg
++    assert "<rect" in report.output_svg
++
++
++def test_foreign_attribute_stripped() -> None:
++    """Foreign namespace and disallowed attributes are stripped."""
++    svg_foreign = (
++        '<svg xmlns="http://www.w3.org/2000/svg" '
++        'xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" '
++        'inkscape:version="1.2" xml:base="/secret/" custom-attr="dangerous">'
++        '  <rect width="10" height="10"/>'
++        "</svg>"
++    )
++    report = sanitize_svg_with_report(svg_foreign)
++    assert "inkscape" not in report.output_svg
++    assert "xml:base" not in report.output_svg
++    assert "custom-attr" not in report.output_svg
++
++
++def test_bytes_input_handled_identically() -> None:
++    """Bytes input produces identical report to string input."""
++    raw_bytes = b'<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>'
++    report = sanitize_svg_with_report(raw_bytes)
++    assert report.input_bytes == len(raw_bytes)
++    assert "<rect" in report.output_svg
++
++
++def test_coverage_edge_cases_encoding_and_dimensions() -> None:
++    """Exercise encoding, dimensions, and viewBox edge cases."""
++    # 1. Invalid UTF-8 raw bytes triggering UnicodeDecodeError
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(b"\x80\x81\x82")
++    assert exc_info.value.code == ERR_SVG_INVALID_UTF8
++
++    # 2. UTF-7 BOM signature
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(b"+/v8<svg></svg>")
++    assert exc_info.value.code == ERR_SVG_INVALID_UTF8
++
++    # 3. ViewBox width/height exceeding 32768
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(
++            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50000 100"><rect/></svg>'
++        )
++    assert exc_info.value.code == ERR_SVG_DIMENSIONS_INVALID
++
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(
++            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50000"><rect/></svg>'
++        )
++    assert exc_info.value.code == ERR_SVG_DIMENSIONS_INVALID
++
++    # 4. Dimension parsing unparseable string
++    svg_bad_dim = '<svg xmlns="http://www.w3.org/2000/svg" width="not_a_number"><rect/></svg>'
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(svg_bad_dim)
++    assert exc_info.value.code == ERR_SVG_DIMENSIONS_INVALID
++
++
++def test_coverage_edge_cases_attributes_and_expansion() -> None:
++    """Exercise attributes, namespace handling, and expansion limit branches."""
++    # 1. href on element where href is forbidden (e.g. <rect href="#id"/>)
++    svg_rect_href = (
++        '<svg xmlns="http://www.w3.org/2000/svg">'
++        '<rect id="r" href="#r" width="10" height="10"/>'
++        "</svg>"
++    )
++    report = sanitize_svg_with_report(svg_rect_href)
++    assert report.stripped_attrs >= 1
++    assert "href" not in report.output_svg
++
++    # 2. use with target not in id_map
++    svg_use_missing = '<svg xmlns="http://www.w3.org/2000/svg"><use href="#nonexistent"/></svg>'
++    report_missing = sanitize_svg_with_report(svg_use_missing)
++    assert report_missing.stripped_attrs >= 1
++    assert "href" not in report_missing.output_svg
++
++    # 3. Paint attribute with forbidden CSS tokens (expression, javascript:, @import, image-set)
++    svg_expr = (
++        '<svg xmlns="http://www.w3.org/2000/svg">'
++        '<rect fill="expression(alert(1))" stroke="javascript:void(0)"/>'
++        "</svg>"
++    )
++    report_expr = sanitize_svg_with_report(svg_expr)
++    assert report_expr.stripped_attrs >= 2
++    assert "expression" not in report_expr.output_svg
++    assert "javascript" not in report_expr.output_svg
++
++    # 4. Paint attribute with url(#nonexistent) pointing to missing target
++    svg_paint_missing = (
++        '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="url(#missing_target)"/></svg>'
++    )
++    report_paint_missing = sanitize_svg_with_report(svg_paint_missing)
++    assert report_paint_missing.stripped_attrs >= 1
++    assert "fill" not in report_paint_missing.output_svg
++
++    # 5. Foreign namespace attribute starting with {
++    svg_foreign_ns_attr = (
++        '<svg xmlns="http://www.w3.org/2000/svg">'
++        '<rect xmlns:custom="http://custom.example" custom:attr="val"/>'
++        "</svg>"
++    )
++    report_foreign = sanitize_svg_with_report(svg_foreign_ns_attr)
++    assert report_foreign.stripped_attrs >= 1
++    assert "custom" not in report_foreign.output_svg
++
++    # 6. Expansion limit exceeded inside child expansion loop
++    rects_child_overflow = "".join("<rect/>" for _ in range(505))
++    svg_child_overflow = (
++        f'<svg xmlns="http://www.w3.org/2000/svg"><g>{rects_child_overflow}</g></svg>'
++    )
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(svg_child_overflow)
++    assert exc_info.value.code == ERR_SVG_EXPANSION_LIMIT_EXCEEDED
++
++    # 7. Expansion limit exceeded inside use target expansion loop
++    rects_500 = "".join("<rect/>" for _ in range(500))
++    svg_target_overflow = (
++        f'<svg xmlns="http://www.w3.org/2000/svg"><defs><g id="big">{rects_500}</g></defs>'
++        '<use href="#big"/></svg>'
++    )
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        sanitize_svg(svg_target_overflow)
++    assert exc_info.value.code == ERR_SVG_EXPANSION_LIMIT_EXCEEDED
++
++    # 12. Element having both href and xlink:href
++    svg_both_href = (
++        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">'
++        '<defs><rect id="t1"/><rect id="t2"/></defs>'
++        '<use href="#t1" xlink:href="#t2"/></svg>'
++    )
++    report_both = sanitize_svg_with_report(svg_both_href)
++    assert 'href="#t1"' in report_both.output_svg
++
++    # 13. Helper functions unit tests
++    assert _get_local_name("{http://example.com/ns}custom") == "custom"
++    assert _get_local_tag("{http://example.com/ns}rect") == "rect"
++
++    # Test _get_element_references with missing target
++    dummy_elem = Element("rect", {"fill": "url(#missing)"})
++    refs = _get_element_references(dummy_elem, {})
++    assert len(refs) == 0
++
++    # Test defusedxml exception catching in _parse_and_validate_xml_root
++    exc = defusedxml.common.DTDForbidden("foo", "bar", "baz")
++    with patch("defusedxml.ElementTree.fromstring", side_effect=exc):
++        with pytest.raises(SvgSanitizeError) as exc_info:
++            _parse_and_validate_xml_root("<svg/>")
++        assert exc_info.value.code == ERR_SVG_DTD_OR_ENTITY_FORBIDDEN
+diff --git a/kanban/tests/content/test_svg_use_dag.py b/kanban/tests/content/test_svg_use_dag.py
+new file mode 100644
+index 0000000..11594f6
+--- /dev/null
++++ b/kanban/tests/content/test_svg_use_dag.py
+@@ -0,0 +1,292 @@
++"""Unit tests for SVG <use> and gradient acyclic DAG validation (svg_dag.py).
++
++Tests:
++1. Acyclic DAG traversal with valid single and multi-level references.
++2. Exact <use> reference depth boundary (depth=4 succeeds, depth=5 raises SVG_USE_DEPTH_EXCEEDED).
++3. Exact rendered node expansion boundary (500 succeeds, 501 raises SVG_EXPANSION_LIMIT_EXCEEDED).
++4. Cycle detection across self-references, mutual cycles, and ancestor containment.
++5. Reference edges from href and paint url(#id) attributes.
++6. SvgDagResult integer behavior and SvgSanitizeError exception contracts.
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++import pytest
++from defusedxml.ElementTree import fromstring
++
++from kanban.content.svg_dag import (
++    ERR_SVG_EXPANSION_LIMIT_EXCEEDED,
++    ERR_SVG_USE_CYCLE,
++    ERR_SVG_USE_DEPTH_EXCEEDED,
++    MAX_SVG_EXPANDED_NODES,
++    MAX_SVG_USE_DEPTH,
++    SvgDagResult,
++    SvgSanitizeError,
++    validate_svg_use_dag,
++)
++
++if TYPE_CHECKING:
++    from xml.etree.ElementTree import Element
++
++
++def _build_id_map(root: Element) -> dict[str, Element]:
++    """Collect id to Element mapping across the tree."""
++    return {elem.attrib["id"]: elem for elem in root.iter() if "id" in elem.attrib}
++
++
++def test_svg_dag_result_integer_behavior() -> None:
++    """SvgDagResult behaves as an integer while exposing DAG metrics."""
++    result = SvgDagResult(expanded_nodes=42, max_use_depth=3)
++    assert isinstance(result, int)
++    assert result == 42
++    assert result.expanded_nodes == 42
++    assert result.max_use_depth == 3
++    assert result < 50
++    assert result + 8 == 50
++
++
++def test_svg_sanitize_error_attributes() -> None:
++    """SvgSanitizeError carries code, message, and string representation."""
++    err = SvgSanitizeError("SVG_CUSTOM_CODE", "Custom error message")
++    assert err.code == "SVG_CUSTOM_CODE"
++    assert err.message == "Custom error message"
++    assert str(err) == "Custom error message"
++
++    err_default = SvgSanitizeError("SVG_DEFAULT_CODE")
++    assert err_default.code == "SVG_DEFAULT_CODE"
++    assert err_default.message == "SVG_DEFAULT_CODE"
++    assert str(err_default) == "SVG_DEFAULT_CODE"
++
++
++def test_clean_svg_without_references() -> None:
++    """SVG with no <use> references returns node count and depth 0."""
++    xml_data = "<svg><g><rect/><circle/></g><path/></svg>"
++    root = fromstring(xml_data)
++    result = validate_svg_use_dag(root)
++    # root (1) + g (1) + rect (1) + circle (1) + path (1) = 5 nodes
++    assert result == 5
++    assert result.expanded_nodes == 5
++    assert result.max_use_depth == 0
++
++
++def test_clean_single_level_use_reference() -> None:
++    """Single level <use href="#box"/> computes correct expansion and depth 1."""
++    xml_data = (
++        "<svg>"
++        "  <defs>"
++        '    <rect id="box" width="10" height="10"/>'
++        "  </defs>"
++        '  <use href="#box"/>'
++        "</svg>"
++    )
++    root = fromstring(xml_data)
++    id_map = _build_id_map(root)
++    result = validate_svg_use_dag(root, id_map=id_map)
++    # root(1) + defs(1) + box(1) + use(1 + box=1 -> 2) = 5 nodes
++    assert result == 5
++    assert result.max_use_depth == 1
++
++
++def test_multiple_independent_uses_share_target() -> None:
++    """Multiple <use> tags referencing the same target do not trigger cycles."""
++    xml_data = (
++        "<svg>"
++        "  <defs>"
++        '    <circle id="dot" r="5"/>'
++        "  </defs>"
++        '  <use href="#dot" x="10"/>'
++        '  <use href="#dot" x="20"/>'
++        '  <use href="#dot" x="30"/>'
++        "</svg>"
++    )
++    root = fromstring(xml_data)
++    result = validate_svg_use_dag(root)
++    # root(1) + defs(1) + dot(1) + 3 * use(1 + 1 = 2) = 9 nodes
++    assert result == 9
++    assert result.max_use_depth == 1
++
++
++def test_depth_chain_4_succeeds() -> None:
++    """Chain u1 -> u2 -> u3 -> u4 -> rect with depth 4 passes boundary validation."""
++    root = fromstring(
++        "<svg>"
++        "  <defs>"
++        '    <rect id="target" width="10" height="10"/>'
++        '    <use id="u3" href="#target"/>'
++        '    <use id="u2" href="#u3"/>'
++        '    <use id="u1" href="#u2"/>'
++        "  </defs>"
++        '  <use id="u0" href="#u1"/>'
++        "</svg>"
++    )
++    result = validate_svg_use_dag(root, max_depth=4)
++    # u0 (1) -> u1 (2) -> u2 (3) -> u3 (4) -> target (0)
++    assert result.max_use_depth == 4
++
++
++def test_depth_chain_5_raises_use_depth_exceeded() -> None:
++    """Adding an additional hop to create depth 5 raises SVG_USE_DEPTH_EXCEEDED."""
++    xml_data = (
++        "<svg>"
++        "  <defs>"
++        '    <rect id="target" width="10" height="10"/>'
++        '    <use id="u4" href="#target"/>'
++        '    <use id="u3" href="#u4"/>'
++        '    <use id="u2" href="#u3"/>'
++        '    <use id="u1" href="#u2"/>'
++        "  </defs>"
++        '  <use id="u0" href="#u1"/>'
++        "</svg>"
++    )
++    root = fromstring(xml_data)
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        validate_svg_use_dag(root, max_depth=MAX_SVG_USE_DEPTH)
++    assert exc_info.value.code == ERR_SVG_USE_DEPTH_EXCEEDED
++
++
++def test_exact_500_expansion_succeeds() -> None:
++    """SVG expanding to exactly 500 rendered nodes succeeds."""
++    # root <svg> is 1 node. 499 child <rect/> elements make exactly 500 nodes.
++    rects = "".join("<rect/>" for _ in range(499))
++    xml_data = f"<svg>{rects}</svg>"
++    root = fromstring(xml_data)
++    result = validate_svg_use_dag(root, max_expanded_nodes=MAX_SVG_EXPANDED_NODES)
++    assert result == 500
++    assert result.expanded_nodes == 500
++
++
++def test_501_expansion_raises_expansion_limit_exceeded() -> None:
++    """SVG expanding to 501 rendered nodes raises SVG_EXPANSION_LIMIT_EXCEEDED."""
++    # root <svg> is 1 node. 500 child <rect/> elements make 501 nodes.
++    rects = "".join("<rect/>" for _ in range(500))
++    xml_data = f"<svg>{rects}</svg>"
++    root = fromstring(xml_data)
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        validate_svg_use_dag(root, max_expanded_nodes=MAX_SVG_EXPANDED_NODES)
++    assert exc_info.value.code == ERR_SVG_EXPANSION_LIMIT_EXCEEDED
++
++
++def test_use_expansion_exact_500_nodes() -> None:
++    """SVG using <use> tags expanding to exactly 500 nodes succeeds."""
++    # defs (1) + target (1) = 2
++    # root (1) + defs (2) = 3
++    # Each <use href="#target"/> costs 1 + 1 = 2
++    # Need 497 more nodes: 248 uses = 496, plus 1 rect = 497 -> total 500
++    uses = "".join('<use href="#t"/>' for _ in range(248))
++    xml_data = f'<svg>  <defs><rect id="t"/></defs>  {uses}  <rect/></svg>'
++    root = fromstring(xml_data)
++    result = validate_svg_use_dag(root, max_expanded_nodes=500)
++    assert result == 500
++
++
++def test_use_expansion_501_nodes_raises() -> None:
++    """SVG using <use> tags expanding to 501 nodes raises SVG_EXPANSION_LIMIT_EXCEEDED."""
++    uses = "".join('<use href="#t"/>' for _ in range(248))
++    xml_data = f'<svg>  <defs><rect id="t"/></defs>  {uses}  <rect/>  <rect/></svg>'
++    root = fromstring(xml_data)
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        validate_svg_use_dag(root, max_expanded_nodes=500)
++    assert exc_info.value.code == ERR_SVG_EXPANSION_LIMIT_EXCEEDED
++
++
++def test_billion_laughs_expansion_bomb_rejected() -> None:
++    """Quadratic / exponential branching <use> tree raises SVG_EXPANSION_LIMIT_EXCEEDED."""
++    five_l4 = "".join('<use href="#l4"/>' for _ in range(5))
++    five_l3 = "".join('<use href="#l3"/>' for _ in range(5))
++    five_l2 = "".join('<use href="#l2"/>' for _ in range(5))
++    xml_data = (
++        "<svg>"
++        "  <defs>"
++        '    <g id="l4"><rect/><rect/></g>'
++        f'    <g id="l3">{five_l4}</g>'
++        f'    <g id="l2">{five_l3}</g>'
++        f'    <g id="l1">{five_l2}</g>'
++        "  </defs>"
++        '  <use href="#l1"/>'
++        "</svg>"
++    )
++    root = fromstring(xml_data)
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        validate_svg_use_dag(root)
++    assert exc_info.value.code == ERR_SVG_EXPANSION_LIMIT_EXCEEDED
++
++
++def test_cycle_direct_self_reference() -> None:
++    """Direct self-reference <g id="a"><use href="#a"/></g> raises SVG_USE_CYCLE."""
++    xml_data = '<svg><g id="a"><use href="#a"/></g></svg>'
++    root = fromstring(xml_data)
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        validate_svg_use_dag(root)
++    assert exc_info.value.code == ERR_SVG_USE_CYCLE
++
++
++def test_cycle_mutual_two_nodes() -> None:
++    """Mutual cycle a -> b -> a raises SVG_USE_CYCLE."""
++    xml_data = '<svg>  <g id="a"><use href="#b"/></g>  <g id="b"><use href="#a"/></g></svg>'
++    root = fromstring(xml_data)
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        validate_svg_use_dag(root)
++    assert exc_info.value.code == ERR_SVG_USE_CYCLE
++
++
++def test_cycle_ancestor_containment() -> None:
++    """Target that is an ancestor of the <use> tag raises SVG_USE_CYCLE."""
++    xml_data = '<svg>  <g id="ancestor">    <g>      <use href="#ancestor"/>    </g>  </g></svg>'
++    root = fromstring(xml_data)
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        validate_svg_use_dag(root)
++    assert exc_info.value.code == ERR_SVG_USE_CYCLE
++
++
++def test_cycle_direct_use_self_loop() -> None:
++    """<use id="x" href="#x"/> self-loop raises SVG_USE_CYCLE."""
++    xml_data = '<svg><use id="x" href="#x"/></svg>'
++    root = fromstring(xml_data)
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        validate_svg_use_dag(root)
++    assert exc_info.value.code == ERR_SVG_USE_CYCLE
++
++
++def test_cycle_gradient_href_loop() -> None:
++    """Cycle between linearGradient elements raises SVG_USE_CYCLE."""
++    xml_data = (
++        "<svg>"
++        "  <defs>"
++        '    <linearGradient id="g1" href="#g2"/>'
++        '    <linearGradient id="g2" href="#g1"/>'
++        "  </defs>"
++        "</svg>"
++    )
++    root = fromstring(xml_data)
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        validate_svg_use_dag(root)
++    assert exc_info.value.code == ERR_SVG_USE_CYCLE
++
++
++def test_cycle_clip_path_url_loop() -> None:
++    """Cycle formed by url(#id) in clip-path attribute raises SVG_USE_CYCLE."""
++    xml_data = (
++        "<svg>"
++        "  <defs>"
++        '    <clipPath id="c1">'
++        '      <rect clip-path="url(#c1)"/>'
++        "    </clipPath>"
++        "  </defs>"
++        "</svg>"
++    )
++    root = fromstring(xml_data)
++    with pytest.raises(SvgSanitizeError) as exc_info:
++        validate_svg_use_dag(root)
++    assert exc_info.value.code == ERR_SVG_USE_CYCLE
++
++
++def test_missing_target_treated_safely() -> None:
++    """Use element pointing to non-existent id does not crash or loop."""
++    xml_data = '<svg><use href="#nonexistent"/></svg>'
++    root = fromstring(xml_data)
++    result = validate_svg_use_dag(root)
++    # root(1) + use(1, target None) = 2
++    assert result == 2
++    assert result.max_use_depth == 1
+diff --git a/pyproject.toml b/pyproject.toml
+index 55ce371..8b81600 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -32,6 +32,7 @@ dev = [
+     "pytest-xdist==3.8.0",
+     "pytest-socket==0.8.1",
+     "types-PyYAML==6.0.12.20261111",
++    "types-defusedxml==0.7.0.20260504",
+     "types-jsonschema==4.26.0.20261006",
+     "pip-licenses==5.5.5",
+     "httpx==0.28.1",
+diff --git a/uv.lock b/uv.lock
+index 17a2505..57d359d 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -331,6 +331,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/f6/b6/a1faf3a27ae9405fb34b1713cc73b2d8a26b04d5c561578fa2e6ef3e5bb9/cryptography-50.0.2-cp39-abi3-win_amd64.whl", hash = "sha256:4e81d95e5bafc2d6e34e4bed780e53e4d5b9a2f928573428aa4d35fbec1eb0de", size = 3854095 },
+ ]
+ 
++[[package]]
++name = "defusedxml"
++version = "0.7.1"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604 },
++]
++
+ [[package]]
+ name = "distlib"
+ version = "0.4.4"
+@@ -738,6 +747,7 @@ source = { editable = "kanban" }
+ dependencies = [
+     { name = "argon2-cffi" },
+     { name = "cryptography" },
++    { name = "defusedxml" },
+     { name = "fastapi" },
+     { name = "kanban-database" },
+     { name = "nh3" },
+@@ -749,6 +759,7 @@ dependencies = [
+ requires-dist = [
+     { name = "argon2-cffi", specifier = "==25.1.0" },
+     { name = "cryptography", specifier = "==50.0.2" },
++    { name = "defusedxml", specifier = "==0.7.1" },
+     { name = "fastapi", specifier = "==0.162.5" },
+     { name = "kanban-database", editable = "database" },
+     { name = "nh3", specifier = "==0.3.7" },
+@@ -823,6 +834,7 @@ dev = [
+     { name = "pytest-socket" },
+     { name = "pytest-xdist" },
+     { name = "ruff" },
++    { name = "types-defusedxml" },
+     { name = "types-jsonschema" },
+     { name = "types-pyyaml" },
+ ]
+@@ -849,6 +861,7 @@ dev = [
+     { name = "pytest-socket", specifier = "==0.8.1" },
+     { name = "pytest-xdist", specifier = "==3.8.0" },
+     { name = "ruff", specifier = "==0.17.4" },
++    { name = "types-defusedxml", specifier = "==0.7.0.20260504" },
+     { name = "types-jsonschema", specifier = "==4.26.0.20261006" },
+     { name = "types-pyyaml", specifier = "==6.0.12.20261111" },
+ ]
+@@ -1496,6 +1509,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/51/e9/3a7820be2bb0fe53b6bc9c3be26d3d1158004e4c3ab953aa6840b955b1e9/truststore-0.10.5-py3-none-any.whl", hash = "sha256:9aaaedaefaf06d8b206278cf8b5012bc897f485a874503501e12d776df78951c", size = 19017 },
+ ]
+ 
++[[package]]
++name = "types-defusedxml"
++version = "0.7.0.20260504"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/da/d2/4553c8fa9cdebfe1e84b950cf790a4d2376a97fa016e43f7c65323fa6c7d/types_defusedxml-0.7.0.20260504.tar.gz", hash = "sha256:2ab2828a3f97111ba1c16cee273ad4124a831fc9198c41bf8368ff6ea48ad300", size = 10729 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/bf/2d/8a4b5ba1d732b8bc691f0efbb1c6f77cb5f6f473b2afe181d83d910773c5/types_defusedxml-0.7.0.20260504-py3-none-any.whl", hash = "sha256:a959e3a0a43b93e464bd625d91ec9193a2703ddc10443bdd627792485fae0b10", size = 13467 },
++]
++
+ [[package]]
+ name = "types-jsonschema"
+ version = "4.26.0.20261006"
