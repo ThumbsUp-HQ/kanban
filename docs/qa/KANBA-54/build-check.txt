@@ -1,0 +1,42 @@
+=== 1. ruff check kanban ===
+All checks passed!
+EXIT CODE: 0
+
+=== 2. ruff format --check kanban ===
+29 files already formatted
+EXIT CODE: 0
+
+=== 3. mypy --strict kanban ===
+Success: no issues found in 27 source files
+EXIT CODE: 0
+
+=== 4. lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 143 files, 208 dependencies.
+-------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+EXIT CODE: 0
+
+=== 5. check_no_dashes ===
+EXIT CODE: 0
+
+=== 6. license_gate ===
+SUMMARY python=94 node=1 violations=0
+EXIT CODE: 0
