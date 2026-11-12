@@ -1,0 +1,3146 @@
+diff --git a/database/migrations/sql/p1_14_force_rls.down.sql b/database/migrations/sql/p1_14_force_rls.down.sql
+new file mode 100644
+index 0000000..a6c920a
+--- /dev/null
++++ b/database/migrations/sql/p1_14_force_rls.down.sql
+@@ -0,0 +1,313 @@
++-- Revert KB-P1-14: FORCE ROW LEVEL SECURITY policies, session context helpers & schema-wide RLS catalog gate
++
++-- 1. Drop Policies
++DROP POLICY IF EXISTS workspaces_select_rls ON workspaces;
++DROP POLICY IF EXISTS workspaces_update_rls ON workspaces;
++
++DROP POLICY IF EXISTS principals_select_rls ON principals;
++DROP POLICY IF EXISTS principals_insert_rls ON principals;
++DROP POLICY IF EXISTS principals_update_rls ON principals;
++DROP POLICY IF EXISTS principals_delete_rls ON principals;
++
++DROP POLICY IF EXISTS users_select_rls ON users;
++DROP POLICY IF EXISTS users_insert_rls ON users;
++DROP POLICY IF EXISTS users_update_rls ON users;
++DROP POLICY IF EXISTS users_delete_rls ON users;
++
++DROP POLICY IF EXISTS groups_select_rls ON groups;
++DROP POLICY IF EXISTS groups_insert_rls ON groups;
++DROP POLICY IF EXISTS groups_update_rls ON groups;
++DROP POLICY IF EXISTS groups_delete_rls ON groups;
++
++DROP POLICY IF EXISTS principal_group_edges_select_rls ON principal_group_edges;
++DROP POLICY IF EXISTS principal_group_edges_insert_rls ON principal_group_edges;
++DROP POLICY IF EXISTS principal_group_edges_update_rls ON principal_group_edges;
++DROP POLICY IF EXISTS principal_group_edges_delete_rls ON principal_group_edges;
++
++DROP POLICY IF EXISTS principal_group_closure_select_rls ON principal_group_closure;
++
++DROP POLICY IF EXISTS objects_select_rls ON objects;
++DROP POLICY IF EXISTS objects_insert_rls ON objects;
++DROP POLICY IF EXISTS objects_update_rls ON objects;
++DROP POLICY IF EXISTS objects_delete_rls ON objects;
++
++DROP POLICY IF EXISTS projects_select_rls ON projects;
++DROP POLICY IF EXISTS projects_insert_rls ON projects;
++DROP POLICY IF EXISTS projects_update_rls ON projects;
++DROP POLICY IF EXISTS projects_delete_rls ON projects;
++
++DROP POLICY IF EXISTS workflow_states_select_rls ON workflow_states;
++DROP POLICY IF EXISTS workflow_states_insert_rls ON workflow_states;
++DROP POLICY IF EXISTS workflow_states_update_rls ON workflow_states;
++DROP POLICY IF EXISTS workflow_states_delete_rls ON workflow_states;
++
++DROP POLICY IF EXISTS project_priorities_select_rls ON project_priorities;
++DROP POLICY IF EXISTS project_priorities_insert_rls ON project_priorities;
++DROP POLICY IF EXISTS project_priorities_update_rls ON project_priorities;
++DROP POLICY IF EXISTS project_priorities_delete_rls ON project_priorities;
++
++DROP POLICY IF EXISTS project_labels_select_rls ON project_labels;
++DROP POLICY IF EXISTS project_labels_insert_rls ON project_labels;
++DROP POLICY IF EXISTS project_labels_update_rls ON project_labels;
++DROP POLICY IF EXISTS project_labels_delete_rls ON project_labels;
++
++DROP POLICY IF EXISTS project_module_defaults_select_rls ON project_module_defaults;
++DROP POLICY IF EXISTS project_module_defaults_insert_rls ON project_module_defaults;
++DROP POLICY IF EXISTS project_module_defaults_update_rls ON project_module_defaults;
++DROP POLICY IF EXISTS project_module_defaults_delete_rls ON project_module_defaults;
++
++DROP POLICY IF EXISTS issues_select_rls ON issues;
++DROP POLICY IF EXISTS issues_insert_rls ON issues;
++DROP POLICY IF EXISTS issues_update_rls ON issues;
++DROP POLICY IF EXISTS issues_delete_rls ON issues;
++
++DROP POLICY IF EXISTS cycles_select_rls ON cycles;
++DROP POLICY IF EXISTS cycles_insert_rls ON cycles;
++DROP POLICY IF EXISTS cycles_update_rls ON cycles;
++DROP POLICY IF EXISTS cycles_delete_rls ON cycles;
++
++DROP POLICY IF EXISTS modules_select_rls ON modules;
++DROP POLICY IF EXISTS modules_insert_rls ON modules;
++DROP POLICY IF EXISTS modules_update_rls ON modules;
++DROP POLICY IF EXISTS modules_delete_rls ON modules;
++
++DROP POLICY IF EXISTS issue_modules_select_rls ON issue_modules;
++DROP POLICY IF EXISTS issue_modules_insert_rls ON issue_modules;
++DROP POLICY IF EXISTS issue_modules_update_rls ON issue_modules;
++DROP POLICY IF EXISTS issue_modules_delete_rls ON issue_modules;
++
++DROP POLICY IF EXISTS issue_assignees_select_rls ON issue_assignees;
++DROP POLICY IF EXISTS issue_assignees_insert_rls ON issue_assignees;
++DROP POLICY IF EXISTS issue_assignees_update_rls ON issue_assignees;
++DROP POLICY IF EXISTS issue_assignees_delete_rls ON issue_assignees;
++
++DROP POLICY IF EXISTS issue_labels_select_rls ON issue_labels;
++DROP POLICY IF EXISTS issue_labels_insert_rls ON issue_labels;
++DROP POLICY IF EXISTS issue_labels_update_rls ON issue_labels;
++DROP POLICY IF EXISTS issue_labels_delete_rls ON issue_labels;
++
++DROP POLICY IF EXISTS issue_subscriptions_select_rls ON issue_subscriptions;
++DROP POLICY IF EXISTS issue_subscriptions_insert_rls ON issue_subscriptions;
++DROP POLICY IF EXISTS issue_subscriptions_update_rls ON issue_subscriptions;
++DROP POLICY IF EXISTS issue_subscriptions_delete_rls ON issue_subscriptions;
++
++DROP POLICY IF EXISTS views_select_rls ON views;
++DROP POLICY IF EXISTS views_insert_rls ON views;
++DROP POLICY IF EXISTS views_update_rls ON views;
++DROP POLICY IF EXISTS views_delete_rls ON views;
++
++DROP POLICY IF EXISTS object_links_select_rls ON object_links;
++DROP POLICY IF EXISTS object_links_insert_rls ON object_links;
++DROP POLICY IF EXISTS object_links_update_rls ON object_links;
++DROP POLICY IF EXISTS object_links_delete_rls ON object_links;
++
++DROP POLICY IF EXISTS activity_records_select_rls ON activity_records;
++DROP POLICY IF EXISTS activity_records_insert_rls ON activity_records;
++
++DROP POLICY IF EXISTS role_bindings_select_rls ON role_bindings;
++DROP POLICY IF EXISTS role_bindings_insert_rls ON role_bindings;
++DROP POLICY IF EXISTS role_bindings_update_rls ON role_bindings;
++DROP POLICY IF EXISTS role_bindings_delete_rls ON role_bindings;
++
++DROP POLICY IF EXISTS resource_acl_entries_select_rls ON resource_acl_entries;
++DROP POLICY IF EXISTS resource_acl_entries_insert_rls ON resource_acl_entries;
++DROP POLICY IF EXISTS resource_acl_entries_update_rls ON resource_acl_entries;
++DROP POLICY IF EXISTS resource_acl_entries_delete_rls ON resource_acl_entries;
++
++DROP POLICY IF EXISTS effective_resource_access_select_rls ON effective_resource_access;
++
++DROP POLICY IF EXISTS issue_comments_select_rls ON issue_comments;
++DROP POLICY IF EXISTS issue_comments_insert_rls ON issue_comments;
++DROP POLICY IF EXISTS issue_comments_update_rls ON issue_comments;
++DROP POLICY IF EXISTS issue_comments_delete_rls ON issue_comments;
++
++DROP POLICY IF EXISTS docs_select_rls ON docs;
++DROP POLICY IF EXISTS docs_insert_rls ON docs;
++DROP POLICY IF EXISTS docs_update_rls ON docs;
++DROP POLICY IF EXISTS docs_delete_rls ON docs;
++
++DROP POLICY IF EXISTS pages_select_rls ON pages;
++DROP POLICY IF EXISTS pages_insert_rls ON pages;
++DROP POLICY IF EXISTS pages_update_rls ON pages;
++DROP POLICY IF EXISTS pages_delete_rls ON pages;
++
++DROP POLICY IF EXISTS page_versions_select_rls ON page_versions;
++DROP POLICY IF EXISTS page_versions_insert_rls ON page_versions;
++
++DROP POLICY IF EXISTS stickies_select_rls ON stickies;
++DROP POLICY IF EXISTS stickies_insert_rls ON stickies;
++DROP POLICY IF EXISTS stickies_update_rls ON stickies;
++DROP POLICY IF EXISTS stickies_delete_rls ON stickies;
++
++-- 2. Disable FORCE RLS and RLS on all tenant tables and child partitions
++ALTER TABLE workspaces NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE workspaces DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE principals NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE principals DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE users NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE users DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE groups NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE groups DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE principal_group_edges NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE principal_group_edges DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE principal_group_closure NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE principal_group_closure DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE projects NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE projects DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE workflow_states NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE workflow_states DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE project_priorities NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE project_priorities DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE project_labels NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE project_labels DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE project_module_defaults NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE project_module_defaults DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE objects NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE objects DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE issues NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE issues DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE cycles NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE cycles DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE modules NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE modules DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE issue_modules NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE issue_modules DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE issue_assignees NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE issue_assignees DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE issue_labels NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE issue_labels DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE issue_subscriptions NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE issue_subscriptions DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE views NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE views DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE object_links NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE object_links DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE activity_records NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE activity_records DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE activity_chain_heads NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE activity_chain_heads DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE role_bindings NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE role_bindings DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE resource_acl_entries NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE resource_acl_entries DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE effective_resource_access NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE effective_resource_access DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE issue_comments NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE issue_comments DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE docs NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE docs DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE pages NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE pages DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE page_versions NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE page_versions DISABLE ROW LEVEL SECURITY;
++
++ALTER TABLE stickies NO FORCE ROW LEVEL SECURITY;
++ALTER TABLE stickies DISABLE ROW LEVEL SECURITY;
++
++DO $$
++DECLARE
++    r RECORD;
++BEGIN
++    FOR r IN (
++        SELECT tablename FROM pg_tables
++        WHERE schemaname = 'public' AND tablename LIKE 'activity_records_y%'
++    ) LOOP
++        EXECUTE format('ALTER TABLE public.%I NO FORCE ROW LEVEL SECURITY', r.tablename);
++        EXECUTE format('ALTER TABLE public.%I DISABLE ROW LEVEL SECURITY', r.tablename);
++    END LOOP;
++END $$;
++
++-- 3. Restore original ensure_activity_partitions (without RLS enablement)
++CREATE OR REPLACE FUNCTION ensure_activity_partitions(
++    p_ref timestamptz DEFAULT clock_timestamp(),
++    p_months_back int DEFAULT 1,
++    p_months_ahead int DEFAULT 6
++) RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
++DECLARE
++    v_created_count integer := 0;
++    v_i integer;
++    v_ref_utc timestamp without time zone;
++    v_start_ts timestamp with time zone;
++    v_end_ts timestamp with time zone;
++    v_part_name text;
++    v_start_str text;
++    v_end_str text;
++BEGIN
++    IF p_months_back < 0 OR p_months_back > 24 OR p_months_ahead < 0 OR p_months_ahead > 36 THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARTITION_RANGE_INVALID';
++    END IF;
++
++    PERFORM pg_advisory_xact_lock(hashtextextended('activity_partitions', 0));
++
++    v_ref_utc := date_trunc('month', p_ref AT TIME ZONE 'UTC');
++
++    FOR v_i IN (-p_months_back)..p_months_ahead LOOP
++        v_start_ts := (v_ref_utc + (v_i || ' month')::interval) AT TIME ZONE 'UTC';
++        v_end_ts := (v_ref_utc + ((v_i + 1) || ' month')::interval) AT TIME ZONE 'UTC';
++
++        v_part_name := 'activity_records_y' || to_char(v_start_ts, 'YYYY') || 'm' || to_char(v_start_ts, 'MM');
++        v_start_str := to_char(v_start_ts, 'YYYY-MM-DD 00:00:00+00');
++        v_end_str := to_char(v_end_ts, 'YYYY-MM-DD 00:00:00+00');
++
++        IF NOT EXISTS (
++            SELECT 1 FROM pg_class c
++            JOIN pg_namespace n ON n.oid = c.relnamespace
++            WHERE n.nspname = 'public' AND c.relname = v_part_name
++        ) THEN
++            EXECUTE format(
++                'CREATE TABLE public.%I PARTITION OF public.activity_records FOR VALUES FROM (%L) TO (%L)',
++                v_part_name,
++                v_start_str,
++                v_end_str
++            );
++            EXECUTE format(
++                'REVOKE UPDATE, DELETE, TRUNCATE ON public.%I FROM kanban_app, app_rls_reader',
++                v_part_name
++            );
++            v_created_count := v_created_count + 1;
++        END IF;
++    END LOOP;
++
++    RETURN v_created_count;
++END $$;
++
++GRANT EXECUTE ON FUNCTION ensure_activity_partitions(timestamptz, int, int) TO kanban_app;
++
++-- 4. Revert Trigger Functions to SECURITY INVOKER
++ALTER FUNCTION issues_validate_biu() SECURITY INVOKER;
++ALTER FUNCTION issues_parent_dag_biu() SECURITY INVOKER;
++ALTER FUNCTION docs_spine_match_biu() SECURITY INVOKER;
++
++-- 5. Drop Capability & Session Helpers
++DROP FUNCTION IF EXISTS app_has_object_capability(uuid, integer);
++DROP FUNCTION IF EXISTS app_current_aal_level();
++DROP FUNCTION IF EXISTS app_current_token_scopes();
+diff --git a/database/migrations/sql/p1_14_force_rls.up.sql b/database/migrations/sql/p1_14_force_rls.up.sql
+new file mode 100644
+index 0000000..ca8a044
+--- /dev/null
++++ b/database/migrations/sql/p1_14_force_rls.up.sql
+@@ -0,0 +1,1043 @@
++-- KB-P1-14: FORCE ROW LEVEL SECURITY policies, session context helpers & schema-wide RLS catalog gate
++
++-- 1. Session GUC & Capability Helpers
++CREATE OR REPLACE FUNCTION app_current_token_scopes()
++RETURNS text[]
++LANGUAGE sql
++STABLE PARALLEL SAFE
++AS $$
++    SELECT COALESCE(string_to_array(NULLIF(current_setting('app.token_scopes', true), ''), ','), '{}'::text[]);
++$$;
++
++CREATE OR REPLACE FUNCTION app_current_aal_level()
++RETURNS integer
++LANGUAGE sql
++STABLE PARALLEL SAFE
++AS $$
++    SELECT COALESCE(NULLIF(current_setting('app.aal_level', true), '')::integer, 0);
++$$;
++
++CREATE OR REPLACE FUNCTION app_has_object_capability(p_object_id uuid, p_mask integer)
++RETURNS boolean
++LANGUAGE sql
++STABLE PARALLEL SAFE SECURITY INVOKER
++AS $$
++    SELECT EXISTS (
++        SELECT 1 FROM effective_resource_access era
++        WHERE era.object_id = p_object_id
++          AND era.workspace_id = app_current_workspace_id()
++          AND era.principal_id = ANY (app_effective_principal_set())
++          AND (era.allow_mask & p_mask) = p_mask
++          AND (era.deny_mask  & p_mask) = 0
++    );
++$$;
++
++GRANT EXECUTE ON FUNCTION app_current_token_scopes() TO kanban_app, app_rls_reader, kanban_migrator;
++GRANT EXECUTE ON FUNCTION app_current_aal_level() TO kanban_app, app_rls_reader, kanban_migrator;
++GRANT EXECUTE ON FUNCTION app_has_object_capability(uuid, integer) TO kanban_app, app_rls_reader, kanban_migrator;
++
++-- 2. Update ensure_activity_partitions to apply ENABLE & FORCE RLS on dynamic monthly partitions
++CREATE OR REPLACE FUNCTION ensure_activity_partitions(
++    p_ref timestamptz DEFAULT clock_timestamp(),
++    p_months_back int DEFAULT 1,
++    p_months_ahead int DEFAULT 6
++) RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
++DECLARE
++    v_created_count integer := 0;
++    v_i integer;
++    v_ref_utc timestamp without time zone;
++    v_start_ts timestamp with time zone;
++    v_end_ts timestamp with time zone;
++    v_part_name text;
++    v_start_str text;
++    v_end_str text;
++BEGIN
++    IF p_months_back < 0 OR p_months_back > 24 OR p_months_ahead < 0 OR p_months_ahead > 36 THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PARTITION_RANGE_INVALID';
++    END IF;
++
++    PERFORM pg_advisory_xact_lock(hashtextextended('activity_partitions', 0));
++
++    v_ref_utc := date_trunc('month', p_ref AT TIME ZONE 'UTC');
++
++    FOR v_i IN (-p_months_back)..p_months_ahead LOOP
++        v_start_ts := (v_ref_utc + (v_i || ' month')::interval) AT TIME ZONE 'UTC';
++        v_end_ts := (v_ref_utc + ((v_i + 1) || ' month')::interval) AT TIME ZONE 'UTC';
++
++        v_part_name := 'activity_records_y' || to_char(v_start_ts, 'YYYY') || 'm' || to_char(v_start_ts, 'MM');
++        v_start_str := to_char(v_start_ts, 'YYYY-MM-DD 00:00:00+00');
++        v_end_str := to_char(v_end_ts, 'YYYY-MM-DD 00:00:00+00');
++
++        IF NOT EXISTS (
++            SELECT 1 FROM pg_class c
++            JOIN pg_namespace n ON n.oid = c.relnamespace
++            WHERE n.nspname = 'public' AND c.relname = v_part_name
++        ) THEN
++            EXECUTE format(
++                'CREATE TABLE public.%I PARTITION OF public.activity_records FOR VALUES FROM (%L) TO (%L)',
++                v_part_name,
++                v_start_str,
++                v_end_str
++            );
++            EXECUTE format(
++                'REVOKE UPDATE, DELETE, TRUNCATE ON public.%I FROM kanban_app, app_rls_reader',
++                v_part_name
++            );
++            EXECUTE format(
++                'ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',
++                v_part_name
++            );
++            EXECUTE format(
++                'ALTER TABLE public.%I FORCE ROW LEVEL SECURITY',
++                v_part_name
++            );
++            v_created_count := v_created_count + 1;
++        END IF;
++    END LOOP;
++
++    RETURN v_created_count;
++END $$;
++
++GRANT EXECUTE ON FUNCTION ensure_activity_partitions(timestamptz, int, int) TO kanban_app, kanban_migrator;
++
++-- 2.1 Set integrity triggers to SECURITY DEFINER so internal constraint checks succeed under RLS
++ALTER FUNCTION issues_validate_biu() SECURITY DEFINER SET search_path = pg_catalog, public;
++ALTER FUNCTION issues_parent_dag_biu() SECURITY DEFINER SET search_path = pg_catalog, public;
++ALTER FUNCTION docs_spine_match_biu() SECURITY DEFINER SET search_path = pg_catalog, public;
++
++-- 3. ENABLE and FORCE ROW LEVEL SECURITY across all tenant tables and existing monthly partitions
++ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
++ALTER TABLE workspaces FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE principals ENABLE ROW LEVEL SECURITY;
++ALTER TABLE principals FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE users ENABLE ROW LEVEL SECURITY;
++ALTER TABLE users FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
++ALTER TABLE groups FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE principal_group_edges ENABLE ROW LEVEL SECURITY;
++ALTER TABLE principal_group_edges FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE principal_group_closure ENABLE ROW LEVEL SECURITY;
++ALTER TABLE principal_group_closure FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
++ALTER TABLE projects FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE workflow_states ENABLE ROW LEVEL SECURITY;
++ALTER TABLE workflow_states FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE project_priorities ENABLE ROW LEVEL SECURITY;
++ALTER TABLE project_priorities FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE project_labels ENABLE ROW LEVEL SECURITY;
++ALTER TABLE project_labels FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE project_module_defaults ENABLE ROW LEVEL SECURITY;
++ALTER TABLE project_module_defaults FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE objects ENABLE ROW LEVEL SECURITY;
++ALTER TABLE objects FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE issues ENABLE ROW LEVEL SECURITY;
++ALTER TABLE issues FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE cycles ENABLE ROW LEVEL SECURITY;
++ALTER TABLE cycles FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE modules ENABLE ROW LEVEL SECURITY;
++ALTER TABLE modules FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE issue_modules ENABLE ROW LEVEL SECURITY;
++ALTER TABLE issue_modules FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE issue_assignees ENABLE ROW LEVEL SECURITY;
++ALTER TABLE issue_assignees FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE issue_labels ENABLE ROW LEVEL SECURITY;
++ALTER TABLE issue_labels FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE issue_subscriptions ENABLE ROW LEVEL SECURITY;
++ALTER TABLE issue_subscriptions FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE views ENABLE ROW LEVEL SECURITY;
++ALTER TABLE views FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE object_links ENABLE ROW LEVEL SECURITY;
++ALTER TABLE object_links FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE activity_records ENABLE ROW LEVEL SECURITY;
++ALTER TABLE activity_records FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE activity_chain_heads ENABLE ROW LEVEL SECURITY;
++ALTER TABLE activity_chain_heads FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE role_bindings ENABLE ROW LEVEL SECURITY;
++ALTER TABLE role_bindings FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE resource_acl_entries ENABLE ROW LEVEL SECURITY;
++ALTER TABLE resource_acl_entries FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE effective_resource_access ENABLE ROW LEVEL SECURITY;
++ALTER TABLE effective_resource_access FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE issue_comments ENABLE ROW LEVEL SECURITY;
++ALTER TABLE issue_comments FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE docs ENABLE ROW LEVEL SECURITY;
++ALTER TABLE docs FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE pages ENABLE ROW LEVEL SECURITY;
++ALTER TABLE pages FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE page_versions ENABLE ROW LEVEL SECURITY;
++ALTER TABLE page_versions FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE stickies ENABLE ROW LEVEL SECURITY;
++ALTER TABLE stickies FORCE ROW LEVEL SECURITY;
++
++DO $$
++DECLARE
++    r RECORD;
++BEGIN
++    FOR r IN (
++        SELECT tablename FROM pg_tables
++        WHERE schemaname = 'public' AND tablename LIKE 'activity_records_y%'
++    ) LOOP
++        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', r.tablename);
++        EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', r.tablename);
++    END LOOP;
++END $$;
++
++-- 4. Row Level Security Policies Across All Tenant Tables
++
++-- 4.1 Workspaces
++CREATE POLICY workspaces_select_rls ON workspaces
++    FOR SELECT USING (
++        id = app_current_workspace_id()
++        AND cardinality(app_effective_principal_set()) > 0
++    );
++
++CREATE POLICY workspaces_update_rls ON workspaces
++    FOR UPDATE USING (
++        id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    ) WITH CHECK (
++        id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++-- 4.2 Principals & Identity
++CREATE POLICY principals_select_rls ON principals
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND cardinality(app_effective_principal_set()) > 0
++    );
++
++CREATE POLICY principals_insert_rls ON principals
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY principals_update_rls ON principals
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY principals_delete_rls ON principals
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY users_select_rls ON users
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND cardinality(app_effective_principal_set()) > 0
++    );
++
++CREATE POLICY users_insert_rls ON users
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY users_update_rls ON users
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY users_delete_rls ON users
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY groups_select_rls ON groups
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND cardinality(app_effective_principal_set()) > 0
++    );
++
++CREATE POLICY groups_insert_rls ON groups
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY groups_update_rls ON groups
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY groups_delete_rls ON groups
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY principal_group_edges_select_rls ON principal_group_edges
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND cardinality(app_effective_principal_set()) > 0
++    );
++
++CREATE POLICY principal_group_edges_insert_rls ON principal_group_edges
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY principal_group_edges_update_rls ON principal_group_edges
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY principal_group_edges_delete_rls ON principal_group_edges
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY principal_group_closure_select_rls ON principal_group_closure
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND cardinality(app_effective_principal_set()) > 0
++    );
++
++-- 4.3 Universal Objects Spine (S3.3)
++CREATE POLICY objects_select_rls ON objects
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND EXISTS (
++            SELECT 1 FROM effective_resource_access era
++            WHERE era.object_id = objects.id
++              AND era.principal_id = ANY (app_effective_principal_set())
++              AND (era.allow_mask & 1) = 1
++              AND (era.deny_mask  & 1) = 0
++        )
++    );
++
++CREATE POLICY objects_insert_rls ON objects
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_current_principal_id() IS NOT NULL
++        AND (
++            (project_id IS NULL AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++            OR (project_id IS NOT NULL AND app_has_object_capability(project_id, 4))
++        )
++    );
++
++CREATE POLICY objects_update_rls ON objects
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    );
++
++CREATE POLICY objects_delete_rls ON objects
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 128)
++    );
++
++-- 4.4 Object-Spine Entity Tables (projects, issues, cycles, modules, docs, pages, stickies, views)
++
++-- projects
++CREATE POLICY projects_select_rls ON projects
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 1)
++    );
++
++CREATE POLICY projects_insert_rls ON projects
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY projects_update_rls ON projects
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 64)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 64)
++    );
++
++CREATE POLICY projects_delete_rls ON projects
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 128)
++    );
++
++-- issues
++CREATE POLICY issues_select_rls ON issues
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 1)
++    );
++
++CREATE POLICY issues_insert_rls ON issues
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 4)
++    );
++
++CREATE POLICY issues_update_rls ON issues
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 1)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (app_has_object_capability(id, 4) OR app_has_object_capability(id, 8))
++    );
++
++CREATE POLICY issues_delete_rls ON issues
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 128)
++    );
++
++-- cycles
++CREATE POLICY cycles_select_rls ON cycles
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 1)
++    );
++
++CREATE POLICY cycles_insert_rls ON cycles
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 4)
++    );
++
++CREATE POLICY cycles_update_rls ON cycles
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    );
++
++CREATE POLICY cycles_delete_rls ON cycles
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 128)
++    );
++
++-- modules
++CREATE POLICY modules_select_rls ON modules
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 1)
++    );
++
++CREATE POLICY modules_insert_rls ON modules
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 4)
++    );
++
++CREATE POLICY modules_update_rls ON modules
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    );
++
++CREATE POLICY modules_delete_rls ON modules
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 128)
++    );
++
++-- docs
++CREATE POLICY docs_select_rls ON docs
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 1)
++    );
++
++CREATE POLICY docs_insert_rls ON docs
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (project_id IS NULL OR app_has_object_capability(project_id, 4))
++    );
++
++CREATE POLICY docs_update_rls ON docs
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    );
++
++CREATE POLICY docs_delete_rls ON docs
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 128)
++    );
++
++-- pages
++CREATE POLICY pages_select_rls ON pages
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 1)
++    );
++
++CREATE POLICY pages_insert_rls ON pages
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(doc_id, 4)
++    );
++
++CREATE POLICY pages_update_rls ON pages
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    );
++
++CREATE POLICY pages_delete_rls ON pages
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 128)
++    );
++
++-- stickies
++CREATE POLICY stickies_select_rls ON stickies
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 1)
++    );
++
++CREATE POLICY stickies_insert_rls ON stickies
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (project_id IS NULL OR app_has_object_capability(project_id, 4))
++    );
++
++CREATE POLICY stickies_update_rls ON stickies
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    );
++
++CREATE POLICY stickies_delete_rls ON stickies
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 128)
++    );
++
++-- views (private views visible to owner or project admins)
++CREATE POLICY views_select_rls ON views
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 1)
++        AND (
++            visibility <> 'private'
++            OR owner_principal_id = app_current_principal_id()
++            OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])
++        )
++    );
++
++CREATE POLICY views_insert_rls ON views
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (project_id IS NULL OR app_has_object_capability(project_id, 4))
++    );
++
++CREATE POLICY views_update_rls ON views
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 4)
++    );
++
++CREATE POLICY views_delete_rls ON views
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 128)
++    );
++
++-- 4.5 Project Configuration Child Tables
++CREATE POLICY workflow_states_select_rls ON workflow_states
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 1)
++    );
++
++CREATE POLICY workflow_states_insert_rls ON workflow_states
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY workflow_states_update_rls ON workflow_states
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY workflow_states_delete_rls ON workflow_states
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY project_priorities_select_rls ON project_priorities
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 1)
++    );
++
++CREATE POLICY project_priorities_insert_rls ON project_priorities
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY project_priorities_update_rls ON project_priorities
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY project_priorities_delete_rls ON project_priorities
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY project_labels_select_rls ON project_labels
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 1)
++    );
++
++CREATE POLICY project_labels_insert_rls ON project_labels
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY project_labels_update_rls ON project_labels
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY project_labels_delete_rls ON project_labels
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY project_module_defaults_select_rls ON project_module_defaults
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 1)
++    );
++
++CREATE POLICY project_module_defaults_insert_rls ON project_module_defaults
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY project_module_defaults_update_rls ON project_module_defaults
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++CREATE POLICY project_module_defaults_delete_rls ON project_module_defaults
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++-- 4.6 Issue Join & Prose Child Tables
++CREATE POLICY issue_modules_select_rls ON issue_modules
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++    );
++
++CREATE POLICY issue_modules_insert_rls ON issue_modules
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    );
++
++CREATE POLICY issue_modules_update_rls ON issue_modules
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    );
++
++CREATE POLICY issue_modules_delete_rls ON issue_modules
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    );
++
++CREATE POLICY issue_assignees_select_rls ON issue_assignees
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++    );
++
++CREATE POLICY issue_assignees_insert_rls ON issue_assignees
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    );
++
++CREATE POLICY issue_assignees_update_rls ON issue_assignees
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    );
++
++CREATE POLICY issue_assignees_delete_rls ON issue_assignees
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    );
++
++CREATE POLICY issue_labels_select_rls ON issue_labels
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++    );
++
++CREATE POLICY issue_labels_insert_rls ON issue_labels
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    );
++
++CREATE POLICY issue_labels_update_rls ON issue_labels
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    );
++
++CREATE POLICY issue_labels_delete_rls ON issue_labels
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 4)
++    );
++
++CREATE POLICY issue_subscriptions_select_rls ON issue_subscriptions
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++        AND (
++            principal_id = app_current_principal_id()
++            OR app_has_object_capability(issue_id, 64)
++        )
++    );
++
++CREATE POLICY issue_subscriptions_insert_rls ON issue_subscriptions
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++        AND (
++            principal_id = app_current_principal_id()
++            OR app_has_object_capability(issue_id, 4)
++        )
++    );
++
++CREATE POLICY issue_subscriptions_update_rls ON issue_subscriptions
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++        AND (
++            principal_id = app_current_principal_id()
++            OR app_has_object_capability(issue_id, 4)
++        )
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++        AND (
++            principal_id = app_current_principal_id()
++            OR app_has_object_capability(issue_id, 4)
++        )
++    );
++
++CREATE POLICY issue_subscriptions_delete_rls ON issue_subscriptions
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++        AND (
++            principal_id = app_current_principal_id()
++            OR app_has_object_capability(issue_id, 4)
++        )
++    );
++
++CREATE POLICY issue_comments_select_rls ON issue_comments
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++    );
++
++CREATE POLICY issue_comments_insert_rls ON issue_comments
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND author_id = app_current_principal_id()
++        AND app_has_object_capability(issue_id, 2)
++    );
++
++CREATE POLICY issue_comments_update_rls ON issue_comments
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (author_id = app_current_principal_id() AND app_has_object_capability(issue_id, 2))
++            OR app_has_object_capability(issue_id, 64)
++        )
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (author_id = app_current_principal_id() AND app_has_object_capability(issue_id, 2))
++            OR app_has_object_capability(issue_id, 64)
++        )
++    );
++
++CREATE POLICY issue_comments_delete_rls ON issue_comments
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (author_id = app_current_principal_id() AND app_has_object_capability(issue_id, 2))
++            OR app_has_object_capability(issue_id, 64)
++        )
++    );
++
++CREATE POLICY page_versions_select_rls ON page_versions
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(page_id, 1)
++    );
++
++CREATE POLICY page_versions_insert_rls ON page_versions
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(page_id, 4)
++    );
++
++-- 4.7 Graph Links & Audit Ledger
++CREATE POLICY object_links_select_rls ON object_links
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            app_has_object_capability(source_id, 1)
++            OR app_has_object_capability(target_id, 1)
++        )
++    );
++
++CREATE POLICY object_links_insert_rls ON object_links
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(source_id, 16)
++        AND app_has_object_capability(target_id, 1)
++    );
++
++CREATE POLICY object_links_update_rls ON object_links
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(source_id, 16)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(source_id, 16)
++        AND app_has_object_capability(target_id, 1)
++    );
++
++CREATE POLICY object_links_delete_rls ON object_links
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(source_id, 16)
++    );
++
++CREATE POLICY activity_records_select_rls ON activity_records
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (object_id IS NOT NULL AND app_has_object_capability(object_id, 1))
++            OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++        )
++    );
++
++CREATE POLICY activity_records_insert_rls ON activity_records
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (actor_id IS NULL OR actor_id = app_current_principal_id())
++    );
++
++-- 4.8 Access Control & Permissions
++CREATE POLICY role_bindings_select_rls ON role_bindings
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            principal_id = ANY (app_effective_principal_set())
++            OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])
++        )
++    );
++
++CREATE POLICY role_bindings_insert_rls ON role_bindings
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (scope_type = 'server' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++            OR (scope_type = 'workspace' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++            OR (scope_type = 'project' AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN']))
++        )
++    );
++
++CREATE POLICY role_bindings_update_rls ON role_bindings
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (scope_type = 'server' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++            OR (scope_type = 'workspace' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++            OR (scope_type = 'project' AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN']))
++        )
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (scope_type = 'server' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++            OR (scope_type = 'workspace' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++            OR (scope_type = 'project' AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN']))
++        )
++    );
++
++CREATE POLICY role_bindings_delete_rls ON role_bindings
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (scope_type = 'server' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++            OR (scope_type = 'workspace' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++            OR (scope_type = 'project' AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN']))
++        )
++    );
++
++CREATE POLICY resource_acl_entries_select_rls ON resource_acl_entries
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(object_id, 1)
++    );
++
++CREATE POLICY resource_acl_entries_insert_rls ON resource_acl_entries
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (
++            app_has_object_capability(object_id, 32)
++            OR app_has_object_capability(object_id, 64)
++        )
++    );
++
++CREATE POLICY resource_acl_entries_update_rls ON resource_acl_entries
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            app_has_object_capability(object_id, 32)
++            OR app_has_object_capability(object_id, 64)
++        )
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (
++            app_has_object_capability(object_id, 32)
++            OR app_has_object_capability(object_id, 64)
++        )
++    );
++
++CREATE POLICY resource_acl_entries_delete_rls ON resource_acl_entries
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            app_has_object_capability(object_id, 32)
++            OR app_has_object_capability(object_id, 64)
++        )
++    );
++
++-- Non-recursive RLS policy on effective_resource_access: avoids calling app_has_object_capability
++CREATE POLICY effective_resource_access_select_rls ON effective_resource_access
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND cardinality(app_effective_principal_set()) > 0
++    );
+diff --git a/database/migrations/versions/p1_14_force_rls.py b/database/migrations/versions/p1_14_force_rls.py
+new file mode 100644
+index 0000000..e3b8642
+--- /dev/null
++++ b/database/migrations/versions/p1_14_force_rls.py
+@@ -0,0 +1,26 @@
++"""FORCE ROW LEVEL SECURITY policies, session context helpers, and schema-wide RLS catalog gate.
++
++Revision ID: p1_14_force_rls
++Revises: p1_07_creator_provenance
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p1_14_force_rls"
++down_revision: str | None = "p1_07_creator_provenance"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply FORCE ROW LEVEL SECURITY policies and context helpers."""
++    execute_sql_file("p1_14_force_rls.up.sql")
++
++
++def downgrade() -> None:
++    """Revert FORCE ROW LEVEL SECURITY policies and context helpers."""
++    execute_sql_file("p1_14_force_rls.down.sql")
+diff --git a/database/tests/migrations/test_p1_14_migration.py b/database/tests/migrations/test_p1_14_migration.py
+new file mode 100644
+index 0000000..46711bd
+--- /dev/null
++++ b/database/tests/migrations/test_p1_14_migration.py
+@@ -0,0 +1,74 @@
++"""Migration lifecycle test for p1_14_force_rls."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++RLS_CATALOG_CHECK = """
++SELECT c.relname
++FROM pg_class c
++JOIN pg_namespace n ON n.oid = c.relnamespace
++WHERE n.nspname = 'public'
++  AND c.relkind IN ('r', 'p')
++  AND c.relname NOT IN ('alembic_version', 'link_type_matrix')
++  AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity);
++"""
++
++
++@pytest.mark.migration
++async def test_07_force_rls_migration_lifecycle() -> None:
++    """Verify p1_14 upgrade applies RLS, downgrade reverts policies, and re-upgrade succeeds."""
++    async with MigrationHarness() as harness:
++        prev_rev = harness.previous_of("p1_14_force_rls")
++        assert prev_rev == "p1_07_creator_provenance"
++
++        # 1. Upgrade to p1_14_force_rls
++        await harness.upgrade("p1_14_force_rls")
++
++        # Verify catalog gate: 0 unprotected tenant tables/partitions
++        unprotected = await harness.fetch(RLS_CATALOG_CHECK)
++        assert len(unprotected) == 0, f"Found unprotected tables after upgrade: {unprotected}"
++
++        # Verify helper functions exist
++        helpers = await harness.fetch(
++            "SELECT proname FROM pg_proc p "
++            "JOIN pg_namespace n ON n.oid = p.pronamespace "
++            "WHERE n.nspname = 'public' "
++            "  AND proname IN ("
++            "    'app_current_token_scopes', 'app_current_aal_level', 'app_has_object_capability'"
++            "  )"
++        )
++        assert {r["proname"] for r in helpers} == {
++            "app_current_token_scopes",
++            "app_current_aal_level",
++            "app_has_object_capability",
++        }
++
++        # 2. Downgrade to previous revision
++        await harness.downgrade(prev_rev)
++
++        # Verify policies are removed
++        policies = await harness.fetch(
++            "SELECT policyname FROM pg_policies WHERE schemaname = 'public'"
++        )
++        assert len(policies) == 0, f"Expected 0 policies after downgrade, found: {policies}"
++
++        # Verify helper functions are dropped
++        helpers_down = await harness.fetch(
++            "SELECT proname FROM pg_proc p "
++            "JOIN pg_namespace n ON n.oid = p.pronamespace "
++            "WHERE n.nspname = 'public' "
++            "  AND proname IN ("
++            "    'app_current_token_scopes', 'app_current_aal_level', 'app_has_object_capability'"
++            "  )"
++        )
++        assert len(helpers_down) == 0, f"Expected helpers dropped, found: {helpers_down}"
++
++        # 3. Re-upgrade to p1_14_force_rls
++        await harness.upgrade("p1_14_force_rls")
++
++        # Verify catalog gate passes again
++        unprotected_reup = await harness.fetch(RLS_CATALOG_CHECK)
++        assert len(unprotected_reup) == 0, (
++            f"Found unprotected tables after re-upgrade: {unprotected_reup}"
++        )
+diff --git a/database/tests/test_p1_14_rls_catalog.py b/database/tests/test_p1_14_rls_catalog.py
+new file mode 100644
+index 0000000..4cc8a5f
+--- /dev/null
++++ b/database/tests/test_p1_14_rls_catalog.py
+@@ -0,0 +1,58 @@
++"""Schema-wide catalog gate verifying FORCE ROW LEVEL SECURITY across all tenant tables."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++CATALOG_RLS_QUERY = """
++SELECT
++    c.relname,
++    c.relkind,
++    c.relrowsecurity,
++    c.relforcerowsecurity
++FROM pg_class c
++JOIN pg_namespace n ON n.oid = c.relnamespace
++WHERE n.nspname = 'public'
++  AND c.relkind IN ('r', 'p')
++  AND c.relname NOT IN ('alembic_version', 'link_type_matrix')
++ORDER BY c.relname;
++"""
++
++EXEMPT_TABLES = {"alembic_version", "link_type_matrix"}
++
++
++@pytest.mark.asyncio
++async def test_06_rls_catalog_gate(db_session: AsyncSession) -> None:
++    """Assert every public tenant table and partition has relrowsecurity and relforcerowsecurity."""
++    result = await db_session.execute(text(CATALOG_RLS_QUERY))
++    rows = result.mappings().all()
++
++    # Must find all tenant tables and activity partition tables
++    assert len(rows) >= 25, f"Expected at least 25 tenant tables/partitions, found {len(rows)}"
++
++    unprotected = [
++        r["relname"] for r in rows if not r["relrowsecurity"] or not r["relforcerowsecurity"]
++    ]
++
++    assert len(unprotected) == 0, (
++        f"Found {len(unprotected)} tenant tables/partitions missing FORCE RLS: {unprotected}"
++    )
++
++    # Verify exempt tables exist and are not flagged
++    exempt_res = await db_session.execute(
++        text(
++            "SELECT c.relname FROM pg_class c "
++            "JOIN pg_namespace n ON n.oid = c.relnamespace "
++            "WHERE n.nspname = 'public' AND c.relname IN ('alembic_version', 'link_type_matrix')"
++        )
++    )
++    found_exempt = {r[0] for r in exempt_res.all()}
++    assert found_exempt == EXEMPT_TABLES, (
++        f"Missing exempt catalog tables: {EXEMPT_TABLES - found_exempt}"
++    )
+diff --git a/database/tests/test_p1_14_rls_policies.py b/database/tests/test_p1_14_rls_policies.py
+new file mode 100644
+index 0000000..f95372d
+--- /dev/null
++++ b/database/tests/test_p1_14_rls_policies.py
+@@ -0,0 +1,839 @@
++"""Comprehensive feature unit tests for Phase 1 FORCE ROW LEVEL SECURITY policies.
++
++Covers:
++1. Zero-context fail-closed (0 rows across every tenant table)
++2. Cross-workspace & cross-project isolation
++3. Write WITH CHECK enforcement (VIEWER comments, updates/inserts fail)
++4. Explicit-deny & link boundary (DENY VIEW hides; far link endpoint masked)
++5. Direct partition query blocked & read-only enforcement
++"""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError, ProgrammingError
++
++from database.tests.conftest import bind_ctx
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++ALL_TENANT_TABLES = [
++    "workspaces",
++    "principals",
++    "users",
++    "groups",
++    "principal_group_edges",
++    "principal_group_closure",
++    "objects",
++    "projects",
++    "workflow_states",
++    "project_priorities",
++    "project_labels",
++    "project_module_defaults",
++    "issues",
++    "cycles",
++    "modules",
++    "issue_modules",
++    "issue_assignees",
++    "issue_labels",
++    "issue_subscriptions",
++    "issue_comments",
++    "docs",
++    "pages",
++    "page_versions",
++    "stickies",
++    "views",
++    "object_links",
++    "role_bindings",
++    "resource_acl_entries",
++    "effective_resource_access",
++    "activity_records",
++    "activity_chain_heads",
++]
++
++
++async def _create_workspace(
++    session: AsyncSession,
++    slug: str | None = None,
++    name: str = "Test Workspace",
++) -> uuid.UUID:
++    """Register and insert a workspace."""
++    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
++    row = await session.execute(
++        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
++        {"slug": ws_slug, "name": name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _create_user(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    display_name: str = "Test User",
++) -> tuple[uuid.UUID, uuid.UUID]:
++    """Register and insert a user and principal."""
++    u_id = uuid.uuid4()
++    p_id = await session.scalar(
++        text(
++            "SELECT register_object(  'user'::object_kind, :ws_id, NULL, :ckey, :name, :uid, :id)"
++        ),
++        {
++            "ws_id": ws_id,
++            "ckey": f"usr-{u_id.hex[:8]}",
++            "name": display_name,
++            "uid": u_id,
++            "id": u_id,
++        },
++    )
++    assert p_id == u_id
++
++    await session.execute(
++        text(
++            "INSERT INTO principals (id, workspace_id, principal_type, display_name) "
++            "VALUES (:id, :ws_id, 'USER', :name)"
++        ),
++        {"id": u_id, "ws_id": ws_id, "name": display_name},
++    )
++    await session.execute(
++        text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws_id, :email)"),
++        {"id": u_id, "ws_id": ws_id, "email": f"{u_id.hex[:8]}@example.com"},
++    )
++    return u_id, u_id
++
++
++async def _create_project(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    user_id: uuid.UUID,
++    identifier: str = "PRJ",
++    name: str = "Test Project",
++) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
++    """Register and insert a project with default state and priority."""
++    proj_id = await session.scalar(
++        text("SELECT register_object('project'::object_kind, :ws_id, NULL, :ident, :name, :uid)"),
++        {"ws_id": ws_id, "ident": identifier, "name": name, "uid": user_id},
++    )
++    assert isinstance(proj_id, uuid.UUID)
++
++    await session.execute(
++        text(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES (:id, :ws_id, :ident, :name)"
++        ),
++        {"id": proj_id, "ws_id": ws_id, "ident": identifier, "name": name},
++    )
++
++    state_id = await session.scalar(
++        text(
++            "SELECT id FROM workflow_states WHERE project_id = :pid AND is_default = true LIMIT 1"
++        ),
++        {"pid": proj_id},
++    )
++    assert isinstance(state_id, uuid.UUID)
++
++    prio_id = await session.scalar(
++        text(
++            "SELECT id FROM project_priorities "
++            "WHERE project_id = :pid AND is_default = true LIMIT 1"
++        ),
++        {"pid": proj_id},
++    )
++    assert isinstance(prio_id, uuid.UUID)
++
++    return proj_id, state_id, prio_id
++
++
++async def _create_issue(  # noqa: PLR0913, PLR0917
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    proj_id: uuid.UUID,
++    user_id: uuid.UUID,
++    state_id: uuid.UUID,
++    prio_id: uuid.UUID,
++    summary: str = "Test Issue",
++) -> uuid.UUID:
++    """Register and create an issue under a project."""
++    seq = await session.scalar(
++        text("SELECT allocate_issue_sequence(:pid)"),
++        {"pid": proj_id},
++    )
++    assert isinstance(seq, int)
++
++    p_ident = await session.scalar(
++        text("SELECT identifier FROM projects WHERE id = :id"),
++        {"id": proj_id},
++    )
++    ckey = f"{p_ident}-{seq}"
++
++    iss_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "SELECT register_object('issue'::object_kind, :ws_id, :pid, :ckey, :summary, :uid, :id)"
++        ),
++        {
++            "ws_id": ws_id,
++            "pid": proj_id,
++            "ckey": ckey,
++            "summary": summary,
++            "uid": user_id,
++            "id": iss_id,
++        },
++    )
++
++    await session.execute(
++        text(
++            "INSERT INTO issues ("
++            "  id, workspace_id, project_id, sequence_id, summary, "
++            "  description_markdown, state_id, priority_id, created_by_id, "
++            "  original_created_by_id, board_rank"
++            ") VALUES ("
++            "  :id, :ws_id, :pid, :seq, :summary, "
++            "  'Issue body', :state_id, :prio_id, :uid, :uid, '0|hzzzzz:'"
++            ")"
++        ),
++        {
++            "id": iss_id,
++            "ws_id": ws_id,
++            "pid": proj_id,
++            "seq": seq,
++            "summary": summary,
++            "state_id": state_id,
++            "prio_id": prio_id,
++            "uid": user_id,
++        },
++    )
++    return iss_id
++
++
++async def _seed_two_workspaces(db_session: AsyncSession) -> dict[str, uuid.UUID]:
++    """Seed two full workspaces with projects, issues, comments, docs, pages, views, stickies."""
++    # 1. WS1
++    ws1 = await _create_workspace(db_session, name="Workspace 1")
++    u_ws1, _ = await _create_user(db_session, ws1, display_name="User WS1")
++    p_kan, st_kan, pr_kan = await _create_project(
++        db_session, ws1, u_ws1, identifier="KAN", name="Kanban Core"
++    )
++    p_sec, st_sec, pr_sec = await _create_project(
++        db_session, ws1, u_ws1, identifier="SEC", name="Security Ops"
++    )
++
++    kan_1 = await _create_issue(
++        db_session, ws1, p_kan, u_ws1, st_kan, pr_kan, summary="KAN Core Issue 1"
++    )
++    kan_2 = await _create_issue(
++        db_session, ws1, p_kan, u_ws1, st_kan, pr_kan, summary="KAN Core Issue 2"
++    )
++    sec_1 = await _create_issue(
++        db_session, ws1, p_sec, u_ws1, st_sec, pr_sec, summary="SEC Secret Issue 1"
++    )
++
++    # Comment on KAN-1 and KAN-2
++    comm_1 = await db_session.scalar(
++        text(
++            "INSERT INTO issue_comments (issue_id, author_id, workspace_id, body_markdown) "
++            "VALUES (:iid, :uid, :ws, 'Comment on KAN-1') RETURNING id"
++        ),
++        {"iid": kan_1, "uid": u_ws1, "ws": ws1},
++    )
++    assert isinstance(comm_1, uuid.UUID)
++
++    comm_2 = await db_session.scalar(
++        text(
++            "INSERT INTO issue_comments (issue_id, author_id, workspace_id, body_markdown) "
++            "VALUES (:iid, :uid, :ws, 'Comment on KAN-2') RETURNING id"
++        ),
++        {"iid": kan_2, "uid": u_ws1, "ws": ws1},
++    )
++    assert isinstance(comm_2, uuid.UUID)
++
++    # Doc and Page in WS1
++    doc_1 = uuid.uuid4()
++    doc_title = "KAN Architecture"
++    await db_session.execute(
++        text("SELECT register_object('doc'::object_kind, :ws, :pid, :ckey, :title, :uid, :id)"),
++        {
++            "ws": ws1,
++            "pid": p_kan,
++            "ckey": f"doc-{doc_1.hex[:8]}",
++            "title": doc_title,
++            "uid": u_ws1,
++            "id": doc_1,
++        },
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO docs (id, workspace_id, project_id, title, body_markdown) "
++            "VALUES (:id, :ws, :pid, :title, 'Markdown documentation')"
++        ),
++        {"id": doc_1, "ws": ws1, "pid": p_kan, "title": doc_title},
++    )
++
++    page_1 = uuid.uuid4()
++    page_title = "Overview Page"
++    await db_session.execute(
++        text("SELECT register_object('page'::object_kind, :ws, :pid, :ckey, :title, :uid, :id)"),
++        {
++            "ws": ws1,
++            "pid": p_kan,
++            "ckey": f"page-{page_1.hex[:8]}",
++            "title": page_title,
++            "uid": u_ws1,
++            "id": page_1,
++        },
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO pages (id, workspace_id, doc_id, parent_page_id, title, body_markdown) "
++            "VALUES (:id, :ws, :doc, NULL, :title, 'Page body')"
++        ),
++        {"id": page_1, "ws": ws1, "doc": doc_1, "title": page_title},
++    )
++
++    # Sticky in WS1
++    stk_1 = uuid.uuid4()
++    await db_session.execute(
++        text("SELECT register_object('sticky'::object_kind, :ws, :pid, :ckey, 'Idea', :uid, :id)"),
++        {"ws": ws1, "pid": p_kan, "ckey": f"stk-{stk_1.hex[:8]}", "uid": u_ws1, "id": stk_1},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO stickies (id, workspace_id, project_id, body_markdown, color_token) "
++            "VALUES (:id, :ws, :pid, 'Scratch idea', 'amber')"
++        ),
++        {"id": stk_1, "ws": ws1, "pid": p_kan},
++    )
++
++    # View in WS1
++    view_1 = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "SELECT register_object(  'view'::object_kind, :ws, :pid, :k, 'Sprint View', :uid, :id)"
++        ),
++        {"ws": ws1, "pid": p_kan, "k": f"view-{view_1.hex[:8]}", "uid": u_ws1, "id": view_1},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO views ("
++            "  id, workspace_id, project_id, owner_principal_id, visibility, "
++            "  name, layout, filters_json, wip_limits_json"
++            ") VALUES ("
++            "  :id, :ws, :pid, :uid, 'workspace', 'Sprint View', 'board', "
++            "  '{}'::jsonb, '{}'::jsonb"
++            ")"
++        ),
++        {"id": view_1, "ws": ws1, "pid": p_kan, "uid": u_ws1},
++    )
++
++    # Object Link in WS1: KAN-1 -> BLOCKS -> SEC-1
++    link_1 = await db_session.scalar(
++        text(
++            "INSERT INTO object_links ("
++            "  workspace_id, source_id, source_type, target_id, target_type, "
++            "  link_type, source_key_snapshot, target_key_snapshot, created_by_id"
++            ") VALUES ("
++            "  :ws, :src, 'issue', :tgt, 'issue', 'BLOCKS', 'KAN-1', 'SEC-1', :uid"
++            ") RETURNING id"
++        ),
++        {"ws": ws1, "src": kan_1, "tgt": sec_1, "uid": u_ws1},
++    )
++    assert isinstance(link_1, uuid.UUID)
++
++    # Activity Record in WS1
++    act_1 = await db_session.scalar(
++        text(
++            "SELECT append_activity("
++            "  :ws, :obj_id, 'issue'::object_kind, :actor, 'ISSUE_CREATED', '{\"k\": 1}'::jsonb"
++            ")"
++        ),
++        {"ws": ws1, "obj_id": kan_1, "actor": u_ws1},
++    )
++    assert isinstance(act_1, uuid.UUID)
++
++    # 2. WS2
++    ws2 = await _create_workspace(db_session, name="Workspace 2")
++    u_ws2, _ = await _create_user(db_session, ws2, display_name="User WS2")
++    p_oth, st_oth, pr_oth = await _create_project(
++        db_session, ws2, u_ws2, identifier="OTH", name="Other Project"
++    )
++    oth_1 = await _create_issue(
++        db_session, ws2, p_oth, u_ws2, st_oth, pr_oth, summary="Other Issue 1"
++    )
++
++    # Refresh effective access for both workspaces
++    await db_session.execute(
++        text("SELECT rebuild_effective_access_for_workspace(:ws)"), {"ws": ws1}
++    )
++    await db_session.execute(
++        text("SELECT rebuild_effective_access_for_workspace(:ws)"), {"ws": ws2}
++    )
++
++    return {
++        "ws1": ws1,
++        "ws2": ws2,
++        "u_ws1": u_ws1,
++        "u_ws2": u_ws2,
++        "p_kan": p_kan,
++        "p_sec": p_sec,
++        "p_oth": p_oth,
++        "kan_1": kan_1,
++        "kan_2": kan_2,
++        "sec_1": sec_1,
++        "oth_1": oth_1,
++        "doc_1": doc_1,
++        "page_1": page_1,
++        "stk_1": stk_1,
++        "view_1": view_1,
++        "link_1": link_1,
++        "act_1": act_1,
++    }
++
++
++# ==============================================================================
++# TEST CASE 1: Zero-Context Fail-Closed (kanban_app & app_rls_reader)
++# ==============================================================================
++@pytest.mark.asyncio
++async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
++    """Test Case 1: kanban_app & app_rls_reader return 0 rows across EVERY table without context."""
++    await _seed_two_workspaces(db_session)
++
++    # Query all public tables except exempt catalog tables
++    tbl_rows = await db_session.execute(
++        text(
++            "SELECT c.relname FROM pg_class c "
++            "JOIN pg_namespace n ON n.oid = c.relnamespace "
++            "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
++            "  AND c.relname NOT IN ('alembic_version', 'link_type_matrix') "
++            "ORDER BY c.relname"
++        )
++    )
++    tables_to_check = [r[0] for r in tbl_rows.all()]
++    assert len(tables_to_check) >= len(ALL_TENANT_TABLES)
++
++    # 1. Test as kanban_app with UNSET context
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++
++    # Unset context check
++    for tbl in tables_to_check:
++        cnt = await db_session.scalar(text(f"SELECT count(*) FROM {tbl}"))  # noqa: S608
++        assert cnt == 0, f"Expected 0 rows for kanban_app on {tbl} with unset context, got {cnt}"
++
++    # 2. Test as kanban_app with explicitly empty context
++    await db_session.execute(
++        text(
++            "SELECT set_config('app.principal_id', '', true), "
++            "set_config('app.workspace_id', '', true)"
++        )
++    )
++    for tbl in tables_to_check:
++        cnt = await db_session.scalar(text(f"SELECT count(*) FROM {tbl}"))  # noqa: S608
++        assert cnt == 0, f"Expected 0 rows for kanban_app on {tbl} with empty context, got {cnt}"
++
++    # 3. Test as app_rls_reader with UNSET context
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION app_rls_reader"))
++    await db_session.execute(
++        text(
++            "SELECT set_config('app.principal_id', '', true), "
++            "set_config('app.workspace_id', '', true)"
++        )
++    )
++    for tbl in tables_to_check:
++        cnt = await db_session.scalar(text(f"SELECT count(*) FROM {tbl}"))  # noqa: S608
++        assert cnt == 0, (
++            f"Expected 0 rows for app_rls_reader on {tbl} with unset context, got {cnt}"
++        )
++
++    # Reset authorization back to superuser
++    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
++
++
++# ==============================================================================
++# TEST CASE 2: Cross-Workspace & Cross-Project Isolation
++# ==============================================================================
++@pytest.mark.asyncio
++async def test_02_cross_workspace_and_project_isolation(db_session: AsyncSession) -> None:
++    """Test Case 2: U_ws1 bound to KAN sees only KAN/WS1 rows and 0 rows from SEC or WS2."""
++    seed = await _seed_two_workspaces(db_session)
++    ws1 = seed["ws1"]
++    u_ws1 = seed["u_ws1"]
++    p_kan = seed["p_kan"]
++    p_sec = seed["p_sec"]
++    p_oth = seed["p_oth"]
++
++    # Bind U_ws1 as MEMBER on project KAN
++    await db_session.execute(
++        text(
++            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:ws, :p, 'MEMBER', 'project', :proj)"
++        ),
++        {"ws": ws1, "p": u_ws1, "proj": p_kan},
++    )
++    await db_session.execute(
++        text("SELECT rebuild_effective_access_for_workspace(:ws)"), {"ws": ws1}
++    )
++
++    # Switch to kanban_app and bind context to (U_ws1, WS1)
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++    await bind_ctx(db_session, u_ws1, ws1)
++
++    # 1. Projects: KAN is visible, SEC and OTH return 0 rows
++    kan_p = await db_session.scalar(
++        text("SELECT count(*) FROM projects WHERE id = :id"), {"id": p_kan}
++    )
++    assert kan_p == 1
++    sec_p = await db_session.scalar(
++        text("SELECT count(*) FROM projects WHERE id = :id"), {"id": p_sec}
++    )
++    assert sec_p == 0
++    oth_p = await db_session.scalar(
++        text("SELECT count(*) FROM projects WHERE id = :id"), {"id": p_oth}
++    )
++    assert oth_p == 0
++
++    # 2. Issues: KAN-1 and KAN-2 visible; SEC-1 and OTH-1 return 0 rows
++    vis_issues = (await db_session.execute(text("SELECT id FROM issues"))).scalars().all()
++    assert set(vis_issues) == {seed["kan_1"], seed["kan_2"]}
++
++    # 3. Objects: KAN entities visible, SEC and OTH entities not in objects
++    kan_obj = await db_session.scalar(
++        text("SELECT count(*) FROM objects WHERE id = :id"), {"id": seed["kan_1"]}
++    )
++    assert kan_obj == 1
++    sec_obj = await db_session.scalar(
++        text("SELECT count(*) FROM objects WHERE id = :id"), {"id": seed["sec_1"]}
++    )
++    assert sec_obj == 0
++    oth_obj = await db_session.scalar(
++        text("SELECT count(*) FROM objects WHERE id = :id"), {"id": seed["oth_1"]}
++    )
++    assert oth_obj == 0
++
++    # 4. Docs, Stickies, Views, Issue Comments, Activity Records
++    vis_docs = (await db_session.execute(text("SELECT id FROM docs"))).scalars().all()
++    assert set(vis_docs) == {seed["doc_1"]}
++
++    vis_stickies = (await db_session.execute(text("SELECT id FROM stickies"))).scalars().all()
++    assert set(vis_stickies) == {seed["stk_1"]}
++
++    vis_views = (await db_session.execute(text("SELECT id FROM views"))).scalars().all()
++    assert set(vis_views) == {seed["view_1"]}
++
++    vis_comments = (await db_session.execute(text("SELECT id FROM issue_comments"))).scalars().all()
++    # Both comments are on KAN issues
++    assert len(vis_comments) == 2
++
++    vis_acts = (await db_session.execute(text("SELECT id FROM activity_records"))).scalars().all()
++    assert set(vis_acts) == {seed["act_1"]}
++
++    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
++
++
++# ==============================================================================
++# TEST CASE 3: Write WITH CHECK Enforcement
++# ==============================================================================
++@pytest.mark.asyncio
++async def test_03_write_with_check_enforcement(db_session: AsyncSession) -> None:
++    """Test Case 3: As VIEWER (mask=3), comments succeed, updates/inserts fail with 42501."""
++    seed = await _seed_two_workspaces(db_session)
++    ws1 = seed["ws1"]
++    ws2 = seed["ws2"]
++    u_ws1 = seed["u_ws1"]
++    p_kan = seed["p_kan"]
++    p_oth = seed["p_oth"]
++    kan_1 = seed["kan_1"]
++
++    # Bind U_ws1 with role VIEWER (mask = 3 => VIEW=1 | COMMENT=2) on project KAN
++    await db_session.execute(
++        text(
++            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:ws, :p, 'VIEWER', 'project', :proj)"
++        ),
++        {"ws": ws1, "p": u_ws1, "proj": p_kan},
++    )
++    await db_session.execute(
++        text("SELECT rebuild_effective_access_for_workspace(:ws)"), {"ws": ws1}
++    )
++
++    # Switch to kanban_app and bind context
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++    await bind_ctx(db_session, u_ws1, ws1)
++
++    # 1. INSERT comment succeeds (COMMENT capability bit 2)
++    comm_res = await db_session.execute(
++        text(
++            "INSERT INTO issue_comments (issue_id, author_id, workspace_id, body_markdown) "
++            "VALUES (:iid, :uid, :ws, 'Viewer comment') RETURNING id"
++        ),
++        {"iid": kan_1, "uid": u_ws1, "ws": ws1},
++    )
++    comm_id = comm_res.scalar_one()
++    assert isinstance(comm_id, uuid.UUID)
++
++    # 2. UPDATE issues SET summary fails with 42501 (requires EDIT=4 or TRANSITION=8)
++    sp1 = await db_session.begin_nested()
++    with pytest.raises(DBAPIError) as exc1:
++        await db_session.execute(
++            text("UPDATE issues SET summary = 'Malicious update' WHERE id = :id"),
++            {"id": kan_1},
++        )
++    assert exc1.value.orig is not None
++    assert getattr(exc1.value.orig, "sqlstate", None) == "42501"
++    await sp1.rollback()
++
++    # 3. INSERT INTO issues fails with 42501 (requires EDIT=4 on project)
++    # Pre-allocate valid sequence and spine object in maintenance mode
++    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
++    seq3 = await db_session.scalar(text("SELECT allocate_issue_sequence(:pid)"), {"pid": p_kan})
++    iss3_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "SELECT register_object("
++            "  'issue'::object_kind, :ws, :pid, :ckey, 'Unauthorized Issue', :uid, :id"
++            ")"
++        ),
++        {"ws": ws1, "pid": p_kan, "ckey": f"KAN-{seq3}", "uid": u_ws1, "id": iss3_id},
++    )
++
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++    await bind_ctx(db_session, u_ws1, ws1)
++
++    sp2 = await db_session.begin_nested()
++    with pytest.raises(DBAPIError) as exc2:
++        await db_session.execute(
++            text(
++                "INSERT INTO issues ("
++                "  id, workspace_id, project_id, sequence_id, summary, "
++                "  description_markdown, state_id, priority_id, created_by_id, "
++                "  original_created_by_id, board_rank"
++                ") VALUES ("
++                "  :id, :ws, :pid, :seq, 'Unauthorized Issue', 'desc', "
++                "  (SELECT id FROM workflow_states "
++                "   WHERE project_id = :pid AND is_default = true LIMIT 1), "
++                "  (SELECT id FROM project_priorities "
++                "   WHERE project_id = :pid AND is_default = true LIMIT 1), "
++                "  :uid, :uid, '0|hzzzzz:'"
++                ")"
++            ),
++            {"id": iss3_id, "ws": ws1, "pid": p_kan, "seq": seq3, "uid": u_ws1},
++        )
++    assert exc2.value.orig is not None
++    assert getattr(exc2.value.orig, "sqlstate", None) == "42501"
++    await sp2.rollback()
++
++    # 4. Attempting to INSERT an issue with workspace_id = WS2 while bound to WS1 raises 42501
++    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
++    seq4 = await db_session.scalar(text("SELECT allocate_issue_sequence(:pid)"), {"pid": p_oth})
++    state_oth = await db_session.scalar(
++        text(
++            "SELECT id FROM workflow_states WHERE project_id = :pid AND is_default = true LIMIT 1"
++        ),
++        {"pid": p_oth},
++    )
++    prio_oth = await db_session.scalar(
++        text(
++            "SELECT id FROM project_priorities "
++            "WHERE project_id = :pid AND is_default = true LIMIT 1"
++        ),
++        {"pid": p_oth},
++    )
++    iss4_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "SELECT register_object("
++            "  'issue'::object_kind, :ws, :pid, :ckey, 'Cross-Workspace Issue', :uid, :id"
++            ")"
++        ),
++        {"ws": ws2, "pid": p_oth, "ckey": f"OTH-{seq4}", "uid": u_ws1, "id": iss4_id},
++    )
++
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++    await bind_ctx(db_session, u_ws1, ws1)
++
++    sp3 = await db_session.begin_nested()
++    with pytest.raises(DBAPIError) as exc3:
++        await db_session.execute(
++            text(
++                "INSERT INTO issues ("
++                "  id, workspace_id, project_id, sequence_id, summary, "
++                "  description_markdown, state_id, priority_id, created_by_id, "
++                "  original_created_by_id, board_rank"
++                ") VALUES ("
++                "  :id, :ws2, :pid, :seq, 'Cross-Workspace Issue', "
++                "  'desc', :state_id, :prio_id, "
++                "  :uid, :uid, '0|hzzzzz:'"
++                ")"
++            ),
++            {
++                "id": iss4_id,
++                "ws2": ws2,
++                "pid": p_oth,
++                "seq": seq4,
++                "state_id": state_oth,
++                "prio_id": prio_oth,
++                "uid": u_ws1,
++            },
++        )
++    assert exc3.value.orig is not None
++    assert getattr(exc3.value.orig, "sqlstate", None) == "42501"
++    await sp3.rollback()
++
++    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
++
++
++# ==============================================================================
++# TEST CASE 4: Explicit-Deny & Link Boundary
++# ==============================================================================
++@pytest.mark.asyncio
++async def test_04_explicit_deny_and_link_boundary(db_session: AsyncSession) -> None:
++    """Test Case 4: DENY VIEW hides issue; object_links visible but far endpoint masked."""
++    seed = await _seed_two_workspaces(db_session)
++    ws1 = seed["ws1"]
++    u_ws1 = seed["u_ws1"]
++    p_kan = seed["p_kan"]
++    kan_1 = seed["kan_1"]
++    kan_2 = seed["kan_2"]
++    sec_1 = seed["sec_1"]
++
++    # 1. Grant MEMBER on project KAN
++    await db_session.execute(
++        text(
++            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:ws, :p, 'MEMBER', 'project', :proj)"
++        ),
++        {"ws": ws1, "p": u_ws1, "proj": p_kan},
++    )
++
++    # 2. Add explicit DENY VIEW on KAN-2
++    await db_session.execute(
++        text(
++            "INSERT INTO resource_acl_entries ("
++            "  workspace_id, object_id, principal_id, effect, capability_mask"
++            ") VALUES (:ws, :obj, :p, 'DENY', 1)"
++        ),
++        {"ws": ws1, "obj": kan_2, "p": u_ws1},
++    )
++    await db_session.execute(
++        text("SELECT rebuild_effective_access_for_workspace(:ws)"), {"ws": ws1}
++    )
++
++    # Switch to kanban_app
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++    await bind_ctx(db_session, u_ws1, ws1)
++
++    # KAN-1 is visible, KAN-2 is hidden by explicit DENY
++    vis_issues = (await db_session.execute(text("SELECT id FROM issues"))).scalars().all()
++    assert kan_1 in vis_issues
++    assert kan_2 not in vis_issues
++
++    # Comments on KAN-2 are also hidden
++    vis_comments = (
++        (
++            await db_session.execute(
++                text("SELECT id FROM issue_comments WHERE issue_id = :id"),
++                {"id": kan_2},
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(vis_comments) == 0
++
++    # 3. Link boundary test: object_links row KAN-1 -> BLOCKS -> SEC-1
++    # Visible in object_links because user has VIEW on KAN-1 (source_id)
++    links = (
++        (
++            await db_session.execute(
++                text("SELECT id, source_id, target_id FROM object_links WHERE source_id = :src"),
++                {"src": kan_1},
++            )
++        )
++        .mappings()
++        .all()
++    )
++    assert len(links) == 1
++    assert links[0]["target_id"] == sec_1
++
++    # But querying objects for sec_1 returns 0 rows (far endpoint masked)
++    sec_obj_cnt = await db_session.scalar(
++        text("SELECT count(*) FROM objects WHERE id = :id"),
++        {"id": sec_1},
++    )
++    assert sec_obj_cnt == 0
++
++    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
++
++
++# ==============================================================================
++# TEST CASE 5: Direct Partition Query Blocked & Read-Only Enforcement
++# ==============================================================================
++@pytest.mark.asyncio
++async def test_05_partition_blocked_and_readonly_reader(db_session: AsyncSession) -> None:
++    """Test Case 5: Direct child partition blocked on kanban_app; app_rls_reader read-only."""
++    seed = await _seed_two_workspaces(db_session)
++    ws1 = seed["ws1"]
++    u_ws1 = seed["u_ws1"]
++    p_kan = seed["p_kan"]
++
++    # Bind U_ws1 on KAN
++    await db_session.execute(
++        text(
++            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:ws, :p, 'MEMBER', 'project', :proj)"
++        ),
++        {"ws": ws1, "p": u_ws1, "proj": p_kan},
++    )
++    await db_session.execute(
++        text("SELECT rebuild_effective_access_for_workspace(:ws)"), {"ws": ws1}
++    )
++
++    # Identify a partition table name
++    part_row = await db_session.scalar(
++        text(
++            "SELECT tablename FROM pg_tables "
++            "WHERE schemaname = 'public' AND tablename LIKE 'activity_records_y%' LIMIT 1"
++        )
++    )
++    assert part_row is not None
++    part_name = str(part_row)
++
++    # 1. As kanban_app bound to U_ws1:
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++    await bind_ctx(db_session, u_ws1, ws1)
++
++    # Querying parent activity_records returns KAN activity rows
++    parent_cnt = await db_session.scalar(text("SELECT count(*) FROM activity_records"))
++    assert parent_cnt >= 1
++
++    # Direct query to child partition returns 0 rows (default-deny due to zero policies)
++    child_cnt = await db_session.scalar(text(f"SELECT count(*) FROM {part_name}"))  # noqa: S608
++    assert child_cnt == 0
++
++    # 2. Switch to app_rls_reader: verify read-only enforcement
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION app_rls_reader"))
++    await bind_ctx(db_session, u_ws1, ws1)
++
++    # SELECT on activity_records works
++    reader_parent_cnt = await db_session.scalar(text("SELECT count(*) FROM activity_records"))
++    assert reader_parent_cnt >= 1
++
++    # INSERT on any table raises 42501 or 25006
++    sp = await db_session.begin_nested()
++    with pytest.raises((DBAPIError, ProgrammingError)) as exc_w:
++        await db_session.execute(
++            text(
++                "INSERT INTO issue_comments (issue_id, author_id, workspace_id, body_markdown) "
++                "VALUES (:iid, :uid, :ws, 'Read only test')"
++            ),
++            {"iid": seed["kan_1"], "uid": u_ws1, "ws": ws1},
++        )
++    sqlstate = getattr(exc_w.value.orig, "sqlstate", None) if exc_w.value.orig else None
++    assert sqlstate in ("42501", "25006")
++    await sp.rollback()
++
++    await db_session.execute(text("RESET SESSION AUTHORIZATION"))
+diff --git a/docs/qa/KANBA-51/alembic-heads.txt b/docs/qa/KANBA-51/alembic-heads.txt
+new file mode 100644
+index 0000000..ea8b1a8
+--- /dev/null
++++ b/docs/qa/KANBA-51/alembic-heads.txt
+@@ -0,0 +1 @@
++p1_14_force_rls (head)
+diff --git a/docs/qa/KANBA-51/build-check.txt b/docs/qa/KANBA-51/build-check.txt
+new file mode 100644
+index 0000000..45c7726
+--- /dev/null
++++ b/docs/qa/KANBA-51/build-check.txt
+@@ -0,0 +1,42 @@
++=== 1. ruff check database ===
++All checks passed!
++EXIT CODE: 0
++
++=== 2. ruff format --check database ===
++65 files already formatted
++EXIT CODE: 0
++
++=== 3. mypy --strict database ===
++Success: no issues found in 63 source files
++EXIT CODE: 0
++
++=== 4. lint-imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 116 files, 145 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++EXIT CODE: 0
++
++=== 5. check_no_dashes ===
++EXIT CODE: 0
++
++=== 6. license_gate ===
++SUMMARY python=92 node=1 violations=0
++EXIT CODE: 0
+diff --git a/docs/qa/KANBA-51/message-to-reality-checker.md b/docs/qa/KANBA-51/message-to-reality-checker.md
+new file mode 100644
+index 0000000..a145609
+--- /dev/null
++++ b/docs/qa/KANBA-51/message-to-reality-checker.md
+@@ -0,0 +1,78 @@
++# Message to Reality-Checker for Ticket KANBA-51 (KB-P1-14)
++
++## Executive Summary
++
++Ticket `KANBA-51` (`KB-P1-14`: `[Phase 1 / Database] FORCE ROW LEVEL SECURITY policies, session context helpers & schema-wide RLS catalog gate`) is fully implemented, verified, and ready for forensic audit.
++
++This ticket delivers complete schema-wide row-level security enforcement across PostgreSQL in strict compliance with Section 3.3, Section 3.2, Section 2.2, and Core Architecture Requirement #1.
++
++---
++
++## 1. Lineage & Single Head Verification
++
++- **Alembic Down Revision:** `p1_07_creator_provenance` (the current linear head on `main`).
++- **Single Head Confirmation:**
++  ```bash
++  $ uv run alembic -c database/alembic.ini heads
++  p1_14_force_rls (head)
++  ```
++  Verified in `docs/qa/KANBA-51/alembic-heads.txt`.
++
++---
++
++## 2. Core Implementation Deliverables
++
++1. **Alembic Version Migration:**
++   - `database/migrations/versions/p1_14_force_rls.py`: Linearly chained to `p1_07_creator_provenance`.
++2. **Upgrade SQL (`database/migrations/sql/p1_14_force_rls.up.sql`):**
++   - **Session Helpers:**
++     - `app_current_token_scopes() RETURNS text[]` (`STABLE PARALLEL SAFE`, granted to `kanban_app, app_rls_reader, kanban_migrator`).
++     - `app_current_aal_level() RETURNS integer` (`STABLE PARALLEL SAFE`, granted to `kanban_app, app_rls_reader, kanban_migrator`).
++     - `app_has_object_capability(uuid, integer) RETURNS boolean` (`STABLE PARALLEL SAFE SECURITY INVOKER`, granted to `kanban_app, app_rls_reader, kanban_migrator`).
++   - **Dynamic Partition RLS Update:**
++     - `ensure_activity_partitions()` updated to apply `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` with 0 direct partition policies on newly created monthly partitions.
++   - **Trigger Constraint Integrity:**
++     - Configured `issues_validate_biu()`, `issues_parent_dag_biu()`, and `docs_spine_match_biu()` as `SECURITY DEFINER SET search_path = pg_catalog, public` so cross-table constraint checks succeed under RLS.
++   - **ENABLE & FORCE RLS:**
++     - Applied `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` across all 31 tenant tables in `public` and all existing `activity_records_y*` partitions.
++     - Exempt tables: `alembic_version` and `link_type_matrix` only.
++   - **Comprehensive RLS Policies:**
++     - `workspaces`: SELECT scoped to `app_current_workspace_id()`, UPDATE requires `SERVER_ADMIN` or `WORKSPACE_ADMIN`.
++     - `principals`, `users`, `groups`, `principal_group_edges`, `principal_group_closure`: SELECT scoped to workspace and non-empty principal set; writes require `SERVER_ADMIN` or `WORKSPACE_ADMIN`.
++     - `objects`: `objects_select_rls` verbatim from S3.3; INSERT requires EDIT (4) on project; UPDATE requires EDIT (4); DELETE requires DELETE (128).
++     - `projects`: SELECT requires VIEW (1); INSERT requires `SERVER_ADMIN` or `WORKSPACE_ADMIN`; UPDATE requires ADMIN (64); DELETE requires DELETE (128).
++     - Object-spine entities (`issues`, `cycles`, `modules`, `docs`, `pages`, `stickies`, `views`): SELECT requires VIEW (1); INSERT requires EDIT (4); UPDATE requires EDIT (4) or TRANSITION (8) for issues; DELETE requires DELETE (128).
++     - Child/join entities (`workflow_states`, `project_priorities`, `project_labels`, `project_module_defaults`, `issue_modules`, `issue_assignees`, `issue_labels`, `issue_subscriptions`, `issue_comments`, `page_versions`): Capability-gated against parent issue/project/page.
++     - `object_links`: SELECT permits viewing link when caller has VIEW on either endpoint (`source_id` or `target_id`); INSERT requires LINK (16) on source and VIEW (1) on target; DELETE requires LINK (16) on source.
++     - `activity_records`: SELECT requires VIEW (1) on target object or workspace/server admin; INSERT requires actor matching current principal.
++     - `activity_chain_heads`: ENABLE + FORCE RLS with 0 direct policies (accessed solely via SECURITY DEFINER ledger functions).
++     - `effective_resource_access`: Non-recursive RLS policy `workspace_id = app_current_workspace_id() AND cardinality(app_effective_principal_set()) > 0`.
++3. **Downgrade SQL (`database/migrations/sql/p1_14_force_rls.down.sql`):**
++   - Cleanly drops all 108 created policies, disables FORCE and ROW LEVEL SECURITY on all tenant tables, reverts triggers to `SECURITY INVOKER`, restores `ensure_activity_partitions` without RLS calls, and drops the 3 helper functions.
++
++---
++
++## 3. Scoped Definition of Done Traceability
++
++| DoD Requirement | Status | Evidence |
++| :--- | :---: | :--- |
++| File existence & implementation (`p1_14_force_rls.{py,up.sql,down.sql}`) | **PASS** | Files present in worktree, 100% statement coverage |
++| Single Head (`uv run alembic heads`) | **PASS** | `p1_14_force_rls (head)` (`docs/qa/KANBA-51/alembic-heads.txt`) |
++| Mandatory unit tests pass (`test_p1_14_rls_policies.py`, `test_p1_14_rls_catalog.py`, `test_p1_14_migration.py`) | **PASS** | 7/7 tests passed in 1.48s, 100% statement/branch coverage (`docs/qa/KANBA-51/unit-test-results.txt`) |
++| Full migration lifecycle pass | **PASS** | 15/15 migration tests pass (`test_p1_01` through `test_p1_14`) |
++| Lint, format, and static typing clean (`ruff check`, `ruff format`, `mypy --strict`) | **PASS** | 0 warnings, 0 errors across 63 database source files (`docs/qa/KANBA-51/build-check.txt`) |
++| Dash check (`check_no_dashes --all`) | **PASS** | Clean exit 0, zero `U+2014` or `U+2013` unicode dashes |
++| License gate check (`make license`) | **PASS** | Clean exit 0, 0 license violations |
++| Forensic verification proof packet complete | **PASS** | All artifacts populated under `docs/qa/KANBA-51/` |
++
++---
++
++## 4. Verification Proof Artifact Manifest
++
++1. `docs/qa/KANBA-51/git-diff.patch` - Unified git diff against `main`.
++2. `docs/qa/KANBA-51/unit-test-results.txt` - Pytest output verifying 7/7 tests pass with 100% coverage on touched modules.
++3. `docs/qa/KANBA-51/build-check.txt` - Output of ruff check, ruff format --check, and mypy --strict.
++4. `docs/qa/KANBA-51/alembic-heads.txt` - Output of `alembic heads` showing single head `p1_14_force_rls (head)`.
++5. `docs/qa/KANBA-51/rls-catalog.txt` - Relrowsecurity / relforcerowsecurity scan of all 41 public tables/partitions and 108 pg_policies.
++6. `docs/qa/KANBA-51/zero-context-check.txt` - Empirical verification showing 0 rows returned across all 39 tenant tables under `kanban_app` and `app_rls_reader`.
++7. `docs/qa/KANBA-51/message-to-reality-checker.md` - This document.
+diff --git a/docs/qa/KANBA-51/rls-catalog.txt b/docs/qa/KANBA-51/rls-catalog.txt
+new file mode 100644
+index 0000000..85cb5b8
+--- /dev/null
++++ b/docs/qa/KANBA-51/rls-catalog.txt
+@@ -0,0 +1,403 @@
++=== RELROWSECURITY & RELFORCEROWSECURITY CATALOG SCAN ===
++Total tables/partitions: 41
++
++relname                             | relkind | rowsecurity  | forcerowsecurity  
++--------------------------------------------------------------------------------
++activity_chain_heads                | r       | True         | True              
++activity_records                    | p       | True         | True              
++activity_records_y2026m10           | r       | True         | True              
++activity_records_y2026m11           | r       | True         | True              
++activity_records_y2026m12           | r       | True         | True              
++activity_records_y2027m01           | r       | True         | True              
++activity_records_y2027m02           | r       | True         | True              
++activity_records_y2027m03           | r       | True         | True              
++activity_records_y2027m04           | r       | True         | True              
++activity_records_y2027m05           | r       | True         | True              
++alembic_version                     | r       | False        | False             
++cycles                              | r       | True         | True              
++docs                                | r       | True         | True              
++effective_resource_access           | r       | True         | True              
++groups                              | r       | True         | True              
++issue_assignees                     | r       | True         | True              
++issue_comments                      | r       | True         | True              
++issue_labels                        | r       | True         | True              
++issue_modules                       | r       | True         | True              
++issue_subscriptions                 | r       | True         | True              
++issues                              | r       | True         | True              
++link_type_matrix                    | r       | False        | False             
++modules                             | r       | True         | True              
++object_links                        | r       | True         | True              
++objects                             | r       | True         | True              
++page_versions                       | r       | True         | True              
++pages                               | r       | True         | True              
++principal_group_closure             | r       | True         | True              
++principal_group_edges               | r       | True         | True              
++principals                          | r       | True         | True              
++project_labels                      | r       | True         | True              
++project_module_defaults             | r       | True         | True              
++project_priorities                  | r       | True         | True              
++projects                            | r       | True         | True              
++resource_acl_entries                | r       | True         | True              
++role_bindings                       | r       | True         | True              
++stickies                            | r       | True         | True              
++users                               | r       | True         | True              
++views                               | r       | True         | True              
++workflow_states                     | r       | True         | True              
++workspaces                          | r       | True         | True              
++
++
++=== PG_POLICIES SUMMARY ===
++Total policies: 108
++
++Table: activity_records | Policy: activity_records_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND ((actor_id IS NULL) OR (actor_id = app_current_principal_id())))
++
++Table: activity_records | Policy: activity_records_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (((object_id IS NOT NULL) AND app_has_object_capability(object_id, 1)) OR app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])))
++
++Table: cycles | Policy: cycles_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
++
++Table: cycles | Policy: cycles_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 4))
++
++Table: cycles | Policy: cycles_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
++
++Table: cycles | Policy: cycles_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++
++Table: docs | Policy: docs_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
++
++Table: docs | Policy: docs_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND ((project_id IS NULL) OR app_has_object_capability(project_id, 4)))
++
++Table: docs | Policy: docs_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
++
++Table: docs | Policy: docs_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++
++Table: effective_resource_access | Policy: effective_resource_access_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
++
++Table: groups | Policy: groups_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: groups | Policy: groups_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: groups | Policy: groups_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
++
++Table: groups | Policy: groups_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: issue_assignees | Policy: issue_assignees_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++
++Table: issue_assignees | Policy: issue_assignees_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++
++Table: issue_assignees | Policy: issue_assignees_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1))
++
++Table: issue_assignees | Policy: issue_assignees_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++
++Table: issue_comments | Policy: issue_comments_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (((author_id = app_current_principal_id()) AND app_has_object_capability(issue_id, 2)) OR app_has_object_capability(issue_id, 64)))
++
++Table: issue_comments | Policy: issue_comments_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (author_id = app_current_principal_id()) AND app_has_object_capability(issue_id, 2))
++
++Table: issue_comments | Policy: issue_comments_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1))
++
++Table: issue_comments | Policy: issue_comments_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (((author_id = app_current_principal_id()) AND app_has_object_capability(issue_id, 2)) OR app_has_object_capability(issue_id, 64)))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (((author_id = app_current_principal_id()) AND app_has_object_capability(issue_id, 2)) OR app_has_object_capability(issue_id, 64)))
++
++Table: issue_labels | Policy: issue_labels_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++
++Table: issue_labels | Policy: issue_labels_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++
++Table: issue_labels | Policy: issue_labels_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1))
++
++Table: issue_labels | Policy: issue_labels_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++
++Table: issue_modules | Policy: issue_modules_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++
++Table: issue_modules | Policy: issue_modules_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++
++Table: issue_modules | Policy: issue_modules_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1))
++
++Table: issue_modules | Policy: issue_modules_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
++
++Table: issue_subscriptions | Policy: issue_subscriptions_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1) AND ((principal_id = app_current_principal_id()) OR app_has_object_capability(issue_id, 4)))
++
++Table: issue_subscriptions | Policy: issue_subscriptions_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1) AND ((principal_id = app_current_principal_id()) OR app_has_object_capability(issue_id, 4)))
++
++Table: issue_subscriptions | Policy: issue_subscriptions_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1) AND ((principal_id = app_current_principal_id()) OR app_has_object_capability(issue_id, 64)))
++
++Table: issue_subscriptions | Policy: issue_subscriptions_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1) AND ((principal_id = app_current_principal_id()) OR app_has_object_capability(issue_id, 4)))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1) AND ((principal_id = app_current_principal_id()) OR app_has_object_capability(issue_id, 4)))
++
++Table: issues | Policy: issues_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
++
++Table: issues | Policy: issues_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 4))
++
++Table: issues | Policy: issues_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
++
++Table: issues | Policy: issues_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(id, 4) OR app_has_object_capability(id, 8)))
++
++Table: modules | Policy: modules_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
++
++Table: modules | Policy: modules_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 4))
++
++Table: modules | Policy: modules_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
++
++Table: modules | Policy: modules_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++
++Table: object_links | Policy: object_links_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(source_id, 16))
++
++Table: object_links | Policy: object_links_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(source_id, 16) AND app_has_object_capability(target_id, 1))
++
++Table: object_links | Policy: object_links_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(source_id, 1) OR app_has_object_capability(target_id, 1)))
++
++Table: object_links | Policy: object_links_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(source_id, 16))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(source_id, 16) AND app_has_object_capability(target_id, 1))
++
++Table: objects | Policy: objects_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
++
++Table: objects | Policy: objects_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (app_current_principal_id() IS NOT NULL) AND (((project_id IS NULL) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])) OR ((project_id IS NOT NULL) AND app_has_object_capability(project_id, 4))))
++
++Table: objects | Policy: objects_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (EXISTS ( SELECT 1
++   FROM effective_resource_access era
++  WHERE ((era.object_id = objects.id) AND (era.principal_id = ANY (app_effective_principal_set())) AND ((era.allow_mask & 1) = 1) AND ((era.deny_mask & 1) = 0)))))
++
++Table: objects | Policy: objects_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++
++Table: page_versions | Policy: page_versions_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(page_id, 4))
++
++Table: page_versions | Policy: page_versions_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(page_id, 1))
++
++Table: pages | Policy: pages_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
++
++Table: pages | Policy: pages_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(doc_id, 4))
++
++Table: pages | Policy: pages_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
++
++Table: pages | Policy: pages_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++
++Table: principal_group_closure | Policy: principal_group_closure_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
++
++Table: principal_group_edges | Policy: principal_group_edges_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: principal_group_edges | Policy: principal_group_edges_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: principal_group_edges | Policy: principal_group_edges_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
++
++Table: principal_group_edges | Policy: principal_group_edges_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: principals | Policy: principals_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: principals | Policy: principals_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: principals | Policy: principals_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
++
++Table: principals | Policy: principals_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: project_labels | Policy: project_labels_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: project_labels | Policy: project_labels_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: project_labels | Policy: project_labels_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 1))
++
++Table: project_labels | Policy: project_labels_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: project_module_defaults | Policy: project_module_defaults_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: project_module_defaults | Policy: project_module_defaults_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: project_module_defaults | Policy: project_module_defaults_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 1))
++
++Table: project_module_defaults | Policy: project_module_defaults_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: project_priorities | Policy: project_priorities_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: project_priorities | Policy: project_priorities_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: project_priorities | Policy: project_priorities_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 1))
++
++Table: project_priorities | Policy: project_priorities_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: projects | Policy: projects_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
++
++Table: projects | Policy: projects_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: projects | Policy: projects_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
++
++Table: projects | Policy: projects_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 64))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 64))
++
++Table: resource_acl_entries | Policy: resource_acl_entries_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(object_id, 32) OR app_has_object_capability(object_id, 64)))
++
++Table: resource_acl_entries | Policy: resource_acl_entries_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(object_id, 32) OR app_has_object_capability(object_id, 64)))
++
++Table: resource_acl_entries | Policy: resource_acl_entries_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(object_id, 1))
++
++Table: resource_acl_entries | Policy: resource_acl_entries_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(object_id, 32) OR app_has_object_capability(object_id, 64)))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(object_id, 32) OR app_has_object_capability(object_id, 64)))
++
++Table: role_bindings | Policy: role_bindings_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (((scope_type = 'server'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text])) OR ((scope_type = 'workspace'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])) OR ((scope_type = 'project'::text) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))
++
++Table: role_bindings | Policy: role_bindings_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (((scope_type = 'server'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text])) OR ((scope_type = 'workspace'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])) OR ((scope_type = 'project'::text) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))
++
++Table: role_bindings | Policy: role_bindings_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND ((principal_id = ANY (app_effective_principal_set())) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text])))
++
++Table: role_bindings | Policy: role_bindings_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (((scope_type = 'server'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text])) OR ((scope_type = 'workspace'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])) OR ((scope_type = 'project'::text) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (((scope_type = 'server'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text])) OR ((scope_type = 'workspace'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])) OR ((scope_type = 'project'::text) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))
++
++Table: stickies | Policy: stickies_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
++
++Table: stickies | Policy: stickies_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND ((project_id IS NULL) OR app_has_object_capability(project_id, 4)))
++
++Table: stickies | Policy: stickies_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
++
++Table: stickies | Policy: stickies_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++
++Table: users | Policy: users_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: users | Policy: users_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: users | Policy: users_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
++
++Table: users | Policy: users_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
++Table: views | Policy: views_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
++
++Table: views | Policy: views_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND ((project_id IS NULL) OR app_has_object_capability(project_id, 4)))
++
++Table: views | Policy: views_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1) AND ((visibility <> 'private'::text) OR (owner_principal_id = app_current_principal_id()) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text])))
++
++Table: views | Policy: views_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
++
++Table: workflow_states | Policy: workflow_states_delete_rls | Cmd: DELETE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: workflow_states | Policy: workflow_states_insert_rls | Cmd: INSERT | Roles: ['public']
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: workflow_states | Policy: workflow_states_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 1))
++
++Table: workflow_states | Policy: workflow_states_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
++
++Table: workspaces | Policy: workspaces_select_rls | Cmd: SELECT | Roles: ['public']
++  USING: ((id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
++
++Table: workspaces | Policy: workspaces_update_rls | Cmd: UPDATE | Roles: ['public']
++  USING: ((id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++  WITH CHECK: ((id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
++
+diff --git a/docs/qa/KANBA-51/unit-test-results.txt b/docs/qa/KANBA-51/unit-test-results.txt
+new file mode 100644
+index 0000000..3ba5422
+--- /dev/null
++++ b/docs/qa/KANBA-51/unit-test-results.txt
+@@ -0,0 +1,72 @@
++.......                                                                  [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                                       Stmts   Miss Branch BrPart  Cover   Missing
++------------------------------------------------------------------------------------------------------
++database/__init__.py                                           1      0      0      0   100%
++database/bootstrap/__init__.py                                25      2      6      3    84%   20, 22->24, 25
++database/migrations/__init__.py                                0      0      0      0   100%
++database/migrations/env.py                                    39      5      8      4    81%   14->17, 22-23, 29->32, 47-48, 73
++database/migrations/sqlfile.py                                19      4      4      2    74%   17-18, 22-23
++database/migrations/versions/__init__.py                       0      0      0      0   100%
++database/migrations/versions/p1_01_baseline.py                10      1      0      0    90%   26
++database/migrations/versions/p1_02_objects_spine.py           10      1      0      0    90%   26
++database/migrations/versions/p1_03_principals.py              10      1      0      0    90%   26
++database/migrations/versions/p1_04_projects.py                10      1      0      0    90%   26
++database/migrations/versions/p1_05_issues.py                  10      1      0      0    90%   26
++database/migrations/versions/p1_06_parent_dag.py              10      1      0      0    90%   26
++database/migrations/versions/p1_07_creator_provenance.py      10      1      0      0    90%   26
++database/migrations/versions/p1_08_planning_joins.py          10      1      0      0    90%   26
++database/migrations/versions/p1_09_prose_tables.py            10      1      0      0    90%   26
++database/migrations/versions/p1_10_views.py                   10      1      0      0    90%   26
++database/migrations/versions/p1_11_object_links.py            10      1      0      0    90%   26
++database/migrations/versions/p1_12_activity_ledger.py         10      1      0      0    90%   26
++database/migrations/versions/p1_13_access_control.py          10      1      0      0    90%   26
++database/migrations/versions/p1_14_force_rls.py               10      0      0      0   100%
++database/testing/__init__.py                                   0      0      0      0   100%
++database/testing/pg_harness.py                               199     69     54     13    59%   49-50, 70-71, 75, 92-93, 113->exit, 114->113, 120-124, 136->147, 138->141, 142->145, 152-167, 177-186, 204-205, 223-224, 229-253, 259, 262, 268, 337, 352-366
++database/tests/__init__.py                                     0      0      0      0   100%
++database/tests/conftest.py                                    15      3      0      0    80%   30, 36-37
++database/tests/migration_harness.py                           88     15     12      6    79%   69, 73, 91, 95, 105, 107, 121-126, 130-134
++database/tests/migrations/__init__.py                          0      0      0      0   100%
++database/tests/migrations/test_p1_01_migration.py             65     65     12      0     0%   3-132
++database/tests/migrations/test_p1_02_migration.py             26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_03_migration.py             21     21      0      0     0%   3-69
++database/tests/migrations/test_p1_04_migration.py             25     25      0      0     0%   3-87
++database/tests/migrations/test_p1_05_migration.py             20     20      0      0     0%   3-59
++database/tests/migrations/test_p1_06_migration.py             28     28      0      0     0%   3-89
++database/tests/migrations/test_p1_07_migration.py             24     24      0      0     0%   3-83
++database/tests/migrations/test_p1_08_migration.py             21     21      0      0     0%   3-67
++database/tests/migrations/test_p1_09_migration.py             17     17      0      0     0%   3-53
++database/tests/migrations/test_p1_10_migration.py             26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_11_migration.py             27     27      0      0     0%   3-89
++database/tests/migrations/test_p1_12_migration.py             21     21      0      0     0%   3-72
++database/tests/migrations/test_p1_13_migration.py             26     26      0      0     0%   3-103
++database/tests/migrations/test_p1_14_migration.py             21      0      0      0   100%
++database/tests/test_harness_benchmark.py                       8      8      0      0     0%   3-19
++database/tests/test_p1_01_baseline.py                        109    109      2      0     0%   3-185
++database/tests/test_p1_02_objects.py                         145    145      0      0     0%   3-319
++database/tests/test_p1_03_principals.py                      196    196      8      0     0%   3-469
++database/tests/test_p1_04_projects.py                        161    161      4      0     0%   3-501
++database/tests/test_p1_05_issues.py                          192    192      0      0     0%   3-535
++database/tests/test_p1_05_sequence_concurrency.py             31     31      0      0     0%   3-75
++database/tests/test_p1_06_parent_concurrency.py               70     70      2      0     0%   3-197
++database/tests/test_p1_06_parent_dag.py                      178    178      2      0     0%   3-450
++database/tests/test_p1_07_creator_provenance.py              226    226      4      0     0%   3-622
++database/tests/test_p1_08_planning.py                        226    226      2      0     0%   3-806
++database/tests/test_p1_09_markdown_only_schema.py             20     20      4      0     0%   3-47
++database/tests/test_p1_09_prose.py                           272    272      2      0     0%   3-714
++database/tests/test_p1_10_views.py                           192    192      2      0     0%   3-571
++database/tests/test_p1_11_object_links.py                    167    167      4      0     0%   3-524
++database/tests/test_p1_12_activity_ledger.py                 218    218     10      0     0%   3-600
++database/tests/test_p1_12_chain_concurrency.py                27     27      2      0     0%   3-67
++database/tests/test_p1_13_access_control.py                  171    171      0      0     0%   3-569
++database/tests/test_p1_14_rls_catalog.py                      16      0      0      0   100%
++database/tests/test_p1_14_rls_policies.py                    235      0      6      0   100%
++database/tests/test_pg_harness.py                            120    120      2      0     0%   3-224
++database/tests/test_smoke.py                                   3      3      0      0     0%   3-8
++database/tests/test_sqlfile.py                                22     22      0      0     0%   3-36
++------------------------------------------------------------------------------------------------------
++TOTAL                                                       3899   3212    152     28    18%
++7 passed in 1.48s
+diff --git a/docs/qa/KANBA-51/zero-context-check.txt b/docs/qa/KANBA-51/zero-context-check.txt
+new file mode 100644
+index 0000000..1aa9d35
+--- /dev/null
++++ b/docs/qa/KANBA-51/zero-context-check.txt
+@@ -0,0 +1,125 @@
++=== ZERO-CONTEXT FAIL-CLOSED AUDIT FOR KANBAN_APP & APP_RLS_READER ===
++Total tenant tables & partitions audited: 39
++
++--- 1. kanban_app with UNSET Context ---
++activity_chain_heads                :    0 rows -> PASS (0 rows)
++activity_records                    :    0 rows -> PASS (0 rows)
++activity_records_y2026m10           :    0 rows -> PASS (0 rows)
++activity_records_y2026m11           :    0 rows -> PASS (0 rows)
++activity_records_y2026m12           :    0 rows -> PASS (0 rows)
++activity_records_y2027m01           :    0 rows -> PASS (0 rows)
++activity_records_y2027m02           :    0 rows -> PASS (0 rows)
++activity_records_y2027m03           :    0 rows -> PASS (0 rows)
++activity_records_y2027m04           :    0 rows -> PASS (0 rows)
++activity_records_y2027m05           :    0 rows -> PASS (0 rows)
++cycles                              :    0 rows -> PASS (0 rows)
++docs                                :    0 rows -> PASS (0 rows)
++effective_resource_access           :    0 rows -> PASS (0 rows)
++groups                              :    0 rows -> PASS (0 rows)
++issue_assignees                     :    0 rows -> PASS (0 rows)
++issue_comments                      :    0 rows -> PASS (0 rows)
++issue_labels                        :    0 rows -> PASS (0 rows)
++issue_modules                       :    0 rows -> PASS (0 rows)
++issue_subscriptions                 :    0 rows -> PASS (0 rows)
++issues                              :    0 rows -> PASS (0 rows)
++modules                             :    0 rows -> PASS (0 rows)
++object_links                        :    0 rows -> PASS (0 rows)
++objects                             :    0 rows -> PASS (0 rows)
++page_versions                       :    0 rows -> PASS (0 rows)
++pages                               :    0 rows -> PASS (0 rows)
++principal_group_closure             :    0 rows -> PASS (0 rows)
++principal_group_edges               :    0 rows -> PASS (0 rows)
++principals                          :    0 rows -> PASS (0 rows)
++project_labels                      :    0 rows -> PASS (0 rows)
++project_module_defaults             :    0 rows -> PASS (0 rows)
++project_priorities                  :    0 rows -> PASS (0 rows)
++projects                            :    0 rows -> PASS (0 rows)
++resource_acl_entries                :    0 rows -> PASS (0 rows)
++role_bindings                       :    0 rows -> PASS (0 rows)
++stickies                            :    0 rows -> PASS (0 rows)
++users                               :    0 rows -> PASS (0 rows)
++views                               :    0 rows -> PASS (0 rows)
++workflow_states                     :    0 rows -> PASS (0 rows)
++workspaces                          :    0 rows -> PASS (0 rows)
++
++--- 2. kanban_app with Explicitly Empty Context ---
++activity_chain_heads                :    0 rows -> PASS (0 rows)
++activity_records                    :    0 rows -> PASS (0 rows)
++activity_records_y2026m10           :    0 rows -> PASS (0 rows)
++activity_records_y2026m11           :    0 rows -> PASS (0 rows)
++activity_records_y2026m12           :    0 rows -> PASS (0 rows)
++activity_records_y2027m01           :    0 rows -> PASS (0 rows)
++activity_records_y2027m02           :    0 rows -> PASS (0 rows)
++activity_records_y2027m03           :    0 rows -> PASS (0 rows)
++activity_records_y2027m04           :    0 rows -> PASS (0 rows)
++activity_records_y2027m05           :    0 rows -> PASS (0 rows)
++cycles                              :    0 rows -> PASS (0 rows)
++docs                                :    0 rows -> PASS (0 rows)
++effective_resource_access           :    0 rows -> PASS (0 rows)
++groups                              :    0 rows -> PASS (0 rows)
++issue_assignees                     :    0 rows -> PASS (0 rows)
++issue_comments                      :    0 rows -> PASS (0 rows)
++issue_labels                        :    0 rows -> PASS (0 rows)
++issue_modules                       :    0 rows -> PASS (0 rows)
++issue_subscriptions                 :    0 rows -> PASS (0 rows)
++issues                              :    0 rows -> PASS (0 rows)
++modules                             :    0 rows -> PASS (0 rows)
++object_links                        :    0 rows -> PASS (0 rows)
++objects                             :    0 rows -> PASS (0 rows)
++page_versions                       :    0 rows -> PASS (0 rows)
++pages                               :    0 rows -> PASS (0 rows)
++principal_group_closure             :    0 rows -> PASS (0 rows)
++principal_group_edges               :    0 rows -> PASS (0 rows)
++principals                          :    0 rows -> PASS (0 rows)
++project_labels                      :    0 rows -> PASS (0 rows)
++project_module_defaults             :    0 rows -> PASS (0 rows)
++project_priorities                  :    0 rows -> PASS (0 rows)
++projects                            :    0 rows -> PASS (0 rows)
++resource_acl_entries                :    0 rows -> PASS (0 rows)
++role_bindings                       :    0 rows -> PASS (0 rows)
++stickies                            :    0 rows -> PASS (0 rows)
++users                               :    0 rows -> PASS (0 rows)
++views                               :    0 rows -> PASS (0 rows)
++workflow_states                     :    0 rows -> PASS (0 rows)
++workspaces                          :    0 rows -> PASS (0 rows)
++
++--- 3. app_rls_reader with Unset / Empty Context ---
++activity_chain_heads                :    0 rows -> PASS (0 rows)
++activity_records                    :    0 rows -> PASS (0 rows)
++activity_records_y2026m10           :    0 rows -> PASS (0 rows)
++activity_records_y2026m11           :    0 rows -> PASS (0 rows)
++activity_records_y2026m12           :    0 rows -> PASS (0 rows)
++activity_records_y2027m01           :    0 rows -> PASS (0 rows)
++activity_records_y2027m02           :    0 rows -> PASS (0 rows)
++activity_records_y2027m03           :    0 rows -> PASS (0 rows)
++activity_records_y2027m04           :    0 rows -> PASS (0 rows)
++activity_records_y2027m05           :    0 rows -> PASS (0 rows)
++cycles                              :    0 rows -> PASS (0 rows)
++docs                                :    0 rows -> PASS (0 rows)
++effective_resource_access           :    0 rows -> PASS (0 rows)
++groups                              :    0 rows -> PASS (0 rows)
++issue_assignees                     :    0 rows -> PASS (0 rows)
++issue_comments                      :    0 rows -> PASS (0 rows)
++issue_labels                        :    0 rows -> PASS (0 rows)
++issue_modules                       :    0 rows -> PASS (0 rows)
++issue_subscriptions                 :    0 rows -> PASS (0 rows)
++issues                              :    0 rows -> PASS (0 rows)
++modules                             :    0 rows -> PASS (0 rows)
++object_links                        :    0 rows -> PASS (0 rows)
++objects                             :    0 rows -> PASS (0 rows)
++page_versions                       :    0 rows -> PASS (0 rows)
++pages                               :    0 rows -> PASS (0 rows)
++principal_group_closure             :    0 rows -> PASS (0 rows)
++principal_group_edges               :    0 rows -> PASS (0 rows)
++principals                          :    0 rows -> PASS (0 rows)
++project_labels                      :    0 rows -> PASS (0 rows)
++project_module_defaults             :    0 rows -> PASS (0 rows)
++project_priorities                  :    0 rows -> PASS (0 rows)
++projects                            :    0 rows -> PASS (0 rows)
++resource_acl_entries                :    0 rows -> PASS (0 rows)
++role_bindings                       :    0 rows -> PASS (0 rows)
++stickies                            :    0 rows -> PASS (0 rows)
++users                               :    0 rows -> PASS (0 rows)
++views                               :    0 rows -> PASS (0 rows)
++workflow_states                     :    0 rows -> PASS (0 rows)
++workspaces                          :    0 rows -> PASS (0 rows)

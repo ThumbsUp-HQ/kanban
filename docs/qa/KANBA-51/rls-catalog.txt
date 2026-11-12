@@ -1,0 +1,403 @@
+=== RELROWSECURITY & RELFORCEROWSECURITY CATALOG SCAN ===
+Total tables/partitions: 41
+
+relname                             | relkind | rowsecurity  | forcerowsecurity  
+--------------------------------------------------------------------------------
+activity_chain_heads                | r       | True         | True              
+activity_records                    | p       | True         | True              
+activity_records_y2026m10           | r       | True         | True              
+activity_records_y2026m11           | r       | True         | True              
+activity_records_y2026m12           | r       | True         | True              
+activity_records_y2027m01           | r       | True         | True              
+activity_records_y2027m02           | r       | True         | True              
+activity_records_y2027m03           | r       | True         | True              
+activity_records_y2027m04           | r       | True         | True              
+activity_records_y2027m05           | r       | True         | True              
+alembic_version                     | r       | False        | False             
+cycles                              | r       | True         | True              
+docs                                | r       | True         | True              
+effective_resource_access           | r       | True         | True              
+groups                              | r       | True         | True              
+issue_assignees                     | r       | True         | True              
+issue_comments                      | r       | True         | True              
+issue_labels                        | r       | True         | True              
+issue_modules                       | r       | True         | True              
+issue_subscriptions                 | r       | True         | True              
+issues                              | r       | True         | True              
+link_type_matrix                    | r       | False        | False             
+modules                             | r       | True         | True              
+object_links                        | r       | True         | True              
+objects                             | r       | True         | True              
+page_versions                       | r       | True         | True              
+pages                               | r       | True         | True              
+principal_group_closure             | r       | True         | True              
+principal_group_edges               | r       | True         | True              
+principals                          | r       | True         | True              
+project_labels                      | r       | True         | True              
+project_module_defaults             | r       | True         | True              
+project_priorities                  | r       | True         | True              
+projects                            | r       | True         | True              
+resource_acl_entries                | r       | True         | True              
+role_bindings                       | r       | True         | True              
+stickies                            | r       | True         | True              
+users                               | r       | True         | True              
+views                               | r       | True         | True              
+workflow_states                     | r       | True         | True              
+workspaces                          | r       | True         | True              
+
+
+=== PG_POLICIES SUMMARY ===
+Total policies: 108
+
+Table: activity_records | Policy: activity_records_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND ((actor_id IS NULL) OR (actor_id = app_current_principal_id())))
+
+Table: activity_records | Policy: activity_records_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (((object_id IS NOT NULL) AND app_has_object_capability(object_id, 1)) OR app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])))
+
+Table: cycles | Policy: cycles_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
+
+Table: cycles | Policy: cycles_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 4))
+
+Table: cycles | Policy: cycles_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
+
+Table: cycles | Policy: cycles_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+
+Table: docs | Policy: docs_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
+
+Table: docs | Policy: docs_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND ((project_id IS NULL) OR app_has_object_capability(project_id, 4)))
+
+Table: docs | Policy: docs_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
+
+Table: docs | Policy: docs_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+
+Table: effective_resource_access | Policy: effective_resource_access_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
+
+Table: groups | Policy: groups_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: groups | Policy: groups_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: groups | Policy: groups_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
+
+Table: groups | Policy: groups_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: issue_assignees | Policy: issue_assignees_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+
+Table: issue_assignees | Policy: issue_assignees_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+
+Table: issue_assignees | Policy: issue_assignees_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1))
+
+Table: issue_assignees | Policy: issue_assignees_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+
+Table: issue_comments | Policy: issue_comments_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (((author_id = app_current_principal_id()) AND app_has_object_capability(issue_id, 2)) OR app_has_object_capability(issue_id, 64)))
+
+Table: issue_comments | Policy: issue_comments_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (author_id = app_current_principal_id()) AND app_has_object_capability(issue_id, 2))
+
+Table: issue_comments | Policy: issue_comments_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1))
+
+Table: issue_comments | Policy: issue_comments_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (((author_id = app_current_principal_id()) AND app_has_object_capability(issue_id, 2)) OR app_has_object_capability(issue_id, 64)))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (((author_id = app_current_principal_id()) AND app_has_object_capability(issue_id, 2)) OR app_has_object_capability(issue_id, 64)))
+
+Table: issue_labels | Policy: issue_labels_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+
+Table: issue_labels | Policy: issue_labels_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+
+Table: issue_labels | Policy: issue_labels_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1))
+
+Table: issue_labels | Policy: issue_labels_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+
+Table: issue_modules | Policy: issue_modules_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+
+Table: issue_modules | Policy: issue_modules_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+
+Table: issue_modules | Policy: issue_modules_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1))
+
+Table: issue_modules | Policy: issue_modules_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 4))
+
+Table: issue_subscriptions | Policy: issue_subscriptions_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1) AND ((principal_id = app_current_principal_id()) OR app_has_object_capability(issue_id, 4)))
+
+Table: issue_subscriptions | Policy: issue_subscriptions_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1) AND ((principal_id = app_current_principal_id()) OR app_has_object_capability(issue_id, 4)))
+
+Table: issue_subscriptions | Policy: issue_subscriptions_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1) AND ((principal_id = app_current_principal_id()) OR app_has_object_capability(issue_id, 64)))
+
+Table: issue_subscriptions | Policy: issue_subscriptions_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1) AND ((principal_id = app_current_principal_id()) OR app_has_object_capability(issue_id, 4)))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(issue_id, 1) AND ((principal_id = app_current_principal_id()) OR app_has_object_capability(issue_id, 4)))
+
+Table: issues | Policy: issues_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
+
+Table: issues | Policy: issues_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 4))
+
+Table: issues | Policy: issues_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
+
+Table: issues | Policy: issues_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(id, 4) OR app_has_object_capability(id, 8)))
+
+Table: modules | Policy: modules_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
+
+Table: modules | Policy: modules_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 4))
+
+Table: modules | Policy: modules_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
+
+Table: modules | Policy: modules_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+
+Table: object_links | Policy: object_links_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(source_id, 16))
+
+Table: object_links | Policy: object_links_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(source_id, 16) AND app_has_object_capability(target_id, 1))
+
+Table: object_links | Policy: object_links_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(source_id, 1) OR app_has_object_capability(target_id, 1)))
+
+Table: object_links | Policy: object_links_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(source_id, 16))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(source_id, 16) AND app_has_object_capability(target_id, 1))
+
+Table: objects | Policy: objects_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
+
+Table: objects | Policy: objects_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (app_current_principal_id() IS NOT NULL) AND (((project_id IS NULL) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])) OR ((project_id IS NOT NULL) AND app_has_object_capability(project_id, 4))))
+
+Table: objects | Policy: objects_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (EXISTS ( SELECT 1
+   FROM effective_resource_access era
+  WHERE ((era.object_id = objects.id) AND (era.principal_id = ANY (app_effective_principal_set())) AND ((era.allow_mask & 1) = 1) AND ((era.deny_mask & 1) = 0)))))
+
+Table: objects | Policy: objects_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+
+Table: page_versions | Policy: page_versions_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(page_id, 4))
+
+Table: page_versions | Policy: page_versions_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(page_id, 1))
+
+Table: pages | Policy: pages_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
+
+Table: pages | Policy: pages_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(doc_id, 4))
+
+Table: pages | Policy: pages_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
+
+Table: pages | Policy: pages_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+
+Table: principal_group_closure | Policy: principal_group_closure_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
+
+Table: principal_group_edges | Policy: principal_group_edges_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: principal_group_edges | Policy: principal_group_edges_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: principal_group_edges | Policy: principal_group_edges_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
+
+Table: principal_group_edges | Policy: principal_group_edges_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: principals | Policy: principals_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: principals | Policy: principals_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: principals | Policy: principals_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
+
+Table: principals | Policy: principals_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: project_labels | Policy: project_labels_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: project_labels | Policy: project_labels_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: project_labels | Policy: project_labels_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 1))
+
+Table: project_labels | Policy: project_labels_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: project_module_defaults | Policy: project_module_defaults_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: project_module_defaults | Policy: project_module_defaults_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: project_module_defaults | Policy: project_module_defaults_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 1))
+
+Table: project_module_defaults | Policy: project_module_defaults_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: project_priorities | Policy: project_priorities_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: project_priorities | Policy: project_priorities_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: project_priorities | Policy: project_priorities_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 1))
+
+Table: project_priorities | Policy: project_priorities_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: projects | Policy: projects_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
+
+Table: projects | Policy: projects_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: projects | Policy: projects_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
+
+Table: projects | Policy: projects_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 64))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 64))
+
+Table: resource_acl_entries | Policy: resource_acl_entries_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(object_id, 32) OR app_has_object_capability(object_id, 64)))
+
+Table: resource_acl_entries | Policy: resource_acl_entries_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(object_id, 32) OR app_has_object_capability(object_id, 64)))
+
+Table: resource_acl_entries | Policy: resource_acl_entries_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(object_id, 1))
+
+Table: resource_acl_entries | Policy: resource_acl_entries_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(object_id, 32) OR app_has_object_capability(object_id, 64)))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (app_has_object_capability(object_id, 32) OR app_has_object_capability(object_id, 64)))
+
+Table: role_bindings | Policy: role_bindings_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (((scope_type = 'server'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text])) OR ((scope_type = 'workspace'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])) OR ((scope_type = 'project'::text) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))
+
+Table: role_bindings | Policy: role_bindings_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (((scope_type = 'server'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text])) OR ((scope_type = 'workspace'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])) OR ((scope_type = 'project'::text) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))
+
+Table: role_bindings | Policy: role_bindings_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND ((principal_id = ANY (app_effective_principal_set())) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text])))
+
+Table: role_bindings | Policy: role_bindings_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (((scope_type = 'server'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text])) OR ((scope_type = 'workspace'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])) OR ((scope_type = 'project'::text) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND (((scope_type = 'server'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text])) OR ((scope_type = 'workspace'::text) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text])) OR ((scope_type = 'project'::text) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))
+
+Table: stickies | Policy: stickies_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
+
+Table: stickies | Policy: stickies_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND ((project_id IS NULL) OR app_has_object_capability(project_id, 4)))
+
+Table: stickies | Policy: stickies_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1))
+
+Table: stickies | Policy: stickies_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+
+Table: users | Policy: users_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: users | Policy: users_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: users | Policy: users_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
+
+Table: users | Policy: users_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
+Table: views | Policy: views_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 128))
+
+Table: views | Policy: views_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND ((project_id IS NULL) OR app_has_object_capability(project_id, 4)))
+
+Table: views | Policy: views_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 1) AND ((visibility <> 'private'::text) OR (owner_principal_id = app_current_principal_id()) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text])))
+
+Table: views | Policy: views_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(id, 4))
+
+Table: workflow_states | Policy: workflow_states_delete_rls | Cmd: DELETE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: workflow_states | Policy: workflow_states_insert_rls | Cmd: INSERT | Roles: ['public']
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: workflow_states | Policy: workflow_states_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 1))
+
+Table: workflow_states | Policy: workflow_states_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+  WITH CHECK: ((workspace_id = app_current_workspace_id()) AND app_has_object_capability(project_id, 64))
+
+Table: workspaces | Policy: workspaces_select_rls | Cmd: SELECT | Roles: ['public']
+  USING: ((id = app_current_workspace_id()) AND (cardinality(app_effective_principal_set()) > 0))
+
+Table: workspaces | Policy: workspaces_update_rls | Cmd: UPDATE | Roles: ['public']
+  USING: ((id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+  WITH CHECK: ((id = app_current_workspace_id()) AND app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))
+
