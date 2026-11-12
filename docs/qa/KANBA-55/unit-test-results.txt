@@ -1,0 +1,40 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-55/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-55
+configfile: pyproject.toml
+plugins: anyio-4.16.0, asyncio-1.4.1.post1, xdist-3.8.0, socket-0.8.1, cov-7.1.0, platformdirs-4.14.5
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 12 items
+
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  8%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 16%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 25%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 33%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 41%]
+database/tests/test_p1_17_rls_session.py::test_set_local_binding_and_isolation_with_pool_reuse PASSED [ 50%]
+database/tests/test_p1_17_rls_session.py::test_unbound_session_guard PASSED [ 58%]
+database/tests/test_p1_17_rls_session.py::test_verify_non_bypass_role PASSED [ 66%]
+database/tests/test_p1_17_rls_session.py::test_rls_context_validation PASSED [ 75%]
+database/tests/test_p1_17_repositories.py::test_repository_unbound_session_guard PASSED [ 83%]
+database/tests/test_p1_17_repositories.py::test_repository_crud_operations PASSED [ 91%]
+database/tests/test_p1_17_repositories.py::test_repository_pagination_bounds PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                            Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------
+database/models/__init__.py         8      0      0      0   100%
+database/models/activity.py        26      0      0      0   100%
+database/models/base.py            80      0      6      0   100%
+database/models/issues.py          69      0      0      0   100%
+database/models/knowledge.py       55      0      0      0   100%
+database/models/principals.py      72      0      0      0   100%
+database/models/projects.py        96      0      0      0   100%
+database/models/spine.py           66      0      0      0   100%
+database/repositories.py           42      0      6      0   100%
+database/session.py                96      3     22      2    96%   52-53, 157, 183->exit
+---------------------------------------------------------------------------
+TOTAL                             610      3     34      2    99%
+Required test coverage of 95% reached. Total coverage: 99.22%
+============================== 12 passed in 0.78s ==============================

@@ -11,12 +11,15 @@ None. This is the foundational leaf module in the workspace dependency hierarchy
 
 ## Inbound Contracts
 - Transactional database connections and async connection pools managed via SQLAlchemy 2.0 and asyncpg.
-- Parameterized session configuration via SET LOCAL (app.principal_id, app.workspace_id, app.token_scopes, app.aal_level).
+- Parameterized session configuration via SET LOCAL (app.principal_id, app.workspace_id, app.token_scopes, app.aal_level) bound via RLSContext and bind_rls_context.
+- RLSSessionFactory managing fail-closed RLSAsyncSession instances with verify_non_bypass_role startup validation.
 - Schema migrations managed via Alembic under dedicated migration role.
-- Test harness execution isolates probe entities within `kb_harness` schema, which must be ignored by production RLS catalog assertions.
+- Test harness execution isolates probe entities within kb_harness schema, which must be ignored by production RLS catalog assertions.
 
 ## Outbound Contracts
-- Typed entity models and schemas for universal objects and object links.
+- database.models: 33 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity), custom LtreeType, and 5 PostgreSQL StrEnums.
+- database.session: RLSContext, bind_rls_context, RLSSessionFactory, create_rls_engine, and fail-closed security exceptions (RLSContextError, UnboundRLSSessionError, RLSRoleViolationError).
+- database.repositories: BaseRepository generic base providing type-safe CRUD operations, bounded pagination (1..500), and mandatory RLS session verification.
 - PL/pgSQL audit triggers detecting and recording broken object links.
 - Postgres LISTEN/NOTIFY event streams for real-time state changes.
 
@@ -24,9 +27,13 @@ None. This is the foundational leaf module in the workspace dependency hierarchy
 - Sub-millisecond SAVEPOINT rollback isolation for clean-database unit tests.
 - Index-backed single-object read latency < 5ms.
 - Complex graph traversal and access-closure resolution < 18ms.
+- RLS session context binding overhead < 1ms per transaction.
 
 ## Failure Modes
 - Foreign key constraint violations on dangling link creation or deletion.
 - RLS policy denial returning zero rows on unauthorized access attempts.
+- UnboundRLSSessionError raised when queries are executed on sessions without active RLS context binding.
+- RLSRoleViolationError raised when connected database role possesses SUPERUSER or BYPASSRLS privileges.
+- RLSContextError raised when attempting RLS context binding outside an active transaction.
 - Migration lock timeout during schema upgrades under active load.
 - Fail-closed behavior on broken object links pending audit purge.
