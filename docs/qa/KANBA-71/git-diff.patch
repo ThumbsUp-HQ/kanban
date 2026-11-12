@@ -594,6 +594,124 @@ index 705e815..5845cbb 100644
  
  
  async def _setup_test_project_spine(
+diff --git a/docs/qa/KANBA-71/api-specialist-review.md b/docs/qa/KANBA-71/api-specialist-review.md
+new file mode 100644
+index 0000000..c99842a
+--- /dev/null
++++ b/docs/qa/KANBA-71/api-specialist-review.md
+@@ -0,0 +1,112 @@
++# API Specialist Gate Final Audit: APPROVED for KANBA-71 (KB-P5-16)
++
++- Auditor: arch-reviewer (Swarm Systems/Backend Architect & API Specialist Gate)
++- Worktree: `/tmp/kb-wt-KANBA-71`
++- Branch: `feat/KANBA-71`
++- Commit: `bb243bd`
++- Ticket: `KANBA-71` (`KB-P5-16`: `[Phase 5 / Database + API] agent_definitions registry, CLI binary allowlist & banned-flag validation (save + runtime)`)
++
++---
++
++### 1. Executive Summary & Verification Matrix
++
++A comprehensive systems architecture, database schema, and security policy audit was conducted for `KANBA-71` (`KB-P5-16`) in `/tmp/kb-wt-KANBA-71`. The ticket implements the `agent_definitions` registry, double-gated CLI argument and binary validation, transactional `AGENT` principal provisioning, and REST API management routes. The implementation was evaluated against specification sections 14.2, 14.3, 3.2, and 3.5.
++
++| Verification Dimension | Specification Target | Observed Implementation | Verdict |
++| :--- | :--- | :--- | :--- |
++| **DDL & CHECK Constraints** | S14.2 `agent_definitions` table + 3 CHECKs | Added `agent_def_harness_fields`, `agent_def_mcp_tools_subset`, `agent_def_args_is_array` | PASS |
++| **Row-Level Security** | S14.2 `FORCE RLS` on `agent_definitions` | `ENABLE RLS` + `FORCE RLS` asserted in `schema-dump.sql` (`relrowsecurity = t`, `relforcerowsecurity = t`) | PASS |
++| **Transactional Principal Creation** | S3.2 agent as `AGENT` principal | Atomically provisions `principals` row (`principal_type='AGENT'`) alongside definition row | PASS |
++| **Double-Gated CLI Validation** | S14.3 save-time + runtime enforcement | `validate_cli_args` in schema/service + `assert_runtime_argv` prior to execution | PASS |
++| **Banned Flags & Sandbox Pins** | S14.3 5 banned flags + codex prefix | Rejects `--yolo`, `--full-auto`, `--dangerously*`, `<banned>=`; pins codex `("-p", "-s", "read-only")` | PASS |
++| **Binary Allowlist** | S14.2 allowlist: agy, codex, gemini, claude | `BINARY_ALLOWLIST` enforces allowlist; rejects non-allowlisted binaries with `422` | PASS |
++| **Argument Bounds & Control Chars** | 1..32 args, 1..256 bytes, no NUL/CR/LF | Rejects > 32 args, > 256 bytes, NUL, CR, LF (`422 CLI_ARGS_INVALID`) | PASS |
++| **Deletion In-Use Protection** | FK RESTRICT on bound hooks | Catches `23503` foreign key violation on DELETE and maps to RFC 7807 `409 AGENT_IN_USE` | PASS |
++| **Anti-Enumeration Protection** | S3.4 25.0ms timing floor + 404 | GET/PATCH/DELETE execute under `timing_floor(floor_ms=25.0)`; cross-workspace returns 404 | PASS |
++| **Markdown Instructions Safety** | Canonical Markdown, 64 KiB cap | `system_instructions_md` normalized via `normalize_to_markdown()`; surrogate safe | PASS |
++| **Activity Ledger Auditing** | Category `ADMIN` event types | Records `AGENT_DEFINITION_CREATED`, `UPDATED`, `DELETED` with validated argv | PASS |
++| **Unit Test Coverage** | Mandatory Feature Tests (>= 95%) | 53/53 passed in 3.87s; 97.76% combined coverage across `kanban.agents` | PASS |
++| **Quality & Static Analysis** | Zero-Tolerance Quality Mandate | Ruff clean, Ruff format clean, Mypy strict clean (212 files), Lint-imports clean (2 kept) | PASS |
++
++---
++
++### 2. Forensic Architectural & Security Invariant Audit
++
++#### A. Database Schema, Constraints & RLS Boundaries (`database/migrations/`)
++- **Table Definition (`p5_16_agent_definitions.up.sql`)**:
++  - Primary key uses `uuidv7()`.
++  - Workspace uniqueness enforced via `UNIQUE (workspace_id, slug)`.
++  - Slugs strictly validated by regex `CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,62}$')`.
++  - Foreign key to `principals(id)` enforces `ON DELETE RESTRICT`, preventing orphaned agent records.
++- **Harness Consistency Constraint (`agent_def_harness_fields`)**:
++  - Enforces that `in_app_sdk` has `provider_kind` and `model_id` while omitting CLI binary and remote runner fields.
++  - Enforces that `cli_pipe` specifies `cli_binary_allowlist_id` while omitting remote runner fields.
++  - Enforces that `remote_runner` specifies `remote_runner_pool_slug`.
++- **Tool Allowlist Subset (`agent_def_mcp_tools_subset`)**:
++  - Enforces `mcp_allowed_tools <@ ARRAY['search_tickets','read_ticket','search_knowledge','read_doc']::text[]`.
++  - Disallows dangerous mutation tools (e.g. `update_ticket`, `delete_ticket`) from being assigned to read-only agent profiles.
++- **Row-Level Security Invariants**:
++  - `agent_definitions` has both `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY`.
++  - SELECT policy scopes reads to `workspace_id = app_current_workspace_id()`, requiring non-empty principal context, and checks `VIEW` capability on `project_id` when project-scoped.
++  - INSERT/UPDATE/DELETE policies restrict workspace-scoped agents to `WORKSPACE_ADMIN` and project-scoped agents to `PROJECT_ADMIN`.
++  - Least-privilege grants: `kanban_app` receives CRUD; `app_rls_reader` receives `SELECT` only.
++
++#### B. Double-Gated CLI Policy Enforcement (`kanban/agents/cli_policy.py`)
++- **Architecture & Layering**:
++  - Located in `kanban/agents/cli_policy.py` within `kanban/`, satisfying the unidirectional layering contract: `agent -> mcp -> kanban -> database`. Both API endpoints (save-time) and runtime runners (`agent/` in future waves) can import and execute the policy without circular dependencies.
++- **Save-Time Gate (`validate_cli_args`)**:
++  - Executed during `POST` and `PATCH` requests via Pydantic model validation and service logic.
++  - Banned flag detection checks casefolded arguments against `BANNED_FLAGS = frozenset({"--yolo", "--dangerously-bypass-approvals-and-sandbox", "--dangerously-skip-permissions", "--full-auto", "--allow-all-tools"})`.
++  - Detects flag assignment variants (`<banned>=<val>`) and any flag starting with `--dangerously` (e.g., `--dangerously-foo`).
++  - Limits total argument count to `<= 32`, individual argument byte length to `1..256` UTF-8 bytes, and disallows control characters (`\x00`, `\r`, `\n`).
++  - Enforces `CODEX_PINNED_PREFIX = ("-p", "-s", "read-only")` as the first three arguments for `codex`, and forbids any subsequent `-s`, `--sandbox`, `-c`, or `--config` arguments, preventing sandbox escapes.
++  - Returns `ValidatedArgv` as an immutable tuple `(binary_path, *args)`. Never a shell command string, preventing `sh -c` shell injection vulnerabilities.
++- **Runtime Gate (`assert_runtime_argv`)**:
++  - Re-evaluates stored `AgentDefinition` rows immediately prior to subprocess spawn.
++  - Guards against direct database manipulation, manual DBA inserts, or historical definitions created before policy hardening.
++
++#### C. REST API & Lifecycle Management (`kanban/api/v1/agent_definitions.py`)
++- **Endpoints**:
++  - `POST /api/v1/workspaces/{workspace}/agent-definitions`: Creates agent definition and `AGENT` principal in one atomic transaction.
++  - `GET /api/v1/workspaces/{workspace}/agent-definitions`: Lists workspace agents visible to caller.
++  - `GET /api/v1/agent-definitions/{agent}`: Retrieves definition by UUID or slug with `timing_floor(floor_ms=25.0)`.
++  - `PATCH /api/v1/agent-definitions/{agent}`: Updates mutable fields with CLI re-validation under `timing_floor(floor_ms=25.0)`.
++  - `DELETE /api/v1/agent-definitions/{agent}`: Deletes agent definition with `timing_floor(floor_ms=25.0)`; maps `23503` FK violations to RFC 7807 409 `AGENT_IN_USE`.
++- **Anti-Enumeration (S3.4)**:
++  - Single-resource routes execute inside `async with timing_floor(floor_ms=25.0):`.
++  - Non-existent agents and agents in other workspaces return indistinguishable 404 Problem Details responses.
++- **Audit Trails**:
++  - Ingestion, modification, and deletion emit `AGENT_DEFINITION_CREATED`, `AGENT_DEFINITION_UPDATED`, and `AGENT_DEFINITION_DELETED` events to the activity ledger with the validated argv payload.
++
++---
++
++### 3. Test Suite & Verification Matrix
++
++1. **Mandatory Test Cases Verified**:
++   - Case 1 (Positive): Create `cli_pipe` agent with `agy ["-p"]` and `codex ["-p", "-s", "read-only", "--model", "o3-mini"]`.
++   - Case 2 (Banned Flags): Rejection of `--yolo`, `--YOLO`, `--yolo=true`, `--dangerously*`, `--full-auto`, `--allow-all-tools=1` with RFC 7807 422 `BANNED_CLI_FLAG`.
++   - Case 3 (Codex Sandbox): Rejection of unpinned sandbox mode or subsequent override flags with RFC 7807 422 `CODEX_SANDBOX_OVERRIDE`. Rejection of non-allowlisted binary (`bash`) with `CLI_BINARY_NOT_ALLOWLISTED`.
++   - Case 4 (Arg Sanitization): Arguments with `\n` or `\x00`, > 32 arguments, or > 256 bytes rejected with `CLI_ARGS_INVALID`.
++   - Case 5 (Runtime Assertion): Direct database row with `--yolo` caught by `assert_runtime_argv()`.
++   - Case 6 (RLS Enforcement): Member context fails `WITH CHECK` on create; query without workspace ID returns 0 rows; cross-workspace lookup returns 404.
++   - Case 7 (Boundaries & DDL): Slug length/character bounds; `timeout_ms` bounds (1000..300000); tool allowlist subset CHECK; harness field consistency CHECK.
++   - Case 8 (In-Use Deletion): Deleting an agent referenced by a transition hook produces RFC 7807 409 `AGENT_IN_USE`.
++2. **Execution Results**:
++   - Test suite: 53/53 passed in 3.87s across `test_cli_policy.py`, `test_agent_definitions_api.py`, and `test_agent_definitions_ddl.py`.
++   - Test coverage: `kanban.agents` achieved **97.76%** branch+line coverage (exceeds >= 95% mandate).
++3. **Static Quality Verification**:
++   - `uv run ruff check .`: Clean (0 errors).
++   - `uv run ruff format --check .`: Clean (582 files formatted).
++   - `uv run mypy --strict database kanban`: Clean (0 errors across 212 source files).
++   - `uv run lint-imports`: Clean (2 kept, 0 broken).
++   - `python -m scripts.check_no_dashes --all`: Clean (0 non-ASCII dashes repo-wide).
++   - `make license`: Clean (violations=0).
++4. **Typography**: Plain ASCII hyphens `-` only throughout. Zero non-ASCII Unicode dashes (`U+2014` / `U+2013`).
++
++---
++
++### 4. Gate Sign-Off
++
++The `agent_definitions` registry, CLI binary allowlist, and double-gated sandboxing policy in `/tmp/kb-wt-KANBA-71` fully satisfy all architectural, security, database constraint, and contract requirements of ticket `KANBA-71` (`KB-P5-16`).
++
++Verdict: APPROVED
 diff --git a/docs/qa/KANBA-71/build-check.txt b/docs/qa/KANBA-71/build-check.txt
 new file mode 100644
 index 0000000..dbfbbc9
@@ -1226,6 +1344,77 @@ index 0000000..3ca6b16
 + agent_definitions | t              | t
 +(1 row)
 +
+diff --git a/docs/qa/KANBA-71/ui-specialist-review.md b/docs/qa/KANBA-71/ui-specialist-review.md
+new file mode 100644
+index 0000000..96fce75
+--- /dev/null
++++ b/docs/qa/KANBA-71/ui-specialist-review.md
+@@ -0,0 +1,64 @@
++# UI Specialist Gate Final Audit: APPROVED for KANBA-71 (KB-P5-16)
++
++- Auditor: ui-specialist (UI & UX Architecture Specialist Gate)
++- Worktree: `/tmp/kb-wt-KANBA-71`
++- Branch: `feat/KANBA-71`
++- Ticket: `KANBA-71` (`KB-P5-16`: `[Phase 5 / Database + API] agent_definitions registry, CLI binary allowlist & banned-flag validation (save + runtime)`)
++
++---
++
++### 1. Executive Summary & Verification Matrix
++A comprehensive frontend contract, API error ergonomics, and UX readiness audit was conducted for `KANBA-71` in `/tmp/kb-wt-KANBA-71`. While `KB-P5-16` is a backend database and REST API ticket without direct frontend screenshots (Screenshots: N/A - Non-UI Ticket per KB-P5-16 proof criteria), it establishes the core data contracts and error boundaries for the upcoming Agent Studio UI (`KB-P5-24`). All request/response schemas, discrete RFC 7807 problem details, CLI policy error payloads, timing equalization, and canonical Markdown normalization were forensically evaluated against S14.2, S14.3, and Section 5.4 architecture specifications.
++
++| Verification Dimension | Specification Target | Observed Status | Verdict |
++| :--- | :--- | :--- | :--- |
++| **API Error Ergonomics** | Discrete RFC 7807 problem details for UI form binding | Discretely typed problem codes (`BANNED_CLI_FLAG`, `CODEX_SANDBOX_OVERRIDE`, `CLI_BINARY_NOT_ALLOWLISTED`, `CLI_ARGS_INVALID`, `HARNESS_FIELDS_INVALID`, `AGENT_IN_USE`) | PASS |
++| **Form Stepper Contracts** | Strict harness field mutual exclusion | `in_app_sdk`, `cli_pipe`, and `remote_runner` mutual exclusion enforced cleanly via Pydantic validators | PASS |
++| **CLI Argument Tokenization** | Index-annotated argument validation | Argument index and offending token reported in `detail`, enabling per-pill field errors in UI tag inputs | PASS |
++| **Canonical Markdown Safety** | Safe system instructions handling | `system_instructions_md` normalized via `normalize_to_markdown()` with 64 KiB ceiling and surrogate safety | PASS |
++| **Timing Equalization** | Anti-enumeration timing floor | 25.0ms `timing_floor` on GET/PATCH/DELETE endpoints defeats side-channels within 100ms UX budget | PASS |
++| **Deletion Dependency Guard** | 409 Conflict on transition hook reference | `AGENT_IN_USE` problem returned when agent is bound to active hooks, preventing dangling references | PASS |
++| **Unit Test Coverage** | Mandatory Feature Tests (>=95%) | 53/53 passed in 3.93s; `kanban.agents` achieved 97.76% coverage (exceeds >=95.00% requirement) | PASS |
++| **Build, Typecheck & Quality** | Zero-Tolerance Quality Mandate | Ruff clean, Ruff format clean (582 files), Mypy strict clean (212 files), Lint-imports clean (2 kept, 0 broken) | PASS |
++
++---
++
++### 2. Frontend Contract & UX Ergonomics Audit for Agent Studio (`KB-P5-24`)
++
++1. **Discrete RFC 7807 Problem Codes for UI Form Binding:**
++   - In modern single-page applications, generic 422 `VALIDATION_ERROR` payloads force UIs into brittle string parsing to display inline field errors.
++   - `KANBA-71` provides high-precision, machine-readable problem codes matching `urn:kanban:problem:<CODE>`:
++     * `BANNED_CLI_FLAG`: Emitted when an argument matches banned flags (e.g., `--yolo`, `--full-auto`, `--dangerously*`). The `detail` field identifies the exact index and argument (e.g., `"Argument at index 1 ('--yolo') violates banned CLI flag policy"`), allowing Agent Studio to render an inline error pill directly underneath the offending token.
++     * `CODEX_SANDBOX_OVERRIDE`: Emitted when `codex` is missing the mandatory `['-p', '-s', 'read-only']` prefix or attempts sandbox bypass (`-s`, `--sandbox`, `-c`, `--config`). Enables the UI to offer an automated "Fix Prefix" action button.
++     * `CLI_BINARY_NOT_ALLOWLISTED`: Emitted when an unsupported executable is provided, allowing the UI dropdown to highlight available options (`agy`, `codex`, `gemini-cli`, `claude-code`).
++     * `CLI_ARGS_INVALID`: Emitted when argument count exceeds 32, byte length is outside 1..256 bytes, or control characters (NUL, CR, LF) are detected.
++     * `HARNESS_FIELDS_INVALID`: Emitted when required fields for the chosen harness kind are missing or mutually exclusive fields are populated. This supports dynamic form field visibility in the Agent Studio harness selector.
++     * `AGENT_IN_USE`: Emitted on `DELETE` when active transition interceptor hooks bind the agent, enabling a clear confirmation/warning modal listing active usages.
++
++2. **System Instructions Markdown Normalization & Bounds:**
++   - System prompts are stored as canonical Markdown in `system_instructions_md`.
++   - Length is enforced with a strict 64 KiB ceiling (`MAX_INSTRUCTIONS_BYTES = 65536`).
++   - Normalization via `normalize_to_markdown()` strips invisible Unicode directional and tag characters, disarms dangerous script/URI links, and formats content canonically.
++   - Malformed Unicode (such as lone surrogates) is caught at validation time and returned as an RFC 7807 problem rather than throwing an unhandled 500 server crash, preserving a smooth authoring experience in ProseMirror or Monaco editor components.
++
++3. **Anti-Enumeration Timing Equalization (25.0ms):**
++   - The endpoints `GET /api/v1/agent-definitions/{agent}`, `PATCH /api/v1/agent-definitions/{agent}`, and `DELETE /api/v1/agent-definitions/{agent}` wrap their execution in `async with timing_floor(floor_ms=25.0)`.
++   - This prevents malicious actors from probing workspace agent existence via response latency discrepancies between existing and non-existing records.
++   - From a UI perspective, 25.0ms is well below the standard 100ms human perception threshold, ensuring that Agent Studio navigation, detail drawers, and update operations feel instantaneous.
++
++4. **Security & Data Sanitization Invariants:**
++   - All response payloads use `AgentDefinitionResponse` with `extra="forbid"`, preventing accidental field leakage.
++   - Principal IDs and workspace relationships are strictly bound under PostgreSQL `FORCE ROW LEVEL SECURITY`.
++   - The double-gated execution invariant (`validate_cli_args` at save time + `assert_runtime_argv` at invocation time) ensures complete defense-in-depth against direct database manipulation.
++
++---
++
++### 3. Formatting & Typography Compliance
++- Strictly plain ASCII hyphens `-` used throughout. Zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) detected.
++
++---
++
++### 4. Gate Sign-Off
++I have written this audit to `/tmp/kb-wt-KANBA-71/docs/qa/KANBA-71/ui-specialist-review.md`. Please commit it to your branch `feat/KANBA-71`.
++
++Verdict: APPROVED
+\ No newline at end of file
 diff --git a/docs/qa/KANBA-71/unit-test-results.txt b/docs/qa/KANBA-71/unit-test-results.txt
 new file mode 100644
 index 0000000..f509c3d
