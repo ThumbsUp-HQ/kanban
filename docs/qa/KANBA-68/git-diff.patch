@@ -1,0 +1,3335 @@
+diff --git a/kanban/api/problems.py b/kanban/api/problems.py
+index 5332b84..675c3e3 100644
+--- a/kanban/api/problems.py
++++ b/kanban/api/problems.py
+@@ -45,12 +45,16 @@ class Problem(BaseModel):
+         default=None,
+         description="Field-level validation errors",
+     )
++    current_etag: str | None = Field(
++        default=None,
++        description="Current resource ETag on 412 precondition failed",
++    )
+ 
+ 
+ class ProblemException(Exception):  # noqa: N818
+     """Application exception mapped directly to an RFC 7807 Problem document."""
+ 
+-    def __init__(  # noqa: PLR0913, PLR0917 - Extended with response headers
++    def __init__(  # noqa: PLR0913, PLR0917 - Extended with response headers and current_etag
+         self,
+         code: str,
+         status: int,
+@@ -58,6 +62,7 @@ class ProblemException(Exception):  # noqa: N818
+         detail: str | None = None,
+         errors: list[FieldError] | None = None,
+         headers: dict[str, str] | None = None,
++        current_etag: str | None = None,
+     ) -> None:
+         """Initialize problem exception with error code, status, and optional details."""
+         if not _CODE_REGEX.match(code):
+@@ -70,6 +75,7 @@ class ProblemException(Exception):  # noqa: N818
+         self.detail = detail
+         self.errors = errors
+         self.headers = headers
++        self.current_etag = current_etag
+ 
+ 
+ def not_found() -> NoReturn:
+@@ -101,6 +107,7 @@ async def problem_exception_handler(
+         detail=exc.detail,
+         request_id=req_id,
+         errors=exc.errors,
++        current_etag=exc.current_etag,
+     )
+     response_headers = {"x-request-id": req_id}
+     if exc.headers:
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 9b4f0b6..e98aad5 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -4,6 +4,7 @@ from __future__ import annotations
+ 
+ from fastapi import APIRouter
+ 
++from kanban.api.v1.docs import router as docs_router
+ from kanban.api.v1.health import router as health_router
+ from kanban.api.v1.objects_access import router as objects_access_router
+ from kanban.api.v1.projects import router as projects_router
+@@ -15,6 +16,7 @@ def build_v1_router() -> APIRouter:
+     v1.include_router(health_router)
+     v1.include_router(objects_access_router)
+     v1.include_router(projects_router)
++    v1.include_router(docs_router)
+     return v1
+ 
+ 
+diff --git a/kanban/api/v1/docs.py b/kanban/api/v1/docs.py
+new file mode 100644
+index 0000000..36e1b16
+--- /dev/null
++++ b/kanban/api/v1/docs.py
+@@ -0,0 +1,247 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Docs and hierarchical Pages endpoints (S8.1, S12.2, S3.4)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003  # Required at runtime by FastAPI query parameter parsing
++from typing import Annotated
++
++from fastapi import APIRouter, Depends, Header, Query, Response
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.timing import timing_floor
++from kanban.api.v1.schemas.docs import (
++    DocCreate,
++    DocResponse,
++    DocSummaryResponse,
++    DocUpdate,
++    PageCreate,
++    PageMove,
++    PageResponse,
++    PageTreeNode,
++    PageUpdate,
++    PageVersionResponse,
++)
++from kanban.services import docs as svc
++
++router = APIRouter(tags=["docs"])
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++# =========================================================================
++# DOCS ENDPOINTS
++# =========================================================================
++
++
++@router.get("/docs", response_model=list[DocSummaryResponse], summary="List readable docs")
++async def list_docs(
++    caller: Caller,
++    session: Session,
++    project: Annotated[uuid.UUID | None, Query()] = None,
++) -> list[DocSummaryResponse]:
++    """List documents visible to the caller filtered by workspace and optional project."""
++    return await svc.list_docs(session, caller, project_id=project)
++
++
++@router.post("/docs", status_code=201, response_model=DocResponse, summary="Create a document")
++async def create_doc(
++    body: DocCreate,
++    caller: Caller,
++    session: Session,
++    response: Response,
++) -> DocResponse:
++    """Create a new top-level documentation entity."""
++    result, etag = await svc.create_doc(session, caller, body)
++    response.headers["ETag"] = etag
++    response.headers["Location"] = f"/api/v1/docs/{result.canonical_key}"
++    return result
++
++
++@router.get("/docs/{doc_ref:path}/tree", response_model=list[PageTreeNode], summary="Get page tree")
++async def get_doc_tree(
++    doc_ref: str,
++    caller: Caller,
++    session: Session,
++) -> list[PageTreeNode]:
++    """Retrieve full hierarchical page tree with restricted ancestor masking."""
++    return await svc.get_doc_tree(session, caller, doc_ref)
++
++
++@router.post(
++    "/docs/{doc_ref:path}/pages",
++    status_code=201,
++    response_model=PageResponse,
++    summary="Create a page",
++)
++async def create_page(
++    doc_ref: str,
++    body: PageCreate,
++    caller: Caller,
++    session: Session,
++    response: Response,
++) -> PageResponse:
++    """Create a hierarchical page within a document."""
++    result, etag = await svc.create_page(session, caller, doc_ref, body)
++    response.headers["ETag"] = etag
++    response.headers["Location"] = f"/api/v1/pages/{result.canonical_key}"
++    return result
++
++
++@router.get("/docs/{doc_ref:path}", response_model=DocResponse, summary="Get a document")
++async def get_doc(
++    doc_ref: str,
++    caller: Caller,
++    session: Session,
++    response: Response,
++    if_none_match: Annotated[str | None, Header()] = None,
++) -> Response | DocResponse:
++    """Return a document with ETag caching, or timing-equalized 404 when absent or unreadable."""
++    async with timing_floor(floor_ms=25.0):
++        result, etag = await svc.get_doc(session, caller, doc_ref)
++        if if_none_match and (if_none_match.strip() in (etag, etag.strip('"'), "*")):
++            return Response(status_code=304, headers={"ETag": etag})
++        response.headers["ETag"] = etag
++        return result
++
++
++@router.patch("/docs/{doc_ref:path}", response_model=DocResponse, summary="Update a document")
++async def update_doc(  # noqa: PLR0913
++    doc_ref: str,
++    body: DocUpdate,
++    *,
++    caller: Caller,
++    session: Session,
++    response: Response,
++    if_match: Annotated[str | None, Header()] = None,
++) -> DocResponse:
++    """Update document metadata or body under optimistic concurrency."""
++    result, etag = await svc.update_doc(session, caller, doc_ref, body, if_match)
++    response.headers["ETag"] = etag
++    return result
++
++
++@router.delete("/docs/{doc_ref:path}", status_code=200, summary="Delete a document")
++async def delete_doc(
++    doc_ref: str,
++    caller: Caller,
++    session: Session,
++) -> dict[str, str]:
++    """Soft-trash document and all hierarchical pages."""
++    await svc.delete_doc(session, caller, doc_ref)
++    return {"status": "deleted"}
++
++
++# =========================================================================
++# PAGES ENDPOINTS
++# =========================================================================
++
++
++@router.post(
++    "/pages/{page_ref:path}/versions/{version_seq:int}/restore",
++    response_model=PageResponse,
++    summary="Restore a historical page version",
++)
++async def restore_page_version(  # noqa: PLR0913
++    page_ref: str,
++    version_seq: int,
++    *,
++    caller: Caller,
++    session: Session,
++    response: Response,
++    if_match: Annotated[str | None, Header()] = None,
++) -> PageResponse:
++    """Restore historical version content into the current page under If-Match concurrency."""
++    result, etag = await svc.restore_page_version(session, caller, page_ref, version_seq, if_match)
++    response.headers["ETag"] = etag
++    return result
++
++
++@router.get(
++    "/pages/{page_ref:path}/versions/{version_seq:int}",
++    response_model=PageVersionResponse,
++    summary="Get a page version",
++)
++async def get_page_version(
++    page_ref: str,
++    version_seq: int,
++    caller: Caller,
++    session: Session,
++) -> PageVersionResponse:
++    """Retrieve a single historical version snapshot of a page."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.get_page_version(session, caller, page_ref, version_seq)
++
++
++@router.get(
++    "/pages/{page_ref:path}/versions",
++    response_model=list[PageVersionResponse],
++    summary="List page versions",
++)
++async def list_page_versions(
++    page_ref: str,
++    caller: Caller,
++    session: Session,
++    cursor: Annotated[int | None, Query()] = None,
++    limit: Annotated[int, Query(ge=1, le=100)] = 50,
++) -> list[PageVersionResponse]:
++    """List historical version snapshots of a page with pagination."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.list_page_versions(session, caller, page_ref, cursor=cursor, limit=limit)
++
++
++@router.post("/pages/{page_ref:path}/move", response_model=PageResponse, summary="Move a page")
++async def move_page(
++    page_ref: str,
++    body: PageMove,
++    caller: Caller,
++    session: Session,
++) -> PageResponse:
++    """Move a page to a new parent or re-order among siblings."""
++    return await svc.move_page(session, caller, page_ref, body)
++
++
++@router.get("/pages/{page_ref:path}", response_model=PageResponse, summary="Get a page")
++async def get_page(
++    page_ref: str,
++    caller: Caller,
++    session: Session,
++    response: Response,
++    if_none_match: Annotated[str | None, Header()] = None,
++) -> Response | PageResponse:
++    """Return a page with ETag caching, or timing-equalized 404 when absent or unreadable."""
++    async with timing_floor(floor_ms=25.0):
++        result, etag = await svc.get_page(session, caller, page_ref)
++        if if_none_match and (if_none_match.strip() in (etag, etag.strip('"'), "*")):
++            return Response(status_code=304, headers={"ETag": etag})
++        response.headers["ETag"] = etag
++        return result
++
++
++@router.patch("/pages/{page_ref:path}", response_model=PageResponse, summary="Update a page")
++async def update_page(  # noqa: PLR0913
++    page_ref: str,
++    body: PageUpdate,
++    *,
++    caller: Caller,
++    session: Session,
++    response: Response,
++    if_match: Annotated[str | None, Header()] = None,
++) -> PageResponse:
++    """Update page title or body under optimistic concurrency."""
++    result, etag = await svc.update_page(session, caller, page_ref, body, if_match)
++    response.headers["ETag"] = etag
++    return result
++
++
++@router.delete("/pages/{page_ref:path}", status_code=200, summary="Delete a page")
++async def delete_page(
++    page_ref: str,
++    caller: Caller,
++    session: Session,
++) -> dict[str, str]:
++    """Soft-trash page and all its hierarchical descendants."""
++    await svc.delete_page(session, caller, page_ref)
++    return {"status": "deleted"}
+diff --git a/kanban/api/v1/schemas/docs.py b/kanban/api/v1/schemas/docs.py
+new file mode 100644
+index 0000000..6b6ebbb
+--- /dev/null
++++ b/kanban/api/v1/schemas/docs.py
+@@ -0,0 +1,182 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Pydantic schemas for Docs and Pages API endpoints (S8.1, S12.2)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003  # Evaluated at runtime by Pydantic
++from datetime import datetime  # noqa: TC003  # Evaluated at runtime by Pydantic
++from typing import Any
++
++from pydantic import BaseModel, ConfigDict, Field
++
++__all__ = [
++    "BreadcrumbItem",
++    "DocCreate",
++    "DocResponse",
++    "DocSummaryResponse",
++    "DocUpdate",
++    "OutlineItem",
++    "PageCreate",
++    "PageMove",
++    "PageResponse",
++    "PageTreeNode",
++    "PageUpdate",
++    "PageVersionResponse",
++]
++
++
++class BreadcrumbItem(BaseModel):
++    """Breadcrumb trail element representing an ancestor doc or page."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: str | None = None
++    title: str | None = None
++    slug: str | None = None
++    canonical_key: str | None = None
++    restricted: bool = False
++    label: str | None = None
++
++
++class OutlineItem(BaseModel):
++    """Heading outline entry extracted from Markdown body."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    level: int
++    text: str
++    anchor: str
++    start_line: int
++
++
++class DocCreate(BaseModel):
++    """Payload for creating a new top-level documentation entity."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    project_id: uuid.UUID | None = None
++    title: str = Field(min_length=1)
++    body_markdown: str = ""
++
++
++class DocUpdate(BaseModel):
++    """Payload for updating doc metadata and markdown content."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    title: str | None = None
++    body_markdown: str | None = None
++
++
++class DocSummaryResponse(BaseModel):
++    """Compact summary of a document for list views."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID
++    canonical_key: str
++    project_id: uuid.UUID | None
++    title: str
++    version_seq: int
++    body_sha256: str
++
++
++class DocResponse(BaseModel):
++    """Full detail of a document including breadcrumbs, outline, and access metadata."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID
++    canonical_key: str
++    workspace_id: uuid.UUID
++    project_id: uuid.UUID | None
++    title: str
++    body_markdown: str
++    body_sha256: str
++    hierarchy_path: str
++    version_seq: int
++    breadcrumbs: list[BreadcrumbItem]
++    outline: list[OutlineItem]
++    access_manifest: dict[str, Any]
++    capabilities: list[str]
++
++
++class PageCreate(BaseModel):
++    """Payload for creating a hierarchical page within a document."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    parent_page_id: uuid.UUID | None = None
++    title: str = Field(min_length=1)
++    body_markdown: str = ""
++    after_page_id: uuid.UUID | None = None
++    before_page_id: uuid.UUID | None = None
++
++
++class PageUpdate(BaseModel):
++    """Payload for updating an existing page."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    title: str | None = None
++    body_markdown: str | None = None
++
++
++class PageMove(BaseModel):
++    """Payload for moving a page within the hierarchy or re-ranking siblings."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    parent_page_id: uuid.UUID | None = None
++    after_page_id: uuid.UUID | None = None
++    before_page_id: uuid.UUID | None = None
++
++
++class PageTreeNode(BaseModel):
++    """Hierarchical node in a document page tree with restricted ancestor masking."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: str | None = None
++    title: str | None = None
++    slug: str | None = None
++    sort_rank: str | None = None
++    restricted: bool = False
++    label: str | None = None
++    children: list[PageTreeNode] = Field(default_factory=list)
++
++
++class PageResponse(BaseModel):
++    """Full detail of a hierarchical page."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID
++    canonical_key: str
++    doc_id: uuid.UUID
++    parent_page_id: uuid.UUID | None
++    workspace_id: uuid.UUID
++    title: str
++    body_markdown: str
++    body_sha256: str
++    hierarchy_path: str
++    version_seq: int
++    sort_rank: str
++    breadcrumbs: list[BreadcrumbItem]
++    outline: list[OutlineItem]
++    access_manifest: dict[str, Any]
++    capabilities: list[str]
++
++
++class PageVersionResponse(BaseModel):
++    """Historical immutable snapshot of a page version."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    page_id: uuid.UUID
++    version_seq: int
++    title: str
++    body_markdown: str
++    body_sha256: str
++    created_by_id: uuid.UUID | None
++    created_at: datetime
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index de04ad6..ef4b0b3 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -61,6 +61,14 @@ class ActivityEventType(StrEnum):
+     PROJECT_CREATED = "PROJECT_CREATED"
+     PROJECT_UPDATED = "PROJECT_UPDATED"
+     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
++    DOC_CREATED = "DOC_CREATED"
++    DOC_UPDATED = "DOC_UPDATED"
++    DOC_TRASHED = "DOC_TRASHED"
++    PAGE_CREATED = "PAGE_CREATED"
++    PAGE_UPDATED = "PAGE_UPDATED"
++    PAGE_MOVED = "PAGE_MOVED"
++    PAGE_VERSION_RESTORED = "PAGE_VERSION_RESTORED"
++    PAGE_TRASHED = "PAGE_TRASHED"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -68,6 +76,14 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.PROJECT_CREATED: ActivityCategory.HISTORY,
+         ActivityEventType.PROJECT_UPDATED: ActivityCategory.HISTORY,
+         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
++        ActivityEventType.DOC_CREATED: ActivityCategory.HISTORY,
++        ActivityEventType.DOC_UPDATED: ActivityCategory.HISTORY,
++        ActivityEventType.DOC_TRASHED: ActivityCategory.HISTORY,
++        ActivityEventType.PAGE_CREATED: ActivityCategory.HISTORY,
++        ActivityEventType.PAGE_UPDATED: ActivityCategory.HISTORY,
++        ActivityEventType.PAGE_MOVED: ActivityCategory.HISTORY,
++        ActivityEventType.PAGE_VERSION_RESTORED: ActivityCategory.HISTORY,
++        ActivityEventType.PAGE_TRASHED: ActivityCategory.HISTORY,
+     }
+ )
+ 
+diff --git a/kanban/services/docs.py b/kanban/services/docs.py
+new file mode 100644
+index 0000000..213baaf
+--- /dev/null
++++ b/kanban/services/docs.py
+@@ -0,0 +1,1254 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Domain services for Docs, hierarchical Pages, versions, and outline extraction (S8.1, S12.2)."""
++
++from __future__ import annotations
++
++import re
++import uuid
++from typing import TYPE_CHECKING, Any, Final
++
++from sqlalchemy import select, text
++from sqlalchemy.exc import DBAPIError
++
++from database.models.knowledge import Doc, Page, PageVersion
++from database.models.spine import ObjectRecord
++from kanban.api.problems import ProblemException, not_found
++from kanban.api.v1.schemas.docs import (
++    BreadcrumbItem,
++    DocCreate,
++    DocResponse,
++    DocSummaryResponse,
++    DocUpdate,
++    OutlineItem,
++    PageCreate,
++    PageMove,
++    PageResponse,
++    PageTreeNode,
++    PageUpdate,
++    PageVersionResponse,
++)
++from kanban.content.normalize import normalize_to_markdown
++from kanban.security.access_manifest import build_access_manifest
++from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
++from kanban.services.activity import ActivityEventType, record_activity
++from kanban.services.lexorank import midpoint_rank
++from kanban.services.markdown_outline import extract_markdown_outline
++
++if TYPE_CHECKING:
++    from collections.abc import Sequence
++
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.api.deps import PrincipalContext
++
++__all__ = [
++    "create_doc",
++    "create_page",
++    "delete_doc",
++    "delete_page",
++    "get_doc",
++    "get_doc_tree",
++    "get_page",
++    "get_page_version",
++    "list_docs",
++    "list_page_versions",
++    "move_page",
++    "restore_page_version",
++    "update_doc",
++    "update_page",
++]
++
++_MAX_TITLE_LENGTH: Final[int] = 500
++_MAX_BODY_BYTES: Final[int] = 1_048_576  # 1 MiB
++_ZERO_WIDTH_CHARS: Final[re.Pattern[str]] = re.compile(r"[\u200b-\u200f\ufeff]")
++_SLUG_NON_ALPHANUM: Final[re.Pattern[str]] = re.compile(r"[^\w-]")
++_SLUG_SPACES: Final[re.Pattern[str]] = re.compile(r"[\s_]+")
++_PAGE_LTREE_LABEL_LEN: Final[int] = 33
++
++
++def _clean_title(title: str) -> str:
++    """Normalize title, strip zero-width characters and whitespace, enforce 1..500 bounds."""
++    stripped = _ZERO_WIDTH_CHARS.sub("", title).strip()
++    if len(stripped) < 1 or len(stripped) > _MAX_TITLE_LENGTH:
++        raise ProblemException(
++            code="TITLE_LENGTH",
++            status=422,
++            title="Title Length Invalid",
++            detail=f"Title must be between 1 and {_MAX_TITLE_LENGTH} characters",
++        )
++    return stripped
++
++
++def _clean_body(body: str) -> str:
++    """Normalize markdown and enforce maximum body length."""
++    normalized = normalize_to_markdown(body)
++    encoded = normalized.encode("utf-8")
++    if len(encoded) > _MAX_BODY_BYTES:
++        raise ProblemException(
++            code="BODY_TOO_LARGE",
++            status=422,
++            title="Body Too Large",
++            detail=f"body_markdown must not exceed {_MAX_BODY_BYTES} bytes",
++        )
++    return normalized
++
++
++def _to_slug(text_val: str, default: str) -> str:
++    """Convert text to lowercase URL-safe slug."""
++    base = _SLUG_SPACES.sub("-", text_val.lower())
++    slug = _SLUG_NON_ALPHANUM.sub("", base).strip("-")
++    return slug or default
++
++
++def _extract_ancestor_uuids(hierarchy_path: str | None) -> list[uuid.UUID]:
++    """Parse ancestor UUIDs from ltree hierarchy_path skipping doc root and self."""
++    if not hierarchy_path:
++        return []
++    res: list[uuid.UUID] = []
++    labels = hierarchy_path.split(".")
++    for label in labels[1:-1]:
++        if label.startswith("p") and len(label) == _PAGE_LTREE_LABEL_LEN:
++            try:
++                res.append(uuid.UUID(hex=label[1:]))
++            except ValueError:
++                continue
++    return res
++
++
++def _format_etag(sha256_bytes: bytes | None) -> str:
++    """Format sha256 byte string into standard quoted ETag header value."""
++    if not sha256_bytes:
++        return '""'
++    return f'"{sha256_bytes.hex()}"'
++
++
++def _verify_if_match(if_match: str | None, current_sha: bytes | None) -> None:
++    """Validate If-Match precondition against current body_sha256."""
++    if if_match is None:
++        raise ProblemException(
++            code="PRECONDITION_REQUIRED",
++            status=428,
++            title="Precondition Required",
++            detail="If-Match header is required when modifying body_markdown",
++        )
++
++    current_tag = _format_etag(current_sha)
++    clean_match = if_match.strip()
++
++    if clean_match == "*":
++        return
++
++    # Compare hex string directly or quoted ETag
++    current_hex = current_sha.hex() if current_sha else ""
++    unquoted = clean_match.strip('"')
++
++    if clean_match != current_tag and unquoted != current_hex:
++        raise ProblemException(
++            code="PRECONDITION_FAILED",
++            status=412,
++            title="Precondition Failed",
++            detail="Provided ETag does not match current resource state",
++            headers={"ETag": current_tag},
++            current_etag=current_tag,
++        )
++
++
++async def _allocate_unique_canonical_key(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    object_type: str,
++    prefix: str,
++    base_slug: str,
++) -> str:
++    """Find a unique canonical_key in objects for the given slug, appending -1, -2 if needed."""
++    candidate = f"{prefix}/{base_slug}" if prefix else base_slug
++    idx = 1
++    while True:
++        exists = (
++            await session.execute(
++                select(ObjectRecord.id).where(
++                    ObjectRecord.workspace_id == workspace_id,
++                    ObjectRecord.object_type == object_type,
++                    ObjectRecord.canonical_key == candidate,
++                    ObjectRecord.deleted_at.is_(None),
++                )
++            )
++        ).scalar_one_or_none()
++        if exists is None:
++            return candidate
++        candidate = f"{prefix}/{base_slug}-{idx}" if prefix else f"{base_slug}-{idx}"
++        idx += 1
++
++
++async def _resolve_doc_id(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    doc_ref: str,
++) -> uuid.UUID:
++    """Resolve doc UUID from UUID string or canonical key."""
++    try:
++        doc_uuid = uuid.UUID(doc_ref)
++        doc = (
++            await session.execute(
++                select(Doc.id).where(
++                    Doc.id == doc_uuid,
++                    Doc.workspace_id == workspace_id,
++                )
++            )
++        ).scalar_one_or_none()
++        if doc is not None:
++            return doc
++    except ValueError:
++        pass
++
++    clean_ref = doc_ref.strip("/")
++    ref_with_prefix = f"docs/{clean_ref}" if not clean_ref.startswith("docs/") else clean_ref
++
++    obj_id = (
++        await session.execute(
++            select(ObjectRecord.id).where(
++                ObjectRecord.workspace_id == workspace_id,
++                ObjectRecord.object_type == "doc",
++                ObjectRecord.canonical_key.in_([clean_ref, ref_with_prefix]),
++                ObjectRecord.deleted_at.is_(None),
++            )
++        )
++    ).scalar_one_or_none()
++
++    if obj_id is None:
++        not_found()
++    return obj_id
++
++
++async def _resolve_page_id(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    page_ref: str,
++) -> uuid.UUID:
++    """Resolve page UUID from UUID string or canonical key."""
++    try:
++        page_uuid = uuid.UUID(page_ref)
++        page = (
++            await session.execute(
++                select(Page.id).where(
++                    Page.id == page_uuid,
++                    Page.workspace_id == workspace_id,
++                )
++            )
++        ).scalar_one_or_none()
++        if page is not None:
++            return page
++    except ValueError:
++        pass
++
++    clean_ref = page_ref.strip("/")
++    ref_with_prefix = f"docs/{clean_ref}" if not clean_ref.startswith("docs/") else clean_ref
++
++    obj_id = (
++        await session.execute(
++            select(ObjectRecord.id).where(
++                ObjectRecord.workspace_id == workspace_id,
++                ObjectRecord.object_type == "page",
++                ObjectRecord.canonical_key.in_([clean_ref, ref_with_prefix]),
++                ObjectRecord.deleted_at.is_(None),
++            )
++        )
++    ).scalar_one_or_none()
++
++    if obj_id is None:
++        not_found()
++    return obj_id
++
++
++def _capabilities_to_list(caps: Capability) -> list[str]:
++    """Convert Capability bitmask to sorted string representation list."""
++    res: list[str] = []
++    for member in Capability:
++        if member.name in ("NONE", "ALL"):
++            continue
++        if member in caps and member.name:
++            res.append(member.name)
++    return sorted(res)
++
++
++# =========================================================================
++# DOCS OPERATIONS
++# =========================================================================
++
++
++async def list_docs(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_id: uuid.UUID | None = None,
++) -> list[DocSummaryResponse]:
++    """List documents visible to the caller filtered by workspace and optional project."""
++    stmt = (
++        select(Doc)
++        .join(ObjectRecord, ObjectRecord.id == Doc.id)
++        .where(
++            Doc.workspace_id == caller.workspace_id,
++            ObjectRecord.deleted_at.is_(None),
++        )
++    )
++
++    if project_id is not None:
++        # Require VIEW capability on project
++        await require_capability(session, caller, project_id, Capability.VIEW)
++        stmt = stmt.where(Doc.project_id == project_id)
++    else:
++        stmt = stmt.where(Doc.project_id.is_(None))
++
++    stmt = stmt.order_by(Doc.title.asc(), Doc.id.asc())
++    docs = (await session.execute(stmt)).scalars().all()
++
++    results: list[DocSummaryResponse] = []
++    for d in docs:
++        caps = await evaluate_capabilities(session, caller, d.id)
++        if Capability.VIEW in caps:
++            results.append(
++                DocSummaryResponse(
++                    id=d.id,
++                    canonical_key=d.hierarchy_path,
++                    project_id=d.project_id,
++                    title=d.title,
++                    version_seq=d.version_seq,
++                    body_sha256=d.body_sha256.hex() if d.body_sha256 else "",
++                )
++            )
++    return results
++
++
++async def create_doc(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    body: DocCreate,
++) -> tuple[DocResponse, str]:
++    """Create a new top-level documentation entity."""
++    clean_title = _clean_title(body.title)
++    clean_body = _clean_body(body.body_markdown)
++
++    if body.project_id is not None:
++        await require_capability(session, caller, body.project_id, Capability.EDIT)
++
++    base_slug = _to_slug(clean_title, "doc")
++    canonical_key = await _allocate_unique_canonical_key(
++        session, caller.workspace_id, "doc", "docs", base_slug
++    )
++
++    async with session.begin_nested():
++        doc_id = (
++            await session.execute(
++                text(
++                    "SELECT register_object("
++                    "  CAST('doc' AS object_kind), :ws, :proj, :ckey, :title, :creator"
++                    ")"
++                ),
++                {
++                    "ws": caller.workspace_id,
++                    "proj": body.project_id,
++                    "ckey": canonical_key,
++                    "title": clean_title,
++                    "creator": caller.principal_id,
++                },
++            )
++        ).scalar_one()
++
++        doc = Doc(
++            id=doc_id,
++            workspace_id=caller.workspace_id,
++            project_id=body.project_id,
++            title=clean_title,
++            body_markdown=clean_body,
++            hierarchy_path="pending",  # populated by database trigger docs_hierarchy_bi
++        )
++        session.add(doc)
++        await session.flush()
++        await session.refresh(doc)
++
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=doc.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.DOC_CREATED,
++            payload={},
++        )
++
++    etag = _format_etag(doc.body_sha256)
++    manifest = await build_access_manifest(session, caller, doc.id)
++    caps = await evaluate_capabilities(session, caller, doc.id)
++
++    breadcrumbs = [
++        BreadcrumbItem(
++            id=str(doc.id),
++            title=doc.title,
++            slug=base_slug,
++            canonical_key=canonical_key,
++        )
++    ]
++    outline = [
++        OutlineItem(
++            level=e.level,
++            text=e.text,
++            anchor=e.anchor,
++            start_line=e.start_line,
++        )
++        for e in extract_markdown_outline(clean_body)
++    ]
++
++    resp = DocResponse(
++        id=doc.id,
++        canonical_key=canonical_key,
++        workspace_id=doc.workspace_id,
++        project_id=doc.project_id,
++        title=doc.title,
++        body_markdown=doc.body_markdown,
++        body_sha256=doc.body_sha256.hex() if doc.body_sha256 else "",
++        hierarchy_path=doc.hierarchy_path,
++        version_seq=doc.version_seq,
++        breadcrumbs=breadcrumbs,
++        outline=outline,
++        access_manifest=manifest.model_dump(),
++        capabilities=_capabilities_to_list(caps),
++    )
++    return resp, etag
++
++
++async def get_doc(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    doc_ref: str,
++) -> tuple[DocResponse, str]:
++    """Retrieve full document detail, breadcrumbs, outline, and access metadata."""
++    doc_id = await _resolve_doc_id(session, caller.workspace_id, doc_ref)
++    caps = await require_capability(session, caller, doc_id, Capability.VIEW)
++
++    doc = (
++        await session.execute(
++            select(Doc, ObjectRecord.canonical_key)
++            .join(ObjectRecord, ObjectRecord.id == Doc.id)
++            .where(
++                Doc.id == doc_id,
++                Doc.workspace_id == caller.workspace_id,
++                ObjectRecord.deleted_at.is_(None),
++            )
++        )
++    ).first()
++
++    if doc is None:
++        not_found()
++
++    doc_obj, canonical_key = doc
++    etag = _format_etag(doc_obj.body_sha256)
++    manifest = await build_access_manifest(session, caller, doc_id)
++
++    slug = canonical_key.split("/")[-1]
++    breadcrumbs = [
++        BreadcrumbItem(
++            id=str(doc_obj.id),
++            title=doc_obj.title,
++            slug=slug,
++            canonical_key=canonical_key,
++        )
++    ]
++    outline = [
++        OutlineItem(
++            level=e.level,
++            text=e.text,
++            anchor=e.anchor,
++            start_line=e.start_line,
++        )
++        for e in extract_markdown_outline(doc_obj.body_markdown)
++    ]
++
++    resp = DocResponse(
++        id=doc_obj.id,
++        canonical_key=canonical_key,
++        workspace_id=doc_obj.workspace_id,
++        project_id=doc_obj.project_id,
++        title=doc_obj.title,
++        body_markdown=doc_obj.body_markdown,
++        body_sha256=doc_obj.body_sha256.hex() if doc_obj.body_sha256 else "",
++        hierarchy_path=doc_obj.hierarchy_path,
++        version_seq=doc_obj.version_seq,
++        breadcrumbs=breadcrumbs,
++        outline=outline,
++        access_manifest=manifest.model_dump(),
++        capabilities=_capabilities_to_list(caps),
++    )
++    return resp, etag
++
++
++async def update_doc(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    doc_ref: str,
++    body: DocUpdate,
++    if_match: str | None,
++) -> tuple[DocResponse, str]:
++    """Update document title or body markdown under optimistic concurrency."""
++    doc_id = await _resolve_doc_id(session, caller.workspace_id, doc_ref)
++    await require_capability(session, caller, doc_id, Capability.EDIT)
++
++    doc_row = (
++        await session.execute(
++            select(Doc).where(Doc.id == doc_id, Doc.workspace_id == caller.workspace_id)
++        )
++    ).scalar_one_or_none()
++
++    if doc_row is None:
++        not_found()
++
++    old_sha = doc_row.body_sha256.hex() if doc_row.body_sha256 else ""
++
++    if body.body_markdown is not None:
++        _verify_if_match(if_match, doc_row.body_sha256)
++        doc_row.body_markdown = _clean_body(body.body_markdown)
++
++    if body.title is not None:
++        clean_title = _clean_title(body.title)
++        doc_row.title = clean_title
++        await session.execute(
++            text("UPDATE objects SET display_title = :t WHERE id = :id"),
++            {"t": clean_title, "id": doc_id},
++        )
++
++    await session.flush()
++    await session.refresh(doc_row)
++
++    new_sha = doc_row.body_sha256.hex() if doc_row.body_sha256 else ""
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=doc_row.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.DOC_UPDATED,
++        payload={
++            "old_sha256": old_sha,
++            "new_sha256": new_sha,
++            "version_seq": doc_row.version_seq,
++        },
++    )
++
++    return await get_doc(session, caller, str(doc_id))
++
++
++async def delete_doc(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    doc_ref: str,
++) -> None:
++    """Soft-trash document and all hierarchical pages."""
++    doc_id = await _resolve_doc_id(session, caller.workspace_id, doc_ref)
++    await require_capability(session, caller, doc_id, Capability.DELETE)
++
++    # Soft trash doc in objects
++    await session.execute(
++        text("UPDATE objects SET deleted_at = clock_timestamp() WHERE id = :id"),
++        {"id": doc_id},
++    )
++    # Soft trash all pages of this doc
++    await session.execute(
++        text(
++            "UPDATE objects SET deleted_at = clock_timestamp() "
++            "WHERE id IN (SELECT id FROM pages WHERE doc_id = :did)"
++        ),
++        {"did": doc_id},
++    )
++
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=doc_id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.DOC_TRASHED,
++        payload={},
++    )
++
++
++async def get_doc_tree(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    doc_ref: str,
++) -> list[PageTreeNode]:
++    """Retrieve full hierarchical page tree with restricted ancestor masking."""
++    doc_id = await _resolve_doc_id(session, caller.workspace_id, doc_ref)
++    await require_capability(session, caller, doc_id, Capability.VIEW)
++
++    rows = (
++        await session.execute(
++            select(
++                Page.id,
++                Page.parent_page_id,
++                Page.title,
++                Page.sort_rank,
++                ObjectRecord.canonical_key,
++                Page.hierarchy_path,
++            )
++            .join(ObjectRecord, ObjectRecord.id == Page.id)
++            .where(
++                Page.doc_id == doc_id,
++                Page.workspace_id == caller.workspace_id,
++                ObjectRecord.deleted_at.is_(None),
++            )
++            .order_by(Page.sort_rank.collate("C").asc(), Page.id.asc())
++        )
++    ).all()
++
++    page_map: dict[uuid.UUID, dict[str, Any]] = {}
++    children_map: dict[uuid.UUID | None, list[uuid.UUID]] = {}
++
++    for row in rows:
++        pid, parent_id, title, sort_rank, ckey, hpath = row
++        caps = await evaluate_capabilities(session, caller, pid)
++        slug = ckey.split("/")[-1]
++        page_map[pid] = {
++            "id": pid,
++            "parent_id": parent_id,
++            "title": title,
++            "slug": slug,
++            "sort_rank": sort_rank,
++            "can_view": Capability.VIEW in caps,
++            "restricted": False,
++        }
++
++        # Synthesize restricted ancestor nodes if hidden by RLS
++        ancestors = _extract_ancestor_uuids(hpath)
++        prev_aid: uuid.UUID | None = None
++        for aid in ancestors:
++            if aid not in page_map:
++                page_map[aid] = {
++                    "id": aid,
++                    "parent_id": prev_aid,
++                    "title": None,
++                    "slug": None,
++                    "sort_rank": "",
++                    "can_view": False,
++                    "restricted": True,
++                }
++                c_list = children_map.setdefault(prev_aid, [])
++                if aid not in c_list:
++                    c_list.append(aid)
++            prev_aid = aid
++
++        effective_parent = parent_id if (parent_id is None or parent_id in page_map) else prev_aid
++        c_list = children_map.setdefault(effective_parent, [])
++        if pid not in c_list:
++            c_list.append(pid)
++
++    def _build_nodes(parent_id: uuid.UUID | None) -> list[PageTreeNode]:
++        nodes: list[PageTreeNode] = []
++        for child_id in children_map.get(parent_id, []):
++            info = page_map[child_id]
++            child_nodes = _build_nodes(child_id)
++            if info["can_view"]:
++                nodes.append(
++                    PageTreeNode(
++                        id=str(info["id"]),
++                        title=info["title"],
++                        slug=info["slug"],
++                        sort_rank=info["sort_rank"],
++                        children=child_nodes,
++                    )
++                )
++            else:
++                # Mask restricted ancestor with zero id/title/slug leakage
++                nodes.append(
++                    PageTreeNode(
++                        restricted=True,
++                        label="🔒 Restricted Page",
++                        children=child_nodes,
++                    )
++                )
++        return nodes
++
++    return _build_nodes(None)
++
++
++# =========================================================================
++# PAGES OPERATIONS
++# =========================================================================
++
++
++async def _validate_parent_page(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    parent_page_id: uuid.UUID | None,
++    doc_id: uuid.UUID,
++) -> None:
++    """Ensure parent page exists, belongs to same doc, and caller has edit capability."""
++    if parent_page_id is None:
++        return
++    await require_capability(session, caller, parent_page_id, Capability.EDIT)
++    parent_page = (
++        await session.execute(
++            select(Page).where(
++                Page.id == parent_page_id,
++                Page.workspace_id == caller.workspace_id,
++            )
++        )
++    ).scalar_one_or_none()
++    if parent_page is None:
++        not_found()
++    if parent_page.doc_id != doc_id:
++        raise ProblemException(
++            code="PAGE_PARENT_DOC_MISMATCH",
++            status=422,
++            title="Parent Doc Mismatch",
++            detail="Parent page must belong to the same document",
++        )
++
++
++def _compute_new_sort_rank(
++    siblings: Sequence[Any],
++    after_id: uuid.UUID | None,
++    before_id: uuid.UUID | None,
++) -> str:
++    """Calculate the midpoint sort_rank among siblings given optional relative positioning."""
++    prev_rank: str | None = None
++    next_rank: str | None = None
++
++    if after_id:
++        for idx, (sid, srank) in enumerate(siblings):
++            if sid == after_id:
++                prev_rank = srank
++                if idx + 1 < len(siblings):
++                    next_rank = siblings[idx + 1][1]
++                break
++    elif before_id:
++        for idx, (sid, srank) in enumerate(siblings):
++            if sid == before_id:
++                next_rank = srank
++                if idx > 0:
++                    prev_rank = siblings[idx - 1][1]
++                break
++    elif siblings:
++        prev_rank = siblings[-1][1]
++
++    return midpoint_rank(prev_rank, next_rank)
++
++
++def _handle_page_db_error(exc: DBAPIError) -> None:
++    """Translate Postgres page trigger/hierarchy exceptions to API problems."""
++    err_str = str(exc)
++    if "PAGE_MAX_DEPTH_EXCEEDED" in err_str:
++        raise ProblemException(
++            code="PAGE_MAX_DEPTH_EXCEEDED",
++            status=422,
++            title="Max Depth Exceeded",
++            detail="Page hierarchy depth cannot exceed 10",
++        ) from exc
++    if "PAGE_CYCLE" in err_str:
++        raise ProblemException(
++            code="PAGE_CYCLE",
++            status=409,
++            title="Page Cycle",
++            detail="Hierarchy cycle detected",
++        ) from exc
++    if "PAGE_PARENT_DOC_MISMATCH" in err_str:
++        raise ProblemException(
++            code="PAGE_PARENT_DOC_MISMATCH",
++            status=422,
++            title="Parent Doc Mismatch",
++            detail="Parent page must belong to the same document",
++        ) from exc
++    raise exc
++
++
++async def create_page(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    doc_ref: str,
++    body: PageCreate,
++) -> tuple[PageResponse, str]:
++    """Create a hierarchical page within a document."""
++    doc_id = await _resolve_doc_id(session, caller.workspace_id, doc_ref)
++    await require_capability(session, caller, doc_id, Capability.EDIT)
++    await _validate_parent_page(session, caller, body.parent_page_id, doc_id)
++
++    clean_title = _clean_title(body.title)
++    clean_body = _clean_body(body.body_markdown)
++
++    # Determine doc canonical key prefix
++    doc_obj = (
++        await session.execute(
++            select(Doc, ObjectRecord.canonical_key)
++            .join(ObjectRecord, ObjectRecord.id == Doc.id)
++            .where(Doc.id == doc_id)
++        )
++    ).first()
++    if doc_obj is None:
++        not_found()
++    doc_entity, doc_ckey = doc_obj
++
++    base_slug = _to_slug(clean_title, "page")
++    canonical_key = await _allocate_unique_canonical_key(
++        session, caller.workspace_id, "page", doc_ckey, base_slug
++    )
++
++    # Compute sort_rank
++    siblings = (
++        await session.execute(
++            select(Page.id, Page.sort_rank)
++            .where(
++                Page.doc_id == doc_id,
++                Page.parent_page_id == body.parent_page_id,
++            )
++            .order_by(Page.sort_rank.collate("C").asc(), Page.id.asc())
++        )
++    ).all()
++
++    new_rank = _compute_new_sort_rank(siblings, body.after_page_id, body.before_page_id)
++
++    async with session.begin_nested():
++        page_id = (
++            await session.execute(
++                text(
++                    "SELECT register_object("
++                    "  CAST('page' AS object_kind), :ws, :proj, :ckey, :title, :creator"
++                    ")"
++                ),
++                {
++                    "ws": caller.workspace_id,
++                    "proj": doc_entity.project_id,
++                    "ckey": canonical_key,
++                    "title": clean_title,
++                    "creator": caller.principal_id,
++                },
++            )
++        ).scalar_one()
++
++        page = Page(
++            id=page_id,
++            workspace_id=caller.workspace_id,
++            doc_id=doc_id,
++            parent_page_id=body.parent_page_id,
++            title=clean_title,
++            body_markdown=clean_body,
++            sort_rank=new_rank,
++            hierarchy_path="pending",  # populated by pages_hierarchy_biu trigger
++        )
++        session.add(page)
++
++        try:
++            await session.flush()
++            await session.refresh(page)
++        except DBAPIError as exc:
++            _handle_page_db_error(exc)
++
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=page.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.PAGE_CREATED,
++            payload={},
++        )
++
++    return await get_page(session, caller, str(page.id))
++
++
++async def get_page(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    page_ref: str,
++) -> tuple[PageResponse, str]:
++    """Retrieve full page detail, breadcrumbs, outline, and access metadata."""
++    page_id = await _resolve_page_id(session, caller.workspace_id, page_ref)
++    caps = await require_capability(session, caller, page_id, Capability.VIEW)
++
++    page_row = (
++        await session.execute(
++            select(Page, ObjectRecord.canonical_key)
++            .join(ObjectRecord, ObjectRecord.id == Page.id)
++            .where(
++                Page.id == page_id,
++                Page.workspace_id == caller.workspace_id,
++                ObjectRecord.deleted_at.is_(None),
++            )
++        )
++    ).first()
++
++    if page_row is None:
++        not_found()
++
++    page_obj, canonical_key = page_row
++    etag = _format_etag(page_obj.body_sha256)
++    manifest = await build_access_manifest(session, caller, page_id)
++
++    # Build ancestor breadcrumbs
++    doc_row = (
++        await session.execute(
++            select(Doc.id, Doc.title, ObjectRecord.canonical_key)
++            .join(ObjectRecord, ObjectRecord.id == Doc.id)
++            .where(Doc.id == page_obj.doc_id)
++        )
++    ).first()
++
++    breadcrumbs: list[BreadcrumbItem] = []
++    if doc_row is not None:
++        d_id, d_title, d_ckey = doc_row
++        d_caps = await evaluate_capabilities(session, caller, d_id)
++        if Capability.VIEW in d_caps:
++            breadcrumbs.append(
++                BreadcrumbItem(
++                    id=str(d_id),
++                    title=d_title,
++                    slug=d_ckey.split("/")[-1],
++                    canonical_key=d_ckey,
++                )
++            )
++        else:
++            breadcrumbs.append(BreadcrumbItem(restricted=True, label="🔒 Restricted Page"))
++
++    # Parse ancestors from ltree hierarchy_path
++    ancestor_ids = _extract_ancestor_uuids(page_obj.hierarchy_path)
++
++    for aid in ancestor_ids:
++        acaps = await evaluate_capabilities(session, caller, aid)
++        if Capability.VIEW in acaps:
++            arow = (
++                await session.execute(
++                    select(Page.title, ObjectRecord.canonical_key)
++                    .join(ObjectRecord, ObjectRecord.id == Page.id)
++                    .where(Page.id == aid)
++                )
++            ).first()
++            if arow is not None:
++                atitle, ackey = arow
++                breadcrumbs.append(
++                    BreadcrumbItem(
++                        id=str(aid),
++                        title=atitle,
++                        slug=ackey.split("/")[-1],
++                        canonical_key=ackey,
++                    )
++                )
++            else:
++                breadcrumbs.append(BreadcrumbItem(restricted=True, label="🔒 Restricted Page"))
++        else:
++            breadcrumbs.append(BreadcrumbItem(restricted=True, label="🔒 Restricted Page"))
++
++    # Add current page
++    slug = canonical_key.split("/")[-1]
++    breadcrumbs.append(
++        BreadcrumbItem(
++            id=str(page_obj.id),
++            title=page_obj.title,
++            slug=slug,
++            canonical_key=canonical_key,
++        )
++    )
++
++    outline = [
++        OutlineItem(
++            level=e.level,
++            text=e.text,
++            anchor=e.anchor,
++            start_line=e.start_line,
++        )
++        for e in extract_markdown_outline(page_obj.body_markdown)
++    ]
++
++    resp = PageResponse(
++        id=page_obj.id,
++        canonical_key=canonical_key,
++        doc_id=page_obj.doc_id,
++        parent_page_id=page_obj.parent_page_id,
++        workspace_id=page_obj.workspace_id,
++        title=page_obj.title,
++        body_markdown=page_obj.body_markdown,
++        body_sha256=page_obj.body_sha256.hex() if page_obj.body_sha256 else "",
++        hierarchy_path=page_obj.hierarchy_path,
++        version_seq=page_obj.version_seq,
++        sort_rank=page_obj.sort_rank,
++        breadcrumbs=breadcrumbs,
++        outline=outline,
++        access_manifest=manifest.model_dump(),
++        capabilities=_capabilities_to_list(caps),
++    )
++    return resp, etag
++
++
++async def update_page(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    page_ref: str,
++    body: PageUpdate,
++    if_match: str | None,
++) -> tuple[PageResponse, str]:
++    """Update page title or body markdown under optimistic concurrency."""
++    page_id = await _resolve_page_id(session, caller.workspace_id, page_ref)
++    await require_capability(session, caller, page_id, Capability.EDIT)
++
++    page_row = (
++        await session.execute(
++            select(Page).where(Page.id == page_id, Page.workspace_id == caller.workspace_id)
++        )
++    ).scalar_one_or_none()
++
++    if page_row is None:
++        not_found()
++
++    old_sha = page_row.body_sha256.hex() if page_row.body_sha256 else ""
++
++    if body.body_markdown is not None:
++        _verify_if_match(if_match, page_row.body_sha256)
++        page_row.body_markdown = _clean_body(body.body_markdown)
++
++    if body.title is not None:
++        clean_title = _clean_title(body.title)
++        page_row.title = clean_title
++        await session.execute(
++            text("UPDATE objects SET display_title = :t WHERE id = :id"),
++            {"t": clean_title, "id": page_id},
++        )
++
++    await session.flush()
++    await session.refresh(page_row)
++
++    new_sha = page_row.body_sha256.hex() if page_row.body_sha256 else ""
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=page_row.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.PAGE_UPDATED,
++        payload={
++            "old_sha256": old_sha,
++            "new_sha256": new_sha,
++            "version_seq": page_row.version_seq,
++        },
++    )
++
++    return await get_page(session, caller, str(page_id))
++
++
++async def move_page(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    page_ref: str,
++    body: PageMove,
++) -> PageResponse:
++    """Move a page to a new parent or re-order among siblings."""
++    page_id = await _resolve_page_id(session, caller.workspace_id, page_ref)
++    await require_capability(session, caller, page_id, Capability.EDIT)
++
++    page_row = (
++        await session.execute(
++            select(Page).where(Page.id == page_id, Page.workspace_id == caller.workspace_id)
++        )
++    ).scalar_one_or_none()
++
++    if page_row is None:
++        not_found()
++
++    await _validate_parent_page(session, caller, body.parent_page_id, page_row.doc_id)
++
++    old_parent_id = page_row.parent_page_id
++    new_parent_id = body.parent_page_id
++
++    # Compute sort_rank among target siblings
++    target_siblings = (
++        await session.execute(
++            select(Page.id, Page.sort_rank)
++            .where(
++                Page.doc_id == page_row.doc_id,
++                Page.parent_page_id == new_parent_id,
++                Page.id != page_id,
++            )
++            .order_by(Page.sort_rank.collate("C").asc(), Page.id.asc())
++        )
++    ).all()
++
++    new_rank = _compute_new_sort_rank(target_siblings, body.after_page_id, body.before_page_id)
++
++    async with session.begin_nested():
++        page_row.parent_page_id = new_parent_id
++        page_row.sort_rank = new_rank
++
++        try:
++            await session.flush()
++            await session.refresh(page_row)
++        except DBAPIError as exc:
++            _handle_page_db_error(exc)
++
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=page_row.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.PAGE_MOVED,
++            payload={
++                "old_parent_id": str(old_parent_id) if old_parent_id else None,
++                "new_parent_id": str(new_parent_id) if new_parent_id else None,
++                "new_sort_rank": page_row.sort_rank,
++            },
++        )
++
++    resp, _ = await get_page(session, caller, str(page_id))
++    return resp
++
++
++async def delete_page(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    page_ref: str,
++) -> None:
++    """Soft-trash page and all its hierarchical descendants."""
++    page_id = await _resolve_page_id(session, caller.workspace_id, page_ref)
++    await require_capability(session, caller, page_id, Capability.DELETE)
++
++    page_row = (
++        await session.execute(
++            select(Page).where(Page.id == page_id, Page.workspace_id == caller.workspace_id)
++        )
++    ).scalar_one_or_none()
++
++    if page_row is None:
++        not_found()
++
++    # Soft trash page and descendants in objects
++    await session.execute(
++        text(
++            "UPDATE objects SET deleted_at = clock_timestamp() "
++            "WHERE id IN ("
++            "  SELECT id FROM pages WHERE hierarchy_path <@ cast(:path as ltree)"
++            ")"
++        ),
++        {"path": page_row.hierarchy_path},
++    )
++
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=page_id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.PAGE_TRASHED,
++        payload={},
++    )
++
++
++async def list_page_versions(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    page_ref: str,
++    cursor: int | None = None,
++    limit: int = 50,
++) -> list[PageVersionResponse]:
++    """List historical version snapshots of a page."""
++    page_id = await _resolve_page_id(session, caller.workspace_id, page_ref)
++    await require_capability(session, caller, page_id, Capability.VIEW)
++
++    stmt = select(PageVersion).where(
++        PageVersion.page_id == page_id,
++        PageVersion.workspace_id == caller.workspace_id,
++    )
++    if cursor is not None:
++        stmt = stmt.where(PageVersion.version_seq < cursor)
++
++    stmt = stmt.order_by(PageVersion.version_seq.desc()).limit(limit)
++    rows = (await session.execute(stmt)).scalars().all()
++
++    return [
++        PageVersionResponse(
++            page_id=r.page_id,
++            version_seq=r.version_seq,
++            title=r.title,
++            body_markdown=r.body_markdown,
++            body_sha256=r.body_sha256.hex() if r.body_sha256 else "",
++            created_by_id=r.created_by_id,
++            created_at=r.created_at,
++        )
++        for r in rows
++    ]
++
++
++async def get_page_version(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    page_ref: str,
++    version_seq: int,
++) -> PageVersionResponse:
++    """Retrieve a single historical version snapshot of a page."""
++    page_id = await _resolve_page_id(session, caller.workspace_id, page_ref)
++    await require_capability(session, caller, page_id, Capability.VIEW)
++
++    version_row = (
++        await session.execute(
++            select(PageVersion).where(
++                PageVersion.page_id == page_id,
++                PageVersion.version_seq == version_seq,
++                PageVersion.workspace_id == caller.workspace_id,
++            )
++        )
++    ).scalar_one_or_none()
++
++    if version_row is None:
++        not_found()
++
++    return PageVersionResponse(
++        page_id=version_row.page_id,
++        version_seq=version_row.version_seq,
++        title=version_row.title,
++        body_markdown=version_row.body_markdown,
++        body_sha256=version_row.body_sha256.hex() if version_row.body_sha256 else "",
++        created_by_id=version_row.created_by_id,
++        created_at=version_row.created_at,
++    )
++
++
++async def restore_page_version(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    page_ref: str,
++    version_seq: int,
++    if_match: str | None,
++) -> tuple[PageResponse, str]:
++    """Restore historical version content into the current page under If-Match concurrency."""
++    page_id = await _resolve_page_id(session, caller.workspace_id, page_ref)
++    await require_capability(session, caller, page_id, Capability.EDIT)
++
++    page_row = (
++        await session.execute(
++            select(Page).where(Page.id == page_id, Page.workspace_id == caller.workspace_id)
++        )
++    ).scalar_one_or_none()
++
++    if page_row is None:
++        not_found()
++
++    _verify_if_match(if_match, page_row.body_sha256)
++
++    historical = (
++        await session.execute(
++            select(PageVersion).where(
++                PageVersion.page_id == page_id,
++                PageVersion.version_seq == version_seq,
++                PageVersion.workspace_id == caller.workspace_id,
++            )
++        )
++    ).scalar_one_or_none()
++
++    if historical is None:
++        not_found()
++
++    page_row.title = historical.title
++    page_row.body_markdown = historical.body_markdown
++
++    await session.flush()
++    await session.refresh(page_row)
++
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=page_row.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.PAGE_VERSION_RESTORED,
++        payload={
++            "restored_from_seq": version_seq,
++            "new_version_seq": page_row.version_seq,
++        },
++    )
++
++    return await get_page(session, caller, str(page_id))
+diff --git a/kanban/services/lexorank.py b/kanban/services/lexorank.py
+new file mode 100644
+index 0000000..ddf846d
+--- /dev/null
++++ b/kanban/services/lexorank.py
+@@ -0,0 +1,87 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Base-62 LexoRank sorting helper (S8.1, S12.2)."""
++
++from __future__ import annotations
++
++from typing import Final
++
++__all__ = [
++    "BASE62_ALPHABET",
++    "midpoint_rank",
++]
++
++BASE62_ALPHABET: Final[str] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
++_CHAR_TO_VAL: Final[dict[str, int]] = {c: i for i, c in enumerate(BASE62_ALPHABET)}
++_MIN_RANK_LEN: Final[int] = 2
++_BASE: Final[int] = 62
++_MID_STEP: Final[int] = 31
++
++
++def _digits_to_int(digits: list[int]) -> int:
++    """Convert base-62 digit list to integer."""
++    val = 0
++    for d in digits:
++        val = val * _BASE + d
++    return val
++
++
++def _int_to_base62(val: int) -> str:
++    """Convert positive integer to Base-62 string."""
++    if val == 0:
++        return BASE62_ALPHABET[0]
++    digits: list[int] = []
++    v = val
++    while v > 0:
++        digits.append(v % _BASE)
++        v //= _BASE
++    digits.reverse()
++    return "".join(BASE62_ALPHABET[d] for d in digits)
++
++
++def midpoint_rank(prev: str | None, next_: str | None) -> str:
++    """Compute a deterministic Base-62 sort_rank strictly between prev and next in C collation.
++
++    If prev is None and next_ is None, returns standard default rank 'a0'.
++    If prev is None, returns a rank strictly less than next_.
++    If next_ is None, returns a rank strictly greater than prev.
++    If both are provided, returns a rank strictly between prev and next_ (prev < rank < next_).
++
++    Raises:
++        ValueError: If prev is lexicographically greater than or equal to next_.
++
++    """
++    if not prev and not next_:
++        return "a0"
++
++    p = prev if prev is not None else "0"
++    n = next_ if next_ is not None else ("z" * (len(p) + 1) if prev else "a0")
++
++    if p >= n:
++        msg = f"prev rank ({p!r}) must be lexicographically less than next rank ({n!r})"
++        raise ValueError(msg)
++
++    # Pad representation to compare with fractional digits
++    max_len = max(len(p), len(n)) + 1
++    p_digits = [_CHAR_TO_VAL[c] for c in p] + [0] * (max_len - len(p))
++    n_digits = [_CHAR_TO_VAL[c] for c in n] + [0] * (max_len - len(n))
++
++    p_val = _digits_to_int(p_digits)
++    n_val = _digits_to_int(n_digits)
++
++    mid_val = (p_val + n_val) // 2
++
++    res_digits: list[int] = []
++    v = mid_val
++    while v > 0:
++        res_digits.append(v % _BASE)
++        v //= _BASE
++    res_digits.reverse()
++    if len(res_digits) < max_len:
++        res_digits = [0] * (max_len - len(res_digits)) + res_digits
++    result = "".join(BASE62_ALPHABET[d] for d in res_digits)
++
++    # Trim trailing zeros if result remains strictly greater than p
++    while len(result) > _MIN_RANK_LEN and result.endswith("0") and result > p:
++        result = result[:-1]
++
++    return result
+diff --git a/kanban/services/markdown_outline.py b/kanban/services/markdown_outline.py
+new file mode 100644
+index 0000000..b29f871
+--- /dev/null
++++ b/kanban/services/markdown_outline.py
+@@ -0,0 +1,154 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Markdown heading outline extractor (S8.1, S12.2)."""
++
++from __future__ import annotations
++
++import re
++from dataclasses import dataclass
++from typing import Final
++
++__all__ = [
++    "OutlineEntry",
++    "extract_markdown_outline",
++]
++
++_HEADING_REGEX: Final[re.Pattern[str]] = re.compile(r"^(#{1,6})\s+(.*?)(?:\s+#+\s*)?$")
++_FENCE_START_REGEX: Final[re.Pattern[str]] = re.compile(r"^(```+|~~~+)")
++_LINK_IMAGE_REGEX: Final[re.Pattern[str]] = re.compile(
++    r"!\[([^\]]*)\]\([^)]*\)|\[([^\]]+)\]\([^)]*\)"
++)
++_INLINE_CODE_REGEX: Final[re.Pattern[str]] = re.compile(r"`([^`]+)`")
++_BOLD_ITALIC_REGEX: Final[re.Pattern[str]] = re.compile(r"(\*{1,3}|_{1,3})([^*_]+)\1")
++_STRIKE_REGEX: Final[re.Pattern[str]] = re.compile(r"~~([^~]+)~~")
++_NON_ALPHANUM_REGEX: Final[re.Pattern[str]] = re.compile(r"[^\w\s-]")
++_SPACES_REGEX: Final[re.Pattern[str]] = re.compile(r"[\s-]+")
++
++
++@dataclass(frozen=True, slots=True)
++class OutlineEntry:
++    """Single heading outline item with display text, anchor slug, and line number."""
++
++    level: int
++    text: str
++    anchor: str
++    start_line: int
++
++    def to_dict(self) -> dict[str, object]:
++        """Serialize outline entry to a standard dictionary."""
++        return {
++            "level": self.level,
++            "text": self.text,
++            "anchor": self.anchor,
++            "start_line": self.start_line,
++        }
++
++
++def _strip_inline_markdown(text: str) -> str:
++    """Remove Markdown formatting characters from heading text."""
++
++    # Replace links [text](url) with text and images ![alt](url) with alt
++    def _link_sub(match: re.Match[str]) -> str:
++        return match.group(1) or match.group(2) or ""
++
++    cleaned = _LINK_IMAGE_REGEX.sub(_link_sub, text)
++    cleaned = _INLINE_CODE_REGEX.sub(r"\1", cleaned)
++    cleaned = _BOLD_ITALIC_REGEX.sub(r"\2", cleaned)
++    cleaned = _STRIKE_REGEX.sub(r"\1", cleaned)
++    return cleaned.strip()
++
++
++def _slugify_anchor(text: str, seen_counts: dict[str, int]) -> str:
++    """Compute deterministic GitHub-style heading anchor with duplicate suffixing."""
++    base = _NON_ALPHANUM_REGEX.sub("", text.lower()).strip()
++    slug = _SPACES_REGEX.sub("-", base).strip("-")
++    if not slug:
++        slug = "section"
++
++    count = seen_counts.get(slug, 0)
++    seen_counts[slug] = count + 1
++
++    if count == 0:
++        return slug
++    return f"{slug}-{count}"
++
++
++class _OutlineParserState:
++    """Track fenced code blocks and HTML comments during outline extraction."""
++
++    __slots__ = ("fence_char", "fence_length", "in_html_comment")
++
++    def __init__(self) -> None:
++        self.fence_char: str | None = None
++        self.fence_length: int = 0
++        self.in_html_comment: bool = False
++
++    def should_skip(self, line: str) -> bool:
++        """Update comment and fence state; return True if the line should be skipped."""
++        if self.in_html_comment:
++            if "-->" in line:
++                self.in_html_comment = False
++            return True
++
++        if line.startswith("<!--"):
++            if "-->" not in line:
++                self.in_html_comment = True
++            return True
++
++        if self.fence_char is not None:
++            fence_match = _FENCE_START_REGEX.match(line)
++            if fence_match:
++                marker = fence_match.group(1)
++                if marker[0] == self.fence_char and len(marker) >= self.fence_length:
++                    self.fence_char = None
++                    self.fence_length = 0
++            return True
++
++        fence_match = _FENCE_START_REGEX.match(line)
++        if fence_match:
++            marker = fence_match.group(1)
++            self.fence_char = marker[0]
++            self.fence_length = len(marker)
++            return True
++
++        return False
++
++
++def extract_markdown_outline(body_markdown: str) -> list[OutlineEntry]:
++    """Extract ATX headings outside fenced code blocks and HTML comments.
++
++    Args:
++        body_markdown: Raw UTF-8 Markdown text.
++
++    Returns:
++        Ordered list of OutlineEntry objects.
++
++    """
++    if not body_markdown:
++        return []
++
++    lines = body_markdown.splitlines()
++    entries: list[OutlineEntry] = []
++    seen_anchors: dict[str, int] = {}
++    state = _OutlineParserState()
++
++    for idx, raw_line in enumerate(lines, start=1):
++        line = raw_line.strip()
++        if state.should_skip(line):
++            continue
++
++        heading_match = _HEADING_REGEX.match(line)
++        if heading_match:
++            level = len(heading_match.group(1))
++            raw_title = heading_match.group(2).strip()
++            display_text = _strip_inline_markdown(raw_title)
++            anchor = _slugify_anchor(display_text, seen_anchors)
++            entries.append(
++                OutlineEntry(
++                    level=level,
++                    text=display_text,
++                    anchor=anchor,
++                    start_line=idx,
++                )
++            )
++
++    return entries
+diff --git a/kanban/tests/api/test_docs_pages.py b/kanban/tests/api/test_docs_pages.py
+new file mode 100644
+index 0000000..5898fe6
+--- /dev/null
++++ b/kanban/tests/api/test_docs_pages.py
+@@ -0,0 +1,855 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Comprehensive API integration tests for Docs, hierarchical Pages, versions, moves & outlines."""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++
++from kanban.tests.security.helpers import (
++    create_project,
++    rebuild_era,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++    from kanban.tests.contract import ContractRecorder
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _setup_project(api_env: ApiEnv, user: SeededUser) -> uuid.UUID:
++    """Create a test project in the workspace."""
++    proj_id = await create_project(
++        api_env.seed,
++        api_env.workspace_id,
++        identifier="DOCS",
++        name="Docs Test Project",
++        created_by_id=user.id,
++    )
++    await api_env.seed.commit()
++    return proj_id
++
++
++async def test_case_1_positive_lifecycle(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test Case 1: Positive lifecycle: doc 201 + pages P1->P2->P3, versions, and restore."""
++    admin = await make_user("doc_admin", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++    proj_id = await _setup_project(api_env, admin)
++
++    # 1. Create Doc
++    create_doc_payload = {
++        "project_id": str(proj_id),
++        "title": "Architecture Guide",
++        "body_markdown": "# Overview\nThis is the core architecture guide.",
++    }
++    resp = await client.post("/api/v1/docs", json=create_doc_payload)
++    contract_recorder.record("create_doc_201", resp.request, resp)
++    assert resp.status_code == 201, resp.text
++    doc_data = resp.json()
++    doc_id = doc_data["id"]
++    doc_ckey = doc_data["canonical_key"]
++    assert "ETag" in resp.headers
++    doc_etag = resp.headers["ETag"]
++    assert resp.headers["Location"] == f"/api/v1/docs/{doc_ckey}"
++    assert doc_data["title"] == "Architecture Guide"
++    assert "VIEW" in doc_data["capabilities"]
++    assert "EDIT" in doc_data["capabilities"]
++
++    # 2. List Docs
++    list_resp = await client.get("/api/v1/docs", params={"project": str(proj_id)})
++    contract_recorder.record("list_docs_200", list_resp.request, list_resp)
++    assert list_resp.status_code == 200
++    docs_list = list_resp.json()
++    assert len(docs_list) == 1
++    assert docs_list[0]["id"] == doc_id
++
++    # 3. Get Doc with ETag and 304 caching
++    get_doc_resp = await client.get(f"/api/v1/docs/{doc_ckey}")
++    contract_recorder.record("get_doc_200", get_doc_resp.request, get_doc_resp)
++    assert get_doc_resp.status_code == 200
++    assert get_doc_resp.headers["ETag"] == doc_etag
++
++    cached_doc_resp = await client.get(
++        f"/api/v1/docs/{doc_ckey}", headers={"If-None-Match": doc_etag}
++    )
++    assert cached_doc_resp.status_code == 304
++
++    # 4. Create Page P1 (Root page)
++    p1_resp = await client.post(
++        f"/api/v1/docs/{doc_ckey}/pages",
++        json={
++            "title": "System Components",
++            "body_markdown": (
++                "# Components\n## Database\nPostgres 16 details.\n## API\nFastAPI details."
++            ),
++        },
++    )
++    contract_recorder.record("create_page_201", p1_resp.request, p1_resp)
++    assert p1_resp.status_code == 201, p1_resp.text
++    p1_data = p1_resp.json()
++    p1_id = p1_data["id"]
++    p1_ckey = p1_data["canonical_key"]
++    assert p1_ckey.endswith("/system-components")
++    assert len(p1_data["outline"]) == 3
++    assert p1_data["outline"][0]["anchor"] == "components"
++    assert p1_data["outline"][1]["anchor"] == "database"
++    assert p1_data["outline"][2]["anchor"] == "api"
++    assert len(p1_data["breadcrumbs"]) == 2
++    assert p1_data["breadcrumbs"][0]["id"] == doc_id
++    assert p1_data["breadcrumbs"][1]["id"] == p1_id
++
++    # 5. Create Page P2 under P1
++    p2_resp = await client.post(
++        f"/api/v1/docs/{doc_ckey}/pages",
++        json={
++            "parent_page_id": p1_id,
++            "title": "Database Engine",
++            "body_markdown": "# Initial DB Body",
++        },
++    )
++    assert p2_resp.status_code == 201, p2_resp.text
++    p2_data = p2_resp.json()
++    p2_id = p2_data["id"]
++    p2_etag_v1 = p2_resp.headers["ETag"]
++    assert len(p2_data["breadcrumbs"]) == 3
++    assert p2_data["breadcrumbs"][0]["id"] == doc_id
++    assert p2_data["breadcrumbs"][1]["id"] == p1_id
++    assert p2_data["breadcrumbs"][2]["id"] == p2_id
++    assert p2_data["version_seq"] == 1
++
++    # 6. Create Page P3 under P2
++    p3_resp = await client.post(
++        f"/api/v1/docs/{doc_ckey}/pages",
++        json={
++            "parent_page_id": p2_id,
++            "title": "Row-Level Security",
++            "body_markdown": "# RLS Policies",
++        },
++    )
++    assert p3_resp.status_code == 201, p3_resp.text
++    p3_data = p3_resp.json()
++    p3_id = p3_data["id"]
++    assert len(p3_data["breadcrumbs"]) == 4
++    assert p3_data["breadcrumbs"][0]["id"] == doc_id
++    assert p3_data["breadcrumbs"][1]["id"] == p1_id
++    assert p3_data["breadcrumbs"][2]["id"] == p2_id
++    assert p3_data["breadcrumbs"][3]["id"] == p3_id
++
++    # 7. Get Doc Tree (P1 -> P2 -> P3)
++    tree_resp = await client.get(f"/api/v1/docs/{doc_ckey}/tree")
++    contract_recorder.record("get_doc_tree_200", tree_resp.request, tree_resp)
++    assert tree_resp.status_code == 200
++    tree = tree_resp.json()
++    assert len(tree) == 1
++    assert tree[0]["id"] == p1_id
++    assert len(tree[0]["children"]) == 1
++    assert tree[0]["children"][0]["id"] == p2_id
++    assert len(tree[0]["children"][0]["children"]) == 1
++    assert tree[0]["children"][0]["children"][0]["id"] == p3_id
++
++    # 8. Update P2 Body under If-Match (Version 1 -> Version 2)
++    p2_update_1 = await client.patch(
++        f"/api/v1/pages/{p2_id}",
++        json={"body_markdown": "# Updated DB Body V2"},
++        headers={"If-Match": p2_etag_v1},
++    )
++    contract_recorder.record("update_page_200", p2_update_1.request, p2_update_1)
++    assert p2_update_1.status_code == 200, p2_update_1.text
++    p2_etag_v2 = p2_update_1.headers["ETag"]
++    assert p2_update_1.json()["version_seq"] == 2
++
++    # 9. Update P2 Body again under If-Match (Version 2 -> Version 3)
++    p2_update_2 = await client.patch(
++        f"/api/v1/pages/{p2_id}",
++        json={"body_markdown": "# Updated DB Body V3"},
++        headers={"If-Match": p2_etag_v2},
++    )
++    assert p2_update_2.status_code == 200, p2_update_2.text
++    p2_etag_v3 = p2_update_2.headers["ETag"]
++    assert p2_update_2.json()["version_seq"] == 3
++
++    # 10. List P2 Historical Versions
++    versions_resp = await client.get(f"/api/v1/pages/{p2_id}/versions")
++    contract_recorder.record("list_page_versions_200", versions_resp.request, versions_resp)
++    assert versions_resp.status_code == 200
++    versions = versions_resp.json()
++    assert len(versions) == 2
++    # Newest historical first
++    assert versions[0]["version_seq"] == 2
++    assert versions[1]["version_seq"] == 1
++    assert versions[1]["body_markdown"] == "# Initial DB Body"
++
++    # 11. Get Single Historical Version
++    v1_resp = await client.get(f"/api/v1/pages/{p2_id}/versions/1")
++    contract_recorder.record("get_page_version_200", v1_resp.request, v1_resp)
++    assert v1_resp.status_code == 200
++    assert v1_resp.json()["body_markdown"] == "# Initial DB Body"
++
++    # 12. Restore Version 1 under If-Match -> yields version_seq 4 with version 1 content
++    restore_resp = await client.post(
++        f"/api/v1/pages/{p2_id}/versions/1/restore",
++        headers={"If-Match": p2_etag_v3},
++    )
++    contract_recorder.record("restore_page_version_200", restore_resp.request, restore_resp)
++    assert restore_resp.status_code == 200, restore_resp.text
++    restored_data = restore_resp.json()
++    assert restored_data["version_seq"] == 4
++    assert restored_data["body_markdown"] == "# Initial DB Body"
++
++    # 13. Verify GET Page returns version_seq 4
++    get_p2_resp = await client.get(f"/api/v1/pages/{p2_id}")
++    contract_recorder.record("get_page_200", get_p2_resp.request, get_p2_resp)
++    assert get_p2_resp.status_code == 200
++    assert get_p2_resp.json()["version_seq"] == 4
++    assert get_p2_resp.json()["body_markdown"] == "# Initial DB Body"
++
++
++async def test_case_2_tree_move_and_dag_guards(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test Case 2: Tree move, cycle detection (409), depth guard (422), and doc mismatch."""
++    admin = await make_user("dag_admin", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++    proj_id = await _setup_project(api_env, admin)
++
++    # Create Doc 1
++    d1_resp = await client.post(
++        "/api/v1/docs",
++        json={"project_id": str(proj_id), "title": "Doc 1", "body_markdown": ""},
++    )
++    d1_ckey = d1_resp.json()["canonical_key"]
++
++    # Create P1 -> P2 -> P3 in Doc 1
++    p1 = (
++        await client.post(
++            f"/api/v1/docs/{d1_ckey}/pages", json={"title": "Page 1", "body_markdown": ""}
++        )
++    ).json()
++    p2 = (
++        await client.post(
++            f"/api/v1/docs/{d1_ckey}/pages",
++            json={"parent_page_id": p1["id"], "title": "Page 2", "body_markdown": ""},
++        )
++    ).json()
++    p3 = (
++        await client.post(
++            f"/api/v1/docs/{d1_ckey}/pages",
++            json={"parent_page_id": p2["id"], "title": "Page 3", "body_markdown": ""},
++        )
++    ).json()
++
++    # Move P2 to document root (parent_page_id: None)
++    move_resp = await client.post(
++        f"/api/v1/pages/{p2['id']}/move",
++        json={"parent_page_id": None},
++    )
++    contract_recorder.record("move_page_200", move_resp.request, move_resp)
++    assert move_resp.status_code == 200, move_resp.text
++    moved_p2 = move_resp.json()
++    assert moved_p2["parent_page_id"] is None
++    assert len(moved_p2["breadcrumbs"]) == 2
++    assert moved_p2["breadcrumbs"][1]["id"] == p2["id"]
++
++    # Verify P3 was rebased automatically under P2
++    p3_check = (await client.get(f"/api/v1/pages/{p3['id']}")).json()
++    assert p3_check["parent_page_id"] == p2["id"]
++    assert len(p3_check["breadcrumbs"]) == 3
++    assert p3_check["breadcrumbs"][1]["id"] == p2["id"]
++    assert p3_check["breadcrumbs"][2]["id"] == p3["id"]
++
++    # Cycle Detection: Moving P2 under P3 must return 409 PAGE_CYCLE
++    cycle_resp = await client.post(
++        f"/api/v1/pages/{p2['id']}/move",
++        json={"parent_page_id": p3["id"]},
++    )
++    assert cycle_resp.status_code == 409, cycle_resp.text
++    assert cycle_resp.json()["code"] == "PAGE_CYCLE"
++
++    # Parent Doc Mismatch: Create Doc 2, try to move P2 under Doc 2's page
++    d2_resp = await client.post(
++        "/api/v1/docs",
++        json={"project_id": str(proj_id), "title": "Doc 2", "body_markdown": ""},
++    )
++    d2_ckey = d2_resp.json()["canonical_key"]
++    d2_p1 = (
++        await client.post(
++            f"/api/v1/docs/{d2_ckey}/pages", json={"title": "Doc2 Page 1", "body_markdown": ""}
++        )
++    ).json()
++
++    mismatch_resp = await client.post(
++        f"/api/v1/pages/{p2['id']}/move",
++        json={"parent_page_id": d2_p1["id"]},
++    )
++    assert mismatch_resp.status_code == 422, mismatch_resp.text
++    assert mismatch_resp.json()["code"] == "PAGE_PARENT_DOC_MISMATCH"
++
++    # Max Depth Exceeded (depth cannot exceed 10)
++    # Current chain: P2 (depth 1) -> P3 (depth 2)
++    # Add depth 3 through 10
++    parent_id = p3["id"]
++    for depth in range(3, 11):
++        add_resp = await client.post(
++            f"/api/v1/docs/{d1_ckey}/pages",
++            json={"parent_page_id": parent_id, "title": f"Depth {depth}", "body_markdown": ""},
++        )
++        assert add_resp.status_code == 201, f"Failed at depth {depth}: {add_resp.text}"
++        parent_id = add_resp.json()["id"]
++
++    # Now parent_id is at depth 10. Attempting to add depth 11 must fail
++    # with 422 PAGE_MAX_DEPTH_EXCEEDED
++    depth_11_resp = await client.post(
++        f"/api/v1/docs/{d1_ckey}/pages",
++        json={"parent_page_id": parent_id, "title": "Depth 11", "body_markdown": ""},
++    )
++    assert depth_11_resp.status_code == 422, depth_11_resp.text
++    assert depth_11_resp.json()["code"] == "PAGE_MAX_DEPTH_EXCEEDED"
++
++
++async def test_lexorank_sibling_ordering(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Base-62 Lexorank sibling positioning with after_page_id and before_page_id."""
++    admin = await make_user("rank_admin", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++    proj_id = await _setup_project(api_env, admin)
++
++    doc_resp = await client.post(
++        "/api/v1/docs",
++        json={"project_id": str(proj_id), "title": "Rank Doc", "body_markdown": ""},
++    )
++    doc_ckey = doc_resp.json()["canonical_key"]
++
++    # 1. Create page A
++    pa = (
++        await client.post(
++            f"/api/v1/docs/{doc_ckey}/pages", json={"title": "Page A", "body_markdown": ""}
++        )
++    ).json()
++
++    # 2. Create page B
++    pb = (
++        await client.post(
++            f"/api/v1/docs/{doc_ckey}/pages", json={"title": "Page B", "body_markdown": ""}
++        )
++    ).json()
++    assert pa["sort_rank"] < pb["sort_rank"]
++
++    # 3. Create page C after B
++    pc = (
++        await client.post(
++            f"/api/v1/docs/{doc_ckey}/pages",
++            json={"after_page_id": pb["id"], "title": "Page C", "body_markdown": ""},
++        )
++    ).json()
++    assert pb["sort_rank"] < pc["sort_rank"]
++
++    # 4. Create page M between A and B
++    pm = (
++        await client.post(
++            f"/api/v1/docs/{doc_ckey}/pages",
++            json={
++                "after_page_id": pa["id"],
++                "before_page_id": pb["id"],
++                "title": "Page M",
++                "body_markdown": "",
++            },
++        )
++    ).json()
++    assert pa["sort_rank"] < pm["sort_rank"] < pb["sort_rank"]
++
++    # 5. Move C before A
++    move_c = (
++        await client.post(
++            f"/api/v1/pages/{pc['id']}/move",
++            json={"before_page_id": pa["id"]},
++        )
++    ).json()
++    assert move_c["sort_rank"] < pa["sort_rank"]
++
++
++async def test_concurrency_and_boundaries(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 5: Concurrency (ETag/If-Match), size limits, and title length validation."""
++    admin = await make_user("boundary_admin", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++    proj_id = await _setup_project(api_env, admin)
++
++    doc_resp = await client.post(
++        "/api/v1/docs",
++        json={"project_id": str(proj_id), "title": "Boundary Doc", "body_markdown": ""},
++    )
++    doc_ckey = doc_resp.json()["canonical_key"]
++
++    page_resp = await client.post(
++        f"/api/v1/docs/{doc_ckey}/pages",
++        json={"title": "Boundary Page", "body_markdown": "Init"},
++    )
++    page_id = page_resp.json()["id"]
++    current_etag = page_resp.headers["ETag"]
++
++    # 1. PATCH body without If-Match returns 428 PRECONDITION_REQUIRED
++    p_no_etag = await client.patch(
++        f"/api/v1/pages/{page_id}",
++        json={"body_markdown": "New Body Without Header"},
++    )
++    assert p_no_etag.status_code == 428, p_no_etag.text
++    assert p_no_etag.json()["code"] == "PRECONDITION_REQUIRED"
++
++    # 2. PATCH body with stale If-Match returns 412 PRECONDITION_FAILED with current_etag
++    p_stale_etag = await client.patch(
++        f"/api/v1/pages/{page_id}",
++        json={"body_markdown": "New Body With Bad Header"},
++        headers={"If-Match": '"0000000000000000000000000000000000000000000000000000000000000000"'},
++    )
++    assert p_stale_etag.status_code == 412, p_stale_etag.text
++    problem = p_stale_etag.json()
++    assert problem["code"] == "PRECONDITION_FAILED"
++    assert problem["current_etag"] == current_etag
++
++    # 3. Title length: 500 characters succeeds, 501 fails with TITLE_LENGTH
++    t_500 = "a" * 500
++    t_501 = "a" * 501
++    p_500 = await client.patch(f"/api/v1/pages/{page_id}", json={"title": t_500})
++    assert p_500.status_code == 200
++    assert p_500.json()["title"] == t_500
++
++    p_501 = await client.patch(f"/api/v1/pages/{page_id}", json={"title": t_501})
++    assert p_501.status_code == 422
++    assert p_501.json()["code"] in ("TITLE_LENGTH", "VALIDATION_FAILED")
++
++    # Zero-length / whitespace-only title fails with TITLE_LENGTH
++    p_empty = await client.patch(f"/api/v1/pages/{page_id}", json={"title": "   \u200b   "})
++    assert p_empty.status_code == 422
++    assert p_empty.json()["code"] == "TITLE_LENGTH"
++
++    # 4. Body size: 1 MiB (1,048,576 bytes) succeeds, 1,048,577 bytes fails
++    fresh_etag = p_500.headers["ETag"]
++    valid_1mib = "x" * 1_048_576
++    p_1mib = await client.patch(
++        f"/api/v1/pages/{page_id}",
++        json={"body_markdown": valid_1mib},
++        headers={"If-Match": fresh_etag},
++    )
++    assert p_1mib.status_code == 200, p_1mib.text
++
++    overflow_etag = p_1mib.headers["ETag"]
++    invalid_1mib = "x" * 1_048_577
++    p_overflow = await client.patch(
++        f"/api/v1/pages/{page_id}",
++        json={"body_markdown": invalid_1mib},
++        headers={"If-Match": overflow_etag},
++    )
++    assert p_overflow.status_code == 422
++    assert p_overflow.json()["code"] == "BODY_TOO_LARGE"
++
++
++async def test_security_and_restricted_ancestor_masking(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 4: Security 404 timing floors and restricted ancestor masking (zero leakage)."""
++    admin = await make_user("sec_admin", workspace_role="WORKSPACE_ADMIN")
++    restricted_user = await make_user("sec_guest", workspace_role="WORKSPACE_MEMBER")
++    client_admin = as_principal(admin)
++    client_guest = as_principal(restricted_user)
++    proj_id = await _setup_project(api_env, admin)
++
++    # 1. Create Doc & Pages under Admin
++    doc_resp = await client_admin.post(
++        "/api/v1/docs",
++        json={"project_id": str(proj_id), "title": "Secret Doc", "body_markdown": "# Top Secret"},
++    )
++    doc_ckey = doc_resp.json()["canonical_key"]
++
++    p1_resp = await client_admin.post(
++        f"/api/v1/docs/{doc_ckey}/pages",
++        json={"title": "Restricted Parent", "body_markdown": "# Parent Content"},
++    )
++    p1 = p1_resp.json()
++    p1_id = uuid.UUID(p1["id"])
++
++    p2_resp = await client_admin.post(
++        f"/api/v1/docs/{doc_ckey}/pages",
++        json={"parent_page_id": str(p1_id), "title": "Public Child", "body_markdown": "# Child"},
++    )
++    p2 = p2_resp.json()
++    p2_id = uuid.UUID(p2["id"])
++
++    # 2. Deny P1 explicitly to restricted_user, but grant VIEW on P2 in ACL
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO resource_acl_entries "
++            "(workspace_id, object_id, principal_id, effect, capability_mask) "
++            "VALUES (:ws, :p1, :u, 'DENY', 1), (:ws, :p2, :u, 'ALLOW', 1)"
++        ),
++        {
++            "ws": api_env.workspace_id,
++            "p1": p1_id,
++            "p2": p2_id,
++            "u": restricted_user.id,
++        },
++    )
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++    await api_env.seed.commit()
++
++    # 3. Guest GET P1 directly returns 404 (not 403, indistinguishable from non-existent)
++    guest_p1 = await client_guest.get(f"/api/v1/pages/{p1_id}")
++    assert guest_p1.status_code == 404
++
++    # 4. Guest GET P2 succeeds, but P1 in breadcrumbs is masked with zero leakage
++    guest_p2 = await client_guest.get(f"/api/v1/pages/{p2_id}")
++    assert guest_p2.status_code == 200, guest_p2.text
++    p2_data = guest_p2.json()
++    assert len(p2_data["breadcrumbs"]) == 3
++
++    # Visible doc
++    b0 = p2_data["breadcrumbs"][0]
++    assert b0["restricted"] is False
++    assert b0["title"] == "Secret Doc"
++
++    # Masked ancestor
++    b1 = p2_data["breadcrumbs"][1]
++    assert b1["restricted"] is True
++    assert b1["label"] == "🔒 Restricted Page"
++    assert b1["id"] is None
++    assert b1["canonical_key"] is None
++    assert b1["title"] is None
++    assert b1["slug"] is None
++
++    # Visible child
++    b2 = p2_data["breadcrumbs"][2]
++    assert b2["restricted"] is False
++    assert b2["id"] == str(p2_id)
++    assert b2["title"] == "Public Child"
++
++    # 5. Guest GET Doc Tree masks P1 while showing P2 underneath
++    tree_resp = await client_guest.get(f"/api/v1/docs/{doc_ckey}/tree")
++    assert tree_resp.status_code == 200
++    tree_nodes = tree_resp.json()
++    assert len(tree_nodes) == 1
++    t0 = tree_nodes[0]
++    assert t0["restricted"] is True
++    assert t0["label"] == "🔒 Restricted Page"
++    assert t0["id"] is None
++    assert t0["title"] is None
++    assert len(t0["children"]) == 1
++    assert t0["children"][0]["id"] == str(p2_id)
++    assert t0["children"][0]["title"] == "Public Child"
++
++
++async def test_soft_delete_lifecycle(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test soft-delete of pages and documents cascades to child pages."""
++    admin = await make_user("del_admin", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++    proj_id = await _setup_project(api_env, admin)
++
++    doc_resp = await client.post(
++        "/api/v1/docs",
++        json={"project_id": str(proj_id), "title": "Delete Doc", "body_markdown": ""},
++    )
++    doc_ckey = doc_resp.json()["canonical_key"]
++
++    p1 = (
++        await client.post(
++            f"/api/v1/docs/{doc_ckey}/pages", json={"title": "P1", "body_markdown": ""}
++        )
++    ).json()
++    p2 = (
++        await client.post(
++            f"/api/v1/docs/{doc_ckey}/pages",
++            json={"parent_page_id": p1["id"], "title": "P2", "body_markdown": ""},
++        )
++    ).json()
++
++    # Delete page P1 -> cascades to P2
++    del_page = await client.delete(f"/api/v1/pages/{p1['id']}")
++    contract_recorder.record("delete_page_200", del_page.request, del_page)
++    assert del_page.status_code == 200
++    assert del_page.json() == {"status": "deleted"}
++
++    # Subsequent GET returns 404
++    assert (await client.get(f"/api/v1/pages/{p1['id']}")).status_code == 404
++    assert (await client.get(f"/api/v1/pages/{p2['id']}")).status_code == 404
++
++    # Delete Doc
++    del_doc = await client.delete(f"/api/v1/docs/{doc_ckey}")
++    contract_recorder.record("delete_doc_200", del_doc.request, del_doc)
++    assert del_doc.status_code == 200
++    assert del_doc.json() == {"status": "deleted"}
++
++    # Subsequent GET Doc returns 404
++    assert (await client.get(f"/api/v1/docs/{doc_ckey}")).status_code == 404
++
++
++async def test_doc_patch_and_etag_caching(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test PATCH doc metadata/body, wildcard If-Match, and page 304 caching."""
++    admin = await make_user("patch_admin", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++    proj_id = await _setup_project(api_env, admin)
++
++    doc_resp = await client.post(
++        "/api/v1/docs",
++        json={
++            "project_id": str(proj_id),
++            "title": "Patch Target Doc",
++            "body_markdown": "# Initial",
++        },
++    )
++    doc = doc_resp.json()
++    doc_id = doc["id"]
++    doc_ckey = doc["canonical_key"]
++    initial_etag = doc_resp.headers["ETag"]
++
++    # PATCH doc with wildcard If-Match
++    patch_resp = await client.patch(
++        f"/api/v1/docs/{doc_ckey}",
++        json={"title": "Updated Title", "body_markdown": "# New Body Markdown"},
++        headers={"If-Match": "*"},
++    )
++    contract_recorder.record("update_doc_200", patch_resp.request, patch_resp)
++    assert patch_resp.status_code == 200, patch_resp.text
++    patched = patch_resp.json()
++    assert patched["title"] == "Updated Title"
++    assert patched["body_markdown"] == "# New Body Markdown"
++    assert patch_resp.headers["ETag"] != initial_etag
++
++    # PATCH doc title only (no If-Match required)
++    patch_title_only = await client.patch(
++        f"/api/v1/docs/{doc_ckey}",
++        json={"title": "Updated Title Only"},
++    )
++    assert patch_title_only.status_code == 200
++    assert patch_title_only.json()["title"] == "Updated Title Only"
++    etag_title_only = patch_title_only.headers["ETag"]
++
++    # PATCH doc body only (with If-Match)
++    patch_body_only = await client.patch(
++        f"/api/v1/docs/{doc_ckey}",
++        json={"body_markdown": "# Only Body Markdown Updated"},
++        headers={"If-Match": etag_title_only},
++    )
++    assert patch_body_only.status_code == 200
++    assert patch_body_only.json()["body_markdown"] == "# Only Body Markdown Updated"
++
++    # PATCH doc body without If-Match -> 428 PRECONDITION_REQUIRED
++    patch_doc_no_etag = await client.patch(
++        f"/api/v1/docs/{doc_ckey}",
++        json={"body_markdown": "# Should Fail Without Header"},
++    )
++    assert patch_doc_no_etag.status_code == 428
++    assert patch_doc_no_etag.json()["code"] == "PRECONDITION_REQUIRED"
++
++    # PATCH doc body with stale If-Match -> 412 PRECONDITION_FAILED
++    patch_doc_stale_etag = await client.patch(
++        f"/api/v1/docs/{doc_ckey}",
++        json={"body_markdown": "# Should Fail With Stale Header"},
++        headers={"If-Match": initial_etag},
++    )
++    assert patch_doc_stale_etag.status_code == 412
++    assert patch_doc_stale_etag.json()["code"] == "PRECONDITION_FAILED"
++
++    # Resolve doc by UUID
++    get_by_uuid = await client.get(f"/api/v1/docs/{doc_id}")
++    assert get_by_uuid.status_code == 200
++    assert get_by_uuid.json()["id"] == doc_id
++
++    # Create page and test page 304 caching with If-None-Match
++    page_resp = await client.post(
++        f"/api/v1/docs/{doc_ckey}/pages",
++        json={"title": "Cached Page", "body_markdown": "Cacheable content"},
++    )
++    p_data = page_resp.json()
++    p_id = p_data["id"]
++    p_etag = page_resp.headers["ETag"]
++
++    # PATCH page title only (no If-Match required)
++    page_title_only = await client.patch(
++        f"/api/v1/pages/{p_id}",
++        json={"title": "Cached Page Title Only"},
++    )
++    assert page_title_only.status_code == 200
++    assert page_title_only.json()["title"] == "Cached Page Title Only"
++    p_etag_after_title = page_title_only.headers["ETag"]
++
++    # PATCH page body only (with If-Match)
++    page_body_only = await client.patch(
++        f"/api/v1/pages/{p_id}",
++        json={"body_markdown": "Cacheable content modified"},
++        headers={"If-Match": p_etag_after_title},
++    )
++    assert page_body_only.status_code == 200
++    assert page_body_only.json()["body_markdown"] == "Cacheable content modified"
++    p_etag = page_body_only.headers["ETag"]
++
++    cached_page = await client.get(
++        f"/api/v1/pages/{p_id}",
++        headers={"If-None-Match": p_etag},
++    )
++    assert cached_page.status_code == 304
++
++    # Resolve page by canonical key with and without docs/ prefix
++    p_ckey = p_data["canonical_key"]
++    get_by_ckey = await client.get(f"/api/v1/pages/{p_ckey}")
++    assert get_by_ckey.status_code == 200
++
++
++async def test_workspace_level_docs_and_duplicate_slugs(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test workspace-level documents (project_id=None) and duplicate slug allocation."""
++    admin = await make_user("ws_doc_admin", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++
++    # 1. Create workspace-level doc (project_id is None)
++    d1 = (
++        await client.post(
++            "/api/v1/docs",
++            json={"project_id": None, "title": "Company Handbook", "body_markdown": ""},
++        )
++    ).json()
++    assert d1["project_id"] is None
++    assert d1["canonical_key"] == "docs/company-handbook"
++
++    # 2. List docs without project param returns workspace-level docs
++    list_ws = await client.get("/api/v1/docs")
++    assert list_ws.status_code == 200
++    assert any(d["id"] == d1["id"] for d in list_ws.json())
++
++    # 3. Create second doc with duplicate title -> suffix -1
++    d2 = (
++        await client.post(
++            "/api/v1/docs",
++            json={"project_id": None, "title": "Company Handbook", "body_markdown": ""},
++        )
++    ).json()
++    assert d2["canonical_key"] == "docs/company-handbook-1"
++
++    # 4. Duplicate page slugs in same doc
++    p1 = (
++        await client.post(
++            f"/api/v1/docs/{d1['canonical_key']}/pages",
++            json={"title": "Benefits", "body_markdown": ""},
++        )
++    ).json()
++    assert p1["canonical_key"] == "docs/company-handbook/benefits"
++
++    p2 = (
++        await client.post(
++            f"/api/v1/docs/{d1['canonical_key']}/pages",
++            json={"title": "Benefits", "body_markdown": ""},
++        )
++    ).json()
++    assert p2["canonical_key"] == "docs/company-handbook/benefits-1"
++
++
++async def test_version_history_edge_cases(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test pagination, 404 on missing version/restore, and invalid parent_page_id."""
++    admin = await make_user("history_admin", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++    proj_id = await _setup_project(api_env, admin)
++
++    doc = (
++        await client.post(
++            "/api/v1/docs",
++            json={"project_id": str(proj_id), "title": "History Doc", "body_markdown": ""},
++        )
++    ).json()
++
++    # Create page with non-existent parent_page_id -> 404
++    bad_parent = await client.post(
++        f"/api/v1/docs/{doc['canonical_key']}/pages",
++        json={"parent_page_id": str(uuid.uuid4()), "title": "Orphan Page", "body_markdown": ""},
++    )
++    assert bad_parent.status_code == 404
++
++    # Create valid page
++    page_resp = await client.post(
++        f"/api/v1/docs/{doc['canonical_key']}/pages",
++        json={"title": "Versioned Page", "body_markdown": "V1"},
++    )
++    p_id = page_resp.json()["id"]
++    etag = page_resp.headers["ETag"]
++
++    # Create 3 versions
++    for i in range(2, 5):
++        up = await client.patch(
++            f"/api/v1/pages/{p_id}",
++            json={"body_markdown": f"V{i}"},
++            headers={"If-Match": etag},
++        )
++        assert up.status_code == 200
++        etag = up.headers["ETag"]
++
++    # List with cursor pagination
++    list_paged = await client.get(
++        f"/api/v1/pages/{p_id}/versions",
++        params={"cursor": 3, "limit": 2},
++    )
++    assert list_paged.status_code == 200
++    paged_versions = list_paged.json()
++    assert len(paged_versions) == 2
++    assert [v["version_seq"] for v in paged_versions] == [2, 1]
++
++    # Non-existent version seq returns 404
++    v_missing = await client.get(f"/api/v1/pages/{p_id}/versions/999")
++    assert v_missing.status_code == 404
++
++    # Restore missing If-Match returns 428
++    r_no_header = await client.post(f"/api/v1/pages/{p_id}/versions/1/restore")
++    assert r_no_header.status_code == 428
++
++    # Restore stale If-Match returns 412
++    r_stale_header = await client.post(
++        f"/api/v1/pages/{p_id}/versions/1/restore",
++        headers={"If-Match": '"0000000000000000000000000000000000000000000000000000000000000000"'},
++    )
++    assert r_stale_header.status_code == 412
++
++    # Restore non-existent version seq returns 404
++    r_missing = await client.post(
++        f"/api/v1/pages/{p_id}/versions/999/restore",
++        headers={"If-Match": etag},
++    )
++    assert r_missing.status_code == 404
++
++    # Non-existent doc and page refs return 404
++    assert (await client.get(f"/api/v1/docs/{uuid.uuid4()}")).status_code == 404
++    assert (await client.get(f"/api/v1/pages/{uuid.uuid4()}")).status_code == 404
+diff --git a/kanban/tests/services/test_docs_service_unit.py b/kanban/tests/services/test_docs_service_unit.py
+new file mode 100644
+index 0000000..01a4d7f
+--- /dev/null
++++ b/kanban/tests/services/test_docs_service_unit.py
+@@ -0,0 +1,173 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Targeted unit tests for internal domain helpers in docs service (S8.1, S12.2)."""
++
++from __future__ import annotations
++
++import uuid
++
++import pytest
++from sqlalchemy.exc import DBAPIError
++
++from kanban.api.problems import ProblemException
++from kanban.security.permissions import Capability
++from kanban.services.docs import (
++    _capabilities_to_list,
++    _clean_body,
++    _clean_title,
++    _compute_new_sort_rank,
++    _extract_ancestor_uuids,
++    _format_etag,
++    _handle_page_db_error,
++    _to_slug,
++    _verify_if_match,
++)
++
++
++def test_extract_ancestor_uuids() -> None:
++    """Ancestors extracted from ltree labels; handles empty, invalid, and valid paths."""
++    assert _extract_ancestor_uuids(None) == []
++    assert _extract_ancestor_uuids("") == []
++
++    u1 = uuid.uuid4()
++    u2 = uuid.uuid4()
++    u3 = uuid.uuid4()
++
++    hpath = f"d{uuid.uuid4().hex}.p{u1.hex}.p{u2.hex}.p{u3.hex}"
++    ancestors = _extract_ancestor_uuids(hpath)
++    assert ancestors == [u1, u2]
++
++    # Non-uuid hex or bad format skipped gracefully
++    assert _extract_ancestor_uuids("d123.pNotAHexStringAtAll123456789012.p456") == []
++    assert _extract_ancestor_uuids("d123.unknown.p456") == []
++    assert _extract_ancestor_uuids(f"d0.p{'g' * 32}.p1") == []
++
++
++def test_format_etag() -> None:
++    """ETag formatting produces quoted hex string or empty quotes on None."""
++    assert _format_etag(None) == '""'
++    sha = b"\x01\x02\x03\x04"
++    assert _format_etag(sha) == '"01020304"'
++
++
++def test_verify_if_match() -> None:
++    """Precondition checks validate presence, wildcards, quoted and unquoted matching."""
++    with pytest.raises(ProblemException) as exc_req:
++        _verify_if_match(None, b"test")
++    assert exc_req.value.code == "PRECONDITION_REQUIRED"
++
++    # Wildcard matches anything
++    _verify_if_match("*", b"test")
++
++    sha = b"\xaa\xbb"
++    # Matches quoted
++    _verify_if_match('"aabb"', sha)
++    # Matches unquoted hex
++    _verify_if_match("aabb", sha)
++
++    # Mismatch raises 412
++    with pytest.raises(ProblemException) as exc_fail:
++        _verify_if_match('"ccdd"', sha)
++    assert exc_fail.value.code == "PRECONDITION_FAILED"
++    assert exc_fail.value.status == 412
++
++
++def test_capabilities_to_list() -> None:
++    """Capabilities bitmask converts to sorted list of non-NONE/ALL names."""
++    assert _capabilities_to_list(Capability.NONE) == []
++    assert _capabilities_to_list(Capability.ALL) == [
++        "ADMIN",
++        "COMMENT",
++        "DELETE",
++        "EDIT",
++        "LINK",
++        "SHARE",
++        "TRANSITION",
++        "VIEW",
++    ]
++    assert _capabilities_to_list(Capability.VIEW | Capability.EDIT) == ["EDIT", "VIEW"]
++
++
++def test_handle_page_db_error() -> None:
++    """DB trigger exceptions mapped to standard ProblemExceptions; unknowns re-raised."""
++
++    def _mock_db_err(msg: str) -> DBAPIError:
++        return DBAPIError(statement="SELECT 1", params={}, orig=Exception(msg))
++
++    with pytest.raises(ProblemException) as exc_depth:
++        _handle_page_db_error(_mock_db_err("PAGE_MAX_DEPTH_EXCEEDED"))
++    assert exc_depth.value.code == "PAGE_MAX_DEPTH_EXCEEDED"
++    assert exc_depth.value.status == 422
++
++    with pytest.raises(ProblemException) as exc_cycle:
++        _handle_page_db_error(_mock_db_err("PAGE_CYCLE"))
++    assert exc_cycle.value.code == "PAGE_CYCLE"
++    assert exc_cycle.value.status == 409
++
++    with pytest.raises(ProblemException) as exc_mismatch:
++        _handle_page_db_error(_mock_db_err("PAGE_PARENT_DOC_MISMATCH"))
++    assert exc_mismatch.value.code == "PAGE_PARENT_DOC_MISMATCH"
++    assert exc_mismatch.value.status == 422
++
++    with pytest.raises(DBAPIError):
++        _handle_page_db_error(_mock_db_err("SOME_UNEXPECTED_PG_ERROR"))
++
++
++def test_clean_title_and_body() -> None:
++    """Title normalization removes zero-width characters and checks length."""
++    clean = _clean_title(" \u200b Hello World \ufeff ")
++    assert clean == "Hello World"
++
++    with pytest.raises(ProblemException) as exc_short:
++        _clean_title("   \u200b   ")
++    assert exc_short.value.code == "TITLE_LENGTH"
++
++    with pytest.raises(ProblemException) as exc_long:
++        _clean_title("x" * 501)
++    assert exc_long.value.code == "TITLE_LENGTH"
++
++    body = _clean_body("## Sample Header\nText")
++    assert body == "## Sample Header\nText"
++
++
++def test_to_slug() -> None:
++    """Slugs convert to lowercase alphanumeric hyphenated format."""
++    assert _to_slug("My First Doc!", "doc") == "my-first-doc"
++    assert _to_slug("   ", "default") == "default"
++
++
++def test_compute_new_sort_rank() -> None:
++    """Sort rank computation exercises after_id and before_id boundary branches."""
++    u1 = uuid.uuid4()
++    u2 = uuid.uuid4()
++    u3 = uuid.uuid4()
++    siblings = [(u1, "a0"), (u2, "b0"), (u3, "c0")]
++
++    # After first sibling (has next)
++    r1 = _compute_new_sort_rank(siblings, after_id=u1, before_id=None)
++    assert "a0" < r1 < "b0"
++
++    # After last sibling (no next)
++    r2 = _compute_new_sort_rank(siblings, after_id=u3, before_id=None)
++    assert r2 > "c0"
++
++    # Before last sibling (has prev)
++    r3 = _compute_new_sort_rank(siblings, after_id=None, before_id=u3)
++    assert "b0" < r3 < "c0"
++
++    # Before first sibling (no prev)
++    r4 = _compute_new_sort_rank(siblings, after_id=None, before_id=u1)
++    assert r4 < "a0"
++
++    # Neither after nor before: appends after last
++    r5 = _compute_new_sort_rank(siblings, after_id=None, before_id=None)
++    assert r5 > "c0"
++
++    # Empty siblings
++    r6 = _compute_new_sort_rank([], after_id=None, before_id=None)
++    assert r6 == "a0"
++
++    # Unknown after_id / before_id falls back to default rank
++    r7 = _compute_new_sort_rank(siblings, after_id=uuid.uuid4(), before_id=None)
++    assert r7 == "a0"
++    r8 = _compute_new_sort_rank(siblings, after_id=None, before_id=uuid.uuid4())
++    assert r8 == "a0"
+diff --git a/kanban/tests/services/test_lexorank.py b/kanban/tests/services/test_lexorank.py
+new file mode 100644
+index 0000000..3db2cd6
+--- /dev/null
++++ b/kanban/tests/services/test_lexorank.py
+@@ -0,0 +1,63 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Unit tests for Base-62 Lexorank service (S8.1, S12.2)."""
++
++from __future__ import annotations
++
++import pytest
++
++from kanban.services.lexorank import (
++    _int_to_base62,
++    midpoint_rank,
++)
++
++
++def test_int_to_base62_zero() -> None:
++    """Zero value maps to alphabet zero."""
++    assert _int_to_base62(0) == "0"
++    assert _int_to_base62(62) == "10"
++
++
++def test_midpoint_rank_invalid_bounds() -> None:
++    """Prev rank >= next rank raises ValueError."""
++    with pytest.raises(ValueError, match="must be lexicographically less"):
++        midpoint_rank("b", "a")
++
++    with pytest.raises(ValueError, match="must be lexicographically less"):
++        midpoint_rank("same", "same")
++
++
++def test_midpoint_rank_none_bounds() -> None:
++    """None bounds produce valid default or bounded ranks."""
++    default_rank = midpoint_rank(None, None)
++    assert default_rank == "a0"
++
++    after_rank = midpoint_rank("a0", None)
++    assert after_rank > "a0"
++
++    before_rank = midpoint_rank(None, "a0")
++    assert "0" < before_rank < "a0"
++
++
++def test_midpoint_rank_adjacent_strings() -> None:
++    """Adjacent characters expand precision deterministically."""
++    rank = midpoint_rank("a", "b")
++    assert "a" < rank < "b"
++
++    rank_deep = midpoint_rank("a0", "a1")
++    assert "a0" < rank_deep < "a1"
++
++    rank_tight = midpoint_rank("00", "01")
++    assert "00" < rank_tight < "01"
++
++
++def test_midpoint_rank_monotone_sequence() -> None:
++    """Repeatedly inserting between items maintains strict monotonic order."""
++    lo = "0"
++    hi = "z"
++    sequence: list[str] = [lo, hi]
++    for _ in range(25):
++        mid = midpoint_rank(sequence[0], sequence[1])
++        assert sequence[0] < mid < sequence[1]
++        sequence.insert(1, mid)
++
++    assert sequence == sorted(sequence)
+diff --git a/kanban/tests/services/test_markdown_outline.py b/kanban/tests/services/test_markdown_outline.py
+new file mode 100644
+index 0000000..0c20cc6
+--- /dev/null
++++ b/kanban/tests/services/test_markdown_outline.py
+@@ -0,0 +1,166 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Unit tests for Markdown heading outline extractor (S8.1, S12.2)."""
++
++from __future__ import annotations
++
++from kanban.services.markdown_outline import (
++    OutlineEntry,
++    extract_markdown_outline,
++)
++
++
++def test_empty_markdown() -> None:
++    """Empty or whitespace-only markdown produces empty outline."""
++    assert extract_markdown_outline("") == []
++    assert extract_markdown_outline("   \n\n  ") == []
++
++
++def test_atx_heading_levels() -> None:
++    """Headings from level 1 to level 6 are extracted with correct level and line numbers."""
++    md = """# Level 1
++Some paragraph text.
++
++## Level 2
++### Level 3
++#### Level 4
++##### Level 5
++###### Level 6
++####### Not a heading (7 hashes)
++"""
++    outline = extract_markdown_outline(md)
++    assert len(outline) == 6
++    assert [e.level for e in outline] == [1, 2, 3, 4, 5, 6]
++    assert [e.text for e in outline] == [
++        "Level 1",
++        "Level 2",
++        "Level 3",
++        "Level 4",
++        "Level 5",
++        "Level 6",
++    ]
++    assert [e.anchor for e in outline] == [
++        "level-1",
++        "level-2",
++        "level-3",
++        "level-4",
++        "level-5",
++        "level-6",
++    ]
++    assert [e.start_line for e in outline] == [1, 4, 5, 6, 7, 8]
++
++
++def test_duplicate_slug_deduplication() -> None:
++    """Duplicate heading titles append monotonic numeric suffix (GitHub slug convention)."""
++    md = """# H1
++## PKCE (S256)
++## PKCE (S256)
++## PKCE (S256)
++"""
++    outline = extract_markdown_outline(md)
++    assert len(outline) == 4
++    assert outline[0].text == "H1"
++    assert outline[0].anchor == "h1"
++    assert outline[1].text == "PKCE (S256)"
++    assert outline[1].anchor == "pkce-s256"
++    assert outline[2].text == "PKCE (S256)"
++    assert outline[2].anchor == "pkce-s256-1"
++    assert outline[3].text == "PKCE (S256)"
++    assert outline[3].anchor == "pkce-s256-2"
++
++
++def test_fenced_code_blocks_ignored() -> None:
++    """Headings inside backtick and tilde fences are ignored, including variable fence lengths."""
++    md = """# Real Heading
++
++```python
++# This is a comment, not an outline heading
++## Neither is this
++```
++
++## Another Real Heading
++
++~~~~markdown
++# Inside tilde fence
++~~~~
++
++````markdown
++```
++# Inside nested fence
++```
++````
++
++### Final Heading
++"""
++    outline = extract_markdown_outline(md)
++    assert len(outline) == 3
++    assert [e.text for e in outline] == ["Real Heading", "Another Real Heading", "Final Heading"]
++    assert [e.anchor for e in outline] == ["real-heading", "another-real-heading", "final-heading"]
++    assert [e.start_line for e in outline] == [1, 8, 20]
++
++
++def test_html_comments_ignored() -> None:
++    """Headings inside single-line and multiline HTML comments are ignored."""
++    md = """# Start
++
++<!-- # Single Line Comment Heading -->
++
++<!--
++# Multi Line Comment Heading
++## Another Hidden
++-->
++
++## End
++"""
++    outline = extract_markdown_outline(md)
++    assert len(outline) == 2
++    assert [e.text for e in outline] == ["Start", "End"]
++    assert [e.anchor for e in outline] == ["start", "end"]
++    assert [e.start_line for e in outline] == [1, 10]
++
++
++def test_inline_formatting_stripped_from_display_and_slug() -> None:
++    """Inline code, bold, italic, strikethrough, links, and images are stripped."""
++    md = """# Heading with `inline code`
++## Heading with **bold** and *italic* text
++### Heading with ~~strikethrough~~
++#### The [OAuth 2.0 Spec](https://tools.ietf.org/html/rfc6749) Guide
++##### Logo ![Icon](https://example.com/icon.png) Overview
++## Trailing Hashes Heading ##
++"""
++    outline = extract_markdown_outline(md)
++    assert len(outline) == 6
++    assert outline[0].text == "Heading with inline code"
++    assert outline[0].anchor == "heading-with-inline-code"
++    assert outline[1].text == "Heading with bold and italic text"
++    assert outline[1].anchor == "heading-with-bold-and-italic-text"
++    assert outline[2].text == "Heading with strikethrough"
++    assert outline[2].anchor == "heading-with-strikethrough"
++    assert outline[3].text == "The OAuth 2.0 Spec Guide"
++    assert outline[3].anchor == "the-oauth-20-spec-guide"
++    assert outline[4].text == "Logo Icon Overview"
++    assert outline[4].anchor == "logo-icon-overview"
++    assert outline[5].text == "Trailing Hashes Heading"
++    assert outline[5].anchor == "trailing-hashes-heading"
++
++
++def test_fallback_slug_for_non_alphanumeric() -> None:
++    """Titles with only symbols/formatting fall back to 'section' slug."""
++    md = """# !!! ???
++# @@@ ###
++"""
++    outline = extract_markdown_outline(md)
++    assert len(outline) == 2
++    assert outline[0].anchor == "section"
++    assert outline[1].anchor == "section-1"
++
++
++def test_outline_entry_to_dict() -> None:
++    """OutlineEntry converts cleanly to dictionary representation."""
++    entry = OutlineEntry(level=2, text="Overview", anchor="overview", start_line=14)
++    data = entry.to_dict()
++    assert data == {
++        "level": 2,
++        "text": "Overview",
++        "anchor": "overview",
++        "start_line": 14,
++    }
