@@ -89,6 +89,8 @@ class ActivityEventType(StrEnum):
     ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
     MCP_KEY_MINTED = "MCP_KEY_MINTED"
     MCP_KEY_REVOKED = "MCP_KEY_REVOKED"
+    MCP_OAUTH_GRANT_REVOKED = "MCP_OAUTH_GRANT_REVOKED"
+    OAUTH_REFRESH_REUSE_DETECTED = "OAUTH_REFRESH_REUSE_DETECTED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -124,6 +126,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
         ActivityEventType.MCP_KEY_MINTED: ActivityCategory.SYSTEM,
         ActivityEventType.MCP_KEY_REVOKED: ActivityCategory.SYSTEM,
+        ActivityEventType.MCP_OAUTH_GRANT_REVOKED: ActivityCategory.SYSTEM,
+        ActivityEventType.OAUTH_REFRESH_REUSE_DETECTED: ActivityCategory.SYSTEM,
     }
 )
 

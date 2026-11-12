@@ -49,6 +49,13 @@ CSRF_EXEMPT_PATHS: Final[tuple[str, ...]] = (
     "/health",
     # Initial session endpoint: safe GET/discovery endpoint used to obtain pre-session CSRF token
     "/api/v1/auth/session",
+    # OAuth 2.1 client/token machine endpoints
+    "/oauth/register",
+    "/oauth/token",
+    "/oauth/revoke",
+    # Internal MCP introspection
+    "/internal/v1/mcp/introspect",
+    "/internal/mcp/introspect",
 )
 
 

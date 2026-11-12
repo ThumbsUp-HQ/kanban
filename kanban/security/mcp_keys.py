@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import hmac
 import secrets
 import time
-import uuid  # noqa: TC003  # Runtime import required for Pydantic / dataclass type annotations
+import uuid  # Runtime import required for Pydantic / dataclass type annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final
@@ -81,6 +82,7 @@ class McpIntrospectionResult:
     scopes: list[str] | None = None
     token_kind: str | None = "api_key"  # noqa: S105
     reason: str | None = None
+    allowed_projects: list[uuid.UUID] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert introspection result to API JSON payload."""
@@ -89,7 +91,7 @@ class McpIntrospectionResult:
             if self.reason:
                 res["reason"] = self.reason
             return res
-        return {
+        payload: dict[str, Any] = {
             "active": True,
             "principal_id": str(self.principal_id),
             "workspace_id": str(self.workspace_id),
@@ -97,6 +99,9 @@ class McpIntrospectionResult:
             "scopes": self.scopes or [],
             "token_kind": self.token_kind,
         }
+        if self.allowed_projects is not None:
+            payload["allowed_projects"] = [str(p) for p in self.allowed_projects]
+        return payload
 
 
 def hash_mcp_api_key(token: str) -> bytes:
@@ -312,12 +317,102 @@ async def revoke_mcp_api_key(
     return key
 
 
-async def introspect_subject_token(  # noqa: PLR0911
+async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
     session: AsyncSession,
     token: str,
     surface: str | None = None,
 ) -> McpIntrospectionResult:
     """Introspect bearer token digest against database and verify active state."""
+    if token.startswith("eyJ"):
+        # JWT OAuth 2.1 access token path
+        from kanban.oauth.jwt import OAuthTokenError, verify_access_token  # noqa: PLC0415
+
+        try:
+            claims = verify_access_token(token)
+        except OAuthTokenError as exc:
+            if exc.code == "SURFACE_KEY_MISMATCH":
+                return McpIntrospectionResult(active=False, reason="SURFACE_KEY_MISMATCH")
+            return McpIntrospectionResult(active=False)
+
+        # Check surface match
+        token_surface = claims.get("surface")
+        token_aud = str(claims.get("aud", ""))
+        if surface is not None and (
+            token_surface != surface or not token_aud.endswith(f"/mcp/{surface}")
+        ):
+            return McpIntrospectionResult(active=False, reason="SURFACE_KEY_MISMATCH")
+
+        # Check JTI revocation, Grant revocation, and Principal status via
+        # SECURITY DEFINER helper check_oauth_token_status
+        jti_str = claims.get("jti")
+        jti_uuid: uuid.UUID | None = None
+        if jti_str:
+            with contextlib.suppress(ValueError):
+                jti_uuid = uuid.UUID(jti_str)
+
+        grant_id_str = claims.get("grant_id")
+        grant_uuid: uuid.UUID | None = None
+        if grant_id_str:
+            with contextlib.suppress(ValueError):
+                grant_uuid = uuid.UUID(grant_id_str)
+
+        principal_id_str = claims.get("sub")
+        if not principal_id_str:
+            return McpIntrospectionResult(active=False)
+        try:
+            principal_uuid = uuid.UUID(principal_id_str)
+        except ValueError:
+            return McpIntrospectionResult(active=False)
+
+        stmt_status = text(
+            "SELECT grant_revoked, jti_revoked, principal_active "
+            "FROM check_oauth_token_status(:gid, :jti, :pid)"
+        )
+        status_row = (
+            await session.execute(
+                stmt_status,
+                {"gid": grant_uuid, "jti": jti_uuid, "pid": principal_uuid},
+            )
+        ).first()
+
+        if status_row is None:
+            return McpIntrospectionResult(active=False)
+
+        grant_revoked, jti_revoked, principal_active = (
+            bool(status_row[0]),
+            bool(status_row[1]),
+            bool(status_row[2]),
+        )
+        if grant_revoked or jti_revoked or not principal_active:
+            return McpIntrospectionResult(active=False)
+
+        ws_id_str = claims.get("ws")
+        if not ws_id_str:
+            return McpIntrospectionResult(active=False)
+        try:
+            ws_uuid = uuid.UUID(ws_id_str)
+        except ValueError:
+            return McpIntrospectionResult(active=False)
+
+        scope_str = claims.get("scope", "")
+        scopes_list = scope_str.split() if scope_str else []
+
+        allowed_projects_raw = claims.get("allowed_projects")
+        allowed_projects: list[uuid.UUID] | None = None
+        if allowed_projects_raw and isinstance(allowed_projects_raw, list):
+            with contextlib.suppress(ValueError):
+                allowed_projects = [uuid.UUID(str(p)) for p in allowed_projects_raw]
+
+        return McpIntrospectionResult(
+            active=True,
+            principal_id=principal_uuid,
+            workspace_id=ws_uuid,
+            surface=token_surface or surface,
+            scopes=scopes_list,
+            token_kind="oauth",  # noqa: S106
+            allowed_projects=allowed_projects,
+        )
+
     digest = hash_mcp_api_key(token)
 
     expected_prefix = SURFACE_KEY_PREFIXES.get(surface) if surface else None

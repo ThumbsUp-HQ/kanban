@@ -248,12 +248,14 @@ class McpAuthMiddleware:
             await resp(scope, receive, send)
             return
 
-        # Local surface prefix pre-check before network call
-        expected_prefix = SURFACE_PREFIXES[surface]
-        if not token.startswith(expected_prefix):
-            resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
-            await resp(scope, receive, send)
-            return
+        # Local surface prefix pre-check before network call for kb_* API keys
+        is_jwt = token.startswith("eyJ")
+        if not is_jwt:
+            expected_prefix = SURFACE_PREFIXES[surface]
+            if not token.startswith(expected_prefix):
+                resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
+                await resp(scope, receive, send)
+                return
 
         digest = hash_mcp_api_key(token)
 

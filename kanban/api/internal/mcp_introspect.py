@@ -44,6 +44,7 @@ class McpIntrospectResponse(BaseModel):
     scopes: list[str] | None = None
     token_kind: str | None = None
     reason: str | None = None
+    allowed_projects: list[uuid.UUID] | None = None
 
 
 def verify_internal_auth(request: Request) -> None:
@@ -102,4 +103,5 @@ async def introspect_token(
         scopes=result.scopes,
         token_kind=result.token_kind,
         reason=result.reason,
+        allowed_projects=result.allowed_projects,
     )

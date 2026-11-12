@@ -1,0 +1,4852 @@
+diff --git a/database/migrations/sql/p4_02b_oauth_clients_codes.down.sql b/database/migrations/sql/p4_02b_oauth_clients_codes.down.sql
+new file mode 100644
+index 0000000..e4d6d45
+--- /dev/null
++++ b/database/migrations/sql/p4_02b_oauth_clients_codes.down.sql
+@@ -0,0 +1,10 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++ALTER FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb) SECURITY INVOKER;
++DROP FUNCTION IF EXISTS check_oauth_token_status(UUID, UUID, UUID);
++DROP TABLE IF EXISTS oauth_revoked_jtis CASCADE;
++DROP TABLE IF EXISTS oauth_refresh_tokens CASCADE;
++DROP TABLE IF EXISTS oauth_authorization_codes CASCADE;
++DROP TABLE IF EXISTS oauth_grants CASCADE;
++DROP TABLE IF EXISTS oauth_clients CASCADE;
+diff --git a/database/migrations/sql/p4_02b_oauth_clients_codes.up.sql b/database/migrations/sql/p4_02b_oauth_clients_codes.up.sql
+new file mode 100644
+index 0000000..c5175ea
+--- /dev/null
++++ b/database/migrations/sql/p4_02b_oauth_clients_codes.up.sql
+@@ -0,0 +1,207 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++CREATE TABLE oauth_clients (
++    id              UUID PRIMARY KEY DEFAULT uuidv7(),
++    client_id       TEXT NOT NULL UNIQUE,
++    client_name     TEXT NOT NULL,
++    client_type     TEXT NOT NULL DEFAULT 'public' CHECK (client_type = 'public'),
++    redirect_uris   TEXT[] NOT NULL,
++    status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending_admin_approval', 'disabled')),
++    workspace_id    UUID REFERENCES workspaces(id) ON DELETE CASCADE,
++    created_by_id   UUID REFERENCES principals(id) ON DELETE SET NULL,
++    created_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    updated_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++CREATE TABLE oauth_grants (
++    id                  UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id        UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    principal_id        UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
++    client_id           UUID NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
++    surface             TEXT NOT NULL CHECK (surface IN ('agent', 'docs', 'admin')),
++    scopes              TEXT[] NOT NULL,
++    allowed_projects    UUID[],
++    created_at          TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    revoked_at          TIMESTAMPTZ
++);
++
++CREATE TABLE oauth_authorization_codes (
++    id                      UUID PRIMARY KEY DEFAULT uuidv7(),
++    code_sha256             BYTEA NOT NULL UNIQUE CHECK (octet_length(code_sha256) = 32),
++    grant_id                UUID REFERENCES oauth_grants(id) ON DELETE CASCADE,
++    client_id               UUID NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
++    principal_id            UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
++    workspace_id            UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    code_challenge          TEXT NOT NULL,
++    code_challenge_method   TEXT NOT NULL CHECK (code_challenge_method = 'S256'),
++    resource                TEXT NOT NULL,
++    redirect_uri            TEXT NOT NULL,
++    surface                 TEXT NOT NULL CHECK (surface IN ('agent', 'docs', 'admin')),
++    scopes                  TEXT[] NOT NULL,
++    allowed_projects        UUID[],
++    created_at              TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    expires_at              TIMESTAMPTZ NOT NULL,
++    consumed_at             TIMESTAMPTZ
++);
++
++CREATE TABLE oauth_refresh_tokens (
++    id              UUID PRIMARY KEY DEFAULT uuidv7(),
++    token_sha256    BYTEA NOT NULL UNIQUE CHECK (octet_length(token_sha256) = 32),
++    grant_id        UUID NOT NULL REFERENCES oauth_grants(id) ON DELETE CASCADE,
++    workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    client_id       UUID NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
++    principal_id    UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
++    created_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    expires_at      TIMESTAMPTZ NOT NULL,
++    revoked_at      TIMESTAMPTZ
++);
++
++CREATE TABLE oauth_revoked_jtis (
++    jti             UUID PRIMARY KEY,
++    grant_id        UUID NOT NULL REFERENCES oauth_grants(id) ON DELETE CASCADE,
++    workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    expires_at      TIMESTAMPTZ NOT NULL,
++    revoked_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++-- RLS Enforcement
++ALTER TABLE oauth_clients ENABLE ROW LEVEL SECURITY;
++ALTER TABLE oauth_clients FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE oauth_grants ENABLE ROW LEVEL SECURITY;
++ALTER TABLE oauth_grants FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE oauth_authorization_codes ENABLE ROW LEVEL SECURITY;
++ALTER TABLE oauth_authorization_codes FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE oauth_refresh_tokens ENABLE ROW LEVEL SECURITY;
++ALTER TABLE oauth_refresh_tokens FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE oauth_revoked_jtis ENABLE ROW LEVEL SECURITY;
++ALTER TABLE oauth_revoked_jtis FORCE ROW LEVEL SECURITY;
++
++-- Workspace Isolation Policies
++CREATE POLICY oauth_clients_workspace_policy ON oauth_clients
++    FOR ALL
++    USING (
++        workspace_id IS NULL OR
++        app_current_workspace_id() IS NULL OR
++        workspace_id = app_current_workspace_id()
++    )
++    WITH CHECK (
++        workspace_id IS NULL OR
++        app_current_workspace_id() IS NULL OR
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY oauth_grants_workspace_policy ON oauth_grants
++    FOR ALL
++    USING (
++        app_current_workspace_id() IS NULL OR
++        workspace_id = app_current_workspace_id()
++    )
++    WITH CHECK (
++        app_current_workspace_id() IS NULL OR
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY oauth_codes_workspace_policy ON oauth_authorization_codes
++    FOR ALL
++    USING (
++        app_current_workspace_id() IS NULL OR
++        workspace_id = app_current_workspace_id()
++    )
++    WITH CHECK (
++        app_current_workspace_id() IS NULL OR
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY oauth_refresh_workspace_policy ON oauth_refresh_tokens
++    FOR ALL
++    USING (
++        app_current_workspace_id() IS NULL OR
++        workspace_id = app_current_workspace_id()
++    )
++    WITH CHECK (
++        app_current_workspace_id() IS NULL OR
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY oauth_revoked_jtis_workspace_policy ON oauth_revoked_jtis
++    FOR ALL
++    USING (
++        app_current_workspace_id() IS NULL OR
++        workspace_id = app_current_workspace_id()
++    )
++    WITH CHECK (
++        app_current_workspace_id() IS NULL OR
++        workspace_id = app_current_workspace_id()
++    );
++
++-- Table Grants
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE oauth_clients TO kanban_app;
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE oauth_grants TO kanban_app;
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE oauth_authorization_codes TO kanban_app;
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE oauth_refresh_tokens TO kanban_app;
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE oauth_revoked_jtis TO kanban_app;
++GRANT SELECT ON TABLE oauth_clients, oauth_grants, oauth_authorization_codes, oauth_refresh_tokens, oauth_revoked_jtis TO app_rls_reader;
++
++CREATE OR REPLACE FUNCTION check_oauth_token_status(
++    p_grant_id UUID,
++    p_jti UUID,
++    p_principal_id UUID
++)
++RETURNS TABLE (
++    grant_revoked BOOLEAN,
++    jti_revoked BOOLEAN,
++    principal_active BOOLEAN
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_grant_revoked BOOLEAN := TRUE;
++    v_jti_revoked BOOLEAN := FALSE;
++    v_principal_active BOOLEAN := FALSE;
++    v_grant_revoked_at TIMESTAMPTZ;
++    v_status TEXT;
++BEGIN
++    -- 1. Check Grant
++    IF p_grant_id IS NOT NULL THEN
++        SELECT revoked_at INTO v_grant_revoked_at FROM oauth_grants WHERE id = p_grant_id;
++        IF FOUND AND v_grant_revoked_at IS NULL THEN
++            v_grant_revoked := FALSE;
++        ELSE
++            v_grant_revoked := TRUE;
++        END IF;
++    ELSE
++        v_grant_revoked := FALSE;
++    END IF;
++
++    -- 2. Check JTI
++    IF p_jti IS NOT NULL THEN
++        PERFORM 1 FROM oauth_revoked_jtis WHERE jti = p_jti;
++        IF FOUND THEN
++            v_jti_revoked := TRUE;
++        END IF;
++    END IF;
++
++    -- 3. Check Principal
++    IF p_principal_id IS NOT NULL THEN
++        SELECT status INTO v_status FROM principals WHERE id = p_principal_id;
++        IF FOUND AND v_status = 'ACTIVE' THEN
++            v_principal_active := TRUE;
++        END IF;
++    END IF;
++
++    RETURN QUERY SELECT v_grant_revoked, v_jti_revoked, v_principal_active;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION check_oauth_token_status(UUID, UUID, UUID) TO kanban_app, app_rls_reader;
++
++-- Ensure activity ledger append is security definer so unauthenticated and member activity can be written
++ALTER FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb)
++    SECURITY DEFINER SET search_path = pg_catalog, public;
+diff --git a/database/migrations/versions/p4_02b_oauth_clients_codes.py b/database/migrations/versions/p4_02b_oauth_clients_codes.py
+new file mode 100644
+index 0000000..d98e8d0
+--- /dev/null
++++ b/database/migrations/versions/p4_02b_oauth_clients_codes.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""OAuth 2.1 authorization server, clients, codes, grants & tokens (KB-P4-02b).
++
++Revision ID: p4_02b_oauth_clients_codes
++Revises: p4_02a_mcp_api_keys
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p4_02b_oauth_clients_codes"
++down_revision: str | None = "p4_02a_mcp_api_keys"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply oauth_clients, oauth_grants, oauth_authorization_codes, oauth_refresh_tokens DDL."""
++    execute_sql_file("p4_02b_oauth_clients_codes.up.sql")
++
++
++def downgrade() -> None:
++    """Drop oauth tables and RLS policies."""
++    execute_sql_file("p4_02b_oauth_clients_codes.down.sql")
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index 3e776de..e039921 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -24,6 +24,13 @@ from database.models.issues import (
+ )
+ from database.models.knowledge import Doc, Page, PageVersion, Sticky
+ from database.models.mcp_api_key import McpApiKey
++from database.models.oauth import (
++    OAuthAuthorizationCode,
++    OAuthClient,
++    OAuthGrant,
++    OAuthRefreshToken,
++    OAuthRevokedJti,
++)
+ from database.models.outbox import OutboxEvent
+ from database.models.principals import (
+     EffectiveResourceAccess,
+@@ -78,6 +85,11 @@ __all__ = [
+     "LtreeType",
+     "McpApiKey",
+     "Module",
++    "OAuthAuthorizationCode",
++    "OAuthClient",
++    "OAuthGrant",
++    "OAuthRefreshToken",
++    "OAuthRevokedJti",
+     "ObjectEmbedding",
+     "ObjectKind",
+     "ObjectLink",
+diff --git a/database/models/oauth.py b/database/models/oauth.py
+new file mode 100644
+index 0000000..67b7f2d
+--- /dev/null
++++ b/database/models/oauth.py
+@@ -0,0 +1,346 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""SQLAlchemy models for OAuth 2.1 authorization server (KB-P4-02b / S11.1)."""
++
++from __future__ import annotations
++
++import uuid
++from datetime import datetime  # noqa: TC003  # Runtime import required for SQLAlchemy Mapped[datetime]
++from typing import Literal
++
++from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func, text
++from sqlalchemy.dialects.postgresql import ARRAY, BYTEA, UUID
++from sqlalchemy.orm import Mapped, mapped_column
++
++from database.models.base import Base
++
++OAuthClientType = Literal["public"]
++OAuthClientStatus = Literal["active", "pending_admin_approval", "disabled"]
++OAuthSurface = Literal["agent", "docs", "admin"]
++
++
++class OAuthClient(Base):
++    """Registered OAuth 2.1 client (RFC 7591 dynamic registration)."""
++
++    __tablename__ = "oauth_clients"
++
++    id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        primary_key=True,
++        default=uuid.uuid4,
++        server_default=func.uuidv7(),
++    )
++    client_id: Mapped[str] = mapped_column(
++        Text,
++        unique=True,
++        nullable=False,
++        index=True,
++    )
++    client_name: Mapped[str] = mapped_column(
++        Text,
++        nullable=False,
++    )
++    client_type: Mapped[str] = mapped_column(
++        String(16),
++        nullable=False,
++        default="public",
++        server_default="public",
++    )
++    redirect_uris: Mapped[list[str]] = mapped_column(
++        ARRAY(Text),
++        nullable=False,
++    )
++    status: Mapped[str] = mapped_column(
++        String(32),
++        nullable=False,
++        default="active",
++        server_default="active",
++    )
++    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workspaces.id", ondelete="CASCADE"),
++        nullable=True,
++        index=True,
++    )
++    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("principals.id", ondelete="SET NULL"),
++        nullable=True,
++        index=True,
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
++    updated_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
++
++    __table_args__ = (
++        CheckConstraint(
++            "client_type = 'public'",
++            name="oauth_clients_type_check",
++        ),
++        CheckConstraint(
++            "status IN ('active', 'pending_admin_approval', 'disabled')",
++            name="oauth_clients_status_check",
++        ),
++    )
++
++
++class OAuthGrant(Base):
++    """User-approved consent grant for an OAuth client and target surface."""
++
++    __tablename__ = "oauth_grants"
++
++    id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        primary_key=True,
++        default=uuid.uuid4,
++        server_default=func.uuidv7(),
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workspaces.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    principal_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("principals.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    client_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("oauth_clients.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    surface: Mapped[str] = mapped_column(
++        String(16),
++        nullable=False,
++    )
++    scopes: Mapped[list[str]] = mapped_column(
++        ARRAY(Text),
++        nullable=False,
++    )
++    allowed_projects: Mapped[list[uuid.UUID] | None] = mapped_column(
++        ARRAY(UUID(as_uuid=True)),
++        nullable=True,
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
++    revoked_at: Mapped[datetime | None] = mapped_column(
++        DateTime(timezone=True),
++        nullable=True,
++    )
++
++    __table_args__ = (
++        CheckConstraint(
++            "surface IN ('agent', 'docs', 'admin')",
++            name="oauth_grants_surface_check",
++        ),
++    )
++
++
++class OAuthAuthorizationCode(Base):
++    """Single-use authorization code with mandatory PKCE S256."""
++
++    __tablename__ = "oauth_authorization_codes"
++
++    id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        primary_key=True,
++        default=uuid.uuid4,
++        server_default=func.uuidv7(),
++    )
++    code_sha256: Mapped[bytes] = mapped_column(
++        BYTEA,
++        unique=True,
++        nullable=False,
++        index=True,
++    )
++    grant_id: Mapped[uuid.UUID | None] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("oauth_grants.id", ondelete="CASCADE"),
++        nullable=True,
++        index=True,
++    )
++    client_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("oauth_clients.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    principal_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("principals.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workspaces.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    code_challenge: Mapped[str] = mapped_column(
++        Text,
++        nullable=False,
++    )
++    code_challenge_method: Mapped[str] = mapped_column(
++        String(16),
++        nullable=False,
++        default="S256",
++        server_default="S256",
++    )
++    resource: Mapped[str] = mapped_column(
++        Text,
++        nullable=False,
++    )
++    redirect_uri: Mapped[str] = mapped_column(
++        Text,
++        nullable=False,
++    )
++    surface: Mapped[str] = mapped_column(
++        String(16),
++        nullable=False,
++    )
++    scopes: Mapped[list[str]] = mapped_column(
++        ARRAY(Text),
++        nullable=False,
++    )
++    allowed_projects: Mapped[list[uuid.UUID] | None] = mapped_column(
++        ARRAY(UUID(as_uuid=True)),
++        nullable=True,
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
++    expires_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++    )
++    consumed_at: Mapped[datetime | None] = mapped_column(
++        DateTime(timezone=True),
++        nullable=True,
++    )
++
++    __table_args__ = (
++        CheckConstraint(
++            "octet_length(code_sha256) = 32",
++            name="oauth_codes_sha256_len_check",
++        ),
++        CheckConstraint(
++            "code_challenge_method = 'S256'",
++            name="oauth_codes_challenge_method_check",
++        ),
++        CheckConstraint(
++            "surface IN ('agent', 'docs', 'admin')",
++            name="oauth_codes_surface_check",
++        ),
++    )
++
++
++class OAuthRefreshToken(Base):
++    """Single-use rotated refresh token stored as SHA-256 digest."""
++
++    __tablename__ = "oauth_refresh_tokens"
++
++    id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        primary_key=True,
++        default=uuid.uuid4,
++        server_default=func.uuidv7(),
++    )
++    token_sha256: Mapped[bytes] = mapped_column(
++        BYTEA,
++        unique=True,
++        nullable=False,
++        index=True,
++    )
++    grant_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("oauth_grants.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workspaces.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    client_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("oauth_clients.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    principal_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("principals.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
++    expires_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++    )
++    revoked_at: Mapped[datetime | None] = mapped_column(
++        DateTime(timezone=True),
++        nullable=True,
++    )
++
++    __table_args__ = (
++        CheckConstraint(
++            "octet_length(token_sha256) = 32",
++            name="oauth_refresh_sha256_len_check",
++        ),
++    )
++
++
++class OAuthRevokedJti(Base):
++    """Deny-list of revoked JWT IDs (JTIs) until their natural expiration."""
++
++    __tablename__ = "oauth_revoked_jtis"
++
++    jti: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        primary_key=True,
++    )
++    grant_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("oauth_grants.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workspaces.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    expires_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++    )
++    revoked_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
+diff --git a/database/tests/test_p1_17_models.py b/database/tests/test_p1_17_models.py
+index e768c92..9b33259 100644
+--- a/database/tests/test_p1_17_models.py
++++ b/database/tests/test_p1_17_models.py
+@@ -54,9 +54,9 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
+ 
+     # Exact set equality across all tables
+     # (incl. auth, embeddings, limits, sessions, agent defs, attachments,
+-    #  oidc requests, mcp api keys)
++    #  oidc requests, mcp api keys, oauth tables)
+     assert orm_tables == pg_tables
+-    assert len(orm_tables) == 42
++    assert len(orm_tables) == 47
+ 
+ 
+ async def _setup_test_project_spine(
+diff --git a/docs/qa/KANBA-105/build-check.txt b/docs/qa/KANBA-105/build-check.txt
+new file mode 100644
+index 0000000..49aff26
+--- /dev/null
++++ b/docs/qa/KANBA-105/build-check.txt
+@@ -0,0 +1,32 @@
++=== ruff check ===
++All checks passed!
++=== ruff format ===
++734 files already formatted
++=== mypy strict ===
++Success: no issues found in 330 source files
++=== lint-imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 394 files, 907 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++mcp forbidden from importing database KEPT
++
++Contracts: 2 kept, 0 broken.
++=== check_no_dashes ===
++=== make license ===
++SUMMARY python=112 node=1 violations=0
+diff --git a/docs/qa/KANBA-105/contract-sample.json b/docs/qa/KANBA-105/contract-sample.json
+new file mode 100644
+index 0000000..e9a3246
+--- /dev/null
++++ b/docs/qa/KANBA-105/contract-sample.json
+@@ -0,0 +1,79 @@
++{
++  "oauth_authorization_server_metadata": {
++    "issuer": "http://test",
++    "authorization_endpoint": "http://test/oauth/authorize",
++    "token_endpoint": "http://test/oauth/token",
++    "revocation_endpoint": "http://test/oauth/revoke",
++    "registration_endpoint": "http://test/oauth/register",
++    "jwks_uri": "http://test/oauth/jwks.json",
++    "code_challenge_methods_supported": [
++      "S256"
++    ],
++    "grant_types_supported": [
++      "authorization_code",
++      "refresh_token"
++    ],
++    "response_types_supported": [
++      "code"
++    ],
++    "token_endpoint_auth_methods_supported": [
++      "none",
++      "private_key_jwt"
++    ]
++  },
++  "jwks": {
++    "keys": [
++      {
++        "crv": "P-256",
++        "x": "qP17b3-mPKbMfZeDdGAiFbKtUfnu2YXqX4uqoJoi5ds",
++        "y": "x-WXOn83Q1wBa379d0IhGvR336JR57VOIdF9BpnOgPk",
++        "kty": "EC",
++        "use": "sig",
++        "alg": "ES256",
++        "kid": "oauth-test-kid-1"
++      }
++    ]
++  },
++  "protected_resource_metadata": {
++    "agent": {
++      "resource": "http://test/mcp/agent",
++      "authorization_servers": [
++        "http://test"
++      ],
++      "scopes_supported": [
++        "agent:read",
++        "agent:write"
++      ],
++      "bearer_methods_supported": [
++        "header"
++      ]
++    },
++    "docs": {
++      "resource": "http://test/mcp/docs",
++      "authorization_servers": [
++        "http://test"
++      ],
++      "scopes_supported": [
++        "docs:read",
++        "docs:write"
++      ],
++      "bearer_methods_supported": [
++        "header"
++      ]
++    },
++    "admin": {
++      "resource": "http://test/mcp/admin",
++      "authorization_servers": [
++        "http://test"
++      ],
++      "scopes_supported": [
++        "admin:read",
++        "admin:write",
++        "admin:destructive"
++      ],
++      "bearer_methods_supported": [
++        "header"
++      ]
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/docs/qa/KANBA-105/mcp-transcript.txt b/docs/qa/KANBA-105/mcp-transcript.txt
+new file mode 100644
+index 0000000..f66abd9
+--- /dev/null
++++ b/docs/qa/KANBA-105/mcp-transcript.txt
+@@ -0,0 +1,125 @@
++=== 1. MCP Unauthorized Challenge (RFC 9728 Section 5.1) ===
++POST /mcp/agent HTTP/1.1
++Host: kanban.local
++Content-Type: application/json
++
++{
++  "jsonrpc": "2.0",
++  "id": 1,
++  "method": "tools/list"
++}
++
++HTTP/1.1 401 Unauthorized
++WWW-Authenticate: Bearer realm="kanban-mcp", resource_metadata="https://kanban.local/.well-known/oauth-protected-resource/mcp/agent"
++Content-Type: application/json
++
++{
++  "error": "unauthorized",
++  "message": "Bearer authentication required"
++}
++
++============================================================
++
++=== 2. Fetch RFC 9728 Protected-Resource Metadata ===
++GET /.well-known/oauth-protected-resource/mcp/agent HTTP/1.1
++Host: kanban.local
++
++HTTP/1.1 200 OK
++Content-Type: application/json
++
++{
++  "resource": "https://kanban.local/mcp/agent",
++  "authorization_servers": [
++    "https://kanban.local"
++  ],
++  "scopes_supported": [
++    "agent:read",
++    "agent:write"
++  ],
++  "bearer_methods_supported": [
++    "header"
++  ],
++  "resource_documentation": "https://kanban.local/docs/mcp/agent"
++}
++
++============================================================
++
++=== 3. MCP Protocol Initialization with Bearer Access Token ===
++POST /mcp/agent HTTP/1.1
++Host: kanban.local
++Authorization: Bearer <REDACTED_ES256_JWT_ACCESS_TOKEN>
++Content-Type: application/json
++
++{
++  "jsonrpc": "2.0",
++  "id": 1,
++  "method": "initialize",
++  "params": {
++    "protocolVersion": "2025-06-18",
++    "capabilities": {},
++    "clientInfo": {
++      "name": "Claude Code",
++      "version": "1.0"
++    }
++  }
++}
++
++HTTP/1.1 200 OK
++Mcp-Session-Id: <REDACTED_MCP_SESSION_ID>
++Content-Type: application/json
++
++{
++  "jsonrpc": "2.0",
++  "id": 1,
++  "result": {
++    "protocolVersion": "2025-06-18",
++    "capabilities": {
++      "tools": {
++        "listChanged": false
++      }
++    },
++    "serverInfo": {
++      "name": "kanban-mcp-agent",
++      "version": "0.1.0"
++    }
++  }
++}
++
++============================================================
++
++=== 4. MCP tools/list Execution ===
++POST /mcp/agent HTTP/1.1
++Host: kanban.local
++Authorization: Bearer <REDACTED_ES256_JWT_ACCESS_TOKEN>
++Mcp-Session-Id: <REDACTED_MCP_SESSION_ID>
++Content-Type: application/json
++
++{
++  "jsonrpc": "2.0",
++  "id": 2,
++  "method": "tools/list"
++}
++
++HTTP/1.1 200 OK
++Content-Type: application/json
++
++{
++  "jsonrpc": "2.0",
++  "id": 2,
++  "result": {
++    "tools": [
++      {
++        "name": "ping_agent",
++        "description": "Health ping tool for agent surface"
++      },
++      {
++        "name": "search_tickets",
++        "description": "Search issues with natural language or keyword query"
++      },
++      {
++        "name": "read_ticket",
++        "description": "Read issue details and activity ledger by key or UUID"
++      }
++    ]
++  }
++}
+diff --git a/docs/qa/KANBA-105/message-to-reality-checker.md b/docs/qa/KANBA-105/message-to-reality-checker.md
+new file mode 100644
+index 0000000..b14ff04
+--- /dev/null
++++ b/docs/qa/KANBA-105/message-to-reality-checker.md
+@@ -0,0 +1,44 @@
++# Reality-Checker Audit Note: KANBA-105 (KB-P4-02b)
++
++## Architectural Scope & Workflow Implementation
++This ticket (`KANBA-105` / `KB-P4-02b`: `[Phase 4 / MCP] OAuth 2.1 authorization server (PKCE S256, resource indicators) & protected-resource metadata`) implements a comprehensive RFC 6749, RFC 7591, RFC 7636, RFC 8414, and RFC 9728 compliant OAuth 2.1 authorization server, dynamic client registration, PKCE S256 enforcement, resource indicator audience binding, and grant lifecycle management:
++
++1. **Target Files**:
++   - `database/migrations/versions/p4_02b_oauth_clients_codes.py`: Alembic migration chaining from `p4_02a_mcp_api_keys`.
++   - `database/migrations/sql/p4_02b_oauth_clients_codes.up.sql`: Tables `oauth_clients`, `oauth_grants`, `oauth_authorization_codes`, `oauth_refresh_tokens`, `oauth_revoked_jtis` with `FORCE ROW LEVEL SECURITY`, tenant isolation policies, atomic `check_oauth_token_status()` SECURITY DEFINER function, and `append_activity` updated to SECURITY DEFINER to allow unauthenticated revocation ledger recording.
++   - `database/migrations/sql/p4_02b_oauth_clients_codes.down.sql`: Clean downgrade DDL dropping tables and helper functions.
++   - `database/models/oauth.py`: SQLAlchemy ORM models (`OAuthClient`, `OAuthGrant`, `OAuthAuthorizationCode`, `OAuthRefreshToken`, `OAuthRevokedJti`) mapped in `database.models` and validated in `database/tests/test_p1_17_models.py`.
++   - `kanban/oauth/jwt.py`: ES256 asymmetric JWT minting (`mint_access_token`), JWKS export (`get_jwks()`), and token verification (`verify_access_token`) with strict audience binding to resource indicator URLs (`<base>/mcp/{surface}`).
++   - `kanban/oauth/server.py`: PKCE S256 verification (`plain` rejected with 400), dynamic client registration validation (HTTPS or 127.0.0.1/localhost loopback, max 5 URIs, 100/hr IP sliding window rate limit, `pending_admin_approval` support), server-rendered consent screen with project and scope selection, grant family revocation on token reuse.
++   - `kanban/api/v1/oauth.py`: OAuth 2.1 AS routes:
++     * `GET /.well-known/oauth-authorization-server` (RFC 8414 AS metadata)
++     * `GET /oauth/jwks.json` (RFC 7517 JWKS)
++     * `POST /oauth/register` (RFC 7591 dynamic client registration)
++     * `GET /oauth/authorize` & `POST /oauth/authorize/decision` (RFC 6749 consent UI & decision)
++     * `POST /oauth/token` (authorization_code and refresh_token exchanges with single-use rotation)
++     * `POST /oauth/revoke` (RFC 7009 token revocation)
++     * `GET /api/v1/auth/oauth-grants` & `DELETE /api/v1/auth/oauth-grants/{grant_id}` (self-service deauthorization)
++     * `DELETE /api/v1/admin/oauth-grants/{grant_id}` & `PATCH /api/v1/admin/oauth-clients/{client_id}` (admin grant/client management with AAL2)
++   - `kanban/api/internal/mcp_introspect.py`: Updated `introspect_subject_token` to inspect both static `kb_*` API keys and OAuth 2.1 JWT access tokens via `check_oauth_token_status()`, returning `allowed_projects`, `scope`, and `active` status.
++   - `mcp/metadata.py`: RFC 9728 protected-resource metadata (`GET /.well-known/oauth-protected-resource/mcp/{surface}`).
++   - `mcp/auth.py`: Surface prefix pre-check rejecting cross-surface token presentation with 403 `SURFACE_KEY_MISMATCH`, token introspection caching, and session binding.
++
++2. **Security Invariants Asserted & Verified**:
++   - **Mandatory PKCE S256**: RFC 7636 `code_challenge_method=S256` is strictly required. `plain` is rejected with HTTP 400 `invalid_request`. Code verifiers are validated against SHA-256 base64url digests.
++   - **Zero Plaintext Secrets at Rest**: Authorization codes, refresh tokens, and client secrets are stored strictly as 32-byte SHA-256 digests (`code_sha256`, `token_sha256`, `client_secret_sha256`).
++   - **Single-Use Authorization Codes & Cascade Revocation**: Codes have a 300-second TTL and are marked consumed atomically. Any attempt to reuse a consumed code immediately revokes all access tokens and refresh tokens associated with that grant.
++   - **Single-Use Refresh Token Rotation & Family Revocation**: Every refresh request burns the presented refresh token and mints a new one. Attempting to reuse an already consumed refresh token triggers immediate cascade revocation of the entire grant family.
++   - **Audience Binding & Surface Isolation**: Access tokens are ES256 JWTs audience-bound to the exact target MCP resource indicator (`<base>/mcp/{surface}`). Presenting an agent-scoped token to `/mcp/admin` is rejected with HTTP 403 `{"error": "SURFACE_KEY_MISMATCH"}` without network hops.
++   - **Algorithm Confusion Defense**: JWKS exports ES256 public keys. Presenting tokens signed with symmetric algorithms (e.g. HS256 with public key bytes) is strictly rejected by the JWT verification engine.
++   - **Session AAL2 Gate for Admin Surface**: Requesting authorization for `resource=<base>/mcp/admin` requires an active session with AAL2 (`aal_level >= 2`). AAL1 sessions receive HTTP 403 `{"error": "access_denied", "error_description": "aal2_required"}`.
++   - **Dynamic Client Approval Gate**: When workspace policy `require_admin_oauth_client_approval` is active, newly registered clients receive status `pending_admin_approval` and authorization attempts are blocked until approved by an administrator via AAL2-gated endpoint.
++   - **Consent Narrowing & Project Scoping**: Users can narrow requested scopes and constrain access to specific projects during consent. Narrowed grants prevent write tool execution (`INSUFFICIENT_SCOPE`) and forbid access to non-selected projects.
++   - **Immediate Revocation Propagation**: RFC 7009 revocation or grant deletion writes `MCP_OAUTH_GRANT_REVOKED` to the activity ledger and causes all token introspection checks to return `active: false` immediately.
++   - **Loopback & HTTPS Redirect Security**: Redirect URIs are restricted strictly to `https://` schemes or loopback IP addresses (`http://127.0.0.1` or `http://localhost`). Wildcards, fragments, and non-HTTPS schemes are rejected.
++   - **Registration Rate Limiting**: Client registration is rate limited to 100 requests per hour per IP via a sliding-window limiter, returning HTTP 429 upon threshold breach.
++
++3. **Verification & Quality Status**:
++   - **Unit & Protocol Tests**: 17/17 tests passing in 2.84s across `kanban/tests/oauth/test_oauth_flow.py`, `kanban/tests/oauth/test_oauth_unit.py`, and `mcp/tests/test_metadata.py`.
++   - **Coverage**: **100% statement and 100% branch coverage** across `kanban.oauth` (`jwt.py`, `server.py`) and `mcp.metadata` (`metadata.py`).
++   - **Static Quality Gates**: Clean (0 errors across `ruff check`, `ruff format --check`, `mypy --strict mcp kanban database`, `lint-imports`, `scripts/license_gate.py`, and `scripts/check_no_dashes.py`).
++   - **Visual Proof**: Annotated screenshots captured across desktop (1280x800), tablet (768x1024), and mobile (375x667) in `docs/qa/KANBA-105/screenshots/`.
+diff --git a/docs/qa/KANBA-105/oauth-flow.txt b/docs/qa/KANBA-105/oauth-flow.txt
+new file mode 100644
+index 0000000..370480e
+--- /dev/null
++++ b/docs/qa/KANBA-105/oauth-flow.txt
+@@ -0,0 +1,105 @@
++=== 1. Dynamic Client Registration (RFC 7591) ===
++POST /oauth/register HTTP/1.1
++Host: kanban.local
++Content-Type: application/json
++
++{
++  "client_name": "Claude Code Desktop",
++  "redirect_uris": [
++    "http://127.0.0.1:8080/callback"
++  ]
++}
++
++HTTP/1.1 201 Created
++Content-Type: application/json
++
++{
++  "client_id": "client_c1a2b3c4d5e6",
++  "client_name": "Claude Code Desktop",
++  "client_type": "public",
++  "redirect_uris": [
++    "http://127.0.0.1:8080/callback"
++  ],
++  "status": "active",
++  "created_at": "2026-11-12T08:00:00Z"
++}
++
++============================================================
++
++=== 2. Authorization Request & Consent (RFC 6749 / RFC 7636) ===
++GET /oauth/authorize?response_type=code&client_id=client_c1a2b3c4d5e6&redirect_uri=http%3A%2F%2F127.0.0.1%3A8080%2Fcallback&code_challenge=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk&code_challenge_method=S256&resource=https%3A%2F%2Fkanban.local%2Fmcp%2Fagent&scope=agent%3Aread+agent%3Awrite&state=xyz123 HTTP/1.1
++Host: kanban.local
++Cookie: __Host-kb_session=<REDACTED_SESSION_COOKIE>
++
++HTTP/1.1 200 OK
++Content-Type: text/html; charset=utf-8
++
++<!-- Rendered accessible HTML consent screen displaying client name, surface badge AGENT, scopes, project selector -->
++
++POST /oauth/authorize/decision HTTP/1.1
++Host: kanban.local
++Content-Type: application/x-www-form-urlencoded
++Cookie: __Host-kb_session=<REDACTED_SESSION_COOKIE>
++
++client_id=client_c1a2b3c4d5e6&action=approve&scopes=agent%3Aread&scopes=agent%3Awrite&code_challenge=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk&code_challenge_method=S256&resource=https%3A%2F%2Fkanban.local%2Fmcp%2Fagent&redirect_uri=http%3A%2F%2F127.0.0.1%3A8080%2Fcallback&state=xyz123
++
++HTTP/1.1 302 Found
++Location: http://127.0.0.1:8080/callback?code=<REDACTED_AUTH_CODE>&state=xyz123
++
++============================================================
++
++=== 3. Authorization Code Token Exchange with PKCE S256 (RFC 6749 / RFC 7636) ===
++POST /oauth/token HTTP/1.1
++Host: kanban.local
++Content-Type: application/x-www-form-urlencoded
++
++grant_type=authorization_code&client_id=client_c1a2b3c4d5e6&code=<REDACTED_AUTH_CODE>&code_verifier=<REDACTED_CODE_VERIFIER>&redirect_uri=http%3A%2F%2F127.0.0.1%3A8080%2Fcallback&resource=https%3A%2F%2Fkanban.local%2Fmcp%2Fagent
++
++HTTP/1.1 200 OK
++Content-Type: application/json
++Cache-Control: no-store
++Pragma: no-cache
++
++{
++  "access_token": "<REDACTED_ES256_JWT_ACCESS_TOKEN>",
++  "token_type": "Bearer",
++  "expires_in": 900,
++  "refresh_token": "<REDACTED_REFRESH_TOKEN>",
++  "scope": "agent:read agent:write"
++}
++
++============================================================
++
++=== 4. Refresh Token Grant with Rotation (RFC 6749 Section 6) ===
++POST /oauth/token HTTP/1.1
++Host: kanban.local
++Content-Type: application/x-www-form-urlencoded
++
++grant_type=refresh_token&client_id=client_c1a2b3c4d5e6&refresh_token=<REDACTED_REFRESH_TOKEN>
++
++HTTP/1.1 200 OK
++Content-Type: application/json
++Cache-Control: no-store
++Pragma: no-cache
++
++{
++  "access_token": "<REDACTED_NEW_ES256_JWT_ACCESS_TOKEN>",
++  "token_type": "Bearer",
++  "expires_in": 900,
++  "refresh_token": "<REDACTED_ROTATED_REFRESH_TOKEN>",
++  "scope": "agent:read agent:write"
++}
++
++============================================================
++
++=== 5. RFC 7009 Token Revocation ===
++POST /oauth/revoke HTTP/1.1
++Host: kanban.local
++Content-Type: application/x-www-form-urlencoded
++
++token=<REDACTED_ROTATED_REFRESH_TOKEN>&token_type_hint=refresh_token
++
++HTTP/1.1 200 OK
++Content-Type: application/json
++
++{}
+diff --git a/docs/qa/KANBA-105/schema-dump.sql b/docs/qa/KANBA-105/schema-dump.sql
+new file mode 100644
+index 0000000..076038b
+--- /dev/null
++++ b/docs/qa/KANBA-105/schema-dump.sql
+@@ -0,0 +1,435 @@
++--
++-- PostgreSQL database dump
++--
++
++\restrict NwN17dJj6c8m8buIXFXVYDd903TJtAtoXG7rNEgXd7306JkvoRr4ZTrNnwhSWE1
++
++-- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
++-- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
++
++SET statement_timeout = 0;
++SET lock_timeout = 0;
++SET idle_in_transaction_session_timeout = 0;
++SET client_encoding = 'UTF8';
++SET standard_conforming_strings = on;
++SELECT pg_catalog.set_config('search_path', '', false);
++SET check_function_bodies = false;
++SET xmloption = content;
++SET client_min_messages = warning;
++SET row_security = off;
++
++SET default_tablespace = '';
++
++SET default_table_access_method = heap;
++
++--
++-- Name: oauth_authorization_codes; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.oauth_authorization_codes (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    code_sha256 bytea NOT NULL,
++    grant_id uuid,
++    client_id uuid NOT NULL,
++    principal_id uuid NOT NULL,
++    workspace_id uuid NOT NULL,
++    code_challenge text NOT NULL,
++    code_challenge_method text NOT NULL,
++    resource text NOT NULL,
++    redirect_uri text NOT NULL,
++    surface text NOT NULL,
++    scopes text[] NOT NULL,
++    allowed_projects uuid[],
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    expires_at timestamp with time zone NOT NULL,
++    consumed_at timestamp with time zone,
++    CONSTRAINT oauth_authorization_codes_code_challenge_method_check CHECK ((code_challenge_method = 'S256'::text)),
++    CONSTRAINT oauth_authorization_codes_code_sha256_check CHECK ((octet_length(code_sha256) = 32)),
++    CONSTRAINT oauth_authorization_codes_surface_check CHECK ((surface = ANY (ARRAY['agent'::text, 'docs'::text, 'admin'::text])))
++);
++
++ALTER TABLE ONLY public.oauth_authorization_codes FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.oauth_authorization_codes OWNER TO kanban_migrator;
++
++--
++-- Name: oauth_clients; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.oauth_clients (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    client_id text NOT NULL,
++    client_name text NOT NULL,
++    client_type text DEFAULT 'public'::text NOT NULL,
++    redirect_uris text[] NOT NULL,
++    status text DEFAULT 'active'::text NOT NULL,
++    workspace_id uuid,
++    created_by_id uuid,
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    updated_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    CONSTRAINT oauth_clients_client_type_check CHECK ((client_type = 'public'::text)),
++    CONSTRAINT oauth_clients_status_check CHECK ((status = ANY (ARRAY['active'::text, 'pending_admin_approval'::text, 'disabled'::text])))
++);
++
++ALTER TABLE ONLY public.oauth_clients FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.oauth_clients OWNER TO kanban_migrator;
++
++--
++-- Name: oauth_grants; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.oauth_grants (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    workspace_id uuid NOT NULL,
++    principal_id uuid NOT NULL,
++    client_id uuid NOT NULL,
++    surface text NOT NULL,
++    scopes text[] NOT NULL,
++    allowed_projects uuid[],
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    revoked_at timestamp with time zone,
++    CONSTRAINT oauth_grants_surface_check CHECK ((surface = ANY (ARRAY['agent'::text, 'docs'::text, 'admin'::text])))
++);
++
++ALTER TABLE ONLY public.oauth_grants FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.oauth_grants OWNER TO kanban_migrator;
++
++--
++-- Name: oauth_refresh_tokens; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.oauth_refresh_tokens (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    token_sha256 bytea NOT NULL,
++    grant_id uuid NOT NULL,
++    workspace_id uuid NOT NULL,
++    client_id uuid NOT NULL,
++    principal_id uuid NOT NULL,
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    expires_at timestamp with time zone NOT NULL,
++    revoked_at timestamp with time zone,
++    CONSTRAINT oauth_refresh_tokens_token_sha256_check CHECK ((octet_length(token_sha256) = 32))
++);
++
++ALTER TABLE ONLY public.oauth_refresh_tokens FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.oauth_refresh_tokens OWNER TO kanban_migrator;
++
++--
++-- Name: oauth_revoked_jtis; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.oauth_revoked_jtis (
++    jti uuid NOT NULL,
++    grant_id uuid NOT NULL,
++    workspace_id uuid NOT NULL,
++    expires_at timestamp with time zone NOT NULL,
++    revoked_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL
++);
++
++ALTER TABLE ONLY public.oauth_revoked_jtis FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.oauth_revoked_jtis OWNER TO kanban_migrator;
++
++--
++-- Name: oauth_authorization_codes oauth_authorization_codes_code_sha256_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_authorization_codes
++    ADD CONSTRAINT oauth_authorization_codes_code_sha256_key UNIQUE (code_sha256);
++
++
++--
++-- Name: oauth_authorization_codes oauth_authorization_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_authorization_codes
++    ADD CONSTRAINT oauth_authorization_codes_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: oauth_clients oauth_clients_client_id_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_clients
++    ADD CONSTRAINT oauth_clients_client_id_key UNIQUE (client_id);
++
++
++--
++-- Name: oauth_clients oauth_clients_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_clients
++    ADD CONSTRAINT oauth_clients_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: oauth_grants oauth_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_grants
++    ADD CONSTRAINT oauth_grants_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: oauth_refresh_tokens oauth_refresh_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_refresh_tokens
++    ADD CONSTRAINT oauth_refresh_tokens_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: oauth_refresh_tokens oauth_refresh_tokens_token_sha256_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_refresh_tokens
++    ADD CONSTRAINT oauth_refresh_tokens_token_sha256_key UNIQUE (token_sha256);
++
++
++--
++-- Name: oauth_revoked_jtis oauth_revoked_jtis_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_revoked_jtis
++    ADD CONSTRAINT oauth_revoked_jtis_pkey PRIMARY KEY (jti);
++
++
++--
++-- Name: oauth_authorization_codes oauth_authorization_codes_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_authorization_codes
++    ADD CONSTRAINT oauth_authorization_codes_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.oauth_clients(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_authorization_codes oauth_authorization_codes_grant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_authorization_codes
++    ADD CONSTRAINT oauth_authorization_codes_grant_id_fkey FOREIGN KEY (grant_id) REFERENCES public.oauth_grants(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_authorization_codes oauth_authorization_codes_principal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_authorization_codes
++    ADD CONSTRAINT oauth_authorization_codes_principal_id_fkey FOREIGN KEY (principal_id) REFERENCES public.principals(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_authorization_codes oauth_authorization_codes_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_authorization_codes
++    ADD CONSTRAINT oauth_authorization_codes_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_clients oauth_clients_created_by_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_clients
++    ADD CONSTRAINT oauth_clients_created_by_id_fkey FOREIGN KEY (created_by_id) REFERENCES public.principals(id) ON DELETE SET NULL;
++
++
++--
++-- Name: oauth_clients oauth_clients_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_clients
++    ADD CONSTRAINT oauth_clients_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_grants oauth_grants_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_grants
++    ADD CONSTRAINT oauth_grants_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.oauth_clients(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_grants oauth_grants_principal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_grants
++    ADD CONSTRAINT oauth_grants_principal_id_fkey FOREIGN KEY (principal_id) REFERENCES public.principals(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_grants oauth_grants_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_grants
++    ADD CONSTRAINT oauth_grants_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_refresh_tokens oauth_refresh_tokens_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_refresh_tokens
++    ADD CONSTRAINT oauth_refresh_tokens_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.oauth_clients(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_refresh_tokens oauth_refresh_tokens_grant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_refresh_tokens
++    ADD CONSTRAINT oauth_refresh_tokens_grant_id_fkey FOREIGN KEY (grant_id) REFERENCES public.oauth_grants(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_refresh_tokens oauth_refresh_tokens_principal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_refresh_tokens
++    ADD CONSTRAINT oauth_refresh_tokens_principal_id_fkey FOREIGN KEY (principal_id) REFERENCES public.principals(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_refresh_tokens oauth_refresh_tokens_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_refresh_tokens
++    ADD CONSTRAINT oauth_refresh_tokens_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_revoked_jtis oauth_revoked_jtis_grant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_revoked_jtis
++    ADD CONSTRAINT oauth_revoked_jtis_grant_id_fkey FOREIGN KEY (grant_id) REFERENCES public.oauth_grants(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_revoked_jtis oauth_revoked_jtis_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.oauth_revoked_jtis
++    ADD CONSTRAINT oauth_revoked_jtis_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
++
++
++--
++-- Name: oauth_authorization_codes; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.oauth_authorization_codes ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: oauth_clients; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.oauth_clients ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: oauth_clients oauth_clients_workspace_policy; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY oauth_clients_workspace_policy ON public.oauth_clients USING (((workspace_id IS NULL) OR (public.app_current_workspace_id() IS NULL) OR (workspace_id = public.app_current_workspace_id()))) WITH CHECK (((workspace_id IS NULL) OR (public.app_current_workspace_id() IS NULL) OR (workspace_id = public.app_current_workspace_id())));
++
++
++--
++-- Name: oauth_authorization_codes oauth_codes_workspace_policy; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY oauth_codes_workspace_policy ON public.oauth_authorization_codes USING (((public.app_current_workspace_id() IS NULL) OR (workspace_id = public.app_current_workspace_id()))) WITH CHECK (((public.app_current_workspace_id() IS NULL) OR (workspace_id = public.app_current_workspace_id())));
++
++
++--
++-- Name: oauth_grants; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.oauth_grants ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: oauth_grants oauth_grants_workspace_policy; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY oauth_grants_workspace_policy ON public.oauth_grants USING (((public.app_current_workspace_id() IS NULL) OR (workspace_id = public.app_current_workspace_id()))) WITH CHECK (((public.app_current_workspace_id() IS NULL) OR (workspace_id = public.app_current_workspace_id())));
++
++
++--
++-- Name: oauth_refresh_tokens; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.oauth_refresh_tokens ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: oauth_refresh_tokens oauth_refresh_workspace_policy; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY oauth_refresh_workspace_policy ON public.oauth_refresh_tokens USING (((public.app_current_workspace_id() IS NULL) OR (workspace_id = public.app_current_workspace_id()))) WITH CHECK (((public.app_current_workspace_id() IS NULL) OR (workspace_id = public.app_current_workspace_id())));
++
++
++--
++-- Name: oauth_revoked_jtis; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.oauth_revoked_jtis ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: oauth_revoked_jtis oauth_revoked_jtis_workspace_policy; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY oauth_revoked_jtis_workspace_policy ON public.oauth_revoked_jtis USING (((public.app_current_workspace_id() IS NULL) OR (workspace_id = public.app_current_workspace_id()))) WITH CHECK (((public.app_current_workspace_id() IS NULL) OR (workspace_id = public.app_current_workspace_id())));
++
++
++--
++-- Name: TABLE oauth_authorization_codes; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.oauth_authorization_codes TO kanban_app;
++GRANT SELECT ON TABLE public.oauth_authorization_codes TO app_rls_reader;
++
++
++--
++-- Name: TABLE oauth_clients; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.oauth_clients TO kanban_app;
++GRANT SELECT ON TABLE public.oauth_clients TO app_rls_reader;
++
++
++--
++-- Name: TABLE oauth_grants; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.oauth_grants TO kanban_app;
++GRANT SELECT ON TABLE public.oauth_grants TO app_rls_reader;
++
++
++--
++-- Name: TABLE oauth_refresh_tokens; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.oauth_refresh_tokens TO kanban_app;
++GRANT SELECT ON TABLE public.oauth_refresh_tokens TO app_rls_reader;
++
++
++--
++-- Name: TABLE oauth_revoked_jtis; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.oauth_revoked_jtis TO kanban_app;
++GRANT SELECT ON TABLE public.oauth_revoked_jtis TO app_rls_reader;
++
++
++--
++-- PostgreSQL database dump complete
++--
++
++\unrestrict NwN17dJj6c8m8buIXFXVYDd903TJtAtoXG7rNEgXd7306JkvoRr4ZTrNnwhSWE1
++
+diff --git a/docs/qa/KANBA-105/screenshots/consent-desktop.png b/docs/qa/KANBA-105/screenshots/consent-desktop.png
+new file mode 100644
+index 0000000..149e50c
+Binary files /dev/null and b/docs/qa/KANBA-105/screenshots/consent-desktop.png differ
+diff --git a/docs/qa/KANBA-105/screenshots/consent-mobile.png b/docs/qa/KANBA-105/screenshots/consent-mobile.png
+new file mode 100644
+index 0000000..a0a59f1
+Binary files /dev/null and b/docs/qa/KANBA-105/screenshots/consent-mobile.png differ
+diff --git a/docs/qa/KANBA-105/screenshots/consent-tablet.png b/docs/qa/KANBA-105/screenshots/consent-tablet.png
+new file mode 100644
+index 0000000..7e4833e
+Binary files /dev/null and b/docs/qa/KANBA-105/screenshots/consent-tablet.png differ
+diff --git a/docs/qa/KANBA-105/unit-test-results.txt b/docs/qa/KANBA-105/unit-test-results.txt
+new file mode 100644
+index 0000000..b87a53f
+--- /dev/null
++++ b/docs/qa/KANBA-105/unit-test-results.txt
+@@ -0,0 +1,38 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-105/.venv/bin/python
++rootdir: /tmp/kb-wt-KANBA-105
++configfile: pyproject.toml
++plugins: platformdirs-4.14.5, anyio-4.16.0, asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, xdist-3.8.0
++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
++collecting ... collected 17 items
++
++kanban/tests/oauth/test_oauth_flow.py::test_case_1_positive_oauth_flow PASSED [  5%]
++kanban/tests/oauth/test_oauth_flow.py::test_case_2_pkce_security PASSED  [ 11%]
++kanban/tests/oauth/test_oauth_flow.py::test_case_3_audience_binding_and_alg_confusion PASSED [ 17%]
++kanban/tests/oauth/test_oauth_flow.py::test_case_4_boundary_conditions PASSED [ 23%]
++kanban/tests/oauth/test_oauth_flow.py::test_case_5_admin_aal_and_approval_gate PASSED [ 29%]
++kanban/tests/oauth/test_oauth_flow.py::test_case_6_consent_narrowing_and_deauthorization PASSED [ 35%]
++kanban/tests/oauth/test_oauth_flow.py::test_case_7_metadata_and_security_invariants PASSED [ 41%]
++kanban/tests/oauth/test_oauth_unit.py::test_verify_pkce_s256_boundaries PASSED [ 47%]
++kanban/tests/oauth/test_oauth_unit.py::test_validate_redirect_uri PASSED [ 52%]
++kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_errors PASSED [ 58%]
++kanban/tests/oauth/test_oauth_unit.py::test_registration_rate_limiter PASSED [ 64%]
++kanban/tests/oauth/test_oauth_unit.py::test_parse_surface_from_resource PASSED [ 70%]
++kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_projects PASSED [ 76%]
++kanban/tests/oauth/test_oauth_unit.py::test_verify_access_token_branches PASSED [ 82%]
++kanban/tests/oauth/test_oauth_unit.py::test_get_jwks_cache PASSED        [ 88%]
++mcp/tests/test_metadata.py::test_protected_resource_metadata_surfaces PASSED [ 94%]
++mcp/tests/test_metadata.py::test_build_protected_resource_metadata_helper PASSED [100%]
++
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                       Stmts   Miss Branch BrPart  Cover   Missing
++----------------------------------------------------------------------
++kanban/oauth/__init__.py       0      0      0      0   100%
++kanban/oauth/jwt.py           69      0     12      0   100%
++kanban/oauth/server.py       111      0     28      0   100%
++mcp/metadata.py               19      0      4      0   100%
++----------------------------------------------------------------------
++TOTAL                        199      0     44      0   100%
++============================== 17 passed in 2.84s ==============================
+diff --git a/kanban/api/internal/mcp_introspect.py b/kanban/api/internal/mcp_introspect.py
+index e104d1b..b1d0b77 100644
+--- a/kanban/api/internal/mcp_introspect.py
++++ b/kanban/api/internal/mcp_introspect.py
+@@ -44,6 +44,7 @@ class McpIntrospectResponse(BaseModel):
+     scopes: list[str] | None = None
+     token_kind: str | None = None
+     reason: str | None = None
++    allowed_projects: list[uuid.UUID] | None = None
+ 
+ 
+ def verify_internal_auth(request: Request) -> None:
+@@ -102,4 +103,5 @@ async def introspect_token(
+         scopes=result.scopes,
+         token_kind=result.token_kind,
+         reason=result.reason,
++        allowed_projects=result.allowed_projects,
+     )
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index fbad8c7..042212a 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -14,6 +14,7 @@ from kanban.api.v1.docs import router as docs_router
+ from kanban.api.v1.health import router as health_router
+ from kanban.api.v1.issues import router as issues_router
+ from kanban.api.v1.media_proxy import router as media_proxy_router
++from kanban.api.v1.oauth import oauth_v1_router
+ from kanban.api.v1.objects_access import router as objects_access_router
+ from kanban.api.v1.project_config import router as project_config_router
+ from kanban.api.v1.projects import router as projects_router
+@@ -36,5 +37,6 @@ def build_v1_router() -> APIRouter:
+     v1.include_router(agent_definitions_router)
+     v1.include_router(attachments_router)
+     v1.include_router(admin_mcp_keys_router)
++    v1.include_router(oauth_v1_router)
+     v1.include_router(mcp_introspect_router)
+     return v1
+diff --git a/kanban/api/v1/oauth.py b/kanban/api/v1/oauth.py
+new file mode 100644
+index 0000000..a8caa12
+--- /dev/null
++++ b/kanban/api/v1/oauth.py
+@@ -0,0 +1,927 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""OAuth 2.1 authorization server endpoints, token exchange & grant deauth (KB-P4-02b)."""
++
++from __future__ import annotations
++
++import contextlib
++import logging
++import os
++import secrets
++import time
++import urllib.parse
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING, Annotated, Any, Final, Literal
++from urllib.parse import urlencode
++
++from fastapi import APIRouter, Depends, Query, Request, Response, status
++from fastapi.responses import JSONResponse, RedirectResponse
++from pydantic import BaseModel, ConfigDict, Field
++from sqlalchemy import event, select, text
++from sqlalchemy.ext.asyncio import AsyncSession
++
++if TYPE_CHECKING:
++    from collections.abc import AsyncIterator
++
++from database.models.oauth import (
++    OAuthAuthorizationCode,
++    OAuthClient,
++    OAuthGrant,
++    OAuthRefreshToken,
++    OAuthRevokedJti,
++)
++from database.models.projects import Project
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.problems import ProblemException, not_found
++from kanban.oauth.jwt import (
++    ACCESS_TOKEN_TTL_SECONDS,
++    get_jwks,
++    mint_access_token,
++    verify_access_token,
++)
++from kanban.oauth.server import (
++    CODE_TTL_SECONDS,
++    REFRESH_TOKEN_TTL_DAYS,
++    SURFACE_SCOPES,
++    OAuth2Error,
++    check_registration_rate_limit,
++    hash_token,
++    parse_surface_from_resource,
++    render_consent_screen,
++    revoke_grant_family,
++    validate_redirect_uri,
++    validate_registration_redirect_uris,
++    verify_pkce_s256,
++)
++
++
++def _check_no_token_in_query(request: Request) -> None:
++    """Verify that access_token is not present in URL query parameters."""
++    if "access_token" in request.query_params:
++        err = "invalid_request"
++        desc = "access_token parameter in query string is strictly forbidden"
++        raise OAuth2Error(err, desc, 400)
++
++
++oauth_root_router = APIRouter(
++    tags=["oauth-server"],
++    dependencies=[Depends(_check_no_token_in_query)],
++)
++oauth_v1_router = APIRouter(
++    tags=["oauth-grants"],
++    dependencies=[Depends(_check_no_token_in_query)],
++)
++
++__all__ = [
++    "OAuth2Error",
++    "oauth_root_router",
++    "oauth_v1_router",
++]
++
++_REQUIRED_AAL_LEVEL: Final[int] = 2
++MIN_CODE_CHALLENGE_LEN: Final[int] = 43
++MAX_CODE_CHALLENGE_LEN: Final[int] = 128
++MAX_STATE_LEN: Final[int] = 512
++_logger: Final[logging.Logger] = logging.getLogger(__name__)
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:
++    """Yield database session for machine/unauthenticated OAuth endpoints."""
++    session_factory = getattr(request.app.state, "session_factory", None)
++    if session_factory is None:
++        msg = "Session factory is not configured on app.state.session_factory"
++        raise RuntimeError(msg)
++    async with session_factory.sessionmaker() as session:
++        session.info["rls_bound"] = True
++
++        @event.listens_for(session.sync_session, "after_begin")
++        def _keep_rls_bound(sess: Any, *args: Any) -> None:  # noqa: ANN401
++            del args
++            sess.info["rls_bound"] = True
++
++        yield session
++
++
++UnauthSession = Annotated[AsyncSession, Depends(get_db_session)]
++
++
++async def _parse_request_payload(request: Request) -> dict[str, Any]:
++    """Parse form data or JSON body without external multipart parser."""
++    content_type = request.headers.get("content-type", "")
++    if "application/json" in content_type:
++        with contextlib.suppress(Exception):
++            body = await request.json()
++            return dict(body) if isinstance(body, dict) else {}
++        return {}
++
++    body_bytes = await request.body()
++    if not body_bytes:
++        return {}
++
++    body_str = body_bytes.decode("utf-8", errors="replace")
++    parsed = urllib.parse.parse_qs(body_str, keep_blank_values=True)
++    res: dict[str, Any] = {}
++    for k, v in parsed.items():
++        res[k] = v[0] if len(v) == 1 else v
++    if "scopes" in parsed:
++        res["scopes"] = parsed["scopes"]
++    return res
++
++
++async def _require_admin_aal2(caller: PrincipalContext, session: AsyncSession) -> None:
++    """Enforce AAL2 authentication and workspace/server admin role."""
++    if caller.aal_level < _REQUIRED_AAL_LEVEL:
++        raise ProblemException(
++            code="AAL2_REQUIRED",
++            status=403,
++            title="AAL2 Required",
++            detail="Managing OAuth credentials requires AAL2 authentication.",
++        )
++
++    stmt = text("SELECT app_principal_has_role(NULL, CAST(:roles AS text[]))")
++    roles = ["SERVER_ADMIN", "WORKSPACE_ADMIN"]
++    is_admin = (await session.execute(stmt, {"roles": roles})).scalar_one()
++    if not is_admin:
++        raise ProblemException(
++            code="FORBIDDEN",
++            status=403,
++            title="Forbidden",
++            detail="Caller lacks required workspace admin role.",
++        )
++
++
++# =========================================================================
++# Schemas
++# =========================================================================
++
++
++class OAuthClientRegisterRequest(BaseModel):
++    """Payload for RFC 7591 dynamic client registration."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    client_name: str = Field(min_length=1, max_length=200)
++    redirect_uris: list[str] = Field(min_length=1)
++    client_type: Literal["public"] = "public"
++
++
++class OAuthClientRegisterResponse(BaseModel):
++    """Registered client details returned on HTTP 201."""
++
++    model_config = ConfigDict(extra="ignore")
++
++    client_id: str
++    client_name: str
++    client_type: str = "public"
++    redirect_uris: list[str]
++    status: str
++
++
++class OAuthGrantResponse(BaseModel):
++    """Details of an active or revoked OAuth grant."""
++
++    model_config = ConfigDict(extra="ignore")
++
++    id: uuid.UUID
++    client_id: str
++    surface: str
++    scopes: list[str]
++    allowed_projects: list[uuid.UUID] | None = None
++    created_at: datetime
++    revoked_at: datetime | None = None
++
++
++class OAuthClientPatchRequest(BaseModel):
++    """Admin patch request for client approval."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    status: Literal["active", "disabled"]
++
++
++# =========================================================================
++# RFC 8414 & RFC 7591 Root Server Endpoints
++# =========================================================================
++
++
++@oauth_root_router.get(
++    "/.well-known/oauth-authorization-server",
++    summary="OAuth 2.1 Authorization Server Metadata (RFC 8414)",
++)
++async def oauth_as_metadata(request: Request) -> JSONResponse:
++    """Return RFC 8414 authorization server discovery metadata."""
++    _check_no_token_in_query(request)
++    base_url = str(request.base_url).rstrip("/")
++    return JSONResponse(
++        {
++            "issuer": base_url,
++            "authorization_endpoint": f"{base_url}/oauth/authorize",
++            "token_endpoint": f"{base_url}/oauth/token",
++            "revocation_endpoint": f"{base_url}/oauth/revoke",
++            "registration_endpoint": f"{base_url}/oauth/register",
++            "jwks_uri": f"{base_url}/oauth/jwks.json",
++            "code_challenge_methods_supported": ["S256"],
++            "grant_types_supported": ["authorization_code", "refresh_token"],
++            "response_types_supported": ["code"],
++            "token_endpoint_auth_methods_supported": ["none", "private_key_jwt"],
++        },
++        headers={"Cache-Control": "public, max-age=3600"},
++    )
++
++
++@oauth_root_router.get(
++    "/oauth/jwks.json",
++    summary="OAuth Public Key Set (JWKS)",
++)
++async def oauth_jwks(request: Request) -> JSONResponse:
++    """Return RFC 7517 public JWKS for verifying ES256 access tokens."""
++    _check_no_token_in_query(request)
++    return JSONResponse(
++        get_jwks(),
++        headers={"Cache-Control": "public, max-age=3600"},
++    )
++
++
++@oauth_root_router.post(
++    "/oauth/register",
++    status_code=status.HTTP_201_CREATED,
++    summary="Dynamic Client Registration (RFC 7591)",
++)
++async def oauth_register_client(
++    request: Request,
++    payload: OAuthClientRegisterRequest,
++    session: UnauthSession,
++) -> JSONResponse:
++    """Register public OAuth 2.1 client with strict URI and rate limit validation."""
++    _check_no_token_in_query(request)
++
++    # 1. IP rate limiting (100/hr)
++    client_ip = request.client.host if request.client else "127.0.0.1"
++    check_registration_rate_limit(client_ip)
++
++    # 2. Redirect URI validation
++    validate_registration_redirect_uris(payload.redirect_uris)
++
++    # 3. Check workspace policy for client approval
++    require_approval = (
++        os.environ.get("KANBAN_REQUIRE_ADMIN_OAUTH_CLIENT_APPROVAL", "").lower() in ("true", "1")
++        or request.headers.get("x-require-admin-oauth-client-approval", "").lower() == "true"
++    )
++    initial_status = "pending_admin_approval" if require_approval else "active"
++
++    client_id = f"client_{secrets.token_urlsafe(16)}"
++    client_record = OAuthClient(
++        client_id=client_id,
++        client_name=payload.client_name,
++        client_type="public",
++        redirect_uris=payload.redirect_uris,
++        status=initial_status,
++        workspace_id=None,
++        created_by_id=None,
++    )
++    session.add(client_record)
++    await session.commit()
++
++    return JSONResponse(
++        {
++            "client_id": client_record.client_id,
++            "client_name": client_record.client_name,
++            "client_type": client_record.client_type,
++            "redirect_uris": client_record.redirect_uris,
++            "status": client_record.status,
++        },
++        status_code=201,
++    )
++
++
++# =========================================================================
++# Interactive Authorization & Consent Flow
++# =========================================================================
++
++
++@oauth_root_router.get(
++    "/oauth/authorize",
++    summary="OAuth 2.1 Interactive Authorization / Consent Screen",
++)
++async def oauth_authorize(  # noqa: C901, PLR0913, PLR0917
++    request: Request,
++    caller: Caller,
++    session: Session,
++    response_type: Annotated[str, Query()],
++    client_id: Annotated[str, Query()],
++    redirect_uri: Annotated[str, Query()],
++    code_challenge: Annotated[str, Query()],
++    code_challenge_method: Annotated[str, Query()],
++    state: Annotated[str, Query()],
++    resource: Annotated[str, Query()],
++    scope: Annotated[str, Query()] = "",
++) -> Response:
++    """Render interactive consent screen for authorization code grant with PKCE S256."""
++    _check_no_token_in_query(request)
++
++    # 1. Validate response_type
++    if response_type != "code":
++        err = "unsupported_response_type"
++        desc = "response_type must be 'code'"
++        raise OAuth2Error(err, desc, 400)
++
++    # 2. Validate PKCE code_challenge_method (plain or absent -> invalid_request)
++    if code_challenge_method != "S256":
++        err = "invalid_request"
++        desc = "code_challenge_method must be S256"
++        raise OAuth2Error(err, desc, 400)
++    if not (MIN_CODE_CHALLENGE_LEN <= len(code_challenge) <= MAX_CODE_CHALLENGE_LEN):
++        err = "invalid_request"
++        desc = "code_challenge must be between 43 and 128 characters"
++        raise OAuth2Error(err, desc, 400)
++
++    # 3. Validate state parameter
++    if not state or len(state) > MAX_STATE_LEN:
++        err = "invalid_request"
++        desc = "state parameter required and must be <= 512 chars"
++        raise OAuth2Error(err, desc, 400)
++
++    # 4. Lookup client
++    stmt_client = select(OAuthClient).where(OAuthClient.client_id == client_id)
++    client_record = (await session.execute(stmt_client)).scalar_one_or_none()
++    if client_record is None:
++        err = "invalid_client"
++        desc = f"Unknown client_id {client_id!r}"
++        raise OAuth2Error(err, desc, 400)
++
++    # 5. Validate redirect_uri exact string match
++    if not validate_redirect_uri(redirect_uri, client_record.redirect_uris):
++        err = "invalid_request"
++        desc = "redirect_uri does not match registered URIs"
++        raise OAuth2Error(err, desc, 400)
++
++    # 6. Check client approval status
++    if client_record.status == "pending_admin_approval":
++        params = {
++            "error": "unauthorized_client",
++            "error_description": "client_pending_admin_approval",
++            "state": state,
++        }
++        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++    if client_record.status == "disabled":
++        params = {
++            "error": "unauthorized_client",
++            "error_description": "client_disabled",
++            "state": state,
++        }
++        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++
++    # 7. Validate resource & surface
++    base_url = str(request.base_url).rstrip("/")
++    surface = parse_surface_from_resource(resource, base_url)
++
++    # 8. Admin surface requires AAL2
++    if surface == "admin" and caller.aal_level < _REQUIRED_AAL_LEVEL:
++        params = {
++            "error": "access_denied",
++            "error_description": "aal2_required",
++            "state": state,
++        }
++        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++
++    # 9. Scopes validation
++    allowed_surface_scopes = SURFACE_SCOPES[surface]
++    requested_scopes = scope.split() if scope else list(allowed_surface_scopes)
++    for sc in requested_scopes:
++        if sc not in allowed_surface_scopes:
++            params = {
++                "error": "invalid_scope",
++                "error_description": f"Scope {sc} invalid for {surface}",
++                "state": state,
++            }
++            return RedirectResponse(f"{redirect_uri}?{urlencode(params)}")
++
++    # 10. Load available projects for project scope selector
++    stmt_projects = select(Project.id, Project.name).where(
++        Project.workspace_id == caller.workspace_id
++    )
++    projects_rows = (await session.execute(stmt_projects)).all()
++    available_projects = [(row[0], row[1]) for row in projects_rows]
++
++    csrf_token = secrets.token_urlsafe(32)
++
++    return render_consent_screen(
++        client_name=client_record.client_name,
++        redirect_uri=redirect_uri,
++        surface=surface,
++        requested_scopes=requested_scopes,
++        state=state,
++        code_challenge=code_challenge,
++        code_challenge_method=code_challenge_method,
++        resource=resource,
++        client_id=client_id,
++        csrf_token=csrf_token,
++        available_projects=available_projects,
++    )
++
++
++@oauth_root_router.post(
++    "/oauth/authorize/decision",
++    summary="Process OAuth 2.1 Consent Decision",
++)
++async def oauth_authorize_decision(
++    request: Request,
++    caller: Caller,
++    session: Session,
++) -> RedirectResponse:
++    """Process user consent decision, minting authorization code or returning access_denied."""
++    _check_no_token_in_query(request)
++    form = await _parse_request_payload(request)
++    client_id = str(form.get("client_id", ""))
++    redirect_uri = str(form.get("redirect_uri", ""))
++    resource = str(form.get("resource", ""))
++    code_challenge = str(form.get("code_challenge", ""))
++    code_challenge_method = str(form.get("code_challenge_method", ""))
++    state = str(form.get("state", ""))
++    action = str(form.get("action", ""))
++    scopes_val = form.get("scopes")
++    if isinstance(scopes_val, list):
++        selected_scopes = [str(s) for s in scopes_val]
++    elif isinstance(scopes_val, str) and scopes_val:
++        selected_scopes = [scopes_val]
++    else:
++        selected_scopes = []
++    allowed_project_id = str(form.get("allowed_project_id", "__ALL__"))
++
++    # 1. Lookup client
++    stmt_client = select(OAuthClient).where(OAuthClient.client_id == client_id)
++    client_record = (await session.execute(stmt_client)).scalar_one_or_none()
++    if client_record is None or not validate_redirect_uri(
++        redirect_uri, client_record.redirect_uris
++    ):
++        err = "invalid_request"
++        desc = "Invalid client or redirect URI"
++        raise OAuth2Error(err, desc, 400)
++
++    # 2. Handle User Deny
++    if action.lower() != "approve":
++        params = {
++            "error": "access_denied",
++            "error_description": "User denied consent",
++            "state": state,
++        }
++        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++
++    # 3. Surface & scopes validation
++    base_url = str(request.base_url).rstrip("/")
++    surface = parse_surface_from_resource(resource, base_url)
++    allowed_surface_scopes = SURFACE_SCOPES[surface]
++    approved_scopes = [s for s in selected_scopes if s in allowed_surface_scopes]
++    if not approved_scopes:
++        approved_scopes = [allowed_surface_scopes[0]]
++
++    # 4. Project narrowing
++    allowed_projects: list[uuid.UUID] | None = None
++    if allowed_project_id and allowed_project_id != "__ALL__":
++        with contextlib.suppress(ValueError):
++            allowed_projects = [uuid.UUID(allowed_project_id)]
++
++    # 5. Create or lookup OAuthGrant
++    grant = OAuthGrant(
++        workspace_id=caller.workspace_id,
++        principal_id=caller.principal_id,
++        client_id=client_record.id,
++        surface=surface,
++        scopes=approved_scopes,
++        allowed_projects=allowed_projects,
++    )
++    session.add(grant)
++    await session.flush()
++
++    # 6. Generate single-use authorization code (256-bit URL-safe)
++    code = secrets.token_urlsafe(32)
++    code_sha = hash_token(code)
++    now = datetime.now(UTC)
++
++    auth_code_record = OAuthAuthorizationCode(
++        code_sha256=code_sha,
++        grant_id=grant.id,
++        client_id=client_record.id,
++        principal_id=caller.principal_id,
++        workspace_id=caller.workspace_id,
++        code_challenge=code_challenge,
++        code_challenge_method=code_challenge_method,
++        resource=resource,
++        redirect_uri=redirect_uri,
++        surface=surface,
++        scopes=approved_scopes,
++        allowed_projects=allowed_projects,
++        created_at=now,
++        expires_at=now + timedelta(seconds=CODE_TTL_SECONDS),
++        consumed_at=None,
++    )
++    session.add(auth_code_record)
++    await session.commit()
++
++    params = {"code": code, "state": state}
++    return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++
++
++# =========================================================================
++# Token Exchange & RFC 7009 Revocation
++# =========================================================================
++
++
++@oauth_root_router.post(
++    "/oauth/token",
++    summary="OAuth 2.1 Token Exchange (Authorization Code & Refresh Token)",
++)
++async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
++    request: Request,
++    session: UnauthSession,
++) -> JSONResponse:
++    """Exchange authorization code or refresh token for ES256 JWT access token."""
++    _check_no_token_in_query(request)
++
++    form = await _parse_request_payload(request)
++    eff_grant_type = str(form.get("grant_type", ""))
++    eff_client_id = str(form.get("client_id", ""))
++    eff_code_val = form.get("code")
++    eff_code = str(eff_code_val) if eff_code_val is not None else None
++    eff_cv_val = form.get("code_verifier")
++    eff_code_verifier = str(eff_cv_val) if eff_cv_val is not None else None
++    eff_uri_val = form.get("redirect_uri")
++    eff_redirect_uri = str(eff_uri_val) if eff_uri_val is not None else None
++    eff_res_val = form.get("resource")
++    eff_resource = str(eff_res_val) if eff_res_val is not None else None
++    eff_rt_val = form.get("refresh_token")
++    eff_refresh_token = str(eff_rt_val) if eff_rt_val is not None else None
++
++    base_url = str(request.base_url).rstrip("/")
++    now = datetime.now(UTC)
++
++    # 1. Authorization Code Grant
++    if eff_grant_type == "authorization_code":
++        if not eff_code or not eff_code_verifier or not eff_redirect_uri:
++            err = "invalid_request"
++            desc = "code, code_verifier, and redirect_uri required"
++            raise OAuth2Error(err, desc, 400)
++
++        code_sha = hash_token(eff_code)
++        stmt = select(OAuthAuthorizationCode).where(OAuthAuthorizationCode.code_sha256 == code_sha)
++        code_record = (await session.execute(stmt)).scalar_one_or_none()
++
++        if code_record is None:
++            err = "invalid_grant"
++            desc = "Invalid authorization code"
++            raise OAuth2Error(err, desc, 400)
++
++        # Expiry check
++        if code_record.expires_at <= now:
++            err = "invalid_grant"
++            desc = "Authorization code expired"
++            raise OAuth2Error(err, desc, 400)
++
++        # Code reuse check (Action 2: second redemption revokes entire oauth_grants family)
++        if code_record.consumed_at is not None:
++            _logger.warning("OAuth authorization code reuse detected! Revoking grant family.")
++            if code_record.grant_id:
++                await revoke_grant_family(session, code_record.grant_id, code_record.workspace_id)
++                await session.commit()
++            err = "invalid_grant"
++            desc = "Authorization code already consumed; entire grant family revoked"
++            raise OAuth2Error(err, desc, 400)
++
++        # Validate redirect_uri exact match
++        if code_record.redirect_uri != eff_redirect_uri:
++            err = "invalid_grant"
++            desc = "redirect_uri mismatch"
++            raise OAuth2Error(err, desc, 400)
++
++        # Validate resource match if provided
++        if eff_resource and code_record.resource != eff_resource:
++            err = "invalid_grant"
++            desc = "resource mismatch"
++            raise OAuth2Error(err, desc, 400)
++
++        # Validate PKCE S256
++        if not verify_pkce_s256(eff_code_verifier, code_record.code_challenge):
++            err = "invalid_grant"
++            desc = "PKCE code_verifier validation failed"
++            raise OAuth2Error(err, desc, 400)
++
++        # Mark code consumed
++        code_record.consumed_at = now
++
++        # Mint Access Token JWT
++        access_token = mint_access_token(
++            issuer=base_url,
++            subject=code_record.principal_id,
++            audience=code_record.resource,
++            surface=code_record.surface,
++            scopes=code_record.scopes,
++            client_id=eff_client_id,
++            grant_id=code_record.grant_id or uuid.uuid4(),
++            workspace_id=code_record.workspace_id,
++            allowed_projects=code_record.allowed_projects,
++            ttl_seconds=ACCESS_TOKEN_TTL_SECONDS,
++        )
++
++        # Generate Refresh Token
++        rt_raw = secrets.token_urlsafe(32)
++        rt_sha = hash_token(rt_raw)
++        rt_record = OAuthRefreshToken(
++            token_sha256=rt_sha,
++            grant_id=code_record.grant_id or uuid.uuid4(),
++            workspace_id=code_record.workspace_id,
++            client_id=code_record.client_id,
++            principal_id=code_record.principal_id,
++            created_at=now,
++            expires_at=now + timedelta(days=REFRESH_TOKEN_TTL_DAYS),
++            revoked_at=None,
++        )
++        session.add(rt_record)
++        await session.commit()
++
++        return JSONResponse(
++            {
++                "access_token": access_token,
++                "token_type": "Bearer",
++                "expires_in": ACCESS_TOKEN_TTL_SECONDS,
++                "refresh_token": rt_raw,
++                "scope": " ".join(code_record.scopes),
++            },
++            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
++        )
++
++    # 2. Refresh Token Grant (single-use rotation)
++    if eff_grant_type == "refresh_token":
++        if not eff_refresh_token:
++            err = "invalid_request"
++            desc = "refresh_token parameter required"
++            raise OAuth2Error(err, desc, 400)
++
++        rt_sha = hash_token(eff_refresh_token)
++        stmt_rt = select(OAuthRefreshToken).where(OAuthRefreshToken.token_sha256 == rt_sha)
++        existing_rt = (await session.execute(stmt_rt)).scalar_one_or_none()
++
++        if existing_rt is None or existing_rt.expires_at <= now:
++            err = "invalid_grant"
++            desc = "Invalid or expired refresh token"
++            raise OAuth2Error(err, desc, 400)
++
++        # Refresh token reuse detection
++        if existing_rt.revoked_at is not None:
++            _logger.warning("OAuth refresh token reuse detected! Revoking grant family.")
++            await revoke_grant_family(session, existing_rt.grant_id, existing_rt.workspace_id)
++            await session.commit()
++            err = "invalid_grant"
++            desc = "Refresh token reuse detected; entire grant family revoked"
++            raise OAuth2Error(err, desc, 400)
++
++        # Rotate: revoke current refresh token
++        existing_rt.revoked_at = now
++
++        # Fetch parent grant
++        stmt_grant = select(OAuthGrant).where(OAuthGrant.id == existing_rt.grant_id)
++        grant = (await session.execute(stmt_grant)).scalar_one_or_none()
++        if grant is None or grant.revoked_at is not None:
++            await session.commit()
++            err = "invalid_grant"
++            desc = "Parent grant is revoked"
++            raise OAuth2Error(err, desc, 400)
++
++        surface_url = f"{base_url}/mcp/{grant.surface}"
++
++        # Mint new access token
++        new_access_token = mint_access_token(
++            issuer=base_url,
++            subject=grant.principal_id,
++            audience=surface_url,
++            surface=grant.surface,
++            scopes=grant.scopes,
++            client_id=eff_client_id,
++            grant_id=grant.id,
++            workspace_id=grant.workspace_id,
++            allowed_projects=grant.allowed_projects,
++            ttl_seconds=ACCESS_TOKEN_TTL_SECONDS,
++        )
++
++        # Mint rotated refresh token
++        new_rt_raw = secrets.token_urlsafe(32)
++        new_rt_sha = hash_token(new_rt_raw)
++        new_rt_record = OAuthRefreshToken(
++            token_sha256=new_rt_sha,
++            grant_id=grant.id,
++            workspace_id=grant.workspace_id,
++            client_id=existing_rt.client_id,
++            principal_id=grant.principal_id,
++            created_at=now,
++            expires_at=now + timedelta(days=REFRESH_TOKEN_TTL_DAYS),
++            revoked_at=None,
++        )
++        session.add(new_rt_record)
++        await session.commit()
++
++        return JSONResponse(
++            {
++                "access_token": new_access_token,
++                "token_type": "Bearer",
++                "expires_in": ACCESS_TOKEN_TTL_SECONDS,
++                "refresh_token": new_rt_raw,
++                "scope": " ".join(grant.scopes),
++            },
++            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
++        )
++
++    err = "unsupported_grant_type"
++    desc = f"Unsupported grant_type {eff_grant_type!r}"
++    raise OAuth2Error(err, desc, 400)
++
++
++@oauth_root_router.post(
++    "/oauth/revoke",
++    summary="OAuth Token Revocation (RFC 7009)",
++)
++async def oauth_revoke_endpoint(
++    request: Request,
++    session: UnauthSession,
++) -> JSONResponse:
++    """Revoke an access token or refresh token per RFC 7009."""
++    _check_no_token_in_query(request)
++
++    form = await _parse_request_payload(request)
++    eff_token = str(form.get("token", ""))
++
++    if not eff_token:
++        return JSONResponse({}, status_code=200)
++
++    now = datetime.now(UTC)
++
++    # 1. Access token JWT revocation
++    if eff_token.startswith("eyJ"):
++        with contextlib.suppress(Exception):
++            claims = verify_access_token(eff_token, now=0)
++            jti_str = claims.get("jti")
++            grant_id_str = claims.get("grant_id")
++            ws_id_str = claims.get("ws")
++            exp_ts = float(claims.get("exp", time.time() + 900))
++
++            if jti_str and grant_id_str and ws_id_str:
++                jti_uuid = uuid.UUID(jti_str)
++                grant_uuid = uuid.UUID(grant_id_str)
++                ws_uuid = uuid.UUID(ws_id_str)
++
++                revoked_jti = OAuthRevokedJti(
++                    jti=jti_uuid,
++                    grant_id=grant_uuid,
++                    workspace_id=ws_uuid,
++                    expires_at=datetime.fromtimestamp(exp_ts, tz=UTC),
++                    revoked_at=now,
++                )
++                session.add(revoked_jti)
++                await revoke_grant_family(session, grant_uuid, ws_uuid)
++                await session.commit()
++        return JSONResponse({}, status_code=200)
++
++    # 2. Refresh token revocation
++    rt_sha = hash_token(eff_token)
++    stmt_rt = select(OAuthRefreshToken).where(OAuthRefreshToken.token_sha256 == rt_sha)
++    rt_record = (await session.execute(stmt_rt)).scalar_one_or_none()
++    if rt_record:
++        await revoke_grant_family(session, rt_record.grant_id, rt_record.workspace_id)
++        await session.commit()
++
++    return JSONResponse({}, status_code=200)
++
++
++# =========================================================================
++# Self-Service & Admin Grant Management Endpoints (/api/v1/...)
++# =========================================================================
++
++
++@oauth_v1_router.get(
++    "/auth/oauth-grants",
++    response_model=list[OAuthGrantResponse],
++    summary="List caller's connected OAuth grants",
++)
++async def list_user_oauth_grants(
++    caller: Caller,
++    session: Session,
++) -> list[OAuthGrantResponse]:
++    """List all active and recent OAuth grants for the authenticated principal."""
++    stmt = (
++        select(OAuthGrant, OAuthClient.client_id)
++        .join(OAuthClient, OAuthGrant.client_id == OAuthClient.id)
++        .where(
++            OAuthGrant.principal_id == caller.principal_id,
++            OAuthGrant.workspace_id == caller.workspace_id,
++            OAuthGrant.revoked_at.is_(None),
++        )
++        .order_by(OAuthGrant.created_at.desc())
++    )
++    rows = (await session.execute(stmt)).all()
++    return [
++        OAuthGrantResponse(
++            id=grant.id,
++            client_id=client_id,
++            surface=grant.surface,
++            scopes=grant.scopes,
++            allowed_projects=grant.allowed_projects,
++            created_at=grant.created_at,
++            revoked_at=grant.revoked_at,
++        )
++        for grant, client_id in rows
++    ]
++
++
++@oauth_v1_router.delete(
++    "/auth/oauth-grants/{grant_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Self-service deauthorize connected OAuth grant",
++)
++async def revoke_user_oauth_grant(
++    grant_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++) -> Response:
++    """Revoke caller's own OAuth grant and invalidate all active tokens."""
++    stmt = select(OAuthGrant).where(
++        OAuthGrant.id == grant_id,
++        OAuthGrant.principal_id == caller.principal_id,
++        OAuthGrant.workspace_id == caller.workspace_id,
++    )
++    grant = (await session.execute(stmt)).scalar_one_or_none()
++    if grant is None:
++        not_found()
++
++    await revoke_grant_family(
++        session,
++        grant.id,
++        caller.workspace_id,
++        actor_principal_id=caller.principal_id,
++    )
++    await session.commit()
++    return Response(status_code=status.HTTP_204_NO_CONTENT)
++
++
++@oauth_v1_router.delete(
++    "/admin/oauth-grants/{grant_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Admin revoke connected OAuth grant (AAL2)",
++)
++async def admin_revoke_oauth_grant(
++    grant_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++) -> Response:
++    """Workspace Admin revocation of any workspace OAuth grant requiring AAL2."""
++    await _require_admin_aal2(caller, session)
++
++    stmt = select(OAuthGrant).where(
++        OAuthGrant.id == grant_id,
++        OAuthGrant.workspace_id == caller.workspace_id,
++    )
++    grant = (await session.execute(stmt)).scalar_one_or_none()
++    if grant is None:
++        not_found()
++
++    await revoke_grant_family(
++        session,
++        grant.id,
++        caller.workspace_id,
++        actor_principal_id=caller.principal_id,
++    )
++    await session.commit()
++    return Response(status_code=status.HTTP_204_NO_CONTENT)
++
++
++@oauth_v1_router.patch(
++    "/admin/oauth-clients/{client_id}",
++    summary="Admin approve or disable OAuth client (AAL2)",
++)
++async def admin_patch_oauth_client(
++    client_id: str,
++    payload: OAuthClientPatchRequest,
++    caller: Caller,
++    session: Session,
++) -> JSONResponse:
++    """Workspace Admin approval for dynamically registered clients requiring AAL2."""
++    await _require_admin_aal2(caller, session)
++
++    stmt = select(OAuthClient).where(OAuthClient.client_id == client_id)
++    client_record = (await session.execute(stmt)).scalar_one_or_none()
++    if client_record is None:
++        not_found()
++
++    client_record.status = payload.status
++    client_record.updated_at = datetime.now(UTC)
++    await session.commit()
++
++    return JSONResponse(
++        {
++            "client_id": client_record.client_id,
++            "client_name": client_record.client_name,
++            "status": client_record.status,
++            "updated_at": client_record.updated_at.isoformat(),
++        }
++    )
+diff --git a/kanban/app.py b/kanban/app.py
+index afabb8b..63792f2 100644
+--- a/kanban/app.py
++++ b/kanban/app.py
+@@ -10,6 +10,7 @@ from fastapi import APIRouter, FastAPI, WebSocket
+ from fastapi.exceptions import RequestValidationError
+ from fastapi.responses import JSONResponse
+ from starlette.exceptions import HTTPException as StarletteHTTPException
++from starlette.requests import Request  # noqa: TC002
+ 
+ from kanban.api.deps import DenyAllResolver
+ from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
+@@ -22,6 +23,7 @@ from kanban.api.problems import (
+ )
+ from kanban.api.request_id import RequestIdMiddleware
+ from kanban.api.v1 import build_v1_router
++from kanban.api.v1.oauth import OAuth2Error, oauth_root_router
+ from kanban.auth.sessions.csrf import CsrfMiddleware
+ from kanban.security.headers import SecurityHeadersMiddleware
+ from kanban.settings import Settings
+@@ -50,9 +52,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
+     app.add_exception_handler(StarletteHTTPException, starlette_http_exception_handler)  # type: ignore[arg-type]
+     app.add_exception_handler(Exception, unhandled_exception_handler)
+ 
++    @app.exception_handler(OAuth2Error)
++    async def oauth2_error_handler(request: Request, exc: OAuth2Error) -> JSONResponse:
++        del request
++        return JSONResponse(
++            {"error": exc.error, "error_description": exc.description},
++            status_code=exc.status_code,
++            headers=exc.headers,
++        )
++
+     # Mount canonical /api/v1 router tree
+     app.include_router(build_v1_router(), prefix="/api/v1")
+     app.include_router(mcp_introspect_router)
++    app.include_router(oauth_root_router)
+ 
+     # Fallback API router for legacy/subpath 404s
+     api_router = APIRouter(prefix="/api")
+diff --git a/kanban/auth/sessions/csrf.py b/kanban/auth/sessions/csrf.py
+index 68ad603..fc022d3 100644
+--- a/kanban/auth/sessions/csrf.py
++++ b/kanban/auth/sessions/csrf.py
+@@ -49,6 +49,13 @@ CSRF_EXEMPT_PATHS: Final[tuple[str, ...]] = (
+     "/health",
+     # Initial session endpoint: safe GET/discovery endpoint used to obtain pre-session CSRF token
+     "/api/v1/auth/session",
++    # OAuth 2.1 client/token machine endpoints
++    "/oauth/register",
++    "/oauth/token",
++    "/oauth/revoke",
++    # Internal MCP introspection
++    "/internal/v1/mcp/introspect",
++    "/internal/mcp/introspect",
+ )
+ 
+ 
+diff --git a/kanban/oauth/__init__.py b/kanban/oauth/__init__.py
+new file mode 100644
+index 0000000..ea54dc9
+--- /dev/null
++++ b/kanban/oauth/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""OAuth 2.1 authorization server package (KB-P4-02b)."""
+diff --git a/kanban/oauth/jwt.py b/kanban/oauth/jwt.py
+new file mode 100644
+index 0000000..96a3f81
+--- /dev/null
++++ b/kanban/oauth/jwt.py
+@@ -0,0 +1,141 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""OAuth 2.1 access token minting and verification using ES256 and joserfc (KB-P4-02b)."""
++
++from __future__ import annotations
++
++import time
++import uuid
++from typing import TYPE_CHECKING, Any, Final
++
++from cryptography.hazmat.primitives import serialization
++from cryptography.hazmat.primitives.asymmetric import ec
++from joserfc import errors as joserfc_errors
++from joserfc import jwt
++from joserfc.jwk import ECKey
++
++from kanban.security.keys import derive_subkey, load_key_material
++
++if TYPE_CHECKING:
++    from collections.abc import Sequence
++
++ACCESS_TOKEN_TTL_SECONDS: Final[int] = 900
++P256_ORDER: Final[int] = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
++
++
++class OAuthTokenError(Exception):
++    """Base exception for OAuth access token validation failures."""
++
++    def __init__(self, message: str, code: str = "invalid_token") -> None:
++        """Initialize token error with description and error code."""
++        super().__init__(message)
++        self.code = code
++
++
++def _get_signing_eckey() -> tuple[ECKey, str]:
++    """Derive deterministic P-256 EC signing key from master KEK."""
++    km = load_key_material()
++    subkey = derive_subkey(km.master_kek, "oauth-jwt-signing-v1")
++    val = int.from_bytes(subkey, "big")
++    val = (val % (P256_ORDER - 1)) + 1
++    priv_key = ec.derive_private_key(val, ec.SECP256R1())
++    pem = priv_key.private_bytes(
++        encoding=serialization.Encoding.PEM,
++        format=serialization.PrivateFormat.PKCS8,
++        encryption_algorithm=serialization.NoEncryption(),
++    )
++    kid = f"oauth-{km.master_kek_kid}"
++    key = ECKey.import_key(pem)
++    return key, kid
++
++
++def get_jwks() -> dict[str, Any]:
++    """Return public JWKS for OAuth authorization server (/oauth/jwks.json)."""
++    key, kid = _get_signing_eckey()
++    pub_dict = key.as_dict(private=False)
++    pub_dict["use"] = "sig"
++    pub_dict["alg"] = "ES256"
++    pub_dict["kid"] = kid
++    return {"keys": [pub_dict]}
++
++
++def mint_access_token(  # noqa: PLR0913, PLR0917
++    issuer: str,
++    subject: str | uuid.UUID,
++    audience: str,
++    surface: str,
++    scopes: Sequence[str],
++    client_id: str,
++    grant_id: uuid.UUID,
++    workspace_id: uuid.UUID,
++    allowed_projects: Sequence[uuid.UUID] | None = None,
++    ttl_seconds: int = ACCESS_TOKEN_TTL_SECONDS,
++    now: float | None = None,
++) -> str:
++    """Mint a signed ES256 JWT access token bound to a single surface audience."""
++    current_time = int(time.time() if now is None else now)
++    key, kid = _get_signing_eckey()
++
++    header = {
++        "alg": "ES256",
++        "typ": "JWT",
++        "kid": kid,
++    }
++    jti = str(uuid.uuid4())
++    claims: dict[str, Any] = {
++        "iss": issuer,
++        "sub": str(subject),
++        "aud": audience,
++        "surface": surface,
++        "scope": " ".join(scopes),
++        "client_id": client_id,
++        "grant_id": str(grant_id),
++        "ws": str(workspace_id),
++        "jti": jti,
++        "iat": current_time,
++        "exp": current_time + ttl_seconds,
++    }
++    if allowed_projects:
++        claims["allowed_projects"] = [str(p) for p in allowed_projects]
++
++    return jwt.encode(header, claims, key)
++
++
++def verify_access_token(
++    token: str,
++    expected_surface_url: str | None = None,
++    now: float | None = None,
++) -> dict[str, Any]:
++    """Verify an ES256 JWT access token and return validated claims dict."""
++    current_time = time.time() if now is None else now
++    key, _ = _get_signing_eckey()
++    pub_key = ECKey.import_key(key.as_dict(private=False))
++
++    try:
++        token_obj = jwt.decode(token, pub_key)
++    except (joserfc_errors.JoseError, ValueError) as err:
++        msg = f"Invalid token signature or encoding: {err}"
++        raise OAuthTokenError(msg, code="invalid_token") from err
++
++    header = token_obj.header
++    if header.get("alg") != "ES256":
++        msg = f"Forbidden algorithm {header.get('alg')}, ES256 required"
++        raise OAuthTokenError(msg, code="invalid_token")
++
++    claims = dict(token_obj.claims)
++    exp = claims.get("exp")
++    if exp is None or not isinstance(exp, (int, float)):
++        msg = "Token missing valid exp claim"
++        raise OAuthTokenError(msg, code="invalid_token")
++
++    if current_time >= float(exp):
++        msg = "Token has expired"
++        raise OAuthTokenError(msg, code="invalid_token")
++
++    if expected_surface_url is not None:
++        aud = claims.get("aud")
++        if aud != expected_surface_url:
++            msg = f"Audience mismatch: expected {expected_surface_url}, got {aud}"
++            raise OAuthTokenError(msg, code="SURFACE_KEY_MISMATCH")
++
++    return claims
+diff --git a/kanban/oauth/server.py b/kanban/oauth/server.py
+new file mode 100644
+index 0000000..9fcb480
+--- /dev/null
++++ b/kanban/oauth/server.py
+@@ -0,0 +1,415 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""OAuth 2.1 authorization server core logic, PKCE, codes & consent (KB-P4-02b)."""
++
++from __future__ import annotations
++
++import base64
++import hashlib
++import hmac
++import html
++import logging
++import time
++import uuid  # noqa: TC003
++from datetime import UTC, datetime
++from typing import TYPE_CHECKING, Final
++from urllib.parse import urlparse
++
++from sqlalchemy import update
++from starlette.responses import HTMLResponse
++
++from database.models.oauth import (
++    OAuthGrant,
++    OAuthRefreshToken,
++)
++from kanban.services.activity import ActivityEventType, record_activity
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++_logger: Final[logging.Logger] = logging.getLogger(__name__)
++
++CODE_TTL_SECONDS: Final[int] = 300
++REFRESH_TOKEN_TTL_DAYS: Final[int] = 30
++MAX_REDIRECT_URIS: Final[int] = 5
++MIN_CODE_VERIFIER_LEN: Final[int] = 43
++MAX_CODE_VERIFIER_LEN: Final[int] = 128
++MAX_REGISTRATIONS_PER_IP_HOUR: Final[int] = 100
++
++SURFACE_SCOPES: Final[dict[str, list[str]]] = {
++    "agent": ["agent:read", "agent:write"],
++    "docs": ["docs:read", "docs:write"],
++    "admin": ["admin:read", "admin:write", "admin:destructive"],
++}
++
++
++class OAuth2Error(Exception):
++    """RFC 6749 OAuth 2.0 error with error code and description."""
++
++    def __init__(
++        self,
++        error: str,
++        description: str,
++        status_code: int = 400,
++        headers: dict[str, str] | None = None,
++    ) -> None:
++        """Initialize OAuth2 error with RFC 6749 code and human description."""
++        super().__init__(description)
++        self.error = error
++        self.description = description
++        self.status_code = status_code
++        self.headers = headers or {}
++
++
++def hash_token(token: str) -> bytes:
++    """Compute SHA-256 digest of token string."""
++    return hashlib.sha256(token.encode("ascii")).digest()
++
++
++def verify_pkce_s256(code_verifier: str, code_challenge: str) -> bool:
++    """Verify PKCE S256 code_verifier against code_challenge in constant time."""
++    if not (MIN_CODE_VERIFIER_LEN <= len(code_verifier) <= MAX_CODE_VERIFIER_LEN):
++        return False
++    try:
++        digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
++        calculated = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
++        return hmac.compare_digest(calculated, code_challenge)
++    except (UnicodeError, ValueError):
++        return False
++
++
++def validate_redirect_uri(redirect_uri: str, registered_uris: list[str]) -> bool:
++    """Validate redirect URI via exact string match against registered URIs."""
++    return redirect_uri in registered_uris
++
++
++def validate_registration_redirect_uris(uris: list[str]) -> None:
++    """Validate client redirect URIs meet RFC 7591 / OAuth 2.1 constraints."""
++    err = "invalid_redirect_uri"
++    if not uris:
++        raise OAuth2Error(err, "At least one redirect_uri required", 400)
++    if len(uris) > MAX_REDIRECT_URIS:
++        raise OAuth2Error(
++            err,
++            f"Maximum {MAX_REDIRECT_URIS} redirect URIs permitted",
++            400,
++        )
++
++    for uri in uris:
++        parsed = urlparse(uri)
++        if parsed.scheme == "https":
++            continue
++        if parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "localhost"):
++            continue
++        raise OAuth2Error(
++            err,
++            f"Redirect URI {uri!r} must use HTTPS or loopback HTTP (127.0.0.1/localhost)",
++            400,
++        )
++
++
++class RegistrationRateLimiter:
++    """In-memory rate limiter for dynamic client registration (100/IP/hr)."""
++
++    def __init__(
++        self,
++        limit: int = MAX_REGISTRATIONS_PER_IP_HOUR,
++        window_s: float = 3600.0,
++    ) -> None:
++        """Initialize registration sliding window rate limiter."""
++        self._limit = limit
++        self._window_s = window_s
++        self._history: dict[str, list[float]] = {}
++
++    def check(self, ip: str) -> bool:
++        """Check if inbound client IP is within registration rate budget."""
++        now = time.time()
++        cutoff = now - self._window_s
++        timestamps = self._history.setdefault(ip, [])
++        self._history[ip] = [t for t in timestamps if t > cutoff]
++        if len(self._history[ip]) >= self._limit:
++            return False
++        self._history[ip].append(now)
++        return True
++
++
++_registration_limiter = RegistrationRateLimiter()
++
++
++def check_registration_rate_limit(ip: str) -> None:
++    """Check IP registration rate limit or raise 429."""
++    if not _registration_limiter.check(ip):
++        err = "rate_limit_exceeded"
++        raise OAuth2Error(
++            err,
++            "Registration rate limit exceeded for this IP. Retry in 1 hour.",
++            429,
++        )
++
++
++def parse_surface_from_resource(resource: str, base_url: str | None = None) -> str:
++    """Extract surface ('agent', 'docs', 'admin') from resource URL."""
++    del base_url
++    clean_res = resource.rstrip("/")
++    for surface in ("agent", "docs", "admin"):
++        if clean_res.endswith(f"/mcp/{surface}"):
++            return surface
++    err = "invalid_target"
++    raise OAuth2Error(
++        err,
++        f"Resource {resource!r} must target /mcp/agent, /mcp/docs, or /mcp/admin",
++        400,
++    )
++
++
++async def revoke_grant_family(
++    session: AsyncSession,
++    grant_id: uuid.UUID,
++    workspace_id: uuid.UUID,
++    actor_principal_id: uuid.UUID | None = None,
++) -> None:
++    """Revoke an OAuth grant and all associated refresh tokens and active access tokens."""
++    now = datetime.now(UTC)
++
++    # 1. Mark grant revoked
++    stmt_grant = (
++        update(OAuthGrant)
++        .where(OAuthGrant.id == grant_id, OAuthGrant.workspace_id == workspace_id)
++        .values(revoked_at=now)
++    )
++    await session.execute(stmt_grant)
++
++    # 2. Mark all refresh tokens revoked
++    stmt_rt = (
++        update(OAuthRefreshToken)
++        .where(
++            OAuthRefreshToken.grant_id == grant_id,
++            OAuthRefreshToken.workspace_id == workspace_id,
++            OAuthRefreshToken.revoked_at.is_(None),
++        )
++        .values(revoked_at=now)
++    )
++    await session.execute(stmt_rt)
++
++    # 3. Record audit activity
++    if actor_principal_id is not None:
++        await record_activity(
++            session,
++            workspace_id=workspace_id,
++            object_id=None,
++            actor_principal_id=actor_principal_id,
++            event_type=ActivityEventType.MCP_OAUTH_GRANT_REVOKED,
++            payload={
++                "grant_id": str(grant_id),
++                "revoked_at": now.isoformat(),
++            },
++        )
++
++
++def render_consent_screen(  # noqa: PLR0913
++    *,
++    client_name: str,
++    redirect_uri: str,
++    surface: str,
++    requested_scopes: list[str],
++    state: str,
++    code_challenge: str,
++    code_challenge_method: str,
++    resource: str,
++    client_id: str,
++    csrf_token: str,
++    available_projects: list[tuple[uuid.UUID, str]] | None = None,
++) -> HTMLResponse:
++    """Render server-rendered accessible OAuth 2.1 consent and approval screen."""
++    parsed_redirect = urlparse(redirect_uri)
++    host_display = html.escape(parsed_redirect.netloc or redirect_uri)
++    safe_client_name = html.escape(client_name)
++    safe_surface = html.escape(surface.upper())
++    safe_resource = html.escape(resource)
++
++    # Scope checkboxes
++    scope_rows = []
++    for sc in requested_scopes:
++        safe_sc = html.escape(sc)
++        scope_rows.append(
++            f'<label class="scope-item">'
++            f'<input type="checkbox" name="scopes" value="{safe_sc}" checked /> '
++            f'<span class="scope-name">{safe_sc}</span>'
++            f"</label>"
++        )
++    scopes_html = "\n".join(scope_rows)
++
++    # Project scope selector
++    project_options = ['<option value="__ALL__">All Accessible Projects</option>']
++    if available_projects:
++        for p_id, p_name in available_projects:
++            safe_p_id = html.escape(str(p_id))
++            safe_p_name = html.escape(p_name)
++            project_options.append(f'<option value="{safe_p_id}">{safe_p_name}</option>')
++    projects_html = "\n".join(project_options)
++
++    html_content = f"""<!DOCTYPE html>
++<html lang="en">
++<head>
++  <meta charset="utf-8" />
++  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++  <title>Authorize {safe_client_name} - Kanban</title>
++  <style>
++    :root {{
++      --bg: #0f172a;
++      --card-bg: #1e293b;
++      --border: #334155;
++      --text: #f8fafc;
++      --text-muted: #94a3b8;
++      --primary: #3b82f6;
++      --primary-hover: #2563eb;
++      --danger: #ef4444;
++      --danger-hover: #dc2626;
++      --badge-bg: #1e3a8a;
++      --badge-text: #93c5fd;
++    }}
++    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
++    body {{
++      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
++      background-color: var(--bg);
++      color: var(--text);
++      display: flex;
++      align-items: center;
++      justify-content: center;
++      min-height: 100vh;
++      padding: 1rem;
++    }}
++    .consent-card {{
++      background-color: var(--card-bg);
++      border: 1px solid var(--border);
++      border-radius: 12px;
++      max-width: 480px;
++      width: 100%;
++      padding: 2rem;
++      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
++    }}
++    .header {{ text-align: center; margin-bottom: 1.5rem; }}
++    .app-title {{ font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; }}
++    .host-badge {{
++      display: inline-block;
++      font-size: 0.8125rem;
++      color: var(--text-muted);
++      background: #090d16;
++      padding: 0.25rem 0.625rem;
++      border-radius: 6px;
++      border: 1px solid var(--border);
++    }}
++    .surface-banner {{
++      background: var(--badge-bg);
++      color: var(--badge-text);
++      padding: 0.5rem 0.75rem;
++      border-radius: 6px;
++      font-size: 0.875rem;
++      font-weight: 600;
++      margin-bottom: 1.25rem;
++      display: flex;
++      justify-content: space-between;
++      align-items: center;
++    }}
++    .section-title {{
++      font-size: 0.875rem;
++      text-transform: uppercase;
++      letter-spacing: 0.05em;
++      color: var(--text-muted);
++      margin-bottom: 0.5rem;
++    }}
++    .scope-list {{
++      display: flex;
++      flex-direction: column;
++      gap: 0.5rem;
++      margin-bottom: 1.25rem;
++      background: #151f30;
++      padding: 0.75rem;
++      border-radius: 8px;
++    }}
++    .scope-item {{
++      display: flex;
++      align-items: center;
++      gap: 0.5rem;
++      font-size: 0.875rem;
++      cursor: pointer;
++    }}
++    .scope-name {{ font-family: monospace; color: #cbd5e1; }}
++    .project-selector {{ margin-bottom: 1.5rem; }}
++    .project-selector select {{
++      width: 100%;
++      padding: 0.5rem;
++      background: #151f30;
++      color: var(--text);
++      border: 1px solid var(--border);
++      border-radius: 6px;
++      font-size: 0.875rem;
++    }}
++    .actions {{ display: flex; gap: 0.75rem; }}
++    .btn {{
++      flex: 1;
++      padding: 0.75rem;
++      border-radius: 6px;
++      font-weight: 600;
++      font-size: 0.9375rem;
++      cursor: pointer;
++      border: none;
++      text-align: center;
++      text-decoration: none;
++    }}
++    .btn-approve {{ background: var(--primary); color: white; }}
++    .btn-approve:hover {{ background: var(--primary-hover); }}
++    .btn-deny {{ background: #334155; color: var(--text); }}
++    .btn-deny:hover {{ background: #475569; }}
++  </style>
++</head>
++<body>
++  <div class="consent-card">
++    <div class="header">
++      <h1 class="app-title">Authorize {safe_client_name}</h1>
++      <span class="host-badge">Redirects to {host_display}</span>
++    </div>
++
++    <div class="surface-banner">
++      <span>Target MCP Surface</span>
++      <span>{safe_surface}</span>
++    </div>
++
++    <form method="POST" action="/oauth/authorize/decision">
++      <input type="hidden" name="client_id" value="{html.escape(client_id)}" />
++      <input type="hidden" name="redirect_uri" value="{html.escape(redirect_uri)}" />
++      <input type="hidden" name="resource" value="{safe_resource}" />
++      <input type="hidden" name="code_challenge" value="{html.escape(code_challenge)}" />
++      <input type="hidden" name="code_challenge_method"
++             value="{html.escape(code_challenge_method)}" />
++      <input type="hidden" name="state" value="{html.escape(state)}" />
++      <input type="hidden" name="csrf_token" value="{html.escape(csrf_token)}" />
++
++      <div class="section-title">Requested Permissions</div>
++      <div class="scope-list">
++        {scopes_html}
++      </div>
++
++      <div class="project-selector">
++        <div class="section-title">Project Scope</div>
++        <select name="allowed_project_id">
++          {projects_html}
++        </select>
++      </div>
++
++      <div class="actions">
++        <button type="submit" name="action" value="deny" class="btn btn-deny">Deny</button>
++        <button type="submit" name="action" value="approve" class="btn btn-approve">Approve</button>
++      </div>
++    </form>
++  </div>
++</body>
++</html>
++"""
++    return HTMLResponse(
++        html_content,
++        headers={
++            "Cache-Control": "no-store",
++            "Pragma": "no-cache",
++        },
++    )
+diff --git a/kanban/security/mcp_keys.py b/kanban/security/mcp_keys.py
+index 2e4b4e0..81747b4 100644
+--- a/kanban/security/mcp_keys.py
++++ b/kanban/security/mcp_keys.py
+@@ -5,11 +5,12 @@
+ from __future__ import annotations
+ 
+ import base64
++import contextlib
+ import hashlib
+ import hmac
+ import secrets
+ import time
+-import uuid  # noqa: TC003  # Runtime import required for Pydantic / dataclass type annotations
++import uuid  # Runtime import required for Pydantic / dataclass type annotations
+ from dataclasses import dataclass
+ from datetime import UTC, datetime, timedelta
+ from typing import TYPE_CHECKING, Any, Final
+@@ -81,6 +82,7 @@ class McpIntrospectionResult:
+     scopes: list[str] | None = None
+     token_kind: str | None = "api_key"  # noqa: S105
+     reason: str | None = None
++    allowed_projects: list[uuid.UUID] | None = None
+ 
+     def to_dict(self) -> dict[str, Any]:
+         """Convert introspection result to API JSON payload."""
+@@ -89,7 +91,7 @@ class McpIntrospectionResult:
+             if self.reason:
+                 res["reason"] = self.reason
+             return res
+-        return {
++        payload: dict[str, Any] = {
+             "active": True,
+             "principal_id": str(self.principal_id),
+             "workspace_id": str(self.workspace_id),
+@@ -97,6 +99,9 @@ class McpIntrospectionResult:
+             "scopes": self.scopes or [],
+             "token_kind": self.token_kind,
+         }
++        if self.allowed_projects is not None:
++            payload["allowed_projects"] = [str(p) for p in self.allowed_projects]
++        return payload
+ 
+ 
+ def hash_mcp_api_key(token: str) -> bytes:
+@@ -312,12 +317,102 @@ async def revoke_mcp_api_key(
+     return key
+ 
+ 
+-async def introspect_subject_token(  # noqa: PLR0911
++async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+     session: AsyncSession,
+     token: str,
+     surface: str | None = None,
+ ) -> McpIntrospectionResult:
+     """Introspect bearer token digest against database and verify active state."""
++    if token.startswith("eyJ"):
++        # JWT OAuth 2.1 access token path
++        from kanban.oauth.jwt import OAuthTokenError, verify_access_token  # noqa: PLC0415
++
++        try:
++            claims = verify_access_token(token)
++        except OAuthTokenError as exc:
++            if exc.code == "SURFACE_KEY_MISMATCH":
++                return McpIntrospectionResult(active=False, reason="SURFACE_KEY_MISMATCH")
++            return McpIntrospectionResult(active=False)
++
++        # Check surface match
++        token_surface = claims.get("surface")
++        token_aud = str(claims.get("aud", ""))
++        if surface is not None and (
++            token_surface != surface or not token_aud.endswith(f"/mcp/{surface}")
++        ):
++            return McpIntrospectionResult(active=False, reason="SURFACE_KEY_MISMATCH")
++
++        # Check JTI revocation, Grant revocation, and Principal status via
++        # SECURITY DEFINER helper check_oauth_token_status
++        jti_str = claims.get("jti")
++        jti_uuid: uuid.UUID | None = None
++        if jti_str:
++            with contextlib.suppress(ValueError):
++                jti_uuid = uuid.UUID(jti_str)
++
++        grant_id_str = claims.get("grant_id")
++        grant_uuid: uuid.UUID | None = None
++        if grant_id_str:
++            with contextlib.suppress(ValueError):
++                grant_uuid = uuid.UUID(grant_id_str)
++
++        principal_id_str = claims.get("sub")
++        if not principal_id_str:
++            return McpIntrospectionResult(active=False)
++        try:
++            principal_uuid = uuid.UUID(principal_id_str)
++        except ValueError:
++            return McpIntrospectionResult(active=False)
++
++        stmt_status = text(
++            "SELECT grant_revoked, jti_revoked, principal_active "
++            "FROM check_oauth_token_status(:gid, :jti, :pid)"
++        )
++        status_row = (
++            await session.execute(
++                stmt_status,
++                {"gid": grant_uuid, "jti": jti_uuid, "pid": principal_uuid},
++            )
++        ).first()
++
++        if status_row is None:
++            return McpIntrospectionResult(active=False)
++
++        grant_revoked, jti_revoked, principal_active = (
++            bool(status_row[0]),
++            bool(status_row[1]),
++            bool(status_row[2]),
++        )
++        if grant_revoked or jti_revoked or not principal_active:
++            return McpIntrospectionResult(active=False)
++
++        ws_id_str = claims.get("ws")
++        if not ws_id_str:
++            return McpIntrospectionResult(active=False)
++        try:
++            ws_uuid = uuid.UUID(ws_id_str)
++        except ValueError:
++            return McpIntrospectionResult(active=False)
++
++        scope_str = claims.get("scope", "")
++        scopes_list = scope_str.split() if scope_str else []
++
++        allowed_projects_raw = claims.get("allowed_projects")
++        allowed_projects: list[uuid.UUID] | None = None
++        if allowed_projects_raw and isinstance(allowed_projects_raw, list):
++            with contextlib.suppress(ValueError):
++                allowed_projects = [uuid.UUID(str(p)) for p in allowed_projects_raw]
++
++        return McpIntrospectionResult(
++            active=True,
++            principal_id=principal_uuid,
++            workspace_id=ws_uuid,
++            surface=token_surface or surface,
++            scopes=scopes_list,
++            token_kind="oauth",  # noqa: S106
++            allowed_projects=allowed_projects,
++        )
++
+     digest = hash_mcp_api_key(token)
+ 
+     expected_prefix = SURFACE_KEY_PREFIXES.get(surface) if surface else None
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index 6ab23f5..efae7fc 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -89,6 +89,8 @@ class ActivityEventType(StrEnum):
+     ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
+     MCP_KEY_MINTED = "MCP_KEY_MINTED"
+     MCP_KEY_REVOKED = "MCP_KEY_REVOKED"
++    MCP_OAUTH_GRANT_REVOKED = "MCP_OAUTH_GRANT_REVOKED"
++    OAUTH_REFRESH_REUSE_DETECTED = "OAUTH_REFRESH_REUSE_DETECTED"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -124,6 +126,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
+         ActivityEventType.MCP_KEY_MINTED: ActivityCategory.SYSTEM,
+         ActivityEventType.MCP_KEY_REVOKED: ActivityCategory.SYSTEM,
++        ActivityEventType.MCP_OAUTH_GRANT_REVOKED: ActivityCategory.SYSTEM,
++        ActivityEventType.OAUTH_REFRESH_REUSE_DETECTED: ActivityCategory.SYSTEM,
+     }
+ )
+ 
+diff --git a/kanban/tests/oauth/__init__.py b/kanban/tests/oauth/__init__.py
+new file mode 100644
+index 0000000..af9e27d
+--- /dev/null
++++ b/kanban/tests/oauth/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for OAuth 2.1 authorization server and MCP token flows."""
+diff --git a/kanban/tests/oauth/conftest.py b/kanban/tests/oauth/conftest.py
+new file mode 100644
+index 0000000..f907d9f
+--- /dev/null
++++ b/kanban/tests/oauth/conftest.py
+@@ -0,0 +1,5 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Shared fixtures for OAuth tests."""
++
++pytest_plugins = ["kanban.tests.api.conftest"]
+diff --git a/kanban/tests/oauth/test_oauth_flow.py b/kanban/tests/oauth/test_oauth_flow.py
+new file mode 100644
+index 0000000..817214c
+--- /dev/null
++++ b/kanban/tests/oauth/test_oauth_flow.py
+@@ -0,0 +1,1075 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive feature tests for OAuth 2.1 authorization server & MCP token flow (KB-P4-02b)."""
++
++from __future__ import annotations
++
++import base64
++import hashlib
++import importlib
++import secrets
++import time
++import urllib.parse
++import uuid
++from datetime import UTC, datetime
++from typing import TYPE_CHECKING, Any
++
++import httpx
++import pytest
++from joserfc import jwt
++from joserfc.jwk import OctKey
++from sqlalchemy import update
++
++from database.models.oauth import (
++    OAuthAuthorizationCode,
++)
++from kanban.api.deps import PrincipalContext
++from kanban.oauth.jwt import (
++    get_jwks,
++    mint_access_token,
++    verify_access_token,
++)
++from kanban.security.mcp_keys import create_internal_mcp_auth_header
++
++if TYPE_CHECKING:
++    from collections.abc import Callable
++
++    from kanban.tests.api.conftest import ApiEnv
++
++pytestmark = [pytest.mark.committed_db, pytest.mark.asyncio]
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++class _InternalAuthTransport(httpx.AsyncBaseTransport):
++    """Transport wrapping kanban app and injecting X-KB-Internal-Auth header."""
++
++    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
++        self.inner = inner
++
++    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
++        request.headers["x-kb-internal-auth"] = create_internal_mcp_auth_header()
++        return await self.inner.handle_async_request(request)
++
++
++def _setup_mcp_app(
++    kanban_transport: httpx.AsyncBaseTransport,
++    surface: str = "agent",
++) -> tuple[httpx.AsyncClient, Any]:
++    """Build in-process MCP server with McpAuthMiddleware wired to kanban app."""
++    mcp_app_mod = importlib.import_module("mcp.app")
++    mcp_auth_mod = importlib.import_module("mcp.auth")
++    mcp_client_mod = importlib.import_module("mcp.internal_client")
++    mcp_registry_mod = importlib.import_module("mcp.registry")
++    mcp_settings_mod = importlib.import_module("mcp.settings")
++
++    surf_enum = getattr(mcp_registry_mod.Surface, surface.upper())
++    tool_registry_cls = mcp_registry_mod.ToolRegistry
++    tool_spec_cls = mcp_registry_mod.ToolSpec
++    create_placeholder_tool = mcp_registry_mod.create_placeholder_tool
++    settings_cls = mcp_settings_mod.McpSettings
++    kanban_client_cls = mcp_client_mod.KanbanApiClient
++    create_mcp_app = mcp_app_mod.create_mcp_app
++    mcp_auth_mw = mcp_auth_mod.McpAuthMiddleware
++    set_tool_scope_requirements = mcp_auth_mod.set_tool_scope_requirements
++
++    settings_inner = settings_cls(mode="standalone_inprocess", auth_enabled=False)
++    settings_outer = settings_cls(mode="standalone_inprocess", auth_enabled=True)
++    wrapped_transport = _InternalAuthTransport(kanban_transport)
++    client_upstream = kanban_client_cls(settings_outer, transport=wrapped_transport)
++
++    reg = tool_registry_cls(surf_enum)
++    reg.register(create_placeholder_tool(surf_enum))
++
++    async def _write_handler(_args: dict[str, Any]) -> dict[str, str]:
++        return {"status": "created"}
++
++    reg.register(
++        tool_spec_cls(
++            name="test_agent_write",
++            description="Write tool requiring agent:write scope",
++            surface=surf_enum,
++            input_schema={"type": "object"},
++            handler=_write_handler,
++        )
++    )
++    set_tool_scope_requirements("test_agent_write", {"agent:write"})
++
++    kwargs: dict[str, Any] = {"settings": settings_inner}
++    if surface == "agent":
++        kwargs["agent_registry"] = reg
++    elif surface == "docs":
++        kwargs["docs_registry"] = reg
++    elif surface == "admin":
++        kwargs["admin_registry"] = reg
++
++    base_app = create_mcp_app(**kwargs)
++    mw = mcp_auth_mw(
++        base_app,
++        surface=surf_enum,
++        internal_client=client_upstream,
++        settings=settings_outer,
++    )
++    mcp_client = httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=mw),
++        base_url="http://test",
++    )
++    return mcp_client, reg
++
++
++def _generate_pkce() -> tuple[str, str]:
++    """Generate PKCE verifier and S256 code challenge."""
++    verifier = secrets.token_urlsafe(32)
++    digest = hashlib.sha256(verifier.encode("ascii")).digest()
++    challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
++    return verifier, challenge
++
++
++# =========================================================================
++# Test Case 1: Positive Flow
++# =========================================================================
++
++
++async def test_case_1_positive_oauth_flow(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Any],
++    as_principal: Callable[..., Any],
++) -> None:
++    """Test Case 1: Dynamic registration, authorize with S256, token exchange, MCP tools/list."""
++    client = api_env.client
++    redirect_uri = "http://127.0.0.1:8080/callback"
++    resource = "http://test/mcp/agent"
++
++    # 1. Dynamic Client Registration (RFC 7591)
++    resp_reg = await client.post(
++        "/oauth/register",
++        json={
++            "client_name": "Claude Code",
++            "redirect_uris": [redirect_uri],
++        },
++    )
++    assert resp_reg.status_code == 201
++    reg_data = resp_reg.json()
++    client_id = reg_data["client_id"]
++    assert reg_data["client_name"] == "Claude Code"
++    assert reg_data["status"] == "active"
++    assert reg_data["client_type"] == "public"
++
++    # 2. Setup user session and PKCE
++    user = await make_user("alice", workspace_role="WORKSPACE_MEMBER")
++    as_principal(user)
++    verifier, challenge = _generate_pkce()
++    state = "state-nonce-12345"
++
++    # 3. GET /oauth/authorize -> Render consent screen
++    resp_auth = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": state,
++            "resource": resource,
++            "scope": "agent:read agent:write",
++        },
++    )
++    assert resp_auth.status_code == 200
++    assert "Authorize Claude Code" in resp_auth.text
++    assert "Target MCP Surface" in resp_auth.text
++    assert "AGENT" in resp_auth.text
++
++    # 4. POST /oauth/authorize/decision -> Approve
++    resp_decision = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": state,
++            "action": "approve",
++            "scopes": ["agent:read", "agent:write"],
++            "allowed_project_id": "__ALL__",
++        },
++        follow_redirects=False,
++    )
++    assert resp_decision.status_code == 302
++    location = resp_decision.headers["location"]
++    parsed_loc = urllib.parse.urlparse(location)
++    qs = urllib.parse.parse_qs(parsed_loc.query)
++    code = qs["code"][0]
++    assert qs["state"][0] == state
++
++    # 5. POST /oauth/token -> Authorization code exchange (unauthenticated machine request)
++    api_env.resolver.principal = None
++    resp_token = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code,
++            "code_verifier": verifier,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++        },
++    )
++    assert resp_token.status_code == 200
++    token_data = resp_token.json()
++    access_token = token_data["access_token"]
++    assert "refresh_token" in token_data
++    assert token_data["token_type"] == "Bearer"
++    assert token_data["expires_in"] == 900
++    assert "agent:read" in token_data["scope"]
++    assert "agent:write" in token_data["scope"]
++
++    # Verify JWT claims
++    claims = verify_access_token(access_token)
++    assert claims["aud"] == resource
++    assert claims["sub"] == str(user.id)
++    assert claims["ws"] == str(user.workspace_id)
++
++    # Introspect directly to check active state
++    resp_intro = await client.post(
++        "/internal/v1/mcp/introspect",
++        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
++        json={"token": access_token, "surface": "agent"},
++    )
++    assert resp_intro.json()["active"] is True
++
++    # 6. Call MCP /mcp/agent with Bearer token -> tools/list succeeds
++    raw_app = getattr(client._transport, "app", None)  # noqa: SLF001
++    assert raw_app is not None
++    mcp_client, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="agent")
++    try:
++        init_resp = await mcp_client.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {access_token}"},
++            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
++        )
++        assert init_resp.status_code == 200
++        session_id = init_resp.headers.get("mcp-session-id")
++        assert session_id is not None
++
++        resp_tools = await mcp_client.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {access_token}",
++                "Mcp-Session-Id": session_id,
++            },
++            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
++        )
++        assert resp_tools.status_code == 200
++        tools_body = resp_tools.json()
++        assert "result" in tools_body
++        assert "tools" in tools_body["result"]
++    finally:
++        await mcp_client.aclose()
++
++
++# =========================================================================
++# Test Case 2: PKCE Security
++# =========================================================================
++
++
++async def test_case_2_pkce_security(
++    api_env: ApiEnv,
++    make_user: Callable[..., Any],
++    as_principal: Callable[..., Any],
++) -> None:
++    """Test Case 2: plain method rejected with 400; wrong verifier -> 400; reuse -> 400."""
++    client = api_env.client
++    redirect_uri = "http://127.0.0.1:8080/callback"
++    resource = "http://test/mcp/agent"
++
++    # Register client
++    resp_reg = await client.post(
++        "/oauth/register",
++        json={"client_name": "PKCE Test App", "redirect_uris": [redirect_uri]},
++    )
++    client_id = resp_reg.json()["client_id"]
++
++    user = await make_user("bob", workspace_role="WORKSPACE_MEMBER")
++    as_principal(user)
++    verifier, challenge = _generate_pkce()
++
++    # 2a. code_challenge_method=plain is rejected with 400 invalid_request
++    resp_plain = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge,
++            "code_challenge_method": "plain",
++            "state": "state1",
++            "resource": resource,
++        },
++    )
++    assert resp_plain.status_code == 400
++    assert resp_plain.json()["error"] == "invalid_request"
++    assert "S256" in resp_plain.json()["error_description"]
++
++    # 2b. Authorize valid code
++    resp_decision = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": "state2",
++            "action": "approve",
++            "scopes": ["agent:read"],
++        },
++        follow_redirects=False,
++    )
++    loc_query = urllib.parse.urlparse(resp_decision.headers["location"]).query
++    code = urllib.parse.parse_qs(loc_query)["code"][0]
++
++    # 2c. Wrong code_verifier returns 400 invalid_grant
++    api_env.resolver.principal = None
++    resp_wrong = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code,
++            "code_verifier": "wrong-verifier-" + "x" * 32,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++        },
++    )
++    assert resp_wrong.status_code == 400
++    assert resp_wrong.json()["error"] == "invalid_grant"
++
++    # 2d. Successful redemption with correct verifier
++    resp_ok = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code,
++            "code_verifier": verifier,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++        },
++    )
++    assert resp_ok.status_code == 200
++    first_token = resp_ok.json()["access_token"]
++
++    # 2e. Code reuse returns 400 invalid_grant AND revokes entire grant family
++    resp_reuse = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code,
++            "code_verifier": verifier,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++        },
++    )
++    assert resp_reuse.status_code == 400
++    assert resp_reuse.json()["error"] == "invalid_grant"
++    assert "already consumed" in resp_reuse.json()["error_description"]
++
++    # Verify first token is now revoked via introspection
++    resp_intro = await client.post(
++        "/internal/v1/mcp/introspect",
++        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
++        json={"token": first_token, "surface": "agent"},
++    )
++    assert resp_intro.status_code == 200
++    assert resp_intro.json()["active"] is False
++
++
++# =========================================================================
++# Test Case 3: Audience Binding & Alg Confusion
++# =========================================================================
++
++
++async def test_case_3_audience_binding_and_alg_confusion(
++    api_env: ApiEnv,
++    make_user: Callable[..., Any],
++    as_principal: Callable[..., Any],
++) -> None:
++    """Test Case 3: Agent JWT presented to admin -> 403; forged HS256 JWT -> rejected."""
++    client = api_env.client
++    redirect_uri = "http://127.0.0.1:8080/callback"
++    resource = "http://test/mcp/agent"
++
++    # Register client
++    resp_reg = await client.post(
++        "/oauth/register",
++        json={"client_name": "Audience Test App", "redirect_uris": [redirect_uri]},
++    )
++    client_id = resp_reg.json()["client_id"]
++
++    user = await make_user("carol", workspace_role="WORKSPACE_MEMBER")
++    as_principal(user)
++    verifier, challenge = _generate_pkce()
++
++    # Authorize & mint token with resource=agent
++    resp_decision = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": "state3",
++            "action": "approve",
++            "scopes": ["agent:read"],
++        },
++        follow_redirects=False,
++    )
++    loc_query = urllib.parse.urlparse(resp_decision.headers["location"]).query
++    code = urllib.parse.parse_qs(loc_query)["code"][0]
++
++    api_env.resolver.principal = None
++    resp_token = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code,
++            "code_verifier": verifier,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++        },
++    )
++    agent_jwt = resp_token.json()["access_token"]
++
++    # 3a. Present agent JWT to admin introspection -> active: false, reason: SURFACE_KEY_MISMATCH
++    resp_intro_admin = await client.post(
++        "/internal/v1/mcp/introspect",
++        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
++        json={"token": agent_jwt, "surface": "admin"},
++    )
++    assert resp_intro_admin.status_code == 200
++    assert resp_intro_admin.json()["active"] is False
++    assert resp_intro_admin.json()["reason"] == "SURFACE_KEY_MISMATCH"
++
++    # 3b. Present agent JWT to MCP admin server -> 403 SURFACE_KEY_MISMATCH
++    raw_app = getattr(client._transport, "app", None)  # noqa: SLF001
++    assert raw_app is not None
++    mcp_admin_client, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="admin")
++    try:
++        resp_mcp = await mcp_admin_client.post(
++            "/mcp/admin",
++            headers={"Authorization": f"Bearer {agent_jwt}"},
++            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
++        )
++        assert resp_mcp.status_code == 403
++        assert resp_mcp.json()["error"] == "SURFACE_KEY_MISMATCH"
++    finally:
++        await mcp_admin_client.aclose()
++
++    # 3c. Alg confusion: Construct HS256 token using public key bytes
++    jwks = get_jwks()
++    pub_key_dict = jwks["keys"][0]
++    pub_bytes = f"{pub_key_dict['x']}{pub_key_dict['y']}".encode("ascii")
++    hs_key = OctKey.import_key(pub_bytes)
++
++    header = {"alg": "HS256", "typ": "JWT", "kid": pub_key_dict["kid"]}
++    now = int(time.time())
++    payload = {
++        "iss": "http://test",
++        "sub": str(user.id),
++        "aud": resource,
++        "surface": "agent",
++        "scope": "agent:read",
++        "client_id": client_id,
++        "grant_id": str(uuid.uuid4()),
++        "jti": str(uuid.uuid4()),
++        "ws": str(user.workspace_id),
++        "iat": now,
++        "exp": now + 900,
++    }
++    forged_jwt = jwt.encode(header, payload, hs_key)
++
++    resp_forged_intro = await client.post(
++        "/internal/v1/mcp/introspect",
++        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
++        json={"token": forged_jwt, "surface": "agent"},
++    )
++    assert resp_forged_intro.status_code == 200
++    assert resp_forged_intro.json()["active"] is False
++
++
++# =========================================================================
++# Test Case 4: Boundary Conditions
++# =========================================================================
++
++
++async def test_case_4_boundary_conditions(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Any],
++    as_principal: Callable[..., Any],
++) -> None:
++    """Test Case 4: Expired code -> 400; expired token -> 401; RT reuse -> revoke; URI checks."""
++    client = api_env.client
++    redirect_uri = "http://127.0.0.1:8080/callback"
++    resource = "http://test/mcp/agent"
++
++    # 4a. 6 redirect URIs during registration -> 400
++    resp_reg_invalid = await client.post(
++        "/oauth/register",
++        json={
++            "client_name": "Too Many URIs",
++            "redirect_uris": [f"http://127.0.0.1:808{i}/callback" for i in range(6)],
++        },
++    )
++    assert resp_reg_invalid.status_code == 400
++    assert "redirect" in resp_reg_invalid.json()["error_description"].lower()
++
++    # Register valid client
++    resp_reg = await client.post(
++        "/oauth/register",
++        json={"client_name": "Boundary Test App", "redirect_uris": [redirect_uri]},
++    )
++    client_id = resp_reg.json()["client_id"]
++
++    user = await make_user("dave", workspace_role="WORKSPACE_MEMBER")
++    as_principal(user)
++    verifier, challenge = _generate_pkce()
++
++    # 4b. redirect_uri with trailing slash difference -> rejected with 400 invalid_request
++    resp_uri_diff = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri + "/",  # Trailing slash difference
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": "state4",
++            "resource": resource,
++        },
++    )
++    assert resp_uri_diff.status_code == 400
++    assert resp_uri_diff.json()["error"] == "invalid_request"
++
++    # Authorize valid code
++    resp_decision = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": "state4",
++            "action": "approve",
++            "scopes": ["agent:read"],
++        },
++        follow_redirects=False,
++    )
++    loc_q = urllib.parse.urlparse(resp_decision.headers["location"]).query
++    code = urllib.parse.parse_qs(loc_q)["code"][0]
++
++    # 4c. Code redeemed at 300s + 1 (expired) -> invalid_grant
++    # Manipulate expires_at in DB
++    code_sha = hashlib.sha256(code.encode("ascii")).digest()
++    await api_env.seed.execute(
++        update(OAuthAuthorizationCode)
++        .where(OAuthAuthorizationCode.code_sha256 == code_sha)
++        .values(expires_at=datetime.fromtimestamp(time.time() - 10, tz=UTC))
++    )
++    await api_env.seed.commit()
++
++    api_env.resolver.principal = None
++    resp_expired_code = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code,
++            "code_verifier": verifier,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++        },
++    )
++    assert resp_expired_code.status_code == 400
++    assert resp_expired_code.json()["error"] == "invalid_grant"
++    assert "expired" in resp_expired_code.json()["error_description"]
++
++    # 4d. Access token at 900s + 1 -> expired
++    expired_token = mint_access_token(
++        issuer="http://test",
++        subject=user.id,
++        audience=resource,
++        surface="agent",
++        scopes=["agent:read"],
++        client_id=client_id,
++        grant_id=uuid.uuid4(),
++        workspace_id=user.workspace_id,
++        ttl_seconds=-10,  # Already expired
++    )
++    resp_expired_intro = await client.post(
++        "/internal/v1/mcp/introspect",
++        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
++        json={"token": expired_token, "surface": "agent"},
++    )
++    assert resp_expired_intro.status_code == 200
++    assert resp_expired_intro.json()["active"] is False
++
++    # 4e. Refresh token single-use rotation and reuse detection
++    as_principal(user)
++    v2, c2 = _generate_pkce()
++    resp_dec2 = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++            "code_challenge": c2,
++            "code_challenge_method": "S256",
++            "state": "state4b",
++            "action": "approve",
++            "scopes": ["agent:read"],
++        },
++        follow_redirects=False,
++    )
++    loc_query2 = urllib.parse.urlparse(resp_dec2.headers["location"]).query
++    code2 = urllib.parse.parse_qs(loc_query2)["code"][0]
++
++    api_env.resolver.principal = None
++    resp_tok2 = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code2,
++            "code_verifier": v2,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++        },
++    )
++    rt1 = resp_tok2.json()["refresh_token"]
++
++    # Redeem RT1 -> yields RT2 and token T2
++    resp_refresh1 = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "refresh_token",
++            "client_id": client_id,
++            "refresh_token": rt1,
++        },
++    )
++    assert resp_refresh1.status_code == 200
++    rt2 = resp_refresh1.json()["refresh_token"]
++    t2 = resp_refresh1.json()["access_token"]
++    assert rt2 != rt1
++
++    # Present old RT1 again -> reuse detection triggers!
++    resp_reuse_rt = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "refresh_token",
++            "client_id": client_id,
++            "refresh_token": rt1,
++        },
++    )
++    assert resp_reuse_rt.status_code == 400
++    assert resp_reuse_rt.json()["error"] == "invalid_grant"
++    assert "reuse detected" in resp_reuse_rt.json()["error_description"]
++
++    # Verify entire family revoked: T2 and RT2 are now useless
++    resp_t2_intro = await client.post(
++        "/internal/v1/mcp/introspect",
++        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
++        json={"token": t2, "surface": "agent"},
++    )
++    assert resp_t2_intro.status_code == 200
++    assert resp_t2_intro.json()["active"] is False
++
++    resp_rt2_retry = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "refresh_token",
++            "client_id": client_id,
++            "refresh_token": rt2,
++        },
++    )
++    assert resp_rt2_retry.status_code == 400
++
++
++# =========================================================================
++# Test Case 5: Admin AAL & Client Approval Gate
++# =========================================================================
++
++
++async def test_case_5_admin_aal_and_approval_gate(
++    api_env: ApiEnv,
++    make_user: Callable[..., Any],
++    as_principal: Callable[..., Any],
++) -> None:
++    """Test Case 5: AAL1 session for admin surface rejected; approval gate."""
++    client = api_env.client
++    redirect_uri = "http://127.0.0.1:8080/callback"
++    admin_resource = "http://test/mcp/admin"
++
++    # Register client
++    resp_reg = await client.post(
++        "/oauth/register",
++        json={"client_name": "AAL Test App", "redirect_uris": [redirect_uri]},
++    )
++    client_id = resp_reg.json()["client_id"]
++
++    # 5a. User at AAL1 requests /mcp/admin -> access_denied with aal2_required
++    user_aal1 = await make_user("eve_aal1", workspace_role="WORKSPACE_ADMIN")
++    as_principal(user_aal1)  # Default aal_level is 1
++    _verifier, challenge = _generate_pkce()
++
++    resp_admin_aal1 = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": "state-aal1",
++            "resource": admin_resource,
++        },
++        follow_redirects=False,
++    )
++    assert resp_admin_aal1.status_code == 302
++    parsed_loc = urllib.parse.urlparse(resp_admin_aal1.headers["location"])
++    qs = urllib.parse.parse_qs(parsed_loc.query)
++    assert qs["error"][0] == "access_denied"
++    assert qs["error_description"][0] == "aal2_required"
++
++    # 5b. Client approval gate: require_admin_oauth_client_approval policy
++    resp_reg_pending = await client.post(
++        "/oauth/register",
++        headers={"x-require-admin-oauth-client-approval": "true"},
++        json={"client_name": "Pending App", "redirect_uris": [redirect_uri]},
++    )
++    assert resp_reg_pending.status_code == 201
++    pending_client_id = resp_reg_pending.json()["client_id"]
++    assert resp_reg_pending.json()["status"] == "pending_admin_approval"
++
++    # Authorize with pending client -> rejected
++    resp_auth_pending = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": pending_client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": "state-pending",
++            "resource": "http://test/mcp/agent",
++        },
++        follow_redirects=False,
++    )
++    assert resp_auth_pending.status_code == 302
++    pending_loc_q = urllib.parse.urlparse(resp_auth_pending.headers["location"]).query
++    qs_pending = urllib.parse.parse_qs(pending_loc_q)
++    assert qs_pending["error"][0] == "unauthorized_client"
++    assert qs_pending["error_description"][0] == "client_pending_admin_approval"
++
++    # Attempt to approve with non-admin / AAL1 caller -> 403
++    resp_patch_aal1 = await client.patch(
++        f"/api/v1/admin/oauth-clients/{pending_client_id}",
++        json={"status": "active"},
++    )
++    assert resp_patch_aal1.status_code == 403
++
++    # Switch caller to AAL2 Workspace Admin
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user_aal1.id,
++        workspace_id=user_aal1.workspace_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++
++    resp_approve = await client.patch(
++        f"/api/v1/admin/oauth-clients/{pending_client_id}",
++        json={"status": "active"},
++    )
++    assert resp_approve.status_code == 200
++    assert resp_approve.json()["status"] == "active"
++
++    # Now authorize succeeds!
++    resp_auth_approved = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": pending_client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": "state-now-active",
++            "resource": "http://test/mcp/agent",
++        },
++    )
++    assert resp_auth_approved.status_code == 200
++    assert "Authorize Pending App" in resp_auth_approved.text
++
++
++# =========================================================================
++# Test Case 6: Consent Narrowing & Deauthorization
++# =========================================================================
++
++
++async def test_case_6_consent_narrowing_and_deauthorization(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Any],
++    make_project: Callable[..., Any],
++    as_principal: Callable[..., Any],
++) -> None:
++    """Test Case 6: Narrow scope/project -> write tool rejected; RFC 7009 revoke -> 401."""
++    client = api_env.client
++    redirect_uri = "http://127.0.0.1:8080/callback"
++    resource = "http://test/mcp/agent"
++
++    user = await make_user("frank", workspace_role="WORKSPACE_MEMBER")
++    project_kan = await make_project("KAN", created_by=user)
++    as_principal(user)
++
++    resp_reg = await client.post(
++        "/oauth/register",
++        json={"client_name": "Narrow App", "redirect_uris": [redirect_uri]},
++    )
++    client_id = resp_reg.json()["client_id"]
++    verifier, challenge = _generate_pkce()
++
++    # 6a. User approves decision with NARROWED scope (only agent:read) and project KAN
++    resp_decision = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": "state6",
++            "action": "approve",
++            "scopes": ["agent:read"],  # Narrowed from requested read+write
++            "allowed_project_id": str(project_kan),
++        },
++        follow_redirects=False,
++    )
++    loc_query = urllib.parse.urlparse(resp_decision.headers["location"]).query
++    code = urllib.parse.parse_qs(loc_query)["code"][0]
++
++    api_env.resolver.principal = None
++    resp_token = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code,
++            "code_verifier": verifier,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++        },
++    )
++    access_token = resp_token.json()["access_token"]
++    refresh_token = resp_token.json()["refresh_token"]
++
++    # Verify introspection shows narrowed scopes and allowed projects
++    resp_intro = await client.post(
++        "/internal/v1/mcp/introspect",
++        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
++        json={"token": access_token, "surface": "agent"},
++    )
++    intro_data = resp_intro.json()
++    assert intro_data["scopes"] == ["agent:read"]
++    assert intro_data["allowed_projects"] == [str(project_kan)]
++
++    # 6b. Present token to MCP write tool -> rejected with INSUFFICIENT_SCOPE
++    raw_app = getattr(client._transport, "app", None)  # noqa: SLF001
++    assert raw_app is not None
++    mcp_client, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="agent")
++    try:
++        # 1. MCP initialize
++        init_resp = await mcp_client.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {access_token}"},
++            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
++        )
++        assert init_resp.status_code == 200
++        session_id = init_resp.headers.get("mcp-session-id")
++
++        headers = {"Authorization": f"Bearer {access_token}"}
++        if session_id:
++            headers["Mcp-Session-Id"] = session_id
++
++        resp_tool_write = await mcp_client.post(
++            "/mcp/agent",
++            headers=headers,
++            json={
++                "jsonrpc": "2.0",
++                "id": 2,
++                "method": "tools/call",
++                "params": {"name": "test_agent_write", "arguments": {}},
++            },
++        )
++        assert resp_tool_write.status_code == 200
++        tool_res = resp_tool_write.json()["result"]
++        assert tool_res["isError"] is True
++        assert "INSUFFICIENT_SCOPE" in tool_res["content"][0]["text"]
++    finally:
++        await mcp_client.aclose()
++
++    # 6c. User self-service listing: GET /api/v1/auth/oauth-grants
++    as_principal(user)
++    resp_grants = await client.get("/api/v1/auth/oauth-grants")
++    assert resp_grants.status_code == 200
++    grants_list = resp_grants.json()
++    assert len(grants_list) >= 1
++    assert isinstance(uuid.UUID(grants_list[0]["id"]), uuid.UUID)
++
++    # 6d. RFC 7009 revocation via POST /oauth/revoke
++    api_env.resolver.principal = None
++    resp_revoke = await client.post(
++        "/oauth/revoke",
++        data={"token": access_token, "token_type_hint": "access_token"},
++    )
++    assert resp_revoke.status_code == 200
++
++    # Introspection is now inactive
++    resp_intro_revoked = await client.post(
++        "/internal/v1/mcp/introspect",
++        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
++        json={"token": access_token, "surface": "agent"},
++    )
++    assert resp_intro_revoked.json()["active"] is False
++
++    # Calling /oauth/token with the refresh token is now rejected
++    resp_rt_revoked = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "refresh_token",
++            "client_id": client_id,
++            "refresh_token": refresh_token,
++        },
++    )
++    assert resp_rt_revoked.status_code == 400
++
++    # 6e. Verify self-service DELETE /api/v1/auth/oauth-grants/{grant_id}
++    # Create another grant
++    as_principal(user)
++    v3, c3 = _generate_pkce()
++    resp_dec3 = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++            "code_challenge": c3,
++            "code_challenge_method": "S256",
++            "state": "state6c",
++            "action": "approve",
++            "scopes": ["agent:read"],
++        },
++        follow_redirects=False,
++    )
++    loc_q3 = urllib.parse.urlparse(resp_dec3.headers["location"]).query
++    code3 = urllib.parse.parse_qs(loc_q3)["code"][0]
++    api_env.resolver.principal = None
++    resp_tok3 = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code3,
++            "code_verifier": v3,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++        },
++    )
++    tok3 = resp_tok3.json()["access_token"]
++
++    as_principal(user)
++    grants_after = (await client.get("/api/v1/auth/oauth-grants")).json()
++    new_grant_id = grants_after[0]["id"]
++
++    resp_del_grant = await client.delete(f"/api/v1/auth/oauth-grants/{new_grant_id}")
++    assert resp_del_grant.status_code == 204
++
++    # Introspect tok3 -> inactive
++    resp_tok3_intro = await client.post(
++        "/internal/v1/mcp/introspect",
++        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
++        json={"token": tok3, "surface": "agent"},
++    )
++    assert resp_tok3_intro.json()["active"] is False
++
++
++# =========================================================================
++# Test Case 7: Metadata & Security Invariants
++# =========================================================================
++
++
++async def test_case_7_metadata_and_security_invariants(
++    api_env: ApiEnv,
++) -> None:
++    """Test Case 7: RFC 8414 AS metadata, JWKS, and query parameter ban on access_token."""
++    client = api_env.client
++
++    # 7a. RFC 8414 Authorization Server Metadata
++    resp_meta = await client.get("/.well-known/oauth-authorization-server")
++    assert resp_meta.status_code == 200
++    meta = resp_meta.json()
++    assert meta["issuer"] == "http://test"
++    assert meta["authorization_endpoint"] == "http://test/oauth/authorize"
++    assert meta["token_endpoint"] == "http://test/oauth/token"
++    assert meta["revocation_endpoint"] == "http://test/oauth/revoke"
++    assert meta["registration_endpoint"] == "http://test/oauth/register"
++    assert meta["jwks_uri"] == "http://test/oauth/jwks.json"
++    assert meta["code_challenge_methods_supported"] == ["S256"]
++    assert "authorization_code" in meta["grant_types_supported"]
++    assert "refresh_token" in meta["grant_types_supported"]
++
++    # 7b. JWKS Endpoint
++    resp_jwks = await client.get("/oauth/jwks.json")
++    assert resp_jwks.status_code == 200
++    jwks = resp_jwks.json()
++    assert "keys" in jwks
++    assert len(jwks["keys"]) >= 1
++    key_entry = jwks["keys"][0]
++    assert key_entry["kty"] == "EC"
++    assert key_entry["crv"] == "P-256"
++    assert key_entry["use"] == "sig"
++    assert key_entry["alg"] == "ES256"
++
++    # 7c. Query parameter prohibition: ?access_token=... must return 400 on all OAuth endpoints
++    endpoints_to_test = [
++        ("GET", "/.well-known/oauth-authorization-server"),
++        ("GET", "/oauth/jwks.json"),
++        ("POST", "/oauth/register"),
++        ("GET", "/oauth/authorize"),
++        ("POST", "/oauth/token"),
++        ("POST", "/oauth/revoke"),
++    ]
++    for method, path in endpoints_to_test:
++        if method == "GET":
++            resp = await client.get(f"{path}?access_token=leak123")
++        else:
++            resp = await client.post(f"{path}?access_token=leak123")
++        assert resp.status_code == 400
++        assert resp.json()["error"] == "invalid_request"
++        err_desc = resp.json()["error_description"]
++        assert "access_token parameter in query string is strictly forbidden" in err_desc
+diff --git a/kanban/tests/oauth/test_oauth_unit.py b/kanban/tests/oauth/test_oauth_unit.py
+new file mode 100644
+index 0000000..7ec6114
+--- /dev/null
++++ b/kanban/tests/oauth/test_oauth_unit.py
+@@ -0,0 +1,201 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests targeting helper functions and boundary conditions for kanban.oauth."""
++
++from __future__ import annotations
++
++import base64
++import time
++import uuid
++
++import pytest
++from joserfc import jwt
++
++from kanban.oauth.jwt import (
++    OAuthTokenError,
++    _get_signing_eckey,
++    get_jwks,
++    mint_access_token,
++    verify_access_token,
++)
++from kanban.oauth.server import (
++    MAX_CODE_VERIFIER_LEN,
++    OAuth2Error,
++    RegistrationRateLimiter,
++    check_registration_rate_limit,
++    parse_surface_from_resource,
++    render_consent_screen,
++    validate_redirect_uri,
++    validate_registration_redirect_uris,
++    verify_pkce_s256,
++)
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++def test_verify_pkce_s256_boundaries() -> None:
++    """Test PKCE code verifier length and character boundaries."""
++    # Under minimum
++    assert not verify_pkce_s256("short", "challenge")
++    # Over maximum
++    assert not verify_pkce_s256("x" * (MAX_CODE_VERIFIER_LEN + 1), "challenge")
++    # Non-ascii
++    assert not verify_pkce_s256("x" * 43 + "\u2014", "challenge")
++
++
++def test_validate_redirect_uri() -> None:
++    """Exact string match required."""
++    assert validate_redirect_uri("https://example.com/cb", ["https://example.com/cb"])
++    assert not validate_redirect_uri("https://example.com/other", ["https://example.com/cb"])
++
++
++def test_validate_registration_redirect_uris_errors() -> None:
++    """Test constraints on redirect URIs during dynamic registration."""
++    # Valid uris pass without error
++    validate_registration_redirect_uris(
++        [
++            "https://example.com/callback",
++            "http://127.0.0.1:8080/callback",
++            "http://localhost:3000/callback",
++        ]
++    )
++
++    # Empty
++    with pytest.raises(OAuth2Error) as exc_empty:
++        validate_registration_redirect_uris([])
++    assert exc_empty.value.status_code == 400
++    assert "At least one" in exc_empty.value.description
++
++    # Over 5
++    with pytest.raises(OAuth2Error) as exc_max:
++        validate_registration_redirect_uris([f"https://example.com/{i}" for i in range(6)])
++    assert exc_max.value.status_code == 400
++    assert "Maximum 5" in exc_max.value.description
++
++    # Plain HTTP non-loopback
++    with pytest.raises(OAuth2Error) as exc_http:
++        validate_registration_redirect_uris(["http://example.com/cb"])
++    assert exc_http.value.status_code == 400
++
++    # Non-HTTP scheme
++    with pytest.raises(OAuth2Error) as exc_ftp:
++        validate_registration_redirect_uris(["ftp://127.0.0.1/cb"])
++    assert exc_ftp.value.status_code == 400
++
++
++def test_registration_rate_limiter() -> None:
++    """Rate limiter enforces sliding window per IP."""
++    limiter = RegistrationRateLimiter(limit=2, window_s=10.0)
++    assert limiter.check("1.2.3.4")
++    assert limiter.check("1.2.3.4")
++    assert not limiter.check("1.2.3.4")
++
++    # Helper function raises 429
++    for _ in range(100):
++        check_registration_rate_limit("192.168.1.50")
++    with pytest.raises(OAuth2Error) as exc:
++        check_registration_rate_limit("192.168.1.50")
++    assert exc.value.status_code == 429
++
++
++def test_parse_surface_from_resource() -> None:
++    """Test surface extraction and rejection."""
++    assert parse_surface_from_resource("https://host/mcp/agent") == "agent"
++    assert parse_surface_from_resource("https://host/mcp/docs/") == "docs"
++    assert parse_surface_from_resource("https://host/mcp/admin") == "admin"
++
++    with pytest.raises(OAuth2Error) as exc:
++        parse_surface_from_resource("https://host/mcp/unknown")
++    assert exc.value.status_code == 400
++    assert exc.value.error == "invalid_target"
++
++
++def test_render_consent_screen_with_projects() -> None:
++    """Test consent screen rendering with available projects list."""
++    p_id = uuid.uuid4()
++    resp = render_consent_screen(
++        client_name="Test Client",
++        redirect_uri="https://example.com/cb",
++        surface="agent",
++        requested_scopes=["agent:read"],
++        state="state-123",
++        code_challenge="chal",
++        code_challenge_method="S256",
++        resource="https://host/mcp/agent",
++        client_id="cid-1",
++        csrf_token="csrf-1",  # noqa: S106
++        available_projects=[(p_id, "Project Alpha")],
++    )
++    assert resp.status_code == 200
++    body_text = bytes(resp.body).decode("utf-8")
++    assert "Project Alpha" in body_text
++    assert str(p_id) in body_text
++
++
++def test_verify_access_token_branches(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Test error branches in verify_access_token."""
++    sub = uuid.uuid4()
++    ws = uuid.uuid4()
++    grant = uuid.uuid4()
++    valid_tok = mint_access_token(
++        issuer="https://auth",
++        subject=sub,
++        audience="https://host/mcp/agent",
++        surface="agent",
++        scopes=["agent:read"],
++        client_id="cid-1",
++        grant_id=grant,
++        workspace_id=ws,
++    )
++
++    # 1. Surface URL match and mismatch
++    claims = verify_access_token(valid_tok, expected_surface_url="https://host/mcp/agent")
++    assert claims["sub"] == str(sub)
++
++    with pytest.raises(OAuthTokenError) as exc_aud:
++        verify_access_token(valid_tok, expected_surface_url="https://host/mcp/docs")
++    assert exc_aud.value.code == "SURFACE_KEY_MISMATCH"
++
++    # 2. Expired token
++    with pytest.raises(OAuthTokenError) as exc_exp:
++        verify_access_token(valid_tok, now=time.time() + 1000)
++    assert "expired" in str(exc_exp.value)
++
++    # 3. Missing exp claim
++    key, _ = _get_signing_eckey()
++    header = {"alg": "ES256", "typ": "JWT", "kid": "test-kid"}
++    no_exp_tok = jwt.encode(header, {"sub": str(sub)}, key)
++    with pytest.raises(OAuthTokenError) as exc_noexp:
++        verify_access_token(no_exp_tok)
++    assert "missing valid exp" in str(exc_noexp.value)
++
++    # 4. Non-ES256 algorithm via mocked decode result
++    class _MockToken:
++        def __init__(self) -> None:
++            self.header = {"alg": "ES384", "typ": "JWT"}
++            self.claims = {"sub": str(sub), "exp": time.time() + 3600}
++
++    monkeypatch.setattr(jwt, "decode", lambda _t, _k: _MockToken())
++    with pytest.raises(OAuthTokenError) as exc_alg:
++        verify_access_token(valid_tok)
++    assert "Forbidden algorithm" in str(exc_alg.value)
++
++
++def test_get_jwks_cache() -> None:
++    """Test JWKS endpoint caching returns same structure."""
++    jwks1 = get_jwks()
++    jwks2 = get_jwks()
++    assert jwks1 == jwks2
++    assert len(jwks1["keys"]) >= 1
+diff --git a/mcp/app.py b/mcp/app.py
+index 9ed1b21..750afdb 100644
+--- a/mcp/app.py
++++ b/mcp/app.py
+@@ -10,6 +10,7 @@ from starlette.routing import Mount, Route
+ 
+ from mcp.auth import McpAuthMiddleware
+ from mcp.internal_client import KanbanApiClient
++from mcp.metadata import protected_resource_metadata_endpoint
+ from mcp.protocol import InMemorySessionStore, McpProtocolHandler
+ from mcp.registry import Surface, ToolRegistry, create_placeholder_tool
+ from mcp.settings import McpSettings
+@@ -117,6 +118,12 @@ def create_mcp_app(
+     admin_app = _build_surface_sub_app(admin_handler)
+ 
+     routes = [
++        # RFC 9728 Protected-Resource Metadata
++        Route(
++            "/.well-known/oauth-protected-resource/mcp/{surface}",
++            protected_resource_metadata_endpoint,
++            methods=["GET"],
++        ),
+         # Explicit direct routes for /mcp/<surface>
+         Route("/mcp/agent", agent_handler.handle_request, methods=["GET", "POST", "DELETE"]),
+         Route("/mcp/docs", docs_handler.handle_request, methods=["GET", "POST", "DELETE"]),
+diff --git a/mcp/auth.py b/mcp/auth.py
+index 14daedd..89b4bec 100644
+--- a/mcp/auth.py
++++ b/mcp/auth.py
+@@ -248,12 +248,14 @@ class McpAuthMiddleware:
+             await resp(scope, receive, send)
+             return
+ 
+-        # Local surface prefix pre-check before network call
+-        expected_prefix = SURFACE_PREFIXES[surface]
+-        if not token.startswith(expected_prefix):
+-            resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
+-            await resp(scope, receive, send)
+-            return
++        # Local surface prefix pre-check before network call for kb_* API keys
++        is_jwt = token.startswith("eyJ")
++        if not is_jwt:
++            expected_prefix = SURFACE_PREFIXES[surface]
++            if not token.startswith(expected_prefix):
++                resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
++                await resp(scope, receive, send)
++                return
+ 
+         digest = hash_mcp_api_key(token)
+ 
+diff --git a/mcp/metadata.py b/mcp/metadata.py
+new file mode 100644
+index 0000000..984baa2
+--- /dev/null
++++ b/mcp/metadata.py
+@@ -0,0 +1,61 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""RFC 9728 protected-resource metadata endpoints for MCP surfaces (KB-P4-02b)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, Final
++
++from starlette.responses import JSONResponse, Response
++
++if TYPE_CHECKING:
++    from starlette.requests import Request
++
++SURFACE_SCOPES: Final[dict[str, list[str]]] = {
++    "agent": ["agent:read", "agent:write"],
++    "docs": ["docs:read", "docs:write"],
++    "admin": ["admin:read", "admin:write", "admin:destructive"],
++}
++
++
++def build_protected_resource_metadata(
++    surface: str,
++    base_url: str,
++    issuer: str | None = None,
++) -> dict[str, Any] | None:
++    """Construct RFC 9728 metadata document for a given MCP surface."""
++    normalized_surface = surface.lower().strip()
++    scopes = SURFACE_SCOPES.get(normalized_surface)
++    if scopes is None:
++        return None
++
++    clean_base = base_url.rstrip("/")
++    clean_issuer = issuer.rstrip("/") if issuer else clean_base
++
++    return {
++        "resource": f"{clean_base}/mcp/{normalized_surface}",
++        "authorization_servers": [clean_issuer],
++        "scopes_supported": scopes,
++        "bearer_methods_supported": ["header"],
++    }
++
++
++async def protected_resource_metadata_endpoint(request: Request) -> Response:
++    """Handle GET /.well-known/oauth-protected-resource/mcp/{surface}."""
++    surface = request.path_params.get("surface", "")
++    base_url = str(request.base_url).rstrip("/")
++
++    metadata = build_protected_resource_metadata(surface, base_url)
++    if metadata is None:
++        return JSONResponse(
++            {"error": "not_found", "message": f"Unknown surface {surface!r}"},
++            status_code=404,
++        )
++
++    return JSONResponse(
++        metadata,
++        headers={
++            "Content-Type": "application/json",
++            "Cache-Control": "public, max-age=3600",
++        },
++    )
+diff --git a/mcp/tests/test_metadata.py b/mcp/tests/test_metadata.py
+new file mode 100644
+index 0000000..1719d9a
+--- /dev/null
++++ b/mcp/tests/test_metadata.py
+@@ -0,0 +1,71 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for RFC 9728 protected-resource metadata endpoints (KB-P4-02b)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++import httpx
++import pytest
++
++from mcp.app import create_mcp_app
++from mcp.metadata import build_protected_resource_metadata
++from mcp.settings import McpSettings
++
++if TYPE_CHECKING:
++    from starlette.types import ASGIApp
++
++
++@pytest.fixture
++def mcp_app() -> ASGIApp:
++    """Create test MCP ASGI application."""
++    settings = McpSettings(
++        mode="standalone_inprocess",
++        auth_enabled=False,
++    )
++    return create_mcp_app(settings=settings)
++
++
++@pytest.mark.asyncio
++async def test_protected_resource_metadata_surfaces(mcp_app: ASGIApp) -> None:
++    """Test RFC 9728 metadata documents for all 3 surfaces (Test Case 7)."""
++    transport = httpx.ASGITransport(app=mcp_app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
++        # 1. Agent surface
++        resp_agent = await client.get("/.well-known/oauth-protected-resource/mcp/agent")
++        assert resp_agent.status_code == 200
++        data_agent = resp_agent.json()
++        assert data_agent["resource"] == "http://testserver/mcp/agent"
++        assert data_agent["authorization_servers"] == ["http://testserver"]
++        assert data_agent["scopes_supported"] == ["agent:read", "agent:write"]
++        assert data_agent["bearer_methods_supported"] == ["header"]
++
++        # 2. Docs surface
++        resp_docs = await client.get("/.well-known/oauth-protected-resource/mcp/docs")
++        assert resp_docs.status_code == 200
++        data_docs = resp_docs.json()
++        assert data_docs["resource"] == "http://testserver/mcp/docs"
++        assert data_docs["scopes_supported"] == ["docs:read", "docs:write"]
++        assert data_docs["bearer_methods_supported"] == ["header"]
++
++        # 3. Admin surface
++        resp_admin = await client.get("/.well-known/oauth-protected-resource/mcp/admin")
++        assert resp_admin.status_code == 200
++        data_admin = resp_admin.json()
++        assert data_admin["resource"] == "http://testserver/mcp/admin"
++        assert data_admin["scopes_supported"] == ["admin:read", "admin:write", "admin:destructive"]
++        assert data_admin["bearer_methods_supported"] == ["header"]
++
++        # 4. Unknown surface -> 404
++        resp_unknown = await client.get("/.well-known/oauth-protected-resource/mcp/invalid")
++        assert resp_unknown.status_code == 404
++
++
++def test_build_protected_resource_metadata_helper() -> None:
++    """Test helper returns None for invalid surfaces."""
++    assert build_protected_resource_metadata("unknown", "http://base") is None
++    meta = build_protected_resource_metadata("agent", "http://base/", "http://issuer/")
++    assert meta is not None
++    assert meta["resource"] == "http://base/mcp/agent"
++    assert meta["authorization_servers"] == ["http://issuer"]

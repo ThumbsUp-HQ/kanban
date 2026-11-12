@@ -24,6 +24,13 @@ from database.models.issues import (
 )
 from database.models.knowledge import Doc, Page, PageVersion, Sticky
 from database.models.mcp_api_key import McpApiKey
+from database.models.oauth import (
+    OAuthAuthorizationCode,
+    OAuthClient,
+    OAuthGrant,
+    OAuthRefreshToken,
+    OAuthRevokedJti,
+)
 from database.models.outbox import OutboxEvent
 from database.models.principals import (
     EffectiveResourceAccess,
@@ -78,6 +85,11 @@ __all__ = [
     "LtreeType",
     "McpApiKey",
     "Module",
+    "OAuthAuthorizationCode",
+    "OAuthClient",
+    "OAuthGrant",
+    "OAuthRefreshToken",
+    "OAuthRevokedJti",
     "ObjectEmbedding",
     "ObjectKind",
     "ObjectLink",
