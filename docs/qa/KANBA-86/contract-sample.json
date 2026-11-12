@@ -27,7 +27,7 @@
         "headers": {
           "content-length": "195",
           "content-type": "application/json",
-          "x-request-id": "5e8ef6f5aa8041578634d89ba8499a94",
+          "x-request-id": "5086e66014d849feaebb4bf5f02c2e2b",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
@@ -38,11 +38,11 @@
           "strict-transport-security": "max-age=63072000; includeSubDomains"
         },
         "body": {
-          "id": "01a1cecc-9585-7903-8660-db7959513bdb",
+          "id": "01a1ced9-49c5-7df7-a6fc-4289068d8694",
           "link_type": "BLOCKS",
           "link_state": "ACTIVE",
           "target": {
-            "id": "01a1cecc-955e-7c70-9360-e7a5d004486b",
+            "id": "01a1ced9-4984-7e1e-908a-af4df6d1f6b8",
             "type": "issue",
             "key": "KAN-2",
             "title": "Second Issue"
@@ -71,7 +71,7 @@
         "headers": {
           "content-length": "354",
           "content-type": "application/json",
-          "x-request-id": "fdfed4723c3e4077b02aa67d3a999a05",
+          "x-request-id": "c9abf3556e89455e831eca55b4478339",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
@@ -84,7 +84,7 @@
         "body": {
           "outbound": [
             {
-              "id": "01a1cecc-964d-7cdc-81bd-348f9dfd66ff",
+              "id": "01a1ced9-4b43-735e-a311-a776894eb8e0",
               "link_type": "RELATES_TO",
               "link_state": "ACTIVE",
               "target": {
@@ -95,7 +95,7 @@
           ],
           "inbound": [
             {
-              "id": "01a1cecc-965b-7071-a3ee-4bea9df6417f",
+              "id": "01a1ced9-4b5c-7ba2-8e78-93bbdb7dc03f",
               "link_type": "RELATES_TO",
               "link_state": "ACTIVE",
               "source": {
@@ -132,7 +132,7 @@
       "response": {
         "status": 422,
         "headers": {
-          "x-request-id": "bf1c060f556c4d79833793d043524a71",
+          "x-request-id": "f023f3fa9d5f4f93b81db147310233a3",
           "content-length": "219",
           "content-type": "application/problem+json",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
@@ -150,7 +150,7 @@
           "status": 422,
           "code": "TARGET_NOT_FOUND",
           "detail": "Target object does not exist or is not readable",
-          "request_id": "bf1c060f556c4d79833793d043524a71"
+          "request_id": "f023f3fa9d5f4f93b81db147310233a3"
         }
       }
     },
@@ -178,7 +178,7 @@
       "response": {
         "status": 422,
         "headers": {
-          "x-request-id": "6b4b62bfbdcc4fffae71e1faaf4425a7",
+          "x-request-id": "16ac263e64ba43ffa98d6a645e1435ca",
           "content-length": "252",
           "content-type": "application/problem+json",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
@@ -196,7 +196,7 @@
           "status": 422,
           "code": "LINK_TYPE_NOT_ALLOWED",
           "detail": "Link type 'BLOCKS' is not permitted between 'issue' and 'project'",
-          "request_id": "6b4b62bfbdcc4fffae71e1faaf4425a7"
+          "request_id": "16ac263e64ba43ffa98d6a645e1435ca"
         }
       }
     },
@@ -224,7 +224,7 @@
       "response": {
         "status": 409,
         "headers": {
-          "x-request-id": "1fc29469ab874618ba7f8af0667c0479",
+          "x-request-id": "7bd07414a6e74c2f88317554b3a952ce",
           "content-length": "237",
           "content-type": "application/problem+json",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
@@ -242,7 +242,7 @@
           "status": 409,
           "code": "LINK_EXISTS",
           "detail": "A link of this type already exists between the source and target objects",
-          "request_id": "1fc29469ab874618ba7f8af0667c0479"
+          "request_id": "7bd07414a6e74c2f88317554b3a952ce"
         }
       }
     },
@@ -267,7 +267,7 @@
         "headers": {
           "content-length": "115",
           "content-type": "application/json",
-          "x-request-id": "ac9ff085585242359d3a4782740a3104",
+          "x-request-id": "be44403c462f48c796bbb6dd6851c6f2",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
@@ -287,7 +287,7 @@
       "name": "delete_link_204",
       "request": {
         "method": "DELETE",
-        "path": "/api/v1/links/01a1cecc-9991-72ef-bd3c-02ba4397fba8",
+        "path": "/api/v1/links/01a1ced9-51c3-7ba8-a6af-0693ba346558",
         "headers": {
           "host": "test",
           "accept": "*/*",
@@ -302,7 +302,7 @@
       "response": {
         "status": 204,
         "headers": {
-          "x-request-id": "cba5edac50364ca68f182c356b69ccb3",
+          "x-request-id": "a534cf86afae4d7c9066b59694751265",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",

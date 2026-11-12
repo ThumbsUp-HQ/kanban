@@ -1,386 +1,3 @@
-diff --git a/docs/qa/KANBA-86/build-check.txt b/docs/qa/KANBA-86/build-check.txt
-new file mode 100644
-index 0000000..77d0af8
---- /dev/null
-+++ b/docs/qa/KANBA-86/build-check.txt
-@@ -0,0 +1,33 @@
-+=== Ruff Check ===
-+All checks passed!
-+=== Ruff Format Check ===
-+130 files already formatted
-+=== Mypy Strict ===
-+Success: no issues found in 128 source files
-+=== Lint Imports ===
-+
-+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
-+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
-+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
-+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
-+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
-+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
-+  └──▶║║                    ▲ 
-+      ╚╝────────────────────┘
-+
-+
-+---------
-+Contracts
-+---------
-+
-+Analyzed 320 files, 705 dependencies.
-+-------------------------------------
-+
-+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
-+mcp forbidden from importing database KEPT
-+
-+Contracts: 2 kept, 0 broken.
-+=== Check No Unicode Dashes ===
-+=== License Gate ===
-+uv run python -m scripts.license_gate
-+SUMMARY python=110 node=1 violations=0
-diff --git a/docs/qa/KANBA-86/contract-sample.json b/docs/qa/KANBA-86/contract-sample.json
-new file mode 100644
-index 0000000..362b813
---- /dev/null
-+++ b/docs/qa/KANBA-86/contract-sample.json
-@@ -0,0 +1,319 @@
-+{
-+  "ticket": "KANBA-86",
-+  "exchanges": [
-+    {
-+      "name": "create_link_201",
-+      "request": {
-+        "method": "POST",
-+        "path": "/api/v1/objects/KAN-1/links",
-+        "headers": {
-+          "host": "test",
-+          "accept": "*/*",
-+          "accept-encoding": "gzip, deflate",
-+          "connection": "keep-alive",
-+          "user-agent": "python-httpx/0.28.1",
-+          "x-csrf-token": "<redacted>",
-+          "cookie": "<redacted>",
-+          "content-length": "39",
-+          "content-type": "application/json"
-+        },
-+        "body": {
-+          "target": "KAN-2",
-+          "link_type": "BLOCKS"
-+        }
-+      },
-+      "response": {
-+        "status": 201,
-+        "headers": {
-+          "content-length": "195",
-+          "content-type": "application/json",
-+          "x-request-id": "5e8ef6f5aa8041578634d89ba8499a94",
-+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
-+          "x-content-type-options": "nosniff",
-+          "referrer-policy": "no-referrer",
-+          "x-frame-options": "DENY",
-+          "cross-origin-opener-policy": "same-origin",
-+          "cross-origin-resource-policy": "same-origin",
-+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
-+          "strict-transport-security": "max-age=63072000; includeSubDomains"
-+        },
-+        "body": {
-+          "id": "01a1cecc-9585-7903-8660-db7959513bdb",
-+          "link_type": "BLOCKS",
-+          "link_state": "ACTIVE",
-+          "target": {
-+            "id": "01a1cecc-955e-7c70-9360-e7a5d004486b",
-+            "type": "issue",
-+            "key": "KAN-2",
-+            "title": "Second Issue"
-+          }
-+        }
-+      }
-+    },
-+    {
-+      "name": "list_links_masked_200",
-+      "request": {
-+        "method": "GET",
-+        "path": "/api/v1/objects/KAN-1/links",
-+        "headers": {
-+          "host": "test",
-+          "accept": "*/*",
-+          "accept-encoding": "gzip, deflate",
-+          "connection": "keep-alive",
-+          "user-agent": "python-httpx/0.28.1",
-+          "x-csrf-token": "<redacted>",
-+          "cookie": "<redacted>"
-+        },
-+        "body": null
-+      },
-+      "response": {
-+        "status": 200,
-+        "headers": {
-+          "content-length": "354",
-+          "content-type": "application/json",
-+          "x-request-id": "fdfed4723c3e4077b02aa67d3a999a05",
-+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
-+          "x-content-type-options": "nosniff",
-+          "referrer-policy": "no-referrer",
-+          "x-frame-options": "DENY",
-+          "cross-origin-opener-policy": "same-origin",
-+          "cross-origin-resource-policy": "same-origin",
-+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
-+          "strict-transport-security": "max-age=63072000; includeSubDomains"
-+        },
-+        "body": {
-+          "outbound": [
-+            {
-+              "id": "01a1cecc-964d-7cdc-81bd-348f9dfd66ff",
-+              "link_type": "RELATES_TO",
-+              "link_state": "ACTIVE",
-+              "target": {
-+                "restricted": true,
-+                "label": "\ud83d\udd12 Restricted Object"
-+              }
-+            }
-+          ],
-+          "inbound": [
-+            {
-+              "id": "01a1cecc-965b-7071-a3ee-4bea9df6417f",
-+              "link_type": "RELATES_TO",
-+              "link_state": "ACTIVE",
-+              "source": {
-+                "restricted": true,
-+                "label": "\ud83d\udd12 Restricted Object"
-+              }
-+            }
-+          ],
-+          "truncated": false
-+        }
-+      }
-+    },
-+    {
-+      "name": "target_not_found_422",
-+      "request": {
-+        "method": "POST",
-+        "path": "/api/v1/objects/KAN-1/links",
-+        "headers": {
-+          "host": "test",
-+          "accept": "*/*",
-+          "accept-encoding": "gzip, deflate",
-+          "connection": "keep-alive",
-+          "user-agent": "python-httpx/0.28.1",
-+          "x-csrf-token": "<redacted>",
-+          "cookie": "<redacted>",
-+          "content-length": "39",
-+          "content-type": "application/json"
-+        },
-+        "body": {
-+          "target": "SEC-1",
-+          "link_type": "BLOCKS"
-+        }
-+      },
-+      "response": {
-+        "status": 422,
-+        "headers": {
-+          "x-request-id": "bf1c060f556c4d79833793d043524a71",
-+          "content-length": "219",
-+          "content-type": "application/problem+json",
-+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
-+          "x-content-type-options": "nosniff",
-+          "referrer-policy": "no-referrer",
-+          "x-frame-options": "DENY",
-+          "cross-origin-opener-policy": "same-origin",
-+          "cross-origin-resource-policy": "same-origin",
-+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
-+          "strict-transport-security": "max-age=63072000; includeSubDomains"
-+        },
-+        "body": {
-+          "type": "urn:kanban:problem:TARGET_NOT_FOUND",
-+          "title": "Target Not Found",
-+          "status": 422,
-+          "code": "TARGET_NOT_FOUND",
-+          "detail": "Target object does not exist or is not readable",
-+          "request_id": "bf1c060f556c4d79833793d043524a71"
-+        }
-+      }
-+    },
-+    {
-+      "name": "link_type_not_allowed_422",
-+      "request": {
-+        "method": "POST",
-+        "path": "/api/v1/objects/KAN-1/links",
-+        "headers": {
-+          "host": "test",
-+          "accept": "*/*",
-+          "accept-encoding": "gzip, deflate",
-+          "connection": "keep-alive",
-+          "user-agent": "python-httpx/0.28.1",
-+          "x-csrf-token": "<redacted>",
-+          "cookie": "<redacted>",
-+          "content-length": "37",
-+          "content-type": "application/json"
-+        },
-+        "body": {
-+          "target": "KAN",
-+          "link_type": "BLOCKS"
-+        }
-+      },
-+      "response": {
-+        "status": 422,
-+        "headers": {
-+          "x-request-id": "6b4b62bfbdcc4fffae71e1faaf4425a7",
-+          "content-length": "252",
-+          "content-type": "application/problem+json",
-+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
-+          "x-content-type-options": "nosniff",
-+          "referrer-policy": "no-referrer",
-+          "x-frame-options": "DENY",
-+          "cross-origin-opener-policy": "same-origin",
-+          "cross-origin-resource-policy": "same-origin",
-+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
-+          "strict-transport-security": "max-age=63072000; includeSubDomains"
-+        },
-+        "body": {
-+          "type": "urn:kanban:problem:LINK_TYPE_NOT_ALLOWED",
-+          "title": "Link Type Not Allowed",
-+          "status": 422,
-+          "code": "LINK_TYPE_NOT_ALLOWED",
-+          "detail": "Link type 'BLOCKS' is not permitted between 'issue' and 'project'",
-+          "request_id": "6b4b62bfbdcc4fffae71e1faaf4425a7"
-+        }
-+      }
-+    },
-+    {
-+      "name": "link_exists_409",
-+      "request": {
-+        "method": "POST",
-+        "path": "/api/v1/objects/KAN-1/links",
-+        "headers": {
-+          "host": "test",
-+          "accept": "*/*",
-+          "accept-encoding": "gzip, deflate",
-+          "connection": "keep-alive",
-+          "user-agent": "python-httpx/0.28.1",
-+          "x-csrf-token": "<redacted>",
-+          "cookie": "<redacted>",
-+          "content-length": "43",
-+          "content-type": "application/json"
-+        },
-+        "body": {
-+          "target": "KAN-2",
-+          "link_type": "RELATES_TO"
-+        }
-+      },
-+      "response": {
-+        "status": 409,
-+        "headers": {
-+          "x-request-id": "1fc29469ab874618ba7f8af0667c0479",
-+          "content-length": "237",
-+          "content-type": "application/problem+json",
-+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
-+          "x-content-type-options": "nosniff",
-+          "referrer-policy": "no-referrer",
-+          "x-frame-options": "DENY",
-+          "cross-origin-opener-policy": "same-origin",
-+          "cross-origin-resource-policy": "same-origin",
-+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
-+          "strict-transport-security": "max-age=63072000; includeSubDomains"
-+        },
-+        "body": {
-+          "type": "urn:kanban:problem:LINK_EXISTS",
-+          "title": "Link Already Exists",
-+          "status": 409,
-+          "code": "LINK_EXISTS",
-+          "detail": "A link of this type already exists between the source and target objects",
-+          "request_id": "1fc29469ab874618ba7f8af0667c0479"
-+        }
-+      }
-+    },
-+    {
-+      "name": "canonical_url_200",
-+      "request": {
-+        "method": "GET",
-+        "path": "/api/v1/objects/KAN-1/canonical-url",
-+        "headers": {
-+          "accept": "*/*",
-+          "accept-encoding": "gzip, deflate",
-+          "connection": "keep-alive",
-+          "user-agent": "python-httpx/0.28.1",
-+          "x-csrf-token": "<redacted>",
-+          "host": "evil.test",
-+          "cookie": "<redacted>"
-+        },
-+        "body": null
-+      },
-+      "response": {
-+        "status": 200,
-+        "headers": {
-+          "content-length": "115",
-+          "content-type": "application/json",
-+          "x-request-id": "ac9ff085585242359d3a4782740a3104",
-+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
-+          "x-content-type-options": "nosniff",
-+          "referrer-policy": "no-referrer",
-+          "x-frame-options": "DENY",
-+          "cross-origin-opener-policy": "same-origin",
-+          "cross-origin-resource-policy": "same-origin",
-+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
-+          "strict-transport-security": "max-age=63072000; includeSubDomains"
-+        },
-+        "body": {
-+          "url": "https://kb.test/projects/KAN/issues/KAN-1",
-+          "markdown": "[KAN-1](https://kb.test/projects/KAN/issues/KAN-1)"
-+        }
-+      }
-+    },
-+    {
-+      "name": "delete_link_204",
-+      "request": {
-+        "method": "DELETE",
-+        "path": "/api/v1/links/01a1cecc-9991-72ef-bd3c-02ba4397fba8",
-+        "headers": {
-+          "host": "test",
-+          "accept": "*/*",
-+          "accept-encoding": "gzip, deflate",
-+          "connection": "keep-alive",
-+          "user-agent": "python-httpx/0.28.1",
-+          "x-csrf-token": "<redacted>",
-+          "cookie": "<redacted>"
-+        },
-+        "body": null
-+      },
-+      "response": {
-+        "status": 204,
-+        "headers": {
-+          "x-request-id": "cba5edac50364ca68f182c356b69ccb3",
-+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
-+          "x-content-type-options": "nosniff",
-+          "referrer-policy": "no-referrer",
-+          "x-frame-options": "DENY",
-+          "cross-origin-opener-policy": "same-origin",
-+          "cross-origin-resource-policy": "same-origin",
-+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
-+          "strict-transport-security": "max-age=63072000; includeSubDomains"
-+        },
-+        "body": null
-+      }
-+    }
-+  ]
-+}
-diff --git a/docs/qa/KANBA-86/unit-test-results.txt b/docs/qa/KANBA-86/unit-test-results.txt
-new file mode 100644
-index 0000000..c097358
---- /dev/null
-+++ b/docs/qa/KANBA-86/unit-test-results.txt
-@@ -0,0 +1,13 @@
-+..............                                                           [100%]
-+================================ tests coverage ================================
-+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
-+
-+Name                            Stmts   Miss Branch BrPart  Cover   Missing
-+---------------------------------------------------------------------------
-+kanban/api/v1/links.py             42      0     10      0   100%
-+kanban/services/links.py          139      2     66      5    97%   109->107, 252, 374, 423->exit, 425->exit
-+kanban/services/object_ref.py      29      0     14      0   100%
-+---------------------------------------------------------------------------
-+TOTAL                             210      2     90      5    98%
-+Required test coverage of 95% reached. Total coverage: 97.67%
-+14 passed in 4.42s
 diff --git a/kanban/GEMINI.md b/kanban/GEMINI.md
 index 274425a..cfb9ee3 100644
 --- a/kanban/GEMINI.md
@@ -439,10 +56,10 @@ index 85f8b3b..c01d9d9 100644
      return v1
 diff --git a/kanban/api/v1/links.py b/kanban/api/v1/links.py
 new file mode 100644
-index 0000000..24f09ca
+index 0000000..a7d6796
 --- /dev/null
 +++ b/kanban/api/v1/links.py
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,119 @@
 +"""Typed object links, canonical URL helper, and restricted-target masking endpoints.
 +
 +Traceability: Spec S7.2 8m, S12.1.
@@ -458,6 +75,7 @@ index 0000000..24f09ca
 +
 +from kanban.api.deps import PrincipalContext, get_principal, get_rls_session, get_settings
 +from kanban.api.problems import not_found
++from kanban.api.timing import timing_floor
 +from kanban.api.v1.schemas.links import (
 +    CanonicalUrlResponse,
 +    LinkCreateRequest,
@@ -490,15 +108,16 @@ index 0000000..24f09ca
 +    session: Annotated[AsyncSession, Depends(get_rls_session)],
 +) -> LinksListResponse:
 +    """List directed links for an object, masking unreadable far endpoints."""
-+    obj = await resolve_object_ref(session, object_ref)
-+    if obj is None:
-+        not_found()
++    async with timing_floor(floor_ms=25.0):
++        obj = await resolve_object_ref(session, object_ref)
++        if obj is None:
++            not_found()
 +
-+    caps = await evaluate_capabilities(session, caller, obj.id)
-+    if Capability.VIEW not in caps:
-+        not_found()
++        caps = await evaluate_capabilities(session, caller, obj.id)
++        if Capability.VIEW not in caps:
++            not_found()
 +
-+    return await list_object_links(session, caller, obj)
++        return await list_object_links(session, caller, obj)
 +
 +
 +@router.post(
@@ -514,11 +133,12 @@ index 0000000..24f09ca
 +    session: Annotated[AsyncSession, Depends(get_rls_session)],
 +) -> OutboundLinkOut:
 +    """Validate and insert a typed link between two Universal Object Graph nodes."""
-+    source = await resolve_object_ref(session, object_ref)
-+    if source is None:
-+        not_found()
++    async with timing_floor(floor_ms=25.0):
++        source = await resolve_object_ref(session, object_ref)
++        if source is None:
++            not_found()
 +
-+    return await create_object_link(session, caller, source, req)
++        return await create_object_link(session, caller, source, req)
 +
 +
 +@router.delete(
@@ -532,8 +152,9 @@ index 0000000..24f09ca
 +    session: Annotated[AsyncSession, Depends(get_rls_session)],
 +) -> Response:
 +    """Delete an object link with anti-enumeration protection on unreadable sources."""
-+    await delete_object_link(session, caller, link_id)
-+    return Response(status_code=status.HTTP_204_NO_CONTENT)
++    async with timing_floor(floor_ms=25.0):
++        await delete_object_link(session, caller, link_id)
++        return Response(status_code=status.HTTP_204_NO_CONTENT)
 +
 +
 +@router.get(
@@ -548,15 +169,16 @@ index 0000000..24f09ca
 +    settings: Annotated[Settings, Depends(get_settings)],
 +) -> CanonicalUrlResponse:
 +    """Generate canonical URL and escaped Markdown link using settings.public_base_url."""
-+    obj = await resolve_object_ref(session, object_ref)
-+    if obj is None:
-+        not_found()
++    async with timing_floor(floor_ms=25.0):
++        obj = await resolve_object_ref(session, object_ref)
++        if obj is None:
++            not_found()
 +
-+    caps = await evaluate_capabilities(session, caller, obj.id)
-+    if Capability.VIEW not in caps:
-+        not_found()
++        caps = await evaluate_capabilities(session, caller, obj.id)
++        if Capability.VIEW not in caps:
++            not_found()
 +
-+    return build_canonical_url(settings, obj)
++        return build_canonical_url(settings, obj)
 diff --git a/kanban/api/v1/schemas/links.py b/kanban/api/v1/schemas/links.py
 new file mode 100644
 index 0000000..2e18f38

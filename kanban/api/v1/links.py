@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session, get_settings
 from kanban.api.problems import not_found
+from kanban.api.timing import timing_floor
 from kanban.api.v1.schemas.links import (
     CanonicalUrlResponse,
     LinkCreateRequest,
@@ -45,15 +46,16 @@ async def get_object_links_endpoint(
     session: Annotated[AsyncSession, Depends(get_rls_session)],
 ) -> LinksListResponse:
     """List directed links for an object, masking unreadable far endpoints."""
-    obj = await resolve_object_ref(session, object_ref)
-    if obj is None:
-        not_found()
+    async with timing_floor(floor_ms=25.0):
+        obj = await resolve_object_ref(session, object_ref)
+        if obj is None:
+            not_found()
 
-    caps = await evaluate_capabilities(session, caller, obj.id)
-    if Capability.VIEW not in caps:
-        not_found()
+        caps = await evaluate_capabilities(session, caller, obj.id)
+        if Capability.VIEW not in caps:
+            not_found()
 
-    return await list_object_links(session, caller, obj)
+        return await list_object_links(session, caller, obj)
 
 
 @router.post(
@@ -69,11 +71,12 @@ async def create_object_link_endpoint(
     session: Annotated[AsyncSession, Depends(get_rls_session)],
 ) -> OutboundLinkOut:
     """Validate and insert a typed link between two Universal Object Graph nodes."""
-    source = await resolve_object_ref(session, object_ref)
-    if source is None:
-        not_found()
+    async with timing_floor(floor_ms=25.0):
+        source = await resolve_object_ref(session, object_ref)
+        if source is None:
+            not_found()
 
-    return await create_object_link(session, caller, source, req)
+        return await create_object_link(session, caller, source, req)
 
 
 @router.delete(
@@ -87,8 +90,9 @@ async def delete_object_link_endpoint(
     session: Annotated[AsyncSession, Depends(get_rls_session)],
 ) -> Response:
     """Delete an object link with anti-enumeration protection on unreadable sources."""
-    await delete_object_link(session, caller, link_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    async with timing_floor(floor_ms=25.0):
+        await delete_object_link(session, caller, link_id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
@@ -103,12 +107,13 @@ async def get_canonical_url_endpoint(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> CanonicalUrlResponse:
     """Generate canonical URL and escaped Markdown link using settings.public_base_url."""
-    obj = await resolve_object_ref(session, object_ref)
-    if obj is None:
-        not_found()
+    async with timing_floor(floor_ms=25.0):
+        obj = await resolve_object_ref(session, object_ref)
+        if obj is None:
+            not_found()
 
-    caps = await evaluate_capabilities(session, caller, obj.id)
-    if Capability.VIEW not in caps:
-        not_found()
+        caps = await evaluate_capabilities(session, caller, obj.id)
+        if Capability.VIEW not in caps:
+            not_found()
 
-    return build_canonical_url(settings, obj)
+        return build_canonical_url(settings, obj)
