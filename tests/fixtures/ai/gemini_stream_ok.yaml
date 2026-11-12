@@ -1,0 +1,14 @@
+cassette_version: 1
+matcher: {}
+http_exchanges:
+  - request:
+      method: POST
+      path: /v1/models/gemini-2.5-flash:streamGenerateContent
+    response:
+      status: 200
+      headers:
+        content-type: text/event-stream
+      sse_chunks:
+        - '{"candidates": [{"content": {"parts": [{"text": "Hello "}]}, "finishReason": null}]}'
+        - '{"candidates": [{"content": {"parts": [{"text": "from "}]}, "finishReason": null}]}'
+        - '{"candidates": [{"content": {"parts": [{"text": "Gemini!"}]}, "finishReason": "STOP"}], "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 3}}'

@@ -1,0 +1,19 @@
+cassette_version: 1
+matcher: {}
+http_exchanges:
+  - request:
+      method: POST
+      path: /v1/models/gemini-2.5-flash:generateContent
+    response:
+      status: 200
+      headers:
+        content-type: application/json
+      json_body:
+        candidates:
+          - content:
+              parts:
+                - text: '{"status": "APPROVED"}'
+            finishReason: STOP
+        usageMetadata:
+          promptTokenCount: 10
+          candidatesTokenCount: 3

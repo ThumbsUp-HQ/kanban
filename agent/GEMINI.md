@@ -80,3 +80,39 @@ The `OllamaProvider` adapter implements the `@runtime_checkable LLMProvider` pro
 - `REDIRECT_REFUSED`: Ollama daemon responded with an HTTP redirect (3xx), which is prohibited.
 - `LINE_TOO_LARGE`: SSE/JSON stream line exceeded the 64 KiB safety threshold.
 - `BATCH_TOO_LARGE`: Batch embedding request exceeded 512 input texts.
+
+
+## Gemini Provider Adapter (`GeminiProvider`)
+
+The `GeminiProvider` adapter implements the `@runtime_checkable LLMProvider` protocol over the official `google-genai` SDK, supporting Vertex AI and paid Google AI Studio endpoints with strict data residency pinning, explicit safety settings, and zero prompt retention.
+
+### Architecture and Data Residency
+
+1. Pinned Data Residency & Zero Prompt Retention:
+   - Supports two mutually exclusive execution modes: `vertex` and `ai_studio_paid`.
+   - The free AI Studio tier (`ai_studio`) is strictly prohibited and unrepresentable, ensuring enterprise-grade zero prompt retention.
+   - For `vertex` mode, requires explicit regional pinning (`vertex_location` within `allowed_vertex_regions`). The `"global"` region is strictly rejected.
+   - Residency tier identifier exposed as `f"gemini-vertex:{vertex_location}"` or `"gemini-ai-studio-paid"`.
+2. Credential Isolation & Secret Redaction:
+   - In `vertex` mode, API keys are forbidden (`api_key=None`). Authentication relies on Google Cloud credentials.
+   - In `ai_studio_paid` mode, API key is required and wrapped in `SecretStr`.
+   - API keys are strictly redacted from `repr`, `str`, log statements, and exception messages (`_redact` helper).
+3. Native Structured Output & Local Schema Defense:
+   - Configures `response_mime_type="application/json"` and `response_schema` on outbound requests.
+   - Model outputs are re-validated locally against the requested Pydantic model (`ProviderSchemaError` on mismatch), enforcing defense-in-depth against malformed JSON or unvalidated fields.
+4. Content Safety Filters:
+   - Default safety thresholds set `HARM_CATEGORY_HARASSMENT`, `HARM_CATEGORY_HATE_SPEECH`, `HARM_CATEGORY_SEXUALLY_EXPLICIT`, and `HARM_CATEGORY_DANGEROUS_CONTENT` to `BLOCK_MEDIUM_AND_ABOVE`.
+   - Chunks or responses with `finish_reason == "SAFETY"` or prompt feedback blocks raise typed `ProviderSafetyBlock`.
+5. Size Limits & Batch Bounds:
+   - Batch vector embeddings capped at 64 inputs per request (`BATCH_TOO_LARGE` on overflow).
+   - Per-input character count capped at 8,192 characters (`INPUT_TOO_LARGE` on overflow).
+
+### Specific Error Codes
+
+- `MODEL_NOT_ALLOWED`: Requested model name is outside the configured `model_allowlist`.
+- `BATCH_TOO_LARGE`: Embedding batch contains more than 64 input strings.
+- `INPUT_TOO_LARGE`: Embedding input text exceeds 8,192 characters.
+- `SAFETY_BLOCK`: Generation or prompt was blocked by content safety filters.
+- `SCHEMA_ERROR`: Model output failed local Pydantic schema validation.
+- `HTTP_ERROR`: Upstream Gemini or Vertex API returned an HTTP 4xx or 5xx status code.
+- `TIMEOUT`: Request exceeded the configured timeout deadline.
