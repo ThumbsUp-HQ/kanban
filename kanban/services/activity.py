@@ -61,6 +61,9 @@ class ActivityEventType(StrEnum):
     PROJECT_CREATED = "PROJECT_CREATED"
     PROJECT_UPDATED = "PROJECT_UPDATED"
     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
+    AGENT_DEFINITION_CREATED = "AGENT_DEFINITION_CREATED"
+    AGENT_DEFINITION_UPDATED = "AGENT_DEFINITION_UPDATED"
+    AGENT_DEFINITION_DELETED = "AGENT_DEFINITION_DELETED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -68,6 +71,9 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.PROJECT_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.PROJECT_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.AGENT_DEFINITION_CREATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AGENT_DEFINITION_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AGENT_DEFINITION_DELETED: ActivityCategory.SYSTEM,
     }
 )
 

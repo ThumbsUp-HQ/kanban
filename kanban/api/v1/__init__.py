@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from kanban.api.v1.agent_definitions import router as agent_definitions_router
 from kanban.api.v1.health import router as health_router
 from kanban.api.v1.objects_access import router as objects_access_router
 from kanban.api.v1.projects import router as projects_router
@@ -17,6 +18,7 @@ def build_v1_router() -> APIRouter:
     v1.include_router(objects_access_router)
     v1.include_router(projects_router)
     v1.include_router(resolve_router)
+    v1.include_router(agent_definitions_router)
     return v1
 
 
