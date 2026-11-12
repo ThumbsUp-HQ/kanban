@@ -1,0 +1,51 @@
+================================================================================
+OUTBOUND SECRET SCRUBBER BENCHMARK AND CORPUS VALIDATION REPORT (KANBA-20)
+================================================================================
+
+1. CORPUS VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Positive Cases:
+  Case ID              | Secrets Found   | Redacted   | Status  
+  ------------------------------------------------------------
+  sk_legacy            | 1               | True       | PASS    
+  sk_project           | 1               | True       | PASS    
+  sk_anthropic         | 1               | True       | PASS    
+  github_tokens        | 2               | True       | PASS    
+  aws_keys             | 2               | True       | PASS    
+  bearer_and_jwt       | 1               | True       | PASS    
+  kanban_keys          | 2               | True       | PASS    
+
+False Positive Guard Corpus:
+  Case ID                  | Redacted   | Text Preserved   | Status  
+  ------------------------------------------------------------------
+  uuidv7                   | False      | True             | PASS    
+  git_commit_sha           | False      | True             | PASS    
+  ticket_keys              | False      | True             | PASS    
+  css_identifiers          | False      | True             | PASS    
+  short_sk_ident           | False      | True             | PASS    
+  code_variable_ident      | False      | True             | PASS    
+  bearer_word_variable     | False      | True             | PASS    
+  file_path                | False      | True             | PASS    
+  url                      | False      | True             | PASS    
+  public_x509_cert         | False      | True             | PASS    
+
+2. LATENCY BENCHMARKS
+--------------------------------------------------------------------------------
+2,000-char Sparkle Window (908 chars):
+  Iterations: 200
+  Median Latency: 0.0143 ms (Budget: <= 1.0000 ms) -> PASS
+  p95 Latency:    0.0162 ms (Budget: <= 5.0000 ms) -> PASS
+  Min Latency:    0.0141 ms
+  Max Latency:    0.0227 ms
+
+1 MiB Adversarial Payload (1,133,007 bytes, 1,000 unclosed PEM blocks):
+  Iterations: 10
+  Median Latency: 25.80 ms (Budget: <= 50.00 ms) -> PASS
+  p95 Latency:    26.31 ms (Budget: < 250.00 ms) -> PASS
+  Min Latency:    25.39 ms
+  Max Latency:    26.31 ms
+  Secrets Redacted: 1000
+
+================================================================================
+VERDICT: ALL BENCHMARKS PASS WITHIN STRICT LATENCY BUDGETS
+================================================================================

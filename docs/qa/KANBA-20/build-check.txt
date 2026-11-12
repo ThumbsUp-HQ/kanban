@@ -1,0 +1,39 @@
+=== uv run lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 17 files, 6 dependencies.
+----------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+
+=== uv run pytest ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /tmp/kb-wt-KANBA-20
+configfile: pyproject.toml
+plugins: cov-7.1.0
+collected 18 items
+
+agent/tests/test_smoke.py .                                              [  5%]
+database/tests/test_smoke.py .                                           [ 11%]
+kanban/tests/security/test_scrubber.py .........                         [ 61%]
+kanban/tests/test_smoke.py .                                             [ 66%]
+mcp/tests/test_smoke.py .                                                [ 72%]
+tests/test_workspace_layout.py .....                                     [100%]
+
+============================== 18 passed in 0.18s ==============================
