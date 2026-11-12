@@ -1,0 +1,33 @@
+$ uv run kanban-agent validate-echo --provider gemini --model gemini-2.5-flash --air-gap --http-cassette tests/fixtures/ai/gemini_stream_ok.yaml
+=== 1. RENDERED CONTEXT ===
+Hello Sparkle
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 0.0ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: failed
+Error Code: AIR_GAP_EGRESS_DENIED
+Detail: [AIR_GAP_EGRESS_DENIED] Air-gap mode is active: outbound cloud egress to provider 'gemini' is strictly prohibited
+EXIT CODE: 2
+
+$ uv run kanban-agent validate-echo --provider router --route fixture,fixture --cassette tests/fixtures/ai/router_fault_503.yaml --verbose-tools
+=== 1. RENDERED CONTEXT ===
+Hello Sparkle
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 5.0ms | Total: 0.2ms | Tokens: 10 in, 5 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok
+
+=== 5. ROUTE TRACE ===
+  - Provider: b948cf9b-9bb4-48ad-989c-a3f6891a5dc7 | Outcome: failure | Breaker: CLOSED | TTFT: N/A
+  - Provider: b4ad33c4-edc9-456b-9849-54a793559a1d | Outcome: success | Breaker: CLOSED | TTFT: 5.0ms
+EXIT CODE: 0

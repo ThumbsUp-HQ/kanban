@@ -138,3 +138,34 @@ The `OpenAIProvider` adapter implements the `@runtime_checkable LLMProvider` pro
    - Local validation via Pydantic model ensures schema compliance; refusals raise `ProviderRefusal`.
 5. Secret Protection:
    - `api_key` is encapsulated in Pydantic `SecretStr` and excluded from `repr()`, logs, and exception strings.
+
+## Provider Router & Resilience (`ProviderRouter`, `CircuitBreaker`, `AirGapGuard`)
+
+The `ProviderRouter` wraps multi-candidate provider pools with 3-state per-(workspace, provider) circuit breakers, data-residency locking, and fail-closed air-gap enforcement.
+
+### Circuit Breaker Invariants (`CircuitBreaker`)
+
+- State Key: `(workspace_id: UUID, provider_config_id: UUID)` stored in an in-process dictionary (per-replica state).
+- Three-State Machine:
+  * `CLOSED`: Normal operation. Availability failures increment consecutive failure counter.
+  * `OPEN`: Reached failure threshold (`DEFAULT_FAILURE_THRESHOLD = 5`). Outbound requests skip this candidate without network I/O.
+  * `HALF_OPEN`: Cooldown period (`DEFAULT_OPEN_COOLDOWN_S = 30.0s`) has elapsed. Admits exactly 1 probe call. Probe success resets failure count to 0 and transitions to `CLOSED`. Probe failure restarts cooldown and transitions back to `OPEN`.
+- Trip Conditions:
+  * `ProviderHTTPError` with status `429` or `>= 500`.
+  * `ProviderTimeout` (including TTFT SLA breach).
+  * `ProviderUnavailable`.
+- Content/Policy Exemptions: `ProviderSchemaError`, `ProviderSafetyBlock`, `ProviderRefusal`, `ProviderPolicyError` do NOT trip the breaker (they represent content or policy decisions, not provider availability).
+- Retry-After Backoff: An HTTP 429 response carrying a `Retry-After` header extends cooldown to `max(open_cooldown_s, retry_after_s)` capped at `MAX_COOLDOWN_S = 300.0s`.
+
+### Air-Gap Enforcement (`AirGapGuard`)
+
+- Fail-Closed Policy: If `air_gap_mode` is `True` or unspecified (`None`), external cloud egress is forbidden.
+- Allowed Providers Under Air-Gap: Strictly `ollama` (local loopback/CIDR pinned) and `fixture` (offline testing).
+- Rejection Barrier: Calls to `gemini` or `openai` raise `EgressDenied(code="AIR_GAP_EGRESS_DENIED")` BEFORE provider construction, DNS resolution, or socket allocation.
+
+### Routing & Failover Invariants (`ProviderRouter`)
+
+- Residency Locking: Candidates are prioritized by `priority` ascending. The first healthy candidate selected fixes the request's `residency_tier`. Any subsequent failovers MUST stay within that exact same residency tier (cloud never fails over to a different vendor tier; air-gapped workloads never fail over to cloud).
+- Max Attempts: Capped at `min(len(eligible), 3)` attempts per request.
+- Streaming Failover Barrier: Failover is permitted strictly before the first stream chunk is yielded. Once token streaming begins, upstream faults propagate immediately to prevent mixed-model corrupted generation.
+- TTFT SLA Enforcement: When `ttft_deadline_ms` is configured, waiting for the first chunk is bounded by `asyncio.timeout`. Expiry invokes `aclose()` on the upstream stream and trips the candidate's circuit breaker with `ProviderTimeout`.

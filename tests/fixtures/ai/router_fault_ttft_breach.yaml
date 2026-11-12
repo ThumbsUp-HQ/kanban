@@ -1,0 +1,14 @@
+cassette_version: 1
+matcher:
+  prompt_contains:
+    - "ttft-breach-test"
+simulated_ttft_ms: 400.0
+usage:
+  prompt_tokens: 12
+  completion_tokens: 6
+stream_chunks:
+  - "Delayed "
+  - "response"
+structured_output:
+  echo: "Delayed response"
+  ok: true

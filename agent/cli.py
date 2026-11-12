@@ -61,7 +61,7 @@ def get_registered_subcommands() -> Mapping[str, SubcommandSpec]:
 def add_common_agent_flags(
     parser: argparse.ArgumentParser,
     *,
-    available_providers: Sequence[str] = ("fixture", "ollama", "gemini", "openai"),
+    available_providers: Sequence[str] = ("fixture", "ollama", "gemini", "openai", "router"),
 ) -> None:
     """Add standard provider, model, cassette, and reporting flags to a parser."""
     parser.add_argument(
@@ -69,6 +69,18 @@ def add_common_agent_flags(
         choices=available_providers,
         default="fixture",
         help="LLM provider or execution runtime harness.",
+    )
+    parser.add_argument(
+        "--route",
+        type=str,
+        default="fixture,fixture",
+        help="Comma-separated candidate provider kinds for router (e.g. 'fixture,fixture').",
+    )
+    parser.add_argument(
+        "--air-gap",
+        action="store_true",
+        default=False,
+        help="Enforce air-gap restrictions (blocks cloud providers before DNS/socket transport).",
     )
     parser.add_argument(
         "--model",

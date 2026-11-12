@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /tmp/kb-wt-KANBA-45
+configfile: pyproject.toml
+plugins: asyncio-1.4.1.post1, anyio-4.16.0, xdist-3.8.0, socket-0.8.1, platformdirs-4.14.5, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 7 items / 6 deselected / 1 selected
+
+agent/tests/providers/test_circuit_breaker.py [t=100.00s] Failure 1/5 recorded. State: CLOSED
+[t=100.00s] Failure 2/5 recorded. State: CLOSED
+[t=100.00s] Failure 3/5 recorded. State: CLOSED
+[t=100.00s] Failure 4/5 recorded. State: CLOSED
+[t=100.00s] Failure 5/5 recorded. State: OPEN
+[t=100.00s] 6th call correctly skipped: can_attempt = False
+[t=130.00s] 30s cooldown elapsed. Advancing to HALF_OPEN
+[t=130.00s] Probe succeeded. State: CLOSED
+[t=160.00s] Probe failed. State: OPEN
+.
+
+======================= 1 passed, 6 deselected in 0.08s ========================
+EXIT CODE: 0

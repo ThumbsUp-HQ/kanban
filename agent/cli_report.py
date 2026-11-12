@@ -158,4 +158,16 @@ def render_report(
     if report.schema_status.detail:
         lines.append(f"Detail: {report.schema_status.detail}")
 
+    if report.metrics.route_trace:
+        lines.extend(["", "=== 5. ROUTE TRACE ==="])
+        for entry in report.metrics.route_trace:
+            cid = entry.get("provider_config_id", "")
+            outcome = entry.get("outcome", "")
+            st = entry.get("breaker_state", "")
+            ttft = entry.get("ttft_ms")
+            ttft_fmt = f"{ttft:.1f}ms" if isinstance(ttft, (int, float)) else "N/A"
+            lines.append(
+                f"  - Provider: {cid} | Outcome: {outcome} | Breaker: {st} | TTFT: {ttft_fmt}"
+            )
+
     return "\n".join(lines)
