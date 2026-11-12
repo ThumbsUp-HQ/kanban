@@ -97,6 +97,10 @@ class ActivityEventType(StrEnum):
     LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
     ASSIGNEE_ADDED = "ASSIGNEE_ADDED"
     ASSIGNEE_REMOVED = "ASSIGNEE_REMOVED"
+    COMMENT_CREATED = "COMMENT_CREATED"
+    COMMENT_EDITED = "COMMENT_EDITED"
+    COMMENT_DELETED = "COMMENT_DELETED"
+    MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -140,6 +144,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
         ActivityEventType.ASSIGNEE_ADDED: ActivityCategory.HISTORY,
         ActivityEventType.ASSIGNEE_REMOVED: ActivityCategory.HISTORY,
+        ActivityEventType.COMMENT_CREATED: ActivityCategory.COMMENT,
+        ActivityEventType.COMMENT_EDITED: ActivityCategory.COMMENT,
+        ActivityEventType.COMMENT_DELETED: ActivityCategory.COMMENT,
+        ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
     }
 )
 
