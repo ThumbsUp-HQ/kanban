@@ -31,3 +31,5 @@ class McpSettings(BaseSettings):
 
     request_body_limit_bytes: int = 1048576  # 1 MiB
     response_body_limit_bytes: int = 8388608  # 8 MiB
+
+    auth_enabled: bool = False

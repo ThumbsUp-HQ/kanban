@@ -125,6 +125,8 @@ class ActivityEventType(StrEnum):
     ISSUE_ARCHIVED = "ISSUE_ARCHIVED"
     ISSUE_UNARCHIVED = "ISSUE_UNARCHIVED"
     CREATOR_OVERRIDDEN = "CREATOR_OVERRIDDEN"
+    MCP_KEY_MINTED = "MCP_KEY_MINTED"
+    MCP_KEY_REVOKED = "MCP_KEY_REVOKED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -196,6 +198,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_ARCHIVED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_UNARCHIVED: ActivityCategory.HISTORY,
         ActivityEventType.CREATOR_OVERRIDDEN: ActivityCategory.HISTORY,
+        ActivityEventType.MCP_KEY_MINTED: ActivityCategory.SYSTEM,
+        ActivityEventType.MCP_KEY_REVOKED: ActivityCategory.SYSTEM,
     }
 )
 
@@ -218,7 +222,7 @@ class EphemeralEnvelope:
     """Non-persisted event (for example rank-only moves) delivered to listeners."""
 
     workspace_id: uuid.UUID
-    object_id: uuid.UUID
+    object_id: uuid.UUID | None
     actor_principal_id: uuid.UUID
     event_type: str
     payload: Mapping[str, JSONValue]

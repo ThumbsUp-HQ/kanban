@@ -111,7 +111,7 @@ def transcript_recorder(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 @pytest.fixture
 def mcp_app() -> Starlette:
     """Default Starlette application mounting the 3 MCP surfaces."""
-    settings = McpSettings(mode="standalone_inprocess")
+    settings = McpSettings(mode="standalone_inprocess", auth_enabled=False)
     return create_mcp_app(settings)
 
 
