@@ -1,0 +1,67 @@
+=== Command (a): uv run kanban-agent validate-echo --verbose-tools ===
+=== 1. RENDERED CONTEXT ===
+Hello Sparkle
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 5.0ms | Total: 0.1ms | Tokens: 10 in, 5 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok
+Exit Code: 0
+
+=== Command (b): uv run kanban-agent validate-echo --report json ===
+{
+  "schema_version": "kb-cli-validation-report/v1",
+  "command": "validate-echo",
+  "rendered_context": "Hello Sparkle",
+  "tool_trace": [],
+  "metrics": {
+    "ttft_ms": 5.0,
+    "total_latency_ms": 0.05907798185944557,
+    "prompt_tokens": 10,
+    "completion_tokens": 5,
+    "route_trace": []
+  },
+  "schema_status": {
+    "valid": true,
+    "status": "ok",
+    "error_code": null,
+    "detail": null
+  }
+}
+Exit Code: 0
+
+=== Command (c): uv run kanban-agent validate-echo --cassette tests/fixtures/ai/fault_429.yaml ===
+=== 1. RENDERED CONTEXT ===
+Hello Sparkle
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 0.1ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: failed
+Error Code: HTTP_ERROR
+Detail: [HTTP_ERROR] Simulated rate limit exceeded
+Exit Code: 1
+
+=== Command (d): uv run kanban-agent validate-echo --ttft-deadline-ms 1 --cassette tests/fixtures/ai/transition_rls_veto.yaml ===
+=== 1. RENDERED CONTEXT ===
+KAN-142 auth_provider_cards
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 0.1ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: failed
+Error Code: TIMEOUT
+Detail: [TIMEOUT] TTFT SLA breached: simulated 18.0ms > deadline 1ms
+Exit Code: 2

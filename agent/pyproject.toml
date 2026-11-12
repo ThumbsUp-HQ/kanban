@@ -15,6 +15,9 @@ dependencies = [
     "jsonschema==4.26.0",
 ]
 
+[project.scripts]
+kanban-agent = "agent.cli:main"
+
 [tool.hatch.build.targets.wheel.sources]
 "" = "agent"
 

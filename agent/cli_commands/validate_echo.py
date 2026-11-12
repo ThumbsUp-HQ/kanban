@@ -1,0 +1,271 @@
+# Copyright 2026 Kanban Platform Contributors
+"""Demo command validate-echo testing CLI report rendering against FixtureLLMProvider."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from pydantic import BaseModel, ConfigDict
+
+from agent.cli_report import (
+    ContextScrubber,
+    ExitCode,
+    ReportMetrics,
+    SchemaStatus,
+    ValidationReport,
+    default_context_scrubber,
+    map_exception_to_exit_code,
+)
+from agent.providers.base import (
+    CompletionRequest,
+    StructuredRequest,
+)
+from agent.testing.fixtures import (
+    FixtureLLMProvider,
+    load_cassette,
+)
+
+if TYPE_CHECKING:
+    import argparse
+
+__all__ = [
+    "EchoVerdict",
+    "configure_validate_echo_parser",
+    "handle_validate_echo",
+]
+
+_DEFAULT_CASSETTE: Path = Path("tests/fixtures/ai/echo_stream_ok.yaml")
+
+
+class EchoVerdict(BaseModel):
+    """Output schema for structured echo responses."""
+
+    model_config = ConfigDict(extra="allow")
+
+    echo: str = ""
+    ok: bool = True
+
+
+def configure_validate_echo_parser(parser: argparse.ArgumentParser) -> None:
+    """Configure arguments and flags for validate-echo subcommand."""
+    from agent.cli import add_common_agent_flags  # noqa: PLC0415  # Prevent circular import with agent.cli
+
+    add_common_agent_flags(parser)
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default="Hello Sparkle",
+        help="Input prompt text for completion or structured evaluation.",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("stream", "structured"),
+        default="stream",
+        help="Execution mode: token streaming or structured JSON output.",
+    )
+    parser.add_argument(
+        "--ttft-deadline-ms",
+        type=int,
+        default=None,
+        help="TTFT SLA deadline in milliseconds (1..60000).",
+    )
+
+
+def _resolve_provider_and_params(
+    args: argparse.Namespace,
+) -> tuple[FixtureLLMProvider, str, str, dict[str, str]]:
+    prompt = str(args.prompt)
+    model = str(args.model)
+    metadata: dict[str, str] = {}
+
+    cassette_path: Path | None = None
+    if getattr(args, "cassette", None):
+        cassette_path = Path(args.cassette)
+    elif args.provider == "fixture":
+        cassette_path = _DEFAULT_CASSETTE
+
+    if cassette_path is not None and not cassette_path.exists():
+        msg = f"Cassette file not found: {cassette_path}"
+        raise FileNotFoundError(msg)
+
+    if cassette_path is None:
+        msg = "Non-fixture providers are not implemented in Phase 0."
+        raise ValueError(msg)
+
+    cas = load_cassette(cassette_path)
+    provider = FixtureLLMProvider(cas)
+    if args.prompt == "Hello Sparkle" and cas.matcher.prompt_contains:
+        prompt = " ".join(cas.matcher.prompt_contains)
+    if args.model == "fixture-echo-v1" and cas.matcher.model:
+        model = cas.matcher.model
+    if cas.matcher.agent_slug:
+        metadata["agent_slug"] = cas.matcher.agent_slug
+    if cas.matcher.transition_to:
+        metadata["transition_to"] = cas.matcher.transition_to
+    if cas.matcher.provider:
+        metadata["provider"] = cas.matcher.provider
+
+    return provider, prompt, model, metadata
+
+
+async def _stream_echo(
+    provider: FixtureLLMProvider,
+    req: CompletionRequest,
+    rendered_context: str,
+    t0: float,
+) -> tuple[ValidationReport, ExitCode]:
+    ttft_ms: float | None = None
+    prompt_tokens = 0
+    completion_tokens = 0
+    try:
+        async for chunk in provider.stream_complete(req):
+            if chunk.index == 0:
+                ttft_ms = chunk.ttft_ms
+            if chunk.prompt_tokens is not None:
+                prompt_tokens = chunk.prompt_tokens
+            if chunk.completion_tokens is not None:
+                completion_tokens = chunk.completion_tokens
+    except Exception as err:  # noqa: BLE001  # Map provider exception to Section 4 details
+        total_ms = (time.perf_counter() - t0) * 1000.0
+        code = map_exception_to_exit_code(err)
+        report = ValidationReport(
+            command="validate-echo",
+            rendered_context=rendered_context,
+            tool_trace=(),
+            metrics=ReportMetrics(
+                ttft_ms=ttft_ms,
+                total_latency_ms=total_ms,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            ),
+            schema_status=SchemaStatus(
+                valid=False,
+                status="failed",
+                error_code=getattr(err, "code", type(err).__name__),
+                detail=str(err),
+            ),
+        )
+        return report, code
+
+    total_ms = (time.perf_counter() - t0) * 1000.0
+    report = ValidationReport(
+        command="validate-echo",
+        rendered_context=rendered_context,
+        tool_trace=(),
+        metrics=ReportMetrics(
+            ttft_ms=ttft_ms,
+            total_latency_ms=total_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        ),
+        schema_status=SchemaStatus(valid=True, status="ok"),
+    )
+    return report, ExitCode.OK
+
+
+async def _structured_echo(
+    provider: FixtureLLMProvider,
+    req_struct: StructuredRequest[EchoVerdict],
+    rendered_context: str,
+    t0: float,
+) -> tuple[ValidationReport, ExitCode]:
+    try:
+        resp = await provider.generate_structured(req_struct)
+    except Exception as err:  # noqa: BLE001  # Map provider exception to Section 4 details
+        total_ms = (time.perf_counter() - t0) * 1000.0
+        code = map_exception_to_exit_code(err)
+        report = ValidationReport(
+            command="validate-echo",
+            rendered_context=rendered_context,
+            tool_trace=(),
+            metrics=ReportMetrics(
+                ttft_ms=None,
+                total_latency_ms=total_ms,
+            ),
+            schema_status=SchemaStatus(
+                valid=False,
+                status="failed",
+                error_code=getattr(err, "code", type(err).__name__),
+                detail=str(err),
+            ),
+        )
+        return report, code
+
+    total_ms = (time.perf_counter() - t0) * 1000.0
+    report = ValidationReport(
+        command="validate-echo",
+        rendered_context=rendered_context,
+        tool_trace=resp.tool_trace,
+        metrics=ReportMetrics(
+            ttft_ms=resp.ttft_ms,
+            total_latency_ms=total_ms,
+            prompt_tokens=resp.prompt_tokens,
+            completion_tokens=resp.completion_tokens,
+        ),
+        schema_status=SchemaStatus(valid=True, status="ok"),
+    )
+    return report, ExitCode.OK
+
+
+async def handle_validate_echo(
+    args: argparse.Namespace,
+    *,
+    scrubber: ContextScrubber = default_context_scrubber,
+) -> tuple[ValidationReport, ExitCode]:
+    """Execute validate-echo against configured provider or fixture."""
+    try:
+        provider, prompt, model, metadata = _resolve_provider_and_params(args)
+    except FileNotFoundError as err:
+        rendered_context = scrubber(str(args.prompt))
+        report = ValidationReport(
+            command="validate-echo",
+            rendered_context=rendered_context,
+            tool_trace=(),
+            metrics=ReportMetrics(total_latency_ms=0.0),
+            schema_status=SchemaStatus(
+                valid=False,
+                status="failed",
+                error_code="FILE_NOT_FOUND",
+                detail=str(err),
+            ),
+        )
+        return report, ExitCode.RUNTIME_ERROR
+    except Exception as err:  # noqa: BLE001  # Catch setup errors to format Section 4
+        rendered_context = scrubber(str(args.prompt))
+        code = map_exception_to_exit_code(err)
+        report = ValidationReport(
+            command="validate-echo",
+            rendered_context=rendered_context,
+            tool_trace=(),
+            metrics=ReportMetrics(total_latency_ms=0.0),
+            schema_status=SchemaStatus(
+                valid=False,
+                status="failed",
+                error_code=getattr(err, "code", type(err).__name__),
+                detail=str(err),
+            ),
+        )
+        return report, code
+
+    rendered_context = scrubber(prompt)
+    t0 = time.perf_counter()
+
+    if args.mode == "stream":
+        req = CompletionRequest(
+            model=model,
+            prompt=prompt,
+            metadata=metadata,
+            ttft_deadline_ms=args.ttft_deadline_ms,
+        )
+        return await _stream_echo(provider, req, rendered_context, t0)
+
+    req_struct = StructuredRequest(
+        model=model,
+        prompt=prompt,
+        metadata=metadata,
+        response_model=EchoVerdict,
+        ttft_deadline_ms=args.ttft_deadline_ms,
+    )
+    return await _structured_echo(provider, req_struct, rendered_context, t0)
