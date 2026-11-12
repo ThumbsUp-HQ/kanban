@@ -1,0 +1,40 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-91/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-91
+configfile: pyproject.toml
+plugins: anyio-4.16.0, asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 18 items
+
+kanban/tests/services/test_board_rank.py::test_base62_roundtrip_and_errors PASSED [  5%]
+kanban/tests/services/test_board_rank.py::test_is_valid_rank_and_validate_rank PASSED [ 11%]
+kanban/tests/services/test_board_rank.py::test_initial_rank_allocations PASSED [ 16%]
+kanban/tests/services/test_board_rank.py::test_midpoint_rank_order_error PASSED [ 22%]
+kanban/tests/services/test_board_rank.py::test_midpoint_rank_none_bounds PASSED [ 27%]
+kanban/tests/services/test_board_rank.py::test_midpoint_rank_between_cases PASSED [ 33%]
+kanban/tests/services/test_board_rank.py::test_property_200_bisections_collate_c_invariants PASSED [ 38%]
+kanban/tests/services/test_board_rank.py::test_generate_evenly_spaced_ranks PASSED [ 44%]
+kanban/tests/api/test_issue_move.py::test_case_1_single_row_mutation_proof_and_contract PASSED [ 50%]
+kanban/tests/api/test_issue_move.py::test_case_2a_soft_and_hard_wip_limits PASSED [ 55%]
+kanban/tests/api/test_issue_move.py::test_case_2b_hard_wip_admin_overrides PASSED [ 61%]
+kanban/tests/api/test_issue_move.py::test_case_3_security_and_anchors PASSED [ 66%]
+kanban/tests/api/test_issue_move.py::test_case_4_archived_issue_and_rebalance_scheduled PASSED [ 72%]
+kanban/tests/jobs/test_board_rebalance.py::test_rebalance_boundary_logic PASSED [ 77%]
+kanban/tests/jobs/test_board_rebalance.py::test_rebalance_column_empty_and_single PASSED [ 83%]
+kanban/tests/jobs/test_board_rebalance.py::test_rebalance_column_multi_card_and_activity_and_outbox PASSED [ 88%]
+kanban/tests/jobs/test_board_rebalance.py::test_rebalance_column_advisory_lock_contention PASSED [ 94%]
+kanban/tests/jobs/test_board_rebalance.py::test_cli_board_rebalance_command PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+kanban/api/v1/issue_move.py         15      0      0      0   100%
+kanban/jobs/board_rebalance.py      41      1     14      1    96%   93
+kanban/services/board_rank.py      126      0     52      0   100%
+kanban/services/issue_move.py      112      0     36      1    99%   322->332
+----------------------------------------------------------------------------
+TOTAL                              294      1    102      2    99%
+Required test coverage of 95% reached. Total coverage: 99.24%
+============================== 18 passed in 4.40s ==============================
