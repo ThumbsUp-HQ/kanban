@@ -1,0 +1,32 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 11 items
+
+database/tests/test_p1_01_baseline.py::test_01_role_attributes PASSED    [  9%]
+database/tests/test_p1_01_baseline.py::test_02_extensions_installed PASSED [ 18%]
+database/tests/test_p1_01_baseline.py::test_03_uuidv7_properties PASSED  [ 27%]
+database/tests/test_p1_01_baseline.py::test_04_security_kanban_app_restrictions PASSED [ 36%]
+database/tests/test_p1_01_baseline.py::test_05_security_bootstrap_attribute_reassertion PASSED [ 45%]
+database/tests/test_p1_01_baseline.py::test_06_boundary_app_current_principal_and_workspace PASSED [ 54%]
+database/tests/test_p1_01_baseline.py::test_to_asyncpg_kwargs_parsing PASSED [ 63%]
+database/tests/migrations/test_p1_01_migration.py::test_08_migration_up_down_cycle PASSED [ 72%]
+database/tests/migrations/test_p1_01_migration.py::test_09_migration_roundtrip_schema_identity PASSED [ 81%]
+database/tests/test_sqlfile.py::test_07_negative_sqlfile_path_validation PASSED [ 90%]
+database/tests/test_sqlfile.py::test_name_pattern_conformance PASSED     [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover
+------------------------------------------------------------------
+database/bootstrap/__init__.py      25      0      6      0   100%
+database/migrations/sqlfile.py      19      0      4      0   100%
+------------------------------------------------------------------
+TOTAL                               44      0     10      0   100%
+Required test coverage of 95% reached. Total coverage: 100.00%
+============================== 11 passed in 0.74s ==============================
+Exit Code: 0
