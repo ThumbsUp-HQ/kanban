@@ -108,6 +108,9 @@ class ActivityEventType(StrEnum):
     CYCLE_COMPLETED = "CYCLE_COMPLETED"
     CYCLE_DELETED = "CYCLE_DELETED"
     ISSUE_CYCLE_CHANGED = "ISSUE_CYCLE_CHANGED"
+    CUSTOM_FIELD_CREATED = "CUSTOM_FIELD_CREATED"
+    CUSTOM_FIELD_UPDATED = "CUSTOM_FIELD_UPDATED"
+    CUSTOM_FIELD_DELETED = "CUSTOM_FIELD_DELETED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -162,6 +165,9 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.CYCLE_COMPLETED: ActivityCategory.HISTORY,
         ActivityEventType.CYCLE_DELETED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_CYCLE_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.CUSTOM_FIELD_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.CUSTOM_FIELD_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.CUSTOM_FIELD_DELETED: ActivityCategory.HISTORY,
     }
 )
 

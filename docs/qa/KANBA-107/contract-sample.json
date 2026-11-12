@@ -1,0 +1,837 @@
+{
+  "ticket": "KANBA-107",
+  "exchanges": [
+    {
+      "name": "create_custom_field_text_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/CFP/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "260",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "ticket-summary-extra",
+          "name": "Summary Extra",
+          "tier": "wasm",
+          "output_format": "text",
+          "output_format_metadata": {
+            "max_length": 140,
+            "monospace": false
+          },
+          "script_source": "export default function() { return 'extra info'; }",
+          "egress_allowlist": [
+            "/api/v1/issues"
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "758",
+          "content-type": "application/json",
+          "location": "/api/v1/projects/CFP/custom-fields/01a1cfca-e08b-7722-8a84-694247ac1b99",
+          "x-request-id": "e09976a93d8548588abc30ab2224e994",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cfca-e08b-7722-8a84-694247ac1b99",
+          "workspace_id": "01a1cfca-dfec-72fc-a304-37dd96928d0b",
+          "project_id": "01a1cfca-e003-7020-83ab-e5f26a1c6044",
+          "slug": "ticket-summary-extra",
+          "name": "Summary Extra",
+          "tier": "wasm",
+          "output_format": "text",
+          "output_format_metadata": {
+            "max_length": 140,
+            "monospace": false
+          },
+          "script_source": "export default function() { return 'extra info'; }",
+          "wasm_module_sha256": null,
+          "script_version": 1,
+          "target_scope": "PROJECT",
+          "credential_mode": "INVOKING_USER",
+          "egress_allowlist": [
+            "/api/v1/issues"
+          ],
+          "manifest_sha256": "5dcd9554554ac189f477359d9feee64598e5a920e043d90301115fac62b2468a",
+          "is_enabled": true,
+          "created_by_id": "01a1cfca-dff2-7c37-a9ae-730907d05367",
+          "created_at": "2026-11-12T12:45:41.899907Z",
+          "updated_at": "2026-11-12T12:45:41.899907Z"
+        }
+      }
+    },
+    {
+      "name": "create_custom_field_number_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/CFP/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "267",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "story-points-calc",
+          "name": "Story Points Computed",
+          "tier": "wasm",
+          "output_format": "number",
+          "output_format_metadata": {
+            "maximum_fraction_digits": 1,
+            "unit_suffix": "pts",
+            "min_value": 0.0,
+            "max_value": 100.0
+          },
+          "script_source": "export default function() { return 8.5; }"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "787",
+          "content-type": "application/json",
+          "location": "/api/v1/projects/CFP/custom-fields/01a1cfca-e097-7693-8f4f-3f3def055a1b",
+          "x-request-id": "e21a5ab7c461450993380b36e9a90c6b",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cfca-e097-7693-8f4f-3f3def055a1b",
+          "workspace_id": "01a1cfca-dfec-72fc-a304-37dd96928d0b",
+          "project_id": "01a1cfca-e003-7020-83ab-e5f26a1c6044",
+          "slug": "story-points-calc",
+          "name": "Story Points Computed",
+          "tier": "wasm",
+          "output_format": "number",
+          "output_format_metadata": {
+            "maximum_fraction_digits": 1,
+            "unit_suffix": "pts",
+            "min_value": 0.0,
+            "max_value": 100.0
+          },
+          "script_source": "export default function() { return 8.5; }",
+          "wasm_module_sha256": null,
+          "script_version": 1,
+          "target_scope": "PROJECT",
+          "credential_mode": "INVOKING_USER",
+          "egress_allowlist": [],
+          "manifest_sha256": "a4f8fa26e7ba59edbcab44422dc682db45a961ee3640a5ff1527f276c5b38faf",
+          "is_enabled": true,
+          "created_by_id": "01a1cfca-dff2-7c37-a9ae-730907d05367",
+          "created_at": "2026-11-12T12:45:41.911666Z",
+          "updated_at": "2026-11-12T12:45:41.911666Z"
+        }
+      }
+    },
+    {
+      "name": "create_custom_field_badge_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/CFP/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "245",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "release-readiness",
+          "name": "Release Readiness",
+          "tier": "wasm",
+          "output_format": "badge",
+          "output_format_metadata": {
+            "color_token": "success",
+            "allowed_labels": [
+              "READY",
+              "BLOCKED"
+            ]
+          },
+          "script_source": "export default function() { return 'READY'; }"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "765",
+          "content-type": "application/json",
+          "location": "/api/v1/projects/CFP/custom-fields/01a1cfca-e0b4-7f9f-8bf3-2bfa519c4c41",
+          "x-request-id": "9604fc2e10c8447baf3e97a70eb973a9",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cfca-e0b4-7f9f-8bf3-2bfa519c4c41",
+          "workspace_id": "01a1cfca-dfec-72fc-a304-37dd96928d0b",
+          "project_id": "01a1cfca-e003-7020-83ab-e5f26a1c6044",
+          "slug": "release-readiness",
+          "name": "Release Readiness",
+          "tier": "wasm",
+          "output_format": "badge",
+          "output_format_metadata": {
+            "color_token": "success",
+            "allowed_labels": [
+              "READY",
+              "BLOCKED"
+            ]
+          },
+          "script_source": "export default function() { return 'READY'; }",
+          "wasm_module_sha256": null,
+          "script_version": 1,
+          "target_scope": "PROJECT",
+          "credential_mode": "INVOKING_USER",
+          "egress_allowlist": [],
+          "manifest_sha256": "c93faa111d8146125d05533aa5f84f50835963216e69ff673e9ea70bbef35b52",
+          "is_enabled": true,
+          "created_by_id": "01a1cfca-dff2-7c37-a9ae-730907d05367",
+          "created_at": "2026-11-12T12:45:41.940553Z",
+          "updated_at": "2026-11-12T12:45:41.940553Z"
+        }
+      }
+    },
+    {
+      "name": "create_custom_field_markdown_snippet_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/CFP/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "231",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "release-notes-blurb",
+          "name": "Release Notes Blurb",
+          "tier": "wasm",
+          "output_format": "markdown_snippet",
+          "output_format_metadata": {
+            "max_chars": 500
+          },
+          "script_source": "export default function() { return '**Ready for release**'; }"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "751",
+          "content-type": "application/json",
+          "location": "/api/v1/projects/CFP/custom-fields/01a1cfca-e0d0-720b-aaf4-799e58c8680f",
+          "x-request-id": "a67f3eb5241c4f3eadcc77e9962c6b35",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cfca-e0d0-720b-aaf4-799e58c8680f",
+          "workspace_id": "01a1cfca-dfec-72fc-a304-37dd96928d0b",
+          "project_id": "01a1cfca-e003-7020-83ab-e5f26a1c6044",
+          "slug": "release-notes-blurb",
+          "name": "Release Notes Blurb",
+          "tier": "wasm",
+          "output_format": "markdown_snippet",
+          "output_format_metadata": {
+            "max_chars": 500
+          },
+          "script_source": "export default function() { return '**Ready for release**'; }",
+          "wasm_module_sha256": null,
+          "script_version": 1,
+          "target_scope": "PROJECT",
+          "credential_mode": "INVOKING_USER",
+          "egress_allowlist": [],
+          "manifest_sha256": "4b09b4097ebc1c56566afb41c8863027f5024ee94c10fc43606a6744516f7a9e",
+          "is_enabled": true,
+          "created_by_id": "01a1cfca-dff2-7c37-a9ae-730907d05367",
+          "created_at": "2026-11-12T12:45:41.968985Z",
+          "updated_at": "2026-11-12T12:45:41.968985Z"
+        }
+      }
+    },
+    {
+      "name": "create_custom_field_url_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/CFP/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "270",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "pipeline-ci-link",
+          "name": "Pipeline CI Link",
+          "tier": "wasm",
+          "output_format": "url",
+          "output_format_metadata": {
+            "allowed_schemes": [
+              "https"
+            ],
+            "allowed_host_suffixes": [
+              "internal.ci"
+            ]
+          },
+          "script_source": "export default function() { return 'https://internal.ci/build/1'; }"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "790",
+          "content-type": "application/json",
+          "location": "/api/v1/projects/CFP/custom-fields/01a1cfca-e0ec-79c4-b890-952b6eec2f89",
+          "x-request-id": "5d846e19767a4049a38a633373c2a354",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cfca-e0ec-79c4-b890-952b6eec2f89",
+          "workspace_id": "01a1cfca-dfec-72fc-a304-37dd96928d0b",
+          "project_id": "01a1cfca-e003-7020-83ab-e5f26a1c6044",
+          "slug": "pipeline-ci-link",
+          "name": "Pipeline CI Link",
+          "tier": "wasm",
+          "output_format": "url",
+          "output_format_metadata": {
+            "allowed_schemes": [
+              "https"
+            ],
+            "allowed_host_suffixes": [
+              "internal.ci"
+            ]
+          },
+          "script_source": "export default function() { return 'https://internal.ci/build/1'; }",
+          "wasm_module_sha256": null,
+          "script_version": 1,
+          "target_scope": "PROJECT",
+          "credential_mode": "INVOKING_USER",
+          "egress_allowlist": [],
+          "manifest_sha256": "0cb9e1868076002b928e77aad7bc0dacce1518a5fbac6e2dcfa328ef1d4b70c2",
+          "is_enabled": true,
+          "created_by_id": "01a1cfca-dff2-7c37-a9ae-730907d05367",
+          "created_at": "2026-11-12T12:45:41.996990Z",
+          "updated_at": "2026-11-12T12:45:41.996990Z"
+        }
+      }
+    },
+    {
+      "name": "create_custom_field_json_table_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/CFP/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "306",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "dependency-matrix",
+          "name": "Dependency Matrix",
+          "tier": "wasm",
+          "output_format": "json_table",
+          "output_format_metadata": {
+            "columns": [
+              {
+                "key": "dep",
+                "label": "Dependency"
+              },
+              {
+                "key": "ver",
+                "label": "Version"
+              }
+            ],
+            "max_rows": 10
+          },
+          "script_source": "export default function() { return [{'dep': 'auth', 'ver': '1.0'}]; }"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "826",
+          "content-type": "application/json",
+          "location": "/api/v1/projects/CFP/custom-fields/01a1cfca-e109-70b2-b108-5129a9a5d0d6",
+          "x-request-id": "f9d49dbe83e541669e86a39672886a41",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cfca-e109-70b2-b108-5129a9a5d0d6",
+          "workspace_id": "01a1cfca-dfec-72fc-a304-37dd96928d0b",
+          "project_id": "01a1cfca-e003-7020-83ab-e5f26a1c6044",
+          "slug": "dependency-matrix",
+          "name": "Dependency Matrix",
+          "tier": "wasm",
+          "output_format": "json_table",
+          "output_format_metadata": {
+            "columns": [
+              {
+                "key": "dep",
+                "label": "Dependency"
+              },
+              {
+                "key": "ver",
+                "label": "Version"
+              }
+            ],
+            "max_rows": 10
+          },
+          "script_source": "export default function() { return [{'dep': 'auth', 'ver': '1.0'}]; }",
+          "wasm_module_sha256": null,
+          "script_version": 1,
+          "target_scope": "PROJECT",
+          "credential_mode": "INVOKING_USER",
+          "egress_allowlist": [],
+          "manifest_sha256": "320a06ef6d46c7eb9f09d4006f0e37bad195470a9826497f328a658a7582b5b3",
+          "is_enabled": true,
+          "created_by_id": "01a1cfca-dff2-7c37-a9ae-730907d05367",
+          "created_at": "2026-11-12T12:45:42.025428Z",
+          "updated_at": "2026-11-12T12:45:42.025428Z"
+        }
+      }
+    },
+    {
+      "name": "create_custom_field_severity_pill_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/CFP/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "221",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "security-severity",
+          "name": "Security Severity",
+          "tier": "wasm",
+          "output_format": "severity_pill",
+          "output_format_metadata": {},
+          "script_source": "export default function() { return {'level': 'critical', 'score': 9.8}; }"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "741",
+          "content-type": "application/json",
+          "location": "/api/v1/projects/CFP/custom-fields/01a1cfca-e125-70f3-ac76-da5273ad21c0",
+          "x-request-id": "79deb0a142bb4fe5b8addafdfe75e66b",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cfca-e125-70f3-ac76-da5273ad21c0",
+          "workspace_id": "01a1cfca-dfec-72fc-a304-37dd96928d0b",
+          "project_id": "01a1cfca-e003-7020-83ab-e5f26a1c6044",
+          "slug": "security-severity",
+          "name": "Security Severity",
+          "tier": "wasm",
+          "output_format": "severity_pill",
+          "output_format_metadata": {},
+          "script_source": "export default function() { return {'level': 'critical', 'score': 9.8}; }",
+          "wasm_module_sha256": null,
+          "script_version": 1,
+          "target_scope": "PROJECT",
+          "credential_mode": "INVOKING_USER",
+          "egress_allowlist": [],
+          "manifest_sha256": "6e250bc34061706e8f6604da02006102f0453d91cbe03ccb742615a9c3bac3bb",
+          "is_enabled": true,
+          "created_by_id": "01a1cfca-dff2-7c37-a9ae-730907d05367",
+          "created_at": "2026-11-12T12:45:42.053585Z",
+          "updated_at": "2026-11-12T12:45:42.053585Z"
+        }
+      }
+    },
+    {
+      "name": "update_custom_field_200",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/projects/CFP/custom-fields/01a1cfca-e08b-7722-8a84-694247ac1b99",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "74",
+          "content-type": "application/json"
+        },
+        "body": {
+          "script_source": "export default function() { return 'updated script'; }"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "762",
+          "content-type": "application/json",
+          "x-request-id": "fb0dcb1e316742849b3b3830b2da1644",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cfca-e08b-7722-8a84-694247ac1b99",
+          "workspace_id": "01a1cfca-dfec-72fc-a304-37dd96928d0b",
+          "project_id": "01a1cfca-e003-7020-83ab-e5f26a1c6044",
+          "slug": "ticket-summary-extra",
+          "name": "Summary Extra",
+          "tier": "wasm",
+          "output_format": "text",
+          "output_format_metadata": {
+            "monospace": false,
+            "max_length": 140
+          },
+          "script_source": "export default function() { return 'updated script'; }",
+          "wasm_module_sha256": null,
+          "script_version": 2,
+          "target_scope": "PROJECT",
+          "credential_mode": "INVOKING_USER",
+          "egress_allowlist": [
+            "/api/v1/issues"
+          ],
+          "manifest_sha256": "9d32432cd585d968e2745d4d3d2b0d2723880e8c31602defb53e20620fa6b098",
+          "is_enabled": true,
+          "created_by_id": "01a1cfca-dff2-7c37-a9ae-730907d05367",
+          "created_at": "2026-11-12T12:45:41.899907Z",
+          "updated_at": "2026-11-12T12:45:41.899907Z"
+        }
+      }
+    },
+    {
+      "name": "delete_custom_field_204",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/projects/CFP/custom-fields/01a1cfca-e08b-7722-8a84-694247ac1b99",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 204,
+        "headers": {
+          "x-request-id": "b9320389b3fe4926b1c30f1af5abb604",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": null
+      }
+    },
+    {
+      "name": "get_custom_fields_member_redacted_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/projects/RED/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "624",
+          "content-type": "application/json",
+          "x-request-id": "abc153c14d0c4156b942bb62f7c57cc1",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": [
+          {
+            "id": "01a1cfca-e24e-788d-b779-02ccdeb528b1",
+            "workspace_id": "01a1cfca-e1e0-7a73-b796-c87991dd854c",
+            "project_id": "01a1cfca-e1ec-7350-9d2a-6532e19dbc2e",
+            "slug": "secret-calc",
+            "name": "Secret Calculator",
+            "tier": "wasm",
+            "output_format": "number",
+            "output_format_metadata": {
+              "maximum_fraction_digits": 0
+            },
+            "script_source": null,
+            "wasm_module_sha256": null,
+            "script_version": 1,
+            "target_scope": "PROJECT",
+            "credential_mode": "INVOKING_USER",
+            "egress_allowlist": [],
+            "manifest_sha256": null,
+            "is_enabled": true,
+            "created_by_id": "01a1cfca-e1e4-7f57-8520-ee76de683426",
+            "created_at": "2026-11-12T12:45:42.350688Z",
+            "updated_at": "2026-11-12T12:45:42.350688Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "create_custom_field_member_403",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/RED/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "188",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "member-field",
+          "name": "Member Field",
+          "tier": "wasm",
+          "output_format": "text",
+          "output_format_metadata": {
+            "max_length": 50
+          },
+          "script_source": "export default function() { return 'evil'; }"
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "x-request-id": "ec94b8c3894144dc8b32acd4c5949d0c",
+          "content-length": "260",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:INSUFFICIENT_CAPABILITY",
+          "title": "Insufficient Capability",
+          "status": 403,
+          "code": "INSUFFICIENT_CAPABILITY",
+          "detail": "Caller lacks required admin role to manage custom field definitions",
+          "request_id": "ec94b8c3894144dc8b32acd4c5949d0c"
+        }
+      }
+    },
+    {
+      "name": "create_custom_field_aal2_required_403",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/AAL/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "190",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "another-field",
+          "name": "Another Field",
+          "tier": "wasm",
+          "output_format": "text",
+          "output_format_metadata": {
+            "max_length": 50
+          },
+          "script_source": "export default function() { return 'fail'; }"
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "x-request-id": "f2d5355387254b3187b8593796394bcb",
+          "content-length": "237",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:AAL2_REQUIRED",
+          "title": "AAL2 Authentication Required",
+          "status": 403,
+          "code": "AAL2_REQUIRED",
+          "detail": "This operation requires multi-factor authentication (AAL2).",
+          "request_id": "f2d5355387254b3187b8593796394bcb"
+        }
+      }
+    },
+    {
+      "name": "create_custom_field_invalid_format_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/VAL/custom-fields",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "182",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "bad-meta",
+          "name": "Bad Metadata",
+          "tier": "wasm",
+          "output_format": "text",
+          "output_format_metadata": {
+            "max_length": 500
+          },
+          "script_source": "export default function() { return 'x'; }"
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "c1944c003cd64080877af499a2fe4c39",
+          "content-length": "586",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:OUTPUT_FORMAT_INVALID",
+          "title": "Output Format Invalid",
+          "status": 422,
+          "code": "OUTPUT_FORMAT_INVALID",
+          "detail": "1 validation error for tagged-union[TextFormatMetadata,NumberFormatMetadata,BadgeFormatMetadata,MarkdownSnippetFormatMetadata,UrlFormatMetadata,JsonTableFormatMetadata,SeverityPillFormatMetadata]\ntext.max_length\n  Input should be less than or equal to 280 [type=less_than_equal, input_value=500, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.14/v/less_than_equal",
+          "request_id": "c1944c003cd64080877af499a2fe4c39"
+        }
+      }
+    }
+  ]
+}

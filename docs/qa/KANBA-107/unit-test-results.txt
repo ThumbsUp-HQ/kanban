@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /tmp/kb-wt-KANBA-107
+configfile: pyproject.toml
+plugins: socket-0.8.1, asyncio-1.4.1.post1, cov-7.1.0, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 14 items
+
+database/tests/test_custom_fields_rls.py ...                             [ 21%]
+kanban/tests/custom_fields/test_custom_fields_api.py ......              [ 64%]
+kanban/tests/custom_fields/test_output_formats.py .....                  [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                     Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------------
+database/models/custom_field.py             43      0      0      0   100%
+kanban/api/v1/custom_fields.py              30      0      0      0   100%
+kanban/custom_fields/__init__.py             3      0      0      0   100%
+kanban/custom_fields/manifest.py            37      0     16      0   100%
+kanban/custom_fields/output_formats.py     232      0     86      3    99%   102->110, 261->273, 349->351
+kanban/custom_fields/service.py            137      0     30      1    99%   294->298
+------------------------------------------------------------------------------------
+TOTAL                                      482      0    132      4    99%
+Required test coverage of 95% reached. Total coverage: 99.35%
+============================== 14 passed in 4.15s ==============================
