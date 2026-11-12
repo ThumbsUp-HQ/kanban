@@ -3,7 +3,7 @@
 from database.models.activity import ActivityChainHead, ActivityRecord
 from database.models.agent_definition import AgentDefinition
 from database.models.attachments import Attachment
-from database.models.auth import AuthProviderCard, UserSession
+from database.models.auth import AuthProviderCard, LocalAdminCredential, UserSession
 from database.models.base import (
     Base,
     InvalidLinkReason,
@@ -74,6 +74,7 @@ __all__ = [
     "IssueSubscription",
     "LinkKind",
     "LinkTypeMatrix",
+    "LocalAdminCredential",
     "LtreeType",
     "Module",
     "ObjectEmbedding",
