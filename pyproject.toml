@@ -25,7 +25,17 @@ dev = [
     "pytest-cov==7.1.0",
     "import-linter==2.16",
     "hatchling==1.33.0",
+    "pytest-asyncio==1.4.1.post1",
+    "pytest-xdist==3.8.0",
+    "pytest-socket==0.8.1",
 ]
+
+[tool.pytest.ini_options]
+addopts = "--disable-socket --allow-unix-socket -p no:cacheprovider --strict-markers"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["committed_db: test commits real transactions; TRUNCATE cleanup applied"]
 
 [tool.importlinter]
 root_packages = ["agent", "mcp", "kanban", "database"]

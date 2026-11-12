@@ -1,0 +1,29 @@
+install -d -m 0700 ${KB_TEST_PGSOCKET_DIR:-/tmp/kb-pgsock} 2>/dev/null || test -d ${KB_TEST_PGSOCKET_DIR:-/tmp/kb-pgsock}
+docker compose -f docker-compose.test.yml up -d --wait
+ Container kb-wt-kanba-18-pg-test-1 Running 
+ Container kb-wt-kanba-18-pg-test-1 Waiting 
+ Container kb-wt-kanba-18-pg-test-1 Healthy 
+/tmp/kb-wt-KANBA-18/.venv/lib/python3.12/site-packages/coverage/control.py:967: CoverageWarning: No data was collected. (no-data-collected); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-no-data-collected
+  self._warn("No data was collected.", slug="no-data-collected")
+bringing up nodes...
+bringing up nodes...
+
+.............                                                            [100%]
+=============================== warnings summary ===============================
+database/tests/test_pg_harness.py::test_04_negative_security_socket_and_dsn_rejections
+  /tmp/kb-wt-KANBA-18/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+database/testing/__init__.py         0      0      0      0   100%
+database/testing/pg_harness.py     154      0     34      4    98%   112->123, 114->123, 166->164, 287->exit
+----------------------------------------------------------------------------
+TOTAL                              154      0     34      4    98%
+Required test coverage of 95% reached. Total coverage: 97.87%
+13 passed, 1 warning in 11.18s
+Exit Code: 0

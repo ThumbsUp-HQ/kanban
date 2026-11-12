@@ -1,0 +1,29 @@
+uv lock --locked
+Resolved 31 packages in 2ms
+uv sync --locked
+Resolved 31 packages in 2ms
+Audited 29 packages in 0.12ms
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 16 files, 5 dependencies.
+----------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+! grep -rnP '[\x{2013}\x{2014}]' --exclude="build-check.txt" database/ docs/ pyproject.toml conftest.py Makefile docker-compose.test.yml
+Exit Code: 0
