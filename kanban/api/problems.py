@@ -45,6 +45,14 @@ class Problem(BaseModel):
         default=None,
         description="Field-level validation errors",
     )
+    current_etag: str | None = Field(
+        default=None,
+        description="Current entity ETag during precondition failure",
+    )
+    field: str | None = Field(
+        default=None,
+        description="Target field associated with reference or validation failure",
+    )
     candidates: list[dict[str, str]] | None = Field(
         default=None,
         description="Candidate suggestions when identifier resolution is ambiguous",
@@ -62,6 +70,8 @@ class ProblemException(Exception):  # noqa: N818
         detail: str | None = None,
         errors: list[FieldError] | None = None,
         headers: dict[str, str] | None = None,
+        current_etag: str | None = None,
+        field: str | None = None,
         *,
         candidates: list[dict[str, str]] | None = None,
     ) -> None:
@@ -76,6 +86,8 @@ class ProblemException(Exception):  # noqa: N818
         self.detail = detail
         self.errors = errors
         self.headers = headers
+        self.current_etag = current_etag
+        self.field = field
         self.candidates = candidates
 
 
@@ -108,6 +120,8 @@ async def problem_exception_handler(
         detail=exc.detail,
         request_id=req_id,
         errors=exc.errors,
+        current_etag=exc.current_etag,
+        field=exc.field,
         candidates=exc.candidates,
     )
     response_headers = {"x-request-id": req_id}

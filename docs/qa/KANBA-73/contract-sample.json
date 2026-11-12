@@ -1,0 +1,114 @@
+{
+  "ticket": "KANBA-73",
+  "feature": "OIDC and OAuth2 Auth Code Flow with PKCE S256 (KB-P2-06)",
+  "samples": [
+    {
+      "name": "start_redirect_302",
+      "description": "GET /api/v1/auth/oidc/{slug}/start returns HTTP 302 with PKCE S256 challenge, single-use state/nonce, and browser binding cookie",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/auth/oidc/google/start?return_to=/projects/KAN"
+      },
+      "response": {
+        "status_code": 302,
+        "headers": {
+          "Location": "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=123456789.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A8000%2Fapi%2Fv1%2Fauth%2Foidc%2Fgoogle%2Fcallback&scope=openid+profile+email&state=7f9a1b2c3d4e5f60718293a4b5c6d7e8&nonce=a1b2c3d4e5f60718293a4b5c6d7e8f90&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256",
+          "Set-Cookie": "__Host-kb_oidc=7f9a1b2c3d4e5f60718293a4b5c6d7e8.fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210; Path=/; Max-Age=300; HttpOnly; SameSite=Lax; Secure"
+        },
+        "body": null
+      }
+    },
+    {
+      "name": "callback_success_200",
+      "description": "GET /api/v1/auth/oidc/{slug}/callback exchanges auth code with PKCE verifier, validates ID token asymmetric signature, and establishes session",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/auth/oidc/google/callback?code=4%2F0AX4XfWh...&state=7f9a1b2c3d4e5f60718293a4b5c6d7e8",
+        "headers": {
+          "Cookie": "__Host-kb_oidc=7f9a1b2c3d4e5f60718293a4b5c6d7e8.fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+        }
+      },
+      "response": {
+        "status_code": 302,
+        "headers": {
+          "Location": "/projects/KAN",
+          "Set-Cookie": [
+            "__Host-kb_session=sess-9a8b7c6d5e4f3a2b1c0d.hmacsig; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax; Secure",
+            "__Host-kb_csrf=csrf-1a2b3c4d5e6f7a8b9c0d; Path=/; Max-Age=86400; SameSite=Strict; Secure",
+            "__Host-kb_oidc=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure"
+          ]
+        },
+        "body": null
+      }
+    },
+    {
+      "name": "callback_error_oidc_state_invalid_400",
+      "description": "Missing, expired, replayed, or browser-binding mismatched state token rejected",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/auth/oidc/google/callback?code=4%2F0AX4XfWh...&state=replayed_or_unknown_state",
+        "headers": {
+          "Cookie": "__Host-kb_oidc=mismatched_binding_cookie"
+        }
+      },
+      "response": {
+        "status_code": 400,
+        "headers": {
+          "Content-Type": "application/problem+json"
+        },
+        "body": {
+          "type": "urn:kanban:problem:OIDC_STATE_INVALID",
+          "title": "Invalid State",
+          "status": 400,
+          "detail": "Missing, expired, already consumed, or invalid state token",
+          "code": "OIDC_STATE_INVALID"
+        }
+      }
+    },
+    {
+      "name": "callback_error_oidc_token_invalid_401",
+      "description": "ID token fails asymmetric signature check, nonce mismatch, or alg allowlist",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/auth/oidc/google/callback?code=tampered_code&state=7f9a1b2c3d4e5f60718293a4b5c6d7e8",
+        "headers": {
+          "Cookie": "__Host-kb_oidc=7f9a1b2c3d4e5f60718293a4b5c6d7e8.fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+        }
+      },
+      "response": {
+        "status_code": 401,
+        "headers": {
+          "Content-Type": "application/problem+json"
+        },
+        "body": {
+          "type": "urn:kanban:problem:OIDC_TOKEN_INVALID",
+          "title": "Invalid ID Token",
+          "status": 401,
+          "detail": "ID token nonce does not match expected request nonce",
+          "code": "OIDC_TOKEN_INVALID"
+        }
+      }
+    },
+    {
+      "name": "callback_error_oidc_provider_error_400",
+      "description": "External IdP returns error parameter; provider details are redacted to prevent enumeration",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/auth/oidc/google/callback?error=consent_required&error_description=SensitiveInternalPayload"
+      },
+      "response": {
+        "status_code": 400,
+        "headers": {
+          "Content-Type": "application/problem+json"
+        },
+        "body": {
+          "type": "urn:kanban:problem:OIDC_PROVIDER_ERROR",
+          "title": "IdP Provider Error",
+          "status": 400,
+          "detail": "Authentication was rejected by the external identity provider",
+          "code": "OIDC_PROVIDER_ERROR"
+        }
+      }
+    }
+  ]
+}

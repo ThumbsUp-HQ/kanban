@@ -1,7 +1,14 @@
 """Universal Object Graph SQLAlchemy 2.0 ORM models for kanban-database."""
 
 from database.models.activity import ActivityChainHead, ActivityRecord
-from database.models.auth import AuthProviderCard, UserSession
+from database.models.agent_definition import AgentDefinition
+from database.models.attachments import Attachment
+from database.models.auth import (
+    AuthProviderCard,
+    LocalAdminCredential,
+    OidcAuthRequest,
+    UserSession,
+)
 from database.models.base import (
     Base,
     InvalidLinkReason,
@@ -54,6 +61,8 @@ from database.models.spine import (
 __all__ = [
     "ActivityChainHead",
     "ActivityRecord",
+    "AgentDefinition",
+    "Attachment",
     "AuthProviderCard",
     "Base",
     "Cycle",
@@ -70,12 +79,14 @@ __all__ = [
     "IssueSubscription",
     "LinkKind",
     "LinkTypeMatrix",
+    "LocalAdminCredential",
     "LtreeType",
     "Module",
     "ObjectEmbedding",
     "ObjectKind",
     "ObjectLink",
     "ObjectRecord",
+    "OidcAuthRequest",
     "OutboxEvent",
     "Page",
     "PageVersion",

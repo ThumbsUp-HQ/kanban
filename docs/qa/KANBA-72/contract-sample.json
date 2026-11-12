@@ -1,0 +1,95 @@
+{
+  "200_OK": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/auth/local/login",
+      "body": {
+        "username": "admin",
+        "password": "[REDACTED]"
+      }
+    },
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "set-cookie": [
+        "__Host-kb_session=FPKPvAytD9d3DfFgZZ0HTrNjwJOZVv-FoygruLzd9lw.PIVQD355gkCk3tGF1Y3gooBoqZGrV7A9o-9bNk8ot9Q; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Thu, 12 Nov 2026 15:48:49 GMT",
+        "__Host-kb_csrf=uVLFCViiZp0UVF3WhajbWA.X5lhO9JpWaB2Hj3jZvN4e6Xy4zIwoK9lGRjv2B_7X5w; Path=/; Secure; SameSite=Strict"
+      ]
+    },
+    "body": {
+      "authenticated": true,
+      "session_id": "458b5e67-b8f5-4820-8448-319f99c43832",
+      "aal_level": 1,
+      "mfa_pending": true,
+      "csrf_token": "uVLFCViiZp0UVF3WhajbWA.X5lhO9JpWaB2Hj3jZvN4e6Xy4zIwoK9lGRjv2B_7X5w"
+    }
+  },
+  "401_INVALID_CREDENTIALS": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/auth/local/login",
+      "body": {
+        "username": "admin",
+        "password": "[REDACTED]"
+      }
+    },
+    "status": 401,
+    "headers": {
+      "content-type": "application/problem+json"
+    },
+    "body": {
+      "type": "urn:kanban:problem:INVALID_CREDENTIALS",
+      "title": "Invalid Credentials",
+      "status": 401,
+      "code": "INVALID_CREDENTIALS",
+      "detail": "Invalid username or password",
+      "request_id": "ab20428b17e84c3ea5613ade04cb60af"
+    }
+  },
+  "429_RATE_LIMITED": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/auth/local/login",
+      "body": {
+        "username": "ratelimit_victim",
+        "password": "[REDACTED]"
+      }
+    },
+    "status": 429,
+    "headers": {
+      "content-type": "application/problem+json",
+      "retry-after": "670"
+    },
+    "body": {
+      "type": "urn:kanban:problem:RATE_LIMITED",
+      "title": "Rate Limit Exceeded",
+      "status": 429,
+      "code": "RATE_LIMITED",
+      "detail": "Rate limit exceeded for policy 'auth_login_account'",
+      "request_id": "a068e1871c554190bf19be1e18c8b3d9"
+    }
+  },
+  "503_AUTH_BUSY": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/auth/local/login",
+      "body": {
+        "username": "admin",
+        "password": "[REDACTED]"
+      }
+    },
+    "status": 503,
+    "headers": {
+      "content-type": "application/problem+json",
+      "retry-after": "2"
+    },
+    "body": {
+      "type": "urn:kanban:problem:AUTH_BUSY",
+      "title": "Authentication Service Busy",
+      "status": 503,
+      "code": "AUTH_BUSY",
+      "detail": "Authentication capacity exceeded; please retry shortly",
+      "request_id": "31d5a4b6df1a49f6a22ac0ba10346924"
+    }
+  }
+}

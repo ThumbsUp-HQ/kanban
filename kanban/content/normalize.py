@@ -23,6 +23,8 @@ from kanban.content.html_to_gfm import (
     nh3_sanitize_and_serialize_gfm,
 )
 from kanban.content.unicode_guard import (
+    SURROGATE_MAX,
+    SURROGATE_MIN,
     ContentNormalizeError,
     strip_invisible_and_control_chars,
 )
@@ -32,6 +34,7 @@ __all__ = [
     "InputKind",
     "NormalizationReport",
     "normalize_inspect",
+    "normalize_markdown",
     "normalize_plain_text",
     "normalize_to_markdown",
 ]
@@ -418,6 +421,11 @@ def normalize_inspect(
         ContentNormalizeError: If input size, complexity, or surrogate boundaries are violated.
 
     """
+    for ch in raw:
+        if SURROGATE_MIN <= ord(ch) <= SURROGATE_MAX:
+            err_code = "INVALID_UTF8_SURROGATE"
+            raise ContentNormalizeError(err_code)
+
     input_bytes = len(raw.encode("utf-8"))
 
     if mode == "plain":
@@ -473,6 +481,9 @@ def normalize_to_markdown(
     """Normalize input string to canonical GFM Markdown."""
     report = normalize_inspect(raw, mode=mode, max_input_bytes=max_input_bytes)
     return report.output_markdown
+
+
+normalize_markdown = normalize_to_markdown
 
 
 def normalize_plain_text(

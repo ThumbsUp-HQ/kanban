@@ -10,6 +10,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
 
+from database.tests.conftest import bootstrap_workspace_admin
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,14 +22,8 @@ async def _create_workspace(
     name: str = "Activity Test Workspace",
 ) -> uuid.UUID:
     """Create a test workspace."""
-    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
-    row = await session.execute(
-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
-        {"slug": ws_slug, "name": name},
-    )
-    val = row.scalar_one()
-    assert isinstance(val, uuid.UUID)
-    return val
+    ws_id, _ = await bootstrap_workspace_admin(session, slug=slug, name=name)
+    return ws_id
 
 
 async def _create_principal(

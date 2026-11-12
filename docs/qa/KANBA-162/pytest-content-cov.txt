@@ -1,0 +1,32 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /tmp/kb-wt-KANBA-162
+configfile: pyproject.toml
+plugins: cov-7.1.0, asyncio-1.4.1.post1, socket-0.8.1, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 90 items
+
+kanban/tests/content/test_coverage_boost.py ..................           [ 20%]
+kanban/tests/content/test_hidden_dom_pruner.py .........                 [ 30%]
+kanban/tests/content/test_normalize_markdown.py ...........              [ 42%]
+kanban/tests/content/test_svg_sanitizer.py ....................          [ 64%]
+kanban/tests/content/test_svg_use_dag.py ...................             [ 85%]
+kanban/tests/content/test_unicode_and_links.py .............             [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                              Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------
+kanban/content/__init__.py            8      0      0      0   100%
+kanban/content/hidden_dom.py        250      2    122     10    97%   231->exit, 232->231, 239, 256, 266->273, 275->280, 319->323, 326->323, 340->344, 375->378
+kanban/content/html_to_gfm.py       364      5    176     13    97%   161->163, 240->242, 285->290, 334->exit, 335->334, 356, 369->366, 395, 413->415, 451->exit, 468, 496, 513
+kanban/content/normalize.py         258      1     94      8    97%   141->exit, 142->141, 168, 171->exit, 224->226, 252->256, 338->340, 382->387
+kanban/content/svg_dag.py           121      2     52      2    98%   188, 195
+kanban/content/svg_sanitizer.py     242      7    100      2    97%   201, 227-228, 294-297, 464->463
+kanban/content/unicode_guard.py      58      0     16      0   100%
+-----------------------------------------------------------------------------
+TOTAL                              1301     17    560     35    97%
+Coverage JSON written to file docs/qa/KANBA-162/coverage.json
+Required test coverage of 95% reached. Total coverage: 97.10%
+============================= 90 passed in 12.63s ==============================

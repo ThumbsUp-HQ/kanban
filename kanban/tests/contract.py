@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
@@ -25,6 +26,7 @@ REDACTED: Final[str] = "<redacted>"
 SENSITIVE_HEADERS: Final[frozenset[str]] = frozenset(
     {"cookie", "set-cookie", "x-csrf-token", "authorization"}
 )
+_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"kb_[A-Za-z0-9_-]+")
 
 
 def redact_headers(headers: Mapping[str, str]) -> dict[str, str]:
@@ -32,14 +34,29 @@ def redact_headers(headers: Mapping[str, str]) -> dict[str, str]:
     return {k: (REDACTED if k.lower() in SENSITIVE_HEADERS else v) for k, v in headers.items()}
 
 
+def _scrub_tokens(obj: Any) -> Any:  # noqa: ANN401
+    """Recursively redact tokens matching `kb_*` in parsed structures or text."""
+    if isinstance(obj, str):
+        return _TOKEN_RE.sub(REDACTED, obj)
+    if isinstance(obj, dict):
+        return {k: _scrub_tokens(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_scrub_tokens(v) for v in obj]
+    return obj
+
+
 def _decode_body(content: bytes) -> Any:  # noqa: ANN401  # Arbitrary JSON document
     """Decode an HTTP body as JSON, falling back to text, or ``None`` when empty."""
     if not content:
         return None
+    if len(content) > 65536:
+        return f"<payload: {len(content)} bytes>"
     try:
-        return json.loads(content)
+        decoded = json.loads(content)
+        return _scrub_tokens(decoded)
     except ValueError:
-        return content.decode("utf-8", errors="replace")
+        raw_text = content.decode("utf-8", errors="replace")
+        return _scrub_tokens(raw_text)
 
 
 class ContractRecorder:
@@ -52,6 +69,14 @@ class ContractRecorder:
 
     def record(self, name: str, request: httpx.Request, response: httpx.Response) -> None:
         """Store one exchange with sensitive header values redacted."""
+        try:
+            req_content = request.read()
+        except Exception:  # noqa: BLE001
+            req_content = b""
+        try:
+            resp_content = response.read()
+        except Exception:  # noqa: BLE001
+            resp_content = b""
         self.exchanges.append(
             {
                 "name": name,
@@ -59,12 +84,12 @@ class ContractRecorder:
                     "method": request.method,
                     "path": request.url.raw_path.decode("ascii"),
                     "headers": redact_headers(dict(request.headers)),
-                    "body": _decode_body(request.content),
+                    "body": _decode_body(req_content),
                 },
                 "response": {
                     "status": response.status_code,
                     "headers": redact_headers(dict(response.headers)),
-                    "body": _decode_body(response.content),
+                    "body": _decode_body(resp_content),
                 },
             }
         )

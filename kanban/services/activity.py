@@ -61,6 +61,36 @@ class ActivityEventType(StrEnum):
     PROJECT_CREATED = "PROJECT_CREATED"
     PROJECT_UPDATED = "PROJECT_UPDATED"
     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
+    DOC_CREATED = "DOC_CREATED"
+    DOC_UPDATED = "DOC_UPDATED"
+    DOC_TRASHED = "DOC_TRASHED"
+    PAGE_CREATED = "PAGE_CREATED"
+    PAGE_UPDATED = "PAGE_UPDATED"
+    PAGE_MOVED = "PAGE_MOVED"
+    PAGE_VERSION_RESTORED = "PAGE_VERSION_RESTORED"
+    PAGE_TRASHED = "PAGE_TRASHED"
+    AGENT_DEFINITION_CREATED = "AGENT_DEFINITION_CREATED"
+    AGENT_DEFINITION_UPDATED = "AGENT_DEFINITION_UPDATED"
+    AGENT_DEFINITION_DELETED = "AGENT_DEFINITION_DELETED"
+    ISSUE_CREATED = "ISSUE_CREATED"
+    ISSUE_FIELD_CHANGED = "ISSUE_FIELD_CHANGED"
+    ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
+    ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
+    ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
+    STATE_CREATED = "STATE_CREATED"
+    STATE_UPDATED = "STATE_UPDATED"
+    STATE_DELETED = "STATE_DELETED"
+    PRIORITY_CREATED = "PRIORITY_CREATED"
+    PRIORITY_UPDATED = "PRIORITY_UPDATED"
+    PRIORITY_DELETED = "PRIORITY_DELETED"
+    LABEL_CREATED = "LABEL_CREATED"
+    LABEL_UPDATED = "LABEL_UPDATED"
+    LABEL_DELETED = "LABEL_DELETED"
+    ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
+    LOCAL_ADMIN_LOGIN_SUCCEEDED = "LOCAL_ADMIN_LOGIN_SUCCEEDED"
+    LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
+    ASSIGNEE_ADDED = "ASSIGNEE_ADDED"
+    ASSIGNEE_REMOVED = "ASSIGNEE_REMOVED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -68,6 +98,36 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.PROJECT_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.PROJECT_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.DOC_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.DOC_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.DOC_TRASHED: ActivityCategory.HISTORY,
+        ActivityEventType.PAGE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.PAGE_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.PAGE_MOVED: ActivityCategory.HISTORY,
+        ActivityEventType.PAGE_VERSION_RESTORED: ActivityCategory.HISTORY,
+        ActivityEventType.PAGE_TRASHED: ActivityCategory.HISTORY,
+        ActivityEventType.AGENT_DEFINITION_CREATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AGENT_DEFINITION_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AGENT_DEFINITION_DELETED: ActivityCategory.SYSTEM,
+        ActivityEventType.ISSUE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_FIELD_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.STATE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.STATE_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.STATE_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.PRIORITY_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.PRIORITY_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.PRIORITY_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.LABEL_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.LABEL_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.LABEL_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
+        ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
+        ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.ASSIGNEE_ADDED: ActivityCategory.HISTORY,
+        ActivityEventType.ASSIGNEE_REMOVED: ActivityCategory.HISTORY,
     }
 )
 
@@ -78,8 +138,8 @@ class ActivityEnvelope:
 
     activity_id: uuid.UUID
     workspace_id: uuid.UUID
-    object_id: uuid.UUID
-    actor_principal_id: uuid.UUID
+    object_id: uuid.UUID | None
+    actor_principal_id: uuid.UUID | None
     event_type: ActivityEventType
     category: ActivityCategory
     payload: Mapping[str, JSONValue]
@@ -133,8 +193,8 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
     session: AsyncSession,
     *,
     workspace_id: uuid.UUID,
-    object_id: uuid.UUID,
-    actor_principal_id: uuid.UUID,
+    object_id: uuid.UUID | None = None,
+    actor_principal_id: uuid.UUID | None = None,
     event_type: ActivityEventType,
     payload: Mapping[str, JSONValue],
 ) -> uuid.UUID:
@@ -144,15 +204,17 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
         raise ActivityPayloadTooLarge(msg)
 
     async with session.begin_nested():
-        kind = (
-            await session.execute(
-                text("SELECT object_type::text FROM objects WHERE id = :oid"),
-                {"oid": object_id},
-            )
-        ).scalar_one_or_none()
-        if kind is None:
-            msg = "Activity object is not visible"
-            raise ActivityObjectNotFound(msg)
+        kind: str | None = None
+        if object_id is not None:
+            kind = (
+                await session.execute(
+                    text("SELECT object_type::text FROM objects WHERE id = :oid"),
+                    {"oid": object_id},
+                )
+            ).scalar_one_or_none()
+            if kind is None:
+                msg = "Activity object is not visible"
+                raise ActivityObjectNotFound(msg)
 
         activity_id = (
             await session.execute(
