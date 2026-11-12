@@ -1,0 +1,2691 @@
+diff --git a/database/GEMINI.md b/database/GEMINI.md
+index 780c082..2003981 100644
+--- a/database/GEMINI.md
++++ b/database/GEMINI.md
+@@ -17,7 +17,7 @@ None. This is the foundational leaf module in the workspace dependency hierarchy
+ - Test harness execution isolates probe entities within kb_harness schema, which must be ignored by production RLS catalog assertions.
+ 
+ ## Outbound Contracts
+-- database.models: 37 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit), custom LtreeType, and 5 PostgreSQL StrEnums.
++- database.models: 38 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions), custom LtreeType, and 5 PostgreSQL StrEnums.
+ - database.session: RLSContext, bind_rls_context, RLSSessionFactory, create_rls_engine, and fail-closed security exceptions (RLSContextError, UnboundRLSSessionError, RLSRoleViolationError).
+ - database.repositories: BaseRepository generic base providing type-safe CRUD operations, bounded pagination (1..500), and mandatory RLS session verification.
+ - database.outbox: OutboxEnvelope, enqueue_outbox_event, topic_matches, RealtimeBroker, PgNotifyBroker, ValkeyBroker, and OutboxRelay (run via `python -m database.outbox.relay`).
+diff --git a/docs/qa/KANBA-66/api-specialist-review.md b/docs/qa/KANBA-66/api-specialist-review.md
+new file mode 100644
+index 0000000..d51044a
+--- /dev/null
++++ b/docs/qa/KANBA-66/api-specialist-review.md
+@@ -0,0 +1,85 @@
++# API Specialist Gate Independent Forensic Audit: APPROVED for KANBA-66 (KB-P2-16)
++
++- Auditor: `arch-reviewer` (Swarm Systems/Backend Architect & API Specialist Gate Auditor)
++- Worktree: `/tmp/kb-wt-KANBA-66` on branch `feat/KANBA-66`
++- Ticket: `KANBA-66` (`KB-P2-16`: [Phase 2 / Media] Media proxy /api/v1/media-proxy: HMAC URL, DNS-resolve-then-pin SSRF block, zero redirects, <=10MB, cookieless & air-gap placeholder)
++- Target File: `docs/qa/KANBA-66/api-specialist-review.md`
++
++---
++
++### 1. Architectural Scope & Security Invariants Verification
++
++A comprehensive forensic audit of the external media proxy, cryptographic URL signing, DNS-resolve-then-pin SSRF defense, cookieless transport, raster magic byte verification, and air-gap short-circuit mechanisms was conducted in `/tmp/kb-wt-KANBA-66`:
++
++1. **HMAC URL Signing & Short-Circuit Verification (`signing.py`):**
++   - **Constant-Time Pre-Gate:** `verify_media_proxy_url` enforces `len(sig) <= 64` and verifies the HMAC-SHA256 signature using `hmac.compare_digest` BEFORE initiating URL parsing or DNS resolution. Unsigned, tampered, or cross-URL signatures are rejected immediately with 403 `INVALID_SIGNATURE`, eliminating unauthenticated CPU and network amplification.
++   - **Strict URL Formatting Boundaries:** `validate_external_image_url` strictly enforces HTTPS (`scheme == "https"`), default HTTPS port (`port in (None, 443)`), maximum hostname length of 253 characters, maximum URL length of 2,048 characters, zero userinfo (`username`/`password`), and zero URL fragment identifiers.
++   - **Port-Scanning Defense:** Rejecting non-standard ports (e.g. `:8080`, `:6379`, `:5432`) prevents attackers from utilizing the proxy for internal or external port probing. Literal IP hostnames in blocked or private ranges are rejected immediately at validation time.
++
++2. **SSRF Guard & DNS-Resolve-Then-Pin Socket Architecture (`ssrf.py`, `client.py`):**
++   - **Comprehensive Blocked IP Matrix:** `is_public_global_ip` validates that destination addresses are publicly routable global unicast IPs. It explicitly blocks:
++     * IPv4 and IPv6 loopback (`127.0.0.0/8`, `::1`)
++     * RFC 1918 private networks (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`)
++     * Link-local and cloud metadata endpoints (`169.254.0.0/16` AWS/GCP IMDS, `fe80::/10`)
++     * Carrier-Grade NAT (`100.64.0.0/10`)
++     * IPv6 Unique Local (`fc00::/7`) and site-local (`fec0::/10`)
++     * Multicast, broadcast, documentation, benchmarking, and unspecified addresses (`0.0.0.0/8`, `::`).
++   - **IPv6 Tunnel & NAT Unwrapping:** Explicitly unwraps IPv4-mapped IPv6 (`::ffff:x.x.x.x`) and NAT64 (`64:ff9b::/96`) addresses, ensuring embedded private IPv4 addresses cannot bypass filtering via IPv6 encoding.
++   - **Single DNS Resolution & Poisoning Rejection:** `resolve_and_select_pinned_ip` resolves the hostname once under a 2.0s timeout. If zero records are returned or if **ANY** returned `A` or `AAAA` record fails `is_public_global_ip`, the entire request is rejected with 403 `MEDIA_HOST_BLOCKED`.
++   - **Zero-TTL DNS Rebinding Elimination:** `PinnedTlsMediaClient` establishes a direct TCP connection to the pinned IP literal (`host=str(pinned_ip)`, `port=443`) while supplying `server_hostname=original_host` to `ssl.create_default_context()` (`TLSv1_2` minimum, `CERT_REQUIRED`, `check_hostname=True`). Because the socket layer connects directly to the IP literal without performing a secondary lookup, DNS-rebinding TOCTOU attacks are architecturally impossible.
++
++3. **Cookieless Outbound Protocol & Content Sanitization (`client.py`, `service.py`):**
++   - **Total Header Cleansing:** Outbound HTTP/1.1 requests emit strictly:
++     ```http
++     GET {path} HTTP/1.1
++     Host: {original_host}
++     User-Agent: Kanban-Media-Proxy/1.0
++     Accept: image/png, image/jpeg, image/webp, image/avif, image/gif
++     Accept-Encoding: identity
++     Connection: close
++     ```
++     No client `Cookie`, `Authorization`, `Referer`, `Origin`, or `X-Forwarded-For` headers are forwarded upstream.
++   - **Zero Redirect Enforcement:** Any 3xx redirect response (`301`, `302`, `303`, `307`, `308`) immediately closes the socket and triggers 502 `MEDIA_REDIRECT_BLOCKED` without inspecting `Location`, preventing redirect-based SSRF into private networks.
++   - **Raster-Only MIME & Magic Signature Verification:** Declared `Content-Type` must strictly reside in `{"image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"}` (SVG and HTML rejected with 415 `MEDIA_TYPE_DISALLOWED`). The first 32 bytes are verified against raster magic byte headers (`\x89PNG`, `\xff\xd8\xff`, `GIF8`, `RIFF....WEBP`, `ftypavif`/`ftypavis`), returning 502 `MEDIA_SIGNATURE_MISMATCH` on polyglots or mismatched payloads.
++   - **10 MiB Streaming Buffer Cap:** `MAX_PROXY_BYTES = 10_485_760`. Excess `Content-Length` is rejected upfront; streamed chunks are counted and aborted immediately upon exceeding 10 MiB with 502 `MEDIA_TOO_LARGE`.
++   - **Downstream Header Hardening:** Response strips all upstream headers (`Set-Cookie`, `ETag`, `Server`, `Link`) and emits strictly:
++     * `Content-Security-Policy: default-src 'none'; sandbox`
++     * `X-Content-Type-Options: nosniff`
++     * `Cross-Origin-Resource-Policy: same-origin`
++     * `Referrer-Policy: no-referrer`
++     * `Cache-Control: private, max-age=3600`
++
++4. **Air-Gap Short-Circuit & Rate Limiting (`placeholder.py`, `media_proxy.py`):**
++   - **Zero-Packet Air-Gap Isolation:** When `air_gap_mode` is enabled, `MediaProxyService` short-circuits with 0 DNS and 0 TCP calls, returning HTTP 200 with a 67-byte 1x1 transparent PNG, `X-Kanban-Media-Status: air-gap-placeholder`, and `Cache-Control: private, no-store`.
++   - **Rate Limiting:** Enforces `MEDIA_PROXY_PRINCIPAL` sliding-window rate limit (120 req / 60s per authenticated principal) via `kanban.security.ratelimit`.
++
++---
++
++### 2. Independent Verification & Test Execution
++
++- **Unit & Security Matrix Suite:** 22 / 22 tests passed cleanly in 2.68s across `test_ssrf_and_rebinding.py` and `test_media_proxy_api.py`.
++  - Case 1: Positive cookieless proxy with header stripping and CSP sandboxing.
++  - Case 2: HMAC gate verification, tamper rejection, and 0 DNS calls.
++  - Case 3: Complete SSRF IP matrix (127.0.0.1, 10.0.0.1, 172.16.5.4, 192.168.1.1, 169.254.169.254, 100.64.0.1, 0.0.0.0, ::1, fe80::1, fc00::1, fd12:3456::1, mapped IPv4, NAT64, multi-record mixed responses) all rejected with 403 `MEDIA_HOST_BLOCKED` and 0 TCP connects.
++  - Case 4: DNS rebinding TOCTOU assertion confirming exactly 1 DNS lookup and pinned IP literal connection.
++  - Case 5: 3xx redirect rejection with 502 `MEDIA_REDIRECT_BLOCKED`.
++  - Case 6: URL scheme, credential, and port scanning rejections with 400 `INVALID_MEDIA_URL`.
++  - Case 7: Content-Type disallowance (SVG/HTML -> 415) and magic byte mismatch rejection (502).
++  - Case 8: 10 MiB boundary cap enforcement.
++  - Case 9: Air-gap mode placeholder with 0 DNS/TCP calls, 401 unauthenticated check, and 429 rate limit breach.
++- **Coverage:** **96.76%** combined line and branch coverage across target modules (`kanban.media_proxy` and `kanban.api.v1.media_proxy`).
++- **Static Quality & Build Gates:**
++  - `ruff check .`: Clean (0 errors).
++  - `ruff format --check .`: Clean.
++  - `mypy --strict kanban database`: Clean (0 errors across 193 source files).
++  - `lint-imports`: 2 kept, 0 broken.
++  - `scripts/check_no_dashes.py --all`: Clean (0 non-ASCII dashes repo-wide).
++  - `make license`: Clean (violations=0).
++
++---
++
++### 3. Verdict
++
++The media proxy implementation in `/tmp/kb-wt-KANBA-66` establishes an uncompromising, attack-resistant boundary against SSRF, IP leakage, DNS rebinding, and untrusted media execution, fully satisfying `KB-P2-16`.
++
++APPROVED
+diff --git a/docs/qa/KANBA-66/build-check.txt b/docs/qa/KANBA-66/build-check.txt
+new file mode 100644
+index 0000000..1f6839e
+--- /dev/null
++++ b/docs/qa/KANBA-66/build-check.txt
+@@ -0,0 +1,27 @@
++All checks passed!
++547 files already formatted
++Success: no issues found in 193 source files
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 258 files, 479 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++mcp forbidden from importing database KEPT
++
++Contracts: 2 kept, 0 broken.
++uv run python -m scripts.license_gate
++SUMMARY python=110 node=1 violations=0
+diff --git a/docs/qa/KANBA-66/contract-sample.json b/docs/qa/KANBA-66/contract-sample.json
+new file mode 100644
+index 0000000..33f918a
+--- /dev/null
++++ b/docs/qa/KANBA-66/contract-sample.json
+@@ -0,0 +1,87 @@
++{
++  "description": "Captured HTTP contract samples for KANBA-66 (KB-P2-16) Media Proxy API",
++  "route": "GET /api/v1/media-proxy",
++  "responses": {
++    "200_PROXIED_IMAGE": {
++      "status_code": 200,
++      "headers": {
++        "content-type": "image/png",
++        "content-length": "16",
++        "cache-control": "private, max-age=3600",
++        "x-request-id": "cdae08e95d3d4f4f9aa452b7f28b59ef",
++        "content-security-policy": "default-src 'none'; sandbox",
++        "x-content-type-options": "nosniff",
++        "referrer-policy": "no-referrer",
++        "x-frame-options": "DENY",
++        "cross-origin-opener-policy": "same-origin",
++        "cross-origin-resource-policy": "same-origin",
++        "permissions-policy": "camera=(), microphone=(), geolocation=()",
++        "strict-transport-security": "max-age=63072000; includeSubDomains"
++      },
++      "body_bytes_length": 16
++    },
++    "200_AIR_GAP_PLACEHOLDER": {
++      "status_code": 200,
++      "headers": {
++        "content-type": "image/png",
++        "content-length": "67",
++        "x-kanban-media-status": "air-gap-placeholder",
++        "cache-control": "private, no-store",
++        "x-request-id": "bbcbed1ce23e48a0925694904c4e1ef4",
++        "content-security-policy": "default-src 'none'; sandbox",
++        "x-content-type-options": "nosniff",
++        "referrer-policy": "no-referrer",
++        "x-frame-options": "DENY",
++        "cross-origin-opener-policy": "same-origin",
++        "cross-origin-resource-policy": "same-origin",
++        "permissions-policy": "camera=(), microphone=(), geolocation=()",
++        "strict-transport-security": "max-age=63072000; includeSubDomains"
++      },
++      "body_bytes_length": 67
++    },
++    "403_INVALID_SIGNATURE": {
++      "status_code": 403,
++      "payload": {
++        "type": "urn:kanban:problem:INVALID_SIGNATURE",
++        "title": "Invalid Signature",
++        "status": 403,
++        "code": "INVALID_SIGNATURE",
++        "detail": "Missing or invalid HMAC signature for media proxy URL",
++        "request_id": "4c13b97d97864edfa61beb5118548999"
++      }
++    },
++    "403_MEDIA_HOST_BLOCKED": {
++      "status_code": 403,
++      "payload": {
++        "type": "urn:kanban:problem:MEDIA_HOST_BLOCKED",
++        "title": "Media Host Blocked",
++        "status": 403,
++        "code": "MEDIA_HOST_BLOCKED",
++        "detail": "External media host 'img.example.com' resolved to blocked non-public IP address '169.254.169.254' (SSRF guard)",
++        "request_id": "5f6f22491943491b923ce57735db3f2e"
++      }
++    },
++    "502_MEDIA_REDIRECT_BLOCKED": {
++      "status_code": 502,
++      "payload": {
++        "type": "urn:kanban:problem:MEDIA_REDIRECT_BLOCKED",
++        "title": "Media Redirect Blocked",
++        "status": 502,
++        "code": "MEDIA_REDIRECT_BLOCKED",
++        "detail": "Upstream host 'img.example.com' attempted redirect with status 302",
++        "request_id": "5e630ec7e3524e008bb2918f79df6a23"
++      }
++    },
++    "502_MEDIA_TOO_LARGE": {
++      "status_code": 502,
++      "payload": {
++        "type": "urn:kanban:problem:MEDIA_TOO_LARGE",
++        "title": "Media Too Large",
++        "status": 502,
++        "code": "MEDIA_TOO_LARGE",
++        "detail": "Declared Content-Length 10485761 exceeds maximum limit of 10485760 bytes",
++        "request_id": "7506e5304933495dbe59d646704a53d5"
++      }
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/docs/qa/KANBA-66/ssrf-matrix-results.txt b/docs/qa/KANBA-66/ssrf-matrix-results.txt
+new file mode 100644
+index 0000000..a597134
+--- /dev/null
++++ b/docs/qa/KANBA-66/ssrf-matrix-results.txt
+@@ -0,0 +1,22 @@
++KANBA-66 / KB-P2-16 SSRF Blocked IP Matrix Verification (S5.4, S10.2)
++====================================================================
++
++| Category | Resolved Address | Expected | Result | Code | Socket Connects |
++| :--- | :--- | :---: | :---: | :---: | :---: |
++| Single-Record Block | `127.0.0.1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `10.0.0.1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `172.16.5.4` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `192.168.1.1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `169.254.169.254` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `100.64.0.1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `0.0.0.0` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `::1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `fe80::1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `fc00::1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `fd12:3456::1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `::ffff:127.0.0.1` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `::ffff:169.254.169.254` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Single-Record Block | `64:ff9b::a9fe:a9fe` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++| Multi-Record Mixed | `[93.184.216.34, 10.0.0.5]` | 403 BLOCKED | PASS | `MEDIA_HOST_BLOCKED` | 0 |
++
++All non-public, loopback, private, IMDS, and mixed DNS responses were rejected with 403 MEDIA_HOST_BLOCKED and zero TCP connections.
+diff --git a/docs/qa/KANBA-66/ui-specialist-review.md b/docs/qa/KANBA-66/ui-specialist-review.md
+new file mode 100644
+index 0000000..94d0c1e
+--- /dev/null
++++ b/docs/qa/KANBA-66/ui-specialist-review.md
+@@ -0,0 +1,68 @@
++# UI Specialist Gate Final Audit: APPROVED for KANBA-66 (KB-P2-16)
++
++- Auditor: ui-specialist (UI & UX Architecture Specialist Gate)
++- Worktree: `/tmp/kb-wt-KANBA-66`
++- Branch: `feat/KANBA-66`
++- Commit: `10db3e4`
++- Ticket: `KANBA-66` (`KB-P2-16`: `[Phase 2 / Media] Media proxy /api/v1/media-proxy: HMAC URL, DNS-resolve-then-pin SSRF block, zero redirects, <=10MB, cookieless & air-gap placeholder`)
++
++---
++
++### 1. Executive Summary & Verification Matrix
++A comprehensive frontend and UX architecture audit of the media proxy implementation in `/tmp/kb-wt-KANBA-66` was performed. While `KB-P2-16` is a backend media proxy and SSRF protection ticket with no direct UI viewports (Screenshots: N/A - Non-UI Ticket per KB-P2-16 proof criteria), it directly underpins the frontend Markdown image rendering pipeline, `<MediaViewport>` external shield badge (`KB-P3-48`), and air-gap offline placeholder state transitions. All frontend-facing response headers, CSP sandboxing directives, cache behaviors, and RFC 7807 error responses were forensically evaluated against S5.4, S6.2, and S10.2 requirements.
++
++| Verification Dimension | Specification Target | Observed Status | Verdict |
++| :--- | :--- | :--- | :--- |
++| **Media Proxy URL Structure** | HMAC-signed `/api/v1/media-proxy?u=...&sig=...` | Signed URL helper produces canonical URL with URL-safe base64 HMAC; validated before DNS/TCP | PASS |
++| **Media Viewport Integration** | `<MediaViewport>` `🌐` badge (`KB-P3-48`) | Proxy path recognized by `mediaUrlResolver.ts`; sets `isExternalProxied: true` and mounts `🌐` badge | PASS |
++| **Air-Gap Header & Placeholder** | `X-Kanban-Media-Status: air-gap-placeholder` | Emits `air-gap-placeholder` header + 1x1 transparent PNG + `no-store`; triggers calm `📴` card in UI | PASS |
++| **CSP & Sandboxing Headers** | `default-src 'none'; sandbox` | Strict CSP header prevents raster polyglot script execution; `nosniff` prevents MIME confusion | PASS |
++| **Caching & Privacy Policy** | Cookieless, `private, max-age=3600` | Egress strips user cookies/headers; downstream response cached privately; `no-referrer` enforced | PASS |
++| **Raster Types & Magic Bytes** | PNG, JPEG, WebP, AVIF, GIF only | SVG and HTML disallowed upstream; magic bytes enforced; protects DOM from inline SVG XSS | PASS |
++| **Error Handling & RFC 7807** | Predictable problem JSON schemas | `403 INVALID_SIGNATURE`, `403 MEDIA_HOST_BLOCKED`, `502 MEDIA_REDIRECT_BLOCKED`, `502 MEDIA_TOO_LARGE` | PASS |
++| **Unit Test Coverage** | Mandatory Feature Tests (>=95%) | 22/22 passed in 2.78s; 96.99% combined coverage across `kanban.media_proxy` | PASS |
++| **Build, Typecheck & Linter** | Zero-Tolerance Quality Mandate | Ruff check clean, Ruff format clean, Mypy strict clean, Lint-imports clean | PASS |
++
++---
++
++### 2. Frontend Contract & UX Ergonomics Audit
++
++1. **ProseMirror & Markdown Image Consumption:**
++   - In Markdown documents and ProseMirror editor node views (`KANBA-38`, `KB-P3-45`), raw external image links (`https://...`) are safely normalized into signed proxy URLs (`/api/v1/media-proxy?u=<encoded>&sig=<hmac>`).
++   - The media proxy endpoint strictly sets `Content-Security-Policy: default-src 'none'; sandbox`, `X-Content-Type-Options: nosniff`, and `Cross-Origin-Resource-Policy: same-origin`.
++   - When rendered in an `<img>` tag or within `<MediaViewport>`, the browser processes the asset under a sandboxed null-origin context, shielding the application from SVG script injection, CSS keyloggers, and cross-site tracking pixels.
++
++2. **`<MediaViewport>` `🌐` External Media Badge Ergonomics:**
++   - In `<MediaViewport>` (implemented in `KB-P3-48` / `KANBA-78`), `resolveMediaUrl(src)` detects proxy URLs and sets `isExternalProxied: true`.
++   - The floating controls bar renders the `🌐` `<EmojiHint kind="externalMedia">` badge. On hover or tap, users receive the clear, accessible reassurance: `"Proxied anonymously via Kanban Media Shield"`.
++   - User privacy is preserved: external third-party hosts receive zero browser cookies, zero client user-agent strings, and zero viewer IP addresses.
++
++3. **Air-Gap Placeholder UX Integration:**
++   - When `air_gap_mode` is enabled, `MediaProxyService` short-circuits with zero DNS queries and zero socket connections.
++   - It responds with HTTP 200, a 67-byte 1x1 transparent PNG, `X-Kanban-Media-Status: air-gap-placeholder`, and `Cache-Control: private, no-store`.
++   - In the frontend, `<MediaViewport>` checks `systemStatus.air_gap_mode` and header metadata to render a calm, structured placeholder card (`📴 External image blocked in Air-Gap Local-Only Mode (<host>)`) rather than an unsightly broken image box or network error toast.
++   - If a client relies on raw `<img>` tags, the 1x1 transparent PNG prevents browser broken-image icons, maintaining clean document layout.
++
++4. **Error Resilience & Fallback States:**
++   - Upstream failures emit standard RFC 7807 problem responses (`type`, `title`, `status`, `code`, `detail`, `request_id`).
++   - The error response details specifically distinguish between invalid signatures (`INVALID_SIGNATURE`), blocked internal/cloud hosts (`MEDIA_HOST_BLOCKED`), disallowed redirects (`MEDIA_REDIRECT_BLOCKED`), and oversized payloads (`MEDIA_TOO_LARGE`).
++   - `<MediaViewport>` handles non-200 image responses via `onError`, providing graceful fallback indicators while keeping technical diagnostic codes accessible in dev tools and network logs without leaking internal stack traces.
++
++---
++
++### 3. Architecture & Security Invariant Review
++1. **SSRF & DNS-Rebinding Defense:**
++   - Target hostnames are resolved once and verified against the comprehensive `is_public_global_ip` matrix (blocking loopback, RFC 1918, IMDS `169.254.0.0/16`, CGNAT, IPv6 ULA, NAT64, and documentation prefixes).
++   - Socket connection is established strictly to the pre-validated pinned IP literal with TLS SNI set to `original_host`. DNS is never re-consulted by the transport layer, eliminating 0-TTL DNS rebinding TOCTOU attacks.
++2. **Redirect & Stream Caps:**
++   - Any upstream 3xx redirect status code is immediately rejected (`502 MEDIA_REDIRECT_BLOCKED`) with zero follow-through, preventing redirect-based internal network probing.
++   - Payloads exceeding 10 MiB (10,485,760 bytes) are aborted mid-stream (`502 MEDIA_TOO_LARGE`), protecting client browsers from memory exhaustion.
++3. **Typography & Formatting:**
++   - Audit text strictly adheres to plain ASCII hyphens `-` with zero non-ASCII Unicode dashes (`U+2014` / `U+2013`).
++
++---
++
++### 4. Gate Sign-Off
++I have written this audit to `/tmp/kb-wt-KANBA-66/docs/qa/KANBA-66/ui-specialist-review.md`. Please commit it to your branch `feat/KANBA-66`.
++
++Verdict: APPROVED
+diff --git a/docs/qa/KANBA-66/unit-test-results.txt b/docs/qa/KANBA-66/unit-test-results.txt
+new file mode 100644
+index 0000000..5e198a7
+--- /dev/null
++++ b/docs/qa/KANBA-66/unit-test-results.txt
+@@ -0,0 +1,47 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-66/.venv/bin/python
++rootdir: /tmp/kb-wt-KANBA-66
++configfile: pyproject.toml
++plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
++collecting ... collected 22 items
++
++kanban/tests/media_proxy/test_ssrf_and_rebinding.py::test_case_3_ssrf_ip_matrix PASSED [  4%]
++kanban/tests/media_proxy/test_ssrf_and_rebinding.py::test_case_4_dns_rebinding_toctou PASSED [  9%]
++kanban/tests/media_proxy/test_ssrf_and_rebinding.py::test_dns_resolver_failures_and_timeouts PASSED [ 13%]
++kanban/tests/media_proxy/test_ssrf_and_rebinding.py::test_default_async_host_resolver PASSED [ 18%]
++kanban/tests/media_proxy/test_ssrf_and_rebinding.py::test_is_public_global_ip_coverage PASSED [ 22%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_case_1_positive_cookieless_proxy PASSED [ 27%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_case_2_hmac_gate_defense PASSED [ 31%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_case_5_zero_redirects PASSED [ 36%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_case_6_url_and_port_scanning PASSED [ 40%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_case_7_mime_and_magic_mismatch PASSED [ 45%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_case_8_boundary_10mib_cap PASSED [ 50%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_case_9_air_gap_mode_and_rate_limit PASSED [ 54%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_generate_contract_sample_artifact PASSED [ 59%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_magic_signature_verification PASSED [ 63%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_status_code_parsing_failures PASSED [ 68%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_header_validation_failures PASSED [ 72%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_chunked_transfer_encoding PASSED [ 77%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_service_query_params_and_air_gap_checker PASSED [ 81%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_signing_boundary_checks PASSED [ 86%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_default_pinned_connection_transport PASSED [ 90%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_stream_limits_and_timeouts PASSED [ 95%]
++kanban/tests/media_proxy/test_media_proxy_api.py::test_api_loads_default_key_material PASSED [100%]
++
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                Stmts   Miss Branch BrPart  Cover   Missing
++-------------------------------------------------------------------------------
++kanban/api/v1/media_proxy.py           31      0      4      0   100%
++kanban/media_proxy/__init__.py          7      0      0      0   100%
++kanban/media_proxy/client.py          165      5     48      3    96%   121->116, 256-257, 281-282, 332
++kanban/media_proxy/placeholder.py      24      0     10      3    91%   46->49, 50->55, 52->55
++kanban/media_proxy/service.py          24      0      4      0   100%
++kanban/media_proxy/signing.py          76      3     20      1    96%   51->exit, 129-131
++kanban/media_proxy/ssrf.py             63      0     22      0   100%
++-------------------------------------------------------------------------------
++TOTAL                                 390      8    108      7    97%
++Required test coverage of 95% reached. Total coverage: 96.99%
++============================== 22 passed in 2.78s ==============================
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 19d9ba8..92813e0 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -6,6 +6,7 @@ from fastapi import APIRouter
+ 
+ from kanban.api.v1.auth_session import router as auth_session_router
+ from kanban.api.v1.health import router as health_router
++from kanban.api.v1.media_proxy import router as media_proxy_router
+ from kanban.api.v1.objects_access import router as objects_access_router
+ from kanban.api.v1.projects import router as projects_router
+ from kanban.api.v1.resolve import router as resolve_router
+@@ -15,6 +16,7 @@ def build_v1_router() -> APIRouter:
+     """Build and compose the canonical v1 API router tree."""
+     v1 = APIRouter()
+     v1.include_router(health_router)
++    v1.include_router(media_proxy_router)
+     v1.include_router(objects_access_router)
+     v1.include_router(projects_router)
+     v1.include_router(resolve_router)
+diff --git a/kanban/api/v1/media_proxy.py b/kanban/api/v1/media_proxy.py
+new file mode 100644
+index 0000000..dac04ff
+--- /dev/null
++++ b/kanban/api/v1/media_proxy.py
+@@ -0,0 +1,97 @@
++"""Media proxy endpoint protecting against SSRF and IP leakage (S5.4, S10.2)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Annotated
++
++from fastapi import APIRouter, Depends, Query, Response
++from starlette.requests import Request  # noqa: TC002
++
++from kanban.api.deps import PrincipalContext, get_principal
++from kanban.api.problems import ProblemException
++from kanban.media_proxy.service import MediaProxyService
++from kanban.media_proxy.signing import validate_external_image_url, verify_media_proxy_url
++from kanban.security.keys import load_key_material
++from kanban.security.ratelimit import MEDIA_PROXY_PRINCIPAL, rate_limited
++
++if TYPE_CHECKING:
++    from collections.abc import Sequence
++
++    from kanban.security.keys import KeyMaterial
++
++router = APIRouter(tags=["media-proxy"])
++
++
++async def _media_proxy_principal_key(request: Request) -> Sequence[str]:
++    """Extract authenticated principal ID for rate limit keying."""
++    caller = await get_principal(request)
++    request.state.caller_principal = caller
++    return [str(caller.principal_id)]
++
++
++_media_rate_limit_dep = rate_limited(
++    MEDIA_PROXY_PRINCIPAL,
++    key_func=_media_proxy_principal_key,
++)
++
++
++@router.get(
++    "/media-proxy",
++    summary="Cookieless SSRF-defended external media proxy",
++    dependencies=[Depends(_media_rate_limit_dep)],
++)
++async def get_media_proxy(
++    request: Request,
++    u: Annotated[str, Query(description="Target external HTTPS image URL")],
++    sig: Annotated[str, Query(description="HMAC-SHA256 signature for media URL")],
++) -> Response:
++    """Retrieve external Markdown image over DNS-pinned cookieless socket.
++
++    Requires authenticated principal and enforces MEDIA_PROXY_PRINCIPAL rate limits.
++    Validates HMAC signature before URL parsing or DNS lookup.
++    """
++    caller: PrincipalContext = getattr(
++        request.state, "caller_principal", None
++    ) or await get_principal(request)
++
++    key_mat: KeyMaterial | None = getattr(request.app.state, "key_material", None)
++    if key_mat is None:
++        key_mat = load_key_material()
++
++    # S5.4: Validate HMAC signature BEFORE URL parsing or DNS lookup
++    if not verify_media_proxy_url(u, sig, key_mat):
++        msg = "Missing or invalid HMAC signature for media proxy URL"
++        raise ProblemException(
++            code="INVALID_SIGNATURE",
++            status=403,
++            title="Invalid Signature",
++            detail=msg,
++        )
++
++    # Validate external image URL format and boundaries
++    validate_external_image_url(u)
++
++    service: MediaProxyService = getattr(
++        request.app.state, "media_proxy_service", None
++    ) or MediaProxyService(air_gap_checker=getattr(request.app.state, "air_gap_checker", None))
++
++    content_type, body_bytes, extra_headers = await service.fetch_proxy_media(
++        u, workspace_id=caller.workspace_id
++    )
++
++    response_headers = {
++        "content-type": content_type,
++        "content-length": str(len(body_bytes)),
++        "x-content-type-options": "nosniff",
++        "content-security-policy": "default-src 'none'; sandbox",
++        "cross-origin-resource-policy": "same-origin",
++        "referrer-policy": "no-referrer",
++    }
++    response_headers.update(extra_headers)
++
++    return Response(
++        content=body_bytes,
++        status_code=200,
++        media_type=content_type,
++        headers=response_headers,
++    )
+diff --git a/kanban/media_proxy/__init__.py b/kanban/media_proxy/__init__.py
+new file mode 100644
+index 0000000..cb0b199
+--- /dev/null
++++ b/kanban/media_proxy/__init__.py
+@@ -0,0 +1,45 @@
++"""Cookieless external media proxy with DNS-pinning SSRF protection (S5.4, S10.2)."""
++
++from __future__ import annotations
++
++from kanban.media_proxy.client import (
++    MAX_PROXY_BYTES,
++    PinnedConnectionTransport,
++    PinnedTlsMediaClient,
++)
++from kanban.media_proxy.placeholder import (
++    AIR_GAP_PLACEHOLDER_PNG,
++    AIR_GAP_STATUS_HEADER,
++    AirGapChecker,
++    DefaultAirGapChecker,
++)
++from kanban.media_proxy.service import MediaProxyService
++from kanban.media_proxy.signing import (
++    sign_media_proxy_url,
++    validate_external_image_url,
++    verify_media_proxy_url,
++)
++from kanban.media_proxy.ssrf import (
++    AsyncHostResolver,
++    DefaultAsyncHostResolver,
++    is_public_global_ip,
++    resolve_and_select_pinned_ip,
++)
++
++__all__ = [
++    "AIR_GAP_PLACEHOLDER_PNG",
++    "AIR_GAP_STATUS_HEADER",
++    "MAX_PROXY_BYTES",
++    "AirGapChecker",
++    "AsyncHostResolver",
++    "DefaultAirGapChecker",
++    "DefaultAsyncHostResolver",
++    "MediaProxyService",
++    "PinnedConnectionTransport",
++    "PinnedTlsMediaClient",
++    "is_public_global_ip",
++    "resolve_and_select_pinned_ip",
++    "sign_media_proxy_url",
++    "validate_external_image_url",
++    "verify_media_proxy_url",
++]
+diff --git a/kanban/media_proxy/client.py b/kanban/media_proxy/client.py
+new file mode 100644
+index 0000000..1027543
+--- /dev/null
++++ b/kanban/media_proxy/client.py
+@@ -0,0 +1,368 @@
++"""Pinned TLS socket HTTP client for cookieless media retrieval (S5.4, S10.2)."""
++
++from __future__ import annotations
++
++import asyncio
++import contextlib
++import ssl
++from typing import TYPE_CHECKING, Final, Protocol
++
++from kanban.api.problems import ProblemException
++
++if TYPE_CHECKING:
++    from ipaddress import IPv4Address, IPv6Address
++
++MAX_PROXY_BYTES: Final[int] = 10_485_760  # 10 MiB
++_CONNECT_TIMEOUT: Final[float] = 3.0
++_READ_TIMEOUT: Final[float] = 5.0
++_TOTAL_TIMEOUT: Final[float] = 8.0
++
++_HTTP_OK: Final[int] = 200
++_HTTP_REDIRECT_MIN: Final[int] = 300
++_HTTP_REDIRECT_MAX: Final[int] = 399
++_STATUS_LINE_MIN_PARTS: Final[int] = 2
++
++_MIN_SIGNATURE_BYTES: Final[int] = 4
++_CONTAINER_SIGNATURE_BYTES: Final[int] = 12
++_AVIF_BRANDS: Final[frozenset[bytes]] = frozenset({b"avif", b"avis", b"mif1"})
++
++_ALLOWED_CONTENT_TYPES: Final[frozenset[str]] = frozenset(
++    {
++        "image/png",
++        "image/jpeg",
++        "image/webp",
++        "image/avif",
++        "image/gif",
++    }
++)
++
++
++def _verify_magic_signature(content_type: str, data: bytes) -> bool:
++    """Verify first bytes match expected raster image magic signature."""
++    if len(data) < _MIN_SIGNATURE_BYTES:
++        return False
++    if content_type == "image/png":
++        valid = data.startswith(b"\x89PNG\r\n\x1a\n")
++    elif content_type == "image/jpeg":
++        valid = data.startswith(b"\xff\xd8\xff")
++    elif content_type == "image/gif":
++        valid = data.startswith((b"GIF87a", b"GIF89a"))
++    elif len(data) >= _CONTAINER_SIGNATURE_BYTES and content_type == "image/webp":
++        valid = data.startswith(b"RIFF") and data[8:12] == b"WEBP"
++    elif len(data) >= _CONTAINER_SIGNATURE_BYTES and content_type == "image/avif":
++        valid = data[4:8] == b"ftyp" and data[8:12] in _AVIF_BRANDS
++    else:
++        valid = False
++    return valid
++
++
++def _parse_status_code(status_line_bytes: bytes, original_host: str) -> int:
++    """Parse HTTP status line and validate non-redirect 200 status."""
++    if not status_line_bytes:
++        msg = f"Empty response received from media host '{original_host}'"
++        raise ProblemException(
++            code="MEDIA_UPSTREAM_ERROR",
++            status=502,
++            title="Media Upstream Error",
++            detail=msg,
++        )
++
++    status_line = status_line_bytes.decode("latin1", errors="replace").strip()
++    parts = status_line.split(" ", 2)
++    if len(parts) < _STATUS_LINE_MIN_PARTS:
++        msg = f"Malformed status line from media host '{original_host}': {status_line!r}"
++        raise ProblemException(
++            code="MEDIA_UPSTREAM_ERROR",
++            status=502,
++            title="Media Upstream Error",
++            detail=msg,
++        )
++
++    try:
++        status_code = int(parts[1])
++    except ValueError:
++        msg = f"Invalid status code from media host '{original_host}': {parts[1]!r}"
++        raise ProblemException(
++            code="MEDIA_UPSTREAM_ERROR",
++            status=502,
++            title="Media Upstream Error",
++            detail=msg,
++        ) from None
++
++    if _HTTP_REDIRECT_MIN <= status_code <= _HTTP_REDIRECT_MAX:
++        msg = f"Upstream host '{original_host}' attempted redirect with status {status_code}"
++        raise ProblemException(
++            code="MEDIA_REDIRECT_BLOCKED",
++            status=502,
++            title="Media Redirect Blocked",
++            detail=msg,
++        )
++
++    if status_code != _HTTP_OK:
++        msg = f"Upstream media host '{original_host}' returned HTTP {status_code}"
++        raise ProblemException(
++            code="MEDIA_UPSTREAM_ERROR",
++            status=502,
++            title="Media Upstream Error",
++            detail=msg,
++        )
++
++    return status_code
++
++
++async def _read_http_headers(reader: asyncio.StreamReader) -> dict[str, str]:
++    """Read RFC 7230 HTTP headers until terminating CRLF."""
++    raw_headers: dict[str, str] = {}
++    while True:
++        header_line_bytes = await asyncio.wait_for(reader.readline(), timeout=_READ_TIMEOUT)
++        if not header_line_bytes or header_line_bytes in (b"\r\n", b"\n"):
++            break
++        header_line = header_line_bytes.decode("latin1", errors="replace").strip()
++        if ":" in header_line:
++            k, v = header_line.split(":", 1)
++            raw_headers[k.strip().lower()] = v.strip()
++    return raw_headers
++
++
++def _validate_content_type_and_length(raw_headers: dict[str, str]) -> str:
++    """Validate content-type is raster image and declared length is within limit."""
++    content_type_raw = raw_headers.get("content-type", "")
++    content_type = content_type_raw.split(";", 1)[0].strip().lower()
++
++    if content_type not in _ALLOWED_CONTENT_TYPES:
++        msg = (
++            f"Disallowed media content type '{content_type_raw}'; "
++            "only raster images (PNG, JPEG, WebP, AVIF, GIF) are allowed"
++        )
++        raise ProblemException(
++            code="MEDIA_TYPE_DISALLOWED",
++            status=415,
++            title="Media Type Disallowed",
++            detail=msg,
++        )
++
++    cl_header = raw_headers.get("content-length")
++    if cl_header is not None:
++        try:
++            cl_val = int(cl_header)
++            if cl_val > MAX_PROXY_BYTES:
++                msg = (
++                    f"Declared Content-Length {cl_val} exceeds "
++                    f"maximum limit of {MAX_PROXY_BYTES} bytes"
++                )
++                raise ProblemException(
++                    code="MEDIA_TOO_LARGE",
++                    status=502,
++                    title="Media Too Large",
++                    detail=msg,
++                )
++        except ValueError:
++            pass
++
++    return content_type
++
++
++class PinnedConnectionTransport(Protocol):
++    """Protocol for opening a direct IP TLS connection to an external host."""
++
++    async def open_connection(
++        self,
++        ip: str,
++        port: int,
++        server_hostname: str,
++        connect_timeout: float,
++    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
++        """Open TLS connection directly to ip literal verifying server_hostname."""
++        ...
++
++
++class DefaultPinnedConnectionTransport:
++    """Default transport establishing TLS socket directly to pinned IP."""
++
++    async def open_connection(
++        self,
++        ip: str,
++        port: int,
++        server_hostname: str,
++        connect_timeout: float,
++    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
++        """Connect TCP to pinned IP with TLS verification against server_hostname."""
++        ssl_ctx = ssl.create_default_context()
++        ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
++        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
++        ssl_ctx.check_hostname = True
++        return await asyncio.wait_for(
++            asyncio.open_connection(
++                host=ip,
++                port=port,
++                ssl=ssl_ctx,
++                server_hostname=server_hostname,
++            ),
++            timeout=connect_timeout,
++        )
++
++
++class PinnedTlsMediaClient:
++    """Cookieless media retrieval client pinning DNS-resolved IP literals."""
++
++    def __init__(self, transport: PinnedConnectionTransport | None = None) -> None:
++        """Initialize client with optional socket transport double."""
++        self._transport = transport or DefaultPinnedConnectionTransport()
++
++    async def fetch_media(
++        self,
++        pinned_ip: IPv4Address | IPv6Address,
++        original_host: str,
++        path_and_query: str,
++    ) -> tuple[str, bytes]:
++        """Retrieve external media payload over pinned IP socket without cookie forwarding.
++
++        Enforces zero redirects (3xx -> 502), raster content-type verification (415),
++        magic signature validation (502), and strict 10 MiB size limit (502).
++        """
++        return await asyncio.wait_for(
++            self._fetch_internal(pinned_ip, original_host, path_and_query),
++            timeout=_TOTAL_TIMEOUT,
++        )
++
++    async def _fetch_internal(
++        self,
++        pinned_ip: IPv4Address | IPv6Address,
++        original_host: str,
++        path_and_query: str,
++    ) -> tuple[str, bytes]:
++        """Handle internal HTTP wire exchange, status validation, and payload reading."""
++        path = path_and_query if path_and_query.startswith("/") else f"/{path_and_query}"
++        req_lines = [
++            f"GET {path} HTTP/1.1",
++            f"Host: {original_host}",
++            "User-Agent: Kanban-Media-Proxy/1.0",
++            "Accept: image/png, image/jpeg, image/webp, image/avif, image/gif",
++            "Accept-Encoding: identity",
++            "Connection: close",
++            "",
++            "",
++        ]
++        req_payload = "\r\n".join(req_lines).encode("ascii")
++
++        try:
++            reader, writer = await self._transport.open_connection(
++                ip=str(pinned_ip),
++                port=443,
++                server_hostname=original_host,
++                connect_timeout=_CONNECT_TIMEOUT,
++            )
++        except Exception as err:
++            msg = f"Failed to connect to media host '{original_host}': {err}"
++            raise ProblemException(
++                code="MEDIA_UPSTREAM_ERROR",
++                status=502,
++                title="Media Upstream Error",
++                detail=msg,
++            ) from err
++
++        try:
++            writer.write(req_payload)
++            await asyncio.wait_for(writer.drain(), timeout=_READ_TIMEOUT)
++
++            status_line_bytes = await asyncio.wait_for(reader.readline(), timeout=_READ_TIMEOUT)
++            _parse_status_code(status_line_bytes, original_host)
++
++            raw_headers = await _read_http_headers(reader)
++            content_type = _validate_content_type_and_length(raw_headers)
++
++            is_chunked = raw_headers.get("transfer-encoding", "").lower() == "chunked"
++            if is_chunked:
++                body_bytes = await self._read_chunked_body(reader)
++            else:
++                body_bytes = await self._read_fixed_body(reader)
++
++            if len(body_bytes) > MAX_PROXY_BYTES:
++                msg = f"Payload size {len(body_bytes)} exceeds limit of {MAX_PROXY_BYTES} bytes"
++                raise ProblemException(
++                    code="MEDIA_TOO_LARGE",
++                    status=502,
++                    title="Media Too Large",
++                    detail=msg,
++                )
++
++            if not _verify_magic_signature(content_type, body_bytes):
++                msg = f"Payload magic bytes do not match declared content type '{content_type}'"
++                raise ProblemException(
++                    code="MEDIA_SIGNATURE_MISMATCH",
++                    status=502,
++                    title="Media Signature Mismatch",
++                    detail=msg,
++                )
++
++            return content_type, body_bytes
++
++        finally:
++            writer.close()
++            with contextlib.suppress(OSError):
++                await writer.wait_closed()
++
++    async def _read_fixed_body(self, reader: asyncio.StreamReader) -> bytes:
++        """Read stream body until EOF with strict MAX_PROXY_BYTES enforcement."""
++        chunks: list[bytes] = []
++        total_bytes = 0
++        while True:
++            chunk = await asyncio.wait_for(reader.read(65536), timeout=_READ_TIMEOUT)
++            if not chunk:
++                break
++            total_bytes += len(chunk)
++            if total_bytes > MAX_PROXY_BYTES:
++                msg = f"Streamed payload exceeded {MAX_PROXY_BYTES} bytes"
++                raise ProblemException(
++                    code="MEDIA_TOO_LARGE",
++                    status=502,
++                    title="Media Too Large",
++                    detail=msg,
++                )
++            chunks.append(chunk)
++        return b"".join(chunks)
++
++    async def _read_chunked_body(self, reader: asyncio.StreamReader) -> bytes:
++        """Read HTTP chunked transfer-encoded body with strict MAX_PROXY_BYTES enforcement."""
++        chunks: list[bytes] = []
++        total_bytes = 0
++        while True:
++            size_line = await asyncio.wait_for(reader.readline(), timeout=_READ_TIMEOUT)
++            if not size_line:
++                break
++            chunk_size_str = size_line.decode("ascii", errors="replace").split(";")[0].strip()
++            try:
++                chunk_len = int(chunk_size_str, 16)
++            except ValueError as err:
++                msg = f"Invalid chunk size hex: {chunk_size_str!r}"
++                raise ProblemException(
++                    code="MEDIA_UPSTREAM_ERROR",
++                    status=502,
++                    title="Media Upstream Error",
++                    detail=msg,
++                ) from err
++
++            if chunk_len == 0:
++                while True:
++                    trailer = await asyncio.wait_for(reader.readline(), timeout=_READ_TIMEOUT)
++                    if not trailer or trailer in (b"\r\n", b"\n"):
++                        break
++                break
++
++            chunk_data = await asyncio.wait_for(
++                reader.readexactly(chunk_len), timeout=_READ_TIMEOUT
++            )
++            total_bytes += len(chunk_data)
++            if total_bytes > MAX_PROXY_BYTES:
++                msg = f"Streamed chunked payload exceeded {MAX_PROXY_BYTES} bytes"
++                raise ProblemException(
++                    code="MEDIA_TOO_LARGE",
++                    status=502,
++                    title="Media Too Large",
++                    detail=msg,
++                )
++            chunks.append(chunk_data)
++
++            await asyncio.wait_for(reader.readline(), timeout=_READ_TIMEOUT)
++
++        return b"".join(chunks)
+diff --git a/kanban/media_proxy/placeholder.py b/kanban/media_proxy/placeholder.py
+new file mode 100644
+index 0000000..ef145a4
+--- /dev/null
++++ b/kanban/media_proxy/placeholder.py
+@@ -0,0 +1,56 @@
++"""Air-gap mode detection and static offline placeholder PNG (S5.4, S10.2)."""
++
++from __future__ import annotations
++
++import os
++from typing import TYPE_CHECKING, Protocol
++
++if TYPE_CHECKING:
++    from uuid import UUID
++
++    from starlette.requests import Request
++
++# Valid 1x1 transparent RGBA PNG image bytes
++AIR_GAP_PLACEHOLDER_PNG: bytes = (
++    b"\x89PNG\r\n\x1a\n"
++    b"\x00\x00\x00\rIHDR"
++    b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4"
++    b"\x00\x00\x00\rIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q"
++    b"\x00\x00\x00\x00IEND\xaeB`\x82"
++)
++
++AIR_GAP_STATUS_HEADER: str = "air-gap-placeholder"
++
++
++class AirGapChecker(Protocol):
++    """Protocol for checking whether air-gap mode is active for a workspace."""
++
++    def is_air_gap_enabled(self, workspace_id: UUID | None = None) -> bool:
++        """Return True if air-gap isolation is active."""
++        ...
++
++
++class DefaultAirGapChecker:
++    """Default air-gap evaluator reading request state or environment variable."""
++
++    def __init__(self, request: Request | None = None) -> None:
++        """Initialize air-gap checker with optional Starlette request."""
++        self._request = request
++
++    def is_air_gap_enabled(self, workspace_id: UUID | None = None) -> bool:
++        """Evaluate air-gap mode from request app.state or KANBAN_AIR_GAP_MODE env."""
++        if self._request is not None:
++            fn = getattr(self._request.app.state, "is_air_gap_enabled", None)
++            if callable(fn):
++                res = fn(workspace_id)
++                if isinstance(res, bool):
++                    return res
++
++            settings = getattr(self._request.app.state, "settings", None)
++            if settings is not None:
++                val = getattr(settings, "air_gap_mode", None)
++                if isinstance(val, bool):
++                    return val
++
++        env_val = os.environ.get("KANBAN_AIR_GAP_MODE") or os.environ.get("KB_AIR_GAP_MODE", "")
++        return env_val.strip().lower() in ("true", "1", "yes", "on")
+diff --git a/kanban/media_proxy/service.py b/kanban/media_proxy/service.py
+new file mode 100644
+index 0000000..1f13d62
+--- /dev/null
++++ b/kanban/media_proxy/service.py
+@@ -0,0 +1,73 @@
++"""Media proxy service coordinating air-gap checks, DNS pinning, and fetch (S5.4, S10.2)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++from kanban.media_proxy.client import PinnedTlsMediaClient
++from kanban.media_proxy.placeholder import (
++    AIR_GAP_PLACEHOLDER_PNG,
++    AIR_GAP_STATUS_HEADER,
++    DefaultAirGapChecker,
++)
++from kanban.media_proxy.signing import validate_external_image_url
++from kanban.media_proxy.ssrf import resolve_and_select_pinned_ip
++
++if TYPE_CHECKING:
++    from uuid import UUID
++
++    from kanban.media_proxy.client import PinnedConnectionTransport
++    from kanban.media_proxy.placeholder import AirGapChecker
++    from kanban.media_proxy.ssrf import AsyncHostResolver
++
++
++class MediaProxyService:
++    """High-level media proxy service coordinating SSRF defense and retrieval."""
++
++    def __init__(
++        self,
++        resolver: AsyncHostResolver | None = None,
++        client: PinnedTlsMediaClient | None = None,
++        air_gap_checker: AirGapChecker | None = None,
++        transport: PinnedConnectionTransport | None = None,
++    ) -> None:
++        """Initialize service with optional custom resolver, client, or air-gap checker."""
++        self._resolver = resolver
++        self._client = client or PinnedTlsMediaClient(transport=transport)
++        self._air_gap_checker = air_gap_checker or DefaultAirGapChecker()
++
++    async def fetch_proxy_media(
++        self,
++        url: str,
++        workspace_id: UUID | None = None,
++    ) -> tuple[str, bytes, dict[str, str]]:
++        """Retrieve external media or return air-gap placeholder.
++
++        Returns tuple of (content_type, body_bytes, extra_headers).
++        """
++        if self._air_gap_checker.is_air_gap_enabled(workspace_id):
++            headers = {
++                "X-Kanban-Media-Status": AIR_GAP_STATUS_HEADER,
++                "Cache-Control": "private, no-store",
++            }
++            return "image/png", AIR_GAP_PLACEHOLDER_PNG, headers
++
++        parsed = validate_external_image_url(url)
++        hostname = parsed.hostname or ""
++
++        pinned_ip = await resolve_and_select_pinned_ip(hostname, resolver=self._resolver)
++
++        path_and_query = parsed.path or "/"
++        if parsed.query:
++            path_and_query = f"{path_and_query}?{parsed.query}"
++
++        content_type, body_bytes = await self._client.fetch_media(
++            pinned_ip=pinned_ip,
++            original_host=hostname,
++            path_and_query=path_and_query,
++        )
++
++        headers = {
++            "Cache-Control": "private, max-age=3600",
++        }
++        return content_type, body_bytes, headers
+diff --git a/kanban/media_proxy/signing.py b/kanban/media_proxy/signing.py
+new file mode 100644
+index 0000000..fee4245
+--- /dev/null
++++ b/kanban/media_proxy/signing.py
+@@ -0,0 +1,173 @@
++"""HMAC URL signing and validation for external Markdown images (S5.4, S10.2)."""
++
++from __future__ import annotations
++
++import base64
++import binascii
++import hashlib
++import hmac
++import ipaddress
++from typing import TYPE_CHECKING
++from urllib.parse import quote, urlsplit
++
++from kanban.api.problems import ProblemException
++from kanban.media_proxy.ssrf import is_public_global_ip
++from kanban.security.keys import derive_subkey
++
++if TYPE_CHECKING:
++    from urllib.parse import SplitResult
++
++    from kanban.security.keys import KeyMaterial
++
++_MAX_URL_LENGTH = 2048
++_MAX_HOST_LENGTH = 253
++_MAX_SIG_LENGTH = 64
++_HTTPS_PORT = 443
++
++
++def _validate_host(hostname: str | None) -> None:
++    """Validate external image hostname bounds and literal IP restrictions."""
++    if not hostname:
++        msg = "Media URL must contain a non-empty host"
++        raise ProblemException(
++            code="INVALID_MEDIA_URL",
++            status=400,
++            title="Invalid Media URL",
++            detail=msg,
++        )
++
++    if len(hostname) > _MAX_HOST_LENGTH:
++        msg = f"Media host length exceeds {_MAX_HOST_LENGTH} characters"
++        raise ProblemException(
++            code="INVALID_MEDIA_URL",
++            status=400,
++            title="Invalid Media URL",
++            detail=msg,
++        )
++
++    cleaned_host = hostname.strip("[]")
++    try:
++        ip = ipaddress.ip_address(cleaned_host)
++        if not is_public_global_ip(ip):
++            msg = f"Literal host IP '{hostname}' belongs to a blocked or private range"
++            raise ProblemException(
++                code="INVALID_MEDIA_URL",
++                status=400,
++                title="Invalid Media URL",
++                detail=msg,
++            )
++    except ValueError:
++        pass
++
++
++def _validate_components(parsed: SplitResult) -> None:
++    """Validate URL scheme, credentials, fragment, and port."""
++    if parsed.scheme.lower() != "https":
++        msg = f"Disallowed URL scheme '{parsed.scheme}'; media proxy requires HTTPS"
++        raise ProblemException(
++            code="INVALID_MEDIA_URL",
++            status=400,
++            title="Invalid Media URL",
++            detail=msg,
++        )
++
++    if parsed.username is not None or parsed.password is not None:
++        msg = "Media URL must not contain username or password credentials"
++        raise ProblemException(
++            code="INVALID_MEDIA_URL",
++            status=400,
++            title="Invalid Media URL",
++            detail=msg,
++        )
++
++    if parsed.fragment:
++        msg = "Media URL must not contain a URL fragment identifier"
++        raise ProblemException(
++            code="INVALID_MEDIA_URL",
++            status=400,
++            title="Invalid Media URL",
++            detail=msg,
++        )
++
++    if parsed.port not in (None, _HTTPS_PORT):
++        msg = f"Disallowed media port '{parsed.port}'; media proxy requires port {_HTTPS_PORT}"
++        raise ProblemException(
++            code="INVALID_MEDIA_URL",
++            status=400,
++            title="Invalid Media URL",
++            detail=msg,
++        )
++
++
++def validate_external_image_url(url: str) -> SplitResult:
++    """Validate external image URL against strict security boundaries.
++
++    Requires exact scheme 'https', non-empty ASCII/IDNA hostname <= 253 chars,
++    total URL length <= 2048, zero userinfo, zero fragment, and port None or 443.
++    Rejects literal IP hostnames in blocked or private ranges immediately.
++    """
++    if not url or not url.strip():
++        msg = "Media URL must be a non-empty string"
++        raise ProblemException(
++            code="INVALID_MEDIA_URL",
++            status=400,
++            title="Invalid Media URL",
++            detail=msg,
++        )
++
++    if len(url) > _MAX_URL_LENGTH:
++        msg = f"Media URL length exceeds {_MAX_URL_LENGTH} characters"
++        raise ProblemException(
++            code="INVALID_MEDIA_URL",
++            status=400,
++            title="Invalid Media URL",
++            detail=msg,
++        )
++
++    try:
++        parsed = urlsplit(url)
++    except ValueError as err:
++        msg = f"Failed to parse media URL: {err}"
++        raise ProblemException(
++            code="INVALID_MEDIA_URL",
++            status=400,
++            title="Invalid Media URL",
++            detail=msg,
++        ) from err
++
++    _validate_components(parsed)
++    _validate_host(parsed.hostname)
++    return parsed
++
++
++def sign_media_proxy_url(url: str, key_material: KeyMaterial) -> str:
++    """Validate and compute HMAC signature for external media URL.
++
++    Returns canonical relative proxy URL '/api/v1/media-proxy?u=...&sig=...'.
++    """
++    validate_external_image_url(url)
++    subkey = derive_subkey(key_material.session_hmac_key, "media-proxy/url")
++    digest = hmac.new(subkey, url.encode("utf-8"), hashlib.sha256).digest()
++    sig = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
++    quoted_url = quote(url, safe="")
++    return f"/api/v1/media-proxy?u={quoted_url}&sig={sig}"
++
++
++def verify_media_proxy_url(url: str, sig: str, key_material: KeyMaterial) -> bool:
++    """Verify media proxy HMAC signature using constant-time comparison.
++
++    Executed BEFORE URL parsing or DNS resolution to eliminate unauthenticated work.
++    """
++    if not sig or len(sig) > _MAX_SIG_LENGTH or not url:
++        return False
++
++    subkey = derive_subkey(key_material.session_hmac_key, "media-proxy/url")
++    expected_digest = hmac.new(subkey, url.encode("utf-8"), hashlib.sha256).digest()
++
++    padded_sig = sig + "=" * (-len(sig) % 4)
++    try:
++        candidate_digest = base64.urlsafe_b64decode(padded_sig.encode("ascii"))
++    except (ValueError, binascii.Error):
++        return False
++
++    return hmac.compare_digest(candidate_digest, expected_digest)
+diff --git a/kanban/media_proxy/ssrf.py b/kanban/media_proxy/ssrf.py
+new file mode 100644
+index 0000000..f4b403e
+--- /dev/null
++++ b/kanban/media_proxy/ssrf.py
+@@ -0,0 +1,179 @@
++"""DNS-resolve-then-pin SSRF protection for external media proxy (S5.4, S10.2)."""
++
++from __future__ import annotations
++
++import asyncio
++import ipaddress
++import socket
++from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
++from typing import TYPE_CHECKING, Protocol
++
++from kanban.api.problems import ProblemException
++
++if TYPE_CHECKING:
++    from collections.abc import Sequence
++
++_NAT64_PREFIX: IPv6Network = ipaddress.IPv6Network("64:ff9b::/96")
++
++_BLOCKED_NETWORKS: tuple[IPv4Network | IPv6Network, ...] = (
++    # IPv4 loopback & unspecified
++    ipaddress.ip_network("127.0.0.0/8"),
++    ipaddress.ip_network("0.0.0.0/8"),
++    # RFC 1918 private
++    ipaddress.ip_network("10.0.0.0/8"),
++    ipaddress.ip_network("172.16.0.0/12"),
++    ipaddress.ip_network("192.168.0.0/16"),
++    # Link-local / Cloud metadata (AWS/GCP IMDS 169.254.169.254)
++    ipaddress.ip_network("169.254.0.0/16"),
++    # Carrier-Grade NAT (CGNAT)
++    ipaddress.ip_network("100.64.0.0/10"),
++    # Benchmarking & Documentation
++    ipaddress.ip_network("198.18.0.0/15"),
++    ipaddress.ip_network("192.0.2.0/24"),
++    ipaddress.ip_network("198.51.100.0/24"),
++    ipaddress.ip_network("203.0.113.0/24"),
++    # Broadcast & Multicast
++    ipaddress.ip_network("224.0.0.0/4"),
++    ipaddress.ip_network("240.0.0.0/4"),
++    ipaddress.ip_network("255.255.255.255/32"),
++    # IPv6 loopback & unspecified
++    ipaddress.ip_network("::1/128"),
++    ipaddress.ip_network("::/128"),
++    # IPv6 link-local
++    ipaddress.ip_network("fe80::/10"),
++    # IPv6 Unique Local (ULA) & Site-Local
++    ipaddress.ip_network("fc00::/7"),
++    ipaddress.ip_network("fec0::/10"),
++    # IPv6 multicast & documentation
++    ipaddress.ip_network("ff00::/8"),
++    ipaddress.ip_network("2001:db8::/32"),
++)
++
++
++def _unwrap_ip(ip: IPv4Address | IPv6Address) -> IPv4Address | IPv6Address:
++    """Unwrap IPv4-mapped IPv6 or NAT64-embedded IPv4 address."""
++    if isinstance(ip, IPv6Address):
++        if ip.ipv4_mapped is not None:
++            return ip.ipv4_mapped
++        if ip in _NAT64_PREFIX:
++            return ipaddress.IPv4Address(ip.packed[-4:])
++    return ip
++
++
++def is_public_global_ip(addr: str | IPv4Address | IPv6Address) -> bool:
++    """Return True if IP address is a publicly routable global unicast address.
++
++    Rejects loopback, RFC 1918 private, link-local/metadata, CGNAT, IPv6 ULA,
++    multicast, broadcast, documentation, and unwrapped IPv4-mapped or NAT64 addresses.
++    """
++    if isinstance(addr, str):
++        cleaned = addr.strip().strip("[]")
++        try:
++            raw_ip = ipaddress.ip_address(cleaned)
++        except ValueError:
++            return False
++    else:
++        raw_ip = addr
++
++    ip = _unwrap_ip(raw_ip)
++
++    if not ip.is_global:
++        return False
++
++    if (
++        ip.is_loopback
++        or ip.is_private
++        or ip.is_link_local
++        or ip.is_unspecified
++        or ip.is_multicast
++        or ip.is_reserved
++    ):
++        return False
++
++    return not any(ip in net for net in _BLOCKED_NETWORKS)
++
++
++class AsyncHostResolver(Protocol):
++    """Protocol for asynchronous DNS host resolution."""
++
++    async def resolve(self, host: str) -> Sequence[IPv4Address | IPv6Address]:
++        """Resolve host returning sequence of distinct IP addresses."""
++        ...
++
++
++class DefaultAsyncHostResolver:
++    """Production DNS resolver delegating to asyncio.get_running_loop().getaddrinfo."""
++
++    async def resolve(self, host: str) -> Sequence[IPv4Address | IPv6Address]:
++        """Resolve host into distinct IPv4 and IPv6 addresses."""
++        loop = asyncio.get_running_loop()
++        try:
++            addr_info = await loop.getaddrinfo(
++                host,
++                443,
++                type=socket.SOCK_STREAM,
++            )
++        except socket.gaierror as err:
++            msg = f"DNS resolution failed for host '{host}': {err}"
++            raise ProblemException(
++                code="MEDIA_HOST_BLOCKED",
++                status=403,
++                title="Media Host Blocked",
++                detail=msg,
++            ) from err
++
++        ips: list[IPv4Address | IPv6Address] = []
++        seen: set[str] = set()
++        for _family, _socktype, _proto, _canonname, sockaddr in addr_info:
++            raw_ip = str(sockaddr[0])
++            if raw_ip not in seen:
++                seen.add(raw_ip)
++                ips.append(ipaddress.ip_address(raw_ip))
++        return ips
++
++
++async def resolve_and_select_pinned_ip(
++    host: str,
++    resolver: AsyncHostResolver | None = None,
++) -> IPv4Address | IPv6Address:
++    """Resolve host once with DNS timeout and enforce all returned IPs are public global.
++
++    Rejects immediately if zero records are returned, resolution times out (2.0s),
++    or ANY returned record fails is_public_global_ip (preventing mixed responses).
++    Returns the first verified IP address for pinned socket connection.
++    """
++    active_resolver = resolver or DefaultAsyncHostResolver()
++    try:
++        records = await asyncio.wait_for(active_resolver.resolve(host), timeout=2.0)
++    except TimeoutError as err:
++        msg = f"DNS resolution timed out for media host '{host}'"
++        raise ProblemException(
++            code="MEDIA_HOST_BLOCKED",
++            status=403,
++            title="Media Host Blocked",
++            detail=msg,
++        ) from err
++
++    if not records:
++        msg = f"DNS resolution returned zero records for media host '{host}'"
++        raise ProblemException(
++            code="MEDIA_HOST_BLOCKED",
++            status=403,
++            title="Media Host Blocked",
++            detail=msg,
++        )
++
++    for rec in records:
++        if not is_public_global_ip(rec):
++            msg = (
++                f"External media host '{host}' resolved to blocked non-public "
++                f"IP address '{rec}' (SSRF guard)"
++            )
++            raise ProblemException(
++                code="MEDIA_HOST_BLOCKED",
++                status=403,
++                title="Media Host Blocked",
++                detail=msg,
++            )
++
++    return records[0]
+diff --git a/kanban/security/headers.py b/kanban/security/headers.py
+index 01c5459..f40f595 100644
+--- a/kanban/security/headers.py
++++ b/kanban/security/headers.py
+@@ -104,35 +104,38 @@ class SecurityHeadersMiddleware:
+         # Wrap send to inject security headers
+         async def send_wrapper(message: Message) -> None:
+             if message["type"] == "http.response.start":
+-                raw_headers: list[tuple[bytes, bytes]] = [
+-                    (name, value)
+-                    for name, value in message.get("headers", [])
+-                    if name.lower() not in _SECURITY_HEADER_NAMES
+-                ]
+-
+-                # Append canonical security headers
+-                raw_headers.append((b"content-security-policy", CSP_POLICY.encode("latin1")))
+-                raw_headers.append((b"x-content-type-options", b"nosniff"))
+-                raw_headers.append((b"referrer-policy", b"no-referrer"))
+-                raw_headers.append((b"x-frame-options", b"DENY"))
+-                raw_headers.append((b"cross-origin-opener-policy", b"same-origin"))
+-                raw_headers.append((b"cross-origin-resource-policy", b"same-origin"))
+-                raw_headers.append(
+-                    (b"permissions-policy", b"camera=(), microphone=(), geolocation=()")
+-                )
+-
+-                if self.settings.deployment_mode == "production":
+-                    hsts_value = f"max-age={self.settings.hsts_max_age}; includeSubDomains".encode(
+-                        "latin1"
+-                    )
+-                    raw_headers.append((b"strict-transport-security", hsts_value))
+-
+-                message["headers"] = raw_headers
+-
++                message["headers"] = self._inject_security_headers(message.get("headers", []))
+             await send(message)
+ 
+         await self.app(scope, receive, send_wrapper)
+ 
++    def _inject_security_headers(
++        self, existing_headers: list[tuple[bytes, bytes]]
++    ) -> list[tuple[bytes, bytes]]:
++        """Construct canonical security headers while preserving route-specific CSP."""
++        custom_csp: bytes | None = None
++        raw_headers: list[tuple[bytes, bytes]] = []
++        for name, value in existing_headers:
++            if name.lower() == b"content-security-policy":
++                custom_csp = value
++            elif name.lower() not in _SECURITY_HEADER_NAMES:
++                raw_headers.append((name, value))
++
++        csp_val = custom_csp if custom_csp is not None else CSP_POLICY.encode("latin1")
++        raw_headers.append((b"content-security-policy", csp_val))
++        raw_headers.append((b"x-content-type-options", b"nosniff"))
++        raw_headers.append((b"referrer-policy", b"no-referrer"))
++        raw_headers.append((b"x-frame-options", b"DENY"))
++        raw_headers.append((b"cross-origin-opener-policy", b"same-origin"))
++        raw_headers.append((b"cross-origin-resource-policy", b"same-origin"))
++        raw_headers.append((b"permissions-policy", b"camera=(), microphone=(), geolocation=()"))
++
++        if self.settings.deployment_mode == "production":
++            hsts_value = f"max-age={self.settings.hsts_max_age}; includeSubDomains".encode("latin1")
++            raw_headers.append((b"strict-transport-security", hsts_value))
++
++        return raw_headers
++
+     async def _send_problem(
+         self,
+         send: Send,
+diff --git a/kanban/tests/media_proxy/__init__.py b/kanban/tests/media_proxy/__init__.py
+new file mode 100644
+index 0000000..571498e
+--- /dev/null
++++ b/kanban/tests/media_proxy/__init__.py
+@@ -0,0 +1 @@
++"""Tests for cookieless SSRF-defended media proxy (S5.4, S10.2)."""
+diff --git a/kanban/tests/media_proxy/test_media_proxy_api.py b/kanban/tests/media_proxy/test_media_proxy_api.py
+new file mode 100644
+index 0000000..c5e5370
+--- /dev/null
++++ b/kanban/tests/media_proxy/test_media_proxy_api.py
+@@ -0,0 +1,883 @@
++"""Unit tests for media proxy API endpoint, HMAC gating, and rate limiting (S5.4, S10.2)."""
++
++from __future__ import annotations
++
++import asyncio
++import base64
++import ipaddress
++import json
++import os
++import uuid
++from pathlib import Path
++from types import SimpleNamespace
++from typing import TYPE_CHECKING
++from unittest.mock import AsyncMock, MagicMock, patch
++
++import httpx
++import pytest
++
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.app import create_app
++from kanban.media_proxy.client import (
++    MAX_PROXY_BYTES,
++    DefaultPinnedConnectionTransport,
++    PinnedTlsMediaClient,
++    _parse_status_code,
++    _validate_content_type_and_length,
++    _verify_magic_signature,
++)
++from kanban.media_proxy.placeholder import (
++    AIR_GAP_PLACEHOLDER_PNG,
++    AIR_GAP_STATUS_HEADER,
++    DefaultAirGapChecker,
++)
++from kanban.media_proxy.service import MediaProxyService
++from kanban.media_proxy.signing import (
++    _validate_host,
++    sign_media_proxy_url,
++    validate_external_image_url,
++    verify_media_proxy_url,
++)
++from kanban.security.keys import KeyMaterial
++from kanban.security.ratelimit.valkey import ValkeyRateLimiter
++from kanban.tests.security.fakes import FakeValkey
++
++if TYPE_CHECKING:
++    from collections.abc import Sequence
++    from ipaddress import IPv4Address, IPv6Address
++
++
++class _TestPrincipalResolver:
++    """Configurable principal resolver for testing authenticated routes."""
++
++    def __init__(self, principal: PrincipalContext | None = None) -> None:
++        self.principal = principal
++
++    async def resolve(self, _request: object) -> PrincipalContext | None:
++        return self.principal
++
++
++class _MockResolver:
++    """Mock DNS resolver returning static or custom IP addresses."""
++
++    def __init__(self, records: Sequence[IPv4Address | IPv6Address] | None = None) -> None:
++        self.records = records if records is not None else [ipaddress.ip_address("93.184.216.34")]
++        self.call_count = 0
++
++    async def resolve(self, _host: str) -> Sequence[IPv4Address | IPv6Address]:
++        self.call_count += 1
++        return self.records
++
++
++class _MockSocketTransport:
++    """Mock socket transport recording outbound requests and returning configured HTTP responses."""
++
++    def __init__(self, response_bytes: bytes) -> None:
++        self.response_bytes = response_bytes
++        self.written_bytes = bytearray()
++        self.connect_count = 0
++
++    async def open_connection(
++        self,
++        ip: str,
++        port: int,
++        server_hostname: str,
++        connect_timeout: float,
++    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
++        del ip, port, server_hostname, connect_timeout
++        self.connect_count += 1
++        reader = asyncio.StreamReader()
++        reader.feed_data(self.response_bytes)
++        reader.feed_eof()
++
++        writer_mock = MagicMock()
++
++        def _record_write(data: bytes) -> None:
++            self.written_bytes.extend(data)
++
++        writer_mock.write = MagicMock(side_effect=_record_write)
++        writer_mock.close = MagicMock()
++        writer_mock.drain = MagicMock()
++
++        async def _async_drain() -> None:
++            pass
++
++        async def _async_wait_closed() -> None:
++            pass
++
++        writer_mock.drain = _async_drain
++        writer_mock.wait_closed = _async_wait_closed
++        return reader, writer_mock
++
++
++class _MockAirGapChecker:
++    """Mock air gap checker toggling air-gap mode."""
++
++    def __init__(self, *, enabled: bool) -> None:
++        self.enabled = enabled
++
++    def is_air_gap_enabled(self, _workspace_id: uuid.UUID | None = None) -> bool:
++        return self.enabled
++
++
++@pytest.fixture
++def test_keys() -> KeyMaterial:
++    """Provide static test KeyMaterial with 32-byte keys."""
++    return KeyMaterial(
++        master_kek=b"K" * 32,
++        auth_pepper=b"P" * 32,
++        session_hmac_key=b"S" * 32,
++        master_kek_kid="test-kek-1",
++    )
++
++
++@pytest.fixture
++def auth_principal() -> PrincipalContext:
++    """Provide standard authenticated PrincipalContext."""
++    return PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        token_scopes=("session",),
++    )
++
++
++@pytest.mark.asyncio
++async def test_case_1_positive_cookieless_proxy(
++    test_keys: KeyMaterial,
++    auth_principal: PrincipalContext,
++) -> None:
++    """Test Case 1: Positive cookieless proxying and header sanitization (S5.4, S10.2)."""
++    valid_png_body = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
++    upstream_http = (
++        b"HTTP/1.1 200 OK\r\n"
++        b"Content-Type: image/png; charset=utf-8\r\n"
++        b"Content-Length: " + str(len(valid_png_body)).encode("ascii") + b"\r\n"
++        b"Set-Cookie: track=malicious_tracker\r\n"
++        b"Server: Apache/2.4.41\r\n"
++        b'ETag: "12345"\r\n'
++        b"\r\n" + valid_png_body
++    )
++    transport = _MockSocketTransport(upstream_http)
++    resolver = _MockResolver()
++    client = PinnedTlsMediaClient(transport=transport)
++    service = MediaProxyService(
++        resolver=resolver, client=client, air_gap_checker=_MockAirGapChecker(enabled=False)
++    )
++
++    app = create_app()
++    app.state.key_material = test_keys
++    app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++    app.state.media_proxy_service = service
++    app.state.rate_limiter = ValkeyRateLimiter(FakeValkey())
++
++    raw_url = "https://img.example.com/diagram.png"
++    signed_path = sign_media_proxy_url(raw_url, test_keys)
++
++    asgi_transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(
++        transport=asgi_transport,
++        base_url="http://testserver",
++        cookies={"client_session": "secret_cookie"},
++        headers={
++            "Authorization": "Bearer token",
++            "Referer": "https://secret.kanban.internal",
++            "X-Forwarded-For": "203.0.113.195",
++        },
++    ) as http_client:
++        response = await http_client.get(signed_path)
++
++    assert response.status_code == 200
++    assert response.content == valid_png_body
++    assert response.headers["content-type"] == "image/png"
++    assert response.headers["content-length"] == str(len(valid_png_body))
++    assert response.headers["x-content-type-options"] == "nosniff"
++    assert response.headers["content-security-policy"] == "default-src 'none'; sandbox"
++    assert response.headers["cross-origin-resource-policy"] == "same-origin"
++    assert response.headers["referrer-policy"] == "no-referrer"
++    assert "set-cookie" not in response.headers
++    assert "server" not in response.headers
++    assert "etag" not in response.headers
++
++    # Verify upstream received ZERO client cookies, auth, or tracking headers
++    req_bytes = bytes(transport.written_bytes)
++    assert b"secret_cookie" not in req_bytes
++    assert b"Cookie:" not in req_bytes
++    assert b"Authorization:" not in req_bytes
++    assert b"Referer:" not in req_bytes
++    assert b"X-Forwarded-For:" not in req_bytes
++
++
++@pytest.mark.asyncio
++async def test_case_2_hmac_gate_defense(
++    test_keys: KeyMaterial,
++    auth_principal: PrincipalContext,
++) -> None:
++    """Test Case 2: HMAC signature gating and zero DNS resolution on failure (S5.4, S10.2)."""
++    resolver = _MockResolver()
++    transport = _MockSocketTransport(b"")
++    service = MediaProxyService(resolver=resolver, client=PinnedTlsMediaClient(transport=transport))
++
++    app = create_app()
++    app.state.key_material = test_keys
++    app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++    app.state.media_proxy_service = service
++    app.state.rate_limiter = ValkeyRateLimiter(FakeValkey())
++
++    asgi_transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=asgi_transport, base_url="http://testserver") as client:
++        # A: Missing signature
++        res_a = await client.get("/api/v1/media-proxy?u=https://img.example.com/a.png&sig=")
++        assert res_a.status_code == 403
++        assert res_a.json()["code"] == "INVALID_SIGNATURE"
++        assert resolver.call_count == 0
++
++        # B: Bit-flipped signature
++        valid_path = sign_media_proxy_url("https://img.example.com/a.png", test_keys)
++        tampered_path = valid_path[:-1] + ("A" if valid_path[-1] != "A" else "B")
++        res_b = await client.get(tampered_path)
++        assert res_b.status_code == 403
++        assert res_b.json()["code"] == "INVALID_SIGNATURE"
++        assert resolver.call_count == 0
++
++        # C: Valid signature for URL A presented for URL B
++        sig_a = valid_path.split("sig=")[1]
++        res_c = await client.get(f"/api/v1/media-proxy?u=https://img.example.com/b.png&sig={sig_a}")
++        assert res_c.status_code == 403
++        assert res_c.json()["code"] == "INVALID_SIGNATURE"
++        assert resolver.call_count == 0
++
++
++@pytest.mark.asyncio
++async def test_case_5_zero_redirects(
++    test_keys: KeyMaterial,
++    auth_principal: PrincipalContext,
++) -> None:
++    """Test Case 5: Immediate 502 MEDIA_REDIRECT_BLOCKED on 3xx responses (S5.4, S10.2)."""
++    for code in (301, 302, 307, 308):
++        redirect_http = (
++            f"HTTP/1.1 {code} Found\r\n"
++            "Location: http://169.254.169.254/latest/meta-data/\r\n"
++            "Content-Length: 0\r\n"
++            "\r\n"
++        ).encode("ascii")
++        transport = _MockSocketTransport(redirect_http)
++        resolver = _MockResolver()
++        service = MediaProxyService(
++            resolver=resolver, client=PinnedTlsMediaClient(transport=transport)
++        )
++
++        app = create_app()
++        app.state.key_material = test_keys
++        app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++        app.state.media_proxy_service = service
++        app.state.rate_limiter = ValkeyRateLimiter(FakeValkey())
++
++        signed_path = sign_media_proxy_url("https://img.example.com/test.png", test_keys)
++        asgi_transport = httpx.ASGITransport(app=app)
++        async with httpx.AsyncClient(
++            transport=asgi_transport, base_url="http://testserver"
++        ) as client:
++            res = await client.get(signed_path)
++
++        assert res.status_code == 502
++        assert res.json()["code"] == "MEDIA_REDIRECT_BLOCKED"
++        # Zero second connection attempts
++        assert transport.connect_count == 1
++
++
++def test_case_6_url_and_port_scanning() -> None:
++    """Test Case 6: Reject invalid schemes, credentials, ports, and fragments (S5.4)."""
++    # Plain HTTP disallowed
++    with pytest.raises(ProblemException) as exc1:
++        validate_external_image_url("http://img.example.com/a.png")
++    assert exc1.value.code == "INVALID_MEDIA_URL"
++    assert exc1.value.status == 400
++
++    # Disallowed port
++    with pytest.raises(ProblemException) as exc2:
++        validate_external_image_url("https://img.example.com:8443/a.png")
++    assert exc2.value.code == "INVALID_MEDIA_URL"
++    assert exc2.value.status == 400
++
++    # Userinfo disallowed
++    with pytest.raises(ProblemException) as exc3:
++        validate_external_image_url("https://user:pass@img.example.com/a.png")
++    assert exc3.value.code == "INVALID_MEDIA_URL"
++    assert exc3.value.status == 400
++
++    # Fragment disallowed
++    with pytest.raises(ProblemException) as exc4:
++        validate_external_image_url("https://img.example.com/a.png#fragment")
++    assert exc4.value.code == "INVALID_MEDIA_URL"
++    assert exc4.value.status == 400
++
++
++@pytest.mark.asyncio
++async def test_case_7_mime_and_magic_mismatch(
++    test_keys: KeyMaterial,
++    auth_principal: PrincipalContext,
++) -> None:
++    """Test Case 7: Raster MIME restriction and magic signature verification (S5.4, S10.2)."""
++    # Disallowed MIME type (image/svg+xml)
++    svg_http = (
++        b"HTTP/1.1 200 OK\r\n"
++        b"Content-Type: image/svg+xml\r\n"
++        b"Content-Length: 20\r\n\r\n"
++        b"<svg><rect/></svg>"
++    )
++    transport_svg = _MockSocketTransport(svg_http)
++    service_svg = MediaProxyService(
++        resolver=_MockResolver(), client=PinnedTlsMediaClient(transport=transport_svg)
++    )
++
++    app = create_app()
++    app.state.key_material = test_keys
++    app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++    app.state.media_proxy_service = service_svg
++    app.state.rate_limiter = ValkeyRateLimiter(FakeValkey())
++
++    signed_svg = sign_media_proxy_url("https://img.example.com/badge.svg", test_keys)
++    asgi_transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=asgi_transport, base_url="http://testserver") as client:
++        res_svg = await client.get(signed_svg)
++
++    assert res_svg.status_code == 415
++    assert res_svg.json()["code"] == "MEDIA_TYPE_DISALLOWED"
++
++    # Declared image/png with HTML body
++    html_http = (
++        b"HTTP/1.1 200 OK\r\n"
++        b"Content-Type: image/png\r\n"
++        b"Content-Length: 23\r\n\r\n"
++        b"<html><script>1</script>"
++    )
++    transport_html = _MockSocketTransport(html_http)
++    service_html = MediaProxyService(
++        resolver=_MockResolver(), client=PinnedTlsMediaClient(transport=transport_html)
++    )
++    app.state.media_proxy_service = service_html
++
++    signed_html = sign_media_proxy_url("https://img.example.com/exploit.png", test_keys)
++    async with httpx.AsyncClient(transport=asgi_transport, base_url="http://testserver") as client:
++        res_html = await client.get(signed_html)
++
++    assert res_html.status_code == 502
++    assert res_html.json()["code"] == "MEDIA_SIGNATURE_MISMATCH"
++
++
++@pytest.mark.asyncio
++async def test_case_8_boundary_10mib_cap(
++    test_keys: KeyMaterial,
++    auth_principal: PrincipalContext,
++) -> None:
++    """Test Case 8: Maximum payload limit 10 MiB enforcement (S5.4, S10.2)."""
++    # Exceeding Content-Length header
++    too_large_cl_http = (
++        b"HTTP/1.1 200 OK\r\n"
++        b"Content-Type: image/png\r\n"
++        b"Content-Length: " + str(MAX_PROXY_BYTES + 1).encode("ascii") + b"\r\n\r\n"
++        b"\x89PNG\r\n\x1a\n"
++    )
++    transport_cl = _MockSocketTransport(too_large_cl_http)
++    service_cl = MediaProxyService(
++        resolver=_MockResolver(), client=PinnedTlsMediaClient(transport=transport_cl)
++    )
++
++    app = create_app()
++    app.state.key_material = test_keys
++    app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++    app.state.media_proxy_service = service_cl
++    app.state.rate_limiter = ValkeyRateLimiter(FakeValkey())
++
++    signed_path = sign_media_proxy_url("https://img.example.com/huge.png", test_keys)
++    asgi_transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=asgi_transport, base_url="http://testserver") as client:
++        res_cl = await client.get(signed_path)
++
++    assert res_cl.status_code == 502
++    assert res_cl.json()["code"] == "MEDIA_TOO_LARGE"
++
++
++@pytest.mark.asyncio
++async def test_case_9_air_gap_mode_and_rate_limit(
++    test_keys: KeyMaterial,
++    auth_principal: PrincipalContext,
++) -> None:
++    """Test Case 9: Air-gap mode, 401 unauthenticated, and 429 rate limit (S5.4, S10.2)."""
++    resolver = _MockResolver()
++    transport = _MockSocketTransport(b"")
++    service = MediaProxyService(
++        resolver=resolver,
++        client=PinnedTlsMediaClient(transport=transport),
++        air_gap_checker=_MockAirGapChecker(enabled=True),
++    )
++
++    fake_valkey = FakeValkey()
++    rate_limiter = ValkeyRateLimiter(fake_valkey)
++
++    app = create_app()
++    app.state.key_material = test_keys
++    app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++    app.state.media_proxy_service = service
++    app.state.rate_limiter = rate_limiter
++
++    signed_path = sign_media_proxy_url("https://img.example.com/diagram.png", test_keys)
++    asgi_transport = httpx.ASGITransport(app=app)
++
++    async with httpx.AsyncClient(transport=asgi_transport, base_url="http://testserver") as client:
++        # Step 1: Air-gap short-circuit returns 200 with zero DNS or TCP calls
++        res_air = await client.get(signed_path)
++        assert res_air.status_code == 200
++        assert res_air.headers["x-kanban-media-status"] == AIR_GAP_STATUS_HEADER
++        assert res_air.content == AIR_GAP_PLACEHOLDER_PNG
++        assert resolver.call_count == 0
++        assert transport.connect_count == 0
++
++        # Step 2: Unauthenticated request returns 401 AUTHENTICATION_REQUIRED
++        app.state.principal_resolver = _TestPrincipalResolver(None)
++        res_unauth = await client.get(signed_path)
++        assert res_unauth.status_code == 401
++        assert res_unauth.json()["code"] == "AUTHENTICATION_REQUIRED"
++
++        # Restore auth for rate limit testing
++        app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++
++        # Step 3: MEDIA_PROXY_PRINCIPAL threshold (120 requests per 60s)
++        # We already made 1 request (res_air). Let's make 119 more successful requests.
++        for _ in range(119):
++            res = await client.get(signed_path)
++            assert res.status_code == 200
++
++        # 121st request breaches the limit -> 429 RATE_LIMITED
++        res_429 = await client.get(signed_path)
++        assert res_429.status_code == 429
++        assert res_429.json()["code"] == "RATE_LIMITED"
++        assert "retry-after" in res_429.headers
++
++
++@pytest.mark.asyncio
++async def test_generate_contract_sample_artifact(
++    test_keys: KeyMaterial,
++    auth_principal: PrincipalContext,
++) -> None:
++    """Generate docs/qa/KANBA-66/contract-sample.json containing required wire responses."""
++    # Capture 200 Proxied Image
++    valid_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
++    up_200 = (
++        b"HTTP/1.1 200 OK\r\n"
++        b"Content-Type: image/png\r\n"
++        b"Content-Length: " + str(len(valid_png)).encode("ascii") + b"\r\n\r\n" + valid_png
++    )
++    svc_200 = MediaProxyService(
++        resolver=_MockResolver(),
++        client=PinnedTlsMediaClient(transport=_MockSocketTransport(up_200)),
++        air_gap_checker=_MockAirGapChecker(enabled=False),
++    )
++
++    app = create_app()
++    app.state.key_material = test_keys
++    app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++    app.state.media_proxy_service = svc_200
++    app.state.rate_limiter = ValkeyRateLimiter(FakeValkey())
++
++    signed_url = sign_media_proxy_url("https://img.example.com/asset.png", test_keys)
++    asgi_transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=asgi_transport, base_url="http://testserver") as client:
++        r_200 = await client.get(signed_url)
++
++        # 200 Air-Gap Placeholder
++        app.state.media_proxy_service = MediaProxyService(
++            resolver=_MockResolver(),
++            client=PinnedTlsMediaClient(transport=_MockSocketTransport(b"")),
++            air_gap_checker=_MockAirGapChecker(enabled=True),
++        )
++        r_airgap = await client.get(signed_url)
++
++        # 403 INVALID_SIGNATURE
++        r_403_sig = await client.get(
++            "/api/v1/media-proxy?u=https://img.example.com/asset.png&sig=bad"
++        )
++
++        # 403 MEDIA_HOST_BLOCKED
++        app.state.media_proxy_service = MediaProxyService(
++            resolver=_MockResolver(records=[ipaddress.ip_address("169.254.169.254")]),
++            client=PinnedTlsMediaClient(transport=_MockSocketTransport(b"")),
++            air_gap_checker=_MockAirGapChecker(enabled=False),
++        )
++        r_403_host = await client.get(signed_url)
++
++        # 502 MEDIA_REDIRECT_BLOCKED
++        redir_http = b"HTTP/1.1 302 Found\r\nLocation: https://evil.example.com/\r\n\r\n"
++        app.state.media_proxy_service = MediaProxyService(
++            resolver=_MockResolver(),
++            client=PinnedTlsMediaClient(transport=_MockSocketTransport(redir_http)),
++            air_gap_checker=_MockAirGapChecker(enabled=False),
++        )
++        r_502_redir = await client.get(signed_url)
++
++        # 502 MEDIA_TOO_LARGE
++        too_large_http = (
++            b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 10485761\r\n\r\n"
++        )
++        app.state.media_proxy_service = MediaProxyService(
++            resolver=_MockResolver(),
++            client=PinnedTlsMediaClient(transport=_MockSocketTransport(too_large_http)),
++            air_gap_checker=_MockAirGapChecker(enabled=False),
++        )
++        r_502_large = await client.get(signed_url)
++
++    contract_data = {
++        "description": "Captured HTTP contract samples for KANBA-66 (KB-P2-16) Media Proxy API",
++        "route": "GET /api/v1/media-proxy",
++        "responses": {
++            "200_PROXIED_IMAGE": {
++                "status_code": r_200.status_code,
++                "headers": dict(r_200.headers),
++                "body_bytes_length": len(r_200.content),
++            },
++            "200_AIR_GAP_PLACEHOLDER": {
++                "status_code": r_airgap.status_code,
++                "headers": dict(r_airgap.headers),
++                "body_bytes_length": len(r_airgap.content),
++            },
++            "403_INVALID_SIGNATURE": {
++                "status_code": r_403_sig.status_code,
++                "payload": r_403_sig.json(),
++            },
++            "403_MEDIA_HOST_BLOCKED": {
++                "status_code": r_403_host.status_code,
++                "payload": r_403_host.json(),
++            },
++            "502_MEDIA_REDIRECT_BLOCKED": {
++                "status_code": r_502_redir.status_code,
++                "payload": r_502_redir.json(),
++            },
++            "502_MEDIA_TOO_LARGE": {
++                "status_code": r_502_large.status_code,
++                "payload": r_502_large.json(),
++            },
++        },
++    }
++
++    proof_dir = Path("docs/qa/KANBA-66")
++    proof_dir.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
++    contract_file = proof_dir / "contract-sample.json"
++    contract_file.write_text(json.dumps(contract_data, indent=2), encoding="utf-8")
++
++
++def test_magic_signature_verification() -> None:
++    """Verify raster magic signature matching across all supported formats."""
++    # PNG
++    assert _verify_magic_signature("image/png", b"\x89PNG\r\n\x1a\n\x00") is True
++    assert _verify_magic_signature("image/png", b"NOTPNG\x00\x00") is False
++
++    # JPEG
++    assert _verify_magic_signature("image/jpeg", b"\xff\xd8\xff\xe0\x00\x10") is True
++    assert _verify_magic_signature("image/jpeg", b"\x00\x00\x00\x00") is False
++
++    # GIF
++    assert _verify_magic_signature("image/gif", b"GIF87a\x01\x00") is True
++    assert _verify_magic_signature("image/gif", b"GIF89a\x01\x00") is True
++    assert _verify_magic_signature("image/gif", b"GIF88a\x01\x00") is False
++
++    # WebP
++    assert _verify_magic_signature("image/webp", b"RIFF\x00\x00\x00\x00WEBPVP8 ") is True
++    assert _verify_magic_signature("image/webp", b"RIFF\x00\x00\x00\x00NOTP") is False
++
++    # AVIF
++    assert _verify_magic_signature("image/avif", b"\x00\x00\x00\x1cftypavif\x00\x00") is True
++    assert _verify_magic_signature("image/avif", b"\x00\x00\x00\x1cftypavis\x00\x00") is True
++    assert _verify_magic_signature("image/avif", b"\x00\x00\x00\x1cftypmif1\x00\x00") is True
++    assert _verify_magic_signature("image/avif", b"\x00\x00\x00\x1cftypother") is False
++
++    # Too short or unknown
++    assert _verify_magic_signature("image/png", b"\x89P") is False
++    assert _verify_magic_signature("image/webp", b"RIFF") is False
++    assert _verify_magic_signature("image/unknown", b"\x00\x00\x00\x00") is False
++
++
++def test_status_code_parsing_failures() -> None:
++    """Verify malformed, non-integer, and non-200 upstream status lines."""
++    with pytest.raises(ProblemException) as exc1:
++        _parse_status_code(b"", "host.example.com")
++    assert exc1.value.code == "MEDIA_UPSTREAM_ERROR"
++
++    with pytest.raises(ProblemException) as exc2:
++        _parse_status_code(b"MALFORMED\r\n", "host.example.com")
++    assert exc2.value.code == "MEDIA_UPSTREAM_ERROR"
++
++    with pytest.raises(ProblemException) as exc3:
++        _parse_status_code(b"HTTP/1.1 NOTINT OK\r\n", "host.example.com")
++    assert exc3.value.code == "MEDIA_UPSTREAM_ERROR"
++
++    with pytest.raises(ProblemException) as exc4:
++        _parse_status_code(b"HTTP/1.1 404 Not Found\r\n", "host.example.com")
++    assert exc4.value.code == "MEDIA_UPSTREAM_ERROR"
++
++
++def test_header_validation_failures() -> None:
++    """Verify invalid content-length and content-type parsing."""
++    headers_ok = {"content-type": "image/png; charset=utf-8", "content-length": "invalid_num"}
++    assert _validate_content_type_and_length(headers_ok) == "image/png"
++
++
++@pytest.mark.asyncio
++async def test_chunked_transfer_encoding(
++    test_keys: KeyMaterial,
++    auth_principal: PrincipalContext,
++) -> None:
++    """Verify chunked transfer encoding handling, trailers, and error conditions."""
++    png_bytes = b"\x89PNG\r\n\x1a\n"
++    # Format RFC 7230 chunked stream with trailing headers
++    chunked_resp = (
++        b"HTTP/1.1 200 OK\r\n"
++        b"Content-Type: image/png\r\n"
++        b"Transfer-Encoding: chunked\r\n"
++        b"\r\n"
++        b"4\r\n"
++        b"\x89PNG\r\n"
++        b"4\r\n"
++        b"\r\n\x1a\n\r\n"
++        b"0\r\n"
++        b"X-Trailer: trailer-value\r\n"
++        b"\r\n"
++    )
++    transport = _MockSocketTransport(chunked_resp)
++    service = MediaProxyService(
++        resolver=_MockResolver(),
++        client=PinnedTlsMediaClient(transport=transport),
++        air_gap_checker=_MockAirGapChecker(enabled=False),
++    )
++
++    app = create_app()
++    app.state.key_material = test_keys
++    app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++    app.state.media_proxy_service = service
++    app.state.rate_limiter = ValkeyRateLimiter(FakeValkey())
++
++    signed_url = sign_media_proxy_url("https://img.example.com/chunked.png", test_keys)
++    asgi_transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=asgi_transport, base_url="http://testserver") as client:
++        res = await client.get(signed_url)
++
++    assert res.status_code == 200
++    assert res.content == png_bytes
++
++    # Invalid chunk size hex
++    bad_chunk_resp = (
++        b"HTTP/1.1 200 OK\r\n"
++        b"Content-Type: image/png\r\n"
++        b"Transfer-Encoding: chunked\r\n"
++        b"\r\n"
++        b"ZZ\r\n"
++        b"invalid\r\n"
++    )
++    app.state.media_proxy_service = MediaProxyService(
++        resolver=_MockResolver(),
++        client=PinnedTlsMediaClient(transport=_MockSocketTransport(bad_chunk_resp)),
++        air_gap_checker=_MockAirGapChecker(enabled=False),
++    )
++    async with httpx.AsyncClient(transport=asgi_transport, base_url="http://testserver") as client:
++        res_bad = await client.get(signed_url)
++    assert res_bad.status_code == 502
++    assert res_bad.json()["code"] == "MEDIA_UPSTREAM_ERROR"
++
++
++@pytest.mark.asyncio
++async def test_service_query_params_and_air_gap_checker(
++    test_keys: KeyMaterial,
++    auth_principal: PrincipalContext,
++) -> None:
++    """Verify service forwarding of query parameters and DefaultAirGapChecker evaluation."""
++    png_bytes = b"\x89PNG\r\n\x1a\n"
++    resp = b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 8\r\n\r\n" + png_bytes
++    transport = _MockSocketTransport(resp)
++    service = MediaProxyService(
++        resolver=_MockResolver(),
++        client=PinnedTlsMediaClient(transport=transport),
++        air_gap_checker=_MockAirGapChecker(enabled=False),
++    )
++
++    app = create_app()
++    app.state.key_material = test_keys
++    app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++    app.state.media_proxy_service = service
++    app.state.rate_limiter = ValkeyRateLimiter(FakeValkey())
++
++    signed_url = sign_media_proxy_url("https://img.example.com/asset.png?v=2&w=200", test_keys)
++    asgi_transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=asgi_transport, base_url="http://testserver") as client:
++        res = await client.get(signed_url)
++
++    assert res.status_code == 200
++    written = bytes(transport.written_bytes)
++    assert b"GET /asset.png?v=2&w=200 HTTP/1.1" in written
++
++    # DefaultAirGapChecker coverage
++    with patch.dict(os.environ, {"KANBAN_AIR_GAP_MODE": "true"}):
++        checker = DefaultAirGapChecker()
++        assert checker.is_air_gap_enabled() is True
++
++    with patch.dict(os.environ, {"KANBAN_AIR_GAP_MODE": "false"}):
++        checker = DefaultAirGapChecker()
++        assert checker.is_air_gap_enabled() is False
++
++    mock_req = MagicMock()
++    mock_req.app.state.is_air_gap_enabled = lambda _ws: True
++    assert DefaultAirGapChecker(request=mock_req).is_air_gap_enabled() is True
++
++    mock_req2 = MagicMock()
++    mock_req2.app.state.is_air_gap_enabled = None
++    mock_req2.app.state.settings = SimpleNamespace(air_gap_mode=True)
++    assert DefaultAirGapChecker(request=mock_req2).is_air_gap_enabled() is True
++
++
++def test_signing_boundary_checks(test_keys: KeyMaterial) -> None:
++    """Verify signing URL boundaries, literal host rejections, and verify edge cases."""
++    with pytest.raises(ProblemException) as exc_host1:
++        _validate_host("")
++    assert exc_host1.value.code == "INVALID_MEDIA_URL"
++
++    with pytest.raises(ProblemException) as exc_host2:
++        _validate_host("a" * 254)
++    assert exc_host2.value.code == "INVALID_MEDIA_URL"
++
++    with pytest.raises(ProblemException) as exc_host3:
++        _validate_host("127.0.0.1")
++    assert exc_host3.value.code == "INVALID_MEDIA_URL"
++
++    with pytest.raises(ProblemException) as exc_url1:
++        validate_external_image_url("")
++    assert exc_url1.value.code == "INVALID_MEDIA_URL"
++
++    with pytest.raises(ProblemException) as exc_url2:
++        validate_external_image_url("https://" + ("a" * 2045) + ".example.com/p.png")
++    assert exc_url2.value.code == "INVALID_MEDIA_URL"
++
++    # verify_media_proxy_url edge cases
++    assert verify_media_proxy_url("", "sig", test_keys) is False
++    assert verify_media_proxy_url("https://example.com/a.png", "", test_keys) is False
++    assert verify_media_proxy_url("https://example.com/a.png", "a" * 65, test_keys) is False
++    assert verify_media_proxy_url("https://example.com/a.png", "bad!!!base64", test_keys) is False
++
++
++@pytest.mark.asyncio
++async def test_default_pinned_connection_transport() -> None:
++    """Verify DefaultPinnedConnectionTransport calls asyncio.open_connection."""
++    transport = DefaultPinnedConnectionTransport()
++    with patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open:
++        mock_open.return_value = (AsyncMock(), AsyncMock())
++        reader, writer = await transport.open_connection(
++            ip="93.184.216.34",
++            port=443,
++            server_hostname="img.example.com",
++            connect_timeout=3.0,
++        )
++        assert reader is not None
++        assert writer is not None
++        assert mock_open.call_count == 1
++
++
++class _OversizeReaderTransport:
++    async def open_connection(
++        self,
++        ip: str,
++        port: int,
++        server_hostname: str,
++        connect_timeout: float,
++    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
++        del ip, port, server_hostname, connect_timeout
++        reader = asyncio.StreamReader()
++        header = b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\n\r\n"
++        reader.feed_data(header + b"\x89PNG" + b"X" * (MAX_PROXY_BYTES + 10))
++        reader.feed_eof()
++        w = MagicMock()
++        w.write = MagicMock()
++        w.close = MagicMock()
++        w.drain = AsyncMock()
++        w.wait_closed = AsyncMock()
++        return reader, w
++
++
++class _ChunkedOversizeTransport:
++    async def open_connection(
++        self,
++        ip: str,
++        port: int,
++        server_hostname: str,
++        connect_timeout: float,
++    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
++        del ip, port, server_hostname, connect_timeout
++        reader = asyncio.StreamReader()
++        chunk_hex = f"{MAX_PROXY_BYTES + 1:x}".encode("ascii")
++        header = b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nTransfer-Encoding: chunked\r\n\r\n"
++        payload = header + chunk_hex + b"\r\n" + b"Y" * (MAX_PROXY_BYTES + 1) + b"\r\n0\r\n\r\n"
++        reader.feed_data(payload)
++        reader.feed_eof()
++        w = MagicMock()
++        w.write = MagicMock()
++        w.close = MagicMock()
++        w.drain = AsyncMock()
++        w.wait_closed = AsyncMock()
++        return reader, w
++
++
++class _HangingTransport:
++    async def open_connection(
++        self,
++        ip: str,
++        port: int,
++        server_hostname: str,
++        connect_timeout: float,
++    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
++        del ip, port, server_hostname, connect_timeout
++        await asyncio.sleep(10.0)
++        return asyncio.StreamReader(), MagicMock()
++
++
++@pytest.mark.asyncio
++async def test_stream_limits_and_timeouts() -> None:
++    """Verify streaming limit enforcement on fixed and chunked bodies and client timeout."""
++    test_ip = ipaddress.ip_address("93.184.216.34")
++
++    # Fixed body exceeding limit without Content-Length
++    client_oversize = PinnedTlsMediaClient(transport=_OversizeReaderTransport())
++    with pytest.raises(ProblemException) as exc1:
++        await client_oversize.fetch_media(test_ip, "img.example.com", "/oversize.png")
++    assert exc1.value.code == "MEDIA_TOO_LARGE"
++
++    # Chunked body exceeding limit
++    client_chunked = PinnedTlsMediaClient(transport=_ChunkedOversizeTransport())
++    with pytest.raises(ProblemException) as exc2:
++        await client_chunked.fetch_media(test_ip, "img.example.com", "/chunked_huge.png")
++    assert exc2.value.code == "MEDIA_TOO_LARGE"
++
++    # Total timeout in fetch_media
++    client_hanging = PinnedTlsMediaClient(transport=_HangingTransport())
++    with patch("kanban.media_proxy.client._TOTAL_TIMEOUT", 0.05), pytest.raises(TimeoutError):
++        await client_hanging.fetch_media(test_ip, "img.example.com", "/timeout.png")
++
++
++@pytest.mark.asyncio
++async def test_api_loads_default_key_material(
++    test_keys: KeyMaterial,
++    auth_principal: PrincipalContext,
++) -> None:
++    """Verify endpoint falls back to load_key_material() when not present on app.state."""
++    app = create_app()
++    app.state.principal_resolver = _TestPrincipalResolver(auth_principal)
++    app.state.rate_limiter = ValkeyRateLimiter(FakeValkey())
++    b64_key = base64.urlsafe_b64encode(test_keys.session_hmac_key).decode("ascii")
++    with (
++        patch.dict(os.environ, {"KANBAN_SESSION_HMAC_KEY": b64_key}),
++        patch("kanban.api.v1.media_proxy.load_key_material", return_value=test_keys) as mock_load,
++    ):
++        asgi_transport = httpx.ASGITransport(app=app)
++        async with httpx.AsyncClient(
++            transport=asgi_transport, base_url="http://testserver"
++        ) as client:
++            res = await client.get("/api/v1/media-proxy?u=https://img.example.com/a.png&sig=bad")
++        assert res.status_code == 403
++        assert res.json()["code"] == "INVALID_SIGNATURE"
++        assert mock_load.call_count == 1
+diff --git a/kanban/tests/media_proxy/test_ssrf_and_rebinding.py b/kanban/tests/media_proxy/test_ssrf_and_rebinding.py
+new file mode 100644
+index 0000000..6cf94ec
+--- /dev/null
++++ b/kanban/tests/media_proxy/test_ssrf_and_rebinding.py
+@@ -0,0 +1,282 @@
++"""Unit tests for DNS-resolve-then-pin SSRF defenses and rebinding prevention (S5.4, S10.2)."""
++
++from __future__ import annotations
++
++import asyncio
++import ipaddress
++import socket
++from ipaddress import IPv4Address, IPv6Address
++from pathlib import Path
++from typing import TYPE_CHECKING
++from unittest.mock import AsyncMock, MagicMock, patch
++
++import pytest
++
++from kanban.api.problems import ProblemException
++from kanban.media_proxy.client import PinnedTlsMediaClient
++from kanban.media_proxy.service import MediaProxyService
++from kanban.media_proxy.ssrf import (
++    DefaultAsyncHostResolver,
++    is_public_global_ip,
++    resolve_and_select_pinned_ip,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Sequence
++
++
++class MockSpyResolver:
++    """Configurable resolver tracking call counts and returning canned IP records."""
++
++    def __init__(self, records_sequence: Sequence[Sequence[IPv4Address | IPv6Address]]) -> None:
++        """Initialize spy with a sequence of canned record batches."""
++        self._sequence = list(records_sequence)
++        self.call_count = 0
++        self.resolved_hosts: list[str] = []
++
++    async def resolve(self, host: str) -> Sequence[IPv4Address | IPv6Address]:
++        """Record invocation and return next record batch."""
++        self.call_count += 1
++        self.resolved_hosts.append(host)
++        if not self._sequence:
++            return []
++        if len(self._sequence) == 1:
++            return self._sequence[0]
++        idx = min(self.call_count - 1, len(self._sequence) - 1)
++        return self._sequence[idx]
++
++
++class MockSpyTransport:
++    """Mock socket transport tracking open_connection invocations."""
++
++    def __init__(self) -> None:
++        """Initialize spy transport."""
++        self.connect_calls: list[dict[str, object]] = []
++
++    async def open_connection(
++        self,
++        ip: str,
++        port: int,
++        server_hostname: str,
++        connect_timeout: float,
++    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
++        """Record connection parameters and return mock stream pair."""
++        self.connect_calls.append(
++            {
++                "ip": ip,
++                "port": port,
++                "server_hostname": server_hostname,
++                "timeout": connect_timeout,
++            }
++        )
++        reader = asyncio.StreamReader()
++        reader.feed_data(
++            b"HTTP/1.1 200 OK\r\n"
++            b"Content-Type: image/png\r\n"
++            b"Content-Length: 8\r\n\r\n"
++            b"\x89PNG\r\n\x1a\n"
++        )
++        reader.feed_eof()
++        writer_mock = MagicMock()
++        writer_mock.write = MagicMock()
++        writer_mock.close = MagicMock()
++        writer_mock.drain = AsyncMock()
++        writer_mock.wait_closed = AsyncMock()
++        return reader, writer_mock
++
++
++_BLOCKED_TEST_IPS: tuple[str, ...] = (
++    "127.0.0.1",
++    "10.0.0.1",
++    "172.16.5.4",
++    "192.168.1.1",
++    "169.254.169.254",
++    "100.64.0.1",
++    "0.0.0.0",  # noqa: S104
++    "::1",
++    "fe80::1",
++    "fc00::1",
++    "fd12:3456::1",
++    "::ffff:127.0.0.1",
++    "::ffff:169.254.169.254",
++    "64:ff9b::a9fe:a9fe",
++)
++
++
++@pytest.mark.asyncio
++async def test_case_3_ssrf_ip_matrix() -> None:
++    """Test Case 3: Blocked IP matrix and mixed-record DNS rejection (S5.4, S10.2)."""
++    table_rows: list[str] = [
++        "| Category | Resolved Address | Expected | Result | Code | Socket Connects |",
++        "| :--- | :--- | :---: | :---: | :---: | :---: |",
++    ]
++
++    for ip_str in _BLOCKED_TEST_IPS:
++        ip_obj = ipaddress.ip_address(ip_str)
++        resolver = MockSpyResolver([[ip_obj]])
++        transport = MockSpyTransport()
++        client = PinnedTlsMediaClient(transport=transport)
++        service = MediaProxyService(resolver=resolver, client=client)
++
++        with pytest.raises(ProblemException) as exc_info:
++            await service.fetch_proxy_media("https://ssrf-target.example.com/test.png")
++
++        exc = exc_info.value
++        assert exc.status == 403
++        assert exc.code == "MEDIA_HOST_BLOCKED"
++        assert len(transport.connect_calls) == 0
++
++        table_rows.append(
++            f"| Single-Record Block | `{ip_str}` | 403 BLOCKED | PASS | "
++            f"`{exc.code}` | {len(transport.connect_calls)} |"
++        )
++
++    # Multi-record mixed public + private response: [93.184.216.34, 10.0.0.5]
++    mixed_ips = [
++        ipaddress.ip_address("93.184.216.34"),
++        ipaddress.ip_address("10.0.0.5"),
++    ]
++    mixed_resolver = MockSpyResolver([mixed_ips])
++    mixed_transport = MockSpyTransport()
++    mixed_client = PinnedTlsMediaClient(transport=mixed_transport)
++    mixed_service = MediaProxyService(resolver=mixed_resolver, client=mixed_client)
++
++    with pytest.raises(ProblemException) as exc_info_mixed:
++        await mixed_service.fetch_proxy_media("https://mixed-dns.example.com/test.png")
++
++    exc_mixed = exc_info_mixed.value
++    assert exc_mixed.status == 403
++    assert exc_mixed.code == "MEDIA_HOST_BLOCKED"
++    assert len(mixed_transport.connect_calls) == 0
++
++    table_rows.append(
++        "| Multi-Record Mixed | `[93.184.216.34, 10.0.0.5]` | 403 BLOCKED | PASS | "
++        f"`{exc_mixed.code}` | {len(mixed_transport.connect_calls)} |"
++    )
++
++    # Write ssrf-matrix-results.txt QA proof
++    proof_dir = Path("docs/qa/KANBA-66")
++    proof_dir.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
++    matrix_file = proof_dir / "ssrf-matrix-results.txt"
++    matrix_content = (
++        "KANBA-66 / KB-P2-16 SSRF Blocked IP Matrix Verification (S5.4, S10.2)\n"
++        "====================================================================\n\n"
++        + "\n".join(table_rows)
++        + "\n\nAll non-public, loopback, private, IMDS, and mixed DNS responses "
++        "were rejected with 403 MEDIA_HOST_BLOCKED and zero TCP connections.\n"
++    )
++    matrix_file.write_text(matrix_content, encoding="utf-8")
++
++
++@pytest.mark.asyncio
++async def test_case_4_dns_rebinding_toctou() -> None:
++    """Test Case 4: DNS rebinding TOCTOU defense pinning resolved IP (S5.4, S10.2)."""
++    public_ip = ipaddress.ip_address("93.184.216.34")
++    rebind_imds_ip = ipaddress.ip_address("169.254.169.254")
++
++    # Resolver configured to return public IP on lookup 1 and IMDS on lookup 2
++    resolver = MockSpyResolver([[public_ip], [rebind_imds_ip]])
++    transport = MockSpyTransport()
++    client = PinnedTlsMediaClient(transport=transport)
++    service = MediaProxyService(resolver=resolver, client=client)
++
++    target_host = "rebind.example.com"
++    target_url = f"https://{target_host}/image.png"
++
++    content_type, body_bytes, _headers = await service.fetch_proxy_media(target_url)
++
++    assert content_type == "image/png"
++    assert body_bytes.startswith(b"\x89PNG")
++
++    # Assert resolver was invoked exactly ONCE
++    assert resolver.call_count == 1
++    assert resolver.resolved_hosts == [target_host]
++
++    # Assert socket connection was opened to the literal public IP with TLS SNI of the hostname
++    assert len(transport.connect_calls) == 1
++    connect_call = transport.connect_calls[0]
++    assert connect_call["ip"] == "93.184.216.34"
++    assert connect_call["server_hostname"] == target_host
++    assert connect_call["port"] == 443
++
++
++@pytest.mark.asyncio
++async def test_dns_resolver_failures_and_timeouts() -> None:
++    """Verify resolver errors, empty records, and timeouts map to 403 MEDIA_HOST_BLOCKED."""
++    # Empty records
++    empty_resolver = MockSpyResolver([[]])
++    with pytest.raises(ProblemException) as exc_empty:
++        await resolve_and_select_pinned_ip("empty.example.com", resolver=empty_resolver)
++    assert exc_empty.value.status == 403
++    assert exc_empty.value.code == "MEDIA_HOST_BLOCKED"
++
++    # Resolver timeout
++    class SlowResolver:
++        async def resolve(self, _host: str) -> Sequence[IPv4Address | IPv6Address]:
++            await asyncio.sleep(5.0)
++            return [ipaddress.ip_address("93.184.216.34")]
++
++    with pytest.raises(ProblemException) as exc_timeout:
++        await resolve_and_select_pinned_ip("slow.example.com", resolver=SlowResolver())
++    assert exc_timeout.value.status == 403
++    assert exc_timeout.value.code == "MEDIA_HOST_BLOCKED"
++
++
++@pytest.mark.asyncio
++async def test_default_async_host_resolver() -> None:
++    """Verify DefaultAsyncHostResolver socket.gaierror handling and successful resolution."""
++    resolver = DefaultAsyncHostResolver()
++
++    # Successful resolution using loopback mock and duplicate IP deduplication
++    mock_addrinfo = [
++        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
++        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
++    ]
++    with patch("asyncio.get_running_loop") as mock_loop_fn:
++        mock_loop = AsyncMock()
++        mock_loop.getaddrinfo = AsyncMock(return_value=mock_addrinfo)
++        mock_loop_fn.return_value = mock_loop
++
++        ips = await resolver.resolve("example.com")
++        assert len(ips) == 1
++        assert str(ips[0]) == "93.184.216.34"
++
++    # socket.gaierror mapping to 403 MEDIA_HOST_BLOCKED
++    with patch("asyncio.get_running_loop") as mock_loop_fn:
++        mock_loop = AsyncMock()
++        mock_loop.getaddrinfo = AsyncMock(side_effect=socket.gaierror("Name or service not known"))
++        mock_loop_fn.return_value = mock_loop
++
++        with pytest.raises(ProblemException) as exc_gai:
++            await resolver.resolve("nonexistent.example.com")
++        assert exc_gai.value.status == 403
++        assert exc_gai.value.code == "MEDIA_HOST_BLOCKED"
++
++
++def test_is_public_global_ip_coverage() -> None:
++    """Verify public and disallowed IP classifications."""
++    assert is_public_global_ip("93.184.216.34") is True
++    assert is_public_global_ip("1.1.1.1") is True
++    assert is_public_global_ip("2606:4700:4700::1111") is True
++
++    assert is_public_global_ip("invalid-ip-string") is False
++    assert is_public_global_ip("127.0.0.1") is False
++    assert is_public_global_ip("10.0.0.1") is False
++    assert is_public_global_ip("172.20.0.1") is False
++    assert is_public_global_ip("192.168.0.1") is False
++    assert is_public_global_ip("169.254.1.1") is False
++    assert is_public_global_ip("100.64.1.1") is False
++    assert is_public_global_ip("192.0.2.1") is False
++    assert is_public_global_ip("198.51.100.1") is False
++    assert is_public_global_ip("203.0.113.1") is False
++    assert is_public_global_ip("224.0.0.1") is False
++    assert is_public_global_ip("240.0.0.1") is False
++    assert is_public_global_ip("255.255.255.255") is False
++    assert is_public_global_ip("::1") is False
++    assert is_public_global_ip("::") is False
++    assert is_public_global_ip("fe80::1") is False
++    assert is_public_global_ip("fc00::1") is False
++    assert is_public_global_ip("fec0::1") is False
++    assert is_public_global_ip("2001:db8::1") is False
++    assert is_public_global_ip("::ffff:10.0.0.1") is False
++    assert is_public_global_ip("64:ff9b::a9fe:0101") is False

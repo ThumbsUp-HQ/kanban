@@ -68,6 +68,14 @@ export async function testGuardFixture(
   const recorder = await mockApi(page, {
     'GET /api/v1/me': loadFixture('me-adam'),
     'GET /api/v1/system/status': loadFixture('system-status-prod'),
+    'GET /api/v1/media-proxy': {
+      status: 200,
+      contentType: 'image/png',
+      body: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        'base64',
+      ),
+    },
   });
 
   // Run test

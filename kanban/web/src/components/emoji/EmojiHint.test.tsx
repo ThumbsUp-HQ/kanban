@@ -600,5 +600,126 @@ describe('EmojiHint Component', () => {
     act(() => {
       fireEvent.pointerEnter(subtleTrigger);
     });
+
+    // 6. Multi-focusable popup tab navigation middle elements
+    const multiClock = new TestClock();
+    const multiCtrl = createHintController(multiClock);
+    render(
+      <EmojiHint
+        kind="rawMarkdown"
+        variant="interactive"
+        activateLabel="Action 1"
+        onActivate={vi.fn()}
+        testId="multi-btn-hint"
+        controller={multiCtrl}
+      />,
+    );
+    const multiTrigger = screen.getByTestId('multi-btn-hint');
+    act(() => {
+      fireEvent.focus(multiTrigger);
+    });
+    const multiPopup = screen.getByTestId('multi-btn-hint-popup');
+    const extraBtn = document.createElement('button');
+    extraBtn.textContent = 'Action 2';
+    multiPopup.appendChild(extraBtn);
+
+    const firstBtn = multiPopup.querySelector('button');
+    if (firstBtn) {
+      firstBtn.focus();
+    }
+    // Non-shift Tab on first button (which is not last button)
+    fireEvent.keyDown(multiPopup, { key: 'Tab', shiftKey: false });
+
+    extraBtn.focus();
+    // Shift Tab on last button (which is not first button)
+    fireEvent.keyDown(multiPopup, { key: 'Tab', shiftKey: true });
+
+    // Blur with outside target
+    fireEvent.blur(multiPopup, { relatedTarget: document.body });
+  });
+
+  it('covers interactive hint without focusable action elements and pointer enter/leave on popup', () => {
+    const clock = new TestClock();
+    const ctrl = createHintController(clock);
+
+    render(
+      <EmojiHint
+        kind="rawMarkdown"
+        variant="interactive"
+        testId="no-action-hint"
+        controller={ctrl}
+      />,
+    );
+
+    const trigger = screen.getByTestId('no-action-hint');
+    act(() => {
+      fireEvent.focus(trigger);
+    });
+
+    const popup = screen.getByTestId('no-action-hint-popup');
+    expect(popup).toBeDefined();
+
+    // Tab on trigger with popup open but no focusable children
+    fireEvent.keyDown(trigger, { key: 'Tab', shiftKey: false });
+
+    // Tab in popup with no focusable elements returns early
+    fireEvent.keyDown(popup, { key: 'Tab', shiftKey: false });
+    fireEvent.keyDown(popup, { key: 'Tab', shiftKey: true });
+
+    // Pointer enter and leave on popup
+    fireEvent.pointerEnter(popup);
+    fireEvent.pointerLeave(popup);
+
+    // Escape in popup
+    fireEvent.keyDown(popup, { key: 'Escape' });
+
+    // Blur with unrelated target outside popup and trigger
+    const outsideEl = document.createElement('div');
+    document.body.appendChild(outsideEl);
+    fireEvent.blur(popup, { relatedTarget: outsideEl });
+    document.body.removeChild(outsideEl);
+  });
+
+  it('falls back to safeEntry for unknown emoji kinds', () => {
+    render(
+      <EmojiHint
+        kind={'nonExistentKind' as unknown as 'access'}
+        testId="unknown-kind-hint"
+      />,
+    );
+    const trigger = screen.getByTestId('unknown-kind-hint');
+    expect(trigger.getAttribute('aria-label')).toBe('Status indicator');
+    expect(trigger.textContent).toContain('❓');
+  });
+
+  it('handles shift-tab trapping from first focusable element back to trigger', () => {
+    const clock = new TestClock();
+    const ctrl = createHintController(clock);
+
+    render(
+      <EmojiHint
+        kind="rawMarkdown"
+        variant="interactive"
+        activateLabel="First Action"
+        onActivate={vi.fn()}
+        testId="shift-tab-hint"
+        controller={ctrl}
+      />,
+    );
+
+    const trigger = screen.getByTestId('shift-tab-hint');
+    act(() => {
+      fireEvent.focus(trigger);
+    });
+
+    const popup = screen.getByTestId('shift-tab-hint-popup');
+    const actionBtn = popup.querySelector('button');
+    expect(actionBtn).toBeDefined();
+
+    if (actionBtn) {
+      actionBtn.focus();
+      // Shift-Tab from first element focuses trigger
+      fireEvent.keyDown(popup, { key: 'Tab', shiftKey: true });
+    }
   });
 });

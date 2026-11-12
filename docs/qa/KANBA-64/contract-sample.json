@@ -1,0 +1,60 @@
+{
+  "login_stub": {
+    "status_code": 200,
+    "set_cookie_headers": [
+      "__Host-kb_session=p6a0HA5CEYsDgHlMBOzwA0smDSvKjlpLcDne43amw4c.mJEac5JHF0idQnueoYEA_UwFZnFO5aoJp1U8tfolALg; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Thu, 19 Nov 2026 00:00:00 GMT",
+      "__Host-kb_csrf=8SPfjut9TWUR0JDgJHRwIA.FRF2c45iU09PtYdfogzWsx1aKYOBRW8kf2jRluZsG3w; Path=/; Secure; SameSite=Strict"
+    ],
+    "description": "Issued after successful authentication card verification"
+  },
+  "get_session_pre_auth": {
+    "status_code": 200,
+    "headers": {
+      "set-cookie": "__Host-kb_csrf=8_OdqyDKQ0q4_GF45ikoHA.oCoJOn1dI4jrhT26t861it39LrYi2hee8M3m_-j-fAQ; Path=/; Secure; SameSite=Strict",
+      "content-type": "application/json",
+      "x-request-id": "f02159b2bf2f4d37bc1692ed4da311d6"
+    },
+    "body": {
+      "authenticated": false,
+      "principal_id": null,
+      "workspace_id": null,
+      "aal_level": 0,
+      "mfa_pending": false,
+      "csrf_token": "8_OdqyDKQ0q4_GF45ikoHA.oCoJOn1dI4jrhT26t861it39LrYi2hee8M3m_-j-fAQ"
+    }
+  },
+  "get_session_authenticated": {
+    "status_code": 200,
+    "body": {
+      "principal_id": "a750026c-d7d9-49b2-b3a2-1a1d354d95a9",
+      "workspace_id": "bddce1e8-f04d-4222-ba2e-a1617a656b26",
+      "session_id": "d7c58e0f-a68e-459d-85ae-f9b838822c70",
+      "aal_level": 1,
+      "mfa_pending": false,
+      "csrf_token": "8SPfjut9TWUR0JDgJHRwIA.FRF2c45iU09PtYdfogzWsx1aKYOBRW8kf2jRluZsG3w"
+    }
+  },
+  "logout": {
+    "status_code": 200,
+    "set_cookie_headers": [
+      "__Host-kb_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+      "__Host-kb_csrf=; Path=/; Secure; SameSite=Strict; Max-Age=0"
+    ],
+    "description": "Clears __Host-kb_session and __Host-kb_csrf with Max-Age=0"
+  },
+  "403_CSRF_REJECTED": {
+    "status_code": 403,
+    "headers": {
+      "content-type": "application/problem+json",
+      "x-request-id": "6f81b1acdbdf49beb405c9fe5c830413"
+    },
+    "body": {
+      "type": "https://kanban.hackedyour.info/problems/csrf-rejected",
+      "title": "CSRF validation failed",
+      "status": 403,
+      "code": "CSRF_REJECTED",
+      "detail": "Missing CSRF token header or cookie",
+      "request_id": "6f81b1acdbdf49beb405c9fe5c830413"
+    }
+  }
+}

@@ -23,6 +23,11 @@ import { splitListItem, liftListItem, sinkListItem } from 'prosemirror-schema-li
 import { tableEditing, goToNextCell } from 'prosemirror-tables';
 import { editorSchema } from './schema';
 import { createSourceSlicePlugin } from './sourceSlicePlugin';
+import {
+  createSparkleCompletionPlugin,
+  sparklePluginKey,
+  type CreateSparklePluginOptions,
+} from './sparkle/SparkleCompletionPlugin';
 
 export type EditorSurfaceKind = 'summary' | 'description' | 'comment' | 'sticky' | 'doc';
 
@@ -66,7 +71,13 @@ export function clearEditorExtensions(): void {
 }
 
 export interface CreateEditorPluginsOptions {
-  onToggleRaw?: () => void;
+  onToggleRaw?: (() => void) | undefined;
+  projectId?: string | undefined;
+  objectId?: string | null | undefined;
+  sparkleDebounceMs?: number | undefined;
+  sparkleTimeoutMs?: number | undefined;
+  sparkleFetchFn?: CreateSparklePluginOptions['fetchFn'];
+  enableSparkle?: boolean | undefined;
 }
 
 /**
@@ -209,8 +220,22 @@ export function createEditorPlugins(
     'Shift-Enter': chainCommands(exitCode),
   });
 
+  const sparklePlugin =
+    options?.enableSparkle !== false
+      ? createSparkleCompletionPlugin({
+          surface,
+          projectId: options?.projectId,
+          objectId: options?.objectId,
+          debounceMs: options?.sparkleDebounceMs,
+          timeoutMs: options?.sparkleTimeoutMs,
+          fetchFn: options?.sparkleFetchFn,
+          renderOverlay: false,
+        })
+      : null;
+
   const plugins: Plugin[] = [
     createSourceSlicePlugin(),
+    ...(sparklePlugin ? [sparklePlugin] : []),
     history(),
     keymap(customKeybindings),
     listKeymap,
@@ -247,3 +272,6 @@ export function createEditorNodeViews(
   }
   return nodeViews;
 }
+
+export { createSparkleCompletionPlugin, sparklePluginKey };
+

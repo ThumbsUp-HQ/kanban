@@ -9,7 +9,9 @@ import React, {
 } from 'react';
 import {
   EMOJI_REGISTRY,
-  type EmojiKey,
+  EXTENDED_EMOJI_REGISTRY,
+  type ExtendedEmojiKey,
+  type EmojiEntry,
 } from './emojiRegistry';
 import {
   defaultHintController,
@@ -20,7 +22,7 @@ import { positionHint } from './positionHint';
 import './EmojiHint.css';
 
 export interface EmojiHintProps {
-  kind: EmojiKey;
+  kind: ExtendedEmojiKey;
   content?: ReactNode | (() => ReactNode);
   label?: string;
   variant?: 'tooltip' | 'interactive';
@@ -43,7 +45,15 @@ export function EmojiHint({
   testId,
   controller,
 }: EmojiHintProps): JSX.Element {
-  const entry = EMOJI_REGISTRY[kind];
+  const entry: EmojiEntry | undefined =
+    (EMOJI_REGISTRY as Record<string, EmojiEntry>)[kind] ??
+    EXTENDED_EMOJI_REGISTRY[kind];
+  const safeEntry: EmojiEntry = entry ?? {
+    glyph: '❓',
+    domain: 'Unknown',
+    ariaLabel: 'Status indicator',
+    defaultHint: 'Unknown status',
+  };
   const ctrl = controller ?? defaultHintController;
   const isInteractive = variant === 'interactive';
 
@@ -279,8 +289,8 @@ export function EmojiHint({
     onActivate?.();
   };
 
-  const effectiveLabel = label ?? entry.ariaLabel;
-  let resolvedContent: ReactNode = entry.defaultHint;
+  const effectiveLabel = label ?? safeEntry.ariaLabel;
+  let resolvedContent: ReactNode = safeEntry.defaultHint;
   if (content !== undefined) {
     resolvedContent = typeof content === 'function' ? (isOpen ? content() : null) : content;
   }
@@ -306,7 +316,7 @@ export function EmojiHint({
         onKeyDown={handleKeyDown}
       >
         <span aria-hidden="true" className="emoji-hint-glyph">
-          {entry.glyph}
+          {safeEntry.glyph}
         </span>
       </button>
 
