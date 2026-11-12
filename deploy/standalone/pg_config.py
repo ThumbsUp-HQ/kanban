@@ -16,7 +16,7 @@ PG_HBA_CONTENT = """\
 # Standalone mode: Unix-socket only, zero TCP host listeners permitted
 local  all     postgres                         peer
 local  kanban  kanban_migrator                  peer map=kanban_map
-local  kanban  kanban_app                       peer map=kanban_map
+local  kanban  kanban_app                       scram-sha-256
 """
 
 PG_IDENT_CONTENT = """\
@@ -70,3 +70,11 @@ def configure_postgres(pgdata: Path, run_dir: str = "/run/postgresql") -> None:
     # Rewrite pg_ident.conf
     ident_conf = pgdata / "pg_ident.conf"
     ident_conf.write_text(PG_IDENT_CONTENT, encoding="utf-8")
+
+
+def generate_role_passwords_sql(app_scram: str, mig_scram: str) -> str:
+    """Generate ALTER ROLE statements with pre-computed SCRAM-SHA-256 verifiers."""
+    return f"""\
+ALTER ROLE kanban_app PASSWORD '{app_scram}';
+ALTER ROLE kanban_migrator PASSWORD '{mig_scram}';
+"""

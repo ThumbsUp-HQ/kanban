@@ -14,8 +14,21 @@ import sys
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
-from deploy.standalone.pg_config import configure_postgres
+from deploy.standalone.keyring import (
+    Keyring,
+    KeyringError,
+    compute_scram_sha256_verifier,
+    load_or_create_keyring,
+)
+from deploy.standalone.pg_config import configure_postgres, generate_role_passwords_sql
+from deploy.standalone.storage_probe import (
+    DEFAULT_STATUS_PATH,
+    emit_ephemeral_warning,
+    probe,
+    write_standalone_status,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -162,7 +175,10 @@ def run_psql_script(sql: str, dbname: str = "postgres", run_dir: str = DEFAULT_R
     run_as_postgres(cmd, timeout=30.0)
 
 
-def bootstrap_database(run_dir: str = DEFAULT_RUN_DIR) -> None:
+def bootstrap_database(
+    run_dir: str = DEFAULT_RUN_DIR,
+    keyring: Keyring | None = None,
+) -> None:
     """Create roles, database, and extensions idempotently."""
     log_phase("bootstrap_sql", "creating roles and kanban database")
 
@@ -188,7 +204,14 @@ def bootstrap_database(run_dir: str = DEFAULT_RUN_DIR) -> None:
     """
     run_psql_script(role_sql, dbname="postgres", run_dir=run_dir)
 
-    # 2. Create database kanban if missing
+    # 2. Apply role passwords if keyring is provided
+    if keyring is not None:
+        app_scram = compute_scram_sha256_verifier(keyring.kanban_app_password)
+        mig_scram = compute_scram_sha256_verifier(keyring.kanban_migrator_password)
+        pw_sql = generate_role_passwords_sql(app_scram, mig_scram)
+        run_psql_script(pw_sql, dbname="postgres", run_dir=run_dir)
+
+    # 3. Create database kanban if missing
     db_check = run_as_postgres(
         [
             BIN_PSQL,
@@ -276,16 +299,46 @@ def build_uvicorn_command() -> list[str]:
     ]
 
 
-def build_child_env(db_url: str | None = None) -> dict[str, str]:
+def resolve_status_path() -> Path:
+    """Resolve destination path for standalone_status.json."""
+    if "KB_STANDALONE_STATUS_PATH" in os.environ:
+        return Path(os.environ["KB_STANDALONE_STATUS_PATH"])
+    if "KB_RUN_DIR" in os.environ:
+        return Path(os.environ["KB_RUN_DIR"]) / "standalone_status.json"
+    return DEFAULT_STATUS_PATH
+
+
+def build_child_env(
+    keyring: Keyring | None = None,
+    db_url: str | None = None,
+    run_dir: str = DEFAULT_RUN_DIR,
+) -> dict[str, str]:
     """Build the explicit allowlist child environment for Uvicorn."""
-    effective_url = db_url or "postgresql+asyncpg://kanban_app@/kanban?host=/run/postgresql"
-    return {
+    if db_url:
+        effective_url = db_url
+    elif keyring is not None:
+        encoded_pw = quote(keyring.kanban_app_password_str, safe="")
+        encoded_dir = quote(run_dir, safe="")
+        effective_url = f"postgresql+asyncpg://kanban_app:{encoded_pw}@/kanban?host={encoded_dir}"
+    else:
+        encoded_dir = quote(run_dir, safe="")
+        effective_url = f"postgresql+asyncpg://kanban_app@/kanban?host={encoded_dir}"
+
+    env: dict[str, str] = {
         "PATH": "/opt/kanban/.venv/bin:/usr/local/bin:/usr/bin:/bin",
         "KB_WEB_DIST": os.environ.get("KB_WEB_DIST", "/opt/kanban/web/dist"),
         "KB_DEPLOYMENT_MODE": "standalone",
         "DATABASE_URL": effective_url,
         "LANG": "C.UTF-8",
+        "KB_STANDALONE_STATUS_PATH": str(resolve_status_path()),
     }
+
+    if keyring is not None:
+        env["KB_MASTER_KEK_B64"] = keyring.master_kek_b64
+        env["KB_AUTH_PEPPER_B64"] = keyring.auth_pepper_b64
+        env["KB_SESSION_HMAC_KEY_B64"] = keyring.session_hmac_key_b64
+
+    return env
 
 
 def supervisor_loop(
@@ -343,6 +396,9 @@ def main(_argv: Sequence[str] | None = None) -> int:
     database_url = os.environ.get("DATABASE_URL")
     if database_url:
         log_phase("mode", "MODE=external_db")
+        status = probe(Path("/var/lib/kanban/data"), mode="external_db")
+        status_path = resolve_status_path()
+        write_standalone_status(status, target_path=status_path)
         child_env = build_child_env(db_url=database_url)
         cmd = build_uvicorn_command()
         os.execv(cmd[0], cmd)  # noqa: S606
@@ -360,6 +416,27 @@ def main(_argv: Sequence[str] | None = None) -> int:
     run_dir = os.environ.get("KB_RUN_DIR", DEFAULT_RUN_DIR)
     alembic_ini = Path(os.environ.get("KB_ALEMBIC_INI", str(DEFAULT_ALEMBIC_INI)))
 
+    # Storage probe & ephemeral warning
+    status = probe(pgdata.parent, mode="standalone_embedded_pg")
+    status_path = resolve_status_path()
+    write_standalone_status(status, target_path=status_path)
+    if not status.persistent_volume:
+        emit_ephemeral_warning()
+
+    # Keyring loading or creation
+    keyring_path = Path(
+        os.environ.get(
+            "KB_KEYRING_PATH",
+            str(pgdata.parent / "secrets" / "keyring.json"),
+        )
+    )
+    try:
+        keyring = load_or_create_keyring(keyring_path)
+        log_phase("keyring", f"keyring loaded from {keyring_path}")
+    except KeyringError as err:
+        sys.stderr.write(f"KEYRING_INVALID: {err}\n")
+        return 78
+
     # 2. Cluster Init
     initialize_cluster(pgdata)
 
@@ -370,7 +447,7 @@ def main(_argv: Sequence[str] | None = None) -> int:
     start_postgres(pgdata, run_dir=run_dir)
 
     # 5. Bootstrap SQL
-    bootstrap_database(run_dir=run_dir)
+    bootstrap_database(run_dir=run_dir, keyring=keyring)
 
     # 6. Migrations & Privilege drop
     run_migrations(pgdata, alembic_ini, run_dir=run_dir)
@@ -378,7 +455,7 @@ def main(_argv: Sequence[str] | None = None) -> int:
     # 7. Spawn Uvicorn as UID 65532
     log_phase("uvicorn_spawn", "spawning uvicorn as UID 65532")
     uvicorn_cmd = build_uvicorn_command()
-    child_env = build_child_env()
+    child_env = build_child_env(keyring=keyring, run_dir=run_dir)
 
     uvicorn_proc = subprocess.Popen(  # noqa: S603
         uvicorn_cmd,

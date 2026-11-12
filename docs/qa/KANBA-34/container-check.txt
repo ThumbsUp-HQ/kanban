@@ -1,0 +1,76 @@
+=== 1. Ephemeral Container Run (kb-eph) ===
+$ docker run -d --name kb-eph -p 18080:8080 kanban:latest
+6cdba56f3b792ca680f9ad9ae424fb91b0ea243877dc11505d3691727c8b87ca
+
+$ docker logs kb-eph
+[kanban-standalone] [00000ms] mode: MODE=standalone_embedded_pg
+⚠️ Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
+[kanban-standalone] [00052ms] keyring: keyring loaded from /var/lib/kanban/data/secrets/keyring.json
+[kanban-standalone] [00052ms] initdb: initializing new database cluster
+[kanban-standalone] [00720ms] pg_start: starting embedded PostgreSQL
+[kanban-standalone] [00938ms] pg_start: PostgreSQL is ready on /run/postgresql
+[kanban-standalone] [00938ms] bootstrap_sql: creating roles and kanban database
+[kanban-standalone] [01172ms] bootstrap_sql: roles, database, and extensions initialized
+[kanban-standalone] [01172ms] migrations: running alembic upgrade head
+[kanban-standalone] [01945ms] migrations: schema migrations applied successfully
+[kanban-standalone] [01962ms] migrations: privilege dropped: kanban_migrator set to NOLOGIN
+[kanban-standalone] [01962ms] uvicorn_spawn: spawning uvicorn as UID 65532
+INFO:     Started server process [47]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+
+$ docker exec kb-eph stat -c '%a %U' /var/lib/kanban/data/secrets/keyring.json
+600 root
+
+$ docker exec -u 65532 kb-eph cat /var/lib/kanban/data/secrets/keyring.json
+cat: /var/lib/kanban/data/secrets/keyring.json: Permission denied
+
+$ docker exec kb-eph cat /run/kanban/standalone_status.json
+{
+  "mode": "standalone_embedded_pg",
+  "persistent_volume": false,
+  "data_mount_point": "/var/lib/kanban/data",
+  "data_mount_fstype": "ext4",
+  "generated_at": "2026-11-12T03:08:03.683528+00:00"
+}
+=== 2. Persistent Container Run (kb-pers with kb_test_vol) ===
+$ docker volume create kb_test_vol
+kb_test_vol
+$ docker run -d --name kb-pers -v kb_test_vol:/var/lib/kanban/data -p 18080:8080 kanban:latest
+6ca7d9d39aa9d91d23f05033f0d2bd86c816d1ba32063a26ee6af8f03bc318f3
+
+$ docker logs kb-pers (verify no ephemeral warning)
+[kanban-standalone] [00000ms] mode: MODE=standalone_embedded_pg
+[kanban-standalone] [00058ms] keyring: keyring loaded from /var/lib/kanban/data/secrets/keyring.json
+[kanban-standalone] [00059ms] initdb: initializing new database cluster
+[kanban-standalone] [00727ms] pg_start: starting embedded PostgreSQL
+[kanban-standalone] [00947ms] pg_start: PostgreSQL is ready on /run/postgresql
+[kanban-standalone] [00947ms] bootstrap_sql: creating roles and kanban database
+[kanban-standalone] [01181ms] bootstrap_sql: roles, database, and extensions initialized
+[kanban-standalone] [01181ms] migrations: running alembic upgrade head
+[kanban-standalone] [02005ms] migrations: schema migrations applied successfully
+[kanban-standalone] [02021ms] migrations: privilege dropped: kanban_migrator set to NOLOGIN
+[kanban-standalone] [02021ms] uvicorn_spawn: spawning uvicorn as UID 65532
+INFO:     Started server process [47]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+
+$ docker exec kb-pers sha256sum /var/lib/kanban/data/secrets/keyring.json (initial)
+874f899faa01ccf8820f37060d03509e4664153491e1f9555f6a8128e407ce3c  /var/lib/kanban/data/secrets/keyring.json
+
+$ docker restart kb-pers
+kb-pers
+
+$ docker exec kb-pers sha256sum /var/lib/kanban/data/secrets/keyring.json (after restart)
+874f899faa01ccf8820f37060d03509e4664153491e1f9555f6a8128e407ce3c  /var/lib/kanban/data/secrets/keyring.json
+
+$ docker exec kb-pers cat /run/kanban/standalone_status.json
+{
+  "mode": "standalone_embedded_pg",
+  "persistent_volume": true,
+  "data_mount_point": "/var/lib/kanban/data",
+  "data_mount_fstype": "ext4",
+  "generated_at": "2026-11-12T03:08:16.387995+00:00"
+}

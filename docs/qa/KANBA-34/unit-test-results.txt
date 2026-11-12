@@ -1,0 +1,16 @@
+.............................................                            [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+deploy/standalone/__init__.py            0      0      0      0   100%
+deploy/standalone/entrypoint.py        203      1     46      3    98%   365->370, 423->427, 482
+deploy/standalone/keyring.py           164      7     36      3    95%   100-101, 108-110, 131->137, 139-140
+deploy/standalone/pg_config.py          22      0      4      0   100%
+deploy/standalone/storage_probe.py     101      1     28      3    97%   83->85, 97, 109->107
+--------------------------------------------------------------------------------
+TOTAL                                  490      9    114      9    97%
+Required test coverage of 95% reached. Total coverage: 97.02%
+45 passed in 0.27s
+Exit code: 0

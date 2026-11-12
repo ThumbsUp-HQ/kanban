@@ -1,0 +1,1618 @@
+diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
+index ba5993e..e5ee403 100644
+--- a/deploy/standalone/entrypoint.py
++++ b/deploy/standalone/entrypoint.py
+@@ -14,8 +14,21 @@ import sys
+ import time
+ from pathlib import Path
+ from typing import TYPE_CHECKING
+-
+-from deploy.standalone.pg_config import configure_postgres
++from urllib.parse import quote
++
++from deploy.standalone.keyring import (
++    Keyring,
++    KeyringError,
++    compute_scram_sha256_verifier,
++    load_or_create_keyring,
++)
++from deploy.standalone.pg_config import configure_postgres, generate_role_passwords_sql
++from deploy.standalone.storage_probe import (
++    DEFAULT_STATUS_PATH,
++    emit_ephemeral_warning,
++    probe,
++    write_standalone_status,
++)
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Sequence
+@@ -162,7 +175,10 @@ def run_psql_script(sql: str, dbname: str = "postgres", run_dir: str = DEFAULT_R
+     run_as_postgres(cmd, timeout=30.0)
+ 
+ 
+-def bootstrap_database(run_dir: str = DEFAULT_RUN_DIR) -> None:
++def bootstrap_database(
++    run_dir: str = DEFAULT_RUN_DIR,
++    keyring: Keyring | None = None,
++) -> None:
+     """Create roles, database, and extensions idempotently."""
+     log_phase("bootstrap_sql", "creating roles and kanban database")
+ 
+@@ -188,7 +204,14 @@ def bootstrap_database(run_dir: str = DEFAULT_RUN_DIR) -> None:
+     """
+     run_psql_script(role_sql, dbname="postgres", run_dir=run_dir)
+ 
+-    # 2. Create database kanban if missing
++    # 2. Apply role passwords if keyring is provided
++    if keyring is not None:
++        app_scram = compute_scram_sha256_verifier(keyring.kanban_app_password)
++        mig_scram = compute_scram_sha256_verifier(keyring.kanban_migrator_password)
++        pw_sql = generate_role_passwords_sql(app_scram, mig_scram)
++        run_psql_script(pw_sql, dbname="postgres", run_dir=run_dir)
++
++    # 3. Create database kanban if missing
+     db_check = run_as_postgres(
+         [
+             BIN_PSQL,
+@@ -276,17 +299,47 @@ def build_uvicorn_command() -> list[str]:
+     ]
+ 
+ 
+-def build_child_env(db_url: str | None = None) -> dict[str, str]:
++def resolve_status_path() -> Path:
++    """Resolve destination path for standalone_status.json."""
++    if "KB_STANDALONE_STATUS_PATH" in os.environ:
++        return Path(os.environ["KB_STANDALONE_STATUS_PATH"])
++    if "KB_RUN_DIR" in os.environ:
++        return Path(os.environ["KB_RUN_DIR"]) / "standalone_status.json"
++    return DEFAULT_STATUS_PATH
++
++
++def build_child_env(
++    keyring: Keyring | None = None,
++    db_url: str | None = None,
++    run_dir: str = DEFAULT_RUN_DIR,
++) -> dict[str, str]:
+     """Build the explicit allowlist child environment for Uvicorn."""
+-    effective_url = db_url or "postgresql+asyncpg://kanban_app@/kanban?host=/run/postgresql"
+-    return {
++    if db_url:
++        effective_url = db_url
++    elif keyring is not None:
++        encoded_pw = quote(keyring.kanban_app_password_str, safe="")
++        encoded_dir = quote(run_dir, safe="")
++        effective_url = f"postgresql+asyncpg://kanban_app:{encoded_pw}@/kanban?host={encoded_dir}"
++    else:
++        encoded_dir = quote(run_dir, safe="")
++        effective_url = f"postgresql+asyncpg://kanban_app@/kanban?host={encoded_dir}"
++
++    env: dict[str, str] = {
+         "PATH": "/opt/kanban/.venv/bin:/usr/local/bin:/usr/bin:/bin",
+         "KB_WEB_DIST": os.environ.get("KB_WEB_DIST", "/opt/kanban/web/dist"),
+         "KB_DEPLOYMENT_MODE": "standalone",
+         "DATABASE_URL": effective_url,
+         "LANG": "C.UTF-8",
++        "KB_STANDALONE_STATUS_PATH": str(resolve_status_path()),
+     }
+ 
++    if keyring is not None:
++        env["KB_MASTER_KEK_B64"] = keyring.master_kek_b64
++        env["KB_AUTH_PEPPER_B64"] = keyring.auth_pepper_b64
++        env["KB_SESSION_HMAC_KEY_B64"] = keyring.session_hmac_key_b64
++
++    return env
++
+ 
+ def supervisor_loop(
+     uvicorn_proc: subprocess.Popen[str],
+@@ -343,6 +396,9 @@ def main(_argv: Sequence[str] | None = None) -> int:
+     database_url = os.environ.get("DATABASE_URL")
+     if database_url:
+         log_phase("mode", "MODE=external_db")
++        status = probe(Path("/var/lib/kanban/data"), mode="external_db")
++        status_path = resolve_status_path()
++        write_standalone_status(status, target_path=status_path)
+         child_env = build_child_env(db_url=database_url)
+         cmd = build_uvicorn_command()
+         os.execv(cmd[0], cmd)  # noqa: S606
+@@ -360,6 +416,27 @@ def main(_argv: Sequence[str] | None = None) -> int:
+     run_dir = os.environ.get("KB_RUN_DIR", DEFAULT_RUN_DIR)
+     alembic_ini = Path(os.environ.get("KB_ALEMBIC_INI", str(DEFAULT_ALEMBIC_INI)))
+ 
++    # Storage probe & ephemeral warning
++    status = probe(pgdata.parent, mode="standalone_embedded_pg")
++    status_path = resolve_status_path()
++    write_standalone_status(status, target_path=status_path)
++    if not status.persistent_volume:
++        emit_ephemeral_warning()
++
++    # Keyring loading or creation
++    keyring_path = Path(
++        os.environ.get(
++            "KB_KEYRING_PATH",
++            str(pgdata.parent / "secrets" / "keyring.json"),
++        )
++    )
++    try:
++        keyring = load_or_create_keyring(keyring_path)
++        log_phase("keyring", f"keyring loaded from {keyring_path}")
++    except KeyringError as err:
++        sys.stderr.write(f"KEYRING_INVALID: {err}\n")
++        return 78
++
+     # 2. Cluster Init
+     initialize_cluster(pgdata)
+ 
+@@ -370,7 +447,7 @@ def main(_argv: Sequence[str] | None = None) -> int:
+     start_postgres(pgdata, run_dir=run_dir)
+ 
+     # 5. Bootstrap SQL
+-    bootstrap_database(run_dir=run_dir)
++    bootstrap_database(run_dir=run_dir, keyring=keyring)
+ 
+     # 6. Migrations & Privilege drop
+     run_migrations(pgdata, alembic_ini, run_dir=run_dir)
+@@ -378,7 +455,7 @@ def main(_argv: Sequence[str] | None = None) -> int:
+     # 7. Spawn Uvicorn as UID 65532
+     log_phase("uvicorn_spawn", "spawning uvicorn as UID 65532")
+     uvicorn_cmd = build_uvicorn_command()
+-    child_env = build_child_env()
++    child_env = build_child_env(keyring=keyring, run_dir=run_dir)
+ 
+     uvicorn_proc = subprocess.Popen(  # noqa: S603
+         uvicorn_cmd,
+diff --git a/deploy/standalone/keyring.py b/deploy/standalone/keyring.py
+new file mode 100644
+index 0000000..5c6589b
+--- /dev/null
++++ b/deploy/standalone/keyring.py
+@@ -0,0 +1,295 @@
++"""First-boot CSPRNG keyring generator, validator, and SCRAM verifier helper.
++
++Generates 256-bit cryptographic secrets on first boot into an atomic 0600 file,
++validates integrity on warm boots, and computes RFC 7677 SCRAM-SHA-256 verifiers.
++"""
++
++from __future__ import annotations
++
++import base64
++import contextlib
++import hashlib
++import hmac
++import json
++import os
++import re
++import stat
++from dataclasses import dataclass
++from datetime import UTC, datetime
++from typing import TYPE_CHECKING, Any, Final
++
++if TYPE_CHECKING:
++    from collections.abc import Callable
++    from pathlib import Path
++
++KEYRING_VERSION: int = 1
++KEYRING_MAX_SIZE_BYTES: int = 64 * 1024  # 64 KiB
++SECRET_BYTE_LENGTH: int = 32
++KEYRING_FILE_MODE: int = 0o600
++KEYRING_DIR_MODE: int = 0o700
++
++EXPECTED_TOP_LEVEL_KEYS: frozenset[str] = frozenset(
++    {
++        "version",
++        "created_at",
++        "MASTER_KEK",
++        "KB_AUTH_PEPPER",
++        "SESSION_HMAC_KEY",
++        "db_roles",
++    }
++)
++EXPECTED_DB_ROLES: frozenset[str] = frozenset({"kanban_app", "kanban_migrator"})
++
++
++class KeyringError(Exception):
++    """Raised when the standalone keyring cannot be loaded or is invalid."""
++
++
++@dataclass(frozen=True)
++class Keyring:
++    """Immutable representation of standalone keyring secrets."""
++
++    master_kek: bytes
++    auth_pepper: bytes
++    session_hmac_key: bytes
++    kanban_app_password: bytes
++    kanban_migrator_password: bytes
++    created_at: str
++    version: int = KEYRING_VERSION
++
++    @property
++    def master_kek_b64(self) -> str:
++        """URL-safe base64 string without padding for MASTER_KEK."""
++        return base64.urlsafe_b64encode(self.master_kek).decode("ascii").rstrip("=")
++
++    @property
++    def auth_pepper_b64(self) -> str:
++        """URL-safe base64 string without padding for KB_AUTH_PEPPER."""
++        return base64.urlsafe_b64encode(self.auth_pepper).decode("ascii").rstrip("=")
++
++    @property
++    def session_hmac_key_b64(self) -> str:
++        """URL-safe base64 string without padding for SESSION_HMAC_KEY."""
++        return base64.urlsafe_b64encode(self.session_hmac_key).decode("ascii").rstrip("=")
++
++    @property
++    def kanban_app_password_str(self) -> str:
++        """URL-safe base64 string without padding for kanban_app password."""
++        return base64.urlsafe_b64encode(self.kanban_app_password).decode("ascii").rstrip("=")
++
++    @property
++    def kanban_migrator_password_str(self) -> str:
++        """URL-safe base64 string without padding for kanban_migrator password."""
++        return base64.urlsafe_b64encode(self.kanban_migrator_password).decode("ascii").rstrip("=")
++
++    def __repr__(self) -> str:
++        """Redacted representation preventing secret disclosure."""
++        return "Keyring(<redacted>)"
++
++    def __str__(self) -> str:
++        """Redacted string representation preventing secret disclosure."""
++        return "Keyring(<redacted>)"
++
++
++_B64URL_REGEX: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_-]+$")
++
++
++def _decode_b64url_secret(raw: object, name: str) -> bytes:
++    """Decode an unpadded URL-safe base64 string and verify exact 32 bytes length."""
++    if not isinstance(raw, str):
++        msg = f"Secret {name} must be a string, got {type(raw).__name__}"
++        raise KeyringError(msg)
++    if not _B64URL_REGEX.fullmatch(raw):
++        msg = f"Secret {name} is not valid base64url: contains invalid characters"
++        raise KeyringError(msg)
++    padding = "=" * ((4 - len(raw) % 4) % 4)
++    try:
++        decoded = base64.urlsafe_b64decode((raw + padding).encode("ascii"))
++    except Exception as err:
++        msg = f"Secret {name} is not valid base64url: {err}"
++        raise KeyringError(msg) from err
++
++    if len(decoded) != SECRET_BYTE_LENGTH:
++        msg = f"Secret {name} decoded to {len(decoded)} bytes (expected {SECRET_BYTE_LENGTH})"
++        raise KeyringError(msg)
++
++    return decoded
++
++
++def _encode_b64url_secret(raw: bytes) -> str:
++    """Encode bytes into URL-safe base64 string without padding."""
++    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
++
++
++def _validate_file_attributes(path: Path) -> None:
++    """Verify symlink status, owner UID, permission bits, and file size."""
++    if path.is_symlink():
++        msg = f"Keyring file {path} must not be a symlink"
++        raise KeyringError(msg)
++
++    parent = path.parent
++    if parent.exists():
++        parent_mode = stat.S_IMODE(parent.stat().st_mode)
++        if (parent_mode & 0o077) != 0:
++            msg = f"Keyring parent directory {parent} must have mode 0700, got {oct(parent_mode)}"
++            raise KeyringError(msg)
++
++    st = path.stat()
++    if os.getuid() == 0 and st.st_uid != 0:
++        msg = f"Keyring file {path} must be owned by UID 0 (root), got {st.st_uid}"
++        raise KeyringError(msg)
++
++    mode = stat.S_IMODE(st.st_mode)
++    if mode != KEYRING_FILE_MODE:
++        msg = f"Keyring file {path} must have mode 0600, got {oct(mode)}"
++        raise KeyringError(msg)
++
++    if st.st_size > KEYRING_MAX_SIZE_BYTES:
++        msg = f"Keyring file {path} exceeds maximum size of 64 KiB: {st.st_size} bytes"
++        raise KeyringError(msg)
++
++
++def _validate_and_load_keyring(path: Path) -> Keyring:
++    """Validate existing keyring file against all security constraints and load it."""
++    _validate_file_attributes(path)
++
++    try:
++        content = path.read_text(encoding="utf-8")
++        data: Any = json.loads(content)
++    except Exception as err:
++        msg = f"Keyring file {path} contains invalid JSON: {err}"
++        raise KeyringError(msg) from err
++
++    if not isinstance(data, dict):
++        msg = "Keyring JSON root must be an object"
++        raise KeyringError(msg)
++
++    keys = set(data.keys())
++    if keys != EXPECTED_TOP_LEVEL_KEYS:
++        msg = f"Keyring keys mismatch: {keys} != {EXPECTED_TOP_LEVEL_KEYS}"
++        raise KeyringError(msg)
++
++    if data.get("version") != KEYRING_VERSION:
++        msg = f"Unsupported keyring version: {data.get('version')} (expected {KEYRING_VERSION})"
++        raise KeyringError(msg)
++
++    created_at = data.get("created_at")
++    if not isinstance(created_at, str):
++        msg = "Keyring created_at must be an ISO-8601 string"
++        raise KeyringError(msg)
++
++    db_roles = data.get("db_roles")
++    if not isinstance(db_roles, dict) or set(db_roles.keys()) != EXPECTED_DB_ROLES:
++        msg = f"Keyring db_roles mismatch: {db_roles}"
++        raise KeyringError(msg)
++
++    return Keyring(
++        master_kek=_decode_b64url_secret(data["MASTER_KEK"], "MASTER_KEK"),
++        auth_pepper=_decode_b64url_secret(data["KB_AUTH_PEPPER"], "KB_AUTH_PEPPER"),
++        session_hmac_key=_decode_b64url_secret(data["SESSION_HMAC_KEY"], "SESSION_HMAC_KEY"),
++        kanban_app_password=_decode_b64url_secret(db_roles["kanban_app"], "kanban_app"),
++        kanban_migrator_password=_decode_b64url_secret(
++            db_roles["kanban_migrator"], "kanban_migrator"
++        ),
++        created_at=created_at,
++        version=KEYRING_VERSION,
++    )
++
++
++def load_or_create_keyring(
++    path: Path,
++    *,
++    _before_replace_hook: Callable[[], None] | None = None,
++) -> Keyring:
++    """Load existing keyring or atomically create a new one with mode 0600."""
++    if path.exists() or path.is_symlink():
++        return _validate_and_load_keyring(path)
++
++    parent = path.parent
++    parent.mkdir(parents=True, exist_ok=True)
++    with contextlib.suppress(OSError):
++        parent.chmod(KEYRING_DIR_MODE)
++
++    kek = os.urandom(SECRET_BYTE_LENGTH)
++    pepper = os.urandom(SECRET_BYTE_LENGTH)
++    hmac_key = os.urandom(SECRET_BYTE_LENGTH)
++    app_pw = os.urandom(SECRET_BYTE_LENGTH)
++    mig_pw = os.urandom(SECRET_BYTE_LENGTH)
++
++    created_at = datetime.now(UTC).isoformat()
++    payload = {
++        "version": KEYRING_VERSION,
++        "created_at": created_at,
++        "MASTER_KEK": _encode_b64url_secret(kek),
++        "KB_AUTH_PEPPER": _encode_b64url_secret(pepper),
++        "SESSION_HMAC_KEY": _encode_b64url_secret(hmac_key),
++        "db_roles": {
++            "kanban_app": _encode_b64url_secret(app_pw),
++            "kanban_migrator": _encode_b64url_secret(mig_pw),
++        },
++    }
++
++    raw_bytes = json.dumps(payload, indent=2).encode("utf-8")
++    rand_hex = os.urandom(8).hex()
++    tmp_path = parent / f"{path.name}.{rand_hex}.tmp"
++
++    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
++    fd = os.open(str(tmp_path), flags, KEYRING_FILE_MODE)
++    try:
++        os.write(fd, raw_bytes)
++        os.fsync(fd)
++    finally:
++        os.close(fd)
++
++    if _before_replace_hook is not None:
++        _before_replace_hook()
++
++    if path.exists():
++        with contextlib.suppress(OSError):
++            tmp_path.unlink(missing_ok=True)
++        return _validate_and_load_keyring(path)
++
++    tmp_path.replace(path)
++
++    with contextlib.suppress(OSError):
++        dfd = os.open(str(parent), os.O_RDONLY)
++        try:
++            os.fsync(dfd)
++        finally:
++            os.close(dfd)
++
++    return Keyring(
++        master_kek=kek,
++        auth_pepper=pepper,
++        session_hmac_key=hmac_key,
++        kanban_app_password=app_pw,
++        kanban_migrator_password=mig_pw,
++        created_at=created_at,
++        version=KEYRING_VERSION,
++    )
++
++
++def compute_scram_sha256_verifier(
++    password: bytes | str,
++    salt: bytes | None = None,
++    iterations: int = 4096,
++) -> str:
++    """Compute an RFC 5802 / RFC 7677 SCRAM-SHA-256 verifier string for PostgreSQL.
++
++    Format: SCRAM-SHA-256$<iterations>:<salt_b64>$<stored_key_b64>:<server_key_b64>
++    """
++    pw_bytes = password.encode("utf-8") if isinstance(password, str) else password
++
++    if salt is None:
++        salt = os.urandom(16)
++
++    salted = hashlib.pbkdf2_hmac("sha256", pw_bytes, salt, iterations, 32)
++    client_key = hmac.new(salted, b"Client Key", hashlib.sha256).digest()
++    stored_key = hashlib.sha256(client_key).digest()
++    server_key = hmac.new(salted, b"Server Key", hashlib.sha256).digest()
++
++    salt_b64 = base64.b64encode(salt).decode("ascii")
++    stored_b64 = base64.b64encode(stored_key).decode("ascii")
++    server_b64 = base64.b64encode(server_key).decode("ascii")
++
++    return f"SCRAM-SHA-256${iterations}:{salt_b64}${stored_b64}:{server_b64}"
+diff --git a/deploy/standalone/pg_config.py b/deploy/standalone/pg_config.py
+index 7165dc3..a280262 100644
+--- a/deploy/standalone/pg_config.py
++++ b/deploy/standalone/pg_config.py
+@@ -16,7 +16,7 @@ PG_HBA_CONTENT = """\
+ # Standalone mode: Unix-socket only, zero TCP host listeners permitted
+ local  all     postgres                         peer
+ local  kanban  kanban_migrator                  peer map=kanban_map
+-local  kanban  kanban_app                       peer map=kanban_map
++local  kanban  kanban_app                       scram-sha-256
+ """
+ 
+ PG_IDENT_CONTENT = """\
+@@ -70,3 +70,11 @@ def configure_postgres(pgdata: Path, run_dir: str = "/run/postgresql") -> None:
+     # Rewrite pg_ident.conf
+     ident_conf = pgdata / "pg_ident.conf"
+     ident_conf.write_text(PG_IDENT_CONTENT, encoding="utf-8")
++
++
++def generate_role_passwords_sql(app_scram: str, mig_scram: str) -> str:
++    """Generate ALTER ROLE statements with pre-computed SCRAM-SHA-256 verifiers."""
++    return f"""\
++ALTER ROLE kanban_app PASSWORD '{app_scram}';
++ALTER ROLE kanban_migrator PASSWORD '{mig_scram}';
++"""
+diff --git a/deploy/standalone/storage_probe.py b/deploy/standalone/storage_probe.py
+new file mode 100644
+index 0000000..55f4774
+--- /dev/null
++++ b/deploy/standalone/storage_probe.py
+@@ -0,0 +1,198 @@
++"""Storage persistence detection and status reporter for standalone deployment.
++
++Probes /proc/mounts and /proc/self/mountinfo to detect ephemeral overlay or anonymous
++Docker storage, emits high-visibility console warnings, and writes standalone_status.json.
++"""
++
++from __future__ import annotations
++
++import contextlib
++import json
++import os
++import re
++import sys
++from dataclasses import asdict, dataclass
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import TYPE_CHECKING, Literal
++
++if TYPE_CHECKING:
++    from typing import Final
++
++EPHEMERAL_WARNING: Final[str] = (
++    "⚠️ Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data "
++    "to persist data across container removal\n"
++)
++DEFAULT_STATUS_PATH: Final[Path] = Path("/run/kanban/standalone_status.json")
++ANON_DOCKER_VOLUME_REGEX: Final[re.Pattern[str]] = re.compile(
++    r"/var/lib/docker/volumes/[0-9a-f]{64}/_data"
++)
++_MIN_MOUNT_PARTS: Final[int] = 3
++_MIN_MOUNTINFO_PARTS: Final[int] = 5
++_STATUS_FILE_MODE: Final[int] = 0o644
++_STATUS_DIR_MODE: Final[int] = 0o755
++
++
++@dataclass(frozen=True)
++class StandaloneStatus:
++    """Runtime storage persistence and deployment status descriptor."""
++
++    mode: Literal["standalone_embedded_pg", "external_db"]
++    persistent_volume: bool
++    data_mount_point: str
++    data_mount_fstype: str
++    generated_at: str  # ISO-8601 UTC
++
++
++def decode_octal_escapes(raw: str) -> str:
++    r"""Decode octal escape sequences commonly found in /proc/mounts (e.g. \040 -> space)."""
++    return re.sub(
++        r"\\([0-7]{3})",
++        lambda m: chr(int(m.group(1), 8)),
++        raw,
++    )
++
++
++def _is_path_prefix(mount_point: str, target_dir: str) -> bool:
++    """Determine if mount_point is a path prefix of target_dir."""
++    mp = mount_point.rstrip("/")
++    td = target_dir.rstrip("/")
++    if not mp:
++        return True
++    return td == mp or td.startswith(f"{mp}/")
++
++
++def _read_mounts(mounts_text: str | None) -> str:
++    """Return mounts content from argument or read from /proc/mounts."""
++    if mounts_text is not None:
++        return mounts_text
++    mounts_path = Path("/proc/mounts")
++    return mounts_path.read_text(encoding="utf-8") if mounts_path.is_file() else ""
++
++
++def _read_mountinfo(
++    mountinfo_text: str | None,
++    *,
++    read_host_fallback: bool,
++) -> str | None:
++    """Return mountinfo content from argument or read from /proc/self/mountinfo."""
++    if mountinfo_text is not None:
++        return mountinfo_text
++    if read_host_fallback:
++        mountinfo_path = Path("/proc/self/mountinfo")
++        if mountinfo_path.is_file():
++            return mountinfo_path.read_text(encoding="utf-8")
++    return None
++
++
++def _parse_matching_mounts(effective_mounts: str, norm_data_dir: str) -> list[tuple[str, str]]:
++    """Extract (mount_point, fstype) tuples that are prefixes of norm_data_dir."""
++    matching: list[tuple[str, str]] = []
++    for raw_line in effective_mounts.splitlines():
++        line = raw_line.strip()
++        if not line or line.startswith("#"):
++            continue
++        parts = line.split()
++        if len(parts) < _MIN_MOUNT_PARTS:
++            continue
++        mount_point = decode_octal_escapes(parts[1])
++        fstype = parts[2]
++        if _is_path_prefix(mount_point, norm_data_dir):
++            matching.append((mount_point, fstype))
++    return matching
++
++
++def _is_anon_volume(effective_mountinfo: str, target_mount: str) -> bool:
++    """Check if target_mount corresponds to an anonymous Docker volume in mountinfo."""
++    for raw_line in effective_mountinfo.splitlines():
++        parts = raw_line.strip().split()
++        if len(parts) >= _MIN_MOUNTINFO_PARTS:
++            root_path = parts[3]
++            mp = decode_octal_escapes(parts[4])
++            if mp == target_mount and ANON_DOCKER_VOLUME_REGEX.search(root_path):
++                return True
++    return False
++
++
++def probe(
++    data_dir: Path,
++    mounts_text: str | None = None,
++    mountinfo_text: str | None = None,
++    mode: Literal["standalone_embedded_pg", "external_db"] = "standalone_embedded_pg",
++) -> StandaloneStatus:
++    """Probe /proc/mounts to determine if data_dir is backed by persistent storage.
++
++    When mounts_text is not supplied, reads /proc/mounts and /proc/self/mountinfo from disk.
++    Picks the longest mount point prefix of data_dir.
++    Evaluates persistent_volume as False for overlay, tmpfs, anonymous Docker volumes,
++    or when no matching mount is found.
++    """
++    generated_at = datetime.now(UTC).isoformat()
++    norm_data_dir = str(data_dir.resolve() if data_dir.exists() else data_dir)
++
++    is_live_probe = mounts_text is None
++    effective_mounts = _read_mounts(mounts_text)
++    effective_mountinfo = _read_mountinfo(
++        mountinfo_text,
++        read_host_fallback=is_live_probe,
++    )
++
++    matching_mounts = _parse_matching_mounts(effective_mounts, norm_data_dir)
++    if not matching_mounts:
++        return StandaloneStatus(
++            mode=mode,
++            persistent_volume=False,
++            data_mount_point="",
++            data_mount_fstype="",
++            generated_at=generated_at,
++        )
++
++    # Pick the longest mount point prefix
++    matching_mounts.sort(key=lambda item: len(item[0]), reverse=True)
++    best_mp, best_fstype = matching_mounts[0]
++
++    # overlay and tmpfs are inherently non-persistent
++    persistent = best_fstype.lower() not in ("overlay", "tmpfs")
++
++    # Check for anonymous Docker volume in mountinfo if available
++    if persistent and effective_mountinfo and _is_anon_volume(effective_mountinfo, best_mp):
++        persistent = False
++
++    return StandaloneStatus(
++        mode=mode,
++        persistent_volume=persistent,
++        data_mount_point=best_mp,
++        data_mount_fstype=best_fstype,
++        generated_at=generated_at,
++    )
++
++
++def emit_ephemeral_warning() -> None:
++    """Print the exact Section 2.2 item 1 ephemeral storage warning to stderr."""
++    sys.stderr.write(EPHEMERAL_WARNING)
++    sys.stderr.flush()
++
++
++def write_standalone_status(
++    status: StandaloneStatus,
++    target_path: Path = DEFAULT_STATUS_PATH,
++) -> None:
++    """Atomically write StandaloneStatus JSON to target_path with mode 0644."""
++    parent = target_path.parent
++    parent.mkdir(parents=True, exist_ok=True)
++    with contextlib.suppress(OSError):
++        parent.chmod(_STATUS_DIR_MODE)
++
++    raw_bytes = json.dumps(asdict(status), indent=2).encode("utf-8")
++    rand_hex = os.urandom(8).hex()
++    tmp_path = parent / f"{target_path.name}.{rand_hex}.tmp"
++
++    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
++    fd = os.open(str(tmp_path), flags, _STATUS_FILE_MODE)
++    try:
++        os.write(fd, raw_bytes)
++        os.fsync(fd)
++    finally:
++        os.close(fd)
++
++    tmp_path.replace(target_path)
+diff --git a/docs/qa/KANBA-34/build-check.txt b/docs/qa/KANBA-34/build-check.txt
+new file mode 100644
+index 0000000..76680c5
+--- /dev/null
++++ b/docs/qa/KANBA-34/build-check.txt
+@@ -0,0 +1,32 @@
++=== make check ===
++uv run ruff check .
++All checks passed!
++uv run ruff format --check .
++315 files already formatted
++uv run mypy
++Success: no issues found in 125 source files
++uv run lint-imports
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 77 files, 87 dependencies.
++-----------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++uv run python -m scripts.check_no_dashes --all
++=== docker build ===
++EXIT_CODE=0
+diff --git a/docs/qa/KANBA-34/container-check.txt b/docs/qa/KANBA-34/container-check.txt
+new file mode 100644
+index 0000000..92dee17
+--- /dev/null
++++ b/docs/qa/KANBA-34/container-check.txt
+@@ -0,0 +1,76 @@
++=== 1. Ephemeral Container Run (kb-eph) ===
++$ docker run -d --name kb-eph -p 18080:8080 kanban:latest
++6cdba56f3b792ca680f9ad9ae424fb91b0ea243877dc11505d3691727c8b87ca
++
++$ docker logs kb-eph
++[kanban-standalone] [00000ms] mode: MODE=standalone_embedded_pg
++⚠️ Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
++[kanban-standalone] [00052ms] keyring: keyring loaded from /var/lib/kanban/data/secrets/keyring.json
++[kanban-standalone] [00052ms] initdb: initializing new database cluster
++[kanban-standalone] [00720ms] pg_start: starting embedded PostgreSQL
++[kanban-standalone] [00938ms] pg_start: PostgreSQL is ready on /run/postgresql
++[kanban-standalone] [00938ms] bootstrap_sql: creating roles and kanban database
++[kanban-standalone] [01172ms] bootstrap_sql: roles, database, and extensions initialized
++[kanban-standalone] [01172ms] migrations: running alembic upgrade head
++[kanban-standalone] [01945ms] migrations: schema migrations applied successfully
++[kanban-standalone] [01962ms] migrations: privilege dropped: kanban_migrator set to NOLOGIN
++[kanban-standalone] [01962ms] uvicorn_spawn: spawning uvicorn as UID 65532
++INFO:     Started server process [47]
++INFO:     Waiting for application startup.
++INFO:     Application startup complete.
++INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
++
++$ docker exec kb-eph stat -c '%a %U' /var/lib/kanban/data/secrets/keyring.json
++600 root
++
++$ docker exec -u 65532 kb-eph cat /var/lib/kanban/data/secrets/keyring.json
++cat: /var/lib/kanban/data/secrets/keyring.json: Permission denied
++
++$ docker exec kb-eph cat /run/kanban/standalone_status.json
++{
++  "mode": "standalone_embedded_pg",
++  "persistent_volume": false,
++  "data_mount_point": "/var/lib/kanban/data",
++  "data_mount_fstype": "ext4",
++  "generated_at": "2026-11-12T03:08:03.683528+00:00"
++}
++=== 2. Persistent Container Run (kb-pers with kb_test_vol) ===
++$ docker volume create kb_test_vol
++kb_test_vol
++$ docker run -d --name kb-pers -v kb_test_vol:/var/lib/kanban/data -p 18080:8080 kanban:latest
++6ca7d9d39aa9d91d23f05033f0d2bd86c816d1ba32063a26ee6af8f03bc318f3
++
++$ docker logs kb-pers (verify no ephemeral warning)
++[kanban-standalone] [00000ms] mode: MODE=standalone_embedded_pg
++[kanban-standalone] [00058ms] keyring: keyring loaded from /var/lib/kanban/data/secrets/keyring.json
++[kanban-standalone] [00059ms] initdb: initializing new database cluster
++[kanban-standalone] [00727ms] pg_start: starting embedded PostgreSQL
++[kanban-standalone] [00947ms] pg_start: PostgreSQL is ready on /run/postgresql
++[kanban-standalone] [00947ms] bootstrap_sql: creating roles and kanban database
++[kanban-standalone] [01181ms] bootstrap_sql: roles, database, and extensions initialized
++[kanban-standalone] [01181ms] migrations: running alembic upgrade head
++[kanban-standalone] [02005ms] migrations: schema migrations applied successfully
++[kanban-standalone] [02021ms] migrations: privilege dropped: kanban_migrator set to NOLOGIN
++[kanban-standalone] [02021ms] uvicorn_spawn: spawning uvicorn as UID 65532
++INFO:     Started server process [47]
++INFO:     Waiting for application startup.
++INFO:     Application startup complete.
++INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
++
++$ docker exec kb-pers sha256sum /var/lib/kanban/data/secrets/keyring.json (initial)
++874f899faa01ccf8820f37060d03509e4664153491e1f9555f6a8128e407ce3c  /var/lib/kanban/data/secrets/keyring.json
++
++$ docker restart kb-pers
++kb-pers
++
++$ docker exec kb-pers sha256sum /var/lib/kanban/data/secrets/keyring.json (after restart)
++874f899faa01ccf8820f37060d03509e4664153491e1f9555f6a8128e407ce3c  /var/lib/kanban/data/secrets/keyring.json
++
++$ docker exec kb-pers cat /run/kanban/standalone_status.json
++{
++  "mode": "standalone_embedded_pg",
++  "persistent_volume": true,
++  "data_mount_point": "/var/lib/kanban/data",
++  "data_mount_fstype": "ext4",
++  "generated_at": "2026-11-12T03:08:16.387995+00:00"
++}
+\ No newline at end of file
+diff --git a/docs/qa/KANBA-34/message-to-reality-checker.md b/docs/qa/KANBA-34/message-to-reality-checker.md
+new file mode 100644
+index 0000000..50f2393
+--- /dev/null
++++ b/docs/qa/KANBA-34/message-to-reality-checker.md
+@@ -0,0 +1,64 @@
++# Reality-Checker Verification Packet: KANBA-34 (KB-P0-09)
++
++## Ticket Overview
++- **Ticket ID**: `KANBA-34` (`KB-P0-09`)
++- **Title**: [Phase 0 / Standalone] First-boot CSPRNG keyring & ephemeral-storage detection
++- **Branch**: `feat/KANBA-34`
++- **Base Commit**: `eb1daba71147679d545d52b826f36aa19dd138b8` (HEAD of `feat/KANBA-29`)
++- **Author**: `builder-21`
++
++---
++
++## Technical Deliverables Summary
++
++1. **`deploy/standalone/keyring.py`**:
++   - `load_or_create_keyring(path: Path) -> Keyring`:
++     * Generates 5 distinct 256-bit (32-byte) cryptographic secrets (`os.urandom(32)`): `MASTER_KEK`, `KB_AUTH_PEPPER`, `SESSION_HMAC_KEY`, `kanban_app`, `kanban_migrator`.
++     * Writes atomically to `<parent>/keyring.json.<hex>.tmp` with mode `0600` (`O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW`), ensures parent directory permissions are `0700`, calls `os.fsync`, and renames atomically with `Path.replace`. Directory fsync is performed after replace.
++     * Concurrent creation race handled: if replace target appears first, discards temp file and loads existing keyring fail-closed.
++     * Validation on existing file: raises `KeyringError` if symlink, owner UID != 0 (when root), mode != `0600`, parent mode != `0700`, file size > 64 KiB, invalid JSON, version != 1, unexpected/missing keys, or secret length != 32 bytes.
++     * `Keyring` frozen dataclass with redacted representation: `__repr__` and `__str__` return `Keyring(<redacted>)`.
++   - `compute_scram_sha256_verifier(password, salt, iterations)`:
++     * Computes RFC 7677 / RFC 5802 SCRAM-SHA-256 verifier with PBKDF2-HMAC-SHA256 (4096 iterations, 16-byte salt, `SCRAM-SHA-256$4096:<salt>$<StoredKey>:<ServerKey>`).
++     * Confirmed against RFC 7677 Section 3 test vector (`pencil` / `W22ZaJ0SNY7soEsUEjb6gQ==`).
++
++2. **`deploy/standalone/storage_probe.py`**:
++   - `probe(data_dir, mounts_text, mountinfo_text, mode) -> StandaloneStatus`:
++     * Decodes octal escape sequences in mount points (e.g. `\040` -> space).
++     * Finds longest prefix mount point matching `data_dir`.
++     * Identifies ephemeral storage: `overlay`, `tmpfs`, anonymous Docker volumes (`/var/lib/docker/volumes/[0-9a-f]{64}/_data`), or unmounted paths mark `persistent_volume = False`. Named Docker volumes evaluate to `persistent_volume = True`.
++   - `emit_ephemeral_warning()`:
++     * Emits verbatim warning line to stderr: `⚠️ Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal\n`.
++   - `write_standalone_status(status, target_path)`:
++     * Writes `StandaloneStatus` JSON to `/run/kanban/standalone_status.json` atomically with mode `0644`.
++
++3. **`deploy/standalone/pg_config.py`**:
++   - Updated `pg_hba.conf` configuration to authenticate `kanban_app` over local socket via `scram-sha-256` (while `postgres` and `kanban_migrator` remain `peer`).
++   - Added `generate_role_passwords_sql(app_scram, mig_scram)` to apply SCRAM verifiers without exposing plaintext passwords in PostgreSQL logs or SQL scripts.
++
++4. **`deploy/standalone/entrypoint.py`**:
++   - Wired storage probe and ephemeral warning check into entrypoint bootstrap.
++   - Integrated `load_or_create_keyring` on startup. Failure logs `KEYRING_INVALID` to stderr and exits 78 (`EXIT_CONFIG_ERROR`).
++   - Passed SCRAM verifiers into `bootstrap_database()` to execute role password statements on embedded cluster.
++   - Extended `build_child_env()` with `KB_MASTER_KEK_B64`, `KB_AUTH_PEPPER_B64`, `KB_SESSION_HMAC_KEY_B64`, and `KB_STANDALONE_STATUS_PATH`.
++
++5. **Automated Unit Tests & Coverage**:
++   - `tests/deploy/test_keyring.py`: 16 comprehensive test cases covering creation, permissions, symlinks, corrupted/truncated JSON, oversized files, invalid keys, invalid secret lengths, redacted repr, RFC 7677 test vector, and concurrent creation race.
++   - `tests/deploy/test_storage_probe.py`: 11 test cases covering octal escape decoding, overlay/tmpfs/anon/named volume detection, longest prefix matching, missing mount fallback, warning emission, and atomic JSON write.
++   - `tests/deploy/test_standalone_entrypoint.py`: Extended with 18 tests covering keyring loading, SCRAM password bootstrap, child environment allowlist, and exit code 78 on invalid keyring.
++   - Total test suite: 45 passed in 0.26s.
++   - Total line and branch coverage across `deploy.standalone`: 97.02% (exceeds >= 95% mandate).
++
++6. **Container Verification Proof**:
++   - Ephemeral run (`kb-eph`): Warning emitted to stderr; keyring permissions verified as `600 root`; non-root UID 65532 access confirmed blocked with `Permission denied`; `standalone_status.json` captured with `persistent_volume: false`.
++   - Persistent run (`kb-pers` with `kb_test_vol`): Warning suppressed; keyring SHA-256 hash verified byte-identical before and after restart (`874f899faa01ccf8820f37060d03509e4664153491e1f9555f6a8128e407ce3c`); `standalone_status.json` captured with `persistent_volume: true`.
++
++---
++
++## Artifact Index
++- `docs/qa/KANBA-34/git-diff.patch`
++- `docs/qa/KANBA-34/unit-test-results.txt`
++- `docs/qa/KANBA-34/build-check.txt`
++- `docs/qa/KANBA-34/container-check.txt`
++- `docs/qa/KANBA-34/standalone-status-sample.json`
++- `docs/qa/KANBA-34/message-to-reality-checker.md`
+diff --git a/docs/qa/KANBA-34/standalone-status-sample.json b/docs/qa/KANBA-34/standalone-status-sample.json
+new file mode 100644
+index 0000000..8d9a552
+--- /dev/null
++++ b/docs/qa/KANBA-34/standalone-status-sample.json
+@@ -0,0 +1,7 @@
++{
++  "mode": "standalone_embedded_pg",
++  "persistent_volume": false,
++  "data_mount_point": "/var/lib/kanban/data",
++  "data_mount_fstype": "ext4",
++  "generated_at": "2026-11-12T03:08:03.683528+00:00"
++}
+\ No newline at end of file
+diff --git a/docs/qa/KANBA-34/unit-test-results.txt b/docs/qa/KANBA-34/unit-test-results.txt
+new file mode 100644
+index 0000000..8b41c55
+--- /dev/null
++++ b/docs/qa/KANBA-34/unit-test-results.txt
+@@ -0,0 +1,16 @@
++.............................................                            [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                 Stmts   Miss Branch BrPart  Cover   Missing
++--------------------------------------------------------------------------------
++deploy/standalone/__init__.py            0      0      0      0   100%
++deploy/standalone/entrypoint.py        203      1     46      3    98%   365->370, 423->427, 482
++deploy/standalone/keyring.py           164      7     36      3    95%   100-101, 108-110, 131->137, 139-140
++deploy/standalone/pg_config.py          22      0      4      0   100%
++deploy/standalone/storage_probe.py     101      1     28      3    97%   83->85, 97, 109->107
++--------------------------------------------------------------------------------
++TOTAL                                  490      9    114      9    97%
++Required test coverage of 95% reached. Total coverage: 97.02%
++45 passed in 0.27s
++Exit code: 0
+diff --git a/tests/deploy/test_keyring.py b/tests/deploy/test_keyring.py
+new file mode 100644
+index 0000000..4f65dd7
+--- /dev/null
++++ b/tests/deploy/test_keyring.py
+@@ -0,0 +1,347 @@
++"""Unit tests for deploy.standalone.keyring module.
++
++Covers:
++- First boot atomic creation with permissions 0600 / 0700 and 5 distinct CSPRNG keys.
++- Second boot idempotent reuse without mutation.
++- Fail-closed security validations (permissions, symlinks, size limits, schema/fields, lengths).
++- Omit secrets from repr and str.
++- RFC 7677 SCRAM-SHA-256 test vectors.
++- Race conditions during atomic creation.
++"""
++
++from __future__ import annotations
++
++import base64
++import json
++import stat
++from typing import TYPE_CHECKING
++
++import pytest
++
++from deploy.standalone.keyring import (
++    KEYRING_DIR_MODE,
++    KEYRING_FILE_MODE,
++    Keyring,
++    KeyringError,
++    compute_scram_sha256_verifier,
++    load_or_create_keyring,
++)
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++
++def _decode_b64url(s: str) -> bytes:
++    padding = "=" * ((4 - len(s) % 4) % 4)
++    return base64.urlsafe_b64decode((s + padding).encode("ascii"))
++
++
++# -----------------------------------------------------------------------------
++# Case 1: First boot generation & second boot reuse
++# -----------------------------------------------------------------------------
++def test_case_1_first_boot_creation_and_reuse(tmp_path: Path) -> None:
++    """First boot generates 5 distinct 32-byte keys with 0600 file and 0700 dir."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++
++    # First boot: creates file
++    keyring1 = load_or_create_keyring(keyring_path)
++    assert keyring_path.is_file()
++
++    # Verify directory permissions 0700
++    dir_stat = keyring_path.parent.stat()
++    assert stat.S_IMODE(dir_stat.st_mode) == KEYRING_DIR_MODE
++
++    # Verify file permissions 0600
++    file_stat = keyring_path.stat()
++    assert stat.S_IMODE(file_stat.st_mode) == KEYRING_FILE_MODE
++
++    # Verify 5 distinct keys, each 32 bytes
++    keys = [
++        keyring1.master_kek,
++        keyring1.auth_pepper,
++        keyring1.session_hmac_key,
++        keyring1.kanban_app_password,
++        keyring1.kanban_migrator_password,
++    ]
++    for k in keys:
++        assert isinstance(k, bytes)
++        assert len(k) == 32
++    assert len(set(keys)) == 5
++
++    # Verify base64 representations
++    assert len(_decode_b64url(keyring1.master_kek_b64)) == 32
++    assert len(_decode_b64url(keyring1.auth_pepper_b64)) == 32
++    assert len(_decode_b64url(keyring1.session_hmac_key_b64)) == 32
++    assert len(keyring1.kanban_app_password_str) > 0
++    assert len(keyring1.kanban_migrator_password_str) > 0
++
++    # Record mtime and content
++    orig_content = keyring_path.read_bytes()
++    orig_mtime_ns = file_stat.st_mtime_ns
++
++    # Second boot: reuses existing without mutation
++    keyring2 = load_or_create_keyring(keyring_path)
++    assert keyring2.master_kek == keyring1.master_kek
++    assert keyring2.auth_pepper == keyring1.auth_pepper
++    assert keyring2.session_hmac_key == keyring1.session_hmac_key
++    assert keyring2.kanban_app_password == keyring1.kanban_app_password
++    assert keyring2.kanban_migrator_password == keyring1.kanban_migrator_password
++
++    # Confirm file was not rewritten
++    new_stat = keyring_path.stat()
++    assert new_stat.st_mtime_ns == orig_mtime_ns
++    assert keyring_path.read_bytes() == orig_content
++
++
++# -----------------------------------------------------------------------------
++# Case 2: Negative fail-closed validation tests
++# -----------------------------------------------------------------------------
++def test_case_2_insecure_file_permissions_rejected(tmp_path: Path) -> None:
++    """Group-readable or world-readable permissions raise KeyringError."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    load_or_create_keyring(keyring_path)
++
++    # Insecure file mode 0644
++    keyring_path.chmod(0o644)
++    with pytest.raises(KeyringError, match="must have mode 0600"):
++        load_or_create_keyring(keyring_path)
++
++    # Insecure file mode 0660
++    keyring_path.chmod(0o660)
++    with pytest.raises(KeyringError, match="must have mode 0600"):
++        load_or_create_keyring(keyring_path)
++
++
++def test_case_2_insecure_parent_dir_permissions_rejected(tmp_path: Path) -> None:
++    """Group-writable or world-writable parent directory raises KeyringError."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    load_or_create_keyring(keyring_path)
++
++    keyring_path.parent.chmod(0o777)
++    with pytest.raises(KeyringError, match="must have mode 0700"):
++        load_or_create_keyring(keyring_path)
++
++
++def test_case_2_symlink_rejected(tmp_path: Path) -> None:
++    """Symlink target raises KeyringError."""
++    real_target = tmp_path / "real_keyring.json"
++    load_or_create_keyring(real_target)
++
++    link_path = tmp_path / "secrets" / "link_keyring.json"
++    link_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
++    link_path.symlink_to(real_target)
++
++    with pytest.raises(KeyringError, match="must not be a symlink"):
++        load_or_create_keyring(link_path)
++
++
++def test_case_2_truncated_or_invalid_json_rejected(tmp_path: Path) -> None:
++    """Truncated or invalid JSON content raises KeyringError."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    keyring_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
++    keyring_path.write_bytes(b'{"version": 1, "created_at":')
++    keyring_path.chmod(KEYRING_FILE_MODE)
++
++    with pytest.raises(KeyringError, match="contains invalid JSON"):
++        load_or_create_keyring(keyring_path)
++
++
++def test_case_2_json_root_not_dict_rejected(tmp_path: Path) -> None:
++    """JSON root that is not a dictionary raises KeyringError."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    keyring_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
++    keyring_path.write_bytes(b'["not", "a", "dict"]')
++    keyring_path.chmod(KEYRING_FILE_MODE)
++
++    with pytest.raises(KeyringError, match="must be an object"):
++        load_or_create_keyring(keyring_path)
++
++
++def test_case_2_oversized_file_rejected(tmp_path: Path) -> None:
++    """Files exceeding 64 KiB are rejected fail-closed."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    keyring_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
++    huge_data = b" " * 70000
++    keyring_path.write_bytes(huge_data)
++    keyring_path.chmod(KEYRING_FILE_MODE)
++
++    with pytest.raises(KeyringError, match="exceeds maximum size"):
++        load_or_create_keyring(keyring_path)
++
++
++def test_case_2_missing_keys_rejected(tmp_path: Path) -> None:
++    """Missing required key raises KeyringError."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    load_or_create_keyring(keyring_path)
++
++    data = json.loads(keyring_path.read_text(encoding="utf-8"))
++    del data["KB_AUTH_PEPPER"]
++    keyring_path.write_text(json.dumps(data), encoding="utf-8")
++    keyring_path.chmod(KEYRING_FILE_MODE)
++
++    with pytest.raises(KeyringError, match="Keyring keys mismatch"):
++        load_or_create_keyring(keyring_path)
++
++
++def test_case_2_extra_keys_rejected(tmp_path: Path) -> None:
++    """Unexpected additional keys raise KeyringError."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    load_or_create_keyring(keyring_path)
++
++    data = json.loads(keyring_path.read_text(encoding="utf-8"))
++    data["extra_backdoor"] = "malicious"
++    keyring_path.write_text(json.dumps(data), encoding="utf-8")
++    keyring_path.chmod(KEYRING_FILE_MODE)
++
++    with pytest.raises(KeyringError, match="Keyring keys mismatch"):
++        load_or_create_keyring(keyring_path)
++
++
++def test_case_2_invalid_secret_length_rejected(tmp_path: Path) -> None:
++    """Secrets decoded to length other than 32 bytes raise KeyringError."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    load_or_create_keyring(keyring_path)
++
++    data = json.loads(keyring_path.read_text(encoding="utf-8"))
++    data["MASTER_KEK"] = base64.urlsafe_b64encode(b"short").decode("ascii").rstrip("=")
++    keyring_path.write_text(json.dumps(data), encoding="utf-8")
++    keyring_path.chmod(KEYRING_FILE_MODE)
++
++    with pytest.raises(KeyringError, match="decoded to 5 bytes"):
++        load_or_create_keyring(keyring_path)
++
++
++def test_case_2_corrupted_base64_rejected(tmp_path: Path) -> None:
++    """Non-base64 characters in secret fields raise KeyringError."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    load_or_create_keyring(keyring_path)
++
++    data = json.loads(keyring_path.read_text(encoding="utf-8"))
++    data["MASTER_KEK"] = "===not!valid!base64==="
++    keyring_path.write_text(json.dumps(data), encoding="utf-8")
++    keyring_path.chmod(KEYRING_FILE_MODE)
++
++    with pytest.raises(KeyringError, match="is not valid base64url"):
++        load_or_create_keyring(keyring_path)
++
++
++def test_case_2_unsupported_version_rejected(tmp_path: Path) -> None:
++    """Versions other than 1 raise KeyringError."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    load_or_create_keyring(keyring_path)
++
++    data = json.loads(keyring_path.read_text(encoding="utf-8"))
++    data["version"] = 2
++    keyring_path.write_text(json.dumps(data), encoding="utf-8")
++    keyring_path.chmod(KEYRING_FILE_MODE)
++
++    with pytest.raises(KeyringError, match="Unsupported keyring version"):
++        load_or_create_keyring(keyring_path)
++
++
++def test_case_2_invalid_created_at_or_db_roles(tmp_path: Path) -> None:
++    """Invalid created_at type or db_roles schema raises KeyringError."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++    load_or_create_keyring(keyring_path)
++
++    data = json.loads(keyring_path.read_text(encoding="utf-8"))
++    data["created_at"] = 12345
++    keyring_path.write_text(json.dumps(data), encoding="utf-8")
++    keyring_path.chmod(KEYRING_FILE_MODE)
++
++    with pytest.raises(KeyringError, match="must be an ISO-8601 string"):
++        load_or_create_keyring(keyring_path)
++
++    data["created_at"] = "2026-01-01T00:00:00Z"
++    data["db_roles"] = {"kanban_app": "foo"}  # missing kanban_migrator
++    keyring_path.write_text(json.dumps(data), encoding="utf-8")
++    keyring_path.chmod(KEYRING_FILE_MODE)
++
++    with pytest.raises(KeyringError, match="Keyring db_roles mismatch"):
++        load_or_create_keyring(keyring_path)
++
++
++# -----------------------------------------------------------------------------
++# Case 3: Redacted representation & RFC 7677 test vector
++# -----------------------------------------------------------------------------
++def test_case_3_repr_and_str_are_redacted() -> None:
++    """Keyring __repr__ and __str__ must never disclose secret bytes or b64."""
++    secret = b"\xaa" * 32
++    secret_b64 = base64.urlsafe_b64encode(secret).decode("ascii")
++
++    kr = Keyring(
++        version=1,
++        created_at="2026-11-11T20:00:00Z",
++        master_kek=secret,
++        auth_pepper=secret,
++        session_hmac_key=secret,
++        kanban_app_password=secret,
++        kanban_migrator_password=secret,
++    )
++
++    r = repr(kr)
++    s = str(kr)
++
++    assert secret_b64 not in r
++    assert secret_b64 not in s
++    assert r == "Keyring(<redacted>)"
++    assert s == "Keyring(<redacted>)"
++
++
++def test_case_3_rfc_7677_scram_sha256_test_vector() -> None:
++    """Validate SCRAM-SHA-256 verifier against RFC 7677 Section 3 test vector."""
++    # RFC 7677 Section 3 test vector: password 'pencil', salt 'W22ZaJ0SNY7soEsUEjb6gQ=='
++    salt_bytes = base64.b64decode("W22ZaJ0SNY7soEsUEjb6gQ==")
++    verifier = compute_scram_sha256_verifier(
++        b"pencil",
++        salt=salt_bytes,
++        iterations=4096,
++    )
++
++    expected = (
++        "SCRAM-SHA-256$4096:W22ZaJ0SNY7soEsUEjb6gQ==$"
++        "WG5d8oPm3OtcPnkdi4Uo7BkeZkBFzpcXkuLmtbsT4qY=:"
++        "wfPLwcE6nTWhTAmQ7tl2KeoiWGPlZqQxSrmfPwDl2dU="
++    )
++    assert verifier == expected
++
++    # Also test with default random salt
++    random_verifier = compute_scram_sha256_verifier("my_secret_password")
++    assert random_verifier.startswith("SCRAM-SHA-256$4096:")
++    parts = random_verifier.split("$")
++    assert len(parts) == 3
++    iter_and_salt = parts[1].split(":")
++    assert len(iter_and_salt) == 2
++    assert iter_and_salt[0] == "4096"
++    salt_decoded = base64.b64decode(iter_and_salt[1])
++    assert len(salt_decoded) == 16
++
++    keys = parts[2].split(":")
++    assert len(keys) == 2
++    assert len(base64.b64decode(keys[0])) == 32
++    assert len(base64.b64decode(keys[1])) == 32
++
++
++# -----------------------------------------------------------------------------
++# Case 4: Concurrent creation with _before_replace_hook
++# -----------------------------------------------------------------------------
++def test_case_4_concurrent_creation_race(tmp_path: Path) -> None:
++    """When another process creates the keyring before replace, load_or_create reuses it."""
++    keyring_path = tmp_path / "secrets" / "keyring.json"
++
++    def simulate_concurrent_creator() -> None:
++        """Simulate a competitor process creating the keyring before we replace it."""
++        competitor_keyring = load_or_create_keyring(keyring_path)
++        assert competitor_keyring is not None
++        assert keyring_path.is_file()
++
++    # Call with hook simulating race
++    keyring = load_or_create_keyring(
++        keyring_path,
++        _before_replace_hook=simulate_concurrent_creator,
++    )
++
++    # Should have loaded the competitor's keyring without error
++    loaded_on_disk = load_or_create_keyring(keyring_path)
++    assert keyring.master_kek == loaded_on_disk.master_kek
++    assert keyring.auth_pepper == loaded_on_disk.auth_pepper
+diff --git a/tests/deploy/test_standalone_entrypoint.py b/tests/deploy/test_standalone_entrypoint.py
+index 7ff619f..a53769e 100644
+--- a/tests/deploy/test_standalone_entrypoint.py
++++ b/tests/deploy/test_standalone_entrypoint.py
+@@ -28,6 +28,7 @@ from deploy.standalone.entrypoint import (
+     start_postgres,
+     supervisor_loop,
+ )
++from deploy.standalone.keyring import Keyring, KeyringError
+ from deploy.standalone.pg_config import configure_postgres
+ 
+ if TYPE_CHECKING:
+@@ -170,6 +171,7 @@ def test_case_2_warm_boot_skips_initdb(
+ 
+ 
+ def test_case_2_external_db_mode(
++    tmp_path: Path,
+     monkeypatch: pytest.MonkeyPatch,
+ ) -> None:
+     """When DATABASE_URL is set, MODE=external_db execv Uvicorn with zero PG commands."""
+@@ -181,6 +183,7 @@ def test_case_2_external_db_mode(
+ 
+     monkeypatch.setattr("os.execv", mock_execv)
+     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://remote-db:5432/kanban")
++    monkeypatch.setenv("KB_STANDALONE_STATUS_PATH", str(tmp_path / "standalone_status.json"))
+ 
+     with pytest.raises(SystemExit) as exc_info:
+         main([])
+@@ -247,9 +250,33 @@ def test_case_3_security_configuration(tmp_path: Path) -> None:
+         "KB_DEPLOYMENT_MODE",
+         "DATABASE_URL",
+         "LANG",
++        "KB_STANDALONE_STATUS_PATH",
+     }
+     assert child_env["KB_DEPLOYMENT_MODE"] == "standalone"
+ 
++    kr = Keyring(
++        version=1,
++        created_at="2026-01-01T00:00:00Z",
++        master_kek=b"\x01" * 32,
++        auth_pepper=b"\x02" * 32,
++        session_hmac_key=b"\x03" * 32,
++        kanban_app_password=b"\x04" * 32,
++        kanban_migrator_password=b"\x05" * 32,
++    )
++    kr_env = build_child_env(keyring=kr)
++    assert set(kr_env.keys()) == {
++        "PATH",
++        "KB_WEB_DIST",
++        "KB_DEPLOYMENT_MODE",
++        "DATABASE_URL",
++        "LANG",
++        "KB_STANDALONE_STATUS_PATH",
++        "KB_MASTER_KEK_B64",
++        "KB_AUTH_PEPPER_B64",
++        "KB_SESSION_HMAC_KEY_B64",
++    }
++    assert kr_env["KB_MASTER_KEK_B64"] == kr.master_kek_b64
++
+ 
+ # -----------------------------------------------------------------------------
+ # Case 4: Negative Error Handlers (Non-root, Timeout, Migration Failure)
+@@ -443,6 +470,7 @@ def test_case_5_supervisor_detects_postmaster_death(
+ 
+ 
+ def test_signal_handler_clean_exit(
++    tmp_path: Path,
+     monkeypatch: pytest.MonkeyPatch,
+ ) -> None:
+     """Directly test the signal handler installed in main."""
+@@ -462,6 +490,10 @@ def test_signal_handler_clean_exit(
+     monkeypatch.setattr(subprocess, "Popen", MagicMock())
+     monkeypatch.setattr("os.getuid", lambda: 0)
+ 
++    monkeypatch.setenv("KB_PGDATA_DIR", str(tmp_path / "pgdata"))
++    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
++    monkeypatch.setenv("KB_STANDALONE_STATUS_PATH", str(tmp_path / "standalone_status.json"))
++
+     main([])
+     assert signal.SIGTERM in registered_handlers
+ 
+@@ -535,6 +567,72 @@ def test_bootstrap_database_creates_database_when_missing(
+     assert len(create_db_calls) == 1
+ 
+ 
++def test_keyring_error_exits_78(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++    capsys: pytest.CaptureFixture[str],
++) -> None:
++    """When load_or_create_keyring raises KeyringError, main exits 78 with KEYRING_INVALID."""
++    msg = "Insecure keyring permissions"
++
++    def mock_keyring_fail(*_args: object, **_kwargs: object) -> None:
++        raise KeyringError(msg)
++
++    monkeypatch.setattr("deploy.standalone.entrypoint.load_or_create_keyring", mock_keyring_fail)
++    monkeypatch.setattr("os.getuid", lambda: 0)
++    monkeypatch.delenv("DATABASE_URL", raising=False)
++    monkeypatch.setenv("KB_PGDATA_DIR", str(tmp_path / "pgdata"))
++    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
++
++    rc = main([])
++    assert rc == 78
++    captured = capsys.readouterr()
++    assert "KEYRING_INVALID" in captured.err
++    assert "Insecure keyring permissions" in captured.err
++
++
++def test_bootstrap_database_with_keyring(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Bootstrap_database applies SCRAM passwords when keyring is provided."""
++    recorded_psql: list[str] = []
++
++    def mock_run(
++        cmd: list[str],
++        *,
++        timeout: float = 30.0,
++        check: bool = True,
++        env: dict[str, str] | None = None,
++    ) -> subprocess.CompletedProcess[str]:
++        _ = (timeout, check, env)
++        if "-tAc" in cmd:
++            return subprocess.CompletedProcess(cmd, returncode=0, stdout="1", stderr="")
++        if "-c" in cmd:
++            idx = cmd.index("-c")
++            recorded_psql.append(cmd[idx + 1])
++        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
++
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
++
++    kr = Keyring(
++        version=1,
++        created_at="2026-01-01T00:00:00Z",
++        master_kek=b"\x01" * 32,
++        auth_pepper=b"\x02" * 32,
++        session_hmac_key=b"\x03" * 32,
++        kanban_app_password=b"\x04" * 32,
++        kanban_migrator_password=b"\x05" * 32,
++    )
++
++    bootstrap_database(run_dir=str(tmp_path), keyring=kr)
++
++    scram_calls = [s for s in recorded_psql if "SCRAM-SHA-256$" in s]
++    assert len(scram_calls) == 1
++    assert "ALTER ROLE kanban_app PASSWORD 'SCRAM-SHA-256$" in scram_calls[0]
++    assert "ALTER ROLE kanban_migrator PASSWORD 'SCRAM-SHA-256$" in scram_calls[0]
++
++
+ def test_run_as_postgres_real_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
+     """Verify run_as_postgres wraps commands with setpriv correctly."""
+     recorded_full: list[list[str]] = []
+diff --git a/tests/deploy/test_storage_probe.py b/tests/deploy/test_storage_probe.py
+new file mode 100644
+index 0000000..4861514
+--- /dev/null
++++ b/tests/deploy/test_storage_probe.py
+@@ -0,0 +1,185 @@
++r"""Unit tests for deploy.standalone.storage_probe module.
++
++Covers:
++- Longest prefix matching of data_dir against mount points in /proc/mounts.
++- Decoding of octal escape sequences (e.g. \\040 for space).
++- Ephemeral filesystem detection (overlay, tmpfs -> persistent_volume=False).
++- Anonymous Docker volume detection via /proc/self/mountinfo.
++- Named Docker volume persistence via /proc/self/mountinfo.
++- Fallback when no mount point matches.
++- Ephemeral warning emission to stderr.
++- Atomic 0644 status file writing.
++"""
++
++from __future__ import annotations
++
++import json
++import stat
++from pathlib import Path
++from typing import TYPE_CHECKING
++
++from deploy.standalone.storage_probe import (
++    EPHEMERAL_WARNING,
++    StandaloneStatus,
++    decode_octal_escapes,
++    emit_ephemeral_warning,
++    probe,
++    write_standalone_status,
++)
++
++if TYPE_CHECKING:
++    import pytest
++
++
++def test_decode_octal_escapes() -> None:
++    r"""Octal escape sequences such as \040 are decoded to characters."""
++    assert decode_octal_escapes(r"/mnt/my\040volume/data") == "/mnt/my volume/data"
++    assert decode_octal_escapes(r"/simple/path") == "/simple/path"
++    assert decode_octal_escapes(r"/a\011b") == "/a\tb"
++
++
++def test_probe_overlay_non_persistent() -> None:
++    """Overlay filesystem evaluates to persistent_volume=False."""
++    mounts = """
++overlay / overlay rw,relatime,lowerdir=/l/XYZ,upperdir=/ABC/diff,workdir=/ABC/work 0 0
++/dev/sda1 /boot ext4 rw,relatime 0 0
++"""
++    status = probe(Path("/var/lib/kanban/data"), mounts_text=mounts)
++    assert not status.persistent_volume
++    assert status.data_mount_point == "/"
++    assert status.data_mount_fstype == "overlay"
++    assert status.mode == "standalone_embedded_pg"
++
++
++def test_probe_tmpfs_non_persistent() -> None:
++    """Tmpfs mount on data dir evaluates to persistent_volume=False."""
++    mounts = """
++/dev/sda1 / ext4 rw,relatime 0 0
++tmpfs /var/lib/kanban/data tmpfs rw,nosuid,nodev 0 0
++"""
++    status = probe(Path("/var/lib/kanban/data"), mounts_text=mounts)
++    assert not status.persistent_volume
++    assert status.data_mount_point == "/var/lib/kanban/data"
++    assert status.data_mount_fstype == "tmpfs"
++
++
++def test_probe_longest_prefix_match() -> None:
++    """Longest prefix mount point takes precedence over parent mounts."""
++    mounts = """
++/dev/sda1 / ext4 rw,relatime 0 0
++tmpfs /var tmpfs rw,nosuid 0 0
++/dev/sdb1 /var/lib/kanban/data ext4 rw,relatime 0 0
++"""
++    status = probe(Path("/var/lib/kanban/data/pgdata"), mounts_text=mounts)
++    assert status.persistent_volume
++    assert status.data_mount_point == "/var/lib/kanban/data"
++    assert status.data_mount_fstype == "ext4"
++
++
++def test_probe_octal_escapes_in_mount_point() -> None:
++    r"""Mount points containing octal spaces match correctly."""
++    mounts = r"""
++/dev/sda1 / ext4 rw 0 0
++/dev/sdb1 /var/lib/kanban\040data ext4 rw 0 0
++"""
++    status = probe(Path("/var/lib/kanban data/sub"), mounts_text=mounts)
++    assert status.persistent_volume
++    assert status.data_mount_point == "/var/lib/kanban data"
++    assert status.data_mount_fstype == "ext4"
++
++
++def test_probe_no_matching_mount_fail_closed() -> None:
++    """Empty or non-matching mounts evaluate fail-closed to persistent_volume=False."""
++    mounts = """
++# Empty or completely unrelated mounts
++/dev/sda1 /other/dir ext4 rw 0 0
++"""
++    status = probe(Path("/var/lib/kanban/data"), mounts_text=mounts)
++    assert not status.persistent_volume
++    assert status.data_mount_point == ""
++    assert status.data_mount_fstype == ""
++
++
++def test_probe_anon_docker_volume_detected() -> None:
++    """Anonymous 64-hex Docker volume is detected as non-persistent via mountinfo."""
++    mounts = """
++/dev/sda1 / ext4 rw 0 0
++/dev/sda1 /var/lib/kanban/data ext4 rw,relatime 0 0
++"""
++    # 64-hex characters volume id
++    anon_vol_id = "a" * 64
++    mountinfo = (
++        f"100 50 8:1 /var/lib/docker/volumes/{anon_vol_id}/_data "
++        "/var/lib/kanban/data rw - ext4 /dev/sda1 rw\n"
++    )
++    status = probe(
++        Path("/var/lib/kanban/data"),
++        mounts_text=mounts,
++        mountinfo_text=mountinfo,
++    )
++    assert not status.persistent_volume
++    assert status.data_mount_point == "/var/lib/kanban/data"
++    assert status.data_mount_fstype == "ext4"
++
++
++def test_probe_named_docker_volume_persistent() -> None:
++    """Named Docker volume evaluates to persistent_volume=True."""
++    mounts = """
++/dev/sda1 / ext4 rw 0 0
++/dev/sda1 /var/lib/kanban/data ext4 rw,relatime 0 0
++"""
++    named_mountinfo = (
++        "100 50 8:1 /var/lib/docker/volumes/kanban_data/_data "
++        "/var/lib/kanban/data rw - ext4 /dev/sda1 rw\n"
++    )
++    status = probe(
++        Path("/var/lib/kanban/data"),
++        mounts_text=mounts,
++        mountinfo_text=named_mountinfo,
++    )
++    assert status.persistent_volume
++    assert status.data_mount_point == "/var/lib/kanban/data"
++    assert status.data_mount_fstype == "ext4"
++
++
++def test_probe_live_system_fallback(tmp_path: Path) -> None:
++    """When mounts_text is None, probe reads live system mounts without crashing."""
++    status = probe(tmp_path)
++    assert isinstance(status.persistent_volume, bool)
++    assert isinstance(status.data_mount_point, str)
++    assert isinstance(status.data_mount_fstype, str)
++    assert status.mode == "standalone_embedded_pg"
++
++
++def test_emit_ephemeral_warning(capsys: pytest.CaptureFixture[str]) -> None:
++    """emit_ephemeral_warning writes the exact warning text to stderr."""
++    emit_ephemeral_warning()
++    captured = capsys.readouterr()
++    assert captured.err == EPHEMERAL_WARNING
++    assert "⚠️ Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data" in captured.err
++
++
++def test_write_standalone_status(tmp_path: Path) -> None:
++    """write_standalone_status writes valid JSON atomically with mode 0644."""
++    status = StandaloneStatus(
++        mode="standalone_embedded_pg",
++        persistent_volume=True,
++        data_mount_point="/var/lib/kanban/data",
++        data_mount_fstype="ext4",
++        generated_at="2026-11-11T20:00:00Z",
++    )
++    target_path = tmp_path / "run" / "standalone_status.json"
++    write_standalone_status(status, target_path=target_path)
++
++    assert target_path.is_file()
++    # Check permissions 0644
++    mode = stat.S_IMODE(target_path.stat().st_mode)
++    assert mode == 0o644
++
++    # Check contents
++    content = json.loads(target_path.read_text(encoding="utf-8"))
++    assert content["mode"] == "standalone_embedded_pg"
++    assert content["persistent_volume"] is True
++    assert content["data_mount_point"] == "/var/lib/kanban/data"
++    assert content["data_mount_fstype"] == "ext4"
++    assert content["generated_at"] == "2026-11-11T20:00:00Z"
