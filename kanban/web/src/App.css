@@ -1,0 +1,36 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #0b0f19;
+    color: #f1f5f9;
+  }
+}
+
+main[data-testid="app-root"] {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+h1 {
+  font-size: 3.2rem;
+  line-height: 1.1;
+  margin: 0;
+}
