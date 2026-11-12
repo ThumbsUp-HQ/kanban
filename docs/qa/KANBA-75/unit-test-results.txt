@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 11 items
+
+kanban/tests/api/test_project_config.py ..........                       [ 90%]
+database/tests/test_migration_wip_limits.py .                            [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/api/v1/project_config.py              66      0      0      0   100%
+kanban/api/v1/schemas/project_config.py     112      0      8      0   100%
+kanban/services/project_config.py           247      5    114      7    97%   384->393, 401->433, 587->595, 608-609, 620-621, 695, 719->751
+-------------------------------------------------------------------------------------
+TOTAL                                       425      5    122      7    98%
+======================== 11 passed in 80.21s (0:01:20) =========================
