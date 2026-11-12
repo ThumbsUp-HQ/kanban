@@ -93,6 +93,8 @@ class ActivityEventType(StrEnum):
     ISSUE_MODULES_CHANGED = "ISSUE_MODULES_CHANGED"
     ISSUE_MODULE_ADDED = "ISSUE_MODULE_ADDED"
     ISSUE_MODULE_REMOVED = "ISSUE_MODULE_REMOVED"
+    LOCAL_ADMIN_LOGIN_SUCCEEDED = "LOCAL_ADMIN_LOGIN_SUCCEEDED"
+    LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -132,6 +134,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_MODULES_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_MODULE_ADDED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_MODULE_REMOVED: ActivityCategory.HISTORY,
+        ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
+        ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
     }
 )
 
@@ -142,8 +146,8 @@ class ActivityEnvelope:
 
     activity_id: uuid.UUID
     workspace_id: uuid.UUID
-    object_id: uuid.UUID
-    actor_principal_id: uuid.UUID
+    object_id: uuid.UUID | None
+    actor_principal_id: uuid.UUID | None
     event_type: ActivityEventType
     category: ActivityCategory
     payload: Mapping[str, JSONValue]
@@ -197,8 +201,8 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
     session: AsyncSession,
     *,
     workspace_id: uuid.UUID,
-    object_id: uuid.UUID,
-    actor_principal_id: uuid.UUID,
+    object_id: uuid.UUID | None = None,
+    actor_principal_id: uuid.UUID | None = None,
     event_type: ActivityEventType,
     payload: Mapping[str, JSONValue],
 ) -> uuid.UUID:
@@ -208,15 +212,17 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
         raise ActivityPayloadTooLarge(msg)
 
     async with session.begin_nested():
-        kind = (
-            await session.execute(
-                text("SELECT object_type::text FROM objects WHERE id = :oid"),
-                {"oid": object_id},
-            )
-        ).scalar_one_or_none()
-        if kind is None:
-            msg = "Activity object is not visible"
-            raise ActivityObjectNotFound(msg)
+        kind: str | None = None
+        if object_id is not None:
+            kind = (
+                await session.execute(
+                    text("SELECT object_type::text FROM objects WHERE id = :oid"),
+                    {"oid": object_id},
+                )
+            ).scalar_one_or_none()
+            if kind is None:
+                msg = "Activity object is not visible"
+                raise ActivityObjectNotFound(msg)
 
         activity_id = (
             await session.execute(
