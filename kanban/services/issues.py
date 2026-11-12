@@ -66,6 +66,7 @@ from kanban.security.permissions import (
     require_capability,
 )
 from kanban.services.activity import ActivityEventType, JSONValue, record_activity
+from kanban.services.assignees import get_issue_assignees
 from kanban.services.issue_keys import _ISSUE_KEY_RE, resolve_issue_ref
 from kanban.services.projects import get_project_or_404
 
@@ -542,6 +543,7 @@ async def serialize_issue(
 
     manifest = await build_access_manifest(session, caller, issue.id)
     caps = await evaluate_capabilities(session, caller, issue.id)
+    assignee_items = await get_issue_assignees(session, issue.id)
 
     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
 
@@ -561,6 +563,7 @@ async def serialize_issue(
             LabelSummary(id=lbl.id, name=lbl.name, color_hex=lbl.color_hex) for lbl in label_rows
         ],
         module_ids=module_ids,
+        assignees=assignee_items,
         board_rank=issue.board_rank,
         created_by_id=issue.created_by_id,
         access_manifest=manifest,

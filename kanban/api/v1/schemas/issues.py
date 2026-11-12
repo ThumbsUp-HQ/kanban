@@ -12,6 +12,7 @@ from datetime import date  # noqa: TC003  # Required at runtime by Pydantic
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from kanban.api.v1.schemas.assignees import AssigneeResponse  # noqa: TC001
 from kanban.security.access_manifest import AccessManifest  # noqa: TC001  # Pydantic runtime type
 
 
@@ -167,6 +168,7 @@ class IssueResponse(BaseModel):
     parent: NormalParentSummary | RestrictedParentSummary | None = None
     labels: list[LabelSummary] = Field(default_factory=list)
     module_ids: list[uuid.UUID] = Field(default_factory=list)
+    assignees: list[AssigneeResponse] = Field(default_factory=list)
     board_rank: str
     created_by_id: uuid.UUID
     access_manifest: AccessManifest

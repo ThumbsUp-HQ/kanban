@@ -1,0 +1,230 @@
+{
+  "ticket": "KANBA-83",
+  "exchanges": [
+    {
+      "name": "principal_assign_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/PRJ1-1/assignees",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "23",
+          "content-type": "application/json"
+        },
+        "body": {
+          "principal": "@viewer"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "178",
+          "content-type": "application/json",
+          "x-request-id": "abc3286d32274b95806020cdf58a0406",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cecc-6fc9-7f5b-80b9-9fd13bcc680d",
+          "kind": "principal",
+          "principal": {
+            "id": "01a1cecc-6ec3-7746-b945-94369ce61c8d",
+            "handle": "viewer",
+            "display_name": "Viewer",
+            "type": "USER"
+          }
+        }
+      }
+    },
+    {
+      "name": "ineligible_assignee_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/PRJ2-1/assignees",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "52",
+          "content-type": "application/json"
+        },
+        "body": {
+          "principal": "01a1cecc-7051-70d2-8d05-e743909562c3"
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "3abcda0e941242c8ba7f8f2675001ec1",
+          "content-length": "257",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:ASSIGNEE_NOT_ELIGIBLE",
+          "title": "Assignee Not Eligible",
+          "status": 422,
+          "code": "ASSIGNEE_NOT_ELIGIBLE",
+          "detail": "The specified principal is not eligible for assignment in this project",
+          "request_id": "3abcda0e941242c8ba7f8f2675001ec1"
+        }
+      }
+    },
+    {
+      "name": "suggestions_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/projects/PRJA/assignee-suggestions?q=a",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "211",
+          "content-type": "application/json",
+          "x-request-id": "aa0ba3def69d447dbbd93df307746aff",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "items": [
+            {
+              "id": "01a1cecc-71b1-7ccb-80ed-ad21956561ff",
+              "handle": "admin",
+              "display_name": "Admin",
+              "type": "USER"
+            },
+            {
+              "id": "01a1cecc-71b9-7a2f-be07-062e91d299c4",
+              "handle": "alice",
+              "display_name": "Alice",
+              "type": "USER"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "unreadable_project_suggestions_404",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/projects/PRJB/assignee-suggestions?q=b",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "671f4cd3ec7d4d7d8f93103eae22ac36",
+          "content-length": "139",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "request_id": "671f4cd3ec7d4d7d8f93103eae22ac36"
+        }
+      }
+    },
+    {
+      "name": "free_text_assign_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/PRJ4-1/assignees",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "33",
+          "content-type": "application/json"
+        },
+        "body": {
+          "free_text": "Vendor: NCC Group"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "195",
+          "content-type": "application/json",
+          "x-request-id": "18d3ac14add74da3be8ef7372e8c750b",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cecc-7348-7940-8bd0-35d94d8c1692",
+          "kind": "free_text",
+          "free_text": "Vendor: NCC Group",
+          "notify": false,
+          "hint": "External free-text label - grants zero access and sends zero notifications"
+        }
+      }
+    }
+  ]
+}
