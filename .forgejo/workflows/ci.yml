@@ -21,13 +21,18 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Run lint and checks
+        shell: bash
         run: |
-          uv sync --locked
-          make check
+          set -o pipefail
+          echo "=== Lint and Type Checks ===" >> build.log
+          (uv sync --locked && make check) 2>&1 | tee -a build.log
 
       - name: Run tests
+        shell: bash
         run: |
-          uv run pytest -q
+          set -o pipefail
+          echo "=== Unit Tests ===" >> build.log
+          (uv run pytest -q) 2>&1 | tee -a build.log
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -44,3 +49,21 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/thumbs-up-kanban:latest
+
+      - name: Upload logs to Dash
+        if: always()
+        shell: bash
+        run: |
+          TOKEN="${{ secrets.DASH_TOKEN }}"
+          if [ -z "$TOKEN" ]; then
+            TOKEN="${DASH_TOKEN:-}"
+          fi
+          if [ -f build.log ] && [ -n "$TOKEN" ]; then
+            echo "Uploading build.log to Dash..."
+            curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
+                 -H "Authorization: Bearer ${TOKEN}" \
+                 -H "Content-Type: text/plain" \
+                 --data-binary @build.log
+          else
+            echo "Notice: build.log or DASH_TOKEN missing (TOKEN length: ${#TOKEN})"
+          fi
