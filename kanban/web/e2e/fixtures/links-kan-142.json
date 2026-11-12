@@ -1,0 +1,26 @@
+{
+  "outbound": [
+    {
+      "id": "link-out-1",
+      "link_type": "BLOCKS",
+      "link_state": "ACTIVE",
+      "target": {
+        "restricted": true,
+        "label": "Restricted Object"
+      }
+    }
+  ],
+  "inbound": [
+    {
+      "id": "link-in-1",
+      "link_type": "BLOCKED_BY",
+      "link_state": "FLAGGED_INVALID",
+      "source": {
+        "id": "018f0000-0000-7000-8000-000000000010",
+        "type": "issue",
+        "key": "KAN-10",
+        "title": "Legacy auth handler"
+      }
+    }
+  ]
+}

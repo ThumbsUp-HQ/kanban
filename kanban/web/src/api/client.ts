@@ -45,12 +45,13 @@ export interface ApiFetchOptions {
   query?: Record<string, ParamValue | readonly ParamValue[] | null | undefined>;
   body?: unknown;
   ifMatch?: string;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
 }
 
 export const REQUEST_TIMEOUT_MS = 15000;
 const UNSAFE_METHODS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const CSRF_COOKIE_RE = /(?:^|;\s*)__Host-kb_csrf=([^;]+)/;
+const CSRF_COOKIE_RE = /(?:^|;\s*)(?:__Host-kb_csrf|kb_csrf)=([^;]+)/;
 const SCHEME_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
 
 /** Reads the `__Host-kb_csrf` cookie value, or null when absent. */
@@ -136,7 +137,7 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
     }
   }
 
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
   if (UNSAFE_METHODS.has(method)) {
     const csrf = getCsrfToken();
     if (csrf === null) {

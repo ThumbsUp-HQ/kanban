@@ -16,6 +16,7 @@ export class ApiProblem extends Error {
   readonly title: string | undefined;
   readonly detail: string | undefined;
   readonly instance: string | undefined;
+  readonly data: Record<string, unknown>;
 
   constructor(status: number, data?: unknown) {
     const obj: Record<string, unknown> =
@@ -27,6 +28,7 @@ export class ApiProblem extends Error {
     const detail = pickString(obj, 'detail');
     const resolvedCode = code !== undefined && code.trim() !== '' ? code : 'UNKNOWN';
     super(detail ?? title ?? `API error ${String(status)} (${resolvedCode})`);
+    this.data = obj;
     this.name = 'ApiProblem';
     this.status = status;
     this.code = resolvedCode;

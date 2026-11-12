@@ -57,12 +57,14 @@ describe('apiFetch', () => {
     await apiFetch('PATCH', '/api/v1/issues/{issue_key}', {
       params: { issue_key: 'KAN-1' },
       ifMatch: '"abc"',
+      headers: { 'Kb-Blast-Hash': 'deadbeef' },
       body: { summary: 'x' },
     });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
     expect(headers['X-CSRF-Token']).toBe('tok+1');
     expect(headers['If-Match']).toBe('"abc"');
+    expect(headers['Kb-Blast-Hash']).toBe('deadbeef');
     expect(headers['Content-Type']).toBe('application/json');
     expect(init.body).toBe('{"summary":"x"}');
   });

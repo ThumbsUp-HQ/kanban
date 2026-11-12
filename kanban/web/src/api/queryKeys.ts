@@ -16,4 +16,8 @@ export const qk = {
   docsTree: (projectKey: string) => ['docs', 'tree', projectKey] as const,
   page: (pageId: string) => ['docs', 'page', pageId] as const,
   stickies: (projectKey: string) => ['stickies', projectKey] as const,
+  subscription: (key: string) => ['subscription', key] as const,
+  objectLinks: (key: string) => ['objectLinks', key] as const,
+  canonicalUrl: (key: string) => ['canonicalUrl', key] as const,
+  deletePreview: (key: string) => ['deletePreview', key] as const,
 };

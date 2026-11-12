@@ -21,6 +21,7 @@ import { EmojiStory } from '../dev/EmojiStory';
 import { EditorStory } from '../dev/EditorStory';
 import { MediaStory } from '../dev/MediaStory';
 import { RealtimeStory } from '../dev/RealtimeStory';
+import { DrawerActionsStory } from '../dev/DrawerActionsStory';
 
 export const PROJECT_KEY_REGEX = /^[A-Z][A-Z0-9]{1,9}$/;
 export const ISSUE_KEY_REGEX = /^[A-Z][A-Z0-9]{1,9}-[0-9]{1,9}$/;
@@ -95,6 +96,7 @@ export function DevStoryRoute(): JSX.Element {
   if (loc.pathname === '/__dev/editor') return <EditorStory />;
   if (loc.pathname === '/__dev/media') return <MediaStory />;
   if (loc.pathname === '/__dev/realtime') return <RealtimeStory />;
+  if (loc.pathname === '/__dev/drawer-actions') return <DrawerActionsStory />;
   return <NotFoundView />;
 }
 
