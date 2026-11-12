@@ -127,8 +127,13 @@ async def require_admin_aal2(
         status_row = status_res.mappings().first()
         has_active_totp = bool(status_row["has_active_totp"]) if status_row else False
         unused_codes = int(status_row["unused_recovery_codes"]) if status_row else 0
+        has_webauthn = (
+            int(status_row["webauthn_credential_count"]) > 0
+            if status_row and "webauthn_credential_count" in status_row
+            else False
+        )
 
-        if not has_active_totp and unused_codes == 0:
+        if not has_active_totp and unused_codes == 0 and not has_webauthn:
             raise ProblemException(
                 code="MFA_ENROLLMENT_REQUIRED",
                 status=403,
@@ -163,9 +168,17 @@ def assert_admin_routes_protected(app: object) -> list[str]:
     unprotected: list[str] = []
     routes = getattr(app, "routes", [])
     for route in routes:
-        path = getattr(route, "path", "")
-        if path.startswith("/api/v1/admin"):
-            dependant = getattr(route, "dependant", None)
-            if dependant is None or not _has_dependency(dependant, require_admin_aal2):
-                unprotected.append(path)
+        if hasattr(route, "effective_route_contexts") and callable(route.effective_route_contexts):
+            for ctx in route.effective_route_contexts():
+                path = getattr(ctx, "path", "")
+                if path.startswith("/api/v1/admin"):
+                    dependant = getattr(ctx, "dependant", None)
+                    if dependant is None or not _has_dependency(dependant, require_admin_aal2):
+                        unprotected.append(path)
+        else:
+            path = getattr(route, "path", "")
+            if path.startswith("/api/v1/admin"):
+                dependant = getattr(route, "dependant", None)
+                if dependant is None or not _has_dependency(dependant, require_admin_aal2):
+                    unprotected.append(path)
     return unprotected

@@ -51,7 +51,8 @@ class ActivityCategory(StrEnum):
 
     COMMENT = "COMMENT"
     HISTORY = "HISTORY"
-    GATE = "GATE"
+    AGENT_GATE = "AGENT_GATE"
+    GATE = "AGENT_GATE"
     SYSTEM = "SYSTEM"
 
 
@@ -127,6 +128,25 @@ class ActivityEventType(StrEnum):
     CREATOR_OVERRIDDEN = "CREATOR_OVERRIDDEN"
     MCP_KEY_MINTED = "MCP_KEY_MINTED"
     MCP_KEY_REVOKED = "MCP_KEY_REVOKED"
+    STICKY_CREATED = "STICKY_CREATED"
+    STICKY_UPDATED = "STICKY_UPDATED"
+    STICKY_RECOLORED = "STICKY_RECOLORED"
+    STICKY_PROMOTION_SNOOZED = "STICKY_PROMOTION_SNOOZED"
+    STICKY_PROMOTED_TO_DOC = "STICKY_PROMOTED_TO_DOC"
+    STICKY_UNARCHIVED_COPY = "STICKY_UNARCHIVED_COPY"
+    STICKY_TRASHED = "STICKY_TRASHED"
+    WEBAUTHN_REGISTERED = "WEBAUTHN_REGISTERED"
+    WEBAUTHN_VERIFIED = "WEBAUTHN_VERIFIED"
+    WEBAUTHN_DELETED = "WEBAUTHN_DELETED"
+    WEBAUTHN_SIGN_COUNT_REGRESSION = "WEBAUTHN_SIGN_COUNT_REGRESSION"
+    ISSUE_COPIED = "ISSUE_COPIED"
+    SYNC_HOOK_REJECTED = "SYNC_HOOK_REJECTED"
+    HOOK_FAIL_OPEN_WARN = "HOOK_FAIL_OPEN_WARN"
+    GATE_PENDING = "GATE_PENDING"
+    GATE_APPROVED = "GATE_APPROVED"
+    GATE_REJECTED = "GATE_REJECTED"
+    GATE_TIMED_OUT = "GATE_TIMED_OUT"
+    GATE_CANCELLED = "GATE_CANCELLED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -200,6 +220,25 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.CREATOR_OVERRIDDEN: ActivityCategory.HISTORY,
         ActivityEventType.MCP_KEY_MINTED: ActivityCategory.SYSTEM,
         ActivityEventType.MCP_KEY_REVOKED: ActivityCategory.SYSTEM,
+        ActivityEventType.STICKY_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_RECOLORED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_PROMOTION_SNOOZED: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_PROMOTED_TO_DOC: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_UNARCHIVED_COPY: ActivityCategory.HISTORY,
+        ActivityEventType.STICKY_TRASHED: ActivityCategory.HISTORY,
+        ActivityEventType.WEBAUTHN_REGISTERED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_VERIFIED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_DELETED: ActivityCategory.SYSTEM,
+        ActivityEventType.WEBAUTHN_SIGN_COUNT_REGRESSION: ActivityCategory.SYSTEM,
+        ActivityEventType.ISSUE_COPIED: ActivityCategory.HISTORY,
+        ActivityEventType.SYNC_HOOK_REJECTED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.HOOK_FAIL_OPEN_WARN: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_PENDING: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_APPROVED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_REJECTED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_TIMED_OUT: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_CANCELLED: ActivityCategory.AGENT_GATE,
     }
 )
 

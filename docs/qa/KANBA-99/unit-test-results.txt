@@ -1,0 +1,14 @@
+..................                                                       [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                               Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------
+kanban/api/v1/notifications.py        25      0      0      0   100%
+kanban/api/v1/subscriptions.py        27      0      0      0   100%
+kanban/services/notifications.py     154      4     56      6    95%   112->115, 181->exit, 209, 257->exit, 273->exit, 277-278, 289
+kanban/services/subscriptions.py      48      0     10      0   100%
+------------------------------------------------------------------------------
+TOTAL                                254      4     66      6    97%
+Required test coverage of 95% reached. Total coverage: 96.88%
+18 passed in 6.31s

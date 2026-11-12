@@ -1,0 +1,47 @@
+================================================================================
+LDAP WIRE SECURITY & TLS_HARD FORENSIC AUDIT TRACE (KB-P2-07 / KANBA-82)
+================================================================================
+Standards: RFC 4511 (LDAPv3 Protocol), RFC 4513 (Authentication & TLS), Spec S4.2
+Assertion: ZERO BindRequest bytes (0x60) or password cleartext traverse unencrypted transport.
+
+--------------------------------------------------------------------------------
+1. TEST CASE 2: Positive StartTLS Protocol Flow (ldap:// with TLS upgrade)
+--------------------------------------------------------------------------------
+[STARTTLS HANDSHAKE]
+  Pre-TLS bytes received by server: 31 bytes
+  Hex (31 bytes total): 30 1d 02 01 01 77 18 80 16 31 2e 33 2e 36 2e 31 2e 34 2e 31 2e 31 34 36 36 2e 32 30 30 33 37
+  ASCII: 0....w...1.3.6.1.4.1.1466.20037
+  Pre-TLS contains StartTLS OID (1.3.6.1.4.1.1466.20037): True
+  Pre-TLS contains BindRequest tag (0x60): False
+  [VERDICT] PASS: Pre-TLS stream contains ONLY ExtendedRequest(StartTLS); 0 BindRequest tags.
+
+[POST-TLS SERVICE BIND]
+  Post-TLS encrypted payload captured: 79 bytes
+  Post-TLS contains BindRequest tag (0x60): True
+  Verified SPKI SHA-256 Digest: 39bd5a26531a0948bc6b9df31160df134d3ab88ce75c1c9782d0adb7f839eb2b
+
+--------------------------------------------------------------------------------
+2. TEST CASE 3: TLS_HARD Downgrade Attack Refusal (Server returns code 52 unavailable)
+--------------------------------------------------------------------------------
+  Server StartTLS rejection: resultCode 52 (unavailable)
+  Client Exception Raised: StartTLS rejected by server (resultCode 52): StartTLS unavailable
+  Pre-TLS bytes inspected: 31 bytes
+  Hex (31 bytes total): 30 1d 02 01 01 77 18 80 16 31 2e 33 2e 36 2e 31 2e 34 2e 31 2e 31 34 36 36 2e 32 30 30 33 37
+  ASCII: 0....w...1.3.6.1.4.1.1466.20037
+  Pre-TLS contains BindRequest tag (0x60): False
+  Pre-TLS contains service password bytes: False
+  Pre-TLS contains user password bytes: False
+  [VERDICT] PASS: Zero BindRequest tags and zero password bytes traversed socket before failure.
+
+--------------------------------------------------------------------------------
+3. TEST CASE 5: SPKI SHA-256 Public Key Pin Mismatch (MITM / Key Rotation Defense)
+--------------------------------------------------------------------------------
+  Client expected SPKI pin: 39bd5a26531a0948bc6b9df31160df134d3ab88ce75c1c9782d0adb7f839eb2b
+  Client Exception Raised: SPKI_PIN_MISMATCH: peer digest 'efc4e5ddebaab6dcc9dc820283c7d278cb71fa148726d2bacd75ef63c19f3983' not in approved pins
+  Post-TLS plaintext LDAP messages processed: 0 bytes
+  Post-TLS contains BindRequest tag (0x60): False
+  [VERDICT] PASS: SPKI mismatch aborted TLS session immediately; zero BindRequest bytes dispatched.
+
+================================================================================
+OVERALL FORENSIC VERDICT: TLS_HARD WIRE INVARIANTS 100% SATISFIED
+================================================================================
