@@ -1,0 +1,53 @@
+=== Build and Lint Verification Suite: KANBA-15 ===
+Timestamp: 2026-11-12 01:37:08Z
+
+--- 1. uv lock --locked (lockfile assertion) ---
+Resolved 23 packages in 2ms
+Exit Code: 0
+
+--- 1b. uv lock --check (literal ticket DoD command) ---
+error: unexpected argument '--check' found
+
+Usage: uv lock [OPTIONS]
+
+For more information, try '--help'.
+Exit Code: 2
+Note: uv 0.5.4 uses '--locked' to assert lockfile integrity; '--check' is documented above for literal DoD traceability.
+
+--- 2. uv sync --locked ---
+Resolved 23 packages in 1ms
+Audited 21 packages in 0.10ms
+Exit Code: 0
+
+--- 3. uv run lint-imports ---
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 12 files, 4 dependencies.
+----------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+Exit Code: 0
+
+--- 4. Clean external import test from /tmp ---
+Successfully imported modules: database kanban mcp agent
+Exit Code: 0
+
+--- 5. Non-ASCII dash character audit (U+2014 / U+2013) ---
+Exit Code: 1 (1 indicates zero matching forbidden characters)
+
+=== End of Build and Lint Verification Suite ===

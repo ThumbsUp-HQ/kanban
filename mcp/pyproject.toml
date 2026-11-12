@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kanban-mcp"
+version = "0.0.0"
+description = "Model Context Protocol server exposing agent, docs, and admin surfaces"
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+dependencies = [
+    "kanban-core",
+]
+
+[tool.hatch.build.targets.wheel.sources]
+"" = "mcp"
+
+[tool.hatch.build.targets.wheel]
+include = ["*.py", "**/*.py"]
+exclude = [
+    "tests",
+    "pyproject.toml",
+    "GEMINI.md",
+    "AGENTS.md",
+]
+dev-mode-dirs = [".."]

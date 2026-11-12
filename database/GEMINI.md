@@ -1,0 +1,31 @@
+# Database Module Manifest (`kanban-database`)
+
+## Responsibility
+Universal Object Graph implementation for the Kanban platform (Issues, Stickies, Docs, Users, Projects, Cycles, Modules, Views, Pages) storing canonical UTF-8 Markdown only. Enforces PostgreSQL kernel-level Row-Level Security (FORCE RLS, NOBYPASSRLS), composite foreign keys, ltree hierarchical path queries, PL/pgSQL link audit routines, and SHA-256 hash-chained activity records.
+
+## Depends On
+None. This is the foundational leaf module in the workspace dependency hierarchy. Depends on external PostgreSQL 16+ engine with extensions (pgcrypto, ltree, pg_trgm, btree_gist, vector).
+
+## Depended On By
+- `kanban` (`kanban-core` web application and REST/WS server).
+
+## Inbound Contracts
+- Transactional database connections and async connection pools managed via SQLAlchemy 2.0 and asyncpg.
+- Parameterized session configuration via SET LOCAL (app.principal_id, app.workspace_id, app.token_scopes, app.aal_level).
+- Schema migrations managed via Alembic under dedicated migration role.
+
+## Outbound Contracts
+- Typed entity models and schemas for universal objects and object links.
+- PL/pgSQL audit triggers detecting and recording broken object links.
+- Postgres LISTEN/NOTIFY event streams for real-time state changes.
+
+## Performance Budgets
+- Sub-millisecond SAVEPOINT rollback isolation for clean-database unit tests.
+- Index-backed single-object read latency < 5ms.
+- Complex graph traversal and access-closure resolution < 18ms.
+
+## Failure Modes
+- Foreign key constraint violations on dangling link creation or deletion.
+- RLS policy denial returning zero rows on unauthorized access attempts.
+- Migration lock timeout during schema upgrades under active load.
+- Fail-closed behavior on broken object links pending audit purge.

@@ -1,0 +1,41 @@
+[project]
+name = "kanban-platform"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+dependencies = [
+    "kanban-database",
+    "kanban-core",
+    "kanban-mcp",
+    "kanban-agent",
+]
+
+[tool.uv.workspace]
+members = ["database", "kanban", "mcp", "agent"]
+
+[tool.uv.sources]
+kanban-database = { workspace = true }
+kanban-core = { workspace = true }
+kanban-mcp = { workspace = true }
+kanban-agent = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest==9.2.0",
+    "pytest-cov==7.1.0",
+    "import-linter==2.16",
+    "hatchling==1.33.0",
+]
+
+[tool.importlinter]
+root_packages = ["agent", "mcp", "kanban", "database"]
+
+[[tool.importlinter.contracts]]
+name = "Unidirectional module layers agent -> mcp -> kanban -> database"
+type = "layers"
+layers = [
+    "agent",
+    "mcp",
+    "kanban",
+    "database",
+]

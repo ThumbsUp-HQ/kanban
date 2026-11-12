@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kanban-agent"
+version = "0.0.0"
+description = "Agent runtime, LLM providers, CLI harnesses, and workflow transition interceptors"
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+dependencies = [
+    "kanban-mcp",
+]
+
+[tool.hatch.build.targets.wheel.sources]
+"" = "agent"
+
+[tool.hatch.build.targets.wheel]
+include = ["*.py", "**/*.py"]
+exclude = [
+    "tests",
+    "pyproject.toml",
+    "GEMINI.md",
+    "AGENTS.md",
+]
+dev-mode-dirs = [".."]

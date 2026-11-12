@@ -1,0 +1,28 @@
+Command: uv run pytest database/tests kanban/tests mcp/tests agent/tests tests/test_workspace_layout.py -q --cov=database --cov=kanban --cov=mcp --cov=agent --cov-branch --cov-report=term-missing --cov-fail-under=95
+Timestamp: 2026-11-12 01:37:00Z
+Working Directory: /home/adamoutler/kanban
+----------------------------------------------------------------------
+.........                                                                [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                           Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------
+agent/__init__.py                  1      0      0      0   100%
+agent/tests/__init__.py            0      0      0      0   100%
+agent/tests/test_smoke.py          3      0      0      0   100%
+database/__init__.py               1      0      0      0   100%
+database/tests/__init__.py         0      0      0      0   100%
+database/tests/test_smoke.py       3      0      0      0   100%
+kanban/__init__.py                 1      0      0      0   100%
+kanban/tests/__init__.py           0      0      0      0   100%
+kanban/tests/test_smoke.py         3      0      0      0   100%
+mcp/__init__.py                    1      0      0      0   100%
+mcp/tests/__init__.py              0      0      0      0   100%
+mcp/tests/test_smoke.py            3      0      0      0   100%
+--------------------------------------------------------------------------
+TOTAL                             16      0      0      0   100%
+Required test coverage of 95% reached. Total coverage: 100.00%
+9 passed in 0.22s
+----------------------------------------------------------------------
+Exit Code: 0
