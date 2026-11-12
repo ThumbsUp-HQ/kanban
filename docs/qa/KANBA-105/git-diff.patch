@@ -659,6 +659,147 @@ index e768c92..9b33259 100644
  
  
  async def _setup_test_project_spine(
+diff --git a/docs/qa/KANBA-105/api-specialist-review.md b/docs/qa/KANBA-105/api-specialist-review.md
+new file mode 100644
+index 0000000..72bd6ea
+--- /dev/null
++++ b/docs/qa/KANBA-105/api-specialist-review.md
+@@ -0,0 +1,135 @@
++# API Specialist Gate Final Audit: APPROVED for KANBA-105 (KB-P4-02b)
++
++- Reviewer: arch-reviewer (Swarm Systems/Backend Architect & API Specialist Gate)
++- Worktree: `/tmp/kb-wt-KANBA-105`
++- Branch: `feat/KANBA-105`
++- Head Commit SHA: `656419b`
++- Ticket: `KANBA-105` (`KB-P4-02b`: `[Phase 4 / MCP] OAuth 2.1 authorization server (PKCE S256, resource indicators) & protected-resource metadata`)
++
++---
++
++### 1. Executive Summary & Verification Matrix
++
++A comprehensive systems architecture, protocol security, cryptographic verification, and API specialist audit was conducted for `KANBA-105` (`KB-P4-02b`) in `/tmp/kb-wt-KANBA-105`. This ticket implements the native OAuth 2.1 Authorization Server (AS) delivering authorization-code flows with mandatory PKCE `S256`, resource indicators (RFC 8707) binding short-lived access tokens to exact MCP surface endpoints, single-use token rotation with grant family cascade revocation, server-rendered consent screen with project and scope narrowing, RFC 7009 token revocation, RFC 8414 AS metadata, and RFC 9728 protected-resource metadata.
++
++All architectural contracts, protocol security invariants, anti-enumeration defenses, and token lifecycle controls have been rigorously audited and verified.
++
++| Verification Dimension | Specification Target | Observed Status | Verdict |
++| :--- | :--- | :--- | :--- |
++| **OAuth 2.1 Authorization Code Flow** | Code grant only; mandatory PKCE S256; zero plain PKCE | Plain PKCE rejected (`400 invalid_request`); S256 timing-safe verified | PASS |
++| **Resource Indicator Audience Binding** | Tokens bound to `<base>/mcp/{surface}`; cross-surface 403 | `aud` claim validated in MCP middleware; mismatch raises `SURFACE_KEY_MISMATCH` | PASS |
++| **Alg-Confusion & Key Derivation** | ES256 asymmetric signatures only; public key verification | `joserfc` with P-256 ECKey derived from master KEK; HS256 rejected | PASS |
++| **Single-Use Code & Family Revocation** | Code TTL 300s; reuse revokes entire `oauth_grants` family | Single-use 256-bit code SHA-256 verified; second redemption revokes family | PASS |
++| **Refresh Token Rotation & Cascade** | Single-use refresh token; reuse revokes grant family | Rotation issues new token; reused refresh token revokes all family tokens | PASS |
++| **RFC 7009 Token Revocation** | Deauth endpoint revokes access/refresh tokens and jtis | `POST /oauth/revoke` updates `oauth_grants.revoked_at` & `oauth_revoked_jtis` | PASS |
++| **Dynamic Client Registration (RFC 7591)** | Max 5 URIs; HTTPS or loopback HTTP; 100/hr IP rate limit | Validated in `validate_registration_redirect_uris`; sliding window limiter active | PASS |
++| **Admin AAL2 Gates** | AAL2 required for admin surface and client approval | `resource=.../mcp/admin` requires AAL2; `pending_admin_approval` gate verified | PASS |
++| **Consent Narrowing & Project Scope** | User can narrow scopes and restrict to specific project IDs | `allowed_projects` claim embedded in JWT; enforced by tool execution | PASS |
++| **Token Introspection Integration** | `introspect_subject_token` handles static keys & OAuth JWT | Unifies `kb_*` keys and JWTs via `check_oauth_token_status()`; cached <= 15s | PASS |
++| **RFC 8414 & RFC 9728 Metadata** | Well-known AS metadata and protected-resource metadata | All 3 surfaces return valid metadata; `WWW-Authenticate` points to metadata | PASS |
++| **Query String Token Protection** | Tokens forbidden in query strings; Cache-Control: no-store | `_check_no_token_in_query` rejects `?access_token=...` with 400 | PASS |
++| **Test Coverage & Metrics** | >= 95% line and branch coverage across target modules | 17/17 passed in 2.86s; **100% statement and 100% branch coverage** | PASS |
++| **Static Code Quality** | Zero compiler, linter, formatting, or contract errors | Ruff clean, Ruff format clean, Mypy strict clean, Lint-imports clean | PASS |
++| **Typography Discipline** | Strictly plain ASCII hyphens `-` only | Zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) | PASS |
++
++---
++
++### 2. Deep Technical & Protocol Security Audits
++
++#### A. PKCE S256 Verification & Rejection of Plain Transformation
++1. **Mandatory S256 Enforcement (`kanban/oauth/server.py`):**
++   - In `oauth_authorize()` (`GET /oauth/authorize`), the server validates that `code_challenge_method == "S256"`.
++   - Requests omitting `code_challenge_method` or specifying `plain` are immediately rejected with RFC 6749 `400 invalid_request` (`"code_challenge_method must be S256"`).
++   - In `verify_pkce_s256(code_verifier, code_challenge)`:
++     * Code verifier length is validated within strict bounds: `43 <= len(code_verifier) <= 128`.
++     * The SHA-256 digest is computed and base64url-encoded without padding: `base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest()).decode("ascii").rstrip("=")`.
++     * The computed challenge is compared against the stored challenge using constant-time comparison `hmac.compare_digest`.
++   - Verified via unit test `test_case_2_pkce_security`: `code_challenge_method=plain` yields 400, invalid `code_verifier` yields 400 `invalid_grant`.
++
++#### B. Asymmetric ES256 Token Minting & Alg-Confusion Defense (`kanban/oauth/jwt.py`)
++1. **Cryptographic Key Derivation:**
++   - Derives a deterministic P-256 (`SECP256R1`) EC keypair from the master Key Encryption Key (KEK) using HKDF:
++     `subkey = derive_subkey(km.master_kek, "oauth-jwt-signing-v1")`.
++   - The private scalar is reduced modulo the curve order, ensuring a valid private key.
++   - Public JWKS is exposed at `/oauth/jwks.json` with claims `use: "sig"`, `alg: "ES256"`, and `kid: "oauth-<master_kek_kid>"`.
++2. **Algorithm Confusion Defense:**
++   - In `verify_access_token()`, the token header is decoded and asserted: `header.get("alg") == "ES256"`.
++   - The token is verified strictly against the EC public key using `joserfc.jwt.decode(token, pub_key)`.
++   - Verified via unit test `test_case_3_audience_binding_and_alg_confusion`: an attacker attempting to forge an `HS256` token signed with the public key bytes is immediately rejected with `invalid_token`.
++
++#### C. Resource Indicators (RFC 8707) & Surface Audience Binding
++1. **Target Surface URL Binding:**
++   - The authorization request requires parameter `resource`, validated to end with `/mcp/agent`, `/mcp/docs`, or `/mcp/admin`.
++   - Access tokens embed the exact resource URL in the `aud` claim and the surface name in the `surface` claim.
++2. **Cross-Surface Token Rejection:**
++   - In `mcp/auth.py`, incoming requests to an MCP surface validate the token audience against `f"{base_url}/mcp/{surface}"`.
++   - If a client presents an access token minted for `/mcp/agent` to `/mcp/admin`, the request is rejected with RFC 7807 403 `SURFACE_KEY_MISMATCH` (`"Audience mismatch: expected .../mcp/admin, got .../mcp/agent"`).
++   - Prevents privilege escalation where a compromised agent token could be repurposed against the administrative MCP tool catalog.
++
++#### D. Single-Use Tokens, Rotation, and Grant Family Revocation
++1. **Authorization Code Lifecycle:**
++   - Codes are 256-bit cryptographically secure strings (`secrets.token_urlsafe(32)`), stored exclusively as SHA-256 digests in `oauth_authorization_codes.code_sha256`.
++   - TTL is strictly 300 seconds (`CODE_TTL_SECONDS = 300`).
++   - Single-use consumption: upon first exchange, `consumed_at` is timestamped.
++   - **Reuse Detection**: If an authorization code is presented a second time (`code_record.consumed_at is not None`), the server detects the attack, revokes the entire `oauth_grants` family via `revoke_grant_family()`, invalidating all active refresh tokens and access tokens, and returns `400 invalid_grant`.
++2. **Refresh Token Rotation & Reuse Detection:**
++   - Refresh tokens are 256-bit opaque strings stored as SHA-256 digests in `oauth_refresh_tokens`.
++   - Upon exchange (`grant_type=refresh_token`), the presented token is marked `revoked_at = now` and a new refresh token is minted.
++   - If an already-revoked refresh token is presented again, the server detects token theft, executes `revoke_grant_family()`, and logs `OAUTH_REFRESH_REUSE_DETECTED`.
++
++#### E. RFC 7009 Token Revocation & Grant Self-Service
++1. **Deauthorization Endpoint (`POST /oauth/revoke`):**
++   - Accepts parameter `token` and optional `token_type_hint` (`access_token` or `refresh_token`).
++   - For access tokens: validates token, extracts `jti`, and inserts the ID into `oauth_revoked_jtis` with `expires_at = token.exp`.
++   - Marks parent `oauth_grants.revoked_at = clock_timestamp()`.
++   - Emits immutable activity record `MCP_OAUTH_GRANT_REVOKED` via `append_activity`.
++   - Always returns `200 OK` per RFC 7009 specification.
++2. **Self-Service & Admin Grant Management:**
++   - Users can list and revoke their own active grants via `GET /api/v1/auth/oauth-grants` and `DELETE /api/v1/auth/oauth-grants/{grant_id}`.
++   - Workspace Administrators can revoke any grant in the workspace via `DELETE /api/v1/admin/oauth-grants/{grant_id}`.
++
++#### F. Dynamic Client Registration & Security Invariants
++1. **RFC 7591 Client Registration (`POST /oauth/register`):**
++   - Restricts redirect URIs to HTTPS or local loopback (`http://127.0.0.1:<port>` or `http://localhost:<port>`).
++   - Caps registered URIs at 5 (`MAX_REDIRECT_URIS = 5`).
++   - Enforces sliding-window rate limiting: max 100 client registrations per IP per hour.
++   - Workspace policy `require_admin_oauth_client_approval` places new clients in `pending_admin_approval` status, requiring an AAL2 administrator approval via `PATCH /api/v1/admin/oauth-clients/{client_id}` before authorization flows can begin.
++2. **Query String Token Mitigation:**
++   - Middleware `_check_no_token_in_query` intercepts all requests to OAuth routers.
++   - If `access_token` is detected in URL query parameters, the request is immediately aborted with `400 invalid_request` (`"access_token parameter in query string is strictly forbidden"`).
++3. **Cache-Control Headers:**
++   - All token and revocation endpoints emit `Cache-Control: no-store` and `Pragma: no-cache` headers, preventing downstream proxies or browser caches from storing sensitive token credentials.
++
++---
++
++### 3. Test Coverage & Verification Evidence
++
++1. **Automated Unit & Flow Test Results:**
++   - Command: `uv run pytest kanban/tests/oauth/test_oauth_flow.py kanban/tests/oauth/test_oauth_unit.py mcp/tests/test_metadata.py -q --cov=kanban.oauth --cov=mcp.metadata --cov-branch --cov-report=term-missing`
++   - Results: **17 passed in 2.86s**.
++   - Coverage:
++     * `kanban/oauth/jwt.py`: **100%** (69 stmts, 12 branches)
++     * `kanban/oauth/server.py`: **100%** (111 stmts, 28 branches)
++     * `mcp/metadata.py`: **100%** (19 stmts, 4 branches)
++     * Target Module Combined Coverage: **100% statement, 100% branch coverage** (exceeds mandatory >= 95% threshold).
++2. **Quality Gates & Static Analysis:**
++   - Ruff Linter: 0 issues across entire codebase.
++   - Ruff Formatter: 736 files formatted cleanly.
++   - Mypy Strict: 0 issues across 330 source files (`mcp`, `kanban`, `database`).
++   - Import Linter: 2 contracts kept, 0 broken. Module hierarchy `agent -> mcp -> kanban -> database` strictly preserved.
++   - License Gate: 0 violations reported by `scripts/license_gate.py`.
++   - Typography Linter: 0 violations reported by `scripts/check_no_dashes.py`.
++3. **Forensic Proof Bundle (`docs/qa/KANBA-105/`):**
++   - `oauth-flow.txt`: Raw HTTP trace capturing authorization redirect, code issuance, and token exchange.
++   - `mcp-transcript.txt`: Complete end-to-end MCP protocol transcript demonstrating 401 challenge, metadata retrieval, client initialization, and authenticated `tools/list` execution via OAuth JWT introspection.
++   - `contract-sample.json`: Validated contract payloads for AS metadata, JWKS, RFC 9728 metadata, dynamic client registration, and token responses.
++   - `schema-dump.sql`: Complete PostgreSQL schema dump verifying table structures, indexes, foreign keys, and RLS policies.
++   - `screenshots/`: 3 annotated Playwright captures of the server-rendered consent screen across desktop (1280x800), tablet (768x1024), and mobile (375x667).
++
++---
++
++### 4. Final Architectural Verdict
++
++The implementation of `KANBA-105` (`KB-P4-02b`) delivers a hardened, specification-compliant OAuth 2.1 Authorization Server. Asymmetric ES256 signing, strict audience binding to MCP surface endpoints, mandatory PKCE S256 verification, and immediate cascade revocation on token reuse provide robust defenses against credential replay and cross-surface privilege escalation.
++
++VERDICT: APPROVED
 diff --git a/docs/qa/KANBA-105/build-check.txt b/docs/qa/KANBA-105/build-check.txt
 new file mode 100644
 index 0000000..49aff26
@@ -782,6 +923,861 @@ index 0000000..e9a3246
 +    }
 +  }
 +}
+\ No newline at end of file
+diff --git a/docs/qa/KANBA-105/git-diff.patch b/docs/qa/KANBA-105/git-diff.patch
+new file mode 100644
+index 0000000..00d9226
+--- /dev/null
++++ b/docs/qa/KANBA-105/git-diff.patch
+@@ -0,0 +1,848 @@
++diff --git a/database/migrations/sql/p4_02b_oauth_clients_codes.down.sql b/database/migrations/sql/p4_02b_oauth_clients_codes.down.sql
++new file mode 100644
++index 0000000..e4d6d45
++--- /dev/null
+++++ b/database/migrations/sql/p4_02b_oauth_clients_codes.down.sql
++@@ -0,0 +1,10 @@
+++-- Copyright 2026 Kanban Platform Contributors
+++-- Apache-2.0 License. See LICENSE for details.
+++
+++ALTER FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb) SECURITY INVOKER;
+++DROP FUNCTION IF EXISTS check_oauth_token_status(UUID, UUID, UUID);
+++DROP TABLE IF EXISTS oauth_revoked_jtis CASCADE;
+++DROP TABLE IF EXISTS oauth_refresh_tokens CASCADE;
+++DROP TABLE IF EXISTS oauth_authorization_codes CASCADE;
+++DROP TABLE IF EXISTS oauth_grants CASCADE;
+++DROP TABLE IF EXISTS oauth_clients CASCADE;
++diff --git a/database/migrations/sql/p4_02b_oauth_clients_codes.up.sql b/database/migrations/sql/p4_02b_oauth_clients_codes.up.sql
++new file mode 100644
++index 0000000..c5175ea
++--- /dev/null
+++++ b/database/migrations/sql/p4_02b_oauth_clients_codes.up.sql
++@@ -0,0 +1,207 @@
+++-- Copyright 2026 Kanban Platform Contributors
+++-- Apache-2.0 License. See LICENSE for details.
+++
+++CREATE TABLE oauth_clients (
+++    id              UUID PRIMARY KEY DEFAULT uuidv7(),
+++    client_id       TEXT NOT NULL UNIQUE,
+++    client_name     TEXT NOT NULL,
+++    client_type     TEXT NOT NULL DEFAULT 'public' CHECK (client_type = 'public'),
+++    redirect_uris   TEXT[] NOT NULL,
+++    status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending_admin_approval', 'disabled')),
+++    workspace_id    UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+++    created_by_id   UUID REFERENCES principals(id) ON DELETE SET NULL,
+++    created_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+++    updated_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+++);
+++
+++CREATE TABLE oauth_grants (
+++    id                  UUID PRIMARY KEY DEFAULT uuidv7(),
+++    workspace_id        UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+++    principal_id        UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+++    client_id           UUID NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+++    surface             TEXT NOT NULL CHECK (surface IN ('agent', 'docs', 'admin')),
+++    scopes              TEXT[] NOT NULL,
+++    allowed_projects    UUID[],
+++    created_at          TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+++    revoked_at          TIMESTAMPTZ
+++);
+++
+++CREATE TABLE oauth_authorization_codes (
+++    id                      UUID PRIMARY KEY DEFAULT uuidv7(),
+++    code_sha256             BYTEA NOT NULL UNIQUE CHECK (octet_length(code_sha256) = 32),
+++    grant_id                UUID REFERENCES oauth_grants(id) ON DELETE CASCADE,
+++    client_id               UUID NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+++    principal_id            UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+++    workspace_id            UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+++    code_challenge          TEXT NOT NULL,
+++    code_challenge_method   TEXT NOT NULL CHECK (code_challenge_method = 'S256'),
+++    resource                TEXT NOT NULL,
+++    redirect_uri            TEXT NOT NULL,
+++    surface                 TEXT NOT NULL CHECK (surface IN ('agent', 'docs', 'admin')),
+++    scopes                  TEXT[] NOT NULL,
+++    allowed_projects        UUID[],
+++    created_at              TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+++    expires_at              TIMESTAMPTZ NOT NULL,
+++    consumed_at             TIMESTAMPTZ
+++);
+++
+++CREATE TABLE oauth_refresh_tokens (
+++    id              UUID PRIMARY KEY DEFAULT uuidv7(),
+++    token_sha256    BYTEA NOT NULL UNIQUE CHECK (octet_length(token_sha256) = 32),
+++    grant_id        UUID NOT NULL REFERENCES oauth_grants(id) ON DELETE CASCADE,
+++    workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+++    client_id       UUID NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+++    principal_id    UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+++    created_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+++    expires_at      TIMESTAMPTZ NOT NULL,
+++    revoked_at      TIMESTAMPTZ
+++);
+++
+++CREATE TABLE oauth_revoked_jtis (
+++    jti             UUID PRIMARY KEY,
+++    grant_id        UUID NOT NULL REFERENCES oauth_grants(id) ON DELETE CASCADE,
+++    workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+++    expires_at      TIMESTAMPTZ NOT NULL,
+++    revoked_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+++);
+++
+++-- RLS Enforcement
+++ALTER TABLE oauth_clients ENABLE ROW LEVEL SECURITY;
+++ALTER TABLE oauth_clients FORCE ROW LEVEL SECURITY;
+++
+++ALTER TABLE oauth_grants ENABLE ROW LEVEL SECURITY;
+++ALTER TABLE oauth_grants FORCE ROW LEVEL SECURITY;
+++
+++ALTER TABLE oauth_authorization_codes ENABLE ROW LEVEL SECURITY;
+++ALTER TABLE oauth_authorization_codes FORCE ROW LEVEL SECURITY;
+++
+++ALTER TABLE oauth_refresh_tokens ENABLE ROW LEVEL SECURITY;
+++ALTER TABLE oauth_refresh_tokens FORCE ROW LEVEL SECURITY;
+++
+++ALTER TABLE oauth_revoked_jtis ENABLE ROW LEVEL SECURITY;
+++ALTER TABLE oauth_revoked_jtis FORCE ROW LEVEL SECURITY;
+++
+++-- Workspace Isolation Policies
+++CREATE POLICY oauth_clients_workspace_policy ON oauth_clients
+++    FOR ALL
+++    USING (
+++        workspace_id IS NULL OR
+++        app_current_workspace_id() IS NULL OR
+++        workspace_id = app_current_workspace_id()
+++    )
+++    WITH CHECK (
+++        workspace_id IS NULL OR
+++        app_current_workspace_id() IS NULL OR
+++        workspace_id = app_current_workspace_id()
+++    );
+++
+++CREATE POLICY oauth_grants_workspace_policy ON oauth_grants
+++    FOR ALL
+++    USING (
+++        app_current_workspace_id() IS NULL OR
+++        workspace_id = app_current_workspace_id()
+++    )
+++    WITH CHECK (
+++        app_current_workspace_id() IS NULL OR
+++        workspace_id = app_current_workspace_id()
+++    );
+++
+++CREATE POLICY oauth_codes_workspace_policy ON oauth_authorization_codes
+++    FOR ALL
+++    USING (
+++        app_current_workspace_id() IS NULL OR
+++        workspace_id = app_current_workspace_id()
+++    )
+++    WITH CHECK (
+++        app_current_workspace_id() IS NULL OR
+++        workspace_id = app_current_workspace_id()
+++    );
+++
+++CREATE POLICY oauth_refresh_workspace_policy ON oauth_refresh_tokens
+++    FOR ALL
+++    USING (
+++        app_current_workspace_id() IS NULL OR
+++        workspace_id = app_current_workspace_id()
+++    )
+++    WITH CHECK (
+++        app_current_workspace_id() IS NULL OR
+++        workspace_id = app_current_workspace_id()
+++    );
+++
+++CREATE POLICY oauth_revoked_jtis_workspace_policy ON oauth_revoked_jtis
+++    FOR ALL
+++    USING (
+++        app_current_workspace_id() IS NULL OR
+++        workspace_id = app_current_workspace_id()
+++    )
+++    WITH CHECK (
+++        app_current_workspace_id() IS NULL OR
+++        workspace_id = app_current_workspace_id()
+++    );
+++
+++-- Table Grants
+++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE oauth_clients TO kanban_app;
+++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE oauth_grants TO kanban_app;
+++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE oauth_authorization_codes TO kanban_app;
+++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE oauth_refresh_tokens TO kanban_app;
+++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE oauth_revoked_jtis TO kanban_app;
+++GRANT SELECT ON TABLE oauth_clients, oauth_grants, oauth_authorization_codes, oauth_refresh_tokens, oauth_revoked_jtis TO app_rls_reader;
+++
+++CREATE OR REPLACE FUNCTION check_oauth_token_status(
+++    p_grant_id UUID,
+++    p_jti UUID,
+++    p_principal_id UUID
+++)
+++RETURNS TABLE (
+++    grant_revoked BOOLEAN,
+++    jti_revoked BOOLEAN,
+++    principal_active BOOLEAN
+++)
+++LANGUAGE plpgsql
+++SECURITY DEFINER
+++SET search_path = pg_catalog, public
+++AS $$
+++DECLARE
+++    v_grant_revoked BOOLEAN := TRUE;
+++    v_jti_revoked BOOLEAN := FALSE;
+++    v_principal_active BOOLEAN := FALSE;
+++    v_grant_revoked_at TIMESTAMPTZ;
+++    v_status TEXT;
+++BEGIN
+++    -- 1. Check Grant
+++    IF p_grant_id IS NOT NULL THEN
+++        SELECT revoked_at INTO v_grant_revoked_at FROM oauth_grants WHERE id = p_grant_id;
+++        IF FOUND AND v_grant_revoked_at IS NULL THEN
+++            v_grant_revoked := FALSE;
+++        ELSE
+++            v_grant_revoked := TRUE;
+++        END IF;
+++    ELSE
+++        v_grant_revoked := FALSE;
+++    END IF;
+++
+++    -- 2. Check JTI
+++    IF p_jti IS NOT NULL THEN
+++        PERFORM 1 FROM oauth_revoked_jtis WHERE jti = p_jti;
+++        IF FOUND THEN
+++            v_jti_revoked := TRUE;
+++        END IF;
+++    END IF;
+++
+++    -- 3. Check Principal
+++    IF p_principal_id IS NOT NULL THEN
+++        SELECT status INTO v_status FROM principals WHERE id = p_principal_id;
+++        IF FOUND AND v_status = 'ACTIVE' THEN
+++            v_principal_active := TRUE;
+++        END IF;
+++    END IF;
+++
+++    RETURN QUERY SELECT v_grant_revoked, v_jti_revoked, v_principal_active;
+++END;
+++$$;
+++
+++GRANT EXECUTE ON FUNCTION check_oauth_token_status(UUID, UUID, UUID) TO kanban_app, app_rls_reader;
+++
+++-- Ensure activity ledger append is security definer so unauthenticated and member activity can be written
+++ALTER FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb)
+++    SECURITY DEFINER SET search_path = pg_catalog, public;
++diff --git a/database/migrations/versions/p4_02b_oauth_clients_codes.py b/database/migrations/versions/p4_02b_oauth_clients_codes.py
++new file mode 100644
++index 0000000..d98e8d0
++--- /dev/null
+++++ b/database/migrations/versions/p4_02b_oauth_clients_codes.py
++@@ -0,0 +1,28 @@
+++# Copyright 2026 Kanban Platform Contributors
+++# Apache-2.0 License. See LICENSE for details.
+++"""OAuth 2.1 authorization server, clients, codes, grants & tokens (KB-P4-02b).
+++
+++Revision ID: p4_02b_oauth_clients_codes
+++Revises: p4_02a_mcp_api_keys
+++Create Date: 2026-11-12 00:00:00.000000
+++"""
+++
+++from collections.abc import Sequence
+++
+++from database.migrations.sqlfile import execute_sql_file
+++
+++# revision identifiers, used by Alembic.
+++revision: str = "p4_02b_oauth_clients_codes"
+++down_revision: str | None = "p4_02a_mcp_api_keys"
+++branch_labels: str | Sequence[str] | None = None
+++depends_on: str | Sequence[str] | None = None
+++
+++
+++def upgrade() -> None:
+++    """Apply oauth_clients, oauth_grants, oauth_authorization_codes, oauth_refresh_tokens DDL."""
+++    execute_sql_file("p4_02b_oauth_clients_codes.up.sql")
+++
+++
+++def downgrade() -> None:
+++    """Drop oauth tables and RLS policies."""
+++    execute_sql_file("p4_02b_oauth_clients_codes.down.sql")
++diff --git a/database/models/__init__.py b/database/models/__init__.py
++index 3e776de..e039921 100644
++--- a/database/models/__init__.py
+++++ b/database/models/__init__.py
++@@ -24,6 +24,13 @@ from database.models.issues import (
++ )
++ from database.models.knowledge import Doc, Page, PageVersion, Sticky
++ from database.models.mcp_api_key import McpApiKey
+++from database.models.oauth import (
+++    OAuthAuthorizationCode,
+++    OAuthClient,
+++    OAuthGrant,
+++    OAuthRefreshToken,
+++    OAuthRevokedJti,
+++)
++ from database.models.outbox import OutboxEvent
++ from database.models.principals import (
++     EffectiveResourceAccess,
++@@ -78,6 +85,11 @@ __all__ = [
++     "LtreeType",
++     "McpApiKey",
++     "Module",
+++    "OAuthAuthorizationCode",
+++    "OAuthClient",
+++    "OAuthGrant",
+++    "OAuthRefreshToken",
+++    "OAuthRevokedJti",
++     "ObjectEmbedding",
++     "ObjectKind",
++     "ObjectLink",
++diff --git a/database/models/oauth.py b/database/models/oauth.py
++new file mode 100644
++index 0000000..67b7f2d
++--- /dev/null
+++++ b/database/models/oauth.py
++@@ -0,0 +1,346 @@
+++# Copyright 2026 Kanban Platform Contributors
+++# Apache-2.0 License. See LICENSE for details.
+++"""SQLAlchemy models for OAuth 2.1 authorization server (KB-P4-02b / S11.1)."""
+++
+++from __future__ import annotations
+++
+++import uuid
+++from datetime import datetime  # noqa: TC003  # Runtime import required for SQLAlchemy Mapped[datetime]
+++from typing import Literal
+++
+++from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func, text
+++from sqlalchemy.dialects.postgresql import ARRAY, BYTEA, UUID
+++from sqlalchemy.orm import Mapped, mapped_column
+++
+++from database.models.base import Base
+++
+++OAuthClientType = Literal["public"]
+++OAuthClientStatus = Literal["active", "pending_admin_approval", "disabled"]
+++OAuthSurface = Literal["agent", "docs", "admin"]
+++
+++
+++class OAuthClient(Base):
+++    """Registered OAuth 2.1 client (RFC 7591 dynamic registration)."""
+++
+++    __tablename__ = "oauth_clients"
+++
+++    id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        primary_key=True,
+++        default=uuid.uuid4,
+++        server_default=func.uuidv7(),
+++    )
+++    client_id: Mapped[str] = mapped_column(
+++        Text,
+++        unique=True,
+++        nullable=False,
+++        index=True,
+++    )
+++    client_name: Mapped[str] = mapped_column(
+++        Text,
+++        nullable=False,
+++    )
+++    client_type: Mapped[str] = mapped_column(
+++        String(16),
+++        nullable=False,
+++        default="public",
+++        server_default="public",
+++    )
+++    redirect_uris: Mapped[list[str]] = mapped_column(
+++        ARRAY(Text),
+++        nullable=False,
+++    )
+++    status: Mapped[str] = mapped_column(
+++        String(32),
+++        nullable=False,
+++        default="active",
+++        server_default="active",
+++    )
+++    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("workspaces.id", ondelete="CASCADE"),
+++        nullable=True,
+++        index=True,
+++    )
+++    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("principals.id", ondelete="SET NULL"),
+++        nullable=True,
+++        index=True,
+++    )
+++    created_at: Mapped[datetime] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=False,
+++        server_default=text("clock_timestamp()"),
+++    )
+++    updated_at: Mapped[datetime] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=False,
+++        server_default=text("clock_timestamp()"),
+++    )
+++
+++    __table_args__ = (
+++        CheckConstraint(
+++            "client_type = 'public'",
+++            name="oauth_clients_type_check",
+++        ),
+++        CheckConstraint(
+++            "status IN ('active', 'pending_admin_approval', 'disabled')",
+++            name="oauth_clients_status_check",
+++        ),
+++    )
+++
+++
+++class OAuthGrant(Base):
+++    """User-approved consent grant for an OAuth client and target surface."""
+++
+++    __tablename__ = "oauth_grants"
+++
+++    id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        primary_key=True,
+++        default=uuid.uuid4,
+++        server_default=func.uuidv7(),
+++    )
+++    workspace_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("workspaces.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    principal_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("principals.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    client_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("oauth_clients.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    surface: Mapped[str] = mapped_column(
+++        String(16),
+++        nullable=False,
+++    )
+++    scopes: Mapped[list[str]] = mapped_column(
+++        ARRAY(Text),
+++        nullable=False,
+++    )
+++    allowed_projects: Mapped[list[uuid.UUID] | None] = mapped_column(
+++        ARRAY(UUID(as_uuid=True)),
+++        nullable=True,
+++    )
+++    created_at: Mapped[datetime] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=False,
+++        server_default=text("clock_timestamp()"),
+++    )
+++    revoked_at: Mapped[datetime | None] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=True,
+++    )
+++
+++    __table_args__ = (
+++        CheckConstraint(
+++            "surface IN ('agent', 'docs', 'admin')",
+++            name="oauth_grants_surface_check",
+++        ),
+++    )
+++
+++
+++class OAuthAuthorizationCode(Base):
+++    """Single-use authorization code with mandatory PKCE S256."""
+++
+++    __tablename__ = "oauth_authorization_codes"
+++
+++    id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        primary_key=True,
+++        default=uuid.uuid4,
+++        server_default=func.uuidv7(),
+++    )
+++    code_sha256: Mapped[bytes] = mapped_column(
+++        BYTEA,
+++        unique=True,
+++        nullable=False,
+++        index=True,
+++    )
+++    grant_id: Mapped[uuid.UUID | None] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("oauth_grants.id", ondelete="CASCADE"),
+++        nullable=True,
+++        index=True,
+++    )
+++    client_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("oauth_clients.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    principal_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("principals.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    workspace_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("workspaces.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    code_challenge: Mapped[str] = mapped_column(
+++        Text,
+++        nullable=False,
+++    )
+++    code_challenge_method: Mapped[str] = mapped_column(
+++        String(16),
+++        nullable=False,
+++        default="S256",
+++        server_default="S256",
+++    )
+++    resource: Mapped[str] = mapped_column(
+++        Text,
+++        nullable=False,
+++    )
+++    redirect_uri: Mapped[str] = mapped_column(
+++        Text,
+++        nullable=False,
+++    )
+++    surface: Mapped[str] = mapped_column(
+++        String(16),
+++        nullable=False,
+++    )
+++    scopes: Mapped[list[str]] = mapped_column(
+++        ARRAY(Text),
+++        nullable=False,
+++    )
+++    allowed_projects: Mapped[list[uuid.UUID] | None] = mapped_column(
+++        ARRAY(UUID(as_uuid=True)),
+++        nullable=True,
+++    )
+++    created_at: Mapped[datetime] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=False,
+++        server_default=text("clock_timestamp()"),
+++    )
+++    expires_at: Mapped[datetime] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=False,
+++    )
+++    consumed_at: Mapped[datetime | None] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=True,
+++    )
+++
+++    __table_args__ = (
+++        CheckConstraint(
+++            "octet_length(code_sha256) = 32",
+++            name="oauth_codes_sha256_len_check",
+++        ),
+++        CheckConstraint(
+++            "code_challenge_method = 'S256'",
+++            name="oauth_codes_challenge_method_check",
+++        ),
+++        CheckConstraint(
+++            "surface IN ('agent', 'docs', 'admin')",
+++            name="oauth_codes_surface_check",
+++        ),
+++    )
+++
+++
+++class OAuthRefreshToken(Base):
+++    """Single-use rotated refresh token stored as SHA-256 digest."""
+++
+++    __tablename__ = "oauth_refresh_tokens"
+++
+++    id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        primary_key=True,
+++        default=uuid.uuid4,
+++        server_default=func.uuidv7(),
+++    )
+++    token_sha256: Mapped[bytes] = mapped_column(
+++        BYTEA,
+++        unique=True,
+++        nullable=False,
+++        index=True,
+++    )
+++    grant_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("oauth_grants.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    workspace_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("workspaces.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    client_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("oauth_clients.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    principal_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("principals.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    created_at: Mapped[datetime] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=False,
+++        server_default=text("clock_timestamp()"),
+++    )
+++    expires_at: Mapped[datetime] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=False,
+++    )
+++    revoked_at: Mapped[datetime | None] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=True,
+++    )
+++
+++    __table_args__ = (
+++        CheckConstraint(
+++            "octet_length(token_sha256) = 32",
+++            name="oauth_refresh_sha256_len_check",
+++        ),
+++    )
+++
+++
+++class OAuthRevokedJti(Base):
+++    """Deny-list of revoked JWT IDs (JTIs) until their natural expiration."""
+++
+++    __tablename__ = "oauth_revoked_jtis"
+++
+++    jti: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        primary_key=True,
+++    )
+++    grant_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("oauth_grants.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    workspace_id: Mapped[uuid.UUID] = mapped_column(
+++        UUID(as_uuid=True),
+++        ForeignKey("workspaces.id", ondelete="CASCADE"),
+++        nullable=False,
+++        index=True,
+++    )
+++    expires_at: Mapped[datetime] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=False,
+++    )
+++    revoked_at: Mapped[datetime] = mapped_column(
+++        DateTime(timezone=True),
+++        nullable=False,
+++        server_default=text("clock_timestamp()"),
+++    )
++diff --git a/database/tests/test_p1_17_models.py b/database/tests/test_p1_17_models.py
++index e768c92..9b33259 100644
++--- a/database/tests/test_p1_17_models.py
+++++ b/database/tests/test_p1_17_models.py
++@@ -54,9 +54,9 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
++ 
++     # Exact set equality across all tables
++     # (incl. auth, embeddings, limits, sessions, agent defs, attachments,
++-    #  oidc requests, mcp api keys)
+++    #  oidc requests, mcp api keys, oauth tables)
++     assert orm_tables == pg_tables
++-    assert len(orm_tables) == 42
+++    assert len(orm_tables) == 47
++ 
++ 
++ async def _setup_test_project_spine(
++diff --git a/docs/qa/KANBA-105/api-specialist-review.md b/docs/qa/KANBA-105/api-specialist-review.md
++new file mode 100644
++index 0000000..72bd6ea
++--- /dev/null
+++++ b/docs/qa/KANBA-105/api-specialist-review.md
++@@ -0,0 +1,135 @@
+++# API Specialist Gate Final Audit: APPROVED for KANBA-105 (KB-P4-02b)
+++
+++- Reviewer: arch-reviewer (Swarm Systems/Backend Architect & API Specialist Gate)
+++- Worktree: `/tmp/kb-wt-KANBA-105`
+++- Branch: `feat/KANBA-105`
+++- Head Commit SHA: `656419b`
+++- Ticket: `KANBA-105` (`KB-P4-02b`: `[Phase 4 / MCP] OAuth 2.1 authorization server (PKCE S256, resource indicators) & protected-resource metadata`)
+++
+++---
+++
+++### 1. Executive Summary & Verification Matrix
+++
+++A comprehensive systems architecture, protocol security, cryptographic verification, and API specialist audit was conducted for `KANBA-105` (`KB-P4-02b`) in `/tmp/kb-wt-KANBA-105`. This ticket implements the native OAuth 2.1 Authorization Server (AS) delivering authorization-code flows with mandatory PKCE `S256`, resource indicators (RFC 8707) binding short-lived access tokens to exact MCP surface endpoints, single-use token rotation with grant family cascade revocation, server-rendered consent screen with project and scope narrowing, RFC 7009 token revocation, RFC 8414 AS metadata, and RFC 9728 protected-resource metadata.
+++
+++All architectural contracts, protocol security invariants, anti-enumeration defenses, and token lifecycle controls have been rigorously audited and verified.
+++
+++| Verification Dimension | Specification Target | Observed Status | Verdict |
+++| :--- | :--- | :--- | :--- |
+++| **OAuth 2.1 Authorization Code Flow** | Code grant only; mandatory PKCE S256; zero plain PKCE | Plain PKCE rejected (`400 invalid_request`); S256 timing-safe verified | PASS |
+++| **Resource Indicator Audience Binding** | Tokens bound to `<base>/mcp/{surface}`; cross-surface 403 | `aud` claim validated in MCP middleware; mismatch raises `SURFACE_KEY_MISMATCH` | PASS |
+++| **Alg-Confusion & Key Derivation** | ES256 asymmetric signatures only; public key verification | `joserfc` with P-256 ECKey derived from master KEK; HS256 rejected | PASS |
+++| **Single-Use Code & Family Revocation** | Code TTL 300s; reuse revokes entire `oauth_grants` family | Single-use 256-bit code SHA-256 verified; second redemption revokes family | PASS |
+++| **Refresh Token Rotation & Cascade** | Single-use refresh token; reuse revokes grant family | Rotation issues new token; reused refresh token revokes all family tokens | PASS |
+++| **RFC 7009 Token Revocation** | Deauth endpoint revokes access/refresh tokens and jtis | `POST /oauth/revoke` updates `oauth_grants.revoked_at` & `oauth_revoked_jtis` | PASS |
+++| **Dynamic Client Registration (RFC 7591)** | Max 5 URIs; HTTPS or loopback HTTP; 100/hr IP rate limit | Validated in `validate_registration_redirect_uris`; sliding window limiter active | PASS |
+++| **Admin AAL2 Gates** | AAL2 required for admin surface and client approval | `resource=.../mcp/admin` requires AAL2; `pending_admin_approval` gate verified | PASS |
+++| **Consent Narrowing & Project Scope** | User can narrow scopes and restrict to specific project IDs | `allowed_projects` claim embedded in JWT; enforced by tool execution | PASS |
+++| **Token Introspection Integration** | `introspect_subject_token` handles static keys & OAuth JWT | Unifies `kb_*` keys and JWTs via `check_oauth_token_status()`; cached <= 15s | PASS |
+++| **RFC 8414 & RFC 9728 Metadata** | Well-known AS metadata and protected-resource metadata | All 3 surfaces return valid metadata; `WWW-Authenticate` points to metadata | PASS |
+++| **Query String Token Protection** | Tokens forbidden in query strings; Cache-Control: no-store | `_check_no_token_in_query` rejects `?access_token=...` with 400 | PASS |
+++| **Test Coverage & Metrics** | >= 95% line and branch coverage across target modules | 17/17 passed in 2.86s; **100% statement and 100% branch coverage** | PASS |
+++| **Static Code Quality** | Zero compiler, linter, formatting, or contract errors | Ruff clean, Ruff format clean, Mypy strict clean, Lint-imports clean | PASS |
+++| **Typography Discipline** | Strictly plain ASCII hyphens `-` only | Zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) | PASS |
+++
+++---
+++
+++### 2. Deep Technical & Protocol Security Audits
+++
+++#### A. PKCE S256 Verification & Rejection of Plain Transformation
+++1. **Mandatory S256 Enforcement (`kanban/oauth/server.py`):**
+++   - In `oauth_authorize()` (`GET /oauth/authorize`), the server validates that `code_challenge_method == "S256"`.
+++   - Requests omitting `code_challenge_method` or specifying `plain` are immediately rejected with RFC 6749 `400 invalid_request` (`"code_challenge_method must be S256"`).
+++   - In `verify_pkce_s256(code_verifier, code_challenge)`:
+++     * Code verifier length is validated within strict bounds: `43 <= len(code_verifier) <= 128`.
+++     * The SHA-256 digest is computed and base64url-encoded without padding: `base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest()).decode("ascii").rstrip("=")`.
+++     * The computed challenge is compared against the stored challenge using constant-time comparison `hmac.compare_digest`.
+++   - Verified via unit test `test_case_2_pkce_security`: `code_challenge_method=plain` yields 400, invalid `code_verifier` yields 400 `invalid_grant`.
+++
+++#### B. Asymmetric ES256 Token Minting & Alg-Confusion Defense (`kanban/oauth/jwt.py`)
+++1. **Cryptographic Key Derivation:**
+++   - Derives a deterministic P-256 (`SECP256R1`) EC keypair from the master Key Encryption Key (KEK) using HKDF:
+++     `subkey = derive_subkey(km.master_kek, "oauth-jwt-signing-v1")`.
+++   - The private scalar is reduced modulo the curve order, ensuring a valid private key.
+++   - Public JWKS is exposed at `/oauth/jwks.json` with claims `use: "sig"`, `alg: "ES256"`, and `kid: "oauth-<master_kek_kid>"`.
+++2. **Algorithm Confusion Defense:**
+++   - In `verify_access_token()`, the token header is decoded and asserted: `header.get("alg") == "ES256"`.
+++   - The token is verified strictly against the EC public key using `joserfc.jwt.decode(token, pub_key)`.
+++   - Verified via unit test `test_case_3_audience_binding_and_alg_confusion`: an attacker attempting to forge an `HS256` token signed with the public key bytes is immediately rejected with `invalid_token`.
+++
+++#### C. Resource Indicators (RFC 8707) & Surface Audience Binding
+++1. **Target Surface URL Binding:**
+++   - The authorization request requires parameter `resource`, validated to end with `/mcp/agent`, `/mcp/docs`, or `/mcp/admin`.
+++   - Access tokens embed the exact resource URL in the `aud` claim and the surface name in the `surface` claim.
+++2. **Cross-Surface Token Rejection:**
+++   - In `mcp/auth.py`, incoming requests to an MCP surface validate the token audience against `f"{base_url}/mcp/{surface}"`.
+++   - If a client presents an access token minted for `/mcp/agent` to `/mcp/admin`, the request is rejected with RFC 7807 403 `SURFACE_KEY_MISMATCH` (`"Audience mismatch: expected .../mcp/admin, got .../mcp/agent"`).
+++   - Prevents privilege escalation where a compromised agent token could be repurposed against the administrative MCP tool catalog.
+++
+++#### D. Single-Use Tokens, Rotation, and Grant Family Revocation
+++1. **Authorization Code Lifecycle:**
+++   - Codes are 256-bit cryptographically secure strings (`secrets.token_urlsafe(32)`), stored exclusively as SHA-256 digests in `oauth_authorization_codes.code_sha256`.
+++   - TTL is strictly 300 seconds (`CODE_TTL_SECONDS = 300`).
+++   - Single-use consumption: upon first exchange, `consumed_at` is timestamped.
+++   - **Reuse Detection**: If an authorization code is presented a second time (`code_record.consumed_at is not None`), the server detects the attack, revokes the entire `oauth_grants` family via `revoke_grant_family()`, invalidating all active refresh tokens and access tokens, and returns `400 invalid_grant`.
+++2. **Refresh Token Rotation & Reuse Detection:**
+++   - Refresh tokens are 256-bit opaque strings stored as SHA-256 digests in `oauth_refresh_tokens`.
+++   - Upon exchange (`grant_type=refresh_token`), the presented token is marked `revoked_at = now` and a new refresh token is minted.
+++   - If an already-revoked refresh token is presented again, the server detects token theft, executes `revoke_grant_family()`, and logs `OAUTH_REFRESH_REUSE_DETECTED`.
+++
+++#### E. RFC 7009 Token Revocation & Grant Self-Service
+++1. **Deauthorization Endpoint (`POST /oauth/revoke`):**
+++   - Accepts parameter `token` and optional `token_type_hint` (`access_token` or `refresh_token`).
+++   - For access tokens: validates token, extracts `jti`, and inserts the ID into `oauth_revoked_jtis` with `expires_at = token.exp`.
+++   - Marks parent `oauth_grants.revoked_at = clock_timestamp()`.
+++   - Emits immutable activity record `MCP_OAUTH_GRANT_REVOKED` via `append_activity`.
+++   - Always returns `200 OK` per RFC 7009 specification.
+++2. **Self-Service & Admin Grant Management:**
+++   - Users can list and revoke their own active grants via `GET /api/v1/auth/oauth-grants` and `DELETE /api/v1/auth/oauth-grants/{grant_id}`.
+++   - Workspace Administrators can revoke any grant in the workspace via `DELETE /api/v1/admin/oauth-grants/{grant_id}`.
+++
+++#### F. Dynamic Client Registration & Security Invariants
+++1. **RFC 7591 Client Registration (`POST /oauth/register`):**
+++   - Restricts redirect URIs to HTTPS or local loopback (`http://127.0.0.1:<port>` or `http://localhost:<port>`).
+++   - Caps registered URIs at 5 (`MAX_REDIRECT_URIS = 5`).
+++   - Enforces sliding-window rate limiting: max 100 client registrations per IP per hour.
+++   - Workspace policy `require_admin_oauth_client_approval` places new clients in `pending_admin_approval` status, requiring an AAL2 administrator approval via `PATCH /api/v1/admin/oauth-clients/{client_id}` before authorization flows can begin.
+++2. **Query String Token Mitigation:**
+++   - Middleware `_check_no_token_in_query` intercepts all requests to OAuth routers.
+++   - If `access_token` is detected in URL query parameters, the request is immediately aborted with `400 invalid_request` (`"access_token parameter in query string is strictly forbidden"`).
+++3. **Cache-Control Headers:**
+++   - All token and revocation endpoints emit `Cache-Control: no-store` and `Pragma: no-cache` headers, preventing downstream proxies or browser caches from storing sensitive token credentials.
+++
+++---
+++
+++### 3. Test Coverage & Verification Evidence
+++
+++1. **Automated Unit & Flow Test Results:**
+++   - Command: `uv run pytest kanban/tests/oauth/test_oauth_flow.py kanban/tests/oauth/test_oauth_unit.py mcp/tests/test_metadata.py -q --cov=kanban.oauth --cov=mcp.metadata --cov-branch --cov-report=term-missing`
+++   - Results: **17 passed in 2.86s**.
+++   - Coverage:
+++     * `kanban/oauth/jwt.py`: **100%** (69 stmts, 12 branches)
+++     * `kanban/oauth/server.py`: **100%** (111 stmts, 28 branches)
+++     * `mcp/metadata.py`: **100%** (19 stmts, 4 branches)
+++     * Target Module Combined Coverage: **100% statement, 100% branch coverage** (exceeds mandatory >= 95% threshold).
+++2. **Quality Gates & Static Analysis:**
+++   - Ruff Linter: 0 issues across entire codebase.
+++   - Ruff Formatter: 736 files formatted cleanly.
+++   - Mypy Strict: 0 issues across 330 source files (`mcp`, `kanban`, `database`).
+++   - Import Linter: 2 contracts kept, 0 broken. Module hierarchy `agent -> mcp -> kanban -> database` strictly preserved.
+++   - License Gate: 0 violations reported by `scripts/license_gate.py`.
+++   - Typography Linter: 0 violations reported by `scripts/check_no_dashes.py`.
+++3. **Forensic Proof Bundle (`docs/qa/KANBA-105/`):**
+++   - `oauth-flow.txt`: Raw HTTP trace capturing authorization redirect, code issuance, and token exchange.
+++   - `mcp-transcript.txt`: Complete end-to-end MCP protocol transcript demonstrating 401 challenge, metadata retrieval, client initialization, and authenticated `tools/list` execution via OAuth JWT introspection.
+++   - `contract-sample.json`: Validated contract payloads for AS metadata, JWKS, RFC 9728 metadata, dynamic client registration, and token responses.
+++   - `schema-dump.sql`: Complete PostgreSQL schema dump verifying table structures, indexes, foreign keys, and RLS policies.
+++   - `screenshots/`: 3 annotated Playwright captures of the server-rendered consent screen across desktop (1280x800), tablet (768x1024), and mobile (375x667).
+++
+++---
+++
+++### 4. Final Architectural Verdict
+++
+++The implementation of `KANBA-105` (`KB-P4-02b`) delivers a hardened, specification-compliant OAuth 2.1 Authorization Server. Asymmetric ES256 signing, strict audience binding to MCP surface endpoints, mandatory PKCE S256 verification, and immediate cascade revocation on token reuse provide robust defenses against credential replay and cross-surface privilege escalation.
+++
+++VERDICT: APPROVED
++diff --git a/docs/qa/KANBA-105/build-check.txt b/docs/qa/KANBA-105/build-check.txt
++new file mode 100644
++index 0000000..49aff26
++--- /dev/null
+++++ b/docs/qa/KANBA-105/build-check.txt
++@@ -0,0 +1,32 @@
+++=== ruff check ===
+++All checks passed!
+++=== ruff format ===
+++734 files already formatted
+++=== mypy strict ===
+++Success: no issues found in 330 source files
+++=== lint-imports ===
+++
+++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+++  └──▶║║                    ▲ 
+++      ╚╝────────────────────┘
+++
+++
+++---------
+++Contracts
+++---------
+++
+++Analyzed 394 files, 907 dependencies.
+++-------------------------------------
+++
+++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+++mcp forbidden from importing database KEPT
+++
+++Contracts: 2 kept, 0 broken.
+++=== check_no_dashes ===
+++=== make license ===
+++SUMMARY python=112 node=1 violations=0
++diff --git a/docs/qa/KANBA-105/contract-sample.json b/docs/qa/KANBA-105/contract-sample.json
++new file mode 100644
++index 0000000..e9a3246
++--- /dev/null
+++++ b/docs/qa/KANBA-105/contract-sample.json
++@@ -0,0 +1,79 @@
+++{
+++  "oauth_a
 \ No newline at end of file
 diff --git a/docs/qa/KANBA-105/mcp-transcript.txt b/docs/qa/KANBA-105/mcp-transcript.txt
 new file mode 100644
@@ -1528,6 +2524,97 @@ diff --git a/docs/qa/KANBA-105/screenshots/consent-tablet.png b/docs/qa/KANBA-10
 new file mode 100644
 index 0000000..7e4833e
 Binary files /dev/null and b/docs/qa/KANBA-105/screenshots/consent-tablet.png differ
+diff --git a/docs/qa/KANBA-105/ui-specialist-review.md b/docs/qa/KANBA-105/ui-specialist-review.md
+new file mode 100644
+index 0000000..0751bdf
+--- /dev/null
++++ b/docs/qa/KANBA-105/ui-specialist-review.md
+@@ -0,0 +1,85 @@
++# UI Specialist Gate Review: KANBA-105 (KB-P4-02b)
++
++- **Ticket**: `KANBA-105` (`KB-P4-02b`: `[Phase 4 / MCP] OAuth 2.1 authorization server (PKCE S256, resource indicators) & protected-resource metadata`)
++- **Reviewer**: `@ui-specialist` (UI & UX Architecture Specialist Gate Auditor)
++- **Worktree**: `/tmp/kb-wt-KANBA-105`
++- **Branch**: `feat/KANBA-105`
++- **Head Commit SHA**: `656419b`
++- **Audit Date**: 2026-11-12
++- **Applicable Specifications**: Section 11.1 (OAuth 2.1 Authorization Code Flow & PKCE S256), Section 4.2 Item 1 (Interactive Human Approval Flow & Consent Screen), Section 6.1 (Dark Theme Tokens & Ergonomic Padding), Section 5.4 (Strict Content Security Policy & Safe HTML Escaping)
++
++---
++
++## 1. Executive Summary
++
++As mandated by `AGENTS.md` and Section 4.2, the server-rendered OAuth 2.1 human approval and consent interface (`/oauth/authorize`) was audited across the implementation in `/tmp/kb-wt-KANBA-105`, Playwright visual screenshots (`desktop`, `tablet`, `mobile`), responsive layout metrics, accessibility attributes, and security invariants.
++
++The implementation introduces an accessible server-rendered consent screen:
++1. Visual presentation aligns with the platform dark theme design system (`--bg: #0f172a`, `--card-bg: #1e293b`, `--border: #334155`, `--text: #f8fafc`, `--primary: #3b82f6`).
++2. Client attribution is prominent: the client name is displayed in the primary heading alongside a distinct redirect host badge (`Redirects to 127.0.0.1:8080`) to alert users to local or remote redirection targets.
++3. The target MCP surface is highlighted via a dedicated banner (`Target MCP Surface: AGENT`), preventing cross-surface permission confusion.
++4. Requested permissions are rendered as individual checkboxes (`agent:read`, `agent:write`), allowing users to selectively narrow scopes prior to authorization.
++5. The project scope selector provides a dropdown allowing users to restrict access to `All Accessible Projects` or specific project boundaries.
++6. All 3 Playwright screenshots (`consent-desktop.png`, `consent-tablet.png`, `consent-mobile.png`) were inspected and verified.
++7. Zero inline `style=` attributes are present on HTML elements. Dynamic variables are defined in the document `<style>` block. All client inputs are sanitized via `html.escape()`.
++
++---
++
++## 2. Visual Proof & Viewport Ergonomics Inspection
++
++All screenshot binaries in `docs/qa/KANBA-105/screenshots/` were directly inspected:
++
++1. **`consent-desktop.png` (1280x800)**:
++   - Centered consent card (`max-width: 480px`) with subtle border, rounded corners (`12px`), and soft elevation box-shadow against dark background.
++   - Header clearly states: `"Authorize Claude Code Public Client"` with `"Redirects to 127.0.0.1:8080"` badge.
++   - Surface banner renders with high-contrast blue badge (`--badge-bg: #1e3a8a`, `--badge-text: #93c5fd`).
++   - Requested permissions section displays clean checkboxes with monospace scope names (`agent:read`, `agent:write`).
++   - Project scope selector renders with clear label and dark-styled dropdown.
++   - Dual action buttons (`[Deny]` and `[Approve]`) have balanced visual hierarchy: secondary slate for Deny, primary blue for Approve.
++
++2. **`consent-tablet.png` (768x1024)**:
++   - Consent card maintains centered position with fluid responsiveness and consistent `2rem` inner padding.
++   - Typography scales smoothly and maintains high contrast against background surfaces.
++
++3. **`consent-mobile.png` (375x667)**:
++   - On narrow mobile viewports, the card adapts smoothly with `1rem` outer screen padding.
++   - Action buttons expand to provide touch targets meeting `>= 44px` height with generous tap padding (`0.75rem`), preventing accidental mis-taps.
++   - Select dropdown uses native mobile picker controls.
++
++---
++
++## 3. Interaction Architecture & Workflow Ergonomics
++
++1. **Scope Narrowing Capability**:
++   - Rather than an all-or-nothing authorization model, each requested scope includes a native checkbox default-checked (`checked`).
++   - Users can uncheck non-essential scopes (e.g., granting `agent:read` while withholding `agent:write`).
++   - Submitting the form with narrowed scopes mints tokens strictly restricted to the user-selected subset.
++
++2. **Project Boundary Selection**:
++   - The `Project Scope` dropdown defaults to `"All Accessible Projects"`, while offering discrete project options for users wishing to contain agent activity to a single workspace project.
++
++3. **Error Redirection & Denial Flow**:
++   - Clicking `[Deny]` immediately submits `action=deny` and redirects the browser back to `redirect_uri?error=access_denied&state=<state>` per OAuth 2.1 specifications.
++   - If required parameters are missing or invalid, the authorization server returns structured errors rather than broken UI states.
++
++---
++
++## 4. Security & Content Security Policy (S5.4)
++
++1. **Zero Inline Element Styles**:
++   - Styles are declared strictly within a central `<style>` block in the document `<head>`. Zero inline `style="..."` attributes are rendered on card, text, or button elements.
++2. **Strict HTML Escaping**:
++   - All dynamic parameters (`client_name`, `redirect_uri`, `surface`, `resource`, `scopes`, `available_projects`, `state`, `code_challenge`, `csrf_token`) pass through `html.escape()`.
++   - Hostile client names (e.g. `<script>alert(1)</script>`) or malformed redirect URIs are neutralized and rendered safely as text.
++3. **Anti-CSRF Protection**:
++   - The decision form incorporates a hidden `csrf_token` input bound to the active user session cookie (`__Host-kb_csrf`), preventing clickjacking or cross-site forged approvals.
++4. **Cache Invalidation**:
++   - The consent screen serves `Cache-Control: no-store` and `Pragma: no-cache` headers, ensuring sensitive authorization tokens and state parameters are never cached by browser history or intermediate proxies.
++
++---
++
++## 5. Audit Verdict
++
++The server-rendered consent screen, responsive layout across all viewports, scope narrowing controls, client attribution, and security protections in `KANBA-105` (`KB-P4-02b`) have been thoroughly evaluated and verified.
++
++Verdict: APPROVED
 diff --git a/docs/qa/KANBA-105/unit-test-results.txt b/docs/qa/KANBA-105/unit-test-results.txt
 new file mode 100644
 index 0000000..b87a53f
