@@ -1,6 +1,8 @@
 import React, { type ComponentType, type JSX } from 'react';
 import { ListView } from '../list/ListView';
 import { TableView } from '../table/TableView';
+import { CalendarView } from '../calendar/CalendarView';
+import { TimelineView } from '../timeline/TimelineView';
 import type { IssueItem } from './viewsApi';
 
 export interface ViewComponentProps {
@@ -21,6 +23,8 @@ export type ViewComponent = ComponentType<ViewComponentProps>;
 export const VIEW_REGISTRY: Record<string, ViewComponent> = {
   list: ListView as ViewComponent,
   table: TableView as ViewComponent,
+  calendar: CalendarView as ViewComponent,
+  timeline: TimelineView as ViewComponent,
 };
 
 export interface ViewHostProps extends ViewComponentProps {

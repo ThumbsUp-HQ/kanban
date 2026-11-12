@@ -14,12 +14,23 @@ export const FIXTURE_PROJECT_NOMODULES: ProjectMetadata = {
 
 export const FIXTURE_12_ISSUES: IssueItem[] = [
   {
+    id: '01931234-0000-7000-8000-000000000100',
+    key: 'KAN-100',
+    summary: 'Security Architecture Epic',
+    state: { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 30 },
+    priority: { slug: 'high', label: 'High', emoji: '⚡', sort_order: 20 },
+    start_date: '2026-11-01',
+    due_date: '2026-11-12',
+    outbound_blocks: [{ target_key: 'KAN-142', link_state: 'ACTIVE', restricted: false }],
+  },
+  {
     id: '01931234-0001-7000-8000-000000000001',
     key: 'KAN-140',
     summary: 'Evaluate Postgres RLS performance under heavy load',
     state: { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 10 },
     priority: { slug: 'medium', label: 'Medium', emoji: '🔹', sort_order: 30 },
-    due_date: '2026-12-01',
+    start_date: '2026-11-05',
+    due_date: '2026-11-10',
     labels: [{ id: 'lbl-1', name: 'Database', color_hex: '#2563eb' }],
     assignees: [
       {
@@ -35,7 +46,8 @@ export const FIXTURE_12_ISSUES: IssueItem[] = [
     summary: 'Design database schema for cycle burndown metrics',
     state: { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 10 },
     priority: { slug: 'low', label: 'Low', emoji: '💤', sort_order: 40 },
-    due_date: '2026-12-05',
+    start_date: '2026-11-14',
+    due_date: '2026-11-22',
   },
   {
     id: '01931234-0003-7000-8000-000000000003',
@@ -43,7 +55,12 @@ export const FIXTURE_12_ISSUES: IssueItem[] = [
     summary: 'Refactor OAuth token rotation and HMAC verification',
     state: { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 30 },
     priority: { slug: 'urgent', label: 'Urgent', emoji: '🔥', sort_order: 10 },
-    due_date: '2026-11-20',
+    start_date: '2026-11-11',
+    due_date: '2026-11-18',
+    outbound_blocks: [
+      { target_key: 'KAN-143', link_state: 'ACTIVE', restricted: false },
+      { target_key: 'KAN-141', link_state: 'FLAGGED_INVALID', restricted: false },
+    ],
     has_explicit_acl: true,
     gate_status: 'approved',
     module_ids: ['mod-1'],
@@ -68,8 +85,17 @@ export const FIXTURE_12_ISSUES: IssueItem[] = [
     summary: 'Implement Pragmatic DnD board column virtualization',
     state: { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 20 },
     priority: { slug: 'high', label: 'High', emoji: '⚡', sort_order: 20 },
-    due_date: '2026-11-15',
+    start_date: '2026-11-20',
+    due_date: '2026-11-25',
     cycle_id: 'cycle-1',
+    links: [
+      {
+        target_key: 'KAN-RESTRICTED',
+        link_type: 'BLOCKS',
+        link_state: 'ACTIVE',
+        restricted: true,
+      },
+    ],
   },
   {
     id: '01931234-0005-7000-8000-000000000005',
@@ -85,7 +111,7 @@ export const FIXTURE_12_ISSUES: IssueItem[] = [
     summary: 'Integrate WebAuthn Passkeys userVerification required',
     state: { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 30 },
     priority: { slug: 'high', label: 'High', emoji: '⚡', sort_order: 20 },
-    due_date: '2026-11-25',
+    due_date: '2026-11-18',
     gate_status: 'pending',
   },
   {
@@ -94,7 +120,7 @@ export const FIXTURE_12_ISSUES: IssueItem[] = [
     summary: 'Review surgical right-click contextmenu event handling',
     state: { id: 'state-in-review', name: 'In Review', group: 'started', sort_order: 40 },
     priority: { slug: 'medium', label: 'Medium', emoji: '🔹', sort_order: 30 },
-    due_date: '2026-11-30',
+    due_date: '2026-11-18',
   },
   {
     id: '01931234-0008-7000-8000-000000000008',
@@ -102,6 +128,7 @@ export const FIXTURE_12_ISSUES: IssueItem[] = [
     summary: 'Verify isolated Mermaid Web Worker sandbox security',
     state: { id: 'state-in-review', name: 'In Review', group: 'started', sort_order: 40 },
     priority: { slug: 'urgent', label: 'Urgent', emoji: '🔥', sort_order: 10 },
+    due_date: '2026-11-18',
     gate_status: 'vetoed',
   },
   {

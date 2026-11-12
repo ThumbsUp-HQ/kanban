@@ -1,0 +1,34 @@
+
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-120/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/calendar/calendarGrid.test.ts (8 tests) 41ms
+ ✓ src/features/timeline/timelineGeometry.test.ts (16 tests) 71ms
+ ✓ src/features/timeline/scheduleMutation.test.tsx (6 tests) 77ms
+ ✓ src/features/timeline/TimelineSvgOverlay.test.tsx (2 tests) 73ms
+ ✓ src/features/timeline/TimelineView.test.tsx (18 tests) 1429ms
+   ✓ TimelineView (18)
+     ✓ covers 200 arrows cap, links array, milestone keydown, and zero delta drag 367ms
+ ✓ src/features/calendar/CalendarView.test.tsx (16 tests) 1663ms
+   ✓ CalendarView (16)
+     ✓ navigates Prev, Next, and Today in toolbar 530ms
+
+ Test Files  6 passed (6)
+      Tests  66 passed (66)
+   Start at  09:17:54
+   Duration  4.06s (environment 60%, tests 23%, import 10%, worker 5%, transform 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.64 |    95.85 |   99.08 |     100 |                   
+ calendar          |   99.14 |    95.86 |     100 |     100 |                   
+  CalendarView.tsx |   98.97 |    95.45 |     100 |     100 | ...54,195,226,507 
+  calendarGrid.ts  |     100 |      100 |     100 |     100 |                   
+ timeline          |     100 |    95.85 |   98.14 |     100 |                   
+  ...vgOverlay.tsx |     100 |      100 |     100 |     100 |                   
+  TimelineView.tsx |     100 |    93.61 |   97.61 |     100 | ...11,268,396-414 
+  ...leMutation.ts |     100 |      100 |     100 |     100 |                   
+  ...neGeometry.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

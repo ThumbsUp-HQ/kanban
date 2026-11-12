@@ -77,6 +77,20 @@ export interface IssueItem {
   gate_status?: 'pending' | 'vetoed' | 'approved' | null;
   capabilities?: string[];
   archived_at?: string | null;
+  outbound_blocks?: {
+    target_key?: string;
+    link_state?: string;
+    restricted?: boolean;
+  }[];
+  links?: {
+    id?: string | undefined;
+    source_key?: string | undefined;
+    target_key?: string | null | undefined;
+    link_type?: string | undefined;
+    link_state?: string | undefined;
+    restricted?: boolean | undefined;
+    label?: string | undefined;
+  }[];
 }
 
 export interface ProjectMetadata {
