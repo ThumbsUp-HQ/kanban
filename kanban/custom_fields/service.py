@@ -16,6 +16,7 @@ from kanban.api.v1.schemas.custom_fields import (
     CustomFieldResponse,
     CustomFieldUpdateRequest,
 )
+from kanban.custom_fields.approvals import required_approver_tier
 from kanban.custom_fields.manifest import (
     compute_field_manifest_sha256,
     validate_egress_allowlist,
@@ -103,8 +104,15 @@ class CustomFieldDefinitionService:
         row: CustomFieldDefinition,
         *,
         is_admin: bool,
+        approval_status: str | None = None,
+        required_approver_tier_override: str | None = None,
     ) -> CustomFieldResponse:
         """Serialize custom field definition, redacting script_source for non-admins."""
+        tier = required_approver_tier(row.target_scope, row.credential_mode)
+        default_status = "default_no_escalation" if tier is None else "UNAPPROVED"
+        final_status = approval_status or default_status
+        final_tier = required_approver_tier_override or tier
+
         wasm_hex = row.wasm_module_sha256.hex() if row.wasm_module_sha256 else None
         return CustomFieldResponse(
             id=row.id,
@@ -123,6 +131,8 @@ class CustomFieldDefinitionService:
             egress_allowlist=list(row.egress_allowlist),
             manifest_sha256=row.manifest_sha256.hex() if is_admin else None,
             is_enabled=row.is_enabled,
+            approval_status=final_status,
+            required_approver_tier=final_tier,
             created_by_id=row.created_by_id,
             created_at=row.created_at,
             updated_at=row.updated_at,

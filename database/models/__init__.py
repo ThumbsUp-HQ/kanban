@@ -21,6 +21,7 @@ from database.models.base import (
     ViewLayout,
 )
 from database.models.custom_field import CustomFieldDefinition, CustomFieldValue
+from database.models.custom_field_approval import CustomFieldApproval
 from database.models.embeddings import ObjectEmbedding
 from database.models.issues import (
     CommentReaction,
@@ -70,6 +71,7 @@ __all__ = [
     "AuthProviderCard",
     "Base",
     "CommentReaction",
+    "CustomFieldApproval",
     "CustomFieldDefinition",
     "CustomFieldValue",
     "Cycle",

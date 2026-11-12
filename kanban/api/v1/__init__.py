@@ -12,6 +12,9 @@ from kanban.api.v1.auth_mfa import router as auth_mfa_router
 from kanban.api.v1.auth_oidc import router as auth_oidc_router
 from kanban.api.v1.auth_session import router as auth_session_router
 from kanban.api.v1.comments import router as comments_router
+from kanban.api.v1.custom_field_approvals import (
+    router as custom_field_approvals_router,
+)
 from kanban.api.v1.custom_fields import router as custom_fields_router
 from kanban.api.v1.cycles import router as cycles_router
 from kanban.api.v1.docs import router as docs_router
@@ -47,4 +50,5 @@ def build_v1_router() -> APIRouter:
     v1.include_router(agent_definitions_router)
     v1.include_router(attachments_router)
     v1.include_router(custom_fields_router)
+    v1.include_router(custom_field_approvals_router)
     return v1

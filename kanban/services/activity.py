@@ -111,6 +111,10 @@ class ActivityEventType(StrEnum):
     CUSTOM_FIELD_CREATED = "CUSTOM_FIELD_CREATED"
     CUSTOM_FIELD_UPDATED = "CUSTOM_FIELD_UPDATED"
     CUSTOM_FIELD_DELETED = "CUSTOM_FIELD_DELETED"
+    CUSTOM_FIELD_APPROVAL_REQUESTED = "CUSTOM_FIELD_APPROVAL_REQUESTED"
+    CUSTOM_FIELD_APPROVED_PRIMARY = "CUSTOM_FIELD_APPROVED_PRIMARY"
+    CUSTOM_FIELD_APPROVED = "CUSTOM_FIELD_APPROVED"
+    CUSTOM_FIELD_APPROVAL_REVOKED = "CUSTOM_FIELD_APPROVAL_REVOKED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -168,6 +172,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.CUSTOM_FIELD_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.CUSTOM_FIELD_APPROVAL_REQUESTED: ActivityCategory.HISTORY,
+        ActivityEventType.CUSTOM_FIELD_APPROVED_PRIMARY: ActivityCategory.HISTORY,
+        ActivityEventType.CUSTOM_FIELD_APPROVED: ActivityCategory.HISTORY,
+        ActivityEventType.CUSTOM_FIELD_APPROVAL_REVOKED: ActivityCategory.HISTORY,
     }
 )
 

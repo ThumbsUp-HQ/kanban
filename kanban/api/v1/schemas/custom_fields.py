@@ -69,6 +69,52 @@ class CustomFieldResponse(BaseModel):
     egress_allowlist: list[str]
     manifest_sha256: str | None = None
     is_enabled: bool
+    approval_status: str | None = None
+    required_approver_tier: str | None = None
     created_by_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
+
+class CustomFieldApprovalRequestCreate(BaseModel):
+    """Payload to request escalation approval for a custom field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    manifest_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+    justification: str = Field(min_length=10, max_length=2000)
+
+
+class CustomFieldApprovalApproveRequest(BaseModel):
+    """Payload to approve a pending custom field escalation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    manifest_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+    sp_warning_acknowledged: bool = False
+
+
+class CustomFieldApprovalResponse(BaseModel):
+    """Public projection of a custom field escalation approval record."""
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    project_id: uuid.UUID
+    field_id: uuid.UUID
+    manifest_sha256: str
+    target_scope: str
+    credential_mode: str
+    required_tier: str
+    status: str
+    requested_by_id: uuid.UUID
+    justification: str
+    primary_approver_id: uuid.UUID | None = None
+    primary_approver_aal: int | None = None
+    primary_approved_at: datetime | None = None
+    secondary_approver_id: uuid.UUID | None = None
+    secondary_approver_aal: int | None = None
+    secondary_approved_at: datetime | None = None
+    sp_warning_acknowledged: bool
+    revoked_at: datetime | None = None
+    revoked_reason: str | None = None
+    created_at: datetime
