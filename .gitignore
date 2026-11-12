@@ -1,0 +1,20 @@
+# Local agent & MCP credentials (never commit live tokens)
+.gemini/settings.json
+.agents/mcp_config.json
+docs/tickets/board_mapping.json
+
+# Python / Node / OS artifacts
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage*
+coverage.xml
+htmlcov/
+node_modules/
+dist/
+kanban/web/dist/
