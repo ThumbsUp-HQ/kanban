@@ -1,0 +1,20 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 9 tests using 9 workers
+
+  ✓  3 [desktop] › e2e/editor/markdown-editor.spec.ts:19:3 › ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45) › 01: ProseMirror WYSIWYG editor mounts with breathable typography and zero mode-picker clutter (1.0s)
+  ✓  1 [desktop] › e2e/editor/markdown-editor.spec.ts:90:3 › ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45) › 02: Surgical single-paragraph edit preserves untouched blocks byte-identical (1.1s)
+  ✓  7 [mobile] › e2e/editor/markdown-editor.spec.ts:19:3 › ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45) › 01: ProseMirror WYSIWYG editor mounts with breathable typography and zero mode-picker clutter (1.1s)
+  ✓  4 [tablet] › e2e/editor/markdown-editor.spec.ts:19:3 › ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45) › 01: ProseMirror WYSIWYG editor mounts with breathable typography and zero mode-picker clutter (1.2s)
+  ✓  8 [tablet] › e2e/editor/markdown-editor.spec.ts:90:3 › ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45) › 02: Surgical single-paragraph edit preserves untouched blocks byte-identical (1.1s)
+  ✓  6 [mobile] › e2e/editor/markdown-editor.spec.ts:90:3 › ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45) › 02: Surgical single-paragraph edit preserves untouched blocks byte-identical (1.2s)
+  ✓  5 [desktop] › e2e/editor/markdown-editor.spec.ts:139:3 › ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45) › 03: Raw Markdown toggle switches to monospace textarea and preserves content (1.3s)
+  ✓  2 [mobile] › e2e/editor/markdown-editor.spec.ts:139:3 › ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45) › 03: Raw Markdown toggle switches to monospace textarea and preserves content (1.4s)
+  ✓  9 [tablet] › e2e/editor/markdown-editor.spec.ts:139:3 › ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45) › 03: Raw Markdown toggle switches to monospace textarea and preserves content (1.3s)
+
+  9 passed (8.4s)
+EXIT_CODE=0

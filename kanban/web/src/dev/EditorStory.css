@@ -1,0 +1,101 @@
+/**
+ * Editor Story Styling for /__dev/editor (KB-P3-45).
+ */
+
+.kb-editor-story {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.kb-editor-story__header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kb-editor-story__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--fg-primary);
+}
+
+.kb-editor-story__desc {
+  font-size: 0.9375rem;
+  color: var(--fg-secondary);
+  margin: 0;
+}
+
+.kb-editor-story__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.kb-editor-story__btn {
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface-raised);
+  color: var(--fg-primary);
+  cursor: pointer;
+}
+
+.kb-editor-story__btn:hover {
+  background-color: var(--bg-hover);
+}
+
+.kb-editor-story__status {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background-color: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.kb-editor-story__status.is-identical {
+  color: var(--ok-fg);
+  background-color: var(--bg-hover);
+}
+
+.kb-editor-story__panels {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+.kb-editor-story__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kb-editor-story__panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg-primary);
+  margin: 0;
+}
+
+.kb-editor-story__output {
+  margin: 0;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+}

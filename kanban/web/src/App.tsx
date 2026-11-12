@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { TokenStory } from './dev/TokenStory';
 import { EmojiStory } from './dev/EmojiStory';
+import { EditorStory } from './dev/EditorStory';
 import './App.css';
 
 /**
@@ -25,6 +26,9 @@ export function App(): JSX.Element {
     }
     if (window.location.pathname === '/__dev/emoji') {
       return <EmojiStory />;
+    }
+    if (window.location.pathname === '/__dev/editor') {
+      return <EditorStory />;
     }
   }
 

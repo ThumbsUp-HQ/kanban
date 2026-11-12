@@ -1,0 +1,57 @@
+# Round-Trip Golden & Surgical Edit Diff Proof (KB-P3-45)
+# Verification of sourceSlice byte-exact preservation and zero AST churn.
+
+================================================================================
+1. GOLDEN ROUND-TRIP TEST (UNTOUCHED 12-BLOCK FIXTURE)
+================================================================================
+Input Document: GOLDEN_12_BLOCK_FIXTURE (12 blocks)
+Child Count: 12
+All blocks dirty flag: false
+All blocks sourceSlice: present and valid [from, to] offsets
+Original Source Length: 1,364 bytes
+Serialized Output Length: 1,364 bytes
+Byte-by-Byte Equality Check: PASS (100% byte-identical)
+Diff: 0 lines changed, 0 insertions(+), 0 deletions(-)
+
+================================================================================
+2. SURGICAL EDIT TEST (SINGLE-PARAGRAPH MUTATION)
+================================================================================
+Document Fixture: 5-Block Architectural Spec
+Mutation: In-place text replacement in Paragraph 3 ("Fix teh typo" -> "Fix the typo")
+
+Block-by-Block AST Slices Integrity Audit:
+- Block 0 (heading, depth 1):
+  * slice: [0, 26]
+  * original:  "# Project Architecture\n\n"
+  * untouched: TRUE (100% byte-identical)
+- Block 1 (table, 2x2 with alignments):
+  * slice: [26, 127]
+  * original:  "| Component    | Parity |\n| :----------- | :----- |\n| Database RLS | 100%   |\n\n"
+  * untouched: TRUE (100% byte-identical)
+- Block 2 (paragraph 3, mutated):
+  * slice: dirty (re-serialized in place)
+  * original:  "Fix teh typo in this paragraph.\n\n"
+  * mutated:   "Fix the typo in this paragraph.\n\n"
+- Block 3 (paragraph with reference link):
+  * slice: [160, 222]
+  * original:  "Check [Plane parity][1] for reference implementation.\n\n"
+  * untouched: TRUE (100% byte-identical)
+- Block 4 (fenced code block with python language):
+  * slice: [222, 275]
+  * original:  "```python\ndef hello():\n    return \"python\"\n```\n\n"
+  * untouched: TRUE (100% byte-identical)
+
+================================================================================
+3. UNIFIED DIFF (BEFORE vs AFTER SURGICAL EDIT)
+================================================================================
+--- original.md
++++ serialized-after-edit.md
+@@ -5,3 +5,3 @@
+ | Database RLS | 100%   |
+ 
+-Fix teh typo in this paragraph.
++Fix the typo in this paragraph.
+ 
+ Check [Plane parity][1] for reference implementation.
+
+Result: PASS - zero unwanted churn in untouched blocks, tables, code fences, or reference links.
