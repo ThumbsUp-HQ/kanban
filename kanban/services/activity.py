@@ -89,6 +89,8 @@ class ActivityEventType(StrEnum):
     ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
     LOCAL_ADMIN_LOGIN_SUCCEEDED = "LOCAL_ADMIN_LOGIN_SUCCEEDED"
     LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
+    ISSUE_ARCHIVED = "ISSUE_ARCHIVED"
+    ISSUE_UNARCHIVED = "ISSUE_UNARCHIVED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -124,6 +126,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
         ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.ISSUE_ARCHIVED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_UNARCHIVED: ActivityCategory.HISTORY,
     }
 )
 

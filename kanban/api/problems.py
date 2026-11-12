@@ -57,6 +57,18 @@ class Problem(BaseModel):
         default=None,
         description="Candidate suggestions when identifier resolution is ambiguous",
     )
+    state_group: str | None = Field(
+        default=None,
+        description="Current state group when archive transition is rejected",
+    )
+    open_subissue_keys: list[str] | None = Field(
+        default=None,
+        description="Keys of open sub-issues preventing archive",
+    )
+    hidden_open_count: int | None = Field(
+        default=None,
+        description="Count of open sub-issues hidden by RLS",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -74,6 +86,9 @@ class ProblemException(Exception):  # noqa: N818
         field: str | None = None,
         *,
         candidates: list[dict[str, str]] | None = None,
+        state_group: str | None = None,
+        open_subissue_keys: list[str] | None = None,
+        hidden_open_count: int | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -89,6 +104,9 @@ class ProblemException(Exception):  # noqa: N818
         self.current_etag = current_etag
         self.field = field
         self.candidates = candidates
+        self.state_group = state_group
+        self.open_subissue_keys = open_subissue_keys
+        self.hidden_open_count = hidden_open_count
 
 
 def not_found() -> NoReturn:
@@ -123,6 +141,9 @@ async def problem_exception_handler(
         current_etag=exc.current_etag,
         field=exc.field,
         candidates=exc.candidates,
+        state_group=exc.state_group,
+        open_subissue_keys=exc.open_subissue_keys,
+        hidden_open_count=exc.hidden_open_count,
     )
     response_headers = {"x-request-id": req_id}
     if exc.headers:
