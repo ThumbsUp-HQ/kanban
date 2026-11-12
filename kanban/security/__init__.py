@@ -1,5 +1,6 @@
-"""Security utilities for the Kanban platform."""
+"""Security utilities and middleware for the Kanban platform."""
 
+from kanban.security.headers import CSP_POLICY, SecurityHeadersMiddleware
 from kanban.security.scrubber import (
     ScrubFinding,
     ScrubResult,
@@ -9,9 +10,11 @@ from kanban.security.scrubber import (
 )
 
 __all__ = [
+    "CSP_POLICY",
     "ScrubFinding",
     "ScrubResult",
     "SecretKind",
+    "SecurityHeadersMiddleware",
     "outbound_secret_scrubber",
     "scrub_text",
 ]
