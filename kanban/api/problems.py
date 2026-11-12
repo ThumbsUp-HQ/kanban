@@ -45,13 +45,17 @@ class Problem(BaseModel):
         default=None,
         description="Field-level validation errors",
     )
+    current_etag: str | None = Field(
+        default=None,
+        description="Current entity ETag during precondition failure",
+    )
+    field: str | None = Field(
+        default=None,
+        description="Target field associated with reference or validation failure",
+    )
     candidates: list[dict[str, str]] | None = Field(
         default=None,
         description="Candidate suggestions when identifier resolution is ambiguous",
-    )
-    current_etag: str | None = Field(
-        default=None,
-        description="Current resource ETag on 412 precondition failed",
     )
 
 
@@ -66,9 +70,10 @@ class ProblemException(Exception):  # noqa: N818
         detail: str | None = None,
         errors: list[FieldError] | None = None,
         headers: dict[str, str] | None = None,
+        current_etag: str | None = None,
+        field: str | None = None,
         *,
         candidates: list[dict[str, str]] | None = None,
-        current_etag: str | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -81,8 +86,9 @@ class ProblemException(Exception):  # noqa: N818
         self.detail = detail
         self.errors = errors
         self.headers = headers
-        self.candidates = candidates
         self.current_etag = current_etag
+        self.field = field
+        self.candidates = candidates
 
 
 def not_found() -> NoReturn:
@@ -114,8 +120,9 @@ async def problem_exception_handler(
         detail=exc.detail,
         request_id=req_id,
         errors=exc.errors,
-        candidates=exc.candidates,
         current_etag=exc.current_etag,
+        field=exc.field,
+        candidates=exc.candidates,
     )
     response_headers = {"x-request-id": req_id}
     if exc.headers:

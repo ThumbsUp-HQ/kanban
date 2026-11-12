@@ -72,6 +72,11 @@ class ActivityEventType(StrEnum):
     AGENT_DEFINITION_CREATED = "AGENT_DEFINITION_CREATED"
     AGENT_DEFINITION_UPDATED = "AGENT_DEFINITION_UPDATED"
     AGENT_DEFINITION_DELETED = "AGENT_DEFINITION_DELETED"
+    ISSUE_CREATED = "ISSUE_CREATED"
+    ISSUE_FIELD_CHANGED = "ISSUE_FIELD_CHANGED"
+    ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
+    ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
+    ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -90,6 +95,11 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.AGENT_DEFINITION_CREATED: ActivityCategory.SYSTEM,
         ActivityEventType.AGENT_DEFINITION_UPDATED: ActivityCategory.SYSTEM,
         ActivityEventType.AGENT_DEFINITION_DELETED: ActivityCategory.SYSTEM,
+        ActivityEventType.ISSUE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_FIELD_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
     }
 )
 
