@@ -130,7 +130,7 @@ services:
     mem_limit: 256m
     tmpfs:
       - /tmp
-    command: ["python", "-m", "kanban.relay_placeholder"]
+    command: ["python", "-m", "database.outbox.relay"]
     networks:
       - data_net
     secrets:

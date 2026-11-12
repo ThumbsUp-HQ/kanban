@@ -19,6 +19,7 @@ from database.models.issues import (
     IssueSubscription,
 )
 from database.models.knowledge import Doc, Page, PageVersion, Sticky
+from database.models.outbox import OutboxEvent
 from database.models.principals import (
     EffectiveResourceAccess,
     Group,
@@ -70,6 +71,7 @@ __all__ = [
     "ObjectKind",
     "ObjectLink",
     "ObjectRecord",
+    "OutboxEvent",
     "Page",
     "PageVersion",
     "Principal",
