@@ -1,0 +1,56 @@
+# Copyright 2026 Kanban Platform Contributors
+"""Vendor-neutral LLM provider abstractions, DTOs, and error hierarchy."""
+
+from agent.providers.base import (
+    CLIRunner,
+    CLIRunRequest,
+    CLIRunResult,
+    CompletionRequest,
+    EmbedBatchRequest,
+    HealthStatus,
+    LLMProvider,
+    StreamChunk,
+    StructuredRequest,
+    StructuredResponse,
+    ToolCallStep,
+)
+from agent.providers.errors import (
+    AllProvidersUnavailable,
+    EgressDenied,
+    ProviderError,
+    ProviderHTTPError,
+    ProviderPolicyError,
+    ProviderProtocolError,
+    ProviderRefusal,
+    ProviderSafetyBlock,
+    ProviderSchemaError,
+    ProviderTimeout,
+    ProviderUnavailable,
+    redact_secrets,
+)
+
+__all__ = [
+    "AllProvidersUnavailable",
+    "CLIRunRequest",
+    "CLIRunResult",
+    "CLIRunner",
+    "CompletionRequest",
+    "EgressDenied",
+    "EmbedBatchRequest",
+    "HealthStatus",
+    "LLMProvider",
+    "ProviderError",
+    "ProviderHTTPError",
+    "ProviderPolicyError",
+    "ProviderProtocolError",
+    "ProviderRefusal",
+    "ProviderSafetyBlock",
+    "ProviderSchemaError",
+    "ProviderTimeout",
+    "ProviderUnavailable",
+    "StreamChunk",
+    "StructuredRequest",
+    "StructuredResponse",
+    "ToolCallStep",
+    "redact_secrets",
+]

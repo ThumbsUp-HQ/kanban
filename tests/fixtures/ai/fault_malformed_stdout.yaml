@@ -1,0 +1,7 @@
+cassette_version: 1
+matcher:
+  argv_prefix: ["/usr/local/bin/codex", "-p"]
+  stdin_contains: ["simulate_malformed"]
+simulated_ttft_ms: 15.0
+fault:
+  kind: malformed_stdout

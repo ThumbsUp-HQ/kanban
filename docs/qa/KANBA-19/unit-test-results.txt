@@ -1,0 +1,61 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 30 items
+
+agent/tests/providers/test_base_protocol.py::test_error_hierarchy_and_properties PASSED [  3%]
+agent/tests/providers/test_base_protocol.py::test_error_code_validation PASSED [  6%]
+agent/tests/providers/test_base_protocol.py::test_secret_redaction PASSED [ 10%]
+agent/tests/providers/test_base_protocol.py::test_completion_request_dto PASSED [ 13%]
+agent/tests/providers/test_base_protocol.py::test_stream_chunk_and_tool_call_step PASSED [ 16%]
+agent/tests/providers/test_base_protocol.py::test_structured_request_and_response PASSED [ 20%]
+agent/tests/providers/test_base_protocol.py::test_embed_batch_request_bounds PASSED [ 23%]
+agent/tests/providers/test_base_protocol.py::test_cli_run_request_and_result PASSED [ 26%]
+agent/tests/providers/test_base_protocol.py::test_runtime_protocols PASSED [ 30%]
+agent/tests/test_smoke.py::test_agent_smoke PASSED                       [ 33%]
+agent/tests/testing/test_fixtures.py::test_fixture_llm_stream_replay PASSED [ 36%]
+agent/tests/testing/test_fixtures.py::test_fixture_llm_generate_structured PASSED [ 40%]
+agent/tests/testing/test_fixtures.py::test_fixture_llm_embed_batch_deterministic PASSED [ 43%]
+agent/tests/testing/test_fixtures.py::test_fixture_llm_embed_batch_static PASSED [ 46%]
+agent/tests/testing/test_fixtures.py::test_fixture_cli_runner_positive PASSED [ 50%]
+agent/tests/testing/test_fixtures.py::test_fault_429_injection PASSED    [ 53%]
+agent/tests/testing/test_fixtures.py::test_fault_malformed_stdout PASSED [ 56%]
+agent/tests/testing/test_fixtures.py::test_miscellaneous_fault_injections PASSED [ 60%]
+agent/tests/testing/test_fixtures.py::test_stream_error_after_chunk PASSED [ 63%]
+agent/tests/testing/test_fixtures.py::test_ttft_deadline_breach PASSED   [ 66%]
+agent/tests/testing/test_fixtures.py::test_cli_runner_timeout_fault PASSED [ 70%]
+agent/tests/testing/test_fixtures.py::test_cassette_security_and_validation PASSED [ 73%]
+agent/tests/testing/test_fixtures.py::test_cassette_mismatch_errors PASSED [ 76%]
+agent/tests/testing/test_fixtures.py::test_fixture_llm_structured_output_and_schema_error PASSED [ 80%]
+agent/tests/testing/test_fixtures.py::test_fixture_sleep_hook_and_predicates PASSED [ 83%]
+agent/tests/testing/test_fixtures.py::test_cli_runner_edge_cases PASSED  [ 86%]
+agent/tests/testing/test_fixtures.py::test_cassette_loader_file_errors PASSED [ 90%]
+agent/tests/testing/test_fixtures.py::test_schema_load_error PASSED      [ 93%]
+agent/tests/testing/test_fixtures.py::test_cassette_model_construction_error PASSED [ 96%]
+agent/tests/testing/test_fixtures.py::test_health_probe PASSED           [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                          Stmts   Miss Branch BrPart  Cover
+-------------------------------------------------------------------------------
+agent/__init__.py                                 1      0      0      0   100%
+agent/providers/__init__.py                       3      0      0      0   100%
+agent/providers/base.py                         116      0     14      0   100%
+agent/providers/errors.py                        66      0      2      0   100%
+agent/testing/__init__.py                         2      0      0      0   100%
+agent/testing/fixtures.py                       284      4     90      4    98%
+agent/tests/__init__.py                           0      0      0      0   100%
+agent/tests/providers/__init__.py                 0      0      0      0   100%
+agent/tests/providers/test_base_protocol.py     179      0      2      0   100%
+agent/tests/test_smoke.py                         3      0      0      0   100%
+agent/tests/testing/__init__.py                   0      0      0      0   100%
+agent/tests/testing/test_fixtures.py            312      7     28      7    96%
+-------------------------------------------------------------------------------
+TOTAL                                           966     11    136     11    98%
+Required test coverage of 95% reached. Total coverage: 98.00%
+============================== 30 passed in 0.59s ==============================
+Exit Code: 0

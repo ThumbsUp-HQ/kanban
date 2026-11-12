@@ -1,0 +1,33 @@
+=== CASSETTE VALIDATION REPORT (KANBA-19) ===
+File: tests/fixtures/ai/cli_agy_approve_ok.yaml
+  Version: 1
+  Matcher: {'prompt_contains': [], 'stdin_contains': ['review_request', 'ticket_id: KAN-142'], 'argv_prefix': ['/usr/local/bin/agy', '-p']}
+  CLI Result Exit Code: 0
+  Status: VALID (Schema Draft 2020-12 verified)
+
+File: tests/fixtures/ai/echo_stream_ok.yaml
+  Version: 1
+  Matcher: {'model': 'echo-model', 'prompt_contains': ['hello', 'stream'], 'stdin_contains': [], 'argv_prefix': []}
+  Stream Chunks: 3 chunks
+  Status: VALID (Schema Draft 2020-12 verified)
+
+File: tests/fixtures/ai/fault_429.yaml
+  Version: 1
+  Matcher: {'model': 'test-429-model', 'prompt_contains': ['simulate_429'], 'stdin_contains': [], 'argv_prefix': []}
+  Fault Kind: http_429
+  Status: VALID (Schema Draft 2020-12 verified)
+
+File: tests/fixtures/ai/fault_malformed_stdout.yaml
+  Version: 1
+  Matcher: {'prompt_contains': [], 'stdin_contains': ['simulate_malformed'], 'argv_prefix': ['/usr/local/bin/codex', '-p']}
+  Fault Kind: malformed_stdout
+  Status: VALID (Schema Draft 2020-12 verified)
+
+File: tests/fixtures/ai/transition_rls_veto.yaml
+  Version: 1
+  Matcher: {'agent_slug': 'forensic-code-check', 'transition_to': 'Done', 'prompt_contains': ['KAN-142', 'auth_provider_cards'], 'stdin_contains': [], 'argv_prefix': []}
+  Tool Script: 2 steps
+  Final Verdict Schema: kb-transition-verdict/v1
+  Status: VALID (Schema Draft 2020-12 verified)
+
+All 5 cassettes validated successfully against agent/testing/cassette.schema.json.

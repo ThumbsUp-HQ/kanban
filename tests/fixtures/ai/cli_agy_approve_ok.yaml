@@ -1,0 +1,10 @@
+cassette_version: 1
+matcher:
+  argv_prefix: ["/usr/local/bin/agy", "-p"]
+  stdin_contains: ["review_request", "ticket_id: KAN-142"]
+simulated_ttft_ms: 12.0
+cli_result:
+  stdout: "{\"verdict\": \"approved\", \"comments\": \"Code meets all requirements\"}\n"
+  stderr: ""
+  exit_code: 0
+  duration_ms: 12.5

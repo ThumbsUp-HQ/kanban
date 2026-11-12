@@ -1,1 +1,1 @@
-"""Tests for kanban-agent package."""
+"""Unit tests for kanban-agent package."""

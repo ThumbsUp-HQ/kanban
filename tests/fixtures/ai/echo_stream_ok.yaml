@@ -1,0 +1,12 @@
+cassette_version: 1
+matcher:
+  model: echo-model
+  prompt_contains: ["hello", "stream"]
+simulated_ttft_ms: 5.0
+usage:
+  prompt_tokens: 10
+  completion_tokens: 5
+stream_chunks:
+  - "Hello"
+  - " world"
+  - "!"
