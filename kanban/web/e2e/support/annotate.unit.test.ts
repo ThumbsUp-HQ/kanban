@@ -79,6 +79,13 @@ describe('annotate and styleProbe support modules', () => {
       const fakeLocator = {
         first: () => fakeLocator,
         count: vi.fn().mockResolvedValue(1),
+        evaluate: vi.fn().mockImplementation((fn: (el: unknown) => unknown) => {
+          return Promise.resolve(
+            fn({
+              getBoundingClientRect: () => ({ x: 100, y: 100, width: 200, height: 50 }),
+            }),
+          );
+        }),
         boundingBox: vi.fn().mockResolvedValue({ x: 100, y: 100, width: 200, height: 50 }),
       } as unknown as Locator;
 
