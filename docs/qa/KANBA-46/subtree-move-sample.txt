@@ -1,0 +1,13 @@
+=== BEFORE SUBTREE MOVE (A <- B <- C, and X) ===
+Issue X (New Root)        | ID: 11a0402e-167d-4cf7-8693-54e31e6216bc | Parent: None | Path: 11a0402e167d4cf7869354e31e6216bc
+Issue A (Root)            | ID: 8e11a219-54c9-48ef-8858-4863292c90ae | Parent: None | Path: 8e11a21954c948ef88584863292c90ae
+Issue B (Child of A)      | ID: 466d93c0-1f80-47c2-bc31-4f11a5541541 | Parent: 8e11a219-54c9-48ef-8858-4863292c90ae | Path: 8e11a21954c948ef88584863292c90ae.466d93c01f8047c2bc314f11a5541541
+Issue C (Child of B)      | ID: 8de2314a-e1c2-4686-be90-9ba5ae36c191 | Parent: 466d93c0-1f80-47c2-bc31-4f11a5541541 | Path: 8e11a21954c948ef88584863292c90ae.466d93c01f8047c2bc314f11a5541541.8de2314ae1c24686be909ba5ae36c191
+
+Executing: UPDATE issues SET parent_issue_id = X WHERE id = B;
+
+=== AFTER SUBTREE MOVE (B and C rebased under X; A has no descendants) ===
+Issue X (New Root)        | ID: 11a0402e-167d-4cf7-8693-54e31e6216bc | Parent: None | Path: 11a0402e167d4cf7869354e31e6216bc
+Issue B (Child of A)      | ID: 466d93c0-1f80-47c2-bc31-4f11a5541541 | Parent: 11a0402e-167d-4cf7-8693-54e31e6216bc | Path: 11a0402e167d4cf7869354e31e6216bc.466d93c01f8047c2bc314f11a5541541
+Issue C (Child of B)      | ID: 8de2314a-e1c2-4686-be90-9ba5ae36c191 | Parent: 466d93c0-1f80-47c2-bc31-4f11a5541541 | Path: 11a0402e167d4cf7869354e31e6216bc.466d93c01f8047c2bc314f11a5541541.8de2314ae1c24686be909ba5ae36c191
+Issue A (Root)            | ID: 8e11a219-54c9-48ef-8858-4863292c90ae | Parent: None | Path: 8e11a21954c948ef88584863292c90ae
