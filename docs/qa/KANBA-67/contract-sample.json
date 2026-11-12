@@ -1,0 +1,452 @@
+{
+  "ticket": "KANBA-67",
+  "exchanges": [
+    {
+      "name": "create_project_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "78",
+          "content-type": "application/json"
+        },
+        "body": {
+          "identifier": "KAN",
+          "name": "  Platform Core  ",
+          "description_markdown": "Hello"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "877",
+          "content-type": "application/json",
+          "location": "/api/v1/projects/KAN",
+          "x-request-id": "3dba4268a8964118b6f31e7185292e49",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ce8c-65ea-729d-b9df-b314ecd51b6b",
+          "identifier": "KAN",
+          "name": "Platform Core",
+          "description_markdown": "Hello",
+          "modules_enabled": false,
+          "default_module_ids": [],
+          "auto_archive_days": null,
+          "access_manifest": {
+            "pill_label": "Workspace",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "workspace",
+              "scope_label": "Workspace: Engineering",
+              "workspace_id": "01a1ce8c-65bf-717c-a9cc-8956bb60fc55",
+              "workspace_name": "Engineering",
+              "project_id": null,
+              "project_key": null,
+              "project_name": null
+            },
+            "users": [
+              {
+                "principal_id": "01a1ce8c-65c5-7cb3-bff1-b3300c9f5da6",
+                "handle": "@admin",
+                "display_name": "Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "workspace_role"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ]
+        }
+      }
+    },
+    {
+      "name": "get_project_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/projects/KAN",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "877",
+          "content-type": "application/json",
+          "x-request-id": "cbdda0d8080e437797606b6852ef0dee",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ce8c-65ea-729d-b9df-b314ecd51b6b",
+          "identifier": "KAN",
+          "name": "Platform Core",
+          "description_markdown": "Hello",
+          "modules_enabled": false,
+          "default_module_ids": [],
+          "auto_archive_days": null,
+          "access_manifest": {
+            "pill_label": "Workspace",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "workspace",
+              "scope_label": "Workspace: Engineering",
+              "workspace_id": "01a1ce8c-65bf-717c-a9cc-8956bb60fc55",
+              "workspace_name": "Engineering",
+              "project_id": null,
+              "project_key": null,
+              "project_name": null
+            },
+            "users": [
+              {
+                "principal_id": "01a1ce8c-65c5-7cb3-bff1-b3300c9f5da6",
+                "handle": "@admin",
+                "display_name": "Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "workspace_role"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ]
+        }
+      }
+    },
+    {
+      "name": "get_unreadable_404",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/projects/SEC",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "47ab59fab89a4e50ad05e6788a4e5a91",
+          "content-length": "139",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "request_id": "47ab59fab89a4e50ad05e6788a4e5a91"
+        }
+      }
+    },
+    {
+      "name": "patch_as_viewer_403",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/projects/OPEN",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "18",
+          "content-type": "application/json"
+        },
+        "body": {
+          "name": "Renamed"
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "x-request-id": "ef46f2690f49456cb92651a7d70c71e8",
+          "content-length": "181",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:INSUFFICIENT_CAPABILITY",
+          "title": "Insufficient Capability",
+          "status": 403,
+          "code": "INSUFFICIENT_CAPABILITY",
+          "request_id": "ef46f2690f49456cb92651a7d70c71e8"
+        }
+      }
+    },
+    {
+      "name": "create_invalid_identifier_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "31",
+          "content-type": "application/json"
+        },
+        "body": {
+          "identifier": "kan",
+          "name": "N"
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "01dcf3370bd04ad296f61a04f8198ae0",
+          "content-length": "296",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:VALIDATION_FAILED",
+          "title": "Validation Failed",
+          "status": 422,
+          "code": "VALIDATION_FAILED",
+          "detail": "Request validation failed",
+          "request_id": "01dcf3370bd04ad296f61a04f8198ae0",
+          "errors": [
+            {
+              "path": "identifier",
+              "message": "String should match pattern '^[A-Z][A-Z0-9]{1,9}$'"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "create_duplicate_409",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "33",
+          "content-type": "application/json"
+        },
+        "body": {
+          "identifier": "DUP",
+          "name": "Two"
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "x-request-id": "44388c4d2fe041dc860728b972ca3b48",
+          "content-length": "229",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:PROJECT_IDENTIFIER_TAKEN",
+          "title": "Project Identifier Taken",
+          "status": 409,
+          "code": "PROJECT_IDENTIFIER_TAKEN",
+          "detail": "Identifier DUP is already in use.",
+          "request_id": "44388c4d2fe041dc860728b972ca3b48"
+        }
+      }
+    },
+    {
+      "name": "put_module_defaults_200",
+      "request": {
+        "method": "PUT",
+        "path": "/api/v1/projects/MODA/module-defaults",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "55",
+          "content-type": "application/json"
+        },
+        "body": {
+          "module_ids": [
+            "01a1ce8c-68fe-72e6-a9da-ac71483a2895"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "898",
+          "content-type": "application/json",
+          "x-request-id": "176f80b5f211483a9cd68dcea5e91d17",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ce8c-6861-7fb4-8f71-7493885e3ab7",
+          "identifier": "MODA",
+          "name": "A",
+          "description_markdown": "",
+          "modules_enabled": true,
+          "default_module_ids": [
+            "01a1ce8c-68fe-72e6-a9da-ac71483a2895"
+          ],
+          "auto_archive_days": null,
+          "access_manifest": {
+            "pill_label": "Workspace",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "workspace",
+              "scope_label": "Workspace: Engineering",
+              "workspace_id": "01a1ce8c-6848-71f4-966d-2f73dd200617",
+              "workspace_name": "Engineering",
+              "project_id": null,
+              "project_key": null,
+              "project_name": null
+            },
+            "users": [
+              {
+                "principal_id": "01a1ce8c-684b-7744-a945-58f8bc64a8b1",
+                "handle": "@admin",
+                "display_name": "Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "workspace_role"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ]
+        }
+      }
+    }
+  ]
+}
