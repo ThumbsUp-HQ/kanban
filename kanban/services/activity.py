@@ -66,6 +66,8 @@ class ActivityEventType(StrEnum):
     ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
     ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
     ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
+    LINK_CREATED = "LINK_CREATED"
+    LINK_DELETED = "LINK_DELETED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -78,6 +80,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.LINK_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.LINK_DELETED: ActivityCategory.HISTORY,
     }
 )
 
