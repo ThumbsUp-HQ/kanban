@@ -1,0 +1,105 @@
+=== CLI RUN (a): kan-142-ready with qa_packet_grade_a_ready.yaml (exit 0) ===
+=== 1. RENDERED CONTEXT ===
+Ticket: KAN-142 ([UI] Harden Multi-Card OIDC & LDAPS Auth Studio)
+Proof Directory: /tmp/kb-wt-KANBA-50/examples/qa_packets/kan-142-ready
+Files Inspected: 8
+Deterministic Checks: 7/7 passed
+  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.
+  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.
+  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.
+  - [PASS] UI_SPECIALIST_GATE: UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile).
+  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.
+  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.
+  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.
+
+=== 2. TOOL TRACE ===
+Calls: 15; Tools: deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 12.0ms | Total: 4.8ms | Tokens: 520 in, 140 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: grade=A, readiness=READY
+Grade: A | Readiness: READY
+Detail: Grade: A | Readiness: READY
+exit=0
+
+=== CLI RUN (b): kan-142-missing-ui-review with qa_packet_grade_a_ready.yaml (exit 2) ===
+=== 1. RENDERED CONTEXT ===
+Ticket: KAN-142 ([UI] Harden Multi-Card OIDC & LDAPS Auth Studio)
+Proof Directory: /tmp/kb-wt-KANBA-50/examples/qa_packets/kan-142-missing-ui-review
+Files Inspected: 3
+Deterministic Checks: 6/7 passed
+  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.
+  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.
+  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.
+  - [FAIL] UI_SPECIALIST_GATE: ui-specialist-review.md is missing or empty.
+  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.
+  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.
+  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.
+
+=== 2. TOOL TRACE ===
+Calls: 10; Tools: deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, inspect_file, inspect_file, inspect_file
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 12.0ms | Total: 4.1ms | Tokens: 520 in, 140 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: grade=A, readiness=NEEDS_WORK
+Grade: A | Readiness: NEEDS_WORK
+Error Code: FANTASY_APPROVAL_BLOCKED
+Detail: Grade: A | Readiness: NEEDS_WORK | Policy Override: FANTASY_APPROVAL_BLOCKED
+exit=2
+
+=== CLI RUN (c): kan-142-ready with qa_packet_fantasy_approval.yaml (exit 2) ===
+=== 1. RENDERED CONTEXT ===
+Ticket: KAN-142 ([UI] Harden Multi-Card OIDC & LDAPS Auth Studio)
+Proof Directory: /tmp/kb-wt-KANBA-50/examples/qa_packets/kan-142-ready
+Files Inspected: 8
+Deterministic Checks: 7/7 passed
+  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.
+  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.
+  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.
+  - [PASS] UI_SPECIALIST_GATE: UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile).
+  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.
+  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.
+  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.
+
+=== 2. TOOL TRACE ===
+Calls: 15; Tools: deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 10.0ms | Total: 5.0ms | Tokens: 520 in, 150 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: grade=B+, readiness=NEEDS_WORK
+Grade: B+ | Readiness: NEEDS_WORK
+Error Code: FANTASY_APPROVAL_BLOCKED
+Detail: Grade: B+ | Readiness: NEEDS_WORK | Policy Override: FANTASY_APPROVAL_BLOCKED
+exit=2
+
+=== CLI RUN (d): KB-P5-27 self-check --deterministic-only against docs/qa/KANBA-50/ (exit 0) ===
+=== 1. RENDERED CONTEXT ===
+Ticket: KB-P5-27 ([Phase 5 / Agent CLI] kanban-agent validate-qa-packet: local passive forensic reality-checker validator over docs/qa/<ID>/ + ticket YAML/MD)
+Proof Directory: /tmp/kb-wt-KANBA-50/docs/qa/KANBA-50
+Files Inspected: 4
+Deterministic Checks: 7/7 passed
+  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.
+  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.
+  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.
+  - [PASS] UI_SPECIALIST_GATE: N/A - Ticket does not require UI specialist gate.
+  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.
+  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.
+  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.
+
+=== 2. TOOL TRACE ===
+Calls: 11; Tools: deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, inspect_file, inspect_file, inspect_file, inspect_file
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 15.9ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: grade=A, readiness=READY
+Grade: A | Readiness: READY
+Detail: Grade: A | Readiness: READY
+exit=0

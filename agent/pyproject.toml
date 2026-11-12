@@ -25,7 +25,7 @@ kanban-agent = "agent.cli:main"
 "" = "agent"
 
 [tool.hatch.build.targets.wheel]
-include = ["*.py", "**/*.py", "testing/cassette.schema.json"]
+include = ["*.py", "**/*.py", "testing/cassette.schema.json", "schemas/*.json"]
 exclude = [
     "tests",
     "pyproject.toml",

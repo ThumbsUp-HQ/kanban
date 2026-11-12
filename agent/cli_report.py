@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from enum import IntEnum
 from typing import Any, Literal
 
@@ -103,6 +103,53 @@ class ValidationReport(BaseModel):
     tool_trace: tuple[ToolCallStep, ...] = ()
     metrics: ReportMetrics
     schema_status: SchemaStatus
+    qa_verdict: object = None
+
+
+def _render_tool_trace(
+    tool_trace: Sequence[ToolCallStep],
+    *,
+    verbose_tools: bool,
+) -> list[str]:
+    lines = ["=== 2. TOOL TRACE ==="]
+    if not tool_trace:
+        lines.append("Calls: 0; Tools: (none)")
+    elif not verbose_tools:
+        tools_list = ", ".join(step.tool for step in tool_trace)
+        lines.append(f"Calls: {len(tool_trace)}; Tools: {tools_list}")
+    else:
+        lines.append(f"Calls: {len(tool_trace)}")
+        for step in tool_trace:
+            lines.append(f"  - Tool: {step.tool}")
+            lines.append(f"    Args: {json.dumps(step.args)}")
+            lines.append(f"    Result: {json.dumps(step.result)}")
+    return lines
+
+
+def _render_schema_section(
+    schema_status: SchemaStatus,
+    qa_verdict: object,
+) -> list[str]:
+    valid_str = str(schema_status.valid).lower()
+    lines = [
+        "=== 4. SCHEMA & POLICY STATUS ===",
+        f"Valid: {valid_str} (valid: {valid_str}) | Status: {schema_status.status}",
+    ]
+    if qa_verdict:
+        grade = getattr(qa_verdict, "grade", None) or (
+            qa_verdict.get("grade") if isinstance(qa_verdict, dict) else None
+        )
+        readiness = getattr(qa_verdict, "readiness", None) or (
+            qa_verdict.get("readiness") if isinstance(qa_verdict, dict) else None
+        )
+        if grade and readiness:
+            lines.append(f"Grade: {grade} | Readiness: {readiness}")
+
+    if schema_status.error_code:
+        lines.append(f"Error Code: {schema_status.error_code}")
+    if schema_status.detail:
+        lines.append(f"Detail: {schema_status.detail}")
+    return lines
 
 
 def render_report(
@@ -119,20 +166,8 @@ def render_report(
         "=== 1. RENDERED CONTEXT ===",
         report.rendered_context,
         "",
-        "=== 2. TOOL TRACE ===",
     ]
-
-    if not report.tool_trace:
-        lines.append("Calls: 0; Tools: (none)")
-    elif not verbose_tools:
-        tools_list = ", ".join(step.tool for step in report.tool_trace)
-        lines.append(f"Calls: {len(report.tool_trace)}; Tools: {tools_list}")
-    else:
-        lines.append(f"Calls: {len(report.tool_trace)}")
-        for step in report.tool_trace:
-            lines.append(f"  - Tool: {step.tool}")
-            lines.append(f"    Args: {json.dumps(step.args)}")
-            lines.append(f"    Result: {json.dumps(step.result)}")
+    lines.extend(_render_tool_trace(report.tool_trace, verbose_tools=verbose_tools))
 
     ttft_str = f"{report.metrics.ttft_ms:.1f}ms" if report.metrics.ttft_ms is not None else "N/A"
     lines.extend(
@@ -144,19 +179,9 @@ def render_report(
                 f"Tokens: {report.metrics.prompt_tokens} in, {report.metrics.completion_tokens} out"
             ),
             "",
-            "=== 4. SCHEMA & POLICY STATUS ===",
-            (
-                f"Valid: {str(report.schema_status.valid).lower()} (valid: "
-                f"{str(report.schema_status.valid).lower()}) | "
-                f"Status: {report.schema_status.status}"
-            ),
         ]
     )
-
-    if report.schema_status.error_code:
-        lines.append(f"Error Code: {report.schema_status.error_code}")
-    if report.schema_status.detail:
-        lines.append(f"Detail: {report.schema_status.detail}")
+    lines.extend(_render_schema_section(report.schema_status, report.qa_verdict))
 
     if report.metrics.route_trace:
         lines.extend(["", "=== 5. ROUTE TRACE ==="])

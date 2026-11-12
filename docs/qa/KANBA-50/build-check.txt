@@ -1,0 +1,43 @@
+=== 1. ruff check . ===
+All checks passed!
+exit=0
+
+=== 2. ruff format --check . ===
+376 files already formatted
+exit=0
+
+=== 3. mypy --strict agent ===
+Success: no issues found in 44 source files
+exit=0
+
+=== 4. lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 121 files, 179 dependencies.
+-------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+exit=0
+
+=== 5. check_no_dashes --all ===
+exit=0
+
+=== 6. make license ===
+uv run python -m scripts.license_gate
+SUMMARY python=92 node=1 violations=0
+exit=0

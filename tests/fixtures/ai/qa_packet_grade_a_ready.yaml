@@ -1,0 +1,24 @@
+cassette_version: 1
+matcher:
+  agent_slug: reality-checker
+  prompt_contains: ["KAN-142"]
+simulated_ttft_ms: 12.0
+usage:
+  prompt_tokens: 520
+  completion_tokens: 140
+final_verdict:
+  schema: kb-qa-verdict/v1
+  grade: A
+  readiness: READY
+  dod_verdicts:
+    - criterion: "Unit test coverage >= 95%"
+      passed: true
+      evidence_ref: "docs/qa/KAN-142/unit-test-results.txt"
+    - criterion: "UI specialist gate review approved"
+      passed: true
+      evidence_ref: "docs/qa/KAN-142/ui-specialist-review.md"
+    - criterion: "Responsive screenshots for desktop, tablet, and mobile"
+      passed: true
+      evidence_ref: "docs/qa/KAN-142/screenshots/"
+  critical_issues: []
+  report_markdown: "# Forensic Reality-Checker Certification: KAN-142\n\nTicket KAN-142 satisfies 100% of its Definition of Done items with verified passive proofs. Grade: A, Production Readiness: READY."

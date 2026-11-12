@@ -169,3 +169,27 @@ The `ProviderRouter` wraps multi-candidate provider pools with 3-state per-(work
 - Max Attempts: Capped at `min(len(eligible), 3)` attempts per request.
 - Streaming Failover Barrier: Failover is permitted strictly before the first stream chunk is yielded. Once token streaming begins, upstream faults propagate immediately to prevent mixed-model corrupted generation.
 - TTFT SLA Enforcement: When `ttft_deadline_ms` is configured, waiting for the first chunk is bounded by `asyncio.timeout`. Expiry invokes `aclose()` on the upstream stream and trips the candidate's circuit breaker with `ProviderTimeout`.
+
+## Local Passive Forensic QA Audit (`kanban-agent validate-qa-packet`, `agent.qa_validator`)
+
+The `validate-qa-packet` subcommand performs deterministic passive proof-bundle checks and a structured reality-checker forensic audit over `docs/qa/<ID>/` proof directories and ticket YAML/Markdown files without executing shell commands, visiting external URLs, or decoding untrusted image payloads.
+
+### Deterministic Proof Bundle Inspector (`agent.qa_validator.bundle_inspector`)
+
+- Pure Passive Containment: Resolves proof directory strictly, rejecting any symlink escaping the proof directory (`PROOF_SYMLINK_ESCAPE`), rejecting FIFOs/devices/sockets (`PROOF_INVALID_ENTRY`), and enforcing a 2 MiB per-file and 16 MiB per-bundle limit (`PROOF_BUNDLE_TOO_LARGE`).
+- Passive PNG Inspection: Validates standard PNG header (`89 50 4E 47 0D 0A 1A 0A`) and extracts width and height from the IHDR chunk via `struct.unpack` without running subprocesses or decoding untrusted raster payloads.
+- Dual Ticket Parsing: Parses both YAML ticket specifications (`examples/tickets/*.yaml`) and Markdown ticket specifications with YAML frontmatter (`docs/tickets/KB-*.md`).
+- Seven Non-Bypassable Deterministic Checks:
+  1. `CORE_ARTIFACTS_PRESENT`: Verifies `git-diff.patch`, `unit-test-results.txt`, and `build-check.txt` (or `build-or-typecheck.txt`) exist and are > 0 bytes.
+  2. `UNIT_TESTS_EXIT_ZERO`: Verifies `unit-test-results.txt` contains a positive passing summary marker and zero failure or non-zero exit markers.
+  3. `BUILD_CHECK_CLEAN`: Verifies `build-check.txt` contains zero unhandled error exit markers or exceptions.
+  4. `UI_SPECIALIST_GATE`: If `ui-specialist` is in gates or `[UI]` tag appears, verifies `ui-specialist-review.md` exists with an explicit `APPROVED` verdict, and that `screenshots/` contains >= 3 valid PNG files covering desktop, tablet, and mobile viewports (or explicitly declared `N/A - Non-UI Ticket`).
+  5. `API_SPECIALIST_GATE`: If `api-specialist` is in gates or `[API]` tag appears, verifies both `api-specialist-review.md` and `ui-specialist-review.md` exist and contain explicit `APPROVED` verdicts.
+  6. `DEPENDENCY_EVALUATION_GATE`: If `new_dependencies` is non-empty or `[DEP]` tag appears, verifies `dependency-evaluation.md` exists and references permissive license, SHA-256 hash, and specialist sign-offs.
+  7. `NO_RAW_SECRETS_IN_PROOF`: Scans all text artifacts in the proof directory with `outbound_secret_scrubber`, failing if unredacted live secrets (`sk-*`, `ghp_*`, `AKIA*`, PEM keys, `kb_*`) are present, and redacting them before LLM spotlighting.
+
+### Reality-Checker Forensic Auditor & Anti-Fantasy Gate (`agent.qa_validator.auditor`)
+
+- Passive Forensic Prompt: Ingests `.agents/agents/reality-checker.md` and appends the mandatory passive forensic mode override forbidding subprocess/URL execution.
+- Spotlight Isolation: Isolates scrubbed ticket specification and proof artifacts within randomized `<<<UNTRUSTED_QA_EVIDENCE_<hex> >>>` delimiters.
+- Hard Anti-Fantasy Invariant: Enforced in code (never trusted to model alone): if any deterministic check failed, OR `verdict.grade != "A"`, OR `len(verdict.critical_issues) > 0`, OR any `dod_verdicts` item has `passed == False`, any claimed `readiness == "READY"` is overridden to `readiness = "NEEDS_WORK"` with `policy_override = "FANTASY_APPROVAL_BLOCKED"`.

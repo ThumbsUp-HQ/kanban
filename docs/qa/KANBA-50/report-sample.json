@@ -1,0 +1,408 @@
+{
+  "ready_run": {
+    "schema_version": "kb-cli-validation-report/v1",
+    "command": "validate-qa-packet",
+    "rendered_context": "Ticket: KAN-142 ([UI] Harden Multi-Card OIDC & LDAPS Auth Studio)\nProof Directory: /tmp/kb-wt-KANBA-50/examples/qa_packets/kan-142-ready\nFiles Inspected: 8\nDeterministic Checks: 7/7 passed\n  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.\n  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.\n  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.\n  - [PASS] UI_SPECIALIST_GATE: UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile).\n  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.\n  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.\n  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.",
+    "tool_trace": [
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "CORE_ARTIFACTS_PRESENT"
+        },
+        "result": {
+          "passed": true,
+          "detail": "Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "UNIT_TESTS_EXIT_ZERO"
+        },
+        "result": {
+          "passed": true,
+          "detail": "Unit tests executed cleanly with zero failures and verified passing summary."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "BUILD_CHECK_CLEAN"
+        },
+        "result": {
+          "passed": true,
+          "detail": "Build, typecheck, and linter checks executed cleanly with zero error exit markers."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "UI_SPECIALIST_GATE"
+        },
+        "result": {
+          "passed": true,
+          "detail": "UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile)."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "API_SPECIALIST_GATE"
+        },
+        "result": {
+          "passed": true,
+          "detail": "N/A - Ticket does not require API specialist gate."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "DEPENDENCY_EVALUATION_GATE"
+        },
+        "result": {
+          "passed": true,
+          "detail": "N/A - No new dependencies declared on ticket."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "NO_RAW_SECRETS_IN_PROOF"
+        },
+        "result": {
+          "passed": true,
+          "detail": "Zero raw secrets detected in proof bundle text artifacts."
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "build-check.txt"
+        },
+        "result": {
+          "bytes": 215,
+          "is_png": false,
+          "png_dimensions": null
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "git-diff.patch"
+        },
+        "result": {
+          "bytes": 324,
+          "is_png": false,
+          "png_dimensions": null
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "message-to-reality-checker.md"
+        },
+        "result": {
+          "bytes": 396,
+          "is_png": false,
+          "png_dimensions": null
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "screenshots/01-auth-studio-desktop.png"
+        },
+        "result": {
+          "bytes": 8566,
+          "is_png": true,
+          "png_dimensions": "1920x1080"
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "screenshots/02-auth-studio-tablet.png"
+        },
+        "result": {
+          "bytes": 4026,
+          "is_png": true,
+          "png_dimensions": "1024x768"
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "screenshots/03-auth-studio-mobile.png"
+        },
+        "result": {
+          "bytes": 2833,
+          "is_png": true,
+          "png_dimensions": "390x844"
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "ui-specialist-review.md"
+        },
+        "result": {
+          "bytes": 502,
+          "is_png": false,
+          "png_dimensions": null
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "unit-test-results.txt"
+        },
+        "result": {
+          "bytes": 1014,
+          "is_png": false,
+          "png_dimensions": null
+        }
+      }
+    ],
+    "metrics": {
+      "ttft_ms": 12.0,
+      "total_latency_ms": 5.277274991385639,
+      "prompt_tokens": 520,
+      "completion_tokens": 140,
+      "route_trace": []
+    },
+    "schema_status": {
+      "valid": true,
+      "status": "grade=A, readiness=READY",
+      "error_code": null,
+      "detail": "Grade: A | Readiness: READY"
+    },
+    "qa_verdict": {
+      "schema": "kb-qa-verdict/v1",
+      "grade": "A",
+      "readiness": "READY",
+      "dod_verdicts": [
+        {
+          "criterion": "Unit test coverage >= 95%",
+          "passed": true,
+          "evidence_ref": "docs/qa/KAN-142/unit-test-results.txt"
+        },
+        {
+          "criterion": "UI specialist gate review approved",
+          "passed": true,
+          "evidence_ref": "docs/qa/KAN-142/ui-specialist-review.md"
+        },
+        {
+          "criterion": "Responsive screenshots for desktop, tablet, and mobile",
+          "passed": true,
+          "evidence_ref": "docs/qa/KAN-142/screenshots/"
+        }
+      ],
+      "critical_issues": [],
+      "report_markdown": "# Forensic Reality-Checker Certification: KAN-142\n\nTicket KAN-142 satisfies 100% of its Definition of Done items with verified passive proofs. Grade: A, Production Readiness: READY.",
+      "policy_override": null
+    }
+  },
+  "fantasy_approval_blocked_run": {
+    "schema_version": "kb-cli-validation-report/v1",
+    "command": "validate-qa-packet",
+    "rendered_context": "Ticket: KAN-142 ([UI] Harden Multi-Card OIDC & LDAPS Auth Studio)\nProof Directory: /tmp/kb-wt-KANBA-50/examples/qa_packets/kan-142-ready\nFiles Inspected: 8\nDeterministic Checks: 7/7 passed\n  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.\n  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.\n  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.\n  - [PASS] UI_SPECIALIST_GATE: UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile).\n  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.\n  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.\n  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.",
+    "tool_trace": [
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "CORE_ARTIFACTS_PRESENT"
+        },
+        "result": {
+          "passed": true,
+          "detail": "Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "UNIT_TESTS_EXIT_ZERO"
+        },
+        "result": {
+          "passed": true,
+          "detail": "Unit tests executed cleanly with zero failures and verified passing summary."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "BUILD_CHECK_CLEAN"
+        },
+        "result": {
+          "passed": true,
+          "detail": "Build, typecheck, and linter checks executed cleanly with zero error exit markers."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "UI_SPECIALIST_GATE"
+        },
+        "result": {
+          "passed": true,
+          "detail": "UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile)."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "API_SPECIALIST_GATE"
+        },
+        "result": {
+          "passed": true,
+          "detail": "N/A - Ticket does not require API specialist gate."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "DEPENDENCY_EVALUATION_GATE"
+        },
+        "result": {
+          "passed": true,
+          "detail": "N/A - No new dependencies declared on ticket."
+        }
+      },
+      {
+        "tool": "deterministic_check",
+        "args": {
+          "check_id": "NO_RAW_SECRETS_IN_PROOF"
+        },
+        "result": {
+          "passed": true,
+          "detail": "Zero raw secrets detected in proof bundle text artifacts."
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "build-check.txt"
+        },
+        "result": {
+          "bytes": 215,
+          "is_png": false,
+          "png_dimensions": null
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "git-diff.patch"
+        },
+        "result": {
+          "bytes": 324,
+          "is_png": false,
+          "png_dimensions": null
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "message-to-reality-checker.md"
+        },
+        "result": {
+          "bytes": 396,
+          "is_png": false,
+          "png_dimensions": null
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "screenshots/01-auth-studio-desktop.png"
+        },
+        "result": {
+          "bytes": 8566,
+          "is_png": true,
+          "png_dimensions": "1920x1080"
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "screenshots/02-auth-studio-tablet.png"
+        },
+        "result": {
+          "bytes": 4026,
+          "is_png": true,
+          "png_dimensions": "1024x768"
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "screenshots/03-auth-studio-mobile.png"
+        },
+        "result": {
+          "bytes": 2833,
+          "is_png": true,
+          "png_dimensions": "390x844"
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "ui-specialist-review.md"
+        },
+        "result": {
+          "bytes": 502,
+          "is_png": false,
+          "png_dimensions": null
+        }
+      },
+      {
+        "tool": "inspect_file",
+        "args": {
+          "path": "unit-test-results.txt"
+        },
+        "result": {
+          "bytes": 1014,
+          "is_png": false,
+          "png_dimensions": null
+        }
+      }
+    ],
+    "metrics": {
+      "ttft_ms": 10.0,
+      "total_latency_ms": 5.648930964525789,
+      "prompt_tokens": 520,
+      "completion_tokens": 150,
+      "route_trace": []
+    },
+    "schema_status": {
+      "valid": false,
+      "status": "grade=B+, readiness=NEEDS_WORK",
+      "error_code": "FANTASY_APPROVAL_BLOCKED",
+      "detail": "Grade: B+ | Readiness: NEEDS_WORK | Policy Override: FANTASY_APPROVAL_BLOCKED"
+    },
+    "qa_verdict": {
+      "schema": "kb-qa-verdict/v1",
+      "grade": "B+",
+      "readiness": "NEEDS_WORK",
+      "dod_verdicts": [
+        {
+          "criterion": "Unit test coverage >= 95%",
+          "passed": false,
+          "evidence_ref": "docs/qa/KAN-142/unit-test-results.txt"
+        },
+        {
+          "criterion": "UI specialist gate review approved",
+          "passed": true,
+          "evidence_ref": "docs/qa/KAN-142/ui-specialist-review.md"
+        },
+        {
+          "criterion": "Responsive screenshots for desktop, tablet, and mobile",
+          "passed": true,
+          "evidence_ref": "docs/qa/KAN-142/screenshots/"
+        }
+      ],
+      "critical_issues": [],
+      "report_markdown": "# Premature Fantasy Approval\n\nModel prematurely declared READY despite failing unit test criterion.",
+      "policy_override": "FANTASY_APPROVAL_BLOCKED"
+    }
+  }
+}

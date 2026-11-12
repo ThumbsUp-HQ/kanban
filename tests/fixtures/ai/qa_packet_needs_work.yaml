@@ -1,0 +1,25 @@
+cassette_version: 1
+matcher:
+  agent_slug: reality-checker
+  prompt_contains: ["KAN-142"]
+simulated_ttft_ms: 14.0
+usage:
+  prompt_tokens: 520
+  completion_tokens: 130
+final_verdict:
+  schema: kb-qa-verdict/v1
+  grade: B-
+  readiness: NEEDS_WORK
+  dod_verdicts:
+    - criterion: "Unit test coverage >= 95%"
+      passed: false
+      evidence_ref: "docs/qa/KAN-142/unit-test-results.txt"
+    - criterion: "UI specialist gate review approved"
+      passed: true
+      evidence_ref: "docs/qa/KAN-142/ui-specialist-review.md"
+    - criterion: "Responsive screenshots for desktop, tablet, and mobile"
+      passed: true
+      evidence_ref: "docs/qa/KAN-142/screenshots/"
+  critical_issues:
+    - "Missing boundary test for token expiration in unit-test-results.txt"
+  report_markdown: "# Forensic Reality-Checker Review: KAN-142\n\nTicket KAN-142 requires additional test coverage for token expiration edge cases. Grade: B-, Status: NEEDS_WORK."

@@ -13,6 +13,10 @@ from agent.cli_commands.validate_echo import (
     configure_validate_echo_parser,
     handle_validate_echo,
 )
+from agent.cli_commands.validate_qa_packet import (
+    configure_validate_qa_packet_parser,
+    handle_validate_qa_packet,
+)
 from agent.cli_report import (
     ContextScrubber,
     ExitCode,
@@ -182,6 +186,16 @@ register_subcommand(
         help="Validate echo stream and structured output against FixtureLLMProvider",
         configure_parser=configure_validate_echo_parser,
         handler=handle_validate_echo,
+    )
+)
+
+# Register validate-qa-packet subcommand
+register_subcommand(
+    SubcommandSpec(
+        name="validate-qa-packet",
+        help="Run local reality-checker forensic QA audit over proof directory and ticket file",
+        configure_parser=configure_validate_qa_packet_parser,
+        handler=handle_validate_qa_packet,
     )
 )
 
