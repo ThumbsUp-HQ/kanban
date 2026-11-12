@@ -1,0 +1,23 @@
+.............................                                            [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                          Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------------------
+agent/__init__.py                                 1      0      0      0   100%
+agent/providers/__init__.py                       3      0      0      0   100%
+agent/providers/base.py                         116      0     14      0   100%
+agent/providers/errors.py                        66      0      2      0   100%
+agent/testing/__init__.py                         2      0      0      0   100%
+agent/testing/fixtures.py                       284      4     90      4    98%   194-196, 290, 357->361, 540->544, 575->583
+agent/tests/__init__.py                           0      0      0      0   100%
+agent/tests/providers/__init__.py                 0      0      0      0   100%
+agent/tests/providers/test_base_protocol.py     179      0      2      0   100%
+agent/tests/test_smoke.py                         3      3      0      0     0%   4-9
+agent/tests/testing/__init__.py                   0      0      0      0   100%
+agent/tests/testing/test_fixtures.py            312      7     28      7    96%   225, 287, 350, 446, 455, 594, 604
+-----------------------------------------------------------------------------------------
+TOTAL                                           966     14    136     11    98%
+Required test coverage of 95% reached. Total coverage: 97.73%
+29 passed in 0.56s
+EXIT_CODE=0

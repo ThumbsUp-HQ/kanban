@@ -1,0 +1,15 @@
+cassette_version: 1
+matcher:
+  agent_slug: forensic-code-check
+  transition_to: Done
+  prompt_contains: ["KAN-142", "auth_provider_cards"]
+tool_script:
+  - call: { tool: read_ticket, args: { identifier: "KAN-100" } }
+  - call: { tool: repo_grep, args: { pattern: "FORCE ROW LEVEL SECURITY", path: "database/" } }
+simulated_ttft_ms: 18
+final_verdict:
+  schema: kb-transition-verdict/v1
+  decision: reject
+  reason_markdown: "Missing `FORCE ROW LEVEL SECURITY` on `auth_card_group_mappings` migration."
+  field_updates: {}
+  add_labels: ["qa-needs-work"]

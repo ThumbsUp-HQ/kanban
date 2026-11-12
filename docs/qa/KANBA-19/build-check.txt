@@ -1,0 +1,39 @@
+=== 1. uv run ruff check agent ===
+All checks passed!
+EXIT_CODE=0
+
+=== 2. uv run ruff format --check agent ===
+14 files already formatted
+EXIT_CODE=0
+
+=== 3. uv run mypy --strict agent ===
+Success: no issues found in 12 source files
+EXIT_CODE=0
+
+=== 4. uv run lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 21 files, 15 dependencies.
+-----------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+
+Contracts: 1 kept, 0 broken.
+EXIT_CODE=0
+
+=== 5. uv lock --locked ===
+Resolved 41 packages in 2ms
+EXIT_CODE=0

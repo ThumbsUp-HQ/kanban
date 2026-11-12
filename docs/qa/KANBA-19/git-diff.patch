@@ -1,0 +1,3333 @@
+diff --git a/agent/__init__.py b/agent/__init__.py
+index 000809d..b724ef1 100644
+--- a/agent/__init__.py
++++ b/agent/__init__.py
+@@ -1,3 +1,4 @@
++# Copyright 2026 Kanban Platform Contributors
+ """Agent runtime, LLM providers, CLI harnesses, and workflow transition interceptors."""
+ 
+ __version__: str = "0.0.0"
+diff --git a/agent/providers/__init__.py b/agent/providers/__init__.py
+new file mode 100644
+index 0000000..9f035e4
+--- /dev/null
++++ b/agent/providers/__init__.py
+@@ -0,0 +1,56 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Vendor-neutral LLM provider abstractions, DTOs, and error hierarchy."""
++
++from agent.providers.base import (
++    CLIRunner,
++    CLIRunRequest,
++    CLIRunResult,
++    CompletionRequest,
++    EmbedBatchRequest,
++    HealthStatus,
++    LLMProvider,
++    StreamChunk,
++    StructuredRequest,
++    StructuredResponse,
++    ToolCallStep,
++)
++from agent.providers.errors import (
++    AllProvidersUnavailable,
++    EgressDenied,
++    ProviderError,
++    ProviderHTTPError,
++    ProviderPolicyError,
++    ProviderProtocolError,
++    ProviderRefusal,
++    ProviderSafetyBlock,
++    ProviderSchemaError,
++    ProviderTimeout,
++    ProviderUnavailable,
++    redact_secrets,
++)
++
++__all__ = [
++    "AllProvidersUnavailable",
++    "CLIRunRequest",
++    "CLIRunResult",
++    "CLIRunner",
++    "CompletionRequest",
++    "EgressDenied",
++    "EmbedBatchRequest",
++    "HealthStatus",
++    "LLMProvider",
++    "ProviderError",
++    "ProviderHTTPError",
++    "ProviderPolicyError",
++    "ProviderProtocolError",
++    "ProviderRefusal",
++    "ProviderSafetyBlock",
++    "ProviderSchemaError",
++    "ProviderTimeout",
++    "ProviderUnavailable",
++    "StreamChunk",
++    "StructuredRequest",
++    "StructuredResponse",
++    "ToolCallStep",
++    "redact_secrets",
++]
+diff --git a/agent/providers/base.py b/agent/providers/base.py
+new file mode 100644
+index 0000000..4226150
+--- /dev/null
++++ b/agent/providers/base.py
+@@ -0,0 +1,263 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Vendor-neutral LLM provider protocol, DTOs, and CLI runner contracts."""
++
++from __future__ import annotations
++
++from typing import (
++    TYPE_CHECKING,
++    Any,
++    Literal,
++    Protocol,
++    TypeVar,
++    runtime_checkable,
++)
++
++from pydantic import (
++    BaseModel,
++    ConfigDict,
++    Field,
++    field_validator,
++    model_validator,
++)
++
++from agent.providers.errors import (
++    AllProvidersUnavailable,
++    EgressDenied,
++    ProviderError,
++    ProviderHTTPError,
++    ProviderPolicyError,
++    ProviderProtocolError,
++    ProviderRefusal,
++    ProviderSafetyBlock,
++    ProviderSchemaError,
++    ProviderTimeout,
++    ProviderUnavailable,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import AsyncIterator
++
++__all__ = [
++    "AllProvidersUnavailable",
++    "CLIRunRequest",
++    "CLIRunResult",
++    "CLIRunner",
++    "CompletionRequest",
++    "EgressDenied",
++    "EmbedBatchRequest",
++    "HealthStatus",
++    "LLMProvider",
++    "ProviderError",
++    "ProviderHTTPError",
++    "ProviderPolicyError",
++    "ProviderProtocolError",
++    "ProviderRefusal",
++    "ProviderSafetyBlock",
++    "ProviderSchemaError",
++    "ProviderTimeout",
++    "ProviderUnavailable",
++    "StreamChunk",
++    "StructuredRequest",
++    "StructuredResponse",
++    "ToolCallStep",
++]
++
++TModel = TypeVar("TModel", bound=BaseModel)
++
++_MAX_BATCH_INPUTS: int = 64
++_MAX_INPUT_CHARS: int = 8192
++
++_FORBIDDEN_SHELL_BINARIES: frozenset[str] = frozenset(
++    {
++        "/bin/sh",
++        "/bin/bash",
++        "/usr/bin/sh",
++        "/usr/bin/bash",
++        "sh",
++        "bash",
++    }
++)
++
++
++class CompletionRequest(BaseModel):
++    """Request DTO for streaming text completion."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    model: str
++    prompt: str
++    suffix: str | None = None
++    system_prompt: str | None = None
++    temperature: float = Field(default=0.15, ge=0.0, le=2.0)
++    max_output_tokens: int = Field(default=256, ge=1, le=32768)
++    ttft_deadline_ms: int | None = Field(default=None, ge=1, le=60000)
++    metadata: dict[str, str] = Field(default_factory=dict)
++
++
++class StreamChunk(BaseModel):
++    """Single token or delta emitted during completion streaming."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    delta: str
++    index: int = Field(ge=0)
++    finish_reason: Literal["stop", "length", "tool_calls"] | None = None
++    ttft_ms: float | None = None
++    prompt_tokens: int | None = None
++    completion_tokens: int | None = None
++
++
++class ToolCallStep(BaseModel):
++    """Audit step representing a tool invocation during structured execution."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    tool: str
++    args: dict[str, Any]
++    result: dict[str, Any] | str | None = None
++
++
++class StructuredRequest[TModel: BaseModel](BaseModel):
++    """Request DTO for structured output parsed into a typed Pydantic model."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
++
++    model: str
++    prompt: str
++    response_model: type[TModel]
++    system_prompt: str | None = None
++    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
++    max_output_tokens: int = Field(default=1024, ge=1, le=32768)
++    ttft_deadline_ms: int | None = Field(default=None, ge=1, le=60000)
++    metadata: dict[str, str] = Field(default_factory=dict)
++
++
++class StructuredResponse[TModel: BaseModel](BaseModel):
++    """Response DTO carrying typed structured output and execution telemetry."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
++
++    parsed: TModel
++    raw_json: str
++    tool_trace: tuple[ToolCallStep, ...] = ()
++    ttft_ms: float
++    total_latency_ms: float
++    prompt_tokens: int = 0
++    completion_tokens: int = 0
++
++
++class EmbedBatchRequest(BaseModel):
++    """Request DTO for batch vector embeddings."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    model: str
++    inputs: tuple[str, ...]
++
++    @field_validator("inputs", mode="before")
++    @classmethod
++    def _validate_inputs(cls, value: tuple[object, ...] | list[object]) -> tuple[str, ...]:
++        tuple_val = tuple(value)
++        if not (1 <= len(tuple_val) <= _MAX_BATCH_INPUTS):
++            msg = f"inputs length must be between 1 and {_MAX_BATCH_INPUTS}, got {len(tuple_val)}"
++            raise ValueError(msg)
++        for idx, item in enumerate(tuple_val):
++            if not isinstance(item, str):
++                msg = f"input at index {idx} must be a string"
++                raise ValueError(msg)  # noqa: TRY004  # ValueError mandated by KB-P0-12 spec
++            if not (1 <= len(item) <= _MAX_INPUT_CHARS):
++                msg = (
++                    f"input at index {idx} length must be between 1 and {_MAX_INPUT_CHARS} "
++                    f"characters, got {len(item)}"
++                )
++                raise ValueError(msg)
++        return tuple(str(x) for x in tuple_val)
++
++
++class HealthStatus(BaseModel):
++    """Health status and latency report for an LLM provider."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    ok: bool
++    latency_ms: float
++    models: tuple[str, ...] = ()
++    detail: str | None = None
++
++
++@runtime_checkable
++class LLMProvider(Protocol):
++    """Vendor-neutral LLM provider protocol."""
++
++    @property
++    def residency_tier(self) -> str:
++        """Return data residency tier identifier (e.g. 'local', 'cloud', 'fixture')."""
++        ...
++
++    def stream_complete(self, req: CompletionRequest) -> AsyncIterator[StreamChunk]:
++        """Stream token-by-token completion chunks."""
++        ...
++
++    async def generate_structured(
++        self, req: StructuredRequest[TModel]
++    ) -> StructuredResponse[TModel]:
++        """Generate typed structured output parsed into req.response_model."""
++        ...
++
++    async def embed_batch(self, req: EmbedBatchRequest) -> list[list[float]]:
++        """Generate batch vector embeddings."""
++        ...
++
++    async def health_probe(self) -> HealthStatus:
++        """Probe upstream provider availability and health."""
++        ...
++
++
++class CLIRunRequest(BaseModel):
++    """Request DTO for executing zero-shell CLI pipe harnesses."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    argv: tuple[str, ...]
++    stdin_bytes: bytes
++    timeout_s: float = 30.0
++    env_keys: tuple[str, ...] = ()
++
++    @field_validator("argv", mode="before")
++    @classmethod
++    def _coerce_argv(cls, value: tuple[str, ...] | list[str]) -> tuple[str, ...]:
++        return tuple(value)
++
++    @model_validator(mode="after")
++    def _validate_cli_request(self) -> CLIRunRequest:
++        if not self.argv:
++            msg = "argv must not be empty"
++            raise ValueError(msg)
++        head = self.argv[0].strip().lower()
++        if head in _FORBIDDEN_SHELL_BINARIES:
++            msg = f"Shell wrapper '{head}' is forbidden; direct zero-shell execution required"
++            raise ValueError(msg)
++        if "-c" in self.argv:
++            msg = "Shell invocation with '-c' wrapper is forbidden"
++            raise ValueError(msg)
++        return self
++
++
++class CLIRunResult(BaseModel):
++    """Result DTO of a completed zero-shell CLI invocation."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    stdout: bytes
++    stderr: bytes
++    exit_code: int
++    duration_ms: float
++
++
++@runtime_checkable
++class CLIRunner(Protocol):
++    """Zero-shell CLI harness protocol for transition interceptors."""
++
++    async def run(self, req: CLIRunRequest) -> CLIRunResult:
++        """Execute a CLI request returning raw stdout, stderr, and exit code."""
++        ...
+diff --git a/agent/providers/errors.py b/agent/providers/errors.py
+new file mode 100644
+index 0000000..c1b28c2
+--- /dev/null
++++ b/agent/providers/errors.py
+@@ -0,0 +1,159 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Typed error hierarchy for LLM providers with secret redaction."""
++
++from __future__ import annotations
++
++import re
++
++_CODE_PATTERN: re.Pattern[str] = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
++
++_BEARER_PATTERN: re.Pattern[str] = re.compile(
++    r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+",
++)
++_SK_PATTERN: re.Pattern[str] = re.compile(
++    r"\bsk-[a-zA-Z0-9_-]{8,}\b",
++)
++_GHP_PATTERN: re.Pattern[str] = re.compile(
++    r"\bghp_[a-zA-Z0-9]{20,}\b",
++)
++_AKIA_PATTERN: re.Pattern[str] = re.compile(
++    r"\bAKIA[0-9A-Z]{16}\b",
++)
++_KB_PATTERN: re.Pattern[str] = re.compile(
++    r"\bkb_[a-zA-Z0-9_-]{8,}\b",
++)
++_AIZA_PATTERN: re.Pattern[str] = re.compile(
++    r"\bAIza[0-9A-Za-z_-]{20,}\b",
++)
++_JWT_PATTERN: re.Pattern[str] = re.compile(
++    r"\beyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b",
++)
++_PARAM_PATTERN: re.Pattern[str] = re.compile(
++    r"(?i)\b(api[_-]?key|secret|token|password|authorization)\s*([:=])\s*['\"]?[a-zA-Z0-9_.\-~/+=]{8,}['\"]?",
++)
++
++
++def redact_secrets(text: str) -> str:
++    """Redact bearer tokens, API keys, and sensitive authorization strings."""
++    redacted = _BEARER_PATTERN.sub("Bearer [REDACTED]", text)
++    redacted = _SK_PATTERN.sub("sk-[REDACTED]", redacted)
++    redacted = _GHP_PATTERN.sub("ghp-[REDACTED]", redacted)
++    redacted = _AKIA_PATTERN.sub("AKIA[REDACTED]", redacted)
++    redacted = _KB_PATTERN.sub("kb_[REDACTED]", redacted)
++    redacted = _AIZA_PATTERN.sub("AIza[REDACTED]", redacted)
++    redacted = _JWT_PATTERN.sub("[REDACTED_JWT]", redacted)
++    return _PARAM_PATTERN.sub(r"\1\2[REDACTED]", redacted)
++
++
++def _validate_code(code: str) -> str:
++    """Validate error code conforms to ^[A-Z][A-Z0-9_]{2,63}$."""
++    if not _CODE_PATTERN.match(code):
++        msg = f"Invalid provider error code '{code}'; must match ^[A-Z][A-Z0-9_]{{2,63}}$"
++        raise ValueError(msg)
++    return code
++
++
++class ProviderError(Exception):
++    """Root error for all LLM and CLI provider failures."""
++
++    def __init__(self, message: str, code: str = "PROVIDER_ERROR") -> None:
++        """Initialize ProviderError with sanitized message and validated code."""
++        self.code: str = _validate_code(code)
++        self.message: str = redact_secrets(message)
++        super().__init__(self.message)
++
++    def __str__(self) -> str:
++        """Return formatted error string with code and message."""
++        return f"[{self.code}] {self.message}"
++
++    def __repr__(self) -> str:
++        """Return developer-facing representation of the error."""
++        return f"{self.__class__.__name__}(message={self.message!r}, code={self.code!r})"
++
++
++class ProviderHTTPError(ProviderError):
++    """Raised when an upstream provider returns an HTTP error status."""
++
++    def __init__(
++        self,
++        message: str,
++        status: int,
++        retry_after_s: float | None = None,
++        code: str = "HTTP_ERROR",
++    ) -> None:
++        """Initialize HTTP error with status code and optional retry header."""
++        self.status: int = status
++        self.retry_after_s: float | None = retry_after_s
++        super().__init__(message, code=code)
++
++
++class ProviderTimeout(ProviderError):  # noqa: N818  # Class name mandated by KB-P0-12 spec
++    """Raised when an upstream provider call or TTFT deadline times out."""
++
++    def __init__(self, message: str, code: str = "TIMEOUT") -> None:
++        """Initialize provider timeout error."""
++        super().__init__(message, code=code)
++
++
++class ProviderUnavailable(ProviderError):  # noqa: N818  # Class name mandated by KB-P0-12 spec
++    """Raised when an individual LLM provider is offline or unreachable."""
++
++    def __init__(self, message: str, code: str = "UNAVAILABLE") -> None:
++        """Initialize provider unavailable error."""
++        super().__init__(message, code=code)
++
++
++class AllProvidersUnavailable(ProviderUnavailable):
++    """Raised when all configured providers in a residency tier are unavailable."""
++
++    def __init__(self, message: str, code: str = "ALL_PROVIDERS_UNAVAILABLE") -> None:
++        """Initialize all providers unavailable error."""
++        super().__init__(message, code=code)
++
++
++class ProviderProtocolError(ProviderError):
++    """Raised when an upstream provider violates the wire protocol."""
++
++    def __init__(self, message: str, code: str = "PROTOCOL_ERROR") -> None:
++        """Initialize provider protocol error."""
++        super().__init__(message, code=code)
++
++
++class ProviderSchemaError(ProviderError):
++    """Raised when model output fails to parse into the requested Pydantic schema."""
++
++    def __init__(self, message: str, code: str = "SCHEMA_ERROR") -> None:
++        """Initialize provider schema error."""
++        super().__init__(message, code=code)
++
++
++class ProviderSafetyBlock(ProviderError):  # noqa: N818  # Class name mandated by KB-P0-12 spec
++    """Raised when provider content safety filters trigger and block generation."""
++
++    def __init__(self, message: str, code: str = "SAFETY_BLOCK") -> None:
++        """Initialize provider safety block error."""
++        super().__init__(message, code=code)
++
++
++class ProviderRefusal(ProviderError):  # noqa: N818  # Class name mandated by KB-P0-12 spec
++    """Raised when a model explicitly refuses to answer or follow instructions."""
++
++    def __init__(self, message: str, code: str = "REFUSAL") -> None:
++        """Initialize provider refusal error."""
++        super().__init__(message, code=code)
++
++
++class ProviderPolicyError(ProviderError):
++    """Raised when a provider request violates platform governance or budget policies."""
++
++    def __init__(self, message: str, code: str = "POLICY_ERROR") -> None:
++        """Initialize provider policy error."""
++        super().__init__(message, code=code)
++
++
++class EgressDenied(ProviderPolicyError):  # noqa: N818  # Class name mandated by KB-P0-12 spec
++    """Raised when air-gap mode or network policy forbids egress to the provider."""
++
++    def __init__(self, message: str, code: str = "EGRESS_DENIED") -> None:
++        """Initialize egress denied policy error."""
++        super().__init__(message, code=code)
+diff --git a/agent/pyproject.toml b/agent/pyproject.toml
+index 2d74a70..4472b7f 100644
+--- a/agent/pyproject.toml
++++ b/agent/pyproject.toml
+@@ -10,13 +10,16 @@ requires-python = ">=3.12,<3.13"
+ license = "Apache-2.0"
+ dependencies = [
+     "kanban-mcp",
++    "pydantic==2.14.3",
++    "pyyaml==6.0.3",
++    "jsonschema==4.26.0",
+ ]
+ 
+ [tool.hatch.build.targets.wheel.sources]
+ "" = "agent"
+ 
+ [tool.hatch.build.targets.wheel]
+-include = ["*.py", "**/*.py"]
++include = ["*.py", "**/*.py", "testing/cassette.schema.json"]
+ exclude = [
+     "tests",
+     "pyproject.toml",
+diff --git a/agent/testing/__init__.py b/agent/testing/__init__.py
+new file mode 100644
+index 0000000..125dc33
+--- /dev/null
++++ b/agent/testing/__init__.py
+@@ -0,0 +1,36 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Deterministic fixture replay harness and cassette validation."""
++
++from agent.testing.fixtures import (
++    MAX_CASSETTE_BYTES,
++    Cassette,
++    CassetteCLIResult,
++    CassetteEmbeddingsGen,
++    CassetteError,
++    CassetteFault,
++    CassetteMatcher,
++    CassetteMismatchError,
++    CassetteToolCall,
++    CassetteUsage,
++    CassetteValidationError,
++    FixtureCLIRunner,
++    FixtureLLMProvider,
++    load_cassette,
++)
++
++__all__ = [
++    "MAX_CASSETTE_BYTES",
++    "Cassette",
++    "CassetteCLIResult",
++    "CassetteEmbeddingsGen",
++    "CassetteError",
++    "CassetteFault",
++    "CassetteMatcher",
++    "CassetteMismatchError",
++    "CassetteToolCall",
++    "CassetteUsage",
++    "CassetteValidationError",
++    "FixtureCLIRunner",
++    "FixtureLLMProvider",
++    "load_cassette",
++]
+diff --git a/agent/testing/cassette.schema.json b/agent/testing/cassette.schema.json
+new file mode 100644
+index 0000000..27bd056
+--- /dev/null
++++ b/agent/testing/cassette.schema.json
+@@ -0,0 +1,213 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://kanban.hackedyour.info/schemas/ai-cassette-v1.json",
++  "title": "AICassette",
++  "description": "Deterministic AI and CLI response fixture cassette schema for offline tests.",
++  "type": "object",
++  "required": [
++    "cassette_version",
++    "matcher"
++  ],
++  "additionalProperties": false,
++  "properties": {
++    "cassette_version": {
++      "type": "integer",
++      "const": 1,
++      "description": "Cassette specification format version; strictly 1."
++    },
++    "matcher": {
++      "type": "object",
++      "description": "Request matching predicates; all specified keys must match for cassette replay.",
++      "additionalProperties": false,
++      "properties": {
++        "agent_slug": {
++          "type": "string"
++        },
++        "provider": {
++          "type": "string"
++        },
++        "model": {
++          "type": "string"
++        },
++        "transition_to": {
++          "type": "string"
++        },
++        "prompt_contains": {
++          "type": "array",
++          "items": {
++            "type": "string"
++          }
++        },
++        "stdin_contains": {
++          "type": "array",
++          "items": {
++            "type": "string"
++          }
++        },
++        "argv_prefix": {
++          "type": "array",
++          "items": {
++            "type": "string"
++          }
++        }
++      }
++    },
++    "tool_script": {
++      "type": "array",
++      "description": "Sequence of simulated MCP/repo tool calls performed during agent execution.",
++      "items": {
++        "type": "object",
++        "required": [
++          "call"
++        ],
++        "additionalProperties": false,
++        "properties": {
++          "call": {
++            "type": "object",
++            "required": [
++              "tool",
++              "args"
++            ],
++            "additionalProperties": false,
++            "properties": {
++              "tool": {
++                "type": "string"
++              },
++              "args": {
++                "type": "object"
++              }
++            }
++          },
++          "returns": {}
++        }
++      }
++    },
++    "simulated_ttft_ms": {
++      "type": "number",
++      "minimum": 0,
++      "default": 5.0,
++      "description": "Simulated time-to-first-token in milliseconds."
++    },
++    "usage": {
++      "type": "object",
++      "description": "Simulated token consumption metrics.",
++      "additionalProperties": false,
++      "properties": {
++        "prompt_tokens": {
++          "type": "integer",
++          "minimum": 0
++        },
++        "completion_tokens": {
++          "type": "integer",
++          "minimum": 0
++        }
++      }
++    },
++    "stream_chunks": {
++      "type": "array",
++      "description": "Sequential text chunks to emit in stream_complete.",
++      "items": {
++        "type": "string"
++      }
++    },
++    "final_verdict": {
++      "type": "object",
++      "description": "Final verdict payload for workflow interceptors."
++    },
++    "structured_output": {
++      "type": "object",
++      "description": "Structured JSON payload to parse into response_model."
++    },
++    "embeddings": {
++      "description": "Static embeddings vectors or deterministic generator parameters.",
++      "oneOf": [
++        {
++          "type": "array",
++          "items": {
++            "type": "array",
++            "items": {
++              "type": "number"
++            }
++          }
++        },
++        {
++          "type": "object",
++          "required": [
++            "dimension",
++            "seed"
++          ],
++          "additionalProperties": false,
++          "properties": {
++            "dimension": {
++              "type": "integer",
++              "minimum": 1
++            },
++            "seed": {
++              "type": "integer"
++            }
++          }
++        }
++      ]
++    },
++    "cli_result": {
++      "type": "object",
++      "description": "CLI runner execution output for zero-shell process simulation.",
++      "required": [
++        "stdout",
++        "stderr",
++        "exit_code",
++        "duration_ms"
++      ],
++      "additionalProperties": false,
++      "properties": {
++        "stdout": {
++          "type": "string"
++        },
++        "stderr": {
++          "type": "string"
++        },
++        "exit_code": {
++          "type": "integer"
++        },
++        "duration_ms": {
++          "type": "number",
++          "minimum": 0
++        }
++      }
++    },
++    "fault": {
++      "type": "object",
++      "description": "Simulated fault injection configuration.",
++      "required": [
++        "kind"
++      ],
++      "additionalProperties": false,
++      "properties": {
++        "kind": {
++          "type": "string",
++          "enum": [
++            "http_429",
++            "http_500",
++            "http_503",
++            "timeout",
++            "ttft_sla_breach",
++            "unavailable",
++            "schema_error",
++            "safety_block",
++            "refusal",
++            "malformed_stdout",
++            "stream_error_after_chunk"
++          ]
++        },
++        "retry_after_s": {
++          "type": "number",
++          "minimum": 0
++        },
++        "after_chunks": {
++          "type": "integer",
++          "minimum": 0
++        }
++      }
++    }
++  }
++}
+diff --git a/agent/testing/fixtures.py b/agent/testing/fixtures.py
+new file mode 100644
+index 0000000..b766fef
+--- /dev/null
++++ b/agent/testing/fixtures.py
+@@ -0,0 +1,592 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Deterministic YAML cassette loader, FixtureLLMProvider, and FixtureCLIRunner."""
++
++from __future__ import annotations
++
++import json
++import math
++import random
++from pathlib import Path
++from typing import (
++    TYPE_CHECKING,
++    Any,
++    TypeVar,
++)
++
++import jsonschema
++import yaml
++from pydantic import BaseModel, ConfigDict, Field
++
++from agent.providers.base import (
++    CLIRunRequest,
++    CLIRunResult,
++    CompletionRequest,
++    EmbedBatchRequest,
++    HealthStatus,
++    StreamChunk,
++    StructuredRequest,
++    StructuredResponse,
++    ToolCallStep,
++)
++from agent.providers.errors import (
++    ProviderError,
++    ProviderHTTPError,
++    ProviderProtocolError,
++    ProviderRefusal,
++    ProviderSafetyBlock,
++    ProviderSchemaError,
++    ProviderTimeout,
++    ProviderUnavailable,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
++
++__all__ = [
++    "MAX_CASSETTE_BYTES",
++    "Cassette",
++    "CassetteCLIResult",
++    "CassetteEmbeddingsGen",
++    "CassetteError",
++    "CassetteFault",
++    "CassetteMatcher",
++    "CassetteMismatchError",
++    "CassetteToolCall",
++    "CassetteUsage",
++    "CassetteValidationError",
++    "FixtureCLIRunner",
++    "FixtureLLMProvider",
++    "load_cassette",
++]
++
++TModel = TypeVar("TModel", bound=BaseModel)
++
++MAX_CASSETTE_BYTES: int = 1_048_576  # 1 MiB
++
++_SCHEMA_PATH: Path = Path(__file__).parent / "cassette.schema.json"
++
++
++class CassetteError(ProviderError):
++    """Base error for cassette loading, schema validation, and replay."""
++
++    def __init__(self, message: str, code: str = "CASSETTE_ERROR") -> None:
++        """Initialize cassette error."""
++        super().__init__(message, code=code)
++
++
++class CassetteValidationError(CassetteError):
++    """Raised when a cassette fails file size, YAML parsing, or schema validation."""
++
++    def __init__(self, message: str, code: str = "CASSETTE_VALIDATION_ERROR") -> None:
++        """Initialize cassette validation error."""
++        super().__init__(message, code=code)
++
++
++class CassetteMismatchError(CassetteError):
++    """Raised when an incoming provider or CLI request matches no loaded cassette."""
++
++    def __init__(self, message: str, code: str = "CASSETTE_MISMATCH_ERROR") -> None:
++        """Initialize cassette mismatch error."""
++        super().__init__(message, code=code)
++
++
++class CassetteMatcher(BaseModel):
++    """Matcher predicates for routing requests to cassettes."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    agent_slug: str | None = None
++    provider: str | None = None
++    model: str | None = None
++    transition_to: str | None = None
++    prompt_contains: list[str] = Field(default_factory=list)
++    stdin_contains: list[str] = Field(default_factory=list)
++    argv_prefix: list[str] = Field(default_factory=list)
++
++
++class CassetteToolInvocation(BaseModel):
++    """Single tool call specification inside tool_script."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    tool: str
++    args: dict[str, Any]
++
++
++class CassetteToolCall(BaseModel):
++    """Tool call step with invocation args and optional mocked return."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    call: CassetteToolInvocation
++    returns: Any = None
++
++
++class CassetteUsage(BaseModel):
++    """Simulated token usage counts."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    prompt_tokens: int = Field(default=0, ge=0)
++    completion_tokens: int = Field(default=0, ge=0)
++
++
++class CassetteEmbeddingsGen(BaseModel):
++    """Deterministic embedding vector generator configuration."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    dimension: int = Field(ge=1)
++    seed: int
++
++
++class CassetteCLIResult(BaseModel):
++    """Simulated CLI runner process output."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    stdout: str
++    stderr: str
++    exit_code: int
++    duration_ms: float = Field(ge=0.0)
++
++
++class CassetteFault(BaseModel):
++    """Fault injection specification."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    kind: str
++    retry_after_s: float | None = Field(default=None, ge=0.0)
++    after_chunks: int | None = Field(default=None, ge=0)
++
++
++class Cassette(BaseModel):
++    """Validated cassette holding deterministic responses and fault rules."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    cassette_version: int = Field(default=1)
++    matcher: CassetteMatcher
++    tool_script: list[CassetteToolCall] | None = None
++    simulated_ttft_ms: float = Field(default=5.0, ge=0.0)
++    usage: CassetteUsage | None = None
++    stream_chunks: list[str] | None = None
++    final_verdict: dict[str, Any] | None = None
++    structured_output: dict[str, Any] | None = None
++    embeddings: list[list[float]] | CassetteEmbeddingsGen | None = None
++    cli_result: CassetteCLIResult | None = None
++    fault: CassetteFault | None = None
++
++
++_COMPILED_SCHEMA: dict[str, Any] | None = None
++
++
++def _get_schema() -> dict[str, Any]:
++    global _COMPILED_SCHEMA  # noqa: PLW0603  # Cached compiled schema singleton
++    if _COMPILED_SCHEMA is None:
++        try:
++            content = _SCHEMA_PATH.read_text(encoding="utf-8")
++            _COMPILED_SCHEMA = json.loads(content)
++        except OSError as err:
++            msg = f"Failed to read cassette schema from {_SCHEMA_PATH}: {err}"
++            raise CassetteValidationError(msg) from err
++        except json.JSONDecodeError as err:
++            msg = f"Failed to parse cassette schema JSON: {err}"
++            raise CassetteValidationError(msg) from err
++    return _COMPILED_SCHEMA
++
++
++def load_cassette(path: Path | str) -> Cassette:
++    """Load, size-check, parse, and validate an AI fixture cassette from YAML."""
++    p = Path(path)
++    try:
++        raw_bytes = p.read_bytes()
++    except OSError as err:
++        msg = f"Cannot read cassette file '{p}': {err}"
++        raise CassetteValidationError(msg) from err
++
++    if len(raw_bytes) > MAX_CASSETTE_BYTES:
++        msg = (
++            f"Cassette file '{p}' size ({len(raw_bytes)} bytes) exceeds maximum "
++            f"allowed size ({MAX_CASSETTE_BYTES} bytes)"
++        )
++        raise CassetteValidationError(msg)
++
++    try:
++        raw_text = raw_bytes.decode("utf-8")
++    except UnicodeDecodeError as err:
++        msg = f"Cassette file '{p}' is not valid UTF-8: {err}"
++        raise CassetteValidationError(msg) from err
++
++    try:
++        data = yaml.safe_load(raw_text)
++    except yaml.YAMLError as err:
++        msg = f"YAML safe_load failed for '{p}': {err}"
++        raise CassetteValidationError(msg) from err
++
++    if not isinstance(data, dict):
++        msg = f"Cassette root in '{p}' must be a YAML mapping (got {type(data).__name__})"
++        raise CassetteValidationError(msg)
++
++    schema = _get_schema()
++    validator = jsonschema.Draft202012Validator(schema)
++    errors = sorted(validator.iter_errors(data), key=lambda e: str(e.path))
++    if errors:
++        details = "; ".join(
++            f"{'/'.join(str(elem) for elem in err.path) or 'root'}: {err.message}" for err in errors
++        )
++        msg = f"Cassette schema validation failed for '{p}': {details}"
++        raise CassetteValidationError(msg)
++
++    try:
++        return Cassette.model_validate(data)
++    except Exception as err:
++        msg = f"Cassette model construction failed for '{p}': {err}"
++        raise CassetteValidationError(msg) from err
++
++
++class FixtureLLMProvider:
++    """Deterministic LLMProvider implementation replaying validated YAML cassettes."""
++
++    def __init__(
++        self,
++        cassettes: Sequence[Cassette | Path | str] | Cassette | Path | str,
++        sleep_fn: Callable[[float], Awaitable[None]] | None = None,
++    ) -> None:
++        """Initialize provider with one or more cassettes and optional sleep hook."""
++        self.call_log: list[dict[str, Any]] = []
++        self._sleep_fn: Callable[[float], Awaitable[None]] | None = sleep_fn
++        self._cassettes: list[Cassette] = []
++
++        items: Sequence[Cassette | Path | str] = (
++            [cassettes] if isinstance(cassettes, (Cassette, Path, str)) else cassettes
++        )
++
++        for item in items:
++            if isinstance(item, Cassette):
++                self._cassettes.append(item)
++            else:
++                self._cassettes.append(load_cassette(item))
++
++    @property
++    def residency_tier(self) -> str:
++        """Return residency tier identifier for fixtures."""
++        return "fixture"
++
++    def _matches_llm(
++        self,
++        matcher: CassetteMatcher,
++        *,
++        model: str,
++        prompt: str,
++        metadata: dict[str, str],
++    ) -> bool:
++        if matcher.model is not None and matcher.model != model:
++            return False
++        if matcher.agent_slug is not None:
++            actual_slug = metadata.get("agent_slug") or metadata.get("agent")
++            if actual_slug != matcher.agent_slug:
++                return False
++        if matcher.provider is not None:
++            actual_provider = metadata.get("provider")
++            if actual_provider != matcher.provider:
++                return False
++        if matcher.transition_to is not None:
++            actual_transition = metadata.get("transition_to")
++            if actual_transition != matcher.transition_to:
++                return False
++        return all(pattern in prompt for pattern in matcher.prompt_contains)
++
++    def _find_matching_cassette(
++        self,
++        *,
++        model: str,
++        prompt: str,
++        metadata: dict[str, str],
++    ) -> Cassette:
++        for cas in self._cassettes:
++            if self._matches_llm(cas.matcher, model=model, prompt=prompt, metadata=metadata):
++                return cas
++        msg = (
++            f"No cassette matched LLM request (model={model!r}, prompt={prompt!r}, "
++            f"metadata={metadata!r})"
++        )
++        raise CassetteMismatchError(msg)
++
++    async def _simulate_latency(self, ms: float) -> None:
++        if self._sleep_fn is not None and ms > 0.0:
++            await self._sleep_fn(ms / 1000.0)
++
++    def _raise_fault(  # noqa: C901  # Exhaustive fault dispatch branch mapping
++        self,
++        cassette: Cassette,
++        req_ttft_deadline_ms: int | None = None,
++    ) -> None:
++        fault = cassette.fault
++        if fault is not None:
++            kind = fault.kind
++            if kind == "http_429":
++                retry_after = fault.retry_after_s if fault.retry_after_s is not None else 30.0
++                msg = "Simulated rate limit exceeded"
++                raise ProviderHTTPError(msg, status=429, retry_after_s=retry_after)
++            if kind == "http_500":
++                msg = "Simulated server error"
++                raise ProviderHTTPError(msg, status=500)
++            if kind == "http_503":
++                msg = "Simulated service unavailable"
++                raise ProviderHTTPError(msg, status=503)
++            if kind == "timeout":
++                msg = "Simulated provider timeout"
++                raise ProviderTimeout(msg)
++            if kind == "ttft_sla_breach":
++                msg = (
++                    f"Simulated TTFT SLA breach ({cassette.simulated_ttft_ms}ms > "
++                    f"{req_ttft_deadline_ms}ms)"
++                )
++                raise ProviderTimeout(msg)
++            if kind == "unavailable":
++                msg = "Simulated provider unavailable"
++                raise ProviderUnavailable(msg)
++            if kind == "schema_error":
++                msg = "Simulated schema error"
++                raise ProviderSchemaError(msg)
++            if kind == "safety_block":
++                msg = "Simulated content safety block"
++                raise ProviderSafetyBlock(msg)
++            if kind == "refusal":
++                msg = "Simulated model refusal"
++                raise ProviderRefusal(msg)
++
++        if req_ttft_deadline_ms is not None and cassette.simulated_ttft_ms > float(
++            req_ttft_deadline_ms
++        ):
++            msg = (
++                f"TTFT SLA breached: simulated {cassette.simulated_ttft_ms}ms > "
++                f"deadline {req_ttft_deadline_ms}ms"
++            )
++            raise ProviderTimeout(msg)
++
++    async def stream_complete(self, req: CompletionRequest) -> AsyncIterator[StreamChunk]:
++        """Stream chunks replayed from matching cassette."""
++        cas = self._find_matching_cassette(
++            model=req.model,
++            prompt=req.prompt,
++            metadata=req.metadata,
++        )
++        self.call_log.append(
++            {
++                "method": "stream_complete",
++                "request": req.model_dump(),
++                "matched_matcher": cas.matcher.model_dump(),
++            }
++        )
++
++        await self._simulate_latency(cas.simulated_ttft_ms)
++
++        if cas.fault is None or cas.fault.kind != "stream_error_after_chunk":
++            self._raise_fault(cas, req.ttft_deadline_ms)
++
++        chunks = cas.stream_chunks or []
++        after_chunks = (
++            cas.fault.after_chunks
++            if (cas.fault and cas.fault.kind == "stream_error_after_chunk")
++            else None
++        )
++
++        for idx, chunk in enumerate(chunks):
++            if after_chunks is not None and idx >= after_chunks:
++                msg = f"Simulated stream error after chunk {idx}"
++                raise ProviderProtocolError(msg)
++
++            is_last = idx == len(chunks) - 1
++            yield StreamChunk(
++                delta=chunk,
++                index=idx,
++                finish_reason="stop" if is_last else None,
++                ttft_ms=cas.simulated_ttft_ms if idx == 0 else None,
++                prompt_tokens=cas.usage.prompt_tokens if (cas.usage and is_last) else None,
++                completion_tokens=cas.usage.completion_tokens if (cas.usage and is_last) else None,
++            )
++
++    async def generate_structured(
++        self, req: StructuredRequest[TModel]
++    ) -> StructuredResponse[TModel]:
++        """Replay structured output and tool trace from matching cassette."""
++        cas = self._find_matching_cassette(
++            model=req.model,
++            prompt=req.prompt,
++            metadata=req.metadata,
++        )
++        self.call_log.append(
++            {
++                "method": "generate_structured",
++                "request": req.model_dump(),
++                "matched_matcher": cas.matcher.model_dump(),
++            }
++        )
++
++        await self._simulate_latency(cas.simulated_ttft_ms)
++        self._raise_fault(cas, req.ttft_deadline_ms)
++
++        raw = cas.final_verdict if cas.final_verdict is not None else cas.structured_output
++        if raw is None:
++            msg = "Cassette has neither final_verdict nor structured_output configured"
++            raise ProviderSchemaError(msg)
++
++        try:
++            parsed: TModel = req.response_model.model_validate(raw)
++        except Exception as err:
++            msg = f"Failed to validate response against {req.response_model.__name__}: {err}"
++            raise ProviderSchemaError(msg) from err
++
++        tool_trace: list[ToolCallStep] = []
++        if cas.tool_script:
++            tool_trace.extend(
++                ToolCallStep(
++                    tool=step.call.tool,
++                    args=step.call.args,
++                    result=step.returns,
++                )
++                for step in cas.tool_script
++            )
++
++        prompt_tokens = cas.usage.prompt_tokens if cas.usage else 0
++        completion_tokens = cas.usage.completion_tokens if cas.usage else 0
++
++        return StructuredResponse(
++            parsed=parsed,
++            raw_json=json.dumps(raw),
++            tool_trace=tuple(tool_trace),
++            ttft_ms=cas.simulated_ttft_ms,
++            total_latency_ms=cas.simulated_ttft_ms + 2.0,
++            prompt_tokens=prompt_tokens,
++            completion_tokens=completion_tokens,
++        )
++
++    async def embed_batch(self, req: EmbedBatchRequest) -> list[list[float]]:
++        """Replay or generate deterministic L2-normalized vector embeddings."""
++        cas = self._find_matching_cassette(
++            model=req.model,
++            prompt="",
++            metadata={},
++        )
++        self.call_log.append(
++            {
++                "method": "embed_batch",
++                "request": req.model_dump(),
++                "matched_matcher": cas.matcher.model_dump(),
++            }
++        )
++
++        await self._simulate_latency(cas.simulated_ttft_ms)
++        self._raise_fault(cas)
++
++        if cas.embeddings is None:
++            msg = "Cassette has no embeddings configured"
++            raise ProviderSchemaError(msg)
++
++        if isinstance(cas.embeddings, list):
++            return cas.embeddings
++
++        rng = random.Random(cas.embeddings.seed)  # noqa: S311  # Deterministic test embeddings
++        dim = cas.embeddings.dimension
++        embeddings: list[list[float]] = []
++        for _ in req.inputs:
++            vec = [rng.gauss(0.0, 1.0) for _ in range(dim)]
++            norm = math.sqrt(sum(x * x for x in vec))
++            norm_factor = norm if norm > 0.0 else 1.0
++            embeddings.append([x / norm_factor for x in vec])
++        return embeddings
++
++    async def health_probe(self) -> HealthStatus:
++        """Return healthy status for fixture provider."""
++        return HealthStatus(
++            ok=True,
++            latency_ms=1.0,
++            models=("fixture-model",),
++            detail="FixtureLLMProvider healthy",
++        )
++
++
++class FixtureCLIRunner:
++    """Deterministic CLIRunner implementation replaying validated CLI cassettes."""
++
++    def __init__(
++        self,
++        cassettes: Sequence[Cassette | Path | str] | Cassette | Path | str,
++    ) -> None:
++        """Initialize CLI runner with one or more cassettes."""
++        self.call_log: list[dict[str, Any]] = []
++        self._cassettes: list[Cassette] = []
++
++        items: Sequence[Cassette | Path | str] = (
++            [cassettes] if isinstance(cassettes, (Cassette, Path, str)) else cassettes
++        )
++
++        for item in items:
++            if isinstance(item, Cassette):
++                self._cassettes.append(item)
++            else:
++                self._cassettes.append(load_cassette(item))
++
++    def _matches_cli(
++        self,
++        matcher: CassetteMatcher,
++        *,
++        argv: tuple[str, ...],
++        stdin_str: str,
++    ) -> bool:
++        if matcher.argv_prefix:
++            prefix_len = len(matcher.argv_prefix)
++            if len(argv) < prefix_len or list(argv[:prefix_len]) != matcher.argv_prefix:
++                return False
++        return all(pattern in stdin_str for pattern in matcher.stdin_contains)
++
++    def _find_matching_cassette(
++        self,
++        *,
++        argv: tuple[str, ...],
++        stdin_str: str,
++    ) -> Cassette:
++        for cas in self._cassettes:
++            if self._matches_cli(cas.matcher, argv=argv, stdin_str=stdin_str):
++                return cas
++        msg = f"No cassette matched CLI request (argv={argv!r}, stdin_str={stdin_str!r})"
++        raise CassetteMismatchError(msg)
++
++    async def run(self, req: CLIRunRequest) -> CLIRunResult:
++        """Simulate CLI process execution without spawning subprocesses."""
++        stdin_str = req.stdin_bytes.decode("utf-8", errors="replace")
++        cas = self._find_matching_cassette(argv=req.argv, stdin_str=stdin_str)
++
++        self.call_log.append(
++            {
++                "method": "run",
++                "request": req.model_dump(),
++                "matched_matcher": cas.matcher.model_dump(),
++            }
++        )
++
++        if cas.fault is not None:
++            if cas.fault.kind == "timeout":
++                msg = f"Simulated CLI execution timeout ({cas.simulated_ttft_ms}ms)"
++                raise ProviderTimeout(msg)
++            if cas.fault.kind == "malformed_stdout":
++                return CLIRunResult(
++                    stdout=b"INVALID MALFORMED NON-JSON GARBAGE \xff\xfe",
++                    stderr=b"warning: non-json payload\n",
++                    exit_code=0,
++                    duration_ms=cas.simulated_ttft_ms,
++                )
++
++        if cas.cli_result is not None:
++            return CLIRunResult(
++                stdout=cas.cli_result.stdout.encode("utf-8"),
++                stderr=cas.cli_result.stderr.encode("utf-8"),
++                exit_code=cas.cli_result.exit_code,
++                duration_ms=cas.cli_result.duration_ms,
++            )
++
++        msg = f"Cassette '{cas}' has neither cli_result nor supported fault"
++        raise CassetteMismatchError(msg)
+diff --git a/agent/tests/__init__.py b/agent/tests/__init__.py
+index e69de29..7ce07a2 100644
+--- a/agent/tests/__init__.py
++++ b/agent/tests/__init__.py
+@@ -0,0 +1,2 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Unit tests for kanban-agent package."""
+diff --git a/agent/tests/providers/__init__.py b/agent/tests/providers/__init__.py
+new file mode 100644
+index 0000000..a9d09d0
+--- /dev/null
++++ b/agent/tests/providers/__init__.py
+@@ -0,0 +1,2 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Tests for agent provider abstractions, DTOs, and error hierarchy."""
+diff --git a/agent/tests/providers/test_base_protocol.py b/agent/tests/providers/test_base_protocol.py
+new file mode 100644
+index 0000000..8288bbb
+--- /dev/null
++++ b/agent/tests/providers/test_base_protocol.py
+@@ -0,0 +1,359 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Unit tests for agent LLMProvider protocol, DTOs, and error hierarchy."""
++
++from __future__ import annotations
++
++import asyncio
++from typing import TYPE_CHECKING
++
++import pytest
++from pydantic import BaseModel, ValidationError
++
++from agent.providers.base import (
++    CLIRunner,
++    CLIRunRequest,
++    CLIRunResult,
++    CompletionRequest,
++    EmbedBatchRequest,
++    HealthStatus,
++    LLMProvider,
++    StreamChunk,
++    StructuredRequest,
++    StructuredResponse,
++    ToolCallStep,
++)
++from agent.providers.errors import (
++    AllProvidersUnavailable,
++    EgressDenied,
++    ProviderError,
++    ProviderHTTPError,
++    ProviderPolicyError,
++    ProviderProtocolError,
++    ProviderRefusal,
++    ProviderSafetyBlock,
++    ProviderSchemaError,
++    ProviderTimeout,
++    ProviderUnavailable,
++    redact_secrets,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import AsyncIterator
++
++
++class DummyOutput(BaseModel):
++    """Sample output schema for structured testing."""
++
++    decision: str
++    confidence: float
++
++
++class DummyLLM:
++    """Mock class implementing LLMProvider protocol."""
++
++    @property
++    def residency_tier(self) -> str:
++        """Return mock residency tier."""
++        return "mock"
++
++    async def stream_complete(self, _req: CompletionRequest) -> AsyncIterator[StreamChunk]:
++        """Yield mock stream chunk."""
++        yield StreamChunk(delta="ok", index=0, finish_reason="stop")
++
++    async def generate_structured(
++        self, _req: StructuredRequest[DummyOutput]
++    ) -> StructuredResponse[DummyOutput]:
++        """Return mock structured generation."""
++        return StructuredResponse(
++            parsed=DummyOutput(decision="approve", confidence=1.0),
++            raw_json='{"decision": "approve", "confidence": 1.0}',
++            ttft_ms=1.0,
++            total_latency_ms=2.0,
++        )
++
++    async def embed_batch(self, _req: EmbedBatchRequest) -> list[list[float]]:
++        """Return dummy embedding vectors."""
++        return [[1.0, 0.0]]
++
++    async def health_probe(self) -> HealthStatus:
++        """Return healthy status."""
++        return HealthStatus(ok=True, latency_ms=1.0)
++
++
++class DummyCLI:
++    """Mock class implementing CLIRunner protocol."""
++
++    async def run(self, _req: CLIRunRequest) -> CLIRunResult:
++        """Return dummy CLI result."""
++        return CLIRunResult(stdout=b"ok", stderr=b"", exit_code=0, duration_ms=1.0)
++
++
++def test_error_hierarchy_and_properties() -> None:
++    """Test all 11 error classes, inheritance, codes, and attributes."""
++    err = ProviderError("Something failed", code="CUSTOM_ERR")
++    assert err.code == "CUSTOM_ERR"
++    assert "Something failed" in str(err)
++    assert repr(err).startswith("ProviderError(")
++
++    http_err = ProviderHTTPError("Rate limited", status=429, retry_after_s=30.0)
++    assert isinstance(http_err, ProviderError)
++    assert http_err.status == 429
++    assert http_err.retry_after_s == 30.0
++    assert http_err.code == "HTTP_ERROR"
++
++    timeout_err = ProviderTimeout("Deadline exceeded")
++    assert isinstance(timeout_err, ProviderError)
++    assert timeout_err.code == "TIMEOUT"
++
++    unavail = ProviderUnavailable("Host down")
++    assert isinstance(unavail, ProviderError)
++    assert unavail.code == "UNAVAILABLE"
++
++    all_unavail = AllProvidersUnavailable("All down")
++    assert isinstance(all_unavail, ProviderUnavailable)
++    assert isinstance(all_unavail, ProviderError)
++    assert all_unavail.code == "ALL_PROVIDERS_UNAVAILABLE"
++
++    proto_err = ProviderProtocolError("Bad SSE framing")
++    assert isinstance(proto_err, ProviderError)
++    assert proto_err.code == "PROTOCOL_ERROR"
++
++    schema_err = ProviderSchemaError("JSON mismatch")
++    assert isinstance(schema_err, ProviderError)
++    assert schema_err.code == "SCHEMA_ERROR"
++
++    safety_err = ProviderSafetyBlock("Harmful prompt")
++    assert isinstance(safety_err, ProviderError)
++    assert safety_err.code == "SAFETY_BLOCK"
++
++    refusal_err = ProviderRefusal("I cannot comply")
++    assert isinstance(refusal_err, ProviderError)
++    assert refusal_err.code == "REFUSAL"
++
++    policy_err = ProviderPolicyError("Budget exceeded")
++    assert isinstance(policy_err, ProviderError)
++    assert policy_err.code == "POLICY_ERROR"
++
++    egress_err = EgressDenied("Air gap blocked outbound connection")
++    assert isinstance(egress_err, ProviderPolicyError)
++    assert isinstance(egress_err, ProviderError)
++    assert egress_err.code == "EGRESS_DENIED"
++
++
++def test_error_code_validation() -> None:
++    """Verify error codes must conform to ^[A-Z][A-Z0-9_]{2,63}$."""
++    with pytest.raises(ValueError, match="Invalid provider error code"):
++        ProviderError("msg", code="invalid-lowercase")
++
++    with pytest.raises(ValueError, match="Invalid provider error code"):
++        ProviderError("msg", code="123_NUMERIC")
++
++    with pytest.raises(ValueError, match="Invalid provider error code"):
++        ProviderError("msg", code="AB")  # Too short (needs min 3 chars)
++
++    long_code = "A" + "B" * 65
++    with pytest.raises(ValueError, match="Invalid provider error code"):
++        ProviderError("msg", code=long_code)
++
++    valid_code = "VALID_CODE_123"
++    err = ProviderError("test", code=valid_code)
++    assert err.code == valid_code
++
++
++def test_secret_redaction() -> None:
++    """Test redaction of bearer tokens, API keys, and sensitive auth strings."""
++    raw = (
++        "Failed request with Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
++        "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ."
++        "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c and sk-1234567890abcdef1234567890 "
++        "and ghp_abcdefghijklmnopqrstuvwxyz1234 and AKIAIOSFODNN7EXAMPLE and "
++        "kb_authsecret12345 and AIzaSyD-1234567890abcdefghijklmnopqr and "
++        "api_key=supersecretpassword1234"
++    )
++    redacted = redact_secrets(raw)
++    assert "Bearer [REDACTED]" in redacted
++    assert "sk-[REDACTED]" in redacted
++    assert "ghp-[REDACTED]" in redacted
++    assert "AKIA[REDACTED]" in redacted
++    assert "kb_[REDACTED]" in redacted
++    assert "AIza[REDACTED]" in redacted
++    assert "api_key=[REDACTED]" in redacted
++
++    err = ProviderError(raw)
++    assert "supersecretpassword" not in err.message
++    assert "sk-1234567890" not in err.message
++
++
++def test_completion_request_dto() -> None:
++    """Test CompletionRequest validation, defaults, and immutability."""
++    req = CompletionRequest(model="test-model", prompt="Hello world")
++    assert req.model == "test-model"
++    assert req.prompt == "Hello world"
++    assert req.temperature == 0.15
++    assert req.max_output_tokens == 256
++    assert req.ttft_deadline_ms is None
++    assert req.metadata == {}
++
++    # Immutability
++    with pytest.raises(ValidationError):
++        setattr(req, "model", "other")  # noqa: B010  # Verifying immutability raises ValidationError
++
++    # Extra fields forbidden
++    with pytest.raises(ValidationError):
++        CompletionRequest(model="m", prompt="p", unknown="val")  # type: ignore[call-arg]
++
++    # Bounds validation
++    with pytest.raises(ValidationError):
++        CompletionRequest(model="m", prompt="p", temperature=2.5)
++
++    with pytest.raises(ValidationError):
++        CompletionRequest(model="m", prompt="p", max_output_tokens=0)
++
++    with pytest.raises(ValidationError):
++        CompletionRequest(model="m", prompt="p", ttft_deadline_ms=70000)
++
++
++def test_stream_chunk_and_tool_call_step() -> None:
++    """Test StreamChunk and ToolCallStep DTO properties."""
++    chunk = StreamChunk(
++        delta="foo",
++        index=0,
++        finish_reason="stop",
++        ttft_ms=12.5,
++        prompt_tokens=5,
++        completion_tokens=1,
++    )
++    assert chunk.delta == "foo"
++    assert chunk.index == 0
++    assert chunk.finish_reason == "stop"
++
++    with pytest.raises(ValidationError):
++        StreamChunk(delta="x", index=-1)
++
++    with pytest.raises(ValidationError):
++        StreamChunk(delta="x", index=0, finish_reason="invalid_reason")  # type: ignore[arg-type]
++
++    step = ToolCallStep(tool="repo_grep", args={"pattern": "test"}, result={"count": 3})
++    assert step.tool == "repo_grep"
++    assert step.args == {"pattern": "test"}
++    assert step.result == {"count": 3}
++
++
++def test_structured_request_and_response() -> None:
++    """Test generic StructuredRequest and StructuredResponse DTOs."""
++    req = StructuredRequest(
++        model="reasoning-model",
++        prompt="Classify code",
++        response_model=DummyOutput,
++        temperature=0.0,
++        max_output_tokens=512,
++    )
++    assert req.response_model is DummyOutput
++    assert req.temperature == 0.0
++
++    parsed = DummyOutput(decision="approve", confidence=0.99)
++    resp = StructuredResponse(
++        parsed=parsed,
++        raw_json='{"decision": "approve", "confidence": 0.99}',
++        tool_trace=(ToolCallStep(tool="t", args={}),),
++        ttft_ms=14.0,
++        total_latency_ms=25.0,
++        prompt_tokens=10,
++        completion_tokens=5,
++    )
++    assert resp.parsed.decision == "approve"
++    assert len(resp.tool_trace) == 1
++    assert resp.ttft_ms == 14.0
++
++
++def test_embed_batch_request_bounds() -> None:
++    """Test validation bounds for EmbedBatchRequest."""
++    # Zero inputs rejected
++    with pytest.raises(ValueError, match="inputs length must be between 1 and 64"):
++        EmbedBatchRequest(model="embed-model", inputs=())
++
++    # 65 inputs rejected
++    too_many = tuple(f"text-{i}" for i in range(65))
++    with pytest.raises(ValueError, match="inputs length must be between 1 and 64"):
++        EmbedBatchRequest(model="embed-model", inputs=too_many)
++
++    # Empty string rejected
++    with pytest.raises(ValueError, match="length must be between 1 and 8192"):
++        EmbedBatchRequest(model="embed-model", inputs=("",))
++
++    # Non-string input rejected
++    with pytest.raises(ValueError, match="must be a string"):
++        EmbedBatchRequest(model="embed-model", inputs=(123,))  # type: ignore[arg-type]
++
++    # >8192 chars rejected
++    too_long = "x" * 8193
++    with pytest.raises(ValueError, match="length must be between 1 and 8192"):
++        EmbedBatchRequest(model="embed-model", inputs=(too_long,))
++
++    # Valid bounds
++    exact_max = "y" * 8192
++    req = EmbedBatchRequest(model="embed-model", inputs=(exact_max,))
++    assert len(req.inputs[0]) == 8192
++
++
++def test_cli_run_request_and_result() -> None:
++    """Test CLIRunRequest validation, shell wrapper rejection, and result DTO."""
++    # Empty argv rejected
++    with pytest.raises(ValueError, match="argv must not be empty"):
++        CLIRunRequest(argv=(), stdin_bytes=b"")
++
++    # Shell wrapper /bin/sh rejected
++    with pytest.raises(ValueError, match="Shell wrapper '/bin/sh' is forbidden"):
++        CLIRunRequest(argv=("/bin/sh", "-c", "id"), stdin_bytes=b"")
++
++    # Shell wrapper bash rejected
++    with pytest.raises(ValueError, match="Shell wrapper 'bash' is forbidden"):
++        CLIRunRequest(argv=("bash", "script.sh"), stdin_bytes=b"")
++
++    # -c invocation rejected
++    with pytest.raises(ValueError, match="Shell invocation with '-c' wrapper is forbidden"):
++        CLIRunRequest(argv=("/usr/bin/python3", "-c", "import sys"), stdin_bytes=b"")
++
++    # Valid CLI request
++    req = CLIRunRequest(
++        argv=("/usr/local/bin/agy", "-p"),
++        stdin_bytes=b'{"action": "test"}',
++        timeout_s=15.0,
++    )
++    assert req.argv == ("/usr/local/bin/agy", "-p")
++    assert req.stdin_bytes == b'{"action": "test"}'
++    assert req.timeout_s == 15.0
++
++    res = CLIRunResult(
++        stdout=b"success",
++        stderr=b"",
++        exit_code=0,
++        duration_ms=42.1,
++    )
++    assert res.exit_code == 0
++    assert res.stdout == b"success"
++
++
++def test_runtime_protocols() -> None:
++    """Verify @runtime_checkable LLMProvider and CLIRunner protocols."""
++    llm = DummyLLM()
++    assert isinstance(llm, LLMProvider)
++    assert llm.residency_tier == "mock"
++
++    async def _exercise() -> None:
++        async for chunk in llm.stream_complete(CompletionRequest(model="m", prompt="p")):
++            assert chunk.delta == "ok"
++        res_struct = await llm.generate_structured(
++            StructuredRequest(model="m", prompt="p", response_model=DummyOutput)
++        )
++        assert res_struct.parsed.decision == "approve"
++        vecs = await llm.embed_batch(EmbedBatchRequest(model="m", inputs=("test",)))
++        assert vecs == [[1.0, 0.0]]
++        assert (await llm.health_probe()).ok is True
++
++        cli = DummyCLI()
++        assert isinstance(cli, CLIRunner)
++        res = await cli.run(CLIRunRequest(argv=("/bin/echo", "hi"), stdin_bytes=b""))
++        assert res.exit_code == 0
++
++    asyncio.run(_exercise())
+diff --git a/agent/tests/test_smoke.py b/agent/tests/test_smoke.py
+index 38ac64b..22a5399 100644
+--- a/agent/tests/test_smoke.py
++++ b/agent/tests/test_smoke.py
+@@ -1,5 +1,9 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Smoke tests for kanban-agent package initialization."""
++
+ from agent import __version__
+ 
+ 
+ def test_agent_smoke() -> None:
++    """Verify package version is initialized properly."""
+     assert __version__ == "0.0.0"
+diff --git a/agent/tests/testing/__init__.py b/agent/tests/testing/__init__.py
+new file mode 100644
+index 0000000..da019b5
+--- /dev/null
++++ b/agent/tests/testing/__init__.py
+@@ -0,0 +1,2 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Tests for cassette loader, FixtureLLMProvider, and FixtureCLIRunner."""
+diff --git a/agent/tests/testing/test_fixtures.py b/agent/tests/testing/test_fixtures.py
+new file mode 100644
+index 0000000..525b6d1
+--- /dev/null
++++ b/agent/tests/testing/test_fixtures.py
+@@ -0,0 +1,693 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Unit tests for deterministic AI cassettes, FixtureLLMProvider, and FixtureCLIRunner."""
++
++from __future__ import annotations
++
++import asyncio
++import json
++import math
++import tempfile
++from pathlib import Path
++from typing import TYPE_CHECKING, Any
++
++import pytest
++from pydantic import BaseModel, Field
++
++import agent.testing.fixtures as fixtures_mod
++from agent.providers.base import (
++    CLIRunner,
++    CLIRunRequest,
++    CompletionRequest,
++    EmbedBatchRequest,
++    LLMProvider,
++    StructuredRequest,
++)
++from agent.providers.errors import (
++    ProviderHTTPError,
++    ProviderProtocolError,
++    ProviderRefusal,
++    ProviderSafetyBlock,
++    ProviderSchemaError,
++    ProviderTimeout,
++    ProviderUnavailable,
++)
++from agent.testing.fixtures import (
++    Cassette,
++    CassetteMismatchError,
++    CassetteValidationError,
++    FixtureCLIRunner,
++    FixtureLLMProvider,
++    load_cassette,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import AsyncIterator
++
++FIXTURES_DIR = Path(__file__).parents[3] / "tests" / "fixtures" / "ai"
++
++
++class TransitionVerdict(BaseModel):
++    """Pydantic model representing S15.2 transition verdict."""
++
++    schema_: str = Field(alias="schema")
++    decision: str
++    reason_markdown: str
++    field_updates: dict[str, Any]
++    add_labels: list[str]
++
++
++def test_fixture_llm_stream_replay() -> None:
++    """Test streaming completion replay from echo_stream_ok.yaml."""
++
++    async def _test() -> None:
++        cassette_path = FIXTURES_DIR / "echo_stream_ok.yaml"
++        provider = FixtureLLMProvider(cassette_path)
++
++        assert provider.residency_tier == "fixture"
++        assert isinstance(provider, LLMProvider)
++
++        req = CompletionRequest(
++            model="echo-model",
++            prompt="Please hello and stream output",
++        )
++
++        chunks: list[str] = []
++        first_chunk_ttft: float | None = None
++        last_finish_reason: str | None = None
++        last_prompt_tokens: int | None = None
++        last_completion_tokens: int | None = None
++
++        async for chunk in provider.stream_complete(req):
++            if chunk.index == 0:
++                first_chunk_ttft = chunk.ttft_ms
++            if chunk.finish_reason is not None:
++                last_finish_reason = chunk.finish_reason
++                last_prompt_tokens = chunk.prompt_tokens
++                last_completion_tokens = chunk.completion_tokens
++            chunks.append(chunk.delta)
++
++        assert "".join(chunks) == "Hello world!"
++        assert first_chunk_ttft == 5.0
++        assert last_finish_reason == "stop"
++        assert last_prompt_tokens == 10
++        assert last_completion_tokens == 5
++        assert len(provider.call_log) == 1
++        assert provider.call_log[0]["method"] == "stream_complete"
++
++    asyncio.run(_test())
++
++
++def test_fixture_llm_generate_structured() -> None:
++    """Test structured verdict generation and tool trace from transition_rls_veto.yaml."""
++
++    async def _test() -> None:
++        cassette_path = FIXTURES_DIR / "transition_rls_veto.yaml"
++        provider = FixtureLLMProvider(cassette_path)
++
++        req = StructuredRequest(
++            model="any-model",
++            prompt="Audit KAN-142 for auth_provider_cards changes",
++            response_model=TransitionVerdict,
++            metadata={"agent_slug": "forensic-code-check", "transition_to": "Done"},
++        )
++
++        resp = await provider.generate_structured(req)
++
++        assert resp.parsed.decision == "reject"
++        assert "Missing `FORCE ROW LEVEL SECURITY`" in resp.parsed.reason_markdown
++        assert resp.parsed.add_labels == ["qa-needs-work"]
++        assert resp.ttft_ms == 18.0
++        assert len(resp.tool_trace) == 2
++        assert resp.tool_trace[0].tool == "read_ticket"
++        assert resp.tool_trace[0].args == {"identifier": "KAN-100"}
++        assert resp.tool_trace[1].tool == "repo_grep"
++        assert resp.tool_trace[1].args == {
++            "pattern": "FORCE ROW LEVEL SECURITY",
++            "path": "database/",
++        }
++
++    asyncio.run(_test())
++
++
++def test_fixture_llm_embed_batch_deterministic() -> None:
++    """Test deterministic L2-normalized vector embedding generation."""
++
++    async def _test() -> None:
++        cassette_yaml = """
++cassette_version: 1
++matcher:
++  model: embed-dim16
++embeddings:
++  dimension: 16
++  seed: 42
++"""
++        cas = load_cassette_from_str(cassette_yaml)
++        provider = FixtureLLMProvider(cas)
++
++        req = EmbedBatchRequest(model="embed-dim16", inputs=("Alpha sentence", "Beta sentence"))
++        vecs1 = await provider.embed_batch(req)
++        vecs2 = await provider.embed_batch(req)
++
++        # Identical across calls with same seed
++        assert vecs1 == vecs2
++        assert len(vecs1) == 2
++        assert len(vecs1[0]) == 16
++        assert len(vecs1[1]) == 16
++
++        # Verify L2 normalization: norm == 1.0
++        for vec in vecs1:
++            norm = math.sqrt(sum(x * x for x in vec))
++            assert math.isclose(norm, 1.0, rel_tol=1e-5)
++
++    asyncio.run(_test())
++
++
++def test_fixture_llm_embed_batch_static() -> None:
++    """Test embedding batch with pre-configured static vectors."""
++
++    async def _test() -> None:
++        cassette_yaml = """
++cassette_version: 1
++matcher:
++  model: embed-static
++embeddings:
++  - [0.1, 0.2, 0.3]
++"""
++        cas = load_cassette_from_str(cassette_yaml)
++        provider = FixtureLLMProvider(cas)
++
++        req = EmbedBatchRequest(model="embed-static", inputs=("Single input",))
++        vecs = await provider.embed_batch(req)
++        assert vecs == [[0.1, 0.2, 0.3]]
++
++    asyncio.run(_test())
++
++
++def test_fixture_cli_runner_positive() -> None:
++    """Test FixtureCLIRunner replaying cli_agy_approve_ok.yaml."""
++
++    async def _test() -> None:
++        cassette_path = FIXTURES_DIR / "cli_agy_approve_ok.yaml"
++        runner = FixtureCLIRunner(cassette_path)
++
++        assert isinstance(runner, CLIRunner)
++
++        req = CLIRunRequest(
++            argv=("/usr/local/bin/agy", "-p"),
++            stdin_bytes=b"review_request: ticket_id: KAN-142\n",
++        )
++
++        result = await runner.run(req)
++
++        assert result.exit_code == 0
++        assert result.duration_ms == 12.5
++        parsed = json.loads(result.stdout.decode("utf-8"))
++        assert parsed["verdict"] == "approved"
++        assert len(runner.call_log) == 1
++
++    asyncio.run(_test())
++
++
++def test_fault_429_injection() -> None:
++    """Test HTTP 429 fault injection with retry-after header."""
++
++    async def _test() -> None:
++        cassette_path = FIXTURES_DIR / "fault_429.yaml"
++        provider = FixtureLLMProvider(cassette_path)
++
++        req = CompletionRequest(
++            model="test-429-model",
++            prompt="Please simulate_429 now",
++        )
++
++        async def _consume() -> None:
++            async for _ in provider.stream_complete(req):
++                pass
++
++        with pytest.raises(ProviderHTTPError) as exc_info:
++            await _consume()
++
++        assert exc_info.value.status == 429
++        assert exc_info.value.retry_after_s == 30.0
++        assert exc_info.value.code == "HTTP_ERROR"
++
++    asyncio.run(_test())
++
++
++def test_fault_malformed_stdout() -> None:
++    """Test malformed stdout bytes from fault_malformed_stdout.yaml."""
++
++    async def _test() -> None:
++        cassette_path = FIXTURES_DIR / "fault_malformed_stdout.yaml"
++        runner = FixtureCLIRunner(cassette_path)
++
++        req = CLIRunRequest(
++            argv=("/usr/local/bin/codex", "-p"),
++            stdin_bytes=b"simulate_malformed task",
++        )
++
++        result = await runner.run(req)
++        assert result.exit_code == 0
++        # Output is unparseable non-JSON bytes
++        with pytest.raises(json.JSONDecodeError):
++            json.loads(result.stdout.decode("utf-8", errors="replace"))
++
++    asyncio.run(_test())
++
++
++def test_miscellaneous_fault_injections() -> None:
++    """Test http_500, http_503, timeout, ttft_sla_breach, safety_block, refusal, schema_error."""
++
++    async def _test() -> None:
++        fault_kinds = [
++            ("http_500", ProviderHTTPError),
++            ("http_503", ProviderHTTPError),
++            ("timeout", ProviderTimeout),
++            ("ttft_sla_breach", ProviderTimeout),
++            ("unavailable", ProviderUnavailable),
++            ("safety_block", ProviderSafetyBlock),
++            ("refusal", ProviderRefusal),
++            ("schema_error", ProviderSchemaError),
++        ]
++
++        for kind, expected_exc in fault_kinds:
++            raw_yaml = f"""
++cassette_version: 1
++matcher:
++  model: fault-model-{kind}
++fault:
++  kind: {kind}
++"""
++            cas = load_cassette_from_str(raw_yaml)
++            provider = FixtureLLMProvider(cas)
++            req = CompletionRequest(model=f"fault-model-{kind}", prompt="test prompt")
++
++            async def _consume(stream: AsyncIterator[Any]) -> None:
++                async for _ in stream:
++                    pass
++
++            with pytest.raises(expected_exc):
++                await _consume(provider.stream_complete(req))
++
++    asyncio.run(_test())
++
++
++def test_stream_error_after_chunk() -> None:
++    """Test stream_error_after_chunk emits initial chunks before raising ProviderProtocolError."""
++
++    async def _test() -> None:
++        raw_yaml = """
++cassette_version: 1
++matcher:
++  model: stream-fault-model
++stream_chunks:
++  - "Chunk1"
++  - "Chunk2"
++  - "Chunk3"
++fault:
++  kind: stream_error_after_chunk
++  after_chunks: 1
++"""
++        cas = load_cassette_from_str(raw_yaml)
++        provider = FixtureLLMProvider(cas)
++        req = CompletionRequest(model="stream-fault-model", prompt="stream test")
++
++        chunks_seen: list[str] = []
++
++        async def _consume() -> None:
++            async for chunk in provider.stream_complete(req):
++                chunks_seen.append(chunk.delta)  # noqa: PERF401  # Incremental append before stream error
++
++        with pytest.raises(ProviderProtocolError):
++            await _consume()
++
++        assert chunks_seen == ["Chunk1"]
++
++    asyncio.run(_test())
++
++
++def test_ttft_deadline_breach() -> None:
++    """Test simulated TTFT breaching request ttft_deadline_ms raises ProviderTimeout."""
++
++    async def _test() -> None:
++        raw_yaml = """
++cassette_version: 1
++matcher:
++  model: slow-model
++simulated_ttft_ms: 100.0
++stream_chunks: ["slow"]
++"""
++        cas = load_cassette_from_str(raw_yaml)
++        provider = FixtureLLMProvider(cas)
++        req = CompletionRequest(
++            model="slow-model",
++            prompt="run slow",
++            ttft_deadline_ms=50,  # 100 > 50 -> SLA breach
++        )
++
++        async def _consume() -> None:
++            async for _ in provider.stream_complete(req):
++                pass
++
++        with pytest.raises(ProviderTimeout, match="TTFT SLA breached"):
++            await _consume()
++
++    asyncio.run(_test())
++
++
++def test_cli_runner_timeout_fault() -> None:
++    """Test CLI runner fault timeout."""
++
++    async def _test() -> None:
++        raw_yaml = """
++cassette_version: 1
++matcher:
++  argv_prefix: ["slow-cli"]
++simulated_ttft_ms: 50.0
++fault:
++  kind: timeout
++"""
++        cas = load_cassette_from_str(raw_yaml)
++        runner = FixtureCLIRunner(cas)
++        req = CLIRunRequest(argv=("slow-cli", "arg"), stdin_bytes=b"")
++
++        with pytest.raises(ProviderTimeout, match="Simulated CLI execution timeout"):
++            await runner.run(req)
++
++    asyncio.run(_test())
++
++
++def test_cassette_security_and_validation(tmp_path: Path) -> None:
++    """Test YAML safe_load attack resistance, file size checks, and schema validation."""
++    # 1. Reject unsafe YAML tags
++    unsafe_yaml = tmp_path / "unsafe.yaml"
++    unsafe_yaml.write_text(
++        "!!python/object/apply:os.system ['echo pwned']\n",
++        encoding="utf-8",
++    )
++    with pytest.raises(CassetteValidationError, match="YAML safe_load failed"):
++        load_cassette(unsafe_yaml)
++
++    # 2. Reject files > 1 MiB
++    large_yaml = tmp_path / "too_large.yaml"
++    large_yaml.write_bytes(b"cassette_version: 1\n" + b" " * (1_048_576 + 1))
++    with pytest.raises(CassetteValidationError, match="exceeds maximum allowed size"):
++        load_cassette(large_yaml)
++
++    # 3. Reject invalid UTF-8
++    bad_utf8 = tmp_path / "bad_utf8.yaml"
++    bad_utf8.write_bytes(b"\xff\xfe\x00\x00")
++    with pytest.raises(CassetteValidationError, match="not valid UTF-8"):
++        load_cassette(bad_utf8)
++
++    # 4. Reject unknown version
++    bad_ver = tmp_path / "bad_ver.yaml"
++    bad_ver.write_text(
++        "cassette_version: 2\nmatcher:\n  model: test\n",
++        encoding="utf-8",
++    )
++    with pytest.raises(CassetteValidationError, match="schema validation failed"):
++        load_cassette(bad_ver)
++
++    # 5. Reject unknown fields (additionalProperties: false)
++    unknown_field = tmp_path / "unknown_field.yaml"
++    unknown_field.write_text(
++        "cassette_version: 1\nmatcher:\n  model: test\nunexpected_extra: 123\n",
++        encoding="utf-8",
++    )
++    with pytest.raises(CassetteValidationError, match="schema validation failed"):
++        load_cassette(unknown_field)
++
++    # 6. Reject non-dict top level
++    list_yaml = tmp_path / "list.yaml"
++    list_yaml.write_text("- item1\n- item2\n", encoding="utf-8")
++    with pytest.raises(CassetteValidationError, match="must be a YAML mapping"):
++        load_cassette(list_yaml)
++
++
++def test_cassette_mismatch_errors() -> None:
++    """Test CassetteMismatchError when request doesn't match loaded predicates."""
++
++    async def _test() -> None:
++        raw_yaml = """
++cassette_version: 1
++matcher:
++  model: expected-model
++  prompt_contains: ["required_phrase"]
++stream_chunks: ["matched"]
++"""
++        cas = load_cassette_from_str(raw_yaml)
++        provider = FixtureLLMProvider(cas)
++
++        # Unmatched prompt
++        async def _consume_bad_prompt() -> None:
++            req = CompletionRequest(model="expected-model", prompt="different phrase")
++            async for _ in provider.stream_complete(req):
++                pass
++
++        with pytest.raises(CassetteMismatchError, match="No cassette matched LLM request"):
++            await _consume_bad_prompt()
++
++        # Unmatched model
++        async def _consume_bad_model() -> None:
++            req = CompletionRequest(model="other-model", prompt="required_phrase")
++            async for _ in provider.stream_complete(req):
++                pass
++
++        with pytest.raises(CassetteMismatchError, match="No cassette matched LLM request"):
++            await _consume_bad_model()
++
++        # Unmatched CLI
++        cli_yaml = """
++cassette_version: 1
++matcher:
++  argv_prefix: ["target-bin"]
++  stdin_contains: ["magic_token"]
++cli_result:
++  stdout: "ok"
++  stderr: ""
++  exit_code: 0
++  duration_ms: 1.0
++"""
++        cli_cas = load_cassette_from_str(cli_yaml)
++        runner = FixtureCLIRunner(cli_cas)
++
++        with pytest.raises(CassetteMismatchError, match="No cassette matched CLI request"):
++            await runner.run(CLIRunRequest(argv=("wrong-bin",), stdin_bytes=b"magic_token"))
++
++        with pytest.raises(CassetteMismatchError, match="No cassette matched CLI request"):
++            await runner.run(CLIRunRequest(argv=("target-bin",), stdin_bytes=b"other_token"))
++
++    asyncio.run(_test())
++
++
++def test_fixture_llm_structured_output_and_schema_error() -> None:
++    """Test structured_output branch, schema validation failure, and missing output."""
++
++    async def _test() -> None:
++        # 1. structured_output branch
++        yaml_structured = """
++cassette_version: 1
++matcher:
++  model: model-struct
++structured_output:
++  schema: kb/v1
++  decision: approve
++  reason_markdown: "Looks great"
++  field_updates: {}
++  add_labels: ["qa-pass"]
++"""
++        cas1 = load_cassette_from_str(yaml_structured)
++        prov1 = FixtureLLMProvider(cas1)
++        resp1 = await prov1.generate_structured(
++            StructuredRequest(model="model-struct", prompt="p", response_model=TransitionVerdict)
++        )
++        assert resp1.parsed.decision == "approve"
++
++        # 2. Schema validation error
++        yaml_invalid = """
++cassette_version: 1
++matcher:
++  model: model-invalid
++structured_output:
++  unexpected: 123
++"""
++        cas2 = load_cassette_from_str(yaml_invalid)
++        prov2 = FixtureLLMProvider(cas2)
++        with pytest.raises(ProviderSchemaError, match="Failed to validate response"):
++            await prov2.generate_structured(
++                StructuredRequest(
++                    model="model-invalid",
++                    prompt="p",
++                    response_model=TransitionVerdict,
++                )
++            )
++
++        # 3. Neither final_verdict nor structured_output
++        yaml_no_output = """
++cassette_version: 1
++matcher:
++  model: model-no-out
++simulated_ttft_ms: 1.0
++"""
++        cas3 = load_cassette_from_str(yaml_no_output)
++        prov3 = FixtureLLMProvider(cas3)
++        with pytest.raises(
++            ProviderSchemaError,
++            match="has neither final_verdict nor structured_output",
++        ):
++            await prov3.generate_structured(
++                StructuredRequest(
++                    model="model-no-out",
++                    prompt="p",
++                    response_model=TransitionVerdict,
++                )
++            )
++
++        # 4. embed_batch with no embeddings
++        with pytest.raises(ProviderSchemaError, match="has no embeddings configured"):
++            await prov3.embed_batch(EmbedBatchRequest(model="model-no-out", inputs=("hi",)))
++
++    asyncio.run(_test())
++
++
++def test_fixture_sleep_hook_and_predicates() -> None:
++    """Test sleep hook invocation and provider/transition_to matching."""
++
++    async def _test() -> None:
++        sleep_called: list[float] = []
++
++        async def fake_sleep(duration: float) -> None:
++            sleep_called.append(duration)
++
++        yaml_predicates = """
++cassette_version: 1
++matcher:
++  provider: custom-provider
++  transition_to: Done
++  model: predicate-model
++simulated_ttft_ms: 20.0
++stream_chunks: ["done"]
++"""
++        cas = load_cassette_from_str(yaml_predicates)
++        prov = FixtureLLMProvider(cas, sleep_fn=fake_sleep)
++
++        # Matching provider and transition_to
++        req_ok = CompletionRequest(
++            model="predicate-model",
++            prompt="go",
++            metadata={"provider": "custom-provider", "transition_to": "Done"},
++        )
++        async for chunk in prov.stream_complete(req_ok):
++            assert chunk.delta == "done"
++        assert len(sleep_called) == 1
++        assert sleep_called[0] == 0.02
++
++        # Mismatch provider
++        req_bad_prov = CompletionRequest(
++            model="predicate-model",
++            prompt="go",
++            metadata={"provider": "wrong-provider", "transition_to": "Done"},
++        )
++        with pytest.raises(CassetteMismatchError):
++            async for _ in prov.stream_complete(req_bad_prov):
++                pass
++
++        # Mismatch transition_to
++        req_bad_trans = CompletionRequest(
++            model="predicate-model",
++            prompt="go",
++            metadata={"provider": "custom-provider", "transition_to": "Backlog"},
++        )
++        with pytest.raises(CassetteMismatchError):
++            async for _ in prov.stream_complete(req_bad_trans):
++                pass
++
++    asyncio.run(_test())
++
++
++def test_cli_runner_edge_cases() -> None:
++    """Test CLI runner short argv, missing result/fault, and string paths."""
++
++    async def _test() -> None:
++        yaml_cli = """
++cassette_version: 1
++matcher:
++  argv_prefix: ["tool", "subcmd", "extra"]
++cli_result:
++  stdout: "ok"
++  stderr: ""
++  exit_code: 0
++  duration_ms: 1.0
++"""
++        cas = load_cassette_from_str(yaml_cli)
++        runner = FixtureCLIRunner([cas])
++
++        # Short argv < prefix length
++        with pytest.raises(CassetteMismatchError):
++            await runner.run(CLIRunRequest(argv=("tool",), stdin_bytes=b""))
++
++        # Cassette without cli_result or fault
++        yaml_no_cli = """
++cassette_version: 1
++matcher:
++  argv_prefix: ["noop"]
++"""
++        cas_no_cli = load_cassette_from_str(yaml_no_cli)
++        runner_empty = FixtureCLIRunner(cas_no_cli)
++        with pytest.raises(CassetteMismatchError, match="neither cli_result nor supported fault"):
++            await runner_empty.run(CLIRunRequest(argv=("noop",), stdin_bytes=b""))
++
++    asyncio.run(_test())
++
++
++def test_cassette_loader_file_errors(tmp_path: Path) -> None:
++    """Test load_cassette with missing file."""
++    with pytest.raises(CassetteValidationError, match="Cannot read cassette file"):
++        load_cassette(tmp_path / "non_existent.yaml")
++
++
++def test_schema_load_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
++    """Test schema loading failure."""
++    monkeypatch.setattr(fixtures_mod, "_COMPILED_SCHEMA", None)
++    monkeypatch.setattr(fixtures_mod, "_SCHEMA_PATH", tmp_path / "non_existent_schema.json")
++    with pytest.raises(CassetteValidationError, match="Failed to read cassette schema"):
++        fixtures_mod._get_schema()  # noqa: SLF001  # Verifying schema loader failure branch
++
++
++def test_cassette_model_construction_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
++    """Test cassette model validation exception handling."""
++    test_yaml = tmp_path / "valid.yaml"
++    test_yaml.write_text("cassette_version: 1\nmatcher: {}\n", encoding="utf-8")
++
++    def _fail_validate(_: object) -> object:
++        msg = "Forced validation failure"
++        raise ValueError(msg)
++
++    monkeypatch.setattr(fixtures_mod.Cassette, "model_validate", _fail_validate)
++    with pytest.raises(CassetteValidationError, match="Cassette model construction failed"):
++        fixtures_mod.load_cassette(test_yaml)
++
++
++def test_health_probe() -> None:
++    """Test FixtureLLMProvider health probe."""
++
++    async def _test() -> None:
++        provider = FixtureLLMProvider([])
++        status = await provider.health_probe()
++        assert status.ok is True
++        assert status.latency_ms > 0.0
++        assert "fixture-model" in status.models
++
++    asyncio.run(_test())
++
++
++def load_cassette_from_str(yaml_str: str) -> Cassette:
++    """Load a cassette from a raw YAML string."""
++    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as tf:
++        tf.write(yaml_str)
++        tpath = Path(tf.name)
++    try:
++        return load_cassette(tpath)
++    finally:
++        tpath.unlink(missing_ok=True)
+diff --git a/docs/qa/KANBA-19/build-check.txt b/docs/qa/KANBA-19/build-check.txt
+new file mode 100644
+index 0000000..ef9de76
+--- /dev/null
++++ b/docs/qa/KANBA-19/build-check.txt
+@@ -0,0 +1,39 @@
++=== 1. uv run ruff check agent ===
++All checks passed!
++EXIT_CODE=0
++
++=== 2. uv run ruff format --check agent ===
++14 files already formatted
++EXIT_CODE=0
++
++=== 3. uv run mypy --strict agent ===
++Success: no issues found in 12 source files
++EXIT_CODE=0
++
++=== 4. uv run lint-imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 21 files, 15 dependencies.
++-----------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++EXIT_CODE=0
++
++=== 5. uv lock --locked ===
++Resolved 41 packages in 2ms
++EXIT_CODE=0
+diff --git a/docs/qa/KANBA-19/cassette-validation.txt b/docs/qa/KANBA-19/cassette-validation.txt
+new file mode 100644
+index 0000000..75cc15a
+--- /dev/null
++++ b/docs/qa/KANBA-19/cassette-validation.txt
+@@ -0,0 +1,33 @@
++=== CASSETTE VALIDATION REPORT (KANBA-19) ===
++File: tests/fixtures/ai/cli_agy_approve_ok.yaml
++  Version: 1
++  Matcher: {'prompt_contains': [], 'stdin_contains': ['review_request', 'ticket_id: KAN-142'], 'argv_prefix': ['/usr/local/bin/agy', '-p']}
++  CLI Result Exit Code: 0
++  Status: VALID (Schema Draft 2020-12 verified)
++
++File: tests/fixtures/ai/echo_stream_ok.yaml
++  Version: 1
++  Matcher: {'model': 'echo-model', 'prompt_contains': ['hello', 'stream'], 'stdin_contains': [], 'argv_prefix': []}
++  Stream Chunks: 3 chunks
++  Status: VALID (Schema Draft 2020-12 verified)
++
++File: tests/fixtures/ai/fault_429.yaml
++  Version: 1
++  Matcher: {'model': 'test-429-model', 'prompt_contains': ['simulate_429'], 'stdin_contains': [], 'argv_prefix': []}
++  Fault Kind: http_429
++  Status: VALID (Schema Draft 2020-12 verified)
++
++File: tests/fixtures/ai/fault_malformed_stdout.yaml
++  Version: 1
++  Matcher: {'prompt_contains': [], 'stdin_contains': ['simulate_malformed'], 'argv_prefix': ['/usr/local/bin/codex', '-p']}
++  Fault Kind: malformed_stdout
++  Status: VALID (Schema Draft 2020-12 verified)
++
++File: tests/fixtures/ai/transition_rls_veto.yaml
++  Version: 1
++  Matcher: {'agent_slug': 'forensic-code-check', 'transition_to': 'Done', 'prompt_contains': ['KAN-142', 'auth_provider_cards'], 'stdin_contains': [], 'argv_prefix': []}
++  Tool Script: 2 steps
++  Final Verdict Schema: kb-transition-verdict/v1
++  Status: VALID (Schema Draft 2020-12 verified)
++
++All 5 cassettes validated successfully against agent/testing/cassette.schema.json.
+diff --git a/docs/qa/KANBA-19/dependency-evaluation.md b/docs/qa/KANBA-19/dependency-evaluation.md
+new file mode 100644
+index 0000000..1aa7c6f
+--- /dev/null
++++ b/docs/qa/KANBA-19/dependency-evaluation.md
+@@ -0,0 +1,119 @@
++# Dependency Evaluation: KANBA-19 (KB-P0-12)
++
++## 1. Evaluated Dependencies and Cryptographic Hashes
++
++| Package | Version | License | Target Scope | First SHA-256 (from `uv.lock`) |
++| :--- | :--- | :--- | :--- | :--- |
++| `pydantic` | `2.14.3` | `MIT` | Runtime (`agent/pyproject.toml`) | `1054f237f4d4733e5a30e1e2333bd33a2004ab9ab1510bd053a9a31bb48e232d` |
++| `pyyaml` | `6.0.3` | `MIT` | Runtime (`agent/pyproject.toml`) | `d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f` |
++| `jsonschema` | `4.26.0` | `MIT` | Runtime (`agent/pyproject.toml`) | `0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326` |
++| `types-PyYAML` | `6.0.12.20261111` | `Apache-2.0` | Dev Toolchain (`pyproject.toml`) | `c511f563eaf820b948c4ff6f43fe0b9d48b227be442a69058d9f68f139cae1fb` |
++| `types-jsonschema` | `4.26.0.20261006` | `Apache-2.0` | Dev Toolchain (`pyproject.toml`) | `3eb7db61b6819d40addfdaac7173e749071a7d4a9a4394f0c844598ec84b2500` |
++
++All dependencies are 100% permissively licensed (`MIT` and `Apache-2.0`). Zero copyleft (`GPL`, `AGPL`, `LGPL`, `SSPL`) dependencies introduced.
++
++---
++
++## 2. Alternatives Considered
++
++- **`ruamel.yaml` vs. `pyyaml`:**
++  - `ruamel.yaml` is designed for preserving comments and file structure in round-trip editing workflows at the expense of a larger C-extension footprint and complex parsing surface.
++  - `pyyaml` with `yaml.safe_load` provides lightweight, fast, safe parsing of read-only YAML test cassettes while strictly forbidding arbitrary object constructor tags.
++- **`msgspec` vs. `pydantic`:**
++  - While `msgspec` provides fast pure serialization, `pydantic` v2 provides first-class JSON Schema (Draft 2020-12) generation required for structured LLM provider outputs, field validation hooks, and immutable models (`ConfigDict(frozen=True, extra="forbid")`).
++- **Custom cassette validation vs. `jsonschema`:**
++  - `jsonschema` provides Draft 2020-12 standard schema enforcement with precise path reporting, eliminating ad-hoc procedural validation logic.
++
++---
++
++## 3. Specialist Evaluations and Sign-offs
++
++### Systems/Backend Architect Evaluation (`arch-reviewer`)
++```markdown
++[DEP-EVAL KANBA-19] LLMProvider Protocol, Typed Errors, FixtureLLMProvider & FixtureCLIRunner
++
++- Evaluator: Systems/Backend Architect (arch-reviewer)
++- Scope: docs/tickets/KB-P0-12.md (KANBA-19 / KB-P0-12)
++- Evaluated Dependencies:
++  * pydantic (MIT)
++  * pyyaml (MIT)
++  * jsonschema (MIT)
++  * types-PyYAML (Apache-2.0, dev typing stub if required)
++  * types-jsonschema (Apache-2.0, dev typing stub if required)
++
++1. License and Compatibility:
++All components and type stubs are licensed under MIT or Apache-2.0. Completely permissive, zero copyleft (GPL, AGPL, SSPL, LGPL).
++
++2. Supply-Chain and Attack Surface:
++- Scoped to agent module runtime and test harness.
++- pyyaml is restricted strictly to yaml.safe_load. Arbitrary Python object instantiation tags (such as !!python/object/apply) are strictly forbidden, mitigating YAML deserialization remote code execution vulnerabilities.
++- File sizes for cassettes are bounded to a maximum of 1 MiB to prevent denial-of-service via memory exhaustion.
++
++3. Architectural Rationale and Alternatives Considered:
++- pyyaml vs. ruamel.yaml:
++  * ruamel.yaml is optimized for preserving comments and formatting in round-trip config file editing, at the expense of complex C extensions and a larger parsing surface.
++  * For immutable AI test cassettes, pyyaml using safe_load is lightweight, fast, robust, and minimizes parsing vulnerabilities.
++- pydantic v2 vs. msgspec / dataclasses:
++  * While dataclasses are built-in, they lack validation hooks, JSON schema generation, and strict coercion controls.
++  * pydantic v2 (Rust core) provides high-performance validation, immutable models via ConfigDict(frozen=True, extra="forbid"), and first-class JSON Schema (Draft 2020-12) reflection required for structured LLM provider outputs.
++- jsonschema vs. custom cassette validation:
++  * jsonschema provides standard Draft 2020-12 validation against cassette.schema.json, ensuring that test cassettes adhere to strict contract specifications without requiring ad-hoc procedural validation logic.
++- Offline Fixture Architecture:
++  * FixtureLLMProvider and FixtureCLIRunner enable deterministic replay of streaming, structured responses, and CLI subprocess execution under pytest-socket isolation (--disable-socket). Tests execute offline in sub-second runtimes without external LLM API costs or flake.
++
++4. Architectural Verdict:
++APPROVED. Standardizes vendor-neutral AI abstractions with deterministic offline verification.
++```
++
++### Application and Supply-Chain Security Engineer Evaluation (`sec-eng`)
++```markdown
++[DEP-EVAL KANBA-19] LLMProvider Protocol and Fixtures
++
++- Evaluator: Application and Supply-Chain Security Engineer (sec-eng)
++- Scope: docs/tickets/KB-P0-12.md (KANBA-19 / KB-P0-12)
++- Target Packages: pydantic, pyyaml, jsonschema, types-PyYAML, types-jsonschema
++
++1. License and Compatibility Audit:
++- pydantic (MIT): Permissive data validation and settings management.
++- pyyaml (MIT): Permissive YAML parser and emitter.
++- jsonschema (MIT): Permissive JSON Schema validation library.
++- types-PyYAML (Apache-2.0), types-jsonschema (Apache-2.0): Permissive static typing stubs.
++- License Compliance: 100% permissive. Zero GPL, AGPL, SSPL, or LGPL licenses.
++
++2. Supply-Chain and Hostile Input Hardening:
++- Safe Deserialization: Historical PyYAML vulnerabilities derive from yaml.load() and arbitrary Python object constructor tags (!!python/object/apply). System invariants strictly mandate yaml.safe_load() and prohibit unsafe tags; malicious serialization payloads are rejected by CassetteValidationError.
++- Strict Schema Constraints: jsonschema (Draft 2020-12) strictly validates cassette structure against cassette.schema.json, enforcing 1 MiB file size limits, strict enum matching, and extra attribute prohibition, neutralizing prompt-injection tampering and payload manipulation.
++- Runtime Immutability: Pydantic v2 models enforce ConfigDict(frozen=True, extra="forbid"), preventing runtime monkeypatching or attribute injection.
++- Zero Network Dependency: FixtureLLMProvider and FixtureCLIRunner operate deterministically offline under --disable-socket with simulated latency and zero external network access.
++
++3. Alternatives Evaluated:
++- ruamel.yaml: Rejected. Complex and historically volatile API with slower parse speeds; primarily beneficial for round-trip YAML comment preservation which is unnecessary for read-only test fixture cassette replay.
++- msgspec: Rejected. Highly performant but lacks native YAML parsing without external C libraries and lacks rich Draft 2020-12 JSON Schema validation integration. Pydantic v2 combined with jsonschema provides standard-compliant validation, deep ecosystem support, and strict typing guarantees.
++
++4. Verdict:
++- Role Sign-Off: APPROVED by sec-eng (Engineer #1, Application and Supply-Chain Security Engineer) for KANBA-19.
++```
++
++### Test and Build Quality Engineer Evaluation (`qa-eng`)
++```markdown
++[DEP-EVAL KANBA-19] AI Agent LLMProvider Protocol, Typed Errors, and Fixture Harness (KB-P0-12)
++
++- Target Dependencies:
++  * pydantic (MIT)
++  * pyyaml (MIT)
++  * jsonschema (MIT)
++  * types-PyYAML (Apache-2.0), types-jsonschema (Apache-2.0, type stubs for mypy strict)
++
++- Test and Build Quality Assessment:
++  * pydantic (v2): High-speed data validation and modeling powered by pydantic-core in Rust. Enforces immutable protocol contracts (ConfigDict(frozen=True, extra="forbid")) for vendor-neutral DTOs (CompletionRequest, StructuredRequest, StructuredResponse, EmbedBatchRequest, HealthStatus). Performs boundary validation (temperature limits, token bounds, batch sizes 1..64) locally before network dispatch.
++  * pyyaml: Robust YAML parsing using safe loading (yaml.safe_load). Used to load deterministic test cassettes while strictly disallowing arbitrary Python object deserialization (e.g. !!python/object).
++  * jsonschema: Enforces schema compliance on test cassettes against agent/testing/cassette.schema.json using Draft202012Validator. Validates matcher rules, simulated TTFT delays, and fault injection payloads before fixture playback.
++  * types-PyYAML and types-jsonschema: Required dev typing stubs ensuring zero untyped call warnings under mypy --strict.
++  * Test Harness Alignment: Enables deterministic, offline AI test execution via FixtureLLMProvider and FixtureCLIRunner under pytest-socket (--disable-socket). Allows complete fault injection testing (HTTP 429, timeouts, schema errors, malformed outputs) without external API dependencies or financial costs.
++
++- Alternatives Considered:
++  * ruamel.yaml vs pyyaml: ruamel.yaml is focused on round-trip YAML comment and structure preservation, adding unneeded complexity and slower performance for read-only cassette fixtures. pyyaml with safe_load provides clean, fast, safe parsing.
++  * msgspec vs pydantic: While msgspec is fast for pure serialization, pydantic v2 offers mature JSON Schema generation required for structured output contracts with LLMs, robust field validators, and rich typing ecosystem support.
++
++- Engineer #2 Sign-off: APPROVED
++```
+diff --git a/docs/qa/KANBA-19/message-to-reality-checker.md b/docs/qa/KANBA-19/message-to-reality-checker.md
+new file mode 100644
+index 0000000..f8e7eb9
+--- /dev/null
++++ b/docs/qa/KANBA-19/message-to-reality-checker.md
+@@ -0,0 +1,58 @@
++# Forensic QA Handoff: KANBA-19 (KB-P0-12)
++
++## 1. Ticket Overview
++- **Ticket ID:** `KANBA-19`
++- **Specification:** `docs/tickets/KB-P0-12.md`
++- **Title:** `[Phase 0 / Agent] LLMProvider protocol, typed errors, FixtureLLMProvider & FixtureCLIRunner`
++- **Epic:** `KB-E0`
++- **Spec Sections:** S10.1 (LLMProvider protocol), S15.2 (Pluggable deterministic AI fixtures), S2.5 (Permissive supply chain)
++- **Branch:** `feat/KANBA-19` (worktree `/tmp/kb-wt-KANBA-19`)
++
++---
++
++## 2. Summary of Implementation
++- **Typed Error Hierarchy (`agent/providers/errors.py`):**
++  - Implemented `ProviderError` with code validation (`^[A-Z][A-Z0-9_]{2,63}$`) and automatic secret redaction (sanitizing Bearer tokens, `sk-*`, `ghp_*`, `AKIA*`, `kb_*`, `AIza*`, JWT tokens, and `api_key`/`secret`/`token`/`password` parameters).
++  - Implemented all 10 specialized subclasses: `ProviderHTTPError` (with `status` and `retry_after_s`), `ProviderTimeout`, `ProviderUnavailable`, `AllProvidersUnavailable`, `ProviderProtocolError`, `ProviderSchemaError`, `ProviderSafetyBlock`, `ProviderRefusal`, `ProviderPolicyError`, and `EgressDenied`.
++- **Vendor-Neutral Protocol & DTOs (`agent/providers/base.py`):**
++  - Implemented immutable Pydantic v2 models (`ConfigDict(frozen=True, extra="forbid")`): `CompletionRequest`, `StreamChunk`, `ToolCallStep`, `StructuredRequest[TModel]`, `StructuredResponse[TModel]`, `EmbedBatchRequest` (strictly enforcing batch bounds 1..64 and input length 1..8192 chars), `HealthStatus`, `CLIRunRequest` (rejecting empty argv, `/bin/sh`, `bash -c`, or any shell invocation with ValueError), and `CLIRunResult`.
++  - Implemented `@runtime_checkable class LLMProvider(Protocol)` and `@runtime_checkable class CLIRunner(Protocol)`.
++  - Re-exported all 11 error classes and DTOs in `agent/providers/__init__.py`.
++- **Cassette Schema & Deterministic Fixtures (`agent/testing/cassette.schema.json`, `agent/testing/fixtures.py`):**
++  - Draft 2020-12 JSON schema enforcing `cassette_version: 1`, `matcher`, `tool_script`, `simulated_ttft_ms`, `usage`, `stream_chunks`, `final_verdict`, `structured_output`, `embeddings`, `cli_result`, and `fault` specifications with `additionalProperties: false`.
++  - `load_cassette()` rejecting files > 1 MiB (`MAX_CASSETTE_BYTES`), parsing via `yaml.safe_load`, and validating against schema via `Draft202012Validator`.
++  - `FixtureLLMProvider` matching requests in order, recording telemetry in `call_log`, replaying SSE stream chunks, validating structured outputs into `response_model`, generating deterministic L2-normalized vectors from `{dimension, seed}`, and raising exact typed faults without real wall-clock sleep.
++  - `FixtureCLIRunner` matching argv prefix and UTF-8 decoded stdin strings without spawning subprocesses, supporting timeout and malformed stdout fault injection.
++- **Sample AI Fixtures (`tests/fixtures/ai/`):**
++  - `echo_stream_ok.yaml`
++  - `transition_rls_veto.yaml` (matching exact S15.2 specification fields)
++  - `cli_agy_approve_ok.yaml`
++  - `fault_429.yaml`
++  - `fault_malformed_stdout.yaml`
++- **Dependencies & Typing:**
++  - Pinned `pydantic==2.14.3`, `pyyaml==6.0.3`, `jsonschema==4.26.0` in `agent/pyproject.toml`.
++  - Pinned dev stubs `types-PyYAML==6.0.12.20261111` and `types-jsonschema==4.26.0.20261006` in root `pyproject.toml`.
++  - Verified supply-chain sign-offs from `arch-reviewer`, `sec-eng`, and `qa-eng`.
++
++---
++
++## 3. Verification & Compliance Evidence
++- **Branch Test Coverage:** `97.73%` total branch+line coverage across `agent/` (surpassing `>=95%` mandate).
++- **Execution Performance:** Full pytest suite (29 tests) executes in `0.56s` (surpassing `< 10s` budget).
++- **Zero Warnings / Strict Typing:**
++  - `uv run ruff check agent`: 0 errors / clean.
++  - `uv run ruff format --check agent`: 14 files clean.
++  - `uv run mypy --strict agent`: 0 errors across 12 source files.
++  - `uv run lint-imports`: 1 kept, 0 broken contracts.
++  - `uv lock --locked`: clean lockfile resolution.
++- **Encoding Compliance:** Zero `U+2014` or `U+2013` non-ASCII dashes present anywhere in added/modified files.
++- **Visual Screenshots:** `N/A - Non-UI Ticket` (headless agent provider and fixture infrastructure).
++
++---
++
++## 4. Manifest of Forensic Artifacts in `docs/qa/KANBA-19/`
++1. `dependency-evaluation.md`: Full dependency audit with pinned versions, SHA-256 hashes, alternatives considered, and signed evaluations from `arch-reviewer`, `sec-eng`, and `qa-eng`.
++2. `cassette-validation.txt`: Automated output validating all 5 sample cassettes against Draft 2020-12 schema.
++3. `unit-test-results.txt`: Full raw output and exit code 0 of coverage pytest command.
++4. `build-check.txt`: Full raw output and exit codes of ruff, mypy, lint-imports, and uv lock.
++5. `git-diff.patch`: Unified diff of all branch changes against the base commit.
+diff --git a/docs/qa/KANBA-19/unit-test-results.txt b/docs/qa/KANBA-19/unit-test-results.txt
+new file mode 100644
+index 0000000..05ff731
+--- /dev/null
++++ b/docs/qa/KANBA-19/unit-test-results.txt
+@@ -0,0 +1,23 @@
++.............................                                            [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                          Stmts   Miss Branch BrPart  Cover   Missing
++-----------------------------------------------------------------------------------------
++agent/__init__.py                                 1      0      0      0   100%
++agent/providers/__init__.py                       3      0      0      0   100%
++agent/providers/base.py                         116      0     14      0   100%
++agent/providers/errors.py                        66      0      2      0   100%
++agent/testing/__init__.py                         2      0      0      0   100%
++agent/testing/fixtures.py                       284      4     90      4    98%   194-196, 290, 357->361, 540->544, 575->583
++agent/tests/__init__.py                           0      0      0      0   100%
++agent/tests/providers/__init__.py                 0      0      0      0   100%
++agent/tests/providers/test_base_protocol.py     179      0      2      0   100%
++agent/tests/test_smoke.py                         3      3      0      0     0%   4-9
++agent/tests/testing/__init__.py                   0      0      0      0   100%
++agent/tests/testing/test_fixtures.py            312      7     28      7    96%   225, 287, 350, 446, 455, 594, 604
++-----------------------------------------------------------------------------------------
++TOTAL                                           966     14    136     11    98%
++Required test coverage of 95% reached. Total coverage: 97.73%
++29 passed in 0.56s
++EXIT_CODE=0
+diff --git a/pyproject.toml b/pyproject.toml
+index d00b411..43c4aae 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -25,6 +25,10 @@ dev = [
+     "pytest-cov==7.1.0",
+     "import-linter==2.16",
+     "hatchling==1.33.0",
++    "ruff==0.17.4",
++    "mypy==2.4.1",
++    "types-PyYAML==6.0.12.20261111",
++    "types-jsonschema==4.26.0.20261006",
+ ]
+ 
+ [tool.importlinter]
+@@ -39,3 +43,26 @@ layers = [
+     "kanban",
+     "database",
+ ]
++
++[tool.ruff]
++target-version = "py312"
++line-length = 100
++
++[tool.ruff.lint]
++select = ["ALL"]
++ignore = [
++    "D203",   # conflicts with D211 (no blank line before class docstring)
++    "D213",   # conflicts with D212 (multi-line summary first line)
++    "COM812", # conflicts with ruff formatter
++    "ISC001", # conflicts with ruff formatter
++]
++
++[tool.ruff.lint.per-file-ignores]
++"**/tests/**" = ["S101", "PLR2004"]  # assert and magic values are idiomatic in pytest
++
++[tool.mypy]
++python_version = "3.12"
++strict = true
++warn_unreachable = true
++enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
++packages = ["database", "kanban", "mcp", "agent"]
+diff --git a/tests/fixtures/ai/cli_agy_approve_ok.yaml b/tests/fixtures/ai/cli_agy_approve_ok.yaml
+new file mode 100644
+index 0000000..a938513
+--- /dev/null
++++ b/tests/fixtures/ai/cli_agy_approve_ok.yaml
+@@ -0,0 +1,10 @@
++cassette_version: 1
++matcher:
++  argv_prefix: ["/usr/local/bin/agy", "-p"]
++  stdin_contains: ["review_request", "ticket_id: KAN-142"]
++simulated_ttft_ms: 12.0
++cli_result:
++  stdout: "{\"verdict\": \"approved\", \"comments\": \"Code meets all requirements\"}\n"
++  stderr: ""
++  exit_code: 0
++  duration_ms: 12.5
+diff --git a/tests/fixtures/ai/echo_stream_ok.yaml b/tests/fixtures/ai/echo_stream_ok.yaml
+new file mode 100644
+index 0000000..59dcb7a
+--- /dev/null
++++ b/tests/fixtures/ai/echo_stream_ok.yaml
+@@ -0,0 +1,12 @@
++cassette_version: 1
++matcher:
++  model: echo-model
++  prompt_contains: ["hello", "stream"]
++simulated_ttft_ms: 5.0
++usage:
++  prompt_tokens: 10
++  completion_tokens: 5
++stream_chunks:
++  - "Hello"
++  - " world"
++  - "!"
+diff --git a/tests/fixtures/ai/fault_429.yaml b/tests/fixtures/ai/fault_429.yaml
+new file mode 100644
+index 0000000..2a27af2
+--- /dev/null
++++ b/tests/fixtures/ai/fault_429.yaml
+@@ -0,0 +1,8 @@
++cassette_version: 1
++matcher:
++  model: test-429-model
++  prompt_contains: ["simulate_429"]
++simulated_ttft_ms: 10.0
++fault:
++  kind: http_429
++  retry_after_s: 30.0
+diff --git a/tests/fixtures/ai/fault_malformed_stdout.yaml b/tests/fixtures/ai/fault_malformed_stdout.yaml
+new file mode 100644
+index 0000000..cd0829e
+--- /dev/null
++++ b/tests/fixtures/ai/fault_malformed_stdout.yaml
+@@ -0,0 +1,7 @@
++cassette_version: 1
++matcher:
++  argv_prefix: ["/usr/local/bin/codex", "-p"]
++  stdin_contains: ["simulate_malformed"]
++simulated_ttft_ms: 15.0
++fault:
++  kind: malformed_stdout
+diff --git a/tests/fixtures/ai/transition_rls_veto.yaml b/tests/fixtures/ai/transition_rls_veto.yaml
+new file mode 100644
+index 0000000..26003b5
+--- /dev/null
++++ b/tests/fixtures/ai/transition_rls_veto.yaml
+@@ -0,0 +1,15 @@
++cassette_version: 1
++matcher:
++  agent_slug: forensic-code-check
++  transition_to: Done
++  prompt_contains: ["KAN-142", "auth_provider_cards"]
++tool_script:
++  - call: { tool: read_ticket, args: { identifier: "KAN-100" } }
++  - call: { tool: repo_grep, args: { pattern: "FORCE ROW LEVEL SECURITY", path: "database/" } }
++simulated_ttft_ms: 18
++final_verdict:
++  schema: kb-transition-verdict/v1
++  decision: reject
++  reason_markdown: "Missing `FORCE ROW LEVEL SECURITY` on `auth_card_group_mappings` migration."
++  field_updates: {}
++  add_labels: ["qa-needs-work"]
+diff --git a/uv.lock b/uv.lock
+index 0d58baf..68be4bf 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -10,6 +10,68 @@ members = [
+     "kanban-platform",
+ ]
+ 
++[[package]]
++name = "annotated-types"
++version = "0.8.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/5f/56/a8120250d128bed162cd73c76d45f6ef9991f3e068f62a8ee060afa3104a/annotated_types-0.8.0.tar.gz", hash = "sha256:13b2beaad985e05e2d6407ee4c4f35590b11f8d693a258a561055cac8f64cab7", size = 15893 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl", hash = "sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0", size = 13427 },
++]
++
++[[package]]
++name = "ast-serialize"
++version = "0.13.1"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/21/d5/5dc1ee8a80c3b20a0b63c61b43ba6bc53517faecd1def47bcd752d22268e/ast_serialize-0.13.1.tar.gz", hash = "sha256:401cc84e8888d4d76f2c8d296fa006ed1a5ff993b6aff90dd777c03973efd025", size = 955137 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/2b/e2/b0c140fe50fa39dd249e382f7733af6f816c90021fe7959a0b026f86237f/ast_serialize-0.13.1-cp315-abi3.abi3t-macosx_10_12_x86_64.whl", hash = "sha256:23d768369b89d551077dc173da6892fad00443338417523b6732f4e8ba4a7ed5", size = 1236160 },
++    { url = "https://files.pythonhosted.org/packages/23/c4/a8a2ca21e3943555b48221f8fba546877a7ad39efaf6505506524967d7c4/ast_serialize-0.13.1-cp315-abi3.abi3t-macosx_11_0_arm64.whl", hash = "sha256:68f8829d114dab6c9db4a8bbb8d0e342958faee1b5e15a29022678df639960f8", size = 1222214 },
++    { url = "https://files.pythonhosted.org/packages/15/19/2f58f2ba64e4799b39de85c140aef09a03aa6ea53be75dd292a9d9b9d8ae/ast_serialize-0.13.1-cp315-abi3.abi3t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4e385b17d5bde892a6184003a9aff3518387908b73f8f5ea539313c07c8c0ede", size = 1282979 },
++    { url = "https://files.pythonhosted.org/packages/b1/af/ca6087fe84210c1ccd43e3182917bb70649fa1e69745a90c1d59ba08fea8/ast_serialize-0.13.1-cp315-abi3.abi3t-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:02686b281ec9b8e9614f6f0db27e12e4cac515f336c5d05b678bc9eb73ff2af5", size = 1288596 },
++    { url = "https://files.pythonhosted.org/packages/b0/2c/4ef964c763329a0347125e745ec0451ba4fbaceec9efe2ac729b7cd55f17/ast_serialize-0.13.1-cp315-abi3.abi3t-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:a8ab2c2585b2e22e48cd4aff2136fce4eab4ced569b85f150ef9a5a5d6f34d49", size = 1545540 },
++    { url = "https://files.pythonhosted.org/packages/bb/85/aa961dbb75813cfa94de0ce9a16a9510c226b95f604c405421e727f44bb0/ast_serialize-0.13.1-cp315-abi3.abi3t-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:c652d9f5d52d8b81eff3ff2c95c9dd0f281de45f6ad5d3fa95527550c396454a", size = 1309374 },
++    { url = "https://files.pythonhosted.org/packages/b4/e6/f2b67c327d9f9533e41791804403ccc2dc457821195a2e51f0b587a90b90/ast_serialize-0.13.1-cp315-abi3.abi3t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:121e1d08d58b75c15491cc3003609cbad71ac2b0016043c36d30a6b2032b6605", size = 1303466 },
++    { url = "https://files.pythonhosted.org/packages/73/1d/33f18b81d1bb1f5d682943ea92fda8130a6593627f12f6201668d40824fd/ast_serialize-0.13.1-cp315-abi3.abi3t-manylinux_2_31_riscv64.whl", hash = "sha256:30cf89b6a6844542d116c758725d13de5b97b9410a51ee577715f761270d0c1c", size = 1300576 },
++    { url = "https://files.pythonhosted.org/packages/25/cb/64914144925f1a4abdd9217e717b122255c38fc5ebe4342f92052f3bacbc/ast_serialize-0.13.1-cp315-abi3.abi3t-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:732aaae9e498c973fc63fd7f308009b57c4afa6ff59d0b674d894e57d0bca01a", size = 1355960 },
++    { url = "https://files.pythonhosted.org/packages/ee/80/bd29379fab2bce19adc0bf9177002b11b23dfe8d8fecf409998b458b4624/ast_serialize-0.13.1-cp315-abi3.abi3t-musllinux_1_2_aarch64.whl", hash = "sha256:d9c1a920b2aa0c1e016bed7721689717034ca0dba64ac3a3ff243b003d4e8dd8", size = 1459779 },
++    { url = "https://files.pythonhosted.org/packages/83/89/012dbe733de05ffdf8e40ca0f9fa5d417cb16ec93a74463c57c001914198/ast_serialize-0.13.1-cp315-abi3.abi3t-musllinux_1_2_armv7l.whl", hash = "sha256:847cad4c22953823f5e76d0b126c6f9da670cfa45b1df41b9324e22189d77611", size = 1563399 },
++    { url = "https://files.pythonhosted.org/packages/69/37/ee4bcb0358bee38744eb0f18560446572d095fe3bf6b63d6f739d08a839c/ast_serialize-0.13.1-cp315-abi3.abi3t-musllinux_1_2_i686.whl", hash = "sha256:aca07de3ca8e3d9f2b716c3c31f4f384fe4bd2d03e09912417cff7a3e08036f7", size = 1558808 },
++    { url = "https://files.pythonhosted.org/packages/54/1c/ff44c5355251d61ef22934c4430bb31a61de4781d25a992154aac9b8c82a/ast_serialize-0.13.1-cp315-abi3.abi3t-musllinux_1_2_ppc64le.whl", hash = "sha256:5db12d843d931b9d1f1519ce66b9cbfe72d8563b75c1204d255322254d1964dd", size = 1666324 },
++    { url = "https://files.pythonhosted.org/packages/c8/bb/6da4bfc8aa3403e6447607131bf3463acaf954d990c6c8b6787c1902ddfe/ast_serialize-0.13.1-cp315-abi3.abi3t-musllinux_1_2_riscv64.whl", hash = "sha256:fb8021f4dc3296de18737e3b8b34994411da725374d74a0b9eb32a738f2a23d0", size = 1474089 },
++    { url = "https://files.pythonhosted.org/packages/21/97/897e33bef2eefd880e6350e375cc66bc5bcd00a139be480fd655f5b3f095/ast_serialize-0.13.1-cp315-abi3.abi3t-musllinux_1_2_x86_64.whl", hash = "sha256:0d764913374ba21df8cd618045b371ed104ce55c6276de7c59e554a4f5ba26fd", size = 1501542 },
++    { url = "https://files.pythonhosted.org/packages/8d/4c/821211ac83870c27e4412381b7c7838336456b40575bf840e4680b2018d9/ast_serialize-0.13.1-cp315-abi3.abi3t-win32.whl", hash = "sha256:2bad302ae2427454ef9dab71bd5c3ad67188860c39d36daee38f72031edb39c4", size = 1126118 },
++    { url = "https://files.pythonhosted.org/packages/1f/86/2b2d5e6c4fa352874a80618e742ffd32d249dee6c119f4233b51afc6b8f4/ast_serialize-0.13.1-cp315-abi3.abi3t-win_amd64.whl", hash = "sha256:032b09d86c785c3984e975378b7861f2a68ac44e22ba7b07b93a536b2524eeb8", size = 1163766 },
++    { url = "https://files.pythonhosted.org/packages/77/a3/d610cfcdabaa44fd62a54ca1fc57a7dba120643798b089a14914973562de/ast_serialize-0.13.1-cp315-abi3.abi3t-win_arm64.whl", hash = "sha256:929eda0c419e622ab49df3a4c45f81c57dcc10874bbad55d0470a4a03324dac3", size = 1134043 },
++    { url = "https://files.pythonhosted.org/packages/81/92/d705be88ff452b9ba0088b554a0cbd308fd01879da092b33fd2ad7d1aa60/ast_serialize-0.13.1-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:4bcf1d5f4eefecaa325a34ecf079b2741189e7d0821523f92cb343a389a67489", size = 1242416 },
++    { url = "https://files.pythonhosted.org/packages/60/c2/98370845a7f35cb8a25782e78284b48e01bf3128339881d48d613f304f8f/ast_serialize-0.13.1-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:1b158f1c9e3a0d386913924c57995d6df78224868a4d0f215bdd41587c97b34a", size = 1229729 },
++    { url = "https://files.pythonhosted.org/packages/d8/8b/2d7ffed76addd9d3fcf37fb171400942735c8912264c763561a85407f6a8/ast_serialize-0.13.1-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:77a6201b69ce42e919f2fd9a559138d5410b5d8afff7c3a6b1f500b0481ff7d8", size = 1292255 },
++    { url = "https://files.pythonhosted.org/packages/6b/2a/bb9e0e719d89cc950fadfcfcc9cb4bc7640419c4228c852f031ab8abf440/ast_serialize-0.13.1-cp39-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:6eb0be64c9b8f1ed26637eef345abe75ea90351c92c85a8aec7838b3af971011", size = 1298501 },
++    { url = "https://files.pythonhosted.org/packages/7a/32/13ce07dce48226f5bd9cfd8f708ec101a8be05aa430cda4918ce31ce8c82/ast_serialize-0.13.1-cp39-abi3-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:7f2427bddfca208e84de700044fadf9aef2769a70bae740a1bdabb89ee9e1117", size = 1553758 },
++    { url = "https://files.pythonhosted.org/packages/e2/fb/9b51d186db0c20ca28cbaaefd50f03b573c89327b9a2627820cbce22196b/ast_serialize-0.13.1-cp39-abi3-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:88df960e67184a71874e5b2ee014f87d1254a0dbc1f903c7bd7b1ab7733ecaef", size = 1318258 },
++    { url = "https://files.pythonhosted.org/packages/c5/fa/da311559dd3dae9af5825cf21660775a929b970f72e3786af3f2cd667944/ast_serialize-0.13.1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9f99786e0d62082a5b121b3437f3167562133711df22128de1e9886f57f0b226", size = 1313260 },
++    { url = "https://files.pythonhosted.org/packages/2b/11/97a4b9e5b4776d72f47fcd9a09a497bbf68ec8c1ae074307a2c51e410d85/ast_serialize-0.13.1-cp39-abi3-manylinux_2_31_riscv64.whl", hash = "sha256:a01b515b25a03184eff4acef25b981ae007916379682e908fc8785b342a0bf3e", size = 1309992 },
++    { url = "https://files.pythonhosted.org/packages/2e/c4/62f85121a80cd451ef04f550cf0f7ea0ad9ff46cc4e9a5b9ae439b6527b1/ast_serialize-0.13.1-cp39-abi3-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:29422d7bcd9e7f39411571c36cec45ce8a7a9b3ad4b2e7aa64497c15a9e397f6", size = 1362715 },
++    { url = "https://files.pythonhosted.org/packages/c1/fa/c5f4a545f72a7681e3295bab6e3600ee0862ec4391bed961fe9f735b67e0/ast_serialize-0.13.1-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:6ffb0f548a7dc126067fdfb7b2325ab5dfcdeecc29faf5e0f0461c96d6ebfa3d", size = 1469931 },
++    { url = "https://files.pythonhosted.org/packages/38/a9/65aed4f8fa7a001a7cfdc03e68e844517ab041ba6fb614b7d78a1d6ac056/ast_serialize-0.13.1-cp39-abi3-musllinux_1_2_armv7l.whl", hash = "sha256:2876444a5f87a7c76f371af3c07c2fda563a08bc8af52568df812e8aba4bf568", size = 1570945 },
++    { url = "https://files.pythonhosted.org/packages/fb/8c/44b2da991cede79bfbf52089f33a5f0168945466b3d9cd38b5dcf08e7130/ast_serialize-0.13.1-cp39-abi3-musllinux_1_2_i686.whl", hash = "sha256:885a62ec6481ce58ab24c6357360d7a82023b62dd7e5e7ceccf59e9662a3272b", size = 1569978 },
++    { url = "https://files.pythonhosted.org/packages/46/e4/109b2a5beca700237767d5add920c2f8e1ba9bd5799b0faf143d0e9cf4ef/ast_serialize-0.13.1-cp39-abi3-musllinux_1_2_ppc64le.whl", hash = "sha256:2015fd0165e463aac3b1aadc6a1fa1e5820c14ca950821f4fe02f8a3f6a388d6", size = 1676082 },
++    { url = "https://files.pythonhosted.org/packages/73/e0/7df70f6dbb11b5762da5416318f08316a1c51348e0d69ec79ca5f98f836a/ast_serialize-0.13.1-cp39-abi3-musllinux_1_2_riscv64.whl", hash = "sha256:eb41e1906502ac80d24ff343f45008552a3f5b5158607959fe6a07dbfc6eb037", size = 1483207 },
++    { url = "https://files.pythonhosted.org/packages/1f/bc/523aa1c08bd69b5654621beb3dc1a9035715a4a63762fb8d219d6fb3eb81/ast_serialize-0.13.1-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:ca9acc67f796aa2554fa3037dccc022a4b08b38b2ad153edfac9c9bb7cb1f3c6", size = 1512140 },
++    { url = "https://files.pythonhosted.org/packages/66/83/6607060659998f00afdea0d8375c1e6e2b7d515ab905090d9a5a02f48851/ast_serialize-0.13.1-cp39-abi3-win32.whl", hash = "sha256:4f98da562e5901d69c7dd30885594c5438f859edf354e9ac7517d188fb026c3a", size = 1131889 },
++    { url = "https://files.pythonhosted.org/packages/9f/6f/bafd6490fe7b355627fabe95f4417e3d02da93102c8552550eb9a0774e1e/ast_serialize-0.13.1-cp39-abi3-win_amd64.whl", hash = "sha256:ddf7cbc9c8abf70102c4a088efe154bb86bfb825b0a10e556d2b15972cf99bd7", size = 1171153 },
++    { url = "https://files.pythonhosted.org/packages/11/25/4235f4b375a67a37ac595bf478a5407a744eaf7b64113c1c3a5432b8d954/ast_serialize-0.13.1-cp39-abi3-win_arm64.whl", hash = "sha256:48f11d96c9ec71119612f8e79a8c55c12f2b136716d68347433c561d27a25f43", size = 1139035 },
++]
++
++[[package]]
++name = "attrs"
++version = "26.1.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz", hash = "sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32", size = 952055 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309", size = 67548 },
++]
++
+ [[package]]
+ name = "click"
+ version = "8.5.1"
+@@ -114,16 +176,51 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/56/43/4ca9e49d27a1fcf6bece6f6aec0ea46bb9112489b93d4b688fb415457bdb/iniconfig-2.3.1-py3-none-any.whl", hash = "sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7", size = 7552 },
+ ]
+ 
++[[package]]
++name = "jsonschema"
++version = "4.26.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "attrs" },
++    { name = "jsonschema-specifications" },
++    { name = "referencing" },
++    { name = "rpds-py" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/b3/fc/e067678238fa451312d4c62bf6e6cf5ec56375422aee02f9cb5f909b3047/jsonschema-4.26.0.tar.gz", hash = "sha256:0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326", size = 366583 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/69/90/f63fb5873511e014207a475e2bb4e8b2e570d655b00ac19a9a0ca0a385ee/jsonschema-4.26.0-py3-none-any.whl", hash = "sha256:d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce", size = 90630 },
++]
++
++[[package]]
++name = "jsonschema-specifications"
++version = "2025.9.1"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "referencing" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/19/74/a633ee74eb36c44aa6d1095e7cc5569bebf04342ee146178e2d36600708b/jsonschema_specifications-2025.9.1.tar.gz", hash = "sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d", size = 32855 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/41/45/1a4ed80516f02155c51f51e8cedb3c1902296743db0bbc66608a0db2814f/jsonschema_specifications-2025.9.1-py3-none-any.whl", hash = "sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe", size = 18437 },
++]
++
+ [[package]]
+ name = "kanban-agent"
+ version = "0.0.0"
+ source = { editable = "agent" }
+ dependencies = [
++    { name = "jsonschema" },
+     { name = "kanban-mcp" },
++    { name = "pydantic" },
++    { name = "pyyaml" },
+ ]
+ 
+ [package.metadata]
+-requires-dist = [{ name = "kanban-mcp", editable = "mcp" }]
++requires-dist = [
++    { name = "jsonschema", specifier = "==4.26.0" },
++    { name = "kanban-mcp", editable = "mcp" },
++    { name = "pydantic", specifier = "==2.14.3" },
++    { name = "pyyaml", specifier = "==6.0.3" },
++]
+ 
+ [[package]]
+ name = "kanban-core"
+@@ -167,8 +264,12 @@ dependencies = [
+ dev = [
+     { name = "hatchling" },
+     { name = "import-linter" },
++    { name = "mypy" },
+     { name = "pytest" },
+     { name = "pytest-cov" },
++    { name = "ruff" },
++    { name = "types-jsonschema" },
++    { name = "types-pyyaml" },
+ ]
+ 
+ [package.metadata]
+@@ -183,8 +284,35 @@ requires-dist = [
+ dev = [
+     { name = "hatchling", specifier = "==1.33.0" },
+     { name = "import-linter", specifier = "==2.16" },
++    { name = "mypy", specifier = "==2.4.1" },
+     { name = "pytest", specifier = "==9.2.0" },
+     { name = "pytest-cov", specifier = "==7.1.0" },
++    { name = "ruff", specifier = "==0.17.4" },
++    { name = "types-jsonschema", specifier = "==4.26.0.20261006" },
++    { name = "types-pyyaml", specifier = "==6.0.12.20261111" },
++]
++
++[[package]]
++name = "librt"
++version = "0.16.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/04/f5/9dc696772d241814bacac7880bac32f2930b5a6ebc1f85317b83161a011c/librt-0.16.0.tar.gz", hash = "sha256:ac38d6d8d66bf3d744148dbbc0b8e193e195a51e364ed55e224631f5721891fc", size = 219839 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/ad/76/bbdaeb87b7c47b5c7343e90222b9bfa4e4a8a83f647e02933ad0129225b1/librt-0.16.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:fe52bf4641069e7978a14253b036cb9002def1926317e710f2e249f8a8c47742", size = 151028 },
++    { url = "https://files.pythonhosted.org/packages/fd/0c/ab8ed3dab0085931aec4a792c7eaac8dc6c5ff4691fda3a5360d9d8a9cd2/librt-0.16.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:5bcc2c4726ced915b00de0c9856a4eeabfb3fddb93e10e0b8f735b7709358b6d", size = 155283 },
++    { url = "https://files.pythonhosted.org/packages/eb/36/494e79d460c80c1f030661e8287c9eca5e1ad652dc2b2180b6cd42abce0a/librt-0.16.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:ff7baa55f8e7c69851419e50a666015d02a74198716fd45c0125a2112e0a389f", size = 503185 },
++    { url = "https://files.pythonhosted.org/packages/9b/34/a8464038dd9db6e4381fa2b6eb73dc9a50888d77102c4c139304ac35cddc/librt-0.16.0-cp312-cp312-manylinux2014_i686.manylinux_2_17_i686.manylinux_2_28_i686.whl", hash = "sha256:b95d5d92ab83d39e760a52091bb1baba664f3a2351e39b1e16801e5747c2f0e9", size = 496738 },
++    { url = "https://files.pythonhosted.org/packages/6a/53/e0e5e334ef0c6ed27039d323819368b9ef6712be87d55ee2bf9799398afd/librt-0.16.0-cp312-cp312-manylinux2014_ppc64le.manylinux_2_17_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:b6d085d70bce51d43c5c7c36d63490770180d8779e71c49305c87b4213918de7", size = 513818 },
++    { url = "https://files.pythonhosted.org/packages/ad/f7/7ce72cbf19d0addd05090b339152fd0548a02562c2866a603e6e3b3da2df/librt-0.16.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:36e53948e99bbe3ffea257124cfcae1cfb01831555c9a9c903c9f9a72db7fd07", size = 531952 },
++    { url = "https://files.pythonhosted.org/packages/83/22/0b1bcb6a8e723c8b4fd60dfc8ae8ec6461c54073fbc8685efeb8d900d407/librt-0.16.0-cp312-cp312-manylinux_2_34_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:54d11f726aae9df5a6ffbbf0a03a52449bbac84a53ef03669cb41cdfd4ae41bf", size = 524465 },
++    { url = "https://files.pythonhosted.org/packages/64/2e/e9c23b8b9df1813da1be205deca9606beb7ddd033972246cd426d05374a0/librt-0.16.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:4323193ac0cd025f85af531df8ba91bf24d1973b401697347a6282e8fd3fcf5e", size = 543191 },
++    { url = "https://files.pythonhosted.org/packages/bc/e5/6a8b21b342c03ed7e230fa3afbfd2edc58e6e87ef1f0d11fa2b9a748c252/librt-0.16.0-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:e42f8e098b9c5396fefa05fb1cc7e33b0e08fc51da106b5de4a45fd22aac6743", size = 546979 },
++    { url = "https://files.pythonhosted.org/packages/84/9e/b5129023eced1be01e01c22757f53be551d463b1bb7264f787927404c1d6/librt-0.16.0-cp312-cp312-musllinux_1_2_ppc64le.whl", hash = "sha256:39ec1d5a14e37baf1450a6cabf03fe552340808bf1ad9d71824ab90117716459", size = 555317 },
++    { url = "https://files.pythonhosted.org/packages/71/89/28bba5938c725fe91f06bf93f7fa6c6b150229df53a87b454b0d5c2a796e/librt-0.16.0-cp312-cp312-musllinux_1_2_riscv64.whl", hash = "sha256:d1aabe3925cbb4a08d15b7b20ba4011b53019da0c4173a25155139b7b1baed65", size = 535846 },
++    { url = "https://files.pythonhosted.org/packages/22/92/63773026614f888c5d4e370e395ce42ca604b89f70b3acdfedbf94851b80/librt-0.16.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:300c3ffdc459f4a779a8411ecb188e3ac0b1ff3a3a7b099642555dedae06c69b", size = 573700 },
++    { url = "https://files.pythonhosted.org/packages/66/8f/347d4677eefb57cd9f8e01d95a1dcee9a91b4e44e664173c32ff6f3752e5/librt-0.16.0-cp312-cp312-win32.whl", hash = "sha256:c17194318e4c0c0348b36f36c2ec7534436fe0a4c15582403162a4f08c80797a", size = 106158 },
++    { url = "https://files.pythonhosted.org/packages/f0/2c/5193dc81127cd5ddfad031391b046bf32dda219b38463ab872407ca30646/librt-0.16.0-cp312-cp312-win_amd64.whl", hash = "sha256:25a58a19ea8d83b68209f04912df765e9260635ef77646542ed4b4abe6bc7940", size = 126176 },
++    { url = "https://files.pythonhosted.org/packages/ff/3d/9668a400c8dd81d162eba38b33fa49fa6205f1a64493570a13fbb815c3ee/librt-0.16.0-cp312-cp312-win_arm64.whl", hash = "sha256:f7be7cf555bc30ec12622e9447299cc4a9b8ff307548b634794353db0c2065dc", size = 116572 },
+ ]
+ 
+ [[package]]
+@@ -208,6 +336,37 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979 },
+ ]
+ 
++[[package]]
++name = "mypy"
++version = "2.4.1"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "ast-serialize" },
++    { name = "librt", marker = "platform_python_implementation != 'PyPy'" },
++    { name = "mypy-extensions" },
++    { name = "pathspec" },
++    { name = "typing-extensions" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/4a/3c/78ecece71ee4b5445389a4ccd11627cfb9c69e4de554d11060171f376305/mypy-2.4.1.tar.gz", hash = "sha256:63b590965691e540a335fa74dadf31a7069142f6b72e234689bbd244edf55623", size = 4066728 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/c0/1a/0be9dc6af5e0e04128f18a5e36b4ca44bfb0085857d37aa6a7de1ac2b0cb/mypy-2.4.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:d63737426a048a27705a4eedb828669f4bc0873612a1b46b0b9fe892b2ebaaaf", size = 14381321 },
++    { url = "https://files.pythonhosted.org/packages/0d/a6/7907e36711a8a8c703f961f076fab61793383694140bd1fd87589f3f68d4/mypy-2.4.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7344869cad05f073b8cae2826774fa0161e3eb2f5c685b76813574008d77d750", size = 14466373 },
++    { url = "https://files.pythonhosted.org/packages/5d/b8/7313212b29de570c25c9859d7c8e4ef2251a6d34338a1e20031d94297721/mypy-2.4.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a20ff6cd2af7a670c64f089bfa5fbcebe8ff3bf896c5e6ac7c9862c7960e4494", size = 15553666 },
++    { url = "https://files.pythonhosted.org/packages/23/8f/92966b6082ff49da9142e1e527eb9af4359a9a61632a1cfc313da96b37fe/mypy-2.4.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:9ed1195502cca32be5ef756b1693477f4991db2f2e34eaa90cc4ad6bea4f9531", size = 15802641 },
++    { url = "https://files.pythonhosted.org/packages/b6/b4/874f6fd54b005020ad63e2cf7a59b178d16a771d478849b29b842cb0cf14/mypy-2.4.1-cp312-cp312-win_amd64.whl", hash = "sha256:4c194c5d878130fca1ae662dfb1feb6274afbab0b40032c80147377e0ea803d5", size = 11383067 },
++    { url = "https://files.pythonhosted.org/packages/b0/41/5ae8e6528c2faa96e4a921a999d2c7ac7c565bee184b4282bf62ffa76b5d/mypy-2.4.1-cp312-cp312-win_arm64.whl", hash = "sha256:71eda06e5bae51976ce869fda429159c9cec678bd02f25bb197f0265c8f991be", size = 10946882 },
++    { url = "https://files.pythonhosted.org/packages/21/5c/6e8010f8f2c4ad817364592d4b3883633417269b913fc9d5174fdeb7e565/mypy-2.4.1-py3-none-any.whl", hash = "sha256:1784648d6ec8c2b5465e3f26241b845a0b3cb4e56c993c64abe16989e7698999", size = 2801286 },
++]
++
++[[package]]
++name = "mypy-extensions"
++version = "1.2.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/d0/6f/43edf3be2748d0e40974a5ee046a8bb4c9961a4bdd3e7d5c6dcbf32d1af6/mypy_extensions-1.2.0.tar.gz", hash = "sha256:c6e275a07f1c2fc096b62940452d0eaa3f3af7de45d704787866240a7c6d5a51", size = 6566 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/b5/99/7b1adac7e97ce7bbda34792dc6e9b2f5cc5cffd1875883f78a818b2a2687/mypy_extensions-1.2.0-py3-none-any.whl", hash = "sha256:993e7a20aa5671eb41a7132cf555af30062da99729601601b9a8382b11cae768", size = 5114 },
++]
++
+ [[package]]
+ name = "packaging"
+ version = "26.3"
+@@ -235,6 +394,54 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/40/9e/2b38731e0fc536806f16490e1a12d7f0dc2a1235aa8cc07bcc75416a7daa/pluggy-1.7.0-py3-none-any.whl", hash = "sha256:7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec", size = 27082 },
+ ]
+ 
++[[package]]
++name = "pydantic"
++version = "2.14.3"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "annotated-types" },
++    { name = "pydantic-core" },
++    { name = "typing-extensions" },
++    { name = "typing-inspection" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/b4/fc/1203d011145c98ddce3cd2f505bb54375ef8d43223053df6bfcf3c746f46/pydantic-2.14.3.tar.gz", hash = "sha256:1054f237f4d4733e5a30e1e2333bd33a2004ab9ab1510bd053a9a31bb48e232d", size = 925636 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/72/b8/b864503789ef5c58597d2a7b4adbee62c26440ab1e682581fc6838df8947/pydantic-2.14.3-py3-none-any.whl", hash = "sha256:3f7b347782ab7e4cf4c798496ae3a82787d9f21ec12676a9c564355eeef8daa8", size = 494071 },
++]
++
++[[package]]
++name = "pydantic-core"
++version = "2.50.4"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "typing-extensions" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/9c/0f/34f9ce4ba701dd0b815033ef94d99b56f66200e578ee6052aa3ac26f064e/pydantic_core-2.50.4.tar.gz", hash = "sha256:aead3b74b68396bf0feab5d57e050b730ded7df55853c1e048a87e00aaf033c6", size = 522249 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/10/bf/d1f6b81709538f831ebe1c42f50fb89db3dfda06f9e9b1ea24e90fc69209/pydantic_core-2.50.4-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:32a991aebd165f227b7c7c60bb9d66c2c7de9c24308552da264c9938fde0f8d6", size = 2231444 },
++    { url = "https://files.pythonhosted.org/packages/c1/39/6618e541658d5a687a8d4962fc304350073a8f322bc4c62e8ed4c2d514d6/pydantic_core-2.50.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:1e20cbde2b6deb33a51d08cd168454dd9044ec7d4474056f4d98d63f51578783", size = 2108048 },
++    { url = "https://files.pythonhosted.org/packages/d9/54/1c941fffa4e14bfc9ab0cd4977075f0e03201447856130d08a33cd45e47b/pydantic_core-2.50.4-cp312-cp312-manylinux1_i686.manylinux_2_5_i686.whl", hash = "sha256:8cceae48ae7f94990c2f4e36291e9ec9868735e8b0f19e4489a17b0422338466", size = 2256866 },
++    { url = "https://files.pythonhosted.org/packages/61/a0/8028ef3e014be522ce43060aeac82a5be2288215e660866f5e6260acc123/pydantic_core-2.50.4-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:16902a147b3da4840612164a5e67947104d63e978f7a57c395877a5e26690b9c", size = 2125682 },
++    { url = "https://files.pythonhosted.org/packages/c3/f2/b98bb73b1734ec4e42e786a766abc24f3c89620a0ddbaf8aa14e4b4c628c/pydantic_core-2.50.4-cp312-cp312-manylinux2014_armv7l.manylinux_2_17_armv7l.whl", hash = "sha256:d6e3485a5e5c01fb5339c1ee3d4b9e21e2135a2a9d44caafb71acd994487ee7c", size = 2197108 },
++    { url = "https://files.pythonhosted.org/packages/f1/d1/7a7142786781400143e8806633fe5b65e2d407c311041fc9494490f05b18/pydantic_core-2.50.4-cp312-cp312-manylinux2014_ppc64le.manylinux_2_17_ppc64le.whl", hash = "sha256:629eae995185540406e3635df5d5cf1d44f19ea240840b835d3f44541ff694d8", size = 2380521 },
++    { url = "https://files.pythonhosted.org/packages/b5/34/cf710ca48d4498b04a3ea605d45892675dc2b14a94a25121a8d03f56d3e9/pydantic_core-2.50.4-cp312-cp312-manylinux2014_s390x.manylinux_2_17_s390x.whl", hash = "sha256:41b2cd8b29dbb5a4c9828a70f50d1abfc92011115c813213d3a91205c6f731b3", size = 2457436 },
++    { url = "https://files.pythonhosted.org/packages/91/23/e0c6e3cd09a0ac809953fea698c816b9f03bf0b35b6820c9553e4f5d85a8/pydantic_core-2.50.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c81d98e27d9d9261909dcccab1ba5d6ea1c98b0bb9470e368604614fd1d36ddd", size = 2261727 },
++    { url = "https://files.pythonhosted.org/packages/f9/00/292a0ed96d5d2d6edb49468ef481336e5b7e54f13435d73b7c912c891c23/pydantic_core-2.50.4-cp312-cp312-manylinux_2_31_riscv64.whl", hash = "sha256:ca83a32b2b41653d89f09a3d22b770bca96da72273bef8f7a68136bdd1e8b823", size = 2262071 },
++    { url = "https://files.pythonhosted.org/packages/f8/36/d4690faf8c082eacf7754e52ab6bebe1bc73b167272e28699c00480ee908/pydantic_core-2.50.4-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:817953730e4a73a09008b010c4a42396cefe799616a22df2ac21d3927b3080cf", size = 2298931 },
++    { url = "https://files.pythonhosted.org/packages/21/17/b180af6d17cf6c8e0d3d2661fc501a4a40959744ca4947d6ad0db81b1416/pydantic_core-2.50.4-cp312-cp312-musllinux_1_1_armv7l.whl", hash = "sha256:664e74848c2f5fc27db8505fe24e1ecd3ac669412913bf73d176916f86cc08e2", size = 2474285 },
++    { url = "https://files.pythonhosted.org/packages/6e/bb/7e44d4ac6e1292f1859384c688713045bdf5448e0635c49c003d2be3bb6c/pydantic_core-2.50.4-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:219114f8dcdcbe4720d82ef016b1287ce5a0a67d7c69ca61524eb72e82aac344", size = 2498172 },
++    { url = "https://files.pythonhosted.org/packages/d8/84/5101f35294579c4bef7dc32fd4f097d91eedac2e195894266bdabc1e6dfd/pydantic_core-2.50.4-cp312-cp312-win32.whl", hash = "sha256:67f7cc397e1d5556a801d1cba74de0d27d827eb242e6c036c0ca273c745414f1", size = 2119592 },
++    { url = "https://files.pythonhosted.org/packages/82/88/d438a8fcf3738e9ff2670f724047ca3893ec899bcd5cdfc077a2aab133c6/pydantic_core-2.50.4-cp312-cp312-win_amd64.whl", hash = "sha256:ea2f61b0bc12f3592288503961b764579dea0658852d96a0b3d823614d808821", size = 2264064 },
++    { url = "https://files.pythonhosted.org/packages/77/d4/4a0c73dc3ef9e50b122b8c3527afcded15a44838f1c9668d2d4b72cc09f0/pydantic_core-2.50.4-cp312-cp312-win_arm64.whl", hash = "sha256:32d6dda86383645ec428ea64dfc277036f5cbc60a72238eab28b91a3fdb9a113", size = 2167792 },
++    { url = "https://files.pythonhosted.org/packages/9a/18/2f6a25e9104d5af713d16671711927601da1f0db74e785be67bd590385c9/pydantic_core-2.50.4-graalpy312-graalpy250_312_native-macosx_10_12_x86_64.whl", hash = "sha256:c04e9d920e2674f54651fd260a15c5d2843526c73d5242ee4311325ddc9573b3", size = 2212591 },
++    { url = "https://files.pythonhosted.org/packages/4c/1b/ba8b721af10a7659e7fbbef320ff8eb55462557a72607858af5a9bd22cb1/pydantic_core-2.50.4-graalpy312-graalpy250_312_native-macosx_11_0_arm64.whl", hash = "sha256:5bc1811ef2b4d4ba63e8e452f6e332b6374bd1d2cbbfdf66826c8cb1f71dd10d", size = 2048167 },
++    { url = "https://files.pythonhosted.org/packages/48/42/3f8638e7d90bdd9a7c7f3e5084723af59e7f43f15a292e242d35624073ce/pydantic_core-2.50.4-graalpy312-graalpy250_312_native-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:0b059a7968b1911be5a2d9a8234827ab0bef9d1e465d4b42da525894143550e8", size = 2119548 },
++    { url = "https://files.pythonhosted.org/packages/e0/8d/4bfbacaf191f7939893d165e18eb301731fa3366c59a6e57336c4f168fbd/pydantic_core-2.50.4-graalpy312-graalpy250_312_native-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:bee28aab5a580eec673f7b68dfa8dece3dd37bd207ef8d22fafe23a8e9837296", size = 2279952 },
++    { url = "https://files.pythonhosted.org/packages/9e/3a/d405a50e02ea81cd95e93fc97f43d351eeaa1707c28aa6fb58a9f1c1efa9/pydantic_core-2.50.4-graalpy313-graalpy253_313_native-macosx_11_0_arm64.whl", hash = "sha256:71e03d2ea1a221d020cfc5b6cc8bbbedef23a06704c70fcf4d0afb42965b22d1", size = 2049324 },
++    { url = "https://files.pythonhosted.org/packages/8f/3b/03e7992115e17cae4131ecd71aadb8fd5e4a04cc2aead72c3c27e9b453d1/pydantic_core-2.50.4-graalpy313-graalpy253_313_native-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:09450778e3ab58d3f565899fcfbf6c82926e31af29e28e799d1d50941316e0cb", size = 2119802 },
++    { url = "https://files.pythonhosted.org/packages/e3/d5/b76fc647e473377ca6e693c21549ee3a4a7677e4962c28ae4659337c5114/pydantic_core-2.50.4-graalpy313-graalpy253_313_native-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:4eb15be588407148ef5937dc8d9256a71f6b115e6cddadb7aa20b6ee384680dc", size = 2280639 },
++]
++
+ [[package]]
+ name = "pygments"
+ version = "2.21.0"
+@@ -274,6 +481,38 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/9d/7a/d968e294073affff457b041c2be9868a40c1c71f4a35fcc1e45e5493067b/pytest_cov-7.1.0-py3-none-any.whl", hash = "sha256:a0461110b7865f9a271aa1b51e516c9a95de9d696734a2f71e3e78f46e1d4678", size = 22876 },
+ ]
+ 
++[[package]]
++name = "pyyaml"
++version = "6.0.3"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/05/8e/961c0007c59b8dd7729d542c61a4d537767a59645b82a0b521206e1e25c2/pyyaml-6.0.3.tar.gz", hash = "sha256:d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f", size = 130960 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/d1/33/422b98d2195232ca1826284a76852ad5a86fe23e31b009c9886b2d0fb8b2/pyyaml-6.0.3-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:7f047e29dcae44602496db43be01ad42fc6f1cc0d8cd6c83d342306c32270196", size = 182063 },
++    { url = "https://files.pythonhosted.org/packages/89/a0/6cf41a19a1f2f3feab0e9c0b74134aa2ce6849093d5517a0c550fe37a648/pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0", size = 173973 },
++    { url = "https://files.pythonhosted.org/packages/ed/23/7a778b6bd0b9a8039df8b1b1d80e2e2ad78aa04171592c8a5c43a56a6af4/pyyaml-6.0.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9149cad251584d5fb4981be1ecde53a1ca46c891a79788c0df828d2f166bda28", size = 775116 },
++    { url = "https://files.pythonhosted.org/packages/65/30/d7353c338e12baef4ecc1b09e877c1970bd3382789c159b4f89d6a70dc09/pyyaml-6.0.3-cp312-cp312-manylinux2014_s390x.manylinux_2_17_s390x.manylinux_2_28_s390x.whl", hash = "sha256:5fdec68f91a0c6739b380c83b951e2c72ac0197ace422360e6d5a959d8d97b2c", size = 844011 },
++    { url = "https://files.pythonhosted.org/packages/8b/9d/b3589d3877982d4f2329302ef98a8026e7f4443c765c46cfecc8858c6b4b/pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc", size = 807870 },
++    { url = "https://files.pythonhosted.org/packages/05/c0/b3be26a015601b822b97d9149ff8cb5ead58c66f981e04fedf4e762f4bd4/pyyaml-6.0.3-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:8dc52c23056b9ddd46818a57b78404882310fb473d63f17b07d5c40421e47f8e", size = 761089 },
++    { url = "https://files.pythonhosted.org/packages/be/8e/98435a21d1d4b46590d5459a22d88128103f8da4c2d4cb8f14f2a96504e1/pyyaml-6.0.3-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:41715c910c881bc081f1e8872880d3c650acf13dfa8214bad49ed4cede7c34ea", size = 790181 },
++    { url = "https://files.pythonhosted.org/packages/74/93/7baea19427dcfbe1e5a372d81473250b379f04b1bd3c4c5ff825e2327202/pyyaml-6.0.3-cp312-cp312-win32.whl", hash = "sha256:96b533f0e99f6579b3d4d4995707cf36df9100d67e0c8303a0c55b27b5f99bc5", size = 137658 },
++    { url = "https://files.pythonhosted.org/packages/86/bf/899e81e4cce32febab4fb42bb97dcdf66bc135272882d1987881a4b519e9/pyyaml-6.0.3-cp312-cp312-win_amd64.whl", hash = "sha256:5fcd34e47f6e0b794d17de1b4ff496c00986e1c83f7ab2fb8fcfe9616ff7477b", size = 154003 },
++    { url = "https://files.pythonhosted.org/packages/1a/08/67bd04656199bbb51dbed1439b7f27601dfb576fb864099c7ef0c3e55531/pyyaml-6.0.3-cp312-cp312-win_arm64.whl", hash = "sha256:64386e5e707d03a7e172c0701abfb7e10f0fb753ee1d773128192742712a98fd", size = 140344 },
++]
++
++[[package]]
++name = "referencing"
++version = "0.37.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "attrs" },
++    { name = "rpds-py" },
++    { name = "typing-extensions" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/22/f5/df4e9027acead3ecc63e50fe1e36aca1523e1719559c499951bb4b53188f/referencing-0.37.0.tar.gz", hash = "sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8", size = 78036 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl", hash = "sha256:381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231", size = 26766 },
++]
++
+ [[package]]
+ name = "rich"
+ version = "15.0.0"
+@@ -287,6 +526,66 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl", hash = "sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb", size = 310654 },
+ ]
+ 
++[[package]]
++name = "rpds-py"
++version = "2026.9.1"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/42/68/3bd46b8a5e01d3c2ebdf9c5e9497912e3fe0cde02bac21a7130ca866e403/rpds_py-2026.9.1.tar.gz", hash = "sha256:4793ef7f78268b124b73fa933440f01d258bbae01de9fa53e9080c9ab0425a12", size = 63948 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/5d/34/a828586ea3329fbb50895b50e9cf98ca3d924a9f41a0b26d443bff1b3794/rpds_py-2026.9.1-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:50906f5aea24b5a865cbd0a589698288631d9f3a54c3a937c83aefa95a0d14af", size = 346822 },
++    { url = "https://files.pythonhosted.org/packages/90/81/ac6a0d064982251856ce009c9e1dd51a34110b3c055aa7d1aad18b4899a3/rpds_py-2026.9.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:e21c1429e205828ea886a2293a4a2c8e01f4c25d9893ca330e97a6cf73f52e7b", size = 341380 },
++    { url = "https://files.pythonhosted.org/packages/42/ff/bf7d54f362748fd6a49277b9d6531c394074110fedf50ad791ec59133fbb/rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2693b2728bbcc48d09a981a356954b0c47c53ff25b545856f28a889ea619f69a", size = 373053 },
++    { url = "https://files.pythonhosted.org/packages/60/de/74b0ccdbbd28687b9b5fdb34c1cabed88352182facaced9d6f5486b8b9ed/rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:8601470267d938bcb7f3ab1a336100af51a4fd5b6ed030ef52461bb3ef5e7e07", size = 377742 },
++    { url = "https://files.pythonhosted.org/packages/c2/6d/b979775a3057b2a5c26d75ecbff60a20a24ef081db6dd76836fca3f20247/rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:3890a6aa36e6baa53d5258a2a25d3ef8b37ad165a6ab27a892d7c3e3a432cd69", size = 487289 },
++    { url = "https://files.pythonhosted.org/packages/1d/5d/7c34734ce3ece943d9d6ee0122a74a21bbc75b47acb5b7053c83f6efb1ed/rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:6b5b393eda5ea42cca1c1a6665f2a4882b4fd5d1777e41ce0545a107fb008c9d", size = 390710 },
++    { url = "https://files.pythonhosted.org/packages/1d/6d/b26eb1e75395925b3a142ed351cbed2ec8212f5c9d937aee3df32c701baa/rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:addeda51556dac7c1a2f14cda62db8b621cd12afba3091d03a96c72932387eab", size = 371261 },
++    { url = "https://files.pythonhosted.org/packages/7c/98/b2fdfe10301a9e27af21e634337fbba7baac0bc17fe44619a17c26bba2cb/rpds_py-2026.9.1-cp312-cp312-manylinux_2_31_riscv64.whl", hash = "sha256:d9edf30457d74eebfd76b045535e36f1cd89062566a128a0db2145ca042d787e", size = 376075 },
++    { url = "https://files.pythonhosted.org/packages/c5/b1/c4b8d954e49c3c69cf8063c0c9e0919c99f3d2cecc46311606a1cbe835dc/rpds_py-2026.9.1-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:815d26356930846a40c7bc1366e7b1b0320ab8a063e66c11298a208bed0fd237", size = 399358 },
++    { url = "https://files.pythonhosted.org/packages/b3/59/9559a7293c97dff0cbb293efffbd36644103883ecc27741af8ef90c84ca8/rpds_py-2026.9.1-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:3b5a6f40f0a1486b4b36c888123afc67acdbd9f33235927acf5ff295429a0ba3", size = 550267 },
++    { url = "https://files.pythonhosted.org/packages/6c/9d/6dc60e49511de4c8b00e74f9c1d43aed4d27f712cdb1ade92f2c199cbf64/rpds_py-2026.9.1-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:b5b8b0753718d258fd454283fbd57e14545d3b40583fa672e27cb4f987626bcc", size = 614018 },
++    { url = "https://files.pythonhosted.org/packages/fb/bc/92a4ecf27301b886232a413360f6b348a81d55ffef654f2ebda5970ebc3d/rpds_py-2026.9.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:46d80bc76b51a6c24f9944368c28d38b8bcbcea1da4f2f8d3ebc31a67e8c6ec6", size = 578509 },
++    { url = "https://files.pythonhosted.org/packages/08/53/efb97f2e6589b7ab8394385a73870e0b2ab2a195281c117b21fd6d7d4855/rpds_py-2026.9.1-cp312-cp312-win32.whl", hash = "sha256:befc2d6a953e563f8a7bfd87a42c22ebf8a3e980dcb7b6a4d17b70b0e914e8a3", size = 205401 },
++    { url = "https://files.pythonhosted.org/packages/1c/84/1700cc748d0eaa747486e4e82882d2575224e6e9a3148df583058850c629/rpds_py-2026.9.1-cp312-cp312-win_amd64.whl", hash = "sha256:5ce8943f79c2210f7abcc28e86367b03b28d95027fd01c46d2472373ae70c86f", size = 222923 },
++    { url = "https://files.pythonhosted.org/packages/c3/89/0302215373c2f8b4408b0fdfee955368cc378a98ff59508d47a7e0dc2dbf/rpds_py-2026.9.1-cp312-cp312-win_arm64.whl", hash = "sha256:501909f2e4a1e2dee528ef766fe3c469060ebc17e54a8383d404ba07a81a6f02", size = 218415 },
++    { url = "https://files.pythonhosted.org/packages/a3/90/a9ba81408369d34c1aca73319c15adc91ed45c1d21e9e8ee4832ffb7fe0b/rpds_py-2026.9.1-pp312-pypy312_pp73-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6cdc537c8633d7fd92a82e2e0d2ab74320a3f63d5e59fb9cf08711e08fe151c4", size = 381109 },
++    { url = "https://files.pythonhosted.org/packages/b3/44/5192a0bed94cec86bd2a5e1cc5a1bb8f7eec3aec907eacd2deb13e87e326/rpds_py-2026.9.1-pp312-pypy312_pp73-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:10e208f2425d973938afcd56e28a7c4be32e27b6a60b5d381f49fb9d8acf9759", size = 388222 },
++    { url = "https://files.pythonhosted.org/packages/92/cd/5356549711448f18b52f7a11ffbe90f1228774996fbf3c6cd1b18d22abaf/rpds_py-2026.9.1-pp312-pypy312_pp73-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:6c0dbbcc19735fe5f8b0a54c07659d154a9e69f47e15d0a6ab7299215daf62cb", size = 500384 },
++    { url = "https://files.pythonhosted.org/packages/7a/88/ddda9d28adfe33119c75b2e733d4ba7e326f41d7e1b1093951771768ca48/rpds_py-2026.9.1-pp312-pypy312_pp73-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:684fd492fff4fead00587544e059be2bbcb6f93454f21fa2a91b66fc7508be82", size = 401661 },
++    { url = "https://files.pythonhosted.org/packages/32/c3/bb59ba16a6b4a57995d15b8c04c00f28df3b938c4dcdde48fbe0f73edb0c/rpds_py-2026.9.1-pp312-pypy312_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d1028417bb44037eb3069c1009bd7b7277212876cda22fbe565b0bca9fab6d2c", size = 380748 },
++    { url = "https://files.pythonhosted.org/packages/f5/b8/0580faa1c5a32ddc160130dd7ae54d2d007272a89a40a6b5db3e50f9f585/rpds_py-2026.9.1-pp312-pypy312_pp73-manylinux_2_31_riscv64.whl", hash = "sha256:492e5e428cbe126221611f47e068f01660352feec4ad18bc0f5ea9b2ae88fb14", size = 385731 },
++    { url = "https://files.pythonhosted.org/packages/bf/70/f73564642bbe3322c7eeef2c2f258cf040b71c41a430b532e59d04a1b838/rpds_py-2026.9.1-pp312-pypy312_pp73-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:88b5268892fde430d5531f95bc560b6efbbd67c929662c586afd729a96e7461c", size = 412131 },
++    { url = "https://files.pythonhosted.org/packages/8c/5d/17fff2e1f8f68721a2afb5cb48f7e442c751bb6b4883157c5abaf618cd08/rpds_py-2026.9.1-pp312-pypy312_pp73-musllinux_1_2_aarch64.whl", hash = "sha256:01445c8d194aa032a08e944f16567672da1c62dbdbefd8b6d0693032e290cf68", size = 558193 },
++    { url = "https://files.pythonhosted.org/packages/2a/d0/869ab6fb08531f97aae4a780b4d61b4190d8aef48fe054ee28bcf7114466/rpds_py-2026.9.1-pp312-pypy312_pp73-musllinux_1_2_i686.whl", hash = "sha256:eef6a03b0b6d08d0835ccfa8ec8d1bc70525e3801387567137b50c557695e6da", size = 622448 },
++    { url = "https://files.pythonhosted.org/packages/ba/a5/9672e532fe02cd3b92c78cfd8743abca939d96853006c63835009a1ecb6f/rpds_py-2026.9.1-pp312-pypy312_pp73-musllinux_1_2_x86_64.whl", hash = "sha256:6b9bf3135b4ad5981df9a73d71a35272d650a2985ae9c2746357b24d59de2448", size = 591126 },
++    { url = "https://files.pythonhosted.org/packages/80/ef/3a9f8e4279c7920af561deed4cb7ebebed2794a8f608cf404d5eef14a105/rpds_py-2026.9.1-pp312-pypy312_pp80-macosx_10_12_x86_64.whl", hash = "sha256:56c6952a9b15047466d0c2347c446a761d4527f89976156341e68f0ce5cc08b0", size = 357108 },
++    { url = "https://files.pythonhosted.org/packages/b7/55/4b2fa381a583760aea5c92841e4e928a358e1c6511b129219e9c2826a226/rpds_py-2026.9.1-pp312-pypy312_pp80-macosx_11_0_arm64.whl", hash = "sha256:b242c27c8f836305a4a72df9cdd564386ac57b807bd252a063223331c9316b37", size = 346877 },
++]
++
++[[package]]
++name = "ruff"
++version = "0.17.4"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/84/0e/3d154514b5bad104f7e1c13169c2d09aa9959fccdc06eb47610ccdfa83ed/ruff-0.17.4.tar.gz", hash = "sha256:f32d178b50e826e00f6c6c1be3f56333068acb9b67fe167143527fa9b81e890d", size = 5357750 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/e0/61/c83c78bbb6108f6c6270a106cf12b54175f4f42da088b9bb880f18e31289/ruff-0.17.4-py3-none-linux_armv6l.whl", hash = "sha256:2b08c4ff98dc234f4a3871a3105353b922fa875ea1073ca31001eb8c06bb4d89", size = 10252195 },
++    { url = "https://files.pythonhosted.org/packages/0a/12/dd158708378866e8b53e145a465dbc51a7cccb9fa197a74d67eaedde7234/ruff-0.17.4-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:13e781c3c5f663e7fba737eaaeb70dd943dd55171daf316afb25cd5268cfe0c7", size = 10266044 },
++    { url = "https://files.pythonhosted.org/packages/28/32/89a94a8eb11fd505a381ae6f04e190d038d9958695209dc1786ce5cfcda3/ruff-0.17.4-py3-none-macosx_11_0_arm64.whl", hash = "sha256:7ed2f416349944f908f9574215994602242b0836844eba48eec61473033afca0", size = 9432227 },
++    { url = "https://files.pythonhosted.org/packages/58/de/a392dc38b215798ae72e639d228b7f6c02d826a95d1c0ad7c4c0ee49ef5b/ruff-0.17.4-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:8ea6e0017c785f7282092b11e46338e4ebed1b9e575ebf2e55a8a1eda968241a", size = 10136900 },
++    { url = "https://files.pythonhosted.org/packages/b7/8f/a880f60f42005f6ffdf58f77af34c7ee327000b5607f48a2f6a69d8b242c/ruff-0.17.4-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:7e061dcc0933c7031a616ac8d66ac540309b2aa21ab558101a8f53e9ac7a1185", size = 10051245 },
++    { url = "https://files.pythonhosted.org/packages/09/55/98844264108af7d5ec27ca3a9cd5a989094ca657a14599c4b69a537a0e9a/ruff-0.17.4-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:f99e95a1515161138be3cbd1b06c06e739d8feb38ade35564556999fffc3686e", size = 10704341 },
++    { url = "https://files.pythonhosted.org/packages/28/a2/5edf97659c3ac7c73f978003bd314936f671037fdac6b978e9de3e4b2b65/ruff-0.17.4-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:5f28cf0dd37cb172fa5a8d2e92e6ada3a9dbd0609f094ed24039929eef0b7524", size = 11394465 },
++    { url = "https://files.pythonhosted.org/packages/f2/8f/51371ae856b2bef4d15a044a574695fbc0f6ae63aafa42a2a22428070fb6/ruff-0.17.4-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:6b21c771b296888e8a35c6f48555f4b44e4483f61675d6ed51810a5203469ce6", size = 10988262 },
++    { url = "https://files.pythonhosted.org/packages/af/1b/62874f14c7873f27c7887d2b1ea41de990e14ba9518801ffe8eacb5d51a6/ruff-0.17.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2cd025509b2e15721b426fc70fd946d71f43b3db3b08e946dfec2d696d911690", size = 10572829 },
++    { url = "https://files.pythonhosted.org/packages/98/30/860b9dae67432b16b88558a9cb2d3194825fa62838f8b9cc49f5d9022095/ruff-0.17.4-py3-none-manylinux_2_31_riscv64.whl", hash = "sha256:49b77f7b3921669466882a4881168801bdb06ec2cd83fb936049016cf5fdece1", size = 10617545 },
++    { url = "https://files.pythonhosted.org/packages/0f/08/781a4b41a1c83fd6e30fea610d6502a6f94e49cf94693fd37bdcbc6bfe11/ruff-0.17.4-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:e3b84eb74f260d1c2dbd236fd9d4c011d4fdd0a52bdf8aea57a10e3a1b71fca5", size = 10111955 },
++    { url = "https://files.pythonhosted.org/packages/3c/e9/94b1c7b677120f30839254518924f73a8157e9bcfa200edcd5796fecdb99/ruff-0.17.4-py3-none-musllinux_1_2_armv7l.whl", hash = "sha256:20e43d7a08e712e33067ba887e6574546c79bd4831596ce8f16803ac7ff9ad90", size = 10058355 },
++    { url = "https://files.pythonhosted.org/packages/27/5f/a825910b9f309336dc33cb8c0774126662c1d2f765699b3e0a1bd538d01f/ruff-0.17.4-py3-none-musllinux_1_2_i686.whl", hash = "sha256:0d1f4848fd2ec0499be4046db9b7dfcc952666885f00233cc7033515282556a8", size = 10415932 },
++    { url = "https://files.pythonhosted.org/packages/8b/b8/0796468423413ea4df1a6e2442ae26cf49b8f7dda0eecf246e0d5d0dde54/ruff-0.17.4-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:6007e7f3a0e55b0fbdb947af69cf24c21b4928df6be8ef3e767c69b5ccccf496", size = 10826033 },
++    { url = "https://files.pythonhosted.org/packages/b9/ab/d8e407669ffe5014429baf780c2df47e001968a6e4c17f615e2e7b13a9ba/ruff-0.17.4-py3-none-win32.whl", hash = "sha256:3971a78cba76298b284c8321e6d40d93045ed348bec5c369d85099efc97fb7cf", size = 9931993 },
++    { url = "https://files.pythonhosted.org/packages/bd/15/42af8a72d8946e3c9efd2bbf6641e462b6832783b0d043d63ef5b280ba7f/ruff-0.17.4-py3-none-win_amd64.whl", hash = "sha256:67c5a894fc054cf41f75f7afa24815de5a74329d97634126c2a1015740ff4e8c", size = 10292922 },
++    { url = "https://files.pythonhosted.org/packages/68/9e/f1dbffcfb8ff25dadbc21f87a8b73c3848abe4abada9d4b08ccef8bec40c/ruff-0.17.4-py3-none-win_arm64.whl", hash = "sha256:181ae38a9a8fb94925bf7d0794327b48d7fd7f4b50cfd84c0e999cc09ef8d131", size = 9889396 },
++]
++
+ [[package]]
+ name = "tomlkit"
+ version = "0.15.2"
+@@ -304,3 +603,45 @@ sdist = { url = "https://files.pythonhosted.org/packages/bf/93/af436dfaa845cab5d
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/30/81/0da8afb52a71d0a4f2bd3152357b1a441e393b286374802b9d3addab4ab5/trove_classifiers-2026.9.21.13-py3-none-any.whl", hash = "sha256:8b1ff4f9c191b1040b71c37f1e445ab99732911e3cd91de52838453a854d7a17", size = 14232 },
+ ]
++
++[[package]]
++name = "types-jsonschema"
++version = "4.26.0.20261006"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "referencing" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/29/d2/1f742605f5a6d39f993134885b8de41c98af606871d3ebddaf3e776bd1eb/types_jsonschema-4.26.0.20261006.tar.gz", hash = "sha256:3eb7db61b6819d40addfdaac7173e749071a7d4a9a4394f0c844598ec84b2500", size = 16843 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/8b/a0/4f2e3c0dc3d5cad958006f2e0307065cc8fe4fbf0393ff0b69d55ee9bbe5/types_jsonschema-4.26.0.20261006-py3-none-any.whl", hash = "sha256:29301f4e65e3928540cdf5e23ad716e38bb0c0b416a48dada213edd3d70206ec", size = 16113 },
++]
++
++[[package]]
++name = "types-pyyaml"
++version = "6.0.12.20261111"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/80/49/96041fdb54de08a5b47bcfcbb4881873b25bae367d1e4dec79d19dfeb84b/types_pyyaml-6.0.12.20261111.tar.gz", hash = "sha256:c511f563eaf820b948c4ff6f43fe0b9d48b227be442a69058d9f68f139cae1fb", size = 18970 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/54/ec/b23dd6911cd0e870e9396b48929ef7c92b58a551c3651d184bb573f371eb/types_pyyaml-6.0.12.20261111-py3-none-any.whl", hash = "sha256:b7e46cbc847dc235305e95e3e3570792d72e6ccf64bf9b831306f48da490322d", size = 21317 },
++]
++
++[[package]]
++name = "typing-extensions"
++version = "4.16.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/f6/cc/6253133b5bb138fc3306cebfbda2c520f545d36b5be2c7255cc528bb45d6/typing_extensions-4.16.0.tar.gz", hash = "sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5", size = 113555 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl", hash = "sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8", size = 45571 },
++]
++
++[[package]]
++name = "typing-inspection"
++version = "0.4.5"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "typing-extensions" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/ff/50/0195198eb1d75bab716bb0a813abea4cc394bfa17a92a189f021a34859af/typing_inspection-0.4.5.tar.gz", hash = "sha256:7f16c411e7930dc79596d42ab44672a3fe5f60eb34b781a1647e7872363120c7", size = 81194 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/de/0c/ea2544850a7c135e15033a5c7a8e7211136184b7ae63e2239d557c2b3019/typing_inspection-0.4.5-py3-none-any.whl", hash = "sha256:bc210535442b39e1bf2805e0c7a17dfd6a4ace760c84c7f7d16245d23a6b1c39", size = 14874 },
++]
