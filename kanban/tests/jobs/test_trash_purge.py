@@ -329,9 +329,9 @@ async def test_purge_issue_without_links_and_naive_datetime(
     )
     await api_env.seed.commit()
 
-    # Run trash purge with session target and commit_batches=True, and naive datetime
+    # Run trash purge with session target and naive datetime
     naive_now = datetime.now(UTC).replace(tzinfo=None)
-    rep = await run_trash_purge(api_env.seed, now=naive_now, commit_batches=True)
+    rep = await run_trash_purge(api_env.seed, now=naive_now)
     assert rep.issues_purged >= 1
     assert rep.links_purged == 0
 
@@ -352,3 +352,105 @@ async def test_purge_target_none_and_existing_sp(
     # 2. Second run on session where system:trash-purge SP already exists (line 129)
     rep2 = await run_trash_purge(api_env.seed, now=now)
     assert isinstance(rep2, PurgeReport)
+
+
+async def test_unrelated_flagged_link_survives_trash_purge(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test that an unrelated FLAGGED_INVALID link survives the purge and stays open (B1)."""
+    admin = await make_user("unrel_admin", workspace_role="WORKSPACE_ADMIN")
+    await make_project("UNREL", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = as_principal(admin)
+
+    # 1. Create two active issues with an active link between them
+    r1 = await client.post("/api/v1/projects/UNREL/issues", json={"summary": "Active 1"})
+    assert r1.status_code == 201
+    i1_id = uuid.UUID(r1.json()["id"])
+    i1_key = r1.json()["key"]
+
+    r2 = await client.post("/api/v1/projects/UNREL/issues", json={"summary": "Active 2"})
+    assert r2.status_code == 201
+    i2_id = uuid.UUID(r2.json()["id"])
+    i2_key = r2.json()["key"]
+
+    unrel_link_id = await _make_link(
+        api_env.seed,
+        api_env.workspace_id,
+        source_id=i1_id,
+        source_key=i1_key,
+        target_id=i2_id,
+        target_key=i2_key,
+        creator_id=admin.id,
+        link_type=LinkKind.BLOCKS,
+    )
+
+    # 2. Archive i1 with active uncompleted target i2
+    # Trigger automatically detects ARCHIVED_POLICY_VIOLATION and inserts an open audit row
+    await api_env.seed.execute(
+        text("UPDATE objects SET archived_at = now() WHERE id = :oid"),
+        {"oid": i1_id},
+    )
+    await api_env.seed.commit()
+
+    audit_row_init = (
+        await api_env.seed.execute(
+            text(
+                "SELECT id FROM invalid_object_link_audits "
+                "WHERE link_id = :lid AND purged_at IS NULL AND resolved_at IS NULL"
+            ),
+            {"lid": unrel_link_id},
+        )
+    ).first()
+    assert audit_row_init is not None
+    unrel_audit_id = audit_row_init[0]
+
+    # 3. Create an expired issue (35 days ago) with its own link
+    r3 = await client.post("/api/v1/projects/UNREL/issues", json={"summary": "Expired Issue"})
+    assert r3.status_code == 201
+    exp_id = uuid.UUID(r3.json()["id"])
+    exp_key = r3.json()["key"]
+
+    await _make_link(
+        api_env.seed,
+        api_env.workspace_id,
+        source_id=exp_id,
+        source_key=exp_key,
+        target_id=i1_id,
+        target_key=i1_key,
+        creator_id=admin.id,
+    )
+
+    t35 = datetime.now(UTC) - timedelta(days=35)
+    await api_env.seed.execute(
+        text("UPDATE objects SET deleted_at = :ts WHERE id = :oid"),
+        {"ts": t35, "oid": exp_id},
+    )
+    await api_env.seed.commit()
+
+    # 4. Run trash purge
+    now = datetime.now(UTC)
+    engine = api_env.seed.bind
+    assert isinstance(engine, AsyncEngine)
+    rep = await run_trash_purge(engine, now=now, batch_size=10)
+    assert rep.issues_purged >= 1
+    assert rep.links_purged >= 1
+
+    # 5. Verify the unrelated audit row survived and remains open (purged_at IS NULL)
+    audit_row = (
+        await api_env.seed.execute(
+            text("SELECT purged_at, resolved_at FROM invalid_object_link_audits WHERE id = :aid"),
+            {"aid": unrel_audit_id},
+        )
+    ).first()
+    assert audit_row is not None
+    assert audit_row[0] is None  # purged_at IS NULL
+    assert audit_row[1] is None  # resolved_at IS NULL
+
+    # 6. Verify the unrelated link still exists in object_links
+    link_row = (
+        await api_env.seed.execute(select(ObjectLink.id).where(ObjectLink.id == unrel_link_id))
+    ).first()
+    assert link_row is not None

@@ -70,7 +70,7 @@ def _extract_engine(
     raise TypeError(msg)
 
 
-async def _process_trash_purge_batch(  # noqa: PLR0915
+async def _process_trash_purge_batch(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     now: datetime,
     *,
@@ -162,44 +162,48 @@ async def _process_trash_purge_batch(  # noqa: PLR0915
         )
         await bind_rls_context(session, rls_ctx)
 
-        # 3. Count links touching each issue before purge
-        issue_link_counts: dict[uuid.UUID, int] = {}
-        for issue_id, _, _, _ in items:
-            c_res = await session.execute(
-                text(
-                    "SELECT count(*) FROM object_links WHERE source_id = :oid OR target_id = :oid"
-                ),
-                {"oid": issue_id},
-            )
-            issue_link_counts[issue_id] = int(c_res.scalar_one())
+        batch_issue_ids = [item[0] for item in items]
+        batch_issue_set = set(batch_issue_ids)
 
-        # 4. Run audit_object_links to detect invalid links
-        audit_res = (
-            await session.execute(
-                text("SELECT audit_id, link_id, reason FROM audit_object_links(:ws_id, :now)"),
-                {"ws_id": ws_id, "now": now},
-            )
-        ).all()
-        detected_audit_ids = [row[0] for row in audit_res if row[0] is not None]
-
-        # Also collect any open audit rows in this workspace
-        open_audits_res = (
-            (
-                await session.execute(
-                    text(
-                        "SELECT id FROM invalid_object_link_audits "
-                        "WHERE workspace_id = :ws_id AND purged_at IS NULL AND resolved_at IS NULL"
-                    ),
-                    {"ws_id": ws_id},
-                )
-            )
-            .scalars()
-            .all()
+        # 3. Run audit_object_links to detect invalid links across the workspace
+        await session.execute(
+            text("SELECT audit_id, link_id, reason FROM audit_object_links(:ws_id, :now)"),
+            {"ws_id": ws_id, "now": now},
         )
 
-        all_audits = sorted(set(detected_audit_ids + list(open_audits_res)))
+        # 4. Restrict purge strictly to open audits whose links touch the expired
+        # issue IDs in this batch (S12.3 / AGENTS invariant 5)
+        touching_audits_stmt = text(
+            "SELECT a.id, a.link_id, l.source_id, l.target_id "
+            "FROM invalid_object_link_audits a "
+            "JOIN object_links l ON l.id = a.link_id "
+            "WHERE a.workspace_id = :ws_id "
+            "  AND a.purged_at IS NULL "
+            "  AND a.resolved_at IS NULL "
+            "  AND (l.source_id = ANY(:issue_ids) OR l.target_id = ANY(:issue_ids))"
+        )
+        touching_audits_res = (
+            await session.execute(
+                touching_audits_stmt,
+                {"ws_id": ws_id, "issue_ids": batch_issue_ids},
+            )
+        ).all()
 
-        # 5. Call purge_invalid_object_links for all open audit ids
+        link_to_issues: dict[uuid.UUID, set[uuid.UUID]] = {}
+        target_audit_ids: set[uuid.UUID] = set()
+        for aud_id, lnk_id, src_id, tgt_id in touching_audits_res:
+            target_audit_ids.add(aud_id)
+            link_to_issues.setdefault(lnk_id, set())
+            if src_id in batch_issue_set:
+                link_to_issues[lnk_id].add(src_id)
+            if tgt_id in batch_issue_set:
+                link_to_issues[lnk_id].add(tgt_id)
+
+        all_audits = sorted(target_audit_ids)
+        purged_links_for_batch: set[uuid.UUID] = set()
+        purged_counts_per_issue: dict[uuid.UUID, int] = dict.fromkeys(batch_issue_ids, 0)
+
+        # 5. Call purge_invalid_object_links for audits touching this batch's issues
         if all_audits:
             for chunk_start in range(0, len(all_audits), 500):
                 chunk = all_audits[chunk_start : chunk_start + 500]
@@ -212,12 +216,18 @@ async def _process_trash_purge_batch(  # noqa: PLR0915
                         {"audit_ids": chunk, "actor_id": sp_id},
                     )
                 ).all()
-                purged_links = {r[1] for r in purge_res if r[1] is not None}
-                batch_links_purged += len(purged_links)
+                for r in purge_res:
+                    pl_id = r[1]
+                    if pl_id is not None and pl_id not in purged_links_for_batch:
+                        purged_links_for_batch.add(pl_id)
+                        if pl_id in link_to_issues:
+                            for aff_iss in link_to_issues[pl_id]:
+                                purged_counts_per_issue[aff_iss] += 1
+            batch_links_purged += len(purged_links_for_batch)
 
         # 6. Delete dependent rows and the issues + objects rows
         for issue_id, proj_id, seq_id, proj_ident in items:
-            purged_for_issue = issue_link_counts.get(issue_id, 0)
+            purged_for_issue = purged_counts_per_issue.get(issue_id, 0)
             issue_key = f"{proj_ident}-{seq_id}"
 
             # Delete issue comments

@@ -21,6 +21,7 @@ from kanban.api.problems import ProblemException
 from kanban.services.issue_delete import compute_blast_radius
 from kanban.settings import Settings
 from kanban.tests.security.helpers import (
+    add_acl_entry,
     add_role_binding,
     rebuild_era,
 )
@@ -278,7 +279,7 @@ async def test_case_2_concurrency_and_missing_hash(
     assert err_body["current_preview"]["inbound_links_flagged"] == 4
 
 
-async def test_case_3_security_non_viewer_and_edit_only_and_masked_child(
+async def test_case_3_security_non_viewer_and_edit_only_and_masked_child(  # noqa: PLR0915
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
@@ -287,6 +288,7 @@ async def test_case_3_security_non_viewer_and_edit_only_and_masked_child(
     """Case 3: Non-viewer 404, edit-only 403, and masked child in preview."""
     admin = await make_user("sec_admin", workspace_role="WORKSPACE_ADMIN")
     editor = await make_user("sec_editor")
+    deleter = await make_user("sec_deleter")
     outsider = await make_user("sec_outsider")
 
     proj_pub_id = await make_project("SECPUB", created_by=admin, roles={admin: "PROJECT_ADMIN"})
@@ -301,6 +303,15 @@ async def test_case_3_security_non_viewer_and_edit_only_and_masked_child(
         scope_type="project",
         project_id=proj_pub_id,
     )
+    # Grant deleter PROJECT_ADMIN on SECPUB (DELETE capability)
+    await add_role_binding(
+        api_env.seed,
+        api_env.workspace_id,
+        deleter.id,
+        role="PROJECT_ADMIN",
+        scope_type="project",
+        project_id=proj_pub_id,
+    )
     await rebuild_era(api_env.seed, api_env.workspace_id)
     await api_env.seed.commit()
 
@@ -312,6 +323,7 @@ async def test_case_3_security_non_viewer_and_edit_only_and_masked_child(
     )
     assert resp_pub.status_code == 201
     pub_key = resp_pub.json()["key"]
+    pub_id = uuid.UUID(resp_pub.json()["id"])
 
     # Admin creates child issue in SECPUB
     resp_child = await client_admin.post(
@@ -320,6 +332,24 @@ async def test_case_3_security_non_viewer_and_edit_only_and_masked_child(
     )
     assert resp_child.status_code == 201
     sec_child_key = resp_child.json()["key"]
+    child_id = uuid.UUID(resp_child.json()["id"])
+
+    # Add explicit DENY VIEW ACL on child issue for deleter
+    await add_acl_entry(
+        api_env.seed,
+        api_env.workspace_id,
+        child_id,
+        deleter.id,
+        effect="DENY",
+        capability_mask=1,
+    )
+    await rebuild_era(api_env.seed, api_env.workspace_id)
+    await api_env.seed.commit()
+
+    # Verify deleter CANNOT view confidential child (404 NOT_FOUND)
+    client_deleter = as_principal(deleter)
+    r_child_denied = await client_deleter.get(f"/api/v1/issues/{sec_child_key}")
+    assert r_child_denied.status_code == 404
 
     # 1. Non-viewer preview -> 404 NOT_FOUND
     client_outsider = as_principal(outsider)
@@ -336,13 +366,68 @@ async def test_case_3_security_non_viewer_and_edit_only_and_masked_child(
     assert r_edit_delete.status_code == 403
     assert r_edit_delete.json()["code"] == "INSUFFICIENT_CAPABILITY"
 
-    # 3. Preview counts child without leaking its key or identifiers
-    r_preview = await as_principal(admin).get(f"/api/v1/issues/{pub_key}/delete-preview")
+    # 3. Deleter preview counts hidden child without leaking its key or identifiers
+    client_deleter = as_principal(deleter)
+    r_preview = await client_deleter.get(f"/api/v1/issues/{pub_key}/delete-preview")
     assert r_preview.status_code == 200
     p_data = r_preview.json()
     assert p_data["sub_issues_unparented"] == 1
+    assert p_data["inbound_links_flagged"] == 0
     # Verify child key (e.g. SECPUB-2) is NEVER in the response body
     assert sec_child_key not in r_preview.text
+    old_hash = p_data["blast_hash"]
+
+    # 4. Add a hidden inbound link from SECSEC (which deleter cannot view) to pub_key
+    resp_sec = await as_principal(admin).post(
+        "/api/v1/projects/SECSEC/issues",
+        json={"summary": "Secret Inbound Source Issue"},
+    )
+    assert resp_sec.status_code == 201
+    sec_key = resp_sec.json()["key"]
+    sec_id = uuid.UUID(resp_sec.json()["id"])
+
+    await _make_link(
+        api_env.seed,
+        api_env.workspace_id,
+        source_id=sec_id,
+        source_key=sec_key,
+        target_id=pub_id,
+        target_key=pub_key,
+        creator_id=admin.id,
+    )
+
+    # 5. Deleter preview again: inbound_links_flagged increases, blast_hash changes
+    client_deleter = as_principal(deleter)
+    r_preview2 = await client_deleter.get(f"/api/v1/issues/{pub_key}/delete-preview")
+    assert r_preview2.status_code == 200
+    p_data2 = r_preview2.json()
+    assert p_data2["inbound_links_flagged"] == 1
+    new_hash = p_data2["blast_hash"]
+    assert new_hash != old_hash
+
+    # 6. Attempt delete with old hash returns 412 BLAST_RADIUS_CHANGED with current_preview
+    r_mismatch = await client_deleter.delete(
+        f"/api/v1/issues/{pub_key}",
+        headers={"Kb-Blast-Hash": old_hash},
+    )
+    assert r_mismatch.status_code == 412
+    mismatch_body = r_mismatch.json()
+    assert mismatch_body["code"] == "BLAST_RADIUS_CHANGED"
+    assert mismatch_body["current_preview"]["blast_hash"] == new_hash
+
+    # 7. Delete with new hash succeeds
+    r_del = await client_deleter.delete(
+        f"/api/v1/issues/{pub_key}",
+        headers={"Kb-Blast-Hash": new_hash},
+    )
+    assert r_del.status_code == 200
+
+    # 8. Verify child in DB was cleanly unparented (parent_issue_id is NULL)
+    await api_env.seed.rollback()
+    child_parent_row = (
+        await api_env.seed.execute(select(Issue.parent_issue_id).where(Issue.id == child_id))
+    ).scalar_one_or_none()
+    assert child_parent_row is None
 
 
 async def test_case_4_restore_and_retention_expired(

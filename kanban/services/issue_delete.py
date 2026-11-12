@@ -8,13 +8,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, text
 
 from database.models import (
-    Attachment,
     Issue,
-    IssueComment,
-    ObjectLink,
     ObjectRecord,
     Project,
     ProjectPriority,
@@ -114,42 +111,28 @@ async def compute_blast_radius(
 
     desc_sha = issue.description_sha256.hex().lower() if issue.description_sha256 else ""
 
-    child_stmt = (
-        select(Issue.id)
-        .join(ObjectRecord, ObjectRecord.id == Issue.id)
-        .where(
-            Issue.parent_issue_id == issue_id,
-            ObjectRecord.deleted_at.is_(None),
+    # Fetch blast radius components via SECURITY DEFINER helper to ensure all
+    # direct children, links, comments and attachments across the workspace
+    # are counted even if hidden from caller by RLS
+    priv_res = (
+        await session.execute(
+            text(
+                "SELECT child_ids, inbound_link_ids, outbound_link_ids, "
+                "comment_count, attachment_count "
+                "FROM get_issue_blast_radius_privileged(:issue_id)"
+            ),
+            {"issue_id": issue_id},
         )
-        .order_by(Issue.id)
-    )
-    child_ids = tuple((await session.execute(child_stmt)).scalars().all())
+    ).first()
 
-    inbound_stmt = (
-        select(ObjectLink.id)
-        .where(
-            ObjectLink.target_id == issue_id,
-            ObjectLink.link_state == "ACTIVE",
-        )
-        .order_by(ObjectLink.id)
-    )
-    inbound_link_ids = tuple((await session.execute(inbound_stmt)).scalars().all())
-
-    outbound_stmt = (
-        select(ObjectLink.id)
-        .where(
-            ObjectLink.source_id == issue_id,
-            ObjectLink.link_state == "ACTIVE",
-        )
-        .order_by(ObjectLink.id)
-    )
-    outbound_link_ids = tuple((await session.execute(outbound_stmt)).scalars().all())
-
-    comment_stmt = select(func.count(IssueComment.id)).where(IssueComment.issue_id == issue_id)
-    comment_count = int((await session.execute(comment_stmt)).scalar_one())
-
-    attachment_stmt = select(func.count(Attachment.id)).where(Attachment.issue_id == issue_id)
-    attachment_count = int((await session.execute(attachment_stmt)).scalar_one())
+    if priv_res is not None:
+        child_ids = tuple(priv_res[0])
+        inbound_link_ids = tuple(priv_res[1])
+        outbound_link_ids = tuple(priv_res[2])
+        comment_count = int(priv_res[3])
+        attachment_count = int(priv_res[4])
+    else:
+        not_found()
 
     retention_days = get_settings().trash_retention_days
 
@@ -240,9 +223,16 @@ async def trash_issue(
         not_found()
     obj.deleted_at = now_ts
 
-    # Direct children get parent_issue_id = NULL
-    await session.execute(
-        update(Issue).where(Issue.parent_issue_id == issue.id).values(parent_issue_id=None)
+    # Direct children get parent_issue_id = NULL via SECURITY DEFINER helper
+    # ensuring children hidden by caller RLS are cleanly unparented
+    unparented_res = (
+        await session.execute(
+            text("SELECT unparent_issue_children_privileged(:issue_id)"),
+            {"issue_id": issue.id},
+        )
+    ).scalar_one_or_none()
+    unparented_ids: list[uuid.UUID] = (
+        list(unparented_res) if unparented_res else list(blast.child_ids)
     )
 
     await record_activity(
@@ -253,7 +243,7 @@ async def trash_issue(
         event_type=ActivityEventType.ISSUE_TRASHED,
         payload={
             "blast_hash": blast.blast_hash,
-            "unparented_child_ids": [str(cid) for cid in blast.child_ids],
+            "unparented_child_ids": [str(cid) for cid in unparented_ids],
             "inbound_links_flagged": blast.inbound_links_flagged,
         },
     )
@@ -274,7 +264,12 @@ async def list_trash(
     cursor: str | None,
     limit: int,
 ) -> TrashedIssueList:
-    """List soft-deleted issues in project trash where caller holds DELETE capability."""
+    """List soft-deleted issues in project trash where caller holds DELETE capability.
+
+    Note: Keyset pagination applies limit at the query level before filtering by
+    the caller's DELETE capability. As a result, page sizes may be smaller than
+    the requested limit when the caller lacks DELETE on some items in the slice.
+    """
     project = await get_project_or_404(session, caller, project_ref)
     await require_capability(session, caller, project.id, Capability.VIEW)
 

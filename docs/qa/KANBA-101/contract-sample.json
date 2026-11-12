@@ -22,7 +22,7 @@
         "headers": {
           "content-length": "294",
           "content-type": "application/json",
-          "x-request-id": "9a9c433ab2ae4fda9575a8b4f2338cad",
+          "x-request-id": "93a0888a960b4217b1ae5d245163f871",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
@@ -40,7 +40,7 @@
           "comments": 0,
           "attachments": 0,
           "summary_text": "2 sub-issues unparented, 3 inbound object_links flagged",
-          "blast_hash": "206175ffc5ea0e298fbe0a37642fb29650c4350564254639928976c669517af6",
+          "blast_hash": "aad16bb75eeb1fdc9be1b11982153b820e8246b12889b2b69566908189b7d1d7",
           "retention_days": 30
         }
       }
@@ -57,7 +57,7 @@
           "connection": "keep-alive",
           "user-agent": "python-httpx/0.28.1",
           "x-csrf-token": "<redacted>",
-          "kb-blast-hash": "206175ffc5ea0e298fbe0a37642fb29650c4350564254639928976c669517af6",
+          "kb-blast-hash": "aad16bb75eeb1fdc9be1b11982153b820e8246b12889b2b69566908189b7d1d7",
           "cookie": "<redacted>"
         },
         "body": null
@@ -67,7 +67,7 @@
         "headers": {
           "content-length": "108",
           "content-type": "application/json",
-          "x-request-id": "5eaf65705a4d4e4e9ae153afdfce5dc2",
+          "x-request-id": "df530454670d4d9ba2ea2703970dbca5",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
@@ -79,8 +79,8 @@
         },
         "body": {
           "issue_key": "DEL-1",
-          "deleted_at": "2026-11-12T09:25:02.832848Z",
-          "purge_after": "2026-12-12T09:25:02.832848Z"
+          "deleted_at": "2026-11-12T12:43:51.082128Z",
+          "purge_after": "2026-12-12T12:43:51.082128Z"
         }
       }
     },
@@ -105,7 +105,7 @@
         "headers": {
           "content-length": "442",
           "content-type": "application/json",
-          "x-request-id": "400275551bbb49eeb06e954d1b1ee738",
+          "x-request-id": "1852858130ba4c809ca456bbb89c0e58",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
@@ -118,13 +118,13 @@
         "body": {
           "items": [
             {
-              "id": "01a1cf13-2bcb-7d0c-8fc6-602803f27050",
+              "id": "01a1cfc9-2e90-7ab8-b41d-f51457401825",
               "key": "DEL-1",
               "summary": "Parent Issue to Delete",
-              "deleted_at": "2026-11-12T09:25:02.832848Z",
-              "purge_after": "2026-12-12T09:25:02.832848Z",
+              "deleted_at": "2026-11-12T12:43:51.082128Z",
+              "purge_after": "2026-12-12T12:43:51.082128Z",
               "state": {
-                "id": "01a1cf13-2b4f-782f-9185-51a6eadff21e",
+                "id": "01a1cfc9-2e45-7ee6-82e6-64869f61f6fd",
                 "name": "Backlog",
                 "group": "backlog"
               },
@@ -168,7 +168,7 @@
       "response": {
         "status": 428,
         "headers": {
-          "x-request-id": "a25cdc8e5ac6498780864d0d0a168266",
+          "x-request-id": "8217bfc8a7064cd68f6ee26445183ee1",
           "content-length": "234",
           "content-type": "application/problem+json",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
@@ -186,7 +186,7 @@
           "status": 428,
           "code": "BLAST_HASH_REQUIRED",
           "detail": "Header 'Kb-Blast-Hash' is required to delete an issue",
-          "request_id": "a25cdc8e5ac6498780864d0d0a168266"
+          "request_id": "8217bfc8a7064cd68f6ee26445183ee1"
         }
       }
     },
@@ -202,7 +202,7 @@
           "connection": "keep-alive",
           "user-agent": "python-httpx/0.28.1",
           "x-csrf-token": "<redacted>",
-          "kb-blast-hash": "fae8f2424cb26091e45e4bea688884b9b65d0444b3f25b44885e6164f375d00e",
+          "kb-blast-hash": "eb3c216bd20bae0581207d915d02116cf25e4a760829b0bda5d201ebae743ce9",
           "cookie": "<redacted>"
         },
         "body": null
@@ -210,7 +210,7 @@
       "response": {
         "status": 412,
         "headers": {
-          "x-request-id": "709c5ee9ceb7477e8d38050cb5e10e5b",
+          "x-request-id": "3441fb8c9a7e463e8e8888c717bed285",
           "content-length": "563",
           "content-type": "application/problem+json",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
@@ -228,7 +228,7 @@
           "status": 412,
           "code": "BLAST_RADIUS_CHANGED",
           "detail": "The issue blast radius has changed since the preview was generated",
-          "request_id": "709c5ee9ceb7477e8d38050cb5e10e5b",
+          "request_id": "3441fb8c9a7e463e8e8888c717bed285",
           "current_preview": {
             "issue_key": "CNC-1",
             "sub_issues_unparented": 0,
@@ -237,7 +237,7 @@
             "comments": 0,
             "attachments": 0,
             "summary_text": "0 sub-issues unparented, 4 inbound object_links flagged",
-            "blast_hash": "ca06c87019c3beccec97c338be16fb4f79ce71a9fde3ddaf72a0191041ff7056",
+            "blast_hash": "d95410f27747ca79ae6bde88bf062b9225f2302986dcd8df5266f42b03f1afab",
             "retention_days": 30
           }
         }
@@ -265,7 +265,7 @@
         "headers": {
           "content-length": "1402",
           "content-type": "application/json",
-          "x-request-id": "9d341b6706f54f17863fbff609683e7b",
+          "x-request-id": "2d317d4556bc486495f6e99b232aef83",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
@@ -276,13 +276,13 @@
           "strict-transport-security": "max-age=63072000; includeSubDomains"
         },
         "body": {
-          "id": "01a1cf13-30e0-790a-8716-e1a23902f0e6",
+          "id": "01a1cfc9-33d5-7e5a-abcf-67b9a483b34e",
           "key": "RES-1",
           "summary": "Restorable Parent",
           "description_markdown": "",
           "description_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
           "state": {
-            "id": "01a1cf13-30ac-7adf-a71d-ce5274285df8",
+            "id": "01a1cfc9-33a4-7a4c-8d05-2c75c885aa19",
             "name": "Backlog",
             "group": "backlog"
           },
@@ -298,22 +298,22 @@
           "labels": [],
           "module_ids": [],
           "board_rank": "a000001",
-          "created_by_id": "01a1cf13-30a5-730e-bc17-1b2bcf3904d6",
+          "created_by_id": "01a1cfc9-339d-7336-ba24-9da9d0713b97",
           "access_manifest": {
             "pill_label": "Project",
             "explicit_grant_count": 0,
             "inherited_scope": {
               "kind": "project",
               "scope_label": "Project: RES",
-              "workspace_id": "01a1cf13-30a1-7021-a950-82e7fe5982c8",
+              "workspace_id": "01a1cfc9-3399-7690-97a1-3bf08a969195",
               "workspace_name": "Engineering",
-              "project_id": "01a1cf13-30ab-7c6d-8594-c298274dce2a",
+              "project_id": "01a1cfc9-33a3-711b-9913-51260a9c1d6f",
               "project_key": "RES",
               "project_name": "RES project"
             },
             "users": [
               {
-                "principal_id": "01a1cf13-30a5-730e-bc17-1b2bcf3904d6",
+                "principal_id": "01a1cfc9-339d-7336-ba24-9da9d0713b97",
                 "handle": "@res_admin",
                 "display_name": "Res_Admin",
                 "capabilities": [
@@ -374,7 +374,7 @@
       "response": {
         "status": 409,
         "headers": {
-          "x-request-id": "043c67708e9e4cb9a12a5970689e115a",
+          "x-request-id": "beae339a8e7a49d1a5db6c650a052c91",
           "content-length": "232",
           "content-type": "application/problem+json",
           "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
@@ -392,7 +392,7 @@
           "status": 409,
           "code": "RETENTION_EXPIRED",
           "detail": "Issue retention window has expired and cannot be restored",
-          "request_id": "043c67708e9e4cb9a12a5970689e115a"
+          "request_id": "beae339a8e7a49d1a5db6c650a052c91"
         }
       }
     }
