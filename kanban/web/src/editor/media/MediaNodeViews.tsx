@@ -10,6 +10,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MediaViewport } from './MediaViewport';
 import { createSafeSvgBlobUrl } from './safeSvg';
 import { registerEditorExtension } from '../editorSurfaceFactory';
+import { MermaidNodeView } from '../mermaid/MermaidBlockView';
 
 export interface MediaNodeViewOptions {
   airGapMode?: boolean;
@@ -158,7 +159,10 @@ export function createMediaNodeViews(
   return {
     image: (node, view, getPos) => new MediaNodeView(node, view, getPos, options),
     image_block: (node, view, getPos) => new MediaNodeView(node, view, getPos, options),
-    code_block: (node) => {
+    code_block: (node, view, getPos) => {
+      if (node.attrs.lang === 'mermaid') {
+        return new MermaidNodeView(node, view, getPos);
+      }
       if (node.attrs.lang === 'svg') {
         return new SvgCodeBlockNodeView(node);
       }

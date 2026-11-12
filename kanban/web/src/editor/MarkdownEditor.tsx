@@ -21,9 +21,13 @@ import {
   type EditorSurfaceKind,
 } from './editorSurfaceFactory';
 import { createMediaNodeViews } from './media/MediaNodeViews';
+import { registerMermaidExtension } from './mermaid/MermaidBlockView';
 import { SparkleOverlayPortal } from './sparkle/SparkleOverlayPortal';
 import { EmojiHint } from '../components/emoji/EmojiHint';
 import './MarkdownEditor.css';
+
+// Ensure Mermaid extension is registered in surface factory
+registerMermaidExtension();
 
 export interface MarkdownEditorProps {
   surface: EditorSurfaceKind;
