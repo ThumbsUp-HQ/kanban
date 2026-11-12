@@ -117,6 +117,11 @@ class ActivityEventType(StrEnum):
     VIEW_CREATED = "VIEW_CREATED"
     VIEW_UPDATED = "VIEW_UPDATED"
     VIEW_DELETED = "VIEW_DELETED"
+    ISSUE_RANK_MOVED = "ISSUE_RANK_MOVED"
+    ISSUE_MOVED = "ISSUE_MOVED"
+    WIP_HARD_LIMIT_OVERRIDDEN = "WIP_HARD_LIMIT_OVERRIDDEN"
+    WIP_LIMIT_OVERRIDDEN = "WIP_LIMIT_OVERRIDDEN"
+    BOARD_COLUMN_REBALANCED = "BOARD_COLUMN_REBALANCED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -180,6 +185,11 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.VIEW_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.VIEW_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.VIEW_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_RANK_MOVED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MOVED: ActivityCategory.HISTORY,
+        ActivityEventType.WIP_HARD_LIMIT_OVERRIDDEN: ActivityCategory.HISTORY,
+        ActivityEventType.WIP_LIMIT_OVERRIDDEN: ActivityCategory.HISTORY,
+        ActivityEventType.BOARD_COLUMN_REBALANCED: ActivityCategory.HISTORY,
     }
 )
 
