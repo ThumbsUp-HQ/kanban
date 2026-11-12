@@ -1,9 +1,13 @@
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
+import { RouterProvider } from 'react-router';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { TokenStory } from './dev/TokenStory';
 import { EmojiStory } from './dev/EmojiStory';
 import { EditorStory } from './dev/EditorStory';
 import { MediaStory } from './dev/MediaStory';
 import { RealtimeStory } from './dev/RealtimeStory';
+import { createAppRouter } from './app/routes';
+import { createQueryClient } from './api/queryClient';
 import './App.css';
 
 /**
@@ -14,6 +18,17 @@ export function isStoryEnabled(devMode: boolean, storyEnv?: string): boolean {
     return true;
   }
   return storyEnv === '1';
+}
+
+function RoutedApp(): JSX.Element {
+  const [queryClient] = useState(() => createQueryClient());
+  const [router] = useState(() => createAppRouter());
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  );
 }
 
 export function App(): JSX.Element {
@@ -38,6 +53,13 @@ export function App(): JSX.Element {
     if (window.location.pathname === '/__dev/realtime') {
       return <RealtimeStory />;
     }
+    if (window.location.pathname.startsWith('/__dev/drawer')) {
+      return <RoutedApp />;
+    }
+  }
+
+  if (window.location.pathname.startsWith('/projects/')) {
+    return <RoutedApp />;
   }
 
   return (

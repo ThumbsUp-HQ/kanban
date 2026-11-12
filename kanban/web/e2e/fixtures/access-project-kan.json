@@ -1,0 +1,87 @@
+{
+  "pill_label": "Project + 2",
+  "explicit_grant_count": 2,
+  "inherited_scope": {
+    "kind": "project",
+    "scope_label": "Project + 2",
+    "workspace_id": "00000000-0000-0000-0000-000000000001",
+    "workspace_name": "Engineering",
+    "project_id": "00000000-0000-0000-0000-000000000002",
+    "project_key": "KAN",
+    "project_name": "Platform Core"
+  },
+  "users": [
+    {
+      "principal_id": "00000000-0000-0000-0000-000000000010",
+      "handle": "@adam",
+      "display_name": "Adam Outler",
+      "capabilities": ["VIEW", "CREATE_ISSUE", "EDIT_ISSUE"],
+      "grant_source": "DIRECT_ACL"
+    },
+    {
+      "principal_id": "00000000-0000-0000-0000-000000000011",
+      "handle": "@alice",
+      "display_name": "Alice Engineer",
+      "capabilities": ["VIEW", "CREATE_ISSUE"],
+      "grant_source": "ROLE_BINDING"
+    },
+    {
+      "principal_id": "00000000-0000-0000-0000-000000000012",
+      "handle": "@bob",
+      "display_name": "Bob Builder",
+      "capabilities": ["VIEW"],
+      "grant_source": "ROLE_BINDING"
+    },
+    {
+      "principal_id": "00000000-0000-0000-0000-000000000013",
+      "handle": "@charlie",
+      "display_name": "Charlie Tester",
+      "capabilities": ["VIEW"],
+      "grant_source": "ROLE_BINDING"
+    }
+  ],
+  "groups": [
+    {
+      "principal_id": "00000000-0000-0000-0000-000000000020",
+      "name": "Platform Core Engineers",
+      "member_count": 8,
+      "external_source": null,
+      "capabilities": ["VIEW", "CREATE_ISSUE", "EDIT_ISSUE"],
+      "grant_source": "ROLE_BINDING"
+    },
+    {
+      "principal_id": "00000000-0000-0000-0000-000000000021",
+      "name": "Security Reviewers",
+      "member_count": 3,
+      "external_source": null,
+      "capabilities": ["VIEW"],
+      "grant_source": "ROLE_BINDING"
+    }
+  ],
+  "agents": [
+    {
+      "principal_id": "00000000-0000-0000-0000-000000000030",
+      "display_name": "Reality Checker",
+      "principal_type": "AGENT",
+      "provider_badge": "gemini",
+      "scope_summary": "Project Scoped",
+      "capabilities": ["VIEW", "COMMENT"]
+    }
+  ],
+  "deny_overrides": [
+    {
+      "principal_id": null,
+      "principal_type": "USER",
+      "display_name": "1 Restricted Principal",
+      "redacted": true,
+      "denied_capabilities": ["EXPORT_DATA"]
+    }
+  ],
+  "redacted_entries": [
+    {
+      "redacted": true,
+      "label": "1 External Collaborator"
+    }
+  ],
+  "redacted_count": 1
+}

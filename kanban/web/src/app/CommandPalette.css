@@ -1,0 +1,113 @@
+.kb-palette-scrim {
+  position: fixed;
+  inset: 0;
+  background-color: var(--scrim-bg, rgba(0, 0, 0, 0.65));
+  backdrop-filter: blur(2px);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 15vh;
+}
+
+.kb-palette-dialog {
+  background: var(--bg-surface-raised, #24272f);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6));
+  width: min(640px, calc(100vw - 48px));
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--space-4, 16px);
+  outline: none;
+}
+
+.kb-palette-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  padding-bottom: var(--space-3, 12px);
+  border-bottom: 1px solid var(--border-subtle, #333842);
+}
+
+.kb-palette-search-icon {
+  color: var(--fg-muted, #94a3b8);
+  font-size: 16px;
+}
+
+.kb-palette-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  color: var(--fg-primary, #f8fafc);
+  font-family: inherit;
+}
+
+.kb-palette-input::placeholder {
+  color: var(--fg-muted, #64748b);
+}
+
+.kb-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2, 8px) 0 0 0;
+  overflow-y: auto;
+  max-height: calc(70vh - 80px);
+}
+
+.kb-palette-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  min-height: var(--list-row-h, 46px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  color: var(--fg-secondary, #cbd5e1);
+  transition: background 80ms ease, color 80ms ease;
+  user-select: none;
+}
+
+.kb-palette-option[aria-selected="true"],
+.kb-palette-option:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+}
+
+.kb-palette-option-icon {
+  font-size: 16px;
+  width: 24px;
+  text-align: center;
+}
+
+.kb-palette-option-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.kb-palette-option-title {
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-palette-option-meta {
+  font-size: 12px;
+  color: var(--fg-muted, #94a3b8);
+}
+
+.kb-palette-empty {
+  padding: var(--space-4, 16px);
+  text-align: center;
+  color: var(--fg-muted, #94a3b8);
+  font-size: 14px;
+}
