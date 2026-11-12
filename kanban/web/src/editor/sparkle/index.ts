@@ -43,3 +43,17 @@ export {
   SparkleOverlayPortal,
   type SparkleOverlayPortalProps,
 } from './SparkleOverlayPortal';
+
+export {
+  resolveContextMenu,
+  computeCaretDistance,
+  isOverSpellingNode,
+  isOnBadge,
+  setBadgeContextMenuSuppression,
+  consumeBadgeContextMenuSuppression,
+  resetBadgeContextMenuSuppression,
+  CARET_PROXIMITY_RADIUS_PX,
+  type ContextMenuAction,
+  type ContextMenuInput,
+  type CaretPoint,
+} from './contextMenuMatrix';
