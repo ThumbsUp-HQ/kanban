@@ -1,0 +1,8 @@
+member_id                              | ancestor_group_id                      | workspace_id                           | depth
+---------------------------------------+----------------------------------------+----------------------------------------+------
+462a3f8c-99ca-4b03-9bb7-70a84ffbeadf   | 9a31e336-de62-4cc0-b1fa-9a6d32dd2cfd   | 01a1cdae-5529-7bbf-bbdb-a5b2d38a350c   | 1      -- (Group G1 in Group G2)
+462a3f8c-99ca-4b03-9bb7-70a84ffbeadf   | d8d3d067-deb8-4a5e-9e05-55dd989ecddd   | 01a1cdae-5529-7bbf-bbdb-a5b2d38a350c   | 2      -- (Group G1 in Group G3)
+801957d5-b699-417f-93e6-e15778387bf2   | 462a3f8c-99ca-4b03-9bb7-70a84ffbeadf   | 01a1cdae-5529-7bbf-bbdb-a5b2d38a350c   | 1      -- (User U in Group G1)
+801957d5-b699-417f-93e6-e15778387bf2   | 9a31e336-de62-4cc0-b1fa-9a6d32dd2cfd   | 01a1cdae-5529-7bbf-bbdb-a5b2d38a350c   | 2      -- (User U in Group G2)
+801957d5-b699-417f-93e6-e15778387bf2   | d8d3d067-deb8-4a5e-9e05-55dd989ecddd   | 01a1cdae-5529-7bbf-bbdb-a5b2d38a350c   | 3      -- (User U in Group G3)
+9a31e336-de62-4cc0-b1fa-9a6d32dd2cfd   | d8d3d067-deb8-4a5e-9e05-55dd989ecddd   | 01a1cdae-5529-7bbf-bbdb-a5b2d38a350c   | 1      -- (Group G2 in Group G3)
