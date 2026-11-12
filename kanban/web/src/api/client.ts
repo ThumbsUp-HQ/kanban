@@ -41,11 +41,11 @@ export type ResponseBody<P extends keyof paths, M extends Method> =
 type ParamValue = string | number | boolean;
 
 export interface ApiFetchOptions {
-  params?: Record<string, ParamValue>;
-  query?: Record<string, ParamValue | readonly ParamValue[] | null | undefined>;
+  params?: Record<string, ParamValue> | undefined;
+  query?: Record<string, ParamValue | readonly ParamValue[] | null | undefined> | undefined;
   body?: unknown;
-  ifMatch?: string;
-  signal?: AbortSignal;
+  ifMatch?: string | undefined;
+  signal?: AbortSignal | undefined;
 }
 
 export const REQUEST_TIMEOUT_MS = 15000;
@@ -180,3 +180,11 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
   }
   return (await response.json()) as ResponseBody<P, M>;
 }
+
+export const apiClient = {
+  get: <P extends keyof paths>(path: P, opts?: ApiFetchOptions) => apiFetch('GET', path, opts),
+  post: <P extends keyof paths>(path: P, opts?: ApiFetchOptions) => apiFetch('POST', path, opts),
+  put: <P extends keyof paths>(path: P, opts?: ApiFetchOptions) => apiFetch('PUT', path, opts),
+  patch: <P extends keyof paths>(path: P, opts?: ApiFetchOptions) => apiFetch('PATCH', path, opts),
+  delete: <P extends keyof paths>(path: P, opts?: ApiFetchOptions) => apiFetch('DELETE', path, opts),
+};

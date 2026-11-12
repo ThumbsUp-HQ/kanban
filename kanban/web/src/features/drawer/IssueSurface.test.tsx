@@ -1,0 +1,325 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import React from 'react';
+import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from 'react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { IssueSurface } from './IssueSurface';
+import { setOpenerElement } from './IssueKeyLink';
+import { apiClient } from '../../api/client';
+import { ApiProblem } from '../../api/problem';
+import type { IssueDetail } from './slots';
+import * as breakpoints from '../../styles/breakpoints';
+
+const validIssue: IssueDetail = {
+  key: 'KAN-142',
+  object_id: '11111111-1111-1111-1111-111111111111',
+  project_key: 'KAN',
+  project_name: 'Platform Core',
+  summary: 'Harden Multi-Card OIDC & LDAPS Auth Studio',
+  description_markdown: 'Detailed description of the auth hardening task.',
+  priority: {
+    slug: 'high',
+    label: 'High',
+    emoji: '⚡',
+    sort_order: 2,
+    sla_target: null,
+  },
+  etag: '"etag-kan-142"',
+};
+
+function createTestHarness(initialEntries: string[] = ['/projects/KAN/issues?peek=KAN-142']) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: 60_000 },
+    },
+  });
+
+  let navigateRef: ReturnType<typeof useNavigate> | null = null;
+
+  function NavCapture() {
+    const nav = useNavigate();
+    navigateRef = nav;
+    return null;
+  }
+
+  function Harness() {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={initialEntries}>
+          <NavCapture />
+          <Routes>
+            <Route
+              path="/projects/:projectKey/issues"
+              element={
+                <div id="main-content">
+                  <main id="kb-main" tabIndex={-1}>
+                    Main Canvas
+                  </main>
+                  <div id="kb-issue-surface-host">
+                    <IssueSurface />
+                  </div>
+                </div>
+              }
+            />
+            <Route
+              path="/projects/:projectKey/issues/:issueKey"
+              element={
+                <div id="main-content">
+                  <main id="kb-main" tabIndex={-1}>
+                    Main Canvas
+                  </main>
+                  <div id="kb-issue-surface-host">
+                    <IssueSurface />
+                  </div>
+                </div>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  }
+
+  return {
+    queryClient,
+    Harness,
+    getNavigate: (): NavigateFunction => {
+      if (!navigateRef) throw new Error('navigateRef not set');
+      return navigateRef;
+    },
+  };
+}
+
+describe('IssueSurface', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('Required Test Case 1: Positive / Zero-remount invariant', () => {
+    it('maintains identical data-mount-id and data-mount-seq across 5 round-trip toggles with exactly 1 GET fetch', async () => {
+      const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const { Harness, getNavigate } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+
+      const { container } = render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Harden Multi-Card OIDC & LDAPS Auth Studio')).toBeDefined();
+      });
+
+      const surface = container.querySelector('section');
+      expect(surface).not.toBeNull();
+      expect(surface?.className).toBe('surface--drawer');
+
+      const initialMountId = surface?.getAttribute('data-mount-id');
+      const initialMountSeq = surface?.getAttribute('data-mount-seq');
+      expect(initialMountId).toBeTruthy();
+      expect(initialMountSeq).toBeTruthy();
+
+      const navigate = getNavigate();
+
+      // Perform 5 round-trip toggles: drawer -> full -> drawer -> full ...
+      for (let i = 0; i < 5; i++) {
+        // Toggle to full screen
+        void navigate('/projects/KAN/issues/KAN-142');
+        await waitFor(() => {
+          const current = container.querySelector('section');
+          expect(current?.className).toBe('surface--full');
+          expect(current?.getAttribute('data-mount-id')).toBe(initialMountId);
+          expect(current?.getAttribute('data-mount-seq')).toBe(initialMountSeq);
+        });
+
+        // Toggle back to drawer
+        void navigate('/projects/KAN/issues?peek=KAN-142');
+        await waitFor(() => {
+          const current = container.querySelector('section');
+          expect(current?.className).toBe('surface--drawer');
+          expect(current?.getAttribute('data-mount-id')).toBe(initialMountId);
+          expect(current?.getAttribute('data-mount-seq')).toBe(initialMountSeq);
+        });
+      }
+
+      // Mocked fetch was called exactly once for KAN-142
+      expect(getSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Required Test Case 3: Negative / Security (XSS injection in summary & description)', () => {
+    it('renders malicious payloads as literal text nodes; no script or img elements exist', async () => {
+      const xssIssue: IssueDetail = {
+        ...validIssue,
+        summary: '<script>alert(1)</script><img src=x onerror=alert(1)>',
+        description_markdown: '<script>alert(2)</script><img src=y onerror=alert(2)>',
+      };
+      vi.spyOn(apiClient, 'get').mockResolvedValue(xssIssue);
+
+      const { Harness } = createTestHarness();
+      const { container } = render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByText('<script>alert(1)</script><img src=x onerror=alert(1)>')).toBeDefined();
+        expect(screen.getByText('<script>alert(2)</script><img src=y onerror=alert(2)>')).toBeDefined();
+      });
+
+      // Strict security invariant: zero script or injected img tags in the DOM
+      const scripts = container.querySelectorAll('script');
+      const imgs = container.querySelectorAll('img');
+      expect(scripts.length).toBe(0);
+      expect(imgs.length).toBe(0);
+    });
+  });
+
+  describe('Required Test Case 7: Keyboard shortcuts and focus return', () => {
+    it('Ctrl+Shift+F toggles mode', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+
+      const { container } = render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Harden Multi-Card OIDC & LDAPS Auth Studio')).toBeDefined();
+      });
+
+      expect(container.querySelector('section')?.className).toBe('surface--drawer');
+
+      // Trigger Mod+Shift+F
+      fireEvent.keyDown(window, {
+        key: 'F',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+
+      await waitFor(() => {
+        expect(container.querySelector('section')?.className).toBe('surface--full');
+      });
+    });
+
+    it('Escape from full returns to drawer, second Escape closes and focus returns to opener', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+
+      const openerBtn = document.createElement('button');
+      openerBtn.id = 'opener-button';
+      document.body.appendChild(openerBtn);
+      setOpenerElement(openerBtn);
+
+      const { Harness } = createTestHarness(['/projects/KAN/issues/KAN-142']);
+      const { container } = render(<Harness />);
+
+      await waitFor(() => {
+        expect(container.querySelector('section')?.className).toBe('surface--full');
+      });
+
+      // First Escape: returns to drawer
+      fireEvent.keyDown(window, { key: 'Escape' });
+      await waitFor(() => {
+        expect(container.querySelector('section')?.className).toBe('surface--drawer');
+      });
+
+      // Second Escape: closes drawer and returns focus to opener
+      fireEvent.keyDown(window, { key: 'Escape' });
+      await waitFor(() => {
+        expect(container.querySelector('section')).toBeNull();
+        expect(document.activeElement).toBe(openerBtn);
+      });
+
+      document.body.removeChild(openerBtn);
+    });
+
+    it('returns focus to #kb-main when opener element was removed', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+
+      const detachedBtn = document.createElement('button');
+      // Do not append to body -> detached
+      setOpenerElement(detachedBtn);
+
+      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      const { container } = render(<Harness />);
+
+      await waitFor(() => {
+        expect(container.querySelector('section')).toBeDefined();
+      });
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+
+      await waitFor(() => {
+        expect(container.querySelector('section')).toBeNull();
+        const main = document.getElementById('kb-main');
+        expect(document.activeElement).toBe(main);
+      });
+    });
+  });
+
+  describe('Required Test Case 8: Viewport aria-modal property', () => {
+    it('sets aria-modal="true" on mobile and aria-modal="false" on desktop', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+
+      // Desktop
+      vi.spyOn(breakpoints, 'useBreakpoint').mockReturnValue('desktop');
+      const { Harness: DesktopHarness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      const { container: desktopContainer, unmount } = render(<DesktopHarness />);
+
+      await waitFor(() => {
+        expect(desktopContainer.querySelector('section')?.getAttribute('aria-modal')).toBe('false');
+      });
+      unmount();
+
+      // Mobile
+      vi.spyOn(breakpoints, 'useBreakpoint').mockReturnValue('mobile');
+      const { Harness: MobileHarness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      const { container: mobileContainer } = render(<MobileHarness />);
+
+      await waitFor(() => {
+        expect(mobileContainer.querySelector('section')?.getAttribute('aria-modal')).toBe('true');
+      });
+    });
+  });
+
+  describe('Required Test Case 9: Error handling (403, 404, network error with Retry)', () => {
+    it('renders identical anti-enumeration string for 403 and 404', async () => {
+      // 404
+      vi.spyOn(apiClient, 'get').mockRejectedValueOnce(
+        new ApiProblem(404, { title: 'Not Found', status: 404 }),
+      );
+      const { Harness: Harness404, queryClient } = createTestHarness(['/projects/KAN/issues?peek=KAN-999']);
+      const { unmount } = render(<Harness404 />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Issue KAN-999 was not found or you do not have access.')).toBeDefined();
+      });
+      unmount();
+      queryClient.clear();
+
+      // 403
+      vi.spyOn(apiClient, 'get').mockRejectedValueOnce(
+        new ApiProblem(403, { title: 'Forbidden', status: 403 }),
+      );
+      const { Harness: Harness403 } = createTestHarness(['/projects/KAN/issues?peek=KAN-999']);
+      render(<Harness403 />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Issue KAN-999 was not found or you do not have access.')).toBeDefined();
+      });
+    });
+
+    it('renders "Could not load <KEY>." and Retry button on network error', async () => {
+      const getSpy = vi
+        .spyOn(apiClient, 'get')
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce(validIssue);
+
+      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Could not load KAN-142.')).toBeDefined();
+      });
+
+      const retryBtn = screen.getByRole('button', { name: 'Retry' });
+      fireEvent.click(retryBtn);
+
+      await waitFor(() => {
+        expect(getSpy).toHaveBeenCalledTimes(2);
+        expect(screen.getByText('Harden Multi-Card OIDC & LDAPS Auth Studio')).toBeDefined();
+      });
+    });
+  });
+});

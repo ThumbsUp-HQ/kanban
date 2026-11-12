@@ -1,0 +1,27 @@
+{
+  "key": "KAN",
+  "name": "Platform Core",
+  "workspace": "Engineering",
+  "states": [
+    { "id": "state-backlog", "name": "Backlog", "group": "backlog" },
+    { "id": "state-todo", "name": "Todo", "group": "unstarted" },
+    { "id": "state-in-progress", "name": "In Progress", "group": "started", "wip_soft": 3 },
+    { "id": "state-in-review", "name": "In Review", "group": "started" },
+    { "id": "state-done", "name": "Done", "group": "completed" },
+    { "id": "state-canceled", "name": "Canceled", "group": "cancelled" }
+  ],
+  "priorities": [
+    { "id": "urgent", "name": "urgent", "icon": "🔥" },
+    { "id": "high", "name": "high", "icon": "⚡" },
+    { "id": "medium", "name": "medium", "icon": "🔹" },
+    { "id": "low", "name": "low", "icon": "💤" },
+    { "id": "none", "name": "none" }
+  ],
+  "labels": [
+    { "id": "label-sec", "name": "security" },
+    { "id": "label-bug", "name": "type:bug", "exclusive_group": "type" },
+    { "id": "label-feature", "name": "type:feature", "exclusive_group": "type" }
+  ],
+  "modules_enabled": false,
+  "modules": []
+}
