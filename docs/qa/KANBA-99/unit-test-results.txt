@@ -1,0 +1,34 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-99/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-99
+configfile: pyproject.toml
+plugins: anyio-4.16.0, asyncio-1.4.1.post1, platformdirs-4.14.5, socket-0.8.1, cov-7.1.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 12 items
+
+kanban/tests/api/test_subscriptions.py::test_subscription_lifecycle_and_contracts PASSED [  8%]
+kanban/tests/api/test_subscriptions.py::test_subscription_validation_and_errors PASSED [ 16%]
+kanban/tests/api/test_subscriptions.py::test_subscription_permissions_zero_enumeration PASSED [ 25%]
+kanban/tests/api/test_subscriptions.py::test_notifications_list_and_read_contracts PASSED [ 33%]
+kanban/tests/services/test_notifications.py::test_case_1_auto_subscribe_creator_and_comment_delivery PASSED [ 41%]
+kanban/tests/services/test_notifications.py::test_case_2_security_revoked_view_and_free_text PASSED [ 50%]
+kanban/tests/services/test_notifications.py::test_case_3_mute_suppresses_specific_events PASSED [ 58%]
+kanban/tests/services/test_notifications.py::test_case_4_actor_exclusion_and_tombstone PASSED [ 66%]
+kanban/tests/services/test_notifications.py::test_case_5_mention_auto_subscribe PASSED [ 75%]
+kanban/tests/services/test_notifications.py::test_case_6_boundaries_keyset_and_500_cap PASSED [ 83%]
+kanban/tests/services/test_notifications.py::test_case_7_cursor_and_edge_cases PASSED [ 91%]
+kanban/tests/services/test_notifications.py::test_case_8_outbox_wakeup_pg_notify PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                               Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------
+kanban/api/v1/notifications.py        25      0      0      0   100%
+kanban/api/v1/subscriptions.py        27      0      0      0   100%
+kanban/services/notifications.py     154      4     56      6    95%   112->115, 181->exit, 209, 257->exit, 273->exit, 277-278, 289
+kanban/services/subscriptions.py      48      0     10      0   100%
+------------------------------------------------------------------------------
+TOTAL                                254      4     66      6    97%
+Required test coverage of 95% reached. Total coverage: 96.88%
+============================== 12 passed in 4.73s ==============================

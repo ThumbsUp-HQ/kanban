@@ -23,6 +23,7 @@ from kanban.api.request_id import RequestIdMiddleware
 from kanban.api.v1 import build_v1_router
 from kanban.auth.sessions.csrf import CsrfMiddleware
 from kanban.security.headers import SecurityHeadersMiddleware
+from kanban.services.notifications import register_notifications_listener
 from kanban.settings import Settings
 from kanban.web_static import PrecompressedSPAStaticApp
 
@@ -52,6 +53,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Mount canonical /api/v1 router tree
     app.include_router(build_v1_router(), prefix="/api/v1")
+
+    # Register activity listener for notifications and auto-subscriptions
+    register_notifications_listener()
 
     # Fallback API router for legacy/subpath 404s
     api_router = APIRouter(prefix="/api")

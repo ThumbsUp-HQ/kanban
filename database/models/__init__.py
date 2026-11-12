@@ -29,6 +29,7 @@ from database.models.issues import (
     IssueSubscription,
 )
 from database.models.knowledge import Doc, Page, PageVersion, Sticky
+from database.models.notifications import Notification
 from database.models.outbox import OutboxEvent
 from database.models.principals import (
     EffectiveResourceAccess,
@@ -84,6 +85,7 @@ __all__ = [
     "LocalAdminCredential",
     "LtreeType",
     "Module",
+    "Notification",
     "ObjectEmbedding",
     "ObjectKind",
     "ObjectLink",
