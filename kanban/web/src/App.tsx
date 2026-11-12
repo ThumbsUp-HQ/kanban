@@ -4,6 +4,8 @@ import { EmojiStory } from './dev/EmojiStory';
 import { EditorStory } from './dev/EditorStory';
 import { MediaStory } from './dev/MediaStory';
 import { RealtimeStory } from './dev/RealtimeStory';
+import { IssuesWorkspaceRoute } from './app/routes';
+import { FIXTURE_12_ISSUES } from './features/views/fixtures';
 import './App.css';
 
 /**
@@ -37,6 +39,22 @@ export function App(): JSX.Element {
     }
     if (window.location.pathname === '/__dev/realtime') {
       return <RealtimeStory />;
+    }
+    if (
+      window.location.pathname.startsWith('/projects/') ||
+      window.location.pathname === '/__dev/views'
+    ) {
+      const isNoModules =
+        window.location.pathname.includes('nomodules') ||
+        window.location.search.includes('nomodules=1');
+      return (
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          modulesEnabled={!isNoModules}
+          initialIssues={FIXTURE_12_ISSUES}
+        />
+      );
+    }
     }
   }
 
