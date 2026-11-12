@@ -43,6 +43,7 @@ COPY --chown=65532:65532 kanban/ /opt/kanban/kanban/
 COPY --chown=65532:65532 mcp/ /opt/kanban/mcp/
 COPY --chown=65532:65532 agent/ /opt/kanban/agent/
 COPY --chown=65532:65532 deploy/ /opt/kanban/deploy/
+COPY --chown=65532:65532 alembic.ini /opt/kanban/alembic.ini
 COPY --chown=65532:65532 --from=web-builder /app/kanban/web/dist /opt/kanban/web/dist
 ENV PATH=/opt/kanban/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -75,11 +76,13 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         postgresql-16 \
         postgresql-16-pgvector \
+        procps \
         util-linux && \
     apt-get purge -y --auto-remove curl gnupg && \
     rm -rf /var/lib/apt/lists/*
-RUN install -d -o postgres -g postgres -m 0700 /var/lib/kanban/data/pgdata && \
-    install -d -o postgres -g postgres -m 2775 /run/postgresql
+RUN usermod -aG kanban postgres && \
+    install -d -o postgres -g postgres -m 0700 /var/lib/kanban/data/pgdata && \
+    install -d -o postgres -g kanban -m 2775 /run/postgresql
 EXPOSE 8080
 VOLUME /var/lib/kanban/data
 ENTRYPOINT ["/usr/bin/tini", "--", "/opt/kanban/.venv/bin/python", "/opt/kanban/deploy/standalone/entrypoint.py"]

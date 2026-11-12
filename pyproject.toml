@@ -62,7 +62,7 @@ python_version = "3.12"
 strict = true
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
-packages = ["database", "kanban", "mcp", "agent", "scripts"]
+packages = ["database", "kanban", "mcp", "agent", "scripts", "deploy"]
 
 [tool.pytest.ini_options]
 addopts = "--disable-socket --allow-unix-socket -p no:cacheprovider --strict-markers"
@@ -72,6 +72,7 @@ asyncio_default_test_loop_scope = "session"
 markers = [
     "committed_db: test commits real transactions; TRUNCATE cleanup applied",
     "migration: test runs alembic migrations against an isolated test database",
+    "container: docker container integration test",
 ]
 
 [tool.importlinter]

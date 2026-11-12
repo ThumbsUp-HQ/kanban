@@ -1,0 +1,19 @@
+=== /proc/net/tcp ===
+  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode                                                     
+   0: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000 65532        0 18545580 1 0000000000000000 100 0 0 10 0                  
+
+=== /proc/net/tcp6 ===
+  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+
+=== ps -eo uid,comm ===
+  UID COMMAND
+    0 tini
+    0 python
+  100 postgres
+  100 postgres
+  100 postgres
+  100 postgres
+  100 postgres
+  100 postgres
+65532 uvicorn
+    0 ps
