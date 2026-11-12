@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 15 items
+
+kanban/tests/api/test_issues.py ..............                           [ 93%]
+kanban/tests/services/test_issue_keys.py .                               [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                            Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------
+kanban/api/v1/issues.py            43      0      6      0   100%
+kanban/services/issue_keys.py      24      0      4      0   100%
+kanban/services/issues.py         370      3    154      2    99%   410, 674, 844->847, 928
+---------------------------------------------------------------------------
+TOTAL                             437      3    164      2    99%
+============================= 15 passed in 16.11s ==============================

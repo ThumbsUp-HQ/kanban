@@ -1,0 +1,29 @@
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 22%]
+........................................................................ [ 30%]
+........................................................................ [ 37%]
+........................................................................ [ 45%]
+........................................................................ [ 52%]
+........................................................................ [ 60%]
+........................................................................ [ 67%]
+........................................................................ [ 75%]
+........................................................................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 98%]
+.................                                                        [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/google/genai/types.py:18270
+  /tmp/kb-wt-KANBA-162/.venv/lib/python3.12/site-packages/google/genai/types.py:18270: SyntaxWarning: invalid escape sequence '\/'
+    description="""Output only. The original name of the uploaded file, taken from the `Content-Disposition` header on upload. Between 1 and 255 characters. Control characters and the characters `<>:"|?*\/` are not accepted.""",
+
+.venv/lib/python3.12/site-packages/google/genai/types.py:18308
+  /tmp/kb-wt-KANBA-162/.venv/lib/python3.12/site-packages/google/genai/types.py:18308: SyntaxWarning: invalid escape sequence '\/'
+    """Output only. The original name of the uploaded file, taken from the `Content-Disposition` header on upload. Between 1 and 255 characters. Control characters and the characters `<>:"|?*\/` are not accepted."""
+
+database/tests/test_pg_harness.py::test_04_negative_security_socket_and_dsn_rejections
+  /tmp/kb-wt-KANBA-162/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+953 passed, 3 warnings in 49.50s

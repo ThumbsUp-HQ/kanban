@@ -1,0 +1,396 @@
+{
+  "ticket": "KANBA-71",
+  "exchanges": [
+    {
+      "name": "create_agent_definition_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/workspaces/01a1ceb1-3a4c-7dd7-b2e2-1982ff5dcaa1/agent-definitions",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "153",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "agy-reviewer",
+          "display_name": "AGY Code Reviewer",
+          "harness_kind": "cli_pipe",
+          "cli_binary_allowlist_id": "agy",
+          "cli_args": [
+            "-p"
+          ],
+          "timeout_ms": 60000
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "528",
+          "content-type": "application/json",
+          "location": "/api/v1/agent-definitions/cc345e03-0a96-4d2e-b6e1-eff29828860f",
+          "x-request-id": "fb9f8901c12e4844b404c9179bb76b77",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "cc345e03-0a96-4d2e-b6e1-eff29828860f",
+          "workspace_id": "01a1ceb1-3a4c-7dd7-b2e2-1982ff5dcaa1",
+          "project_id": null,
+          "principal_id": "1e6ade4e-021e-438f-9de6-90a8b969e07e",
+          "slug": "agy-reviewer",
+          "display_name": "AGY Code Reviewer",
+          "harness_kind": "cli_pipe",
+          "provider_kind": null,
+          "model_id": null,
+          "cli_binary_allowlist_id": "agy",
+          "cli_args": [
+            "-p"
+          ],
+          "remote_runner_pool_slug": null,
+          "repo_access_mode": "none",
+          "mcp_allowed_tools": [
+            "search_tickets",
+            "read_ticket",
+            "search_knowledge",
+            "read_doc"
+          ],
+          "system_instructions_md": "",
+          "timeout_ms": 60000
+        }
+      }
+    },
+    {
+      "name": "banned_cli_flag_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/workspaces/01a1ceb1-3ae4-7318-8c55-f00f1a08796a/agent-definitions",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "144",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "banned-test-3d7cd8",
+          "display_name": "Banned Agent",
+          "harness_kind": "cli_pipe",
+          "cli_binary_allowlist_id": "agy",
+          "cli_args": [
+            "-p",
+            "--yolo"
+          ]
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "c331fbe7930449fe9f0c4afba51fbe37",
+          "content-length": "236",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:BANNED_CLI_FLAG",
+          "title": "CLI Policy Violation",
+          "status": 422,
+          "code": "BANNED_CLI_FLAG",
+          "detail": "Argument at index 1 ('--yolo') violates banned CLI flag policy",
+          "request_id": "c331fbe7930449fe9f0c4afba51fbe37"
+        }
+      }
+    },
+    {
+      "name": "codex_sandbox_override_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/workspaces/01a1ceb1-3cfe-76d6-b3a4-3283c71d97cb/agent-definitions",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "172",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "codex-bypass-42b864",
+          "display_name": "Codex Override Agent",
+          "harness_kind": "cli_pipe",
+          "cli_binary_allowlist_id": "codex",
+          "cli_args": [
+            "-p",
+            "-s",
+            "danger-full-access"
+          ]
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "d95d1f27bbb248dd8369ce1dc37e0d9c",
+          "content-length": "260",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:CODEX_SANDBOX_OVERRIDE",
+          "title": "CLI Policy Violation",
+          "status": 422,
+          "code": "CODEX_SANDBOX_OVERRIDE",
+          "detail": "codex binary requires initial pinned arguments ['-p', '-s', 'read-only']",
+          "request_id": "d95d1f27bbb248dd8369ce1dc37e0d9c"
+        }
+      }
+    },
+    {
+      "name": "cli_binary_not_allowlisted_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/workspaces/01a1ceb1-3dd1-73b3-8e0a-e69977b0a2c2/agent-definitions",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "131",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "bash-agent",
+          "display_name": "Bash Agent",
+          "harness_kind": "cli_pipe",
+          "cli_binary_allowlist_id": "bash",
+          "cli_args": [
+            "-c",
+            "id"
+          ]
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "14f1f2d00cb94212855f945b26294647",
+          "content-length": "242",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:CLI_BINARY_NOT_ALLOWLISTED",
+          "title": "Binary Not Allowlisted",
+          "status": 422,
+          "code": "CLI_BINARY_NOT_ALLOWLISTED",
+          "detail": "Binary identifier 'bash' is not in allowlist",
+          "request_id": "14f1f2d00cb94212855f945b26294647"
+        }
+      }
+    },
+    {
+      "name": "cli_args_invalid_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/workspaces/01a1ceb1-3e50-7798-b450-6dd1a50649f4/agent-definitions",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "128",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "nl-test",
+          "display_name": "Newline Test",
+          "harness_kind": "cli_pipe",
+          "cli_binary_allowlist_id": "agy",
+          "cli_args": [
+            "-p\nls"
+          ]
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "57a247e6214d4622b499f448eb97b459",
+          "content-length": "233",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:CLI_ARGS_INVALID",
+          "title": "CLI Policy Violation",
+          "status": 422,
+          "code": "CLI_ARGS_INVALID",
+          "detail": "Argument at index 0 contains forbidden control characters",
+          "request_id": "57a247e6214d4622b499f448eb97b459"
+        }
+      }
+    },
+    {
+      "name": "not_found_cross_workspace_404",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/workspaces/b0a2b71d-76b4-492f-81dc-bf6b8634ce7f/agent-definitions",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "7e6d096e1ba94166a230c6871e38fc90",
+          "content-length": "139",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "request_id": "7e6d096e1ba94166a230c6871e38fc90"
+        }
+      }
+    },
+    {
+      "name": "harness_fields_invalid_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/workspaces/01a1ceb1-3f73-7981-9739-88cd6f6ce248/agent-definitions",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "113",
+          "content-type": "application/json"
+        },
+        "body": {
+          "slug": "sdk-no-prov",
+          "display_name": "SDK No Provider",
+          "harness_kind": "in_app_sdk",
+          "model_id": "gemini-2.5-flash"
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "5b16548c3946440aba2f91ec8ea7dc1a",
+          "content-length": "249",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:HARNESS_FIELDS_INVALID",
+          "title": "Harness Fields Invalid",
+          "status": 422,
+          "code": "HARNESS_FIELDS_INVALID",
+          "detail": "in_app_sdk harness requires both provider_kind and model_id",
+          "request_id": "5b16548c3946440aba2f91ec8ea7dc1a"
+        }
+      }
+    },
+    {
+      "name": "agent_in_use_409",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/agent-definitions/b18a8ddc-2df2-4274-bebd-9ee067551ab2",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "x-request-id": "cbca49f446fb439b81249559863a93ac",
+          "content-length": "232",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:AGENT_IN_USE",
+          "title": "Agent In Use",
+          "status": 409,
+          "code": "AGENT_IN_USE",
+          "detail": "Agent definition 'delete-target-agent' is referenced by transition hooks",
+          "request_id": "cbca49f446fb439b81249559863a93ac"
+        }
+      }
+    }
+  ]
+}

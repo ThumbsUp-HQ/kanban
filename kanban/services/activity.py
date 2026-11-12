@@ -61,6 +61,22 @@ class ActivityEventType(StrEnum):
     PROJECT_CREATED = "PROJECT_CREATED"
     PROJECT_UPDATED = "PROJECT_UPDATED"
     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
+    DOC_CREATED = "DOC_CREATED"
+    DOC_UPDATED = "DOC_UPDATED"
+    DOC_TRASHED = "DOC_TRASHED"
+    PAGE_CREATED = "PAGE_CREATED"
+    PAGE_UPDATED = "PAGE_UPDATED"
+    PAGE_MOVED = "PAGE_MOVED"
+    PAGE_VERSION_RESTORED = "PAGE_VERSION_RESTORED"
+    PAGE_TRASHED = "PAGE_TRASHED"
+    AGENT_DEFINITION_CREATED = "AGENT_DEFINITION_CREATED"
+    AGENT_DEFINITION_UPDATED = "AGENT_DEFINITION_UPDATED"
+    AGENT_DEFINITION_DELETED = "AGENT_DEFINITION_DELETED"
+    ISSUE_CREATED = "ISSUE_CREATED"
+    ISSUE_FIELD_CHANGED = "ISSUE_FIELD_CHANGED"
+    ISSUE_DESCRIPTION_CHANGED = "ISSUE_DESCRIPTION_CHANGED"
+    ISSUE_STATE_CHANGED = "ISSUE_STATE_CHANGED"
+    ISSUE_LABELS_CHANGED = "ISSUE_LABELS_CHANGED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -68,6 +84,22 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.PROJECT_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.PROJECT_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.DOC_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.DOC_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.DOC_TRASHED: ActivityCategory.HISTORY,
+        ActivityEventType.PAGE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.PAGE_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.PAGE_MOVED: ActivityCategory.HISTORY,
+        ActivityEventType.PAGE_VERSION_RESTORED: ActivityCategory.HISTORY,
+        ActivityEventType.PAGE_TRASHED: ActivityCategory.HISTORY,
+        ActivityEventType.AGENT_DEFINITION_CREATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AGENT_DEFINITION_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AGENT_DEFINITION_DELETED: ActivityCategory.SYSTEM,
+        ActivityEventType.ISSUE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_FIELD_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_DESCRIPTION_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_STATE_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_LABELS_CHANGED: ActivityCategory.HISTORY,
     }
 )
 

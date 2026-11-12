@@ -1,0 +1,27 @@
+{
+  "name": "sparkle_stream_ok",
+  "status_code": 200,
+  "headers": {
+    "content-type": "text/event-stream",
+    "cache-control": "no-store",
+    "x-accel-buffering": "no"
+  },
+  "events": [
+    {
+      "event": "completion",
+      "data": {
+        "text": " is an open-source platform",
+        "tokens": 6
+      }
+    },
+    {
+      "event": "done",
+      "data": {
+        "status": "ok",
+        "ttft_ms": 18,
+        "total_ms": 35
+      }
+    }
+  ],
+  "raw": "event: completion\ndata: {\"text\": \" is an open-source platform\", \"tokens\": 6}\n\nevent: done\ndata: {\"status\": \"ok\", \"ttft_ms\": 18, \"total_ms\": 35}\n\n"
+}

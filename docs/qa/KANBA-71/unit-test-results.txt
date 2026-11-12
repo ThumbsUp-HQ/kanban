@@ -1,0 +1,15 @@
+.....................................................                    [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                          Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------
+kanban/agents/__init__.py         2      0      0      0   100%
+kanban/agents/cli_policy.py      74      0     24      0   100%
+kanban/agents/schemas.py        140      4     36      0    98%   154-155, 239-240
+kanban/agents/service.py        140      2     30      4    96%   86->exit, 216, 333->336, 370
+-------------------------------------------------------------------------
+TOTAL                           356      6     90      4    98%
+Required test coverage of 95% reached. Total coverage: 97.76%
+53 passed in 3.93s
+EXIT_CODE=0

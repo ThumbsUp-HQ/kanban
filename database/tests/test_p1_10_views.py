@@ -11,6 +11,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from database.tests.conftest import bind_workspace_admin, bootstrap_workspace_admin
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,14 +29,8 @@ async def _create_workspace(
     name: str = "Test Workspace",
 ) -> uuid.UUID:
     """Create a test workspace."""
-    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
-    row = await session.execute(
-        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
-        {"slug": ws_slug, "name": name},
-    )
-    val = row.scalar_one()
-    assert isinstance(val, uuid.UUID)
-    return val
+    ws_id, _ = await bootstrap_workspace_admin(session, slug=slug, name=name)
+    return ws_id
 
 
 async def _create_principal(
@@ -45,6 +41,7 @@ async def _create_principal(
     display_name: str = "Test Principal",
 ) -> uuid.UUID:
     """Create a principal in the principals table."""
+    await bind_workspace_admin(session, ws_id)
     row = await session.execute(
         text(
             "INSERT INTO principals (workspace_id, principal_type, display_name) "
@@ -65,6 +62,7 @@ async def _create_project(
     name: str = "Test Project",
 ) -> uuid.UUID:
     """Register and create a project in the database."""
+    await bind_workspace_admin(session, ws_id)
     u_id = uuid.uuid4()
     reg_row = await session.execute(
         text(
@@ -94,6 +92,7 @@ async def _register_view_object(
     title: str,
 ) -> uuid.UUID:
     """Register a view entity in the objects spine."""
+    await session.execute(text("RESET SESSION AUTHORIZATION"))
     u_id = uuid.uuid4()
     row = await session.execute(
         text(
@@ -109,6 +108,8 @@ async def _register_view_object(
     )
     val = row.scalar_one()
     assert isinstance(val, uuid.UUID)
+    await session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
+    await bind_workspace_admin(session, ws_id)
     return val
 
 
@@ -397,6 +398,7 @@ async def test_04_views_security_and_spine_mismatches(app_session: AsyncSession)
     group_ws1 = await _create_principal(app_session, ws1, principal_type="GROUP")
     proj_ws1 = await _create_project(app_session, ws1, identifier="SEC1")
     proj_ws2 = await _create_project(app_session, ws2, identifier="SEC2")
+    await bind_workspace_admin(app_session, ws1)
 
     # 1. owner_principal_id pointing to a GROUP raises VIEW_INVALID_OWNER
     sp1 = await app_session.begin_nested()

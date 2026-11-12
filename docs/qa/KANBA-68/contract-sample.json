@@ -1,0 +1,1231 @@
+{
+  "ticket": "KANBA-68",
+  "exchanges": [
+    {
+      "name": "create_doc_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/docs",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "149",
+          "content-type": "application/json"
+        },
+        "body": {
+          "project_id": "01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+          "title": "Architecture Guide",
+          "body_markdown": "# Overview\nThis is the core architecture guide."
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "1440",
+          "content-type": "application/json",
+          "etag": "\"81b0549f7307eafbae31e07ee6aacd019ccfb89b37309202b3f3748e86fbf599\"",
+          "location": "/api/v1/docs/docs/architecture-guide",
+          "x-request-id": "1bb6c8878b3745669a4eb2e9b0fa70bc",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceb1-48b5-71be-8566-526473917c50",
+          "canonical_key": "docs/architecture-guide",
+          "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+          "project_id": "01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+          "title": "Architecture Guide",
+          "body_markdown": "# Overview\nThis is the core architecture guide.",
+          "body_sha256": "81b0549f7307eafbae31e07ee6aacd019ccfb89b37309202b3f3748e86fbf599",
+          "hierarchy_path": "d01a1ceb148b571be8566526473917c50",
+          "version_seq": 1,
+          "breadcrumbs": [
+            {
+              "id": "01a1ceb1-48b5-71be-8566-526473917c50",
+              "title": "Architecture Guide",
+              "slug": "architecture-guide",
+              "canonical_key": "docs/architecture-guide",
+              "restricted": false,
+              "label": null
+            }
+          ],
+          "outline": [
+            {
+              "level": 1,
+              "text": "Overview",
+              "anchor": "overview",
+              "start_line": 1
+            }
+          ],
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: DOCS",
+              "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+              "project_key": "DOCS",
+              "project_name": "Docs Test Project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceb1-47fe-7d3c-9037-45ddf4295b4a",
+                "handle": "@doc_admin",
+                "display_name": "Doc_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "ADMIN",
+            "COMMENT",
+            "DELETE",
+            "EDIT",
+            "LINK",
+            "SHARE",
+            "TRANSITION",
+            "VIEW"
+          ]
+        }
+      }
+    },
+    {
+      "name": "list_docs_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/docs?project=01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "277",
+          "content-type": "application/json",
+          "x-request-id": "3a5969f474ea433db3d28a8d041760f2",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": [
+          {
+            "id": "01a1ceb1-48b5-71be-8566-526473917c50",
+            "canonical_key": "d01a1ceb148b571be8566526473917c50",
+            "project_id": "01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+            "title": "Architecture Guide",
+            "version_seq": 1,
+            "body_sha256": "81b0549f7307eafbae31e07ee6aacd019ccfb89b37309202b3f3748e86fbf599"
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_doc_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/docs/docs/architecture-guide",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1440",
+          "content-type": "application/json",
+          "etag": "\"81b0549f7307eafbae31e07ee6aacd019ccfb89b37309202b3f3748e86fbf599\"",
+          "x-request-id": "84ea4c16d90645c690584f46e110bdd4",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceb1-48b5-71be-8566-526473917c50",
+          "canonical_key": "docs/architecture-guide",
+          "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+          "project_id": "01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+          "title": "Architecture Guide",
+          "body_markdown": "# Overview\nThis is the core architecture guide.",
+          "body_sha256": "81b0549f7307eafbae31e07ee6aacd019ccfb89b37309202b3f3748e86fbf599",
+          "hierarchy_path": "d01a1ceb148b571be8566526473917c50",
+          "version_seq": 1,
+          "breadcrumbs": [
+            {
+              "id": "01a1ceb1-48b5-71be-8566-526473917c50",
+              "title": "Architecture Guide",
+              "slug": "architecture-guide",
+              "canonical_key": "docs/architecture-guide",
+              "restricted": false,
+              "label": null
+            }
+          ],
+          "outline": [
+            {
+              "level": 1,
+              "text": "Overview",
+              "anchor": "overview",
+              "start_line": 1
+            }
+          ],
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: DOCS",
+              "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+              "project_key": "DOCS",
+              "project_name": "Docs Test Project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceb1-47fe-7d3c-9037-45ddf4295b4a",
+                "handle": "@doc_admin",
+                "display_name": "Doc_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "ADMIN",
+            "COMMENT",
+            "DELETE",
+            "EDIT",
+            "LINK",
+            "SHARE",
+            "TRANSITION",
+            "VIEW"
+          ]
+        }
+      }
+    },
+    {
+      "name": "create_page_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/docs/docs/architecture-guide/pages",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "121",
+          "content-type": "application/json"
+        },
+        "body": {
+          "title": "System Components",
+          "body_markdown": "# Components\n## Database\nPostgres 16 details.\n## API\nFastAPI details."
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "1868",
+          "content-type": "application/json",
+          "etag": "\"f19acde350bbfd37f84a1b33fff7675aa867e0fc8eb130252216f24d1a8804b1\"",
+          "location": "/api/v1/pages/docs/architecture-guide/system-components",
+          "x-request-id": "722f66cc9e6f48c4bc15a3bba066614a",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceb1-4962-7042-a965-9e5d618f0e5c",
+          "canonical_key": "docs/architecture-guide/system-components",
+          "doc_id": "01a1ceb1-48b5-71be-8566-526473917c50",
+          "parent_page_id": null,
+          "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+          "title": "System Components",
+          "body_markdown": "# Components\n## Database\nPostgres 16 details.\n## API\nFastAPI details.",
+          "body_sha256": "f19acde350bbfd37f84a1b33fff7675aa867e0fc8eb130252216f24d1a8804b1",
+          "hierarchy_path": "d01a1ceb148b571be8566526473917c50.p01a1ceb149627042a9659e5d618f0e5c",
+          "version_seq": 1,
+          "sort_rank": "a0",
+          "breadcrumbs": [
+            {
+              "id": "01a1ceb1-48b5-71be-8566-526473917c50",
+              "title": "Architecture Guide",
+              "slug": "architecture-guide",
+              "canonical_key": "docs/architecture-guide",
+              "restricted": false,
+              "label": null
+            },
+            {
+              "id": "01a1ceb1-4962-7042-a965-9e5d618f0e5c",
+              "title": "System Components",
+              "slug": "system-components",
+              "canonical_key": "docs/architecture-guide/system-components",
+              "restricted": false,
+              "label": null
+            }
+          ],
+          "outline": [
+            {
+              "level": 1,
+              "text": "Components",
+              "anchor": "components",
+              "start_line": 1
+            },
+            {
+              "level": 2,
+              "text": "Database",
+              "anchor": "database",
+              "start_line": 2
+            },
+            {
+              "level": 2,
+              "text": "API",
+              "anchor": "api",
+              "start_line": 4
+            }
+          ],
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: DOCS",
+              "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+              "project_key": "DOCS",
+              "project_name": "Docs Test Project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceb1-47fe-7d3c-9037-45ddf4295b4a",
+                "handle": "@doc_admin",
+                "display_name": "Doc_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "ADMIN",
+            "COMMENT",
+            "DELETE",
+            "EDIT",
+            "LINK",
+            "SHARE",
+            "TRANSITION",
+            "VIEW"
+          ]
+        }
+      }
+    },
+    {
+      "name": "get_doc_tree_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/docs/docs/architecture-guide/tree",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "489",
+          "content-type": "application/json",
+          "x-request-id": "cad3dbec8bf54326914d7d2d6b2f935c",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": [
+          {
+            "id": "01a1ceb1-4962-7042-a965-9e5d618f0e5c",
+            "title": "System Components",
+            "slug": "system-components",
+            "sort_rank": "a0",
+            "restricted": false,
+            "label": null,
+            "children": [
+              {
+                "id": "01a1ceb1-49b2-7e5b-a497-045460303cec",
+                "title": "Database Engine",
+                "slug": "database-engine",
+                "sort_rank": "a0",
+                "restricted": false,
+                "label": null,
+                "children": [
+                  {
+                    "id": "01a1ceb1-49ec-7443-aac0-2297a2a09b8f",
+                    "title": "Row-Level Security",
+                    "slug": "row-level-security",
+                    "sort_rank": "a0",
+                    "restricted": false,
+                    "label": null,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "update_page_200",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/pages/01a1ceb1-49b2-7e5b-a497-045460303cec",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "if-match": "\"a836798d799fc8217d298d7609e9c8298958ef0053fa6c29419c94191bc14458\"",
+          "content-length": "40",
+          "content-type": "application/json"
+        },
+        "body": {
+          "body_markdown": "# Updated DB Body V2"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1962",
+          "content-type": "application/json",
+          "etag": "\"385d6b18d8043de6ab416570ad0426af8eba61e602572df6424fb18967e2ddee\"",
+          "x-request-id": "c519da3ce7f54375ad9f272212e00835",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceb1-49b2-7e5b-a497-045460303cec",
+          "canonical_key": "docs/architecture-guide/database-engine",
+          "doc_id": "01a1ceb1-48b5-71be-8566-526473917c50",
+          "parent_page_id": "01a1ceb1-4962-7042-a965-9e5d618f0e5c",
+          "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+          "title": "Database Engine",
+          "body_markdown": "# Updated DB Body V2",
+          "body_sha256": "385d6b18d8043de6ab416570ad0426af8eba61e602572df6424fb18967e2ddee",
+          "hierarchy_path": "d01a1ceb148b571be8566526473917c50.p01a1ceb149627042a9659e5d618f0e5c.p01a1ceb149b27e5ba497045460303cec",
+          "version_seq": 2,
+          "sort_rank": "a0",
+          "breadcrumbs": [
+            {
+              "id": "01a1ceb1-48b5-71be-8566-526473917c50",
+              "title": "Architecture Guide",
+              "slug": "architecture-guide",
+              "canonical_key": "docs/architecture-guide",
+              "restricted": false,
+              "label": null
+            },
+            {
+              "id": "01a1ceb1-4962-7042-a965-9e5d618f0e5c",
+              "title": "System Components",
+              "slug": "system-components",
+              "canonical_key": "docs/architecture-guide/system-components",
+              "restricted": false,
+              "label": null
+            },
+            {
+              "id": "01a1ceb1-49b2-7e5b-a497-045460303cec",
+              "title": "Database Engine",
+              "slug": "database-engine",
+              "canonical_key": "docs/architecture-guide/database-engine",
+              "restricted": false,
+              "label": null
+            }
+          ],
+          "outline": [
+            {
+              "level": 1,
+              "text": "Updated DB Body V2",
+              "anchor": "updated-db-body-v2",
+              "start_line": 1
+            }
+          ],
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: DOCS",
+              "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+              "project_key": "DOCS",
+              "project_name": "Docs Test Project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceb1-47fe-7d3c-9037-45ddf4295b4a",
+                "handle": "@doc_admin",
+                "display_name": "Doc_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "ADMIN",
+            "COMMENT",
+            "DELETE",
+            "EDIT",
+            "LINK",
+            "SHARE",
+            "TRANSITION",
+            "VIEW"
+          ]
+        }
+      }
+    },
+    {
+      "name": "list_page_versions_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/pages/01a1ceb1-49b2-7e5b-a497-045460303cec/versions",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "620",
+          "content-type": "application/json",
+          "x-request-id": "01c31d0f41ad40139dbb234685f581f3",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": [
+          {
+            "page_id": "01a1ceb1-49b2-7e5b-a497-045460303cec",
+            "version_seq": 2,
+            "title": "Database Engine",
+            "body_markdown": "# Updated DB Body V2",
+            "body_sha256": "385d6b18d8043de6ab416570ad0426af8eba61e602572df6424fb18967e2ddee",
+            "created_by_id": "01a1ceb1-47fe-7d3c-9037-45ddf4295b4a",
+            "created_at": "2026-11-12T07:38:07.850740Z"
+          },
+          {
+            "page_id": "01a1ceb1-49b2-7e5b-a497-045460303cec",
+            "version_seq": 1,
+            "title": "Database Engine",
+            "body_markdown": "# Initial DB Body",
+            "body_sha256": "a836798d799fc8217d298d7609e9c8298958ef0053fa6c29419c94191bc14458",
+            "created_by_id": "01a1ceb1-47fe-7d3c-9037-45ddf4295b4a",
+            "created_at": "2026-11-12T07:38:07.804108Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_page_version_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/pages/01a1ceb1-49b2-7e5b-a497-045460303cec/versions/1",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "307",
+          "content-type": "application/json",
+          "x-request-id": "04e909e0f8eb45f29d2ec361e9b25a0e",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "page_id": "01a1ceb1-49b2-7e5b-a497-045460303cec",
+          "version_seq": 1,
+          "title": "Database Engine",
+          "body_markdown": "# Initial DB Body",
+          "body_sha256": "a836798d799fc8217d298d7609e9c8298958ef0053fa6c29419c94191bc14458",
+          "created_by_id": "01a1ceb1-47fe-7d3c-9037-45ddf4295b4a",
+          "created_at": "2026-11-12T07:38:07.804108Z"
+        }
+      }
+    },
+    {
+      "name": "restore_page_version_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/pages/01a1ceb1-49b2-7e5b-a497-045460303cec/versions/1/restore",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "if-match": "\"297b3f52ad49d51c3f9c118a50ad59219fc187867a20a6a34a2d1e79987dc568\""
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1953",
+          "content-type": "application/json",
+          "etag": "\"a836798d799fc8217d298d7609e9c8298958ef0053fa6c29419c94191bc14458\"",
+          "x-request-id": "38d0cf9dc92442f7afb6572cf73f9d68",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceb1-49b2-7e5b-a497-045460303cec",
+          "canonical_key": "docs/architecture-guide/database-engine",
+          "doc_id": "01a1ceb1-48b5-71be-8566-526473917c50",
+          "parent_page_id": "01a1ceb1-4962-7042-a965-9e5d618f0e5c",
+          "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+          "title": "Database Engine",
+          "body_markdown": "# Initial DB Body",
+          "body_sha256": "a836798d799fc8217d298d7609e9c8298958ef0053fa6c29419c94191bc14458",
+          "hierarchy_path": "d01a1ceb148b571be8566526473917c50.p01a1ceb149627042a9659e5d618f0e5c.p01a1ceb149b27e5ba497045460303cec",
+          "version_seq": 4,
+          "sort_rank": "a0",
+          "breadcrumbs": [
+            {
+              "id": "01a1ceb1-48b5-71be-8566-526473917c50",
+              "title": "Architecture Guide",
+              "slug": "architecture-guide",
+              "canonical_key": "docs/architecture-guide",
+              "restricted": false,
+              "label": null
+            },
+            {
+              "id": "01a1ceb1-4962-7042-a965-9e5d618f0e5c",
+              "title": "System Components",
+              "slug": "system-components",
+              "canonical_key": "docs/architecture-guide/system-components",
+              "restricted": false,
+              "label": null
+            },
+            {
+              "id": "01a1ceb1-49b2-7e5b-a497-045460303cec",
+              "title": "Database Engine",
+              "slug": "database-engine",
+              "canonical_key": "docs/architecture-guide/database-engine",
+              "restricted": false,
+              "label": null
+            }
+          ],
+          "outline": [
+            {
+              "level": 1,
+              "text": "Initial DB Body",
+              "anchor": "initial-db-body",
+              "start_line": 1
+            }
+          ],
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: DOCS",
+              "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+              "project_key": "DOCS",
+              "project_name": "Docs Test Project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceb1-47fe-7d3c-9037-45ddf4295b4a",
+                "handle": "@doc_admin",
+                "display_name": "Doc_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "ADMIN",
+            "COMMENT",
+            "DELETE",
+            "EDIT",
+            "LINK",
+            "SHARE",
+            "TRANSITION",
+            "VIEW"
+          ]
+        }
+      }
+    },
+    {
+      "name": "get_page_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/pages/01a1ceb1-49b2-7e5b-a497-045460303cec",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1953",
+          "content-type": "application/json",
+          "etag": "\"a836798d799fc8217d298d7609e9c8298958ef0053fa6c29419c94191bc14458\"",
+          "x-request-id": "30234b70af1b4b3cbc8c5f5ab2fa9c93",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceb1-49b2-7e5b-a497-045460303cec",
+          "canonical_key": "docs/architecture-guide/database-engine",
+          "doc_id": "01a1ceb1-48b5-71be-8566-526473917c50",
+          "parent_page_id": "01a1ceb1-4962-7042-a965-9e5d618f0e5c",
+          "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+          "title": "Database Engine",
+          "body_markdown": "# Initial DB Body",
+          "body_sha256": "a836798d799fc8217d298d7609e9c8298958ef0053fa6c29419c94191bc14458",
+          "hierarchy_path": "d01a1ceb148b571be8566526473917c50.p01a1ceb149627042a9659e5d618f0e5c.p01a1ceb149b27e5ba497045460303cec",
+          "version_seq": 4,
+          "sort_rank": "a0",
+          "breadcrumbs": [
+            {
+              "id": "01a1ceb1-48b5-71be-8566-526473917c50",
+              "title": "Architecture Guide",
+              "slug": "architecture-guide",
+              "canonical_key": "docs/architecture-guide",
+              "restricted": false,
+              "label": null
+            },
+            {
+              "id": "01a1ceb1-4962-7042-a965-9e5d618f0e5c",
+              "title": "System Components",
+              "slug": "system-components",
+              "canonical_key": "docs/architecture-guide/system-components",
+              "restricted": false,
+              "label": null
+            },
+            {
+              "id": "01a1ceb1-49b2-7e5b-a497-045460303cec",
+              "title": "Database Engine",
+              "slug": "database-engine",
+              "canonical_key": "docs/architecture-guide/database-engine",
+              "restricted": false,
+              "label": null
+            }
+          ],
+          "outline": [
+            {
+              "level": 1,
+              "text": "Initial DB Body",
+              "anchor": "initial-db-body",
+              "start_line": 1
+            }
+          ],
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: DOCS",
+              "workspace_id": "01a1ceb1-47f0-7258-81c4-92b650a599b4",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceb1-4812-7881-91af-f4cf3a9a29fe",
+              "project_key": "DOCS",
+              "project_name": "Docs Test Project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceb1-47fe-7d3c-9037-45ddf4295b4a",
+                "handle": "@doc_admin",
+                "display_name": "Doc_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "ADMIN",
+            "COMMENT",
+            "DELETE",
+            "EDIT",
+            "LINK",
+            "SHARE",
+            "TRANSITION",
+            "VIEW"
+          ]
+        }
+      }
+    },
+    {
+      "name": "move_page_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/pages/01a1ceb1-4c48-799e-b3c7-1700c9349e11/move",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "23",
+          "content-type": "application/json"
+        },
+        "body": {
+          "parent_page_id": null
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1489",
+          "content-type": "application/json",
+          "x-request-id": "9bf61ca3a7b14e03ac42cb84e41c3f56",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceb1-4c48-799e-b3c7-1700c9349e11",
+          "canonical_key": "docs/doc-1/page-2",
+          "doc_id": "01a1ceb1-4bbb-7c04-b3d3-0ba02b2a075c",
+          "parent_page_id": null,
+          "workspace_id": "01a1ceb1-4b41-7150-a91b-f86ada7c507f",
+          "title": "Page 2",
+          "body_markdown": "",
+          "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "hierarchy_path": "d01a1ceb14bbb7c04b3d30ba02b2a075c.p01a1ceb14c48799eb3c71700c9349e11",
+          "version_seq": 1,
+          "sort_rank": "mzzV",
+          "breadcrumbs": [
+            {
+              "id": "01a1ceb1-4bbb-7c04-b3d3-0ba02b2a075c",
+              "title": "Doc 1",
+              "slug": "doc-1",
+              "canonical_key": "docs/doc-1",
+              "restricted": false,
+              "label": null
+            },
+            {
+              "id": "01a1ceb1-4c48-799e-b3c7-1700c9349e11",
+              "title": "Page 2",
+              "slug": "page-2",
+              "canonical_key": "docs/doc-1/page-2",
+              "restricted": false,
+              "label": null
+            }
+          ],
+          "outline": [],
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: DOCS",
+              "workspace_id": "01a1ceb1-4b41-7150-a91b-f86ada7c507f",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceb1-4b56-7fc6-8273-448dd33c3402",
+              "project_key": "DOCS",
+              "project_name": "Docs Test Project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceb1-4b4b-7d24-82fe-7ea21d73e6a6",
+                "handle": "@dag_admin",
+                "display_name": "Dag_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "ADMIN",
+            "COMMENT",
+            "DELETE",
+            "EDIT",
+            "LINK",
+            "SHARE",
+            "TRANSITION",
+            "VIEW"
+          ]
+        }
+      }
+    },
+    {
+      "name": "delete_page_200",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/pages/01a1ceb1-6de4-7a97-91b0-22e740619023",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "20",
+          "content-type": "application/json",
+          "x-request-id": "b3389aec183f4f59bf0e59d9b40649dd",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "status": "deleted"
+        }
+      }
+    },
+    {
+      "name": "delete_doc_200",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/docs/docs/delete-doc",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "20",
+          "content-type": "application/json",
+          "x-request-id": "f4849b9568d4409b977a058244648d51",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "status": "deleted"
+        }
+      }
+    },
+    {
+      "name": "update_doc_200",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/docs/docs/patch-target-doc",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "if-match": "*",
+          "content-length": "63",
+          "content-type": "application/json"
+        },
+        "body": {
+          "title": "Updated Title",
+          "body_markdown": "# New Body Markdown"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1417",
+          "content-type": "application/json",
+          "etag": "\"6a224fd94c97f9f94f32f7980f466b614a39edd67811150042e4ec56927ff9f5\"",
+          "x-request-id": "4aa1eef4df4b480e8510438209179080",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceb1-6f74-736b-92b9-d3f9f5651964",
+          "canonical_key": "docs/patch-target-doc",
+          "workspace_id": "01a1ceb1-6f06-72fa-b46d-22f0609529d5",
+          "project_id": "01a1ceb1-6f16-7dd9-beb6-3b90fa9b3aa6",
+          "title": "Updated Title",
+          "body_markdown": "# New Body Markdown",
+          "body_sha256": "6a224fd94c97f9f94f32f7980f466b614a39edd67811150042e4ec56927ff9f5",
+          "hierarchy_path": "d01a1ceb16f74736b92b9d3f9f5651964",
+          "version_seq": 2,
+          "breadcrumbs": [
+            {
+              "id": "01a1ceb1-6f74-736b-92b9-d3f9f5651964",
+              "title": "Updated Title",
+              "slug": "patch-target-doc",
+              "canonical_key": "docs/patch-target-doc",
+              "restricted": false,
+              "label": null
+            }
+          ],
+          "outline": [
+            {
+              "level": 1,
+              "text": "New Body Markdown",
+              "anchor": "new-body-markdown",
+              "start_line": 1
+            }
+          ],
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: DOCS",
+              "workspace_id": "01a1ceb1-6f06-72fa-b46d-22f0609529d5",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceb1-6f16-7dd9-beb6-3b90fa9b3aa6",
+              "project_key": "DOCS",
+              "project_name": "Docs Test Project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceb1-6f0e-757e-8b00-da3c03488407",
+                "handle": "@patch_admin",
+                "display_name": "Patch_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "ADMIN",
+            "COMMENT",
+            "DELETE",
+            "EDIT",
+            "LINK",
+            "SHARE",
+            "TRANSITION",
+            "VIEW"
+          ]
+        }
+      }
+    }
+  ]
+}

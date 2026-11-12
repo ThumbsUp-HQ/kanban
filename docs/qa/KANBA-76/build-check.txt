@@ -1,0 +1,33 @@
+=== Ruff Check ===
+All checks passed!
+=== Ruff Format Check ===
+658 files already formatted
+=== Mypy Strict ===
+Success: no issues found in 249 source files
+=== Lint Imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 336 files, 726 dependencies.
+-------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT
+
+Contracts: 2 kept, 0 broken.
+=== License Gate ===
+SUMMARY python=110 node=1 violations=0
+=== Check No Unicode Dashes ===
+OK: 0 files with non-ASCII dashes found.

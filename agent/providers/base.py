@@ -13,6 +13,7 @@ from typing import (
 )
 
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -89,9 +90,19 @@ class CompletionRequest(BaseModel):
     suffix: str | None = None
     system_prompt: str | None = None
     temperature: float = Field(default=0.15, ge=0.0, le=2.0)
-    max_output_tokens: int = Field(default=256, ge=1, le=32768)
+    max_output_tokens: int = Field(
+        default=256,
+        ge=1,
+        le=32768,
+        validation_alias=AliasChoices("max_output_tokens", "max_tokens"),
+    )
     ttft_deadline_ms: int | None = Field(default=None, ge=1, le=60000)
     metadata: dict[str, str] = Field(default_factory=dict)
+
+    @property
+    def max_tokens(self) -> int:
+        """Return the maximum token budget for the completion."""
+        return self.max_output_tokens
 
 
 class StreamChunk(BaseModel):
