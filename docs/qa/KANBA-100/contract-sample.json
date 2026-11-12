@@ -1,0 +1,392 @@
+{
+  "ticket": "KANBA-100",
+  "exchanges": [
+    {
+      "name": "copy_issue_default_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/CPY1-1/copy",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "2",
+          "content-type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "1514",
+          "content-type": "application/json",
+          "location": "/api/v1/issues/CPY1-2",
+          "x-request-id": "7afc5ea69c3a41f1b4a0834593e27b2b",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "issue": {
+            "id": "01a1cfc3-9aa8-78d7-be41-754ee6ffd3ad",
+            "key": "CPY1-2",
+            "summary": "[Copy] Harden OIDC auth",
+            "description_markdown": "# Auth Details\n\nEnsure OIDC tokens are verified with S256.",
+            "description_sha256": "3a5ec7b1c8f63e6845d025fb152f3fa911620d9e64fcfc223e80a782c1722eaa",
+            "state": {
+              "id": "01a1cfc3-98a3-7652-91ad-6023c5923ba3",
+              "name": "Backlog",
+              "group": "backlog"
+            },
+            "priority": {
+              "slug": "high",
+              "label": "High",
+              "emoji": "\u26a1"
+            },
+            "start_date": null,
+            "due_date": null,
+            "cycle_id": null,
+            "parent": null,
+            "labels": [
+              {
+                "id": "2b670076-2acb-4b31-a05a-efda6e3b4d34",
+                "name": "security",
+                "color_hex": "#ff0000"
+              }
+            ],
+            "module_ids": [],
+            "assignees": [],
+            "board_rank": "a000002",
+            "created_by_id": "01a1cfc3-9884-7d6e-be53-34dccde17c80",
+            "access_manifest": {
+              "pill_label": "Project",
+              "explicit_grant_count": 0,
+              "inherited_scope": {
+                "kind": "project",
+                "scope_label": "Project: CPY1",
+                "workspace_id": "01a1cfc3-9873-78a6-bd54-6befe497b265",
+                "workspace_name": "Engineering",
+                "project_id": "01a1cfc3-98a0-782c-838d-53385bf9c511",
+                "project_key": "CPY1",
+                "project_name": "CPY1 project"
+              },
+              "users": [
+                {
+                  "principal_id": "01a1cfc3-9884-7d6e-be53-34dccde17c80",
+                  "handle": "@admin1",
+                  "display_name": "Admin1",
+                  "capabilities": [
+                    "VIEW",
+                    "COMMENT",
+                    "EDIT",
+                    "TRANSITION",
+                    "LINK",
+                    "SHARE",
+                    "ADMIN",
+                    "DELETE"
+                  ],
+                  "grant_source": "project_owner"
+                }
+              ],
+              "groups": [],
+              "agents": [],
+              "deny_overrides": [],
+              "redacted_entries": [],
+              "redacted_count": 0
+            },
+            "capabilities": [
+              "VIEW",
+              "COMMENT",
+              "EDIT",
+              "TRANSITION",
+              "LINK",
+              "SHARE",
+              "ADMIN",
+              "DELETE"
+            ]
+          },
+          "copied_sub_issues": [],
+          "skipped": {
+            "restricted_sub_issues": 0
+          },
+          "copied_attachments": 0,
+          "link_id": null
+        }
+      }
+    },
+    {
+      "name": "copy_issue_with_options_and_skipped_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/SEC2-1/copy",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "82",
+          "content-type": "application/json"
+        },
+        "body": {
+          "include_sub_issues": true,
+          "include_attachments": false,
+          "link_as_relates_to": false
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "1571",
+          "content-type": "application/json",
+          "location": "/api/v1/issues/SEC2-5",
+          "x-request-id": "c7052cd609854a05bf3c24e8b13dc8a0",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "issue": {
+            "id": "01a1cfc3-9cc9-7177-bb12-2ef0562cf039",
+            "key": "SEC2-5",
+            "summary": "[Copy] Root Task",
+            "description_markdown": "",
+            "description_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "state": {
+              "id": "01a1cfc3-9b22-7ae5-bb8d-b7c5294404c7",
+              "name": "Backlog",
+              "group": "backlog"
+            },
+            "priority": {
+              "slug": "none",
+              "label": "None",
+              "emoji": null
+            },
+            "start_date": null,
+            "due_date": null,
+            "cycle_id": null,
+            "parent": null,
+            "labels": [],
+            "module_ids": [],
+            "assignees": [],
+            "board_rank": "a000005",
+            "created_by_id": "01a1cfc3-9b1d-77b3-af28-17a802a9b60b",
+            "access_manifest": {
+              "pill_label": "Project",
+              "explicit_grant_count": 0,
+              "inherited_scope": {
+                "kind": "project",
+                "scope_label": "Project: SEC2",
+                "workspace_id": "01a1cfc3-9b0b-76fa-87d8-dd209867c292",
+                "workspace_name": "Engineering",
+                "project_id": "01a1cfc3-9b20-7deb-bb66-3f01df2de623",
+                "project_key": "SEC2",
+                "project_name": "SEC2 project"
+              },
+              "users": [
+                {
+                  "principal_id": "01a1cfc3-9b15-7774-96b0-427a282692c2",
+                  "handle": "@admin2",
+                  "display_name": "Admin2",
+                  "capabilities": [
+                    "VIEW",
+                    "COMMENT",
+                    "EDIT",
+                    "TRANSITION",
+                    "LINK",
+                    "SHARE",
+                    "ADMIN",
+                    "DELETE"
+                  ],
+                  "grant_source": "project_owner"
+                },
+                {
+                  "principal_id": "01a1cfc3-9b1d-77b3-af28-17a802a9b60b",
+                  "handle": "@member2",
+                  "display_name": "Member2",
+                  "capabilities": [
+                    "VIEW",
+                    "COMMENT",
+                    "EDIT",
+                    "TRANSITION",
+                    "LINK"
+                  ],
+                  "grant_source": "project_role"
+                }
+              ],
+              "groups": [],
+              "agents": [],
+              "deny_overrides": [],
+              "redacted_entries": [],
+              "redacted_count": 0
+            },
+            "capabilities": [
+              "VIEW",
+              "COMMENT",
+              "EDIT",
+              "TRANSITION",
+              "LINK"
+            ]
+          },
+          "copied_sub_issues": [
+            {
+              "source_key": "SEC2-2",
+              "copy_key": "SEC2-6"
+            }
+          ],
+          "skipped": {
+            "restricted_sub_issues": 2
+          },
+          "copied_attachments": 0,
+          "link_id": null
+        }
+      }
+    },
+    {
+      "name": "copy_issue_too_large_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/BND3-14/copy",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "27",
+          "content-type": "application/json"
+        },
+        "body": {
+          "include_sub_issues": true
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "689496ec7513438dba0f9ca6feec8cae",
+          "content-length": "214",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:COPY_TOO_LARGE",
+          "title": "Copy Too Large",
+          "status": 422,
+          "code": "COPY_TOO_LARGE",
+          "detail": "Copy operation exceeds 200 readable issues limit",
+          "request_id": "689496ec7513438dba0f9ca6feec8cae"
+        }
+      }
+    },
+    {
+      "name": "copy_issue_non_viewer_404",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/AUT6-1/copy",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "2",
+          "content-type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "88ba4a5470c84f5cb4f46664149f6008",
+          "content-length": "139",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "request_id": "88ba4a5470c84f5cb4f46664149f6008"
+        }
+      }
+    },
+    {
+      "name": "copy_issue_non_editor_403",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/AUT6-1/copy",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "2",
+          "content-type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "x-request-id": "780b5e39a04840a39fc76dd093f38ca7",
+          "content-length": "243",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:INSUFFICIENT_CAPABILITY",
+          "title": "Insufficient Capability",
+          "status": 403,
+          "code": "INSUFFICIENT_CAPABILITY",
+          "detail": "EDIT capability required on project to copy issues",
+          "request_id": "780b5e39a04840a39fc76dd093f38ca7"
+        }
+      }
+    }
+  ]
+}
