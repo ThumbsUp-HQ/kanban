@@ -1,0 +1,37 @@
+                   section                    
+----------------------------------------------
+ === 1. UNBROKEN 5-ROW SHA-256 HASH CHAIN ===
+(1 row)
+
+ chain_seq |                            prev_hash                             |                             row_hash                             |  event_type  
+-----------+------------------------------------------------------------------+------------------------------------------------------------------+--------------
+         1 | 0000000000000000000000000000000000000000000000000000000000000000 | b400c16d6a3272dea4d7a4b03bcbc18482f6a0062b9b7c83fe93ff72036dcb83 | AUDIT_STEP_1
+         2 | b400c16d6a3272dea4d7a4b03bcbc18482f6a0062b9b7c83fe93ff72036dcb83 | bec150786bc764772e4ac91c73dead332f2982776e63d9584f7625b60d3d607a | AUDIT_STEP_2
+         3 | bec150786bc764772e4ac91c73dead332f2982776e63d9584f7625b60d3d607a | 04c5a2f4786d8f302dcfad746a06ee96bee523dae8c4366ffdc5c3aabdb6d1c6 | AUDIT_STEP_3
+         4 | 04c5a2f4786d8f302dcfad746a06ee96bee523dae8c4366ffdc5c3aabdb6d1c6 | d27b130f41438836257d852cd680f9c55e3522a6abef140b3b70788329f73837 | AUDIT_STEP_4
+         5 | d27b130f41438836257d852cd680f9c55e3522a6abef140b3b70788329f73837 | be5d475b641f26d66e95f87daabc73af108a8db205e4f07cb0dac32dabb79893 | AUDIT_STEP_5
+(5 rows)
+
+                       section                       
+-----------------------------------------------------
+ === 2. CHAIN VERIFICATION BEFORE TAMPER (VALID) ===
+(1 row)
+
+ is_valid | checked_rows | first_broken_seq | first_broken_id | failure_reason 
+----------+--------------+------------------+-----------------+----------------
+ t        |            5 |                  |                 | 
+(1 row)
+
+ALTER TABLE
+UPDATE 1
+ALTER TABLE
+                                section                                 
+------------------------------------------------------------------------
+ === 3. CHAIN VERIFICATION AFTER PAYLOAD TAMPER ON ROW 3 (DETECTED) ===
+(1 row)
+
+ is_valid | checked_rows | first_broken_seq |           first_broken_id            |  failure_reason   
+----------+--------------+------------------+--------------------------------------+-------------------
+ f        |            2 |                3 | 01a1cdb9-0e96-7c5d-8b68-4ba923d5db0a | ROW_HASH_MISMATCH
+(1 row)
+
