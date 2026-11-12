@@ -62,9 +62,10 @@ async def create_cycle(
     response: Response,
 ) -> CycleResponse:
     """Create a new cycle in upcoming status (requires project ADMIN)."""
-    result = await svc.create_cycle(session, caller, project_ref, body)
-    response.headers["Location"] = f"/api/v1/cycles/{result.id}"
-    return result
+    async with timing_floor(floor_ms=25.0):
+        result = await svc.create_cycle(session, caller, project_ref, body)
+        response.headers["Location"] = f"/api/v1/cycles/{result.id}"
+        return result
 
 
 @router.get(
@@ -94,7 +95,8 @@ async def patch_cycle(
     session: Session,
 ) -> CycleResponse:
     """Update name, start_date, or end_date for upcoming or active cycles."""
-    return await svc.patch_cycle(session, caller, cycle_id, body)
+    async with timing_floor(floor_ms=25.0):
+        return await svc.patch_cycle(session, caller, cycle_id, body)
 
 
 @router.post(
@@ -108,7 +110,8 @@ async def start_cycle(
     session: Session,
 ) -> CycleResponse:
     """Activate an upcoming cycle, enforcing at most one active cycle per project."""
-    return await svc.start_cycle(session, caller, cycle_id)
+    async with timing_floor(floor_ms=25.0):
+        return await svc.start_cycle(session, caller, cycle_id)
 
 
 @router.post(
@@ -122,7 +125,8 @@ async def activate_cycle(
     session: Session,
 ) -> CycleResponse:
     """Activate an upcoming cycle (semantic alias to /start)."""
-    return await svc.start_cycle(session, caller, cycle_id)
+    async with timing_floor(floor_ms=25.0):
+        return await svc.start_cycle(session, caller, cycle_id)
 
 
 @router.post(
@@ -137,7 +141,8 @@ async def complete_cycle(
     session: Session,
 ) -> CycleCompleteResponse:
     """Complete an active cycle and optionally roll over unfinished issues."""
-    return await svc.complete_cycle(session, caller, cycle_id, body)
+    async with timing_floor(floor_ms=25.0):
+        return await svc.complete_cycle(session, caller, cycle_id, body)
 
 
 @router.delete(
@@ -151,8 +156,9 @@ async def delete_cycle(
     session: Session,
 ) -> Response:
     """Delete a non-completed cycle, setting issues.cycle_id to NULL."""
-    await svc.delete_cycle(session, caller, cycle_id)
-    return Response(status_code=204)
+    async with timing_floor(floor_ms=25.0):
+        await svc.delete_cycle(session, caller, cycle_id)
+        return Response(status_code=204)
 
 
 @router.put(
@@ -166,8 +172,9 @@ async def add_issue_to_cycle(
     session: Session,
 ) -> dict[str, object]:
     """Assign an issue to a cycle, enforcing at-most-one active/upcoming cycle constraint."""
-    await svc.add_issue_to_cycle(session, caller, cycle_id, issue_ref)
-    return {"status": "ok", "cycle_id": str(cycle_id), "issue_ref": issue_ref}
+    async with timing_floor(floor_ms=25.0):
+        await svc.add_issue_to_cycle(session, caller, cycle_id, issue_ref)
+        return {"status": "ok", "cycle_id": str(cycle_id), "issue_ref": issue_ref}
 
 
 @router.delete(
@@ -182,8 +189,9 @@ async def remove_issue_from_cycle(
     session: Session,
 ) -> Response:
     """Remove an issue from a cycle, clearing cycle_id."""
-    await svc.remove_issue_from_cycle(session, caller, cycle_id, issue_ref)
-    return Response(status_code=204)
+    async with timing_floor(floor_ms=25.0):
+        await svc.remove_issue_from_cycle(session, caller, cycle_id, issue_ref)
+        return Response(status_code=204)
 
 
 @router.get(

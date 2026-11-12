@@ -40,10 +40,10 @@ index 540aca8..e5e8fad 100644
      return v1
 diff --git a/kanban/api/v1/cycles.py b/kanban/api/v1/cycles.py
 new file mode 100644
-index 0000000..442b538
+index 0000000..6998770
 --- /dev/null
 +++ b/kanban/api/v1/cycles.py
-@@ -0,0 +1,201 @@
+@@ -0,0 +1,209 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Licensed under Apache-2.0
 +"""Cycle management, lifecycle transitions, and burndown endpoints (S7.2 8g, S11.4)."""
@@ -108,9 +108,10 @@ index 0000000..442b538
 +    response: Response,
 +) -> CycleResponse:
 +    """Create a new cycle in upcoming status (requires project ADMIN)."""
-+    result = await svc.create_cycle(session, caller, project_ref, body)
-+    response.headers["Location"] = f"/api/v1/cycles/{result.id}"
-+    return result
++    async with timing_floor(floor_ms=25.0):
++        result = await svc.create_cycle(session, caller, project_ref, body)
++        response.headers["Location"] = f"/api/v1/cycles/{result.id}"
++        return result
 +
 +
 +@router.get(
@@ -140,7 +141,8 @@ index 0000000..442b538
 +    session: Session,
 +) -> CycleResponse:
 +    """Update name, start_date, or end_date for upcoming or active cycles."""
-+    return await svc.patch_cycle(session, caller, cycle_id, body)
++    async with timing_floor(floor_ms=25.0):
++        return await svc.patch_cycle(session, caller, cycle_id, body)
 +
 +
 +@router.post(
@@ -154,7 +156,8 @@ index 0000000..442b538
 +    session: Session,
 +) -> CycleResponse:
 +    """Activate an upcoming cycle, enforcing at most one active cycle per project."""
-+    return await svc.start_cycle(session, caller, cycle_id)
++    async with timing_floor(floor_ms=25.0):
++        return await svc.start_cycle(session, caller, cycle_id)
 +
 +
 +@router.post(
@@ -168,7 +171,8 @@ index 0000000..442b538
 +    session: Session,
 +) -> CycleResponse:
 +    """Activate an upcoming cycle (semantic alias to /start)."""
-+    return await svc.start_cycle(session, caller, cycle_id)
++    async with timing_floor(floor_ms=25.0):
++        return await svc.start_cycle(session, caller, cycle_id)
 +
 +
 +@router.post(
@@ -183,7 +187,8 @@ index 0000000..442b538
 +    session: Session,
 +) -> CycleCompleteResponse:
 +    """Complete an active cycle and optionally roll over unfinished issues."""
-+    return await svc.complete_cycle(session, caller, cycle_id, body)
++    async with timing_floor(floor_ms=25.0):
++        return await svc.complete_cycle(session, caller, cycle_id, body)
 +
 +
 +@router.delete(
@@ -197,8 +202,9 @@ index 0000000..442b538
 +    session: Session,
 +) -> Response:
 +    """Delete a non-completed cycle, setting issues.cycle_id to NULL."""
-+    await svc.delete_cycle(session, caller, cycle_id)
-+    return Response(status_code=204)
++    async with timing_floor(floor_ms=25.0):
++        await svc.delete_cycle(session, caller, cycle_id)
++        return Response(status_code=204)
 +
 +
 +@router.put(
@@ -212,8 +218,9 @@ index 0000000..442b538
 +    session: Session,
 +) -> dict[str, object]:
 +    """Assign an issue to a cycle, enforcing at-most-one active/upcoming cycle constraint."""
-+    await svc.add_issue_to_cycle(session, caller, cycle_id, issue_ref)
-+    return {"status": "ok", "cycle_id": str(cycle_id), "issue_ref": issue_ref}
++    async with timing_floor(floor_ms=25.0):
++        await svc.add_issue_to_cycle(session, caller, cycle_id, issue_ref)
++        return {"status": "ok", "cycle_id": str(cycle_id), "issue_ref": issue_ref}
 +
 +
 +@router.delete(
@@ -228,8 +235,9 @@ index 0000000..442b538
 +    session: Session,
 +) -> Response:
 +    """Remove an issue from a cycle, clearing cycle_id."""
-+    await svc.remove_issue_from_cycle(session, caller, cycle_id, issue_ref)
-+    return Response(status_code=204)
++    async with timing_floor(floor_ms=25.0):
++        await svc.remove_issue_from_cycle(session, caller, cycle_id, issue_ref)
++        return Response(status_code=204)
 +
 +
 +@router.get(
