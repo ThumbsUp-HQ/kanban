@@ -27,10 +27,11 @@ DECLARE
     v_can_view boolean;
     v_is_parent_skipped boolean;
 BEGIN
-    SELECT ancestry_path
+    SELECT i.ancestry_path
       INTO v_root_path
-      FROM issues
-     WHERE id = p_root_id AND deleted_at IS NULL;
+      FROM issues i
+      JOIN objects o ON o.id = i.id
+     WHERE i.id = p_root_id AND o.deleted_at IS NULL;
 
     IF NOT FOUND THEN
         RETURN;
@@ -49,7 +50,7 @@ BEGIN
           JOIN objects o ON o.id = i.id
          WHERE i.ancestry_path <@ v_root_path
            AND i.id <> p_root_id
-           AND i.deleted_at IS NULL
+           AND o.deleted_at IS NULL
            AND (nlevel(i.ancestry_path) - nlevel(v_root_path)) <= 6
          ORDER BY nlevel(i.ancestry_path) ASC, i.board_rank ASC, i.sequence_id ASC
     LOOP

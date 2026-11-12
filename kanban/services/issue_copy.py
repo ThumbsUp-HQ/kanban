@@ -24,11 +24,11 @@ from kanban.api.v1.schemas.issue_copy import (
 )
 from kanban.api.v1.schemas.links import LinkCreateRequest
 from kanban.content import ContentNormalizeError, normalize_to_markdown
-from kanban.security.capabilities import Capability, evaluate_capabilities
+from kanban.security.permissions import Capability, evaluate_capabilities
 from kanban.services.activity import ActivityEventType, record_activity
+from kanban.services.issue_keys import resolve_issue_ref
 from kanban.services.issues import (
     initial_board_rank,
-    resolve_issue_ref,
     serialize_issue,
 )
 from kanban.services.links import create_object_link
@@ -218,24 +218,30 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
 
         # Copy labels
         label_ids = (
-            await session.execute(
-                select(IssueLabel.label_id).where(IssueLabel.issue_id == source_issue.id)
+            (
+                await session.execute(
+                    select(IssueLabel.label_id).where(IssueLabel.issue_id == source_issue.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for lid in label_ids:
             session.add(
-                IssueLabel(
-                    issue_id=top_copy.id, label_id=lid, workspace_id=caller.workspace_id
-                )
+                IssueLabel(issue_id=top_copy.id, label_id=lid, workspace_id=caller.workspace_id)
             )
 
         # Copy modules (only when modules_enabled is true)
         if getattr(project, "modules_enabled", False):
             module_ids = (
-                await session.execute(
-                    select(IssueModule.module_id).where(IssueModule.issue_id == source_issue.id)
+                (
+                    await session.execute(
+                        select(IssueModule.module_id).where(IssueModule.issue_id == source_issue.id)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for mid in module_ids:
                 session.add(
                     IssueModule(
@@ -313,24 +319,30 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
 
             # Copy sub-issue labels
             sub_label_ids = (
-                await session.execute(
-                    select(IssueLabel.label_id).where(IssueLabel.issue_id == r.issue_id)
+                (
+                    await session.execute(
+                        select(IssueLabel.label_id).where(IssueLabel.issue_id == r.issue_id)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for lid in sub_label_ids:
                 session.add(
-                    IssueLabel(
-                        issue_id=sub_copy.id, label_id=lid, workspace_id=caller.workspace_id
-                    )
+                    IssueLabel(issue_id=sub_copy.id, label_id=lid, workspace_id=caller.workspace_id)
                 )
 
             # Copy sub-issue modules
             if getattr(project, "modules_enabled", False):
                 sub_module_ids = (
-                    await session.execute(
-                        select(IssueModule.module_id).where(IssueModule.issue_id == r.issue_id)
+                    (
+                        await session.execute(
+                            select(IssueModule.module_id).where(IssueModule.issue_id == r.issue_id)
+                        )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
                 for mid in sub_module_ids:
                     session.add(
                         IssueModule(
@@ -362,13 +374,17 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
 
             for src_id, target_id in source_to_copy_pairs:
                 att_rows = (
-                    await session.execute(
-                        select(Attachment).where(
-                            Attachment.issue_id == src_id,
-                            Attachment.workspace_id == caller.workspace_id,
+                    (
+                        await session.execute(
+                            select(Attachment).where(
+                                Attachment.issue_id == src_id,
+                                Attachment.workspace_id == caller.workspace_id,
+                            )
                         )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
 
                 for att in att_rows:
                     new_att = Attachment(
