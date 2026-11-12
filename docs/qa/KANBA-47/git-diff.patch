@@ -1,0 +1,1157 @@
+diff --git a/database/migrations/sql/p1_07_creator_provenance.down.sql b/database/migrations/sql/p1_07_creator_provenance.down.sql
+new file mode 100644
+index 0000000..44e0dd7
+--- /dev/null
++++ b/database/migrations/sql/p1_07_creator_provenance.down.sql
+@@ -0,0 +1,5 @@
++DROP TRIGGER IF EXISTS issues_creator_provenance_bu_trg ON issues;
++DROP FUNCTION IF EXISTS issues_creator_provenance_bu();
++
++DROP TRIGGER IF EXISTS issues_creator_insert_bi_trg ON issues;
++DROP FUNCTION IF EXISTS issues_creator_insert_bi();
+diff --git a/database/migrations/sql/p1_07_creator_provenance.up.sql b/database/migrations/sql/p1_07_creator_provenance.up.sql
+new file mode 100644
+index 0000000..dc3c060
+--- /dev/null
++++ b/database/migrations/sql/p1_07_creator_provenance.up.sql
+@@ -0,0 +1,87 @@
++CREATE OR REPLACE FUNCTION issues_creator_insert_bi()
++RETURNS trigger
++LANGUAGE plpgsql
++AS $$
++BEGIN
++    NEW.original_created_by_id := NEW.created_by_id;
++    NEW.creator_modified_by_id := NULL;
++    NEW.creator_modified_at := NULL;
++    RETURN NEW;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION issues_creator_insert_bi() TO kanban_app;
++
++CREATE TRIGGER issues_creator_insert_bi_trg
++BEFORE INSERT ON issues
++FOR EACH ROW
++EXECUTE FUNCTION issues_creator_insert_bi();
++
++CREATE OR REPLACE FUNCTION issues_creator_provenance_bu()
++RETURNS trigger
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_actor uuid;
++    v_target_ws uuid;
++BEGIN
++    IF NEW.original_created_by_id IS DISTINCT FROM OLD.original_created_by_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_PROVENANCE_IMMUTABLE';
++    END IF;
++
++    IF NEW.created_by_id IS NOT DISTINCT FROM OLD.created_by_id THEN
++        IF NEW.creator_modified_by_id IS DISTINCT FROM OLD.creator_modified_by_id
++           OR NEW.creator_modified_at IS DISTINCT FROM OLD.creator_modified_at THEN
++            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_PROVENANCE_IMMUTABLE';
++        END IF;
++        RETURN NEW;
++    END IF;
++
++    v_actor := app_current_principal_id();
++    IF v_actor IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'RLS_CONTEXT_REQUIRED';
++    END IF;
++
++    IF NOT app_principal_has_role(NEW.project_id, ARRAY['PROJECT_ADMIN','SERVER_ADMIN']) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_FORBIDDEN';
++    END IF;
++
++    IF NOT EXISTS (SELECT 1 FROM users WHERE id = v_actor) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_ACTOR_NOT_USER';
++    END IF;
++
++    SELECT workspace_id INTO v_target_ws FROM users WHERE id = NEW.created_by_id;
++    IF NOT FOUND OR v_target_ws <> NEW.workspace_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_WORKSPACE_MISMATCH';
++    END IF;
++
++    NEW.creator_modified_by_id := v_actor;
++    NEW.creator_modified_at := clock_timestamp();
++
++    UPDATE objects SET created_by_id = NEW.created_by_id WHERE id = NEW.id;
++
++    PERFORM append_activity(
++        NEW.workspace_id,
++        NEW.id,
++        'issue'::object_kind,
++        v_actor,
++        'CREATOR_OVERRIDDEN',
++        jsonb_build_object(
++            'from_user_id', OLD.created_by_id,
++            'to_user_id', NEW.created_by_id,
++            'original_created_by_id', OLD.original_created_by_id
++        )
++    );
++
++    RETURN NEW;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION issues_creator_provenance_bu() TO kanban_app;
++
++CREATE TRIGGER issues_creator_provenance_bu_trg
++BEFORE UPDATE OF created_by_id, original_created_by_id, creator_modified_by_id, creator_modified_at ON issues
++FOR EACH ROW
++EXECUTE FUNCTION issues_creator_provenance_bu();
+diff --git a/database/migrations/versions/p1_07_creator_provenance.py b/database/migrations/versions/p1_07_creator_provenance.py
+new file mode 100644
+index 0000000..922d3eb
+--- /dev/null
++++ b/database/migrations/versions/p1_07_creator_provenance.py
+@@ -0,0 +1,26 @@
++"""Created-by provenance trigger with admin-only override and CREATOR_OVERRIDDEN ledger entry.
++
++Revision ID: p1_07_creator_provenance
++Revises: p1_09_prose_tables
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p1_07_creator_provenance"
++down_revision: str | None = "p1_09_prose_tables"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply creator provenance insert and update triggers on issues."""
++    execute_sql_file("p1_07_creator_provenance.up.sql")
++
++
++def downgrade() -> None:
++    """Revert creator provenance insert and update triggers on issues."""
++    execute_sql_file("p1_07_creator_provenance.down.sql")
+diff --git a/database/tests/migrations/test_p1_07_migration.py b/database/tests/migrations/test_p1_07_migration.py
+new file mode 100644
+index 0000000..24b9664
+--- /dev/null
++++ b/database/tests/migrations/test_p1_07_migration.py
+@@ -0,0 +1,83 @@
++"""Migration tests for p1_07_creator_provenance up/down lifecycle."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++EXPECTED_TRIGGERS = {"issues_creator_insert_bi_trg", "issues_creator_provenance_bu_trg"}
++EXPECTED_ROUTINES = {"issues_creator_insert_bi", "issues_creator_provenance_bu"}
++
++
++@pytest.mark.migration
++async def test_07_creator_provenance_migration_lifecycle() -> None:
++    """Verify p1_07 upgrade creates triggers, downgrade removes them, and re-upgrade."""
++    async with MigrationHarness() as harness:
++        assert harness.previous_of("p1_07_creator_provenance") == "p1_09_prose_tables"
++
++        # 1. Upgrade to p1_07_creator_provenance
++        await harness.upgrade("p1_07_creator_provenance")
++
++        # Verify triggers exist on issues table
++        triggers_up = await harness.fetch(
++            "SELECT trigger_name FROM information_schema.triggers "
++            "WHERE event_object_table = 'issues' "
++            "  AND trigger_name IN ("
++            "    'issues_creator_insert_bi_trg', 'issues_creator_provenance_bu_trg'"
++            "  )"
++        )
++        assert {r["trigger_name"] for r in triggers_up} == EXPECTED_TRIGGERS
++
++        # Verify trigger functions exist
++        funcs_up = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' "
++            "  AND routine_name IN ("
++            "    'issues_creator_insert_bi', 'issues_creator_provenance_bu'"
++            "  )"
++        )
++        assert {r["routine_name"] for r in funcs_up} == EXPECTED_ROUTINES
++
++        # 2. Downgrade to p1_13_access_control
++        prev_rev = harness.previous_of("p1_07_creator_provenance")
++        await harness.downgrade(prev_rev)
++
++        # Verify triggers are absent
++        triggers_down = await harness.fetch(
++            "SELECT trigger_name FROM information_schema.triggers "
++            "WHERE event_object_table = 'issues' "
++            "  AND trigger_name IN ("
++            "    'issues_creator_insert_bi_trg', 'issues_creator_provenance_bu_trg'"
++            "  )"
++        )
++        assert len(triggers_down) == 0
++
++        # Verify functions are absent
++        funcs_down = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' "
++            "  AND routine_name IN ("
++            "    'issues_creator_insert_bi', 'issues_creator_provenance_bu'"
++            "  )"
++        )
++        assert len(funcs_down) == 0
++
++        # 3. Re-upgrade to p1_07_creator_provenance succeeds
++        await harness.upgrade("p1_07_creator_provenance")
++
++        triggers_reup = await harness.fetch(
++            "SELECT trigger_name FROM information_schema.triggers "
++            "WHERE event_object_table = 'issues' "
++            "  AND trigger_name IN ("
++            "    'issues_creator_insert_bi_trg', 'issues_creator_provenance_bu_trg'"
++            "  )"
++        )
++        assert {r["trigger_name"] for r in triggers_reup} == EXPECTED_TRIGGERS
++
++        funcs_reup = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' "
++            "  AND routine_name IN ("
++            "    'issues_creator_insert_bi', 'issues_creator_provenance_bu'"
++            "  )"
++        )
++        assert {r["routine_name"] for r in funcs_reup} == EXPECTED_ROUTINES
+diff --git a/database/tests/test_p1_07_creator_provenance.py b/database/tests/test_p1_07_creator_provenance.py
+new file mode 100644
+index 0000000..08b5354
+--- /dev/null
++++ b/database/tests/test_p1_07_creator_provenance.py
+@@ -0,0 +1,622 @@
++"""Unit tests for Phase 1 created-by provenance trigger with admin override and ledger."""
++
++from __future__ import annotations
++
++import uuid
++from dataclasses import dataclass
++from datetime import UTC, datetime
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError, IntegrityError
++
++from database.tests.conftest import bind_ctx
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++@dataclass(frozen=True)
++class IssueContext:
++    """Project and user context for issue creation."""
++
++    workspace_id: uuid.UUID
++    project_id: uuid.UUID
++    identifier: str
++    user_id: uuid.UUID
++    state_id: uuid.UUID
++    priority_id: uuid.UUID
++
++
++@dataclass(frozen=True)
++class IssueParams:
++    """Attributes for issue creation."""
++
++    summary: str = "Test Issue"
++    original_creator_id: uuid.UUID | None = None
++    creator_modified_by_id: uuid.UUID | None = None
++    creator_modified_at: datetime | None = None
++
++
++async def _create_workspace(
++    session: AsyncSession,
++    slug: str | None = None,
++    name: str = "Test Workspace",
++) -> uuid.UUID:
++    """Create a test workspace and return its UUID."""
++    ws_slug = slug or f"ws-{uuid.uuid4().hex[:12]}"
++    row = await session.execute(
++        text("INSERT INTO workspaces (slug, name) VALUES (:slug, :name) RETURNING id"),
++        {"slug": ws_slug, "name": name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _create_principal(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    *,
++    principal_type: str = "USER",
++    display_name: str = "Test Principal",
++) -> uuid.UUID:
++    """Create a principal in the principals table."""
++    row = await session.execute(
++        text(
++            "INSERT INTO principals (workspace_id, principal_type, display_name) "
++            "VALUES (:ws_id, :pt, :name) RETURNING id"
++        ),
++        {"ws_id": ws_id, "pt": principal_type, "name": display_name},
++    )
++    val = row.scalar_one()
++    assert isinstance(val, uuid.UUID)
++    return val
++
++
++async def _create_user(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    email: str,
++    display_name: str = "Test User",
++) -> uuid.UUID:
++    """Create a user in principals, objects, and users tables."""
++    u_id = await _create_principal(session, ws_id, principal_type="USER", display_name=display_name)
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'user'::object_kind, :ws_id, NULL::uuid, :ckey, :title, :creator, :id"
++            ")"
++        ),
++        {
++            "ws_id": ws_id,
++            "ckey": f"usr-{u_id.hex}",
++            "title": display_name,
++            "creator": u_id,
++            "id": u_id,
++        },
++    )
++    await session.execute(
++        text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws_id, :email)"),
++        {"id": u_id, "ws_id": ws_id, "email": email},
++    )
++    return u_id
++
++
++async def _create_group(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    name: str,
++) -> uuid.UUID:
++    """Create a principal and matching groups row."""
++    p_id = await _create_principal(session, ws_id, principal_type="GROUP", display_name=name)
++    await session.execute(
++        text("INSERT INTO groups (id, workspace_id, name) VALUES (:id, :ws_id, :name)"),
++        {"id": p_id, "ws_id": ws_id, "name": name},
++    )
++    return p_id
++
++
++async def _bind_role(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    role: str,
++    project_id: uuid.UUID | None = None,
++) -> None:
++    """Insert a role_bindings row inferring scope_type from role and project_id."""
++    if project_id is not None:
++        scope = "project"
++    elif role == "SERVER_ADMIN":
++        scope = "server"
++    else:
++        scope = "workspace"
++
++    await session.execute(
++        text(
++            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:ws_id, :p_id, CAST(:role AS rbac_role), :scope, :proj_id)"
++        ),
++        {
++            "ws_id": ws_id,
++            "p_id": principal_id,
++            "role": role,
++            "scope": scope,
++            "proj_id": project_id,
++        },
++    )
++
++
++async def _create_project(
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    creator_id: uuid.UUID,
++    identifier: str = "PRJ",
++    name: str = "Test Project",
++) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
++    """Create a project and return (project_id, default_state_id, default_priority_id)."""
++    p_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'project'::object_kind, :ws, NULL::uuid, :ident, :name, :creator, :id"
++            ")"
++        ),
++        {"ws": ws_id, "ident": identifier, "name": name, "creator": creator_id, "id": p_id},
++    )
++    await session.execute(
++        text(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES (:id, :ws, :ident, :name)"
++        ),
++        {"id": p_id, "ws": ws_id, "ident": identifier, "name": name},
++    )
++
++    state_row = await session.execute(
++        text("SELECT id FROM workflow_states WHERE project_id = :p AND is_default = true"),
++        {"p": p_id},
++    )
++    state_id = state_row.scalar_one()
++    assert isinstance(state_id, uuid.UUID)
++
++    prio_row = await session.execute(
++        text("SELECT id FROM project_priorities WHERE project_id = :p AND is_default = true"),
++        {"p": p_id},
++    )
++    prio_id = prio_row.scalar_one()
++    assert isinstance(prio_id, uuid.UUID)
++
++    return p_id, state_id, prio_id
++
++
++async def _create_issue(
++    session: AsyncSession,
++    ctx: IssueContext,
++    params: IssueParams | None = None,
++) -> tuple[uuid.UUID, int]:
++    """Allocate sequence and insert issue."""
++    p = params or IssueParams()
++    seq_row = await session.execute(
++        text("SELECT allocate_issue_sequence(:p)"),
++        {"p": ctx.project_id},
++    )
++    seq = seq_row.scalar_one()
++    assert isinstance(seq, int)
++
++    i_id = uuid.uuid4()
++    canonical_key = f"{ctx.identifier}-{seq}"
++
++    await session.execute(
++        text(
++            "SELECT register_object(  'issue'::object_kind, :ws, :p, :ckey, :summary, :user, :id)"
++        ),
++        {
++            "ws": ctx.workspace_id,
++            "p": ctx.project_id,
++            "ckey": canonical_key,
++            "summary": p.summary,
++            "user": ctx.user_id,
++            "id": i_id,
++        },
++    )
++
++    orig_user = p.original_creator_id or ctx.user_id
++    await session.execute(
++        text(
++            "INSERT INTO issues ("
++            "  id, workspace_id, project_id, sequence_id, summary, "
++            "  description_markdown, state_id, priority_id, "
++            "  created_by_id, original_created_by_id, creator_modified_by_id, "
++            "  creator_modified_at, board_rank"
++            ") VALUES ("
++            "  :id, :ws, :p, :seq, :summary, "
++            "  '', :state, :prio, "
++            "  :user, :orig_user, :mod_by, :mod_at, '0|hzzzzz:'"
++            ")"
++        ),
++        {
++            "id": i_id,
++            "ws": ctx.workspace_id,
++            "p": ctx.project_id,
++            "seq": seq,
++            "summary": p.summary,
++            "state": ctx.state_id,
++            "prio": ctx.priority_id,
++            "user": ctx.user_id,
++            "orig_user": orig_user,
++            "mod_by": p.creator_modified_by_id,
++            "mod_at": p.creator_modified_at,
++        },
++    )
++    return i_id, seq
++
++
++async def test_01_positive_project_admin_override(db_session: AsyncSession) -> None:
++    """Test 1: PROJECT_ADMIN on project overrides created_by_id U1 -> U2."""
++    ws = await _create_workspace(db_session)
++    u1 = await _create_user(db_session, ws, "u1@example.com", "User One")
++    u2 = await _create_user(db_session, ws, "u2@example.com", "User Two")
++    admin = await _create_user(db_session, ws, "admin@example.com", "Project Admin")
++    p, state_id, prio_id = await _create_project(db_session, ws, admin, "KAN")
++
++    await _bind_role(db_session, ws, admin, "PROJECT_ADMIN", p)
++    ctx = IssueContext(ws, p, "KAN", u1, state_id, prio_id)
++    i_id, _ = await _create_issue(db_session, ctx)
++
++    # Set session RLS to admin
++    await bind_ctx(db_session, admin, ws)
++
++    # Perform creator override
++    await db_session.execute(
++        text("UPDATE issues SET created_by_id = :u2 WHERE id = :i"),
++        {"u2": u2, "i": i_id},
++    )
++
++    # Verify issues row
++    issue_row = (
++        (
++            await db_session.execute(
++                text(
++                    "SELECT created_by_id, original_created_by_id, creator_modified_by_id, "
++                    "creator_modified_at FROM issues WHERE id = :i"
++                ),
++                {"i": i_id},
++            )
++        )
++        .mappings()
++        .one()
++    )
++
++    assert issue_row["created_by_id"] == u2
++    assert issue_row["original_created_by_id"] == u1
++    assert issue_row["creator_modified_by_id"] == admin
++    assert issue_row["creator_modified_at"] is not None
++
++    # Verify objects table is updated
++    obj_row = (
++        (
++            await db_session.execute(
++                text("SELECT created_by_id FROM objects WHERE id = :i"),
++                {"i": i_id},
++            )
++        )
++        .mappings()
++        .one()
++    )
++    assert obj_row["created_by_id"] == u2
++
++    # Verify activity_records
++    act_rows = (
++        (
++            await db_session.execute(
++                text(
++                    "SELECT id, workspace_id, object_id, object_type, actor_id, event_type, "
++                    "payload, prev_hash, row_hash FROM activity_records WHERE object_id = :i"
++                ),
++                {"i": i_id},
++            )
++        )
++        .mappings()
++        .all()
++    )
++
++    assert len(act_rows) == 1
++    act = act_rows[0]
++    assert act["event_type"] == "CREATOR_OVERRIDDEN"
++    assert act["actor_id"] == admin
++    assert act["object_type"] == "issue"
++    assert act["payload"]["from_user_id"] == str(u1)
++    assert act["payload"]["to_user_id"] == str(u2)
++    assert act["payload"]["original_created_by_id"] == str(u1)
++    assert len(bytes(act["prev_hash"])) == 32
++    assert len(bytes(act["row_hash"])) == 32
++
++
++async def test_02_positive_server_admin_direct_and_group(db_session: AsyncSession) -> None:
++    """Test 2: SERVER_ADMIN at server scope and SERVER_ADMIN via group membership can override."""
++    ws = await _create_workspace(db_session)
++    u1 = await _create_user(db_session, ws, "u1@example.com", "User One")
++    u2 = await _create_user(db_session, ws, "u2@example.com", "User Two")
++    u3 = await _create_user(db_session, ws, "u3@example.com", "User Three")
++    server_admin = await _create_user(db_session, ws, "sadmin@example.com", "Server Admin")
++    group_user = await _create_user(db_session, ws, "gadmin@example.com", "Group Admin User")
++    admin_group = await _create_group(db_session, ws, "AdminGroup")
++
++    p, state_id, prio_id = await _create_project(db_session, ws, u1, "KAN")
++    ctx = IssueContext(ws, p, "KAN", u1, state_id, prio_id)
++    i_id, _ = await _create_issue(db_session, ctx)
++
++    # 2a: Direct SERVER_ADMIN binding
++    await _bind_role(db_session, ws, server_admin, "SERVER_ADMIN")
++
++    await bind_ctx(db_session, server_admin, ws)
++    await db_session.execute(
++        text("UPDATE issues SET created_by_id = :u2 WHERE id = :i"),
++        {"u2": u2, "i": i_id},
++    )
++
++    row1 = (
++        (
++            await db_session.execute(
++                text("SELECT created_by_id, creator_modified_by_id FROM issues WHERE id = :i"),
++                {"i": i_id},
++            )
++        )
++        .mappings()
++        .one()
++    )
++    assert row1["created_by_id"] == u2
++    assert row1["creator_modified_by_id"] == server_admin
++
++    # 2b: SERVER_ADMIN through group membership
++    await db_session.execute(
++        text(
++            "INSERT INTO principal_group_edges (member_id, group_id, workspace_id) "
++            "VALUES (:u, :g, :ws)"
++        ),
++        {"u": group_user, "g": admin_group, "ws": ws},
++    )
++    await _bind_role(db_session, ws, admin_group, "SERVER_ADMIN")
++
++    await bind_ctx(db_session, group_user, ws)
++    await db_session.execute(
++        text("UPDATE issues SET created_by_id = :u3 WHERE id = :i"),
++        {"u3": u3, "i": i_id},
++    )
++
++    row2 = (
++        (
++            await db_session.execute(
++                text("SELECT created_by_id, creator_modified_by_id FROM issues WHERE id = :i"),
++                {"i": i_id},
++            )
++        )
++        .mappings()
++        .one()
++    )
++    assert row2["created_by_id"] == u3
++    assert row2["creator_modified_by_id"] == group_user
++
++
++async def test_03_negative_forbidden_roles(db_session: AsyncSession) -> None:
++    """Test 3: Non-authorized roles raise CREATOR_OVERRIDE_FORBIDDEN."""
++    ws = await _create_workspace(db_session)
++    u1 = await _create_user(db_session, ws, "u1@example.com", "User One")
++    u2 = await _create_user(db_session, ws, "u2@example.com", "User Two")
++    member_user = await _create_user(db_session, ws, "member@example.com", "Member User")
++    ws_admin = await _create_user(db_session, ws, "wsadmin@example.com", "WS Admin")
++    other_proj_admin = await _create_user(db_session, ws, "otheradmin@example.com", "Other Admin")
++
++    p1, s1, prio1 = await _create_project(db_session, ws, u1, "P1")
++    p2, _, _ = await _create_project(db_session, ws, u1, "P2")
++
++    await _bind_role(db_session, ws, member_user, "MEMBER", p1)
++    await _bind_role(db_session, ws, ws_admin, "WORKSPACE_ADMIN")
++    await _bind_role(db_session, ws, other_proj_admin, "PROJECT_ADMIN", p2)
++
++    ctx1 = IssueContext(ws, p1, "P1", u1, s1, prio1)
++    i_id, _ = await _create_issue(db_session, ctx1)
++
++    # 3a: MEMBER on p1
++    await bind_ctx(db_session, member_user, ws)
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_m:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET created_by_id = :u2 WHERE id = :i"),
++                {"u2": u2, "i": i_id},
++            )
++    assert "CREATOR_OVERRIDE_FORBIDDEN" in str(exc_m.value)
++
++    # 3b: WORKSPACE_ADMIN on ws
++    await bind_ctx(db_session, ws_admin, ws)
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_ws:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET created_by_id = :u2 WHERE id = :i"),
++                {"u2": u2, "i": i_id},
++            )
++    assert "CREATOR_OVERRIDE_FORBIDDEN" in str(exc_ws.value)
++
++    # 3c: PROJECT_ADMIN of p2 attempting override on p1 issue
++    await bind_ctx(db_session, other_proj_admin, ws)
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_other:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET created_by_id = :u2 WHERE id = :i"),
++                {"u2": u2, "i": i_id},
++            )
++    assert "CREATOR_OVERRIDE_FORBIDDEN" in str(exc_other.value)
++
++    # Verify no activity records were written
++    act_count = (
++        await db_session.execute(
++            text("SELECT count(*) FROM activity_records WHERE object_id = :i"),
++            {"i": i_id},
++        )
++    ).scalar_one()
++    assert act_count == 0
++
++
++async def test_04_negative_provenance_immutability(db_session: AsyncSession) -> None:
++    """Test 4: Mutating original_created_by_id or creator_modified_* raises immutability error."""
++    ws = await _create_workspace(db_session)
++    u1 = await _create_user(db_session, ws, "u1@example.com", "User One")
++    u2 = await _create_user(db_session, ws, "u2@example.com", "User Two")
++    admin = await _create_user(db_session, ws, "admin@example.com", "Admin")
++    p, state_id, prio_id = await _create_project(db_session, ws, admin, "KAN")
++    await _bind_role(db_session, ws, admin, "PROJECT_ADMIN", p)
++
++    ctx = IssueContext(ws, p, "KAN", u1, state_id, prio_id)
++    i_id, _ = await _create_issue(db_session, ctx)
++    await bind_ctx(db_session, admin, ws)
++
++    # 4a: Updating original_created_by_id raises CREATOR_PROVENANCE_IMMUTABLE
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_orig:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET original_created_by_id = :u2 WHERE id = :i"),
++                {"u2": u2, "i": i_id},
++            )
++    assert "CREATOR_PROVENANCE_IMMUTABLE" in str(exc_orig.value)
++
++    # 4b: Directly updating creator_modified_by_id raises CREATOR_PROVENANCE_IMMUTABLE
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_mod_by:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET creator_modified_by_id = :admin WHERE id = :i"),
++                {"admin": admin, "i": i_id},
++            )
++    assert "CREATOR_PROVENANCE_IMMUTABLE" in str(exc_mod_by.value)
++
++    # 4c: Directly updating creator_modified_at raises CREATOR_PROVENANCE_IMMUTABLE
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_mod_at:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET creator_modified_at = clock_timestamp() WHERE id = :i"),
++                {"i": i_id},
++            )
++    assert "CREATOR_PROVENANCE_IMMUTABLE" in str(exc_mod_at.value)
++
++
++async def test_05_negative_context_and_workspace_mismatch(db_session: AsyncSession) -> None:
++    """Test 5: Context, actor user, and workspace checks."""
++    ws1 = await _create_workspace(db_session)
++    ws2 = await _create_workspace(db_session)
++
++    u1 = await _create_user(db_session, ws1, "u1@example.com", "User One")
++    u_other_ws = await _create_user(db_session, ws2, "u_other@example.com", "Other WS User")
++    admin = await _create_user(db_session, ws1, "admin@example.com", "Admin")
++
++    p, state_id, prio_id = await _create_project(db_session, ws1, admin, "KAN")
++    await _bind_role(db_session, ws1, admin, "PROJECT_ADMIN", p)
++    ctx = IssueContext(ws1, p, "KAN", u1, state_id, prio_id)
++    i_id, _ = await _create_issue(db_session, ctx)
++
++    # 5a: No RLS context
++    await bind_ctx(db_session, None, None)
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_no_ctx:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET created_by_id = :u2 WHERE id = :i"),
++                {"u2": admin, "i": i_id},
++            )
++    assert "RLS_CONTEXT_REQUIRED" in str(exc_no_ctx.value)
++
++    # 5b: Actor is not a user (e.g. an agent principal)
++    agent_id = await _create_principal(
++        db_session, ws1, principal_type="AGENT", display_name="AI Agent"
++    )
++    await _bind_role(db_session, ws1, agent_id, "PROJECT_ADMIN", p)
++    await bind_ctx(db_session, agent_id, ws1)
++
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_not_user:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET created_by_id = :u2 WHERE id = :i"),
++                {"u2": admin, "i": i_id},
++            )
++    assert "CREATOR_OVERRIDE_ACTOR_NOT_USER" in str(exc_not_user.value)
++
++    # 5c: Target user from another workspace
++    await bind_ctx(db_session, admin, ws1)
++    with pytest.raises((IntegrityError, DBAPIError)) as exc_ws_mismatch:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET created_by_id = :other WHERE id = :i"),
++                {"other": u_other_ws, "i": i_id},
++            )
++    assert "CREATOR_OVERRIDE_WORKSPACE_MISMATCH" in str(exc_ws_mismatch.value)
++
++
++async def test_06_boundary_insert_sanitization_and_summary_update(
++    db_session: AsyncSession,
++) -> None:
++    """Test 6: INSERT resets forged columns; UPDATE on summary writes no activity row."""
++    ws = await _create_workspace(db_session)
++    u1 = await _create_user(db_session, ws, "u1@example.com", "User One")
++    u2 = await _create_user(db_session, ws, "u2@example.com", "User Two")
++    p, state_id, prio_id = await _create_project(db_session, ws, u1, "KAN")
++
++    # 6a: INSERT with forged original_created_by_id != created_by_id and non-null creator_modified_*
++    ctx = IssueContext(ws, p, "KAN", u1, state_id, prio_id)
++    params = IssueParams(
++        summary="Forged Insert Test",
++        original_creator_id=u2,
++        creator_modified_by_id=u2,
++        creator_modified_at=datetime.now(UTC),
++    )
++    i_id, _ = await _create_issue(db_session, ctx, params)
++
++    row = (
++        (
++            await db_session.execute(
++                text(
++                    "SELECT created_by_id, original_created_by_id, creator_modified_by_id, "
++                    "creator_modified_at FROM issues WHERE id = :i"
++                ),
++                {"i": i_id},
++            )
++        )
++        .mappings()
++        .one()
++    )
++
++    assert row["created_by_id"] == u1
++    assert row["original_created_by_id"] == u1  # Forged u2 replaced by u1
++    assert row["creator_modified_by_id"] is None
++    assert row["creator_modified_at"] is None
++
++    # 6b: UPDATE touching only summary does not write activity rows
++    await bind_ctx(db_session, u1, ws)
++    await db_session.execute(
++        text("UPDATE issues SET summary = 'Safe Summary Update' WHERE id = :i"),
++        {"i": i_id},
++    )
++
++    updated_row = (
++        (
++            await db_session.execute(
++                text("SELECT summary, creator_modified_at FROM issues WHERE id = :i"),
++                {"i": i_id},
++            )
++        )
++        .mappings()
++        .one()
++    )
++    assert updated_row["summary"] == "Safe Summary Update"
++    assert updated_row["creator_modified_at"] is None
++
++    # UPDATE with created_by_id = created_by_id (no change) also writes zero activity rows
++    await db_session.execute(
++        text("UPDATE issues SET created_by_id = created_by_id WHERE id = :i"),
++        {"i": i_id},
++    )
++
++    act_count = (
++        await db_session.execute(
++            text("SELECT count(*) FROM activity_records WHERE object_id = :i"),
++            {"i": i_id},
++        )
++    ).scalar_one()
++    assert act_count == 0
+diff --git a/docs/qa/KANBA-47/activity-sample.txt b/docs/qa/KANBA-47/activity-sample.txt
+new file mode 100644
+index 0000000..b50c8eb
+--- /dev/null
++++ b/docs/qa/KANBA-47/activity-sample.txt
+@@ -0,0 +1,12 @@
++=== CREATOR_OVERRIDDEN Activity Ledger Record Sample ===
++id: 01a1cdcb-2379-7155-bf54-c5ca7e02bf28
++workspace_id: 01a1cdcb-2360-72dc-bdaf-254cfc585136
++chain_seq: 1
++object_id: 01a1cdcb-2372-793e-a460-c550ea79ac32
++object_type: issue
++actor_id: 01a1cdcb-236a-76ff-9bfd-c24d56d86a4e
++event_type: CREATOR_OVERRIDDEN
++payload: {"to_user_id": "01a1cdcb-2367-7dcb-8018-a2c3b335c3ff", "from_user_id": "01a1cdcb-2361-7021-b19b-f79647c0f103", "original_created_by_id": "01a1cdcb-2361-7021-b19b-f79647c0f103"}
++recorded_at: 2026-11-12 03:26:44.601174+00:00
++prev_hash_hex: 0000000000000000000000000000000000000000000000000000000000000000
++row_hash_hex: dbfdf3cd04bd7173bb012994caf558b18d4cc750dc3b2ea65ebb99781a80c67e
+diff --git a/docs/qa/KANBA-47/alembic-heads.txt b/docs/qa/KANBA-47/alembic-heads.txt
+new file mode 100644
+index 0000000..ecc911c
+--- /dev/null
++++ b/docs/qa/KANBA-47/alembic-heads.txt
+@@ -0,0 +1 @@
++p1_07_creator_provenance (head)
+diff --git a/docs/qa/KANBA-47/build-check.txt b/docs/qa/KANBA-47/build-check.txt
+new file mode 100644
+index 0000000..30309d0
+--- /dev/null
++++ b/docs/qa/KANBA-47/build-check.txt
+@@ -0,0 +1,35 @@
++All checks passed!
++61 files already formatted
++Success: no issues found in 59 source files
++uv run ruff check .
++All checks passed!
++uv run ruff format --check .
++355 files already formatted
++uv run mypy
++Success: no issues found in 154 source files
++uv run lint-imports
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 106 files, 122 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++uv run python -m scripts.check_no_dashes --all
++uv run python -m scripts.license_gate
++SUMMARY python=92 node=1 violations=0
++Exit code: 0
+diff --git a/docs/qa/KANBA-47/message-to-reality-checker.md b/docs/qa/KANBA-47/message-to-reality-checker.md
+new file mode 100644
+index 0000000..fd570ae
+--- /dev/null
++++ b/docs/qa/KANBA-47/message-to-reality-checker.md
+@@ -0,0 +1,64 @@
++# Reality-Checker Verification Packet: KANBA-47 (KB-P1-07)
++
++**Ticket:** KANBA-47 (`KB-P1-07`)
++**Title:** [Phase 1 / Database] Created-by provenance trigger with admin-only override & CREATOR_OVERRIDDEN ledger entry
++**Epic:** KB-E1
++**Branch:** `feat/KANBA-47` (Worktree: `/tmp/kb-wt-KANBA-47`)
++**Author:** `builder-23`
++**Spec Traceability:** `S7.2 8d` (Created By fixed + admin override, provenance tooltip, CREATOR_OVERRIDDEN audit entry), `S1.2` (audit ledger covers creator overrides), Requirement #8d
++**Dependencies:** `KB-P1-05`, `KB-P1-12`, `KB-P1-13`
++
++---
++
++## 1. Executive Summary
++
++This ticket implements the database-level creator provenance enforcement and administrative override security triggers on the `issues` table:
++- **`issues_creator_insert_bi` (BEFORE INSERT ON issues):** Enforces creator provenance initialization at row creation. Forces `NEW.original_created_by_id := NEW.created_by_id`, `NEW.creator_modified_by_id := NULL`, and `NEW.creator_modified_at := NULL`, discarding any forged or client-supplied values.
++- **`issues_creator_provenance_bu` (BEFORE UPDATE OF created_by_id, original_created_by_id, creator_modified_by_id, creator_modified_at ON issues, SECURITY DEFINER):**
++  - Strict Immutability Guard: Verifies `NEW.original_created_by_id IS NOT DISTINCT FROM OLD.original_created_by_id` (raises `CREATOR_PROVENANCE_IMMUTABLE` if altered).
++  - No-op Fast Path: If `created_by_id` has not changed and modified columns have not changed, returns `NEW` with zero activity side-effects. Direct alteration of `creator_modified_by_id` or `creator_modified_at` without changing creator raises `CREATOR_PROVENANCE_IMMUTABLE`.
++  - Session Context & Authorization: Requires active session principal context (`app_current_principal_id()` non-NULL, else raises `RLS_CONTEXT_REQUIRED`). Validates that the principal (or any inherited group) holds `PROJECT_ADMIN` on `NEW.project_id` or `SERVER_ADMIN` at server scope via `app_principal_has_role(NEW.project_id, ARRAY['PROJECT_ADMIN','SERVER_ADMIN'])` (raises `CREATOR_OVERRIDE_FORBIDDEN` otherwise).
++  - Actor User Validation: Verifies that the acting principal is a concrete human user in the `users` table (raises `CREATOR_OVERRIDE_ACTOR_NOT_USER` otherwise).
++  - Workspace Match Validation: Verifies that the new creator user belongs to the same workspace as the issue (raises `CREATOR_OVERRIDE_WORKSPACE_MISMATCH` otherwise).
++  - Provenance Tracking: Sets `NEW.creator_modified_by_id := v_actor` and `NEW.creator_modified_at := clock_timestamp()`.
++  - Graph Spine Synchronization: Synchronizes `objects.created_by_id = NEW.created_by_id` for the issue entity.
++  - Immutable Audit Ledger: Appends an immutable activity ledger record via `append_activity(NEW.workspace_id, NEW.id, 'issue', v_actor, 'CREATOR_OVERRIDDEN', jsonb_build_object('from_user_id', OLD.created_by_id, 'to_user_id', NEW.created_by_id, 'original_created_by_id', OLD.original_created_by_id))`.
++- **Down Migration:** Drops both triggers and functions cleanly.
++
++---
++
++## 2. Definition of Done Compliance Matrix
++
++| DoD Requirement | Status | Evidence File / Proof |
++| :--- | :---: | :--- |
++| **File Existence & Implementation:** `p1_07_creator_provenance.py`, `p1_07_creator_provenance.up.sql`, `p1_07_creator_provenance.down.sql` exist; up SQL contains `CREATOR_OVERRIDE_FORBIDDEN`, `CREATOR_PROVENANCE_IMMUTABLE`, `ARRAY['PROJECT_ADMIN','SERVER_ADMIN']`, and call to `append_activity(... 'CREATOR_OVERRIDDEN' ...)` | PASS | `database/migrations/versions/p1_07_creator_provenance.py`<br>`database/migrations/sql/p1_07_creator_provenance.up.sql`<br>`database/migrations/sql/p1_07_creator_provenance.down.sql` |
++| **Single Head:** `uv run alembic -c database/alembic.ini heads` prints exactly one head: `p1_07_creator_provenance (head)` | PASS | `docs/qa/KANBA-47/alembic-heads.txt` |
++| **Unit Tests Implemented & Passing:** `uv run pytest database/tests/test_p1_07_creator_provenance.py database/tests/migrations/test_p1_07_migration.py -q --cov=database --cov-branch --cov-report=term-missing` exits `0` with `0` failures and >=95% coverage | PASS | `docs/qa/KANBA-47/unit-test-results.txt` (7 passed in 1.11s, 100% statement/branch coverage on touched modules) |
++| **Build / Type / Lint Clean:** `uv run ruff check database && uv run ruff format --check database && uv run mypy --strict database` exits `0` | PASS | `docs/qa/KANBA-47/build-check.txt` |
++| **Forensic Proof Packet Complete:** All files exist under `docs/qa/KANBA-47/` | PASS | `git-diff.patch`, `unit-test-results.txt`, `build-check.txt`, `alembic-heads.txt`, `schema-dump.sql`, `activity-sample.txt`, `message-to-reality-checker.md` |
++
++---
++
++## 3. Test Traceability Matrix
++
++| Test Function | Scoped Requirement | Verifications |
++| :--- | :--- | :--- |
++| `test_01_positive_project_admin_override` | Test Case 1 | Session principal with `PROJECT_ADMIN` binding on the project changes `created_by_id` U1 -> U2; row shows `created_by_id=U2`, `original_created_by_id=U1`, `creator_modified_by_id=<admin>`, non-NULL `creator_modified_at`; `objects.created_by_id = U2`; exactly one `activity_records` row with `event_type='CREATOR_OVERRIDDEN'` and payload `from_user_id=U1`, `to_user_id=U2`, `original_created_by_id=U1`; 32-byte sha256 `prev_hash` and `row_hash`. |
++| `test_02_positive_server_admin_direct_and_group` | Test Case 2 | Direct `SERVER_ADMIN` (server scope) overrides creator; user holding `SERVER_ADMIN` solely via group membership closure overrides creator. |
++| `test_03_negative_forbidden_roles` | Test Case 3 | `MEMBER` raises `CREATOR_OVERRIDE_FORBIDDEN`; `WORKSPACE_ADMIN` raises `CREATOR_OVERRIDE_FORBIDDEN`; `PROJECT_ADMIN` of another project raises `CREATOR_OVERRIDE_FORBIDDEN`; zero activity records written in all rejected attempts. |
++| `test_04_negative_provenance_immutability` | Test Case 4 | Any role updating `original_created_by_id` raises `CREATOR_PROVENANCE_IMMUTABLE`; directly setting `creator_modified_by_id` or `creator_modified_at` without changing creator raises `CREATOR_PROVENANCE_IMMUTABLE`. |
++| `test_05_negative_context_and_workspace_mismatch` | Test Case 5 | Override without session RLS context raises `RLS_CONTEXT_REQUIRED`; actor who is not a user (e.g. AGENT principal) raises `CREATOR_OVERRIDE_ACTOR_NOT_USER`; target user from another workspace raises `CREATOR_OVERRIDE_WORKSPACE_MISMATCH`. |
++| `test_06_boundary_insert_sanitization_and_summary_update` | Test Case 6 | INSERT with client-supplied `original_created_by_id <> created_by_id` and non-NULL `creator_modified_*` stores `original_created_by_id = created_by_id` and NULL modified columns; UPDATE touching only `summary` or non-changing `created_by_id` writes no activity rows. |
++| `test_07_creator_provenance_migration_lifecycle` | Test Case 7 | Upgrade to `p1_07_creator_provenance` creates triggers and functions; downgrade to `p1_09_prose_tables` drops them cleanly; re-upgrade succeeds and restores triggers and functions. |
++
++---
++
++## 4. Verification Proof Artifacts
++
++- `docs/qa/KANBA-47/git-diff.patch`: Clean unified diff against base commit (`0882fa7`).
++- `docs/qa/KANBA-47/unit-test-results.txt`: Test execution results with coverage report (7 passed in 1.11s, 100% touched-module coverage, exit code 0).
++- `docs/qa/KANBA-47/build-check.txt`: Ruff lint, format, mypy strict, import-linter, license gate, and zero-dash check outputs (all exit code 0).
++- `docs/qa/KANBA-47/alembic-heads.txt`: Single linear head verification (`p1_07_creator_provenance (head)`).
++- `docs/qa/KANBA-47/schema-dump.sql`: Verbatim `\sf` source of `issues_creator_insert_bi` and `issues_creator_provenance_bu` plus `information_schema.triggers` query.
++- `docs/qa/KANBA-47/activity-sample.txt`: Verified sample of the `CREATOR_OVERRIDDEN` activity record containing full payload, `prev_hash_hex`, and `row_hash_hex`.
++- Screenshots: N/A (Backend Database & Migration Ticket).
+diff --git a/docs/qa/KANBA-47/schema-dump.sql b/docs/qa/KANBA-47/schema-dump.sql
+new file mode 100644
+index 0000000..2ea4c19
+--- /dev/null
++++ b/docs/qa/KANBA-47/schema-dump.sql
+@@ -0,0 +1,87 @@
++-- PostgreSQL Function and Trigger Dump for KB-P1-07 (KANBA-47)
++--
++-- \sf issues_creator_insert_bi
++CREATE OR REPLACE FUNCTION public.issues_creator_insert_bi()
++ RETURNS trigger
++ LANGUAGE plpgsql
++AS $function$
++BEGIN
++    NEW.original_created_by_id := NEW.created_by_id;
++    NEW.creator_modified_by_id := NULL;
++    NEW.creator_modified_at := NULL;
++    RETURN NEW;
++END;
++$function$
++
++-- \sf issues_creator_provenance_bu
++CREATE OR REPLACE FUNCTION public.issues_creator_provenance_bu()
++ RETURNS trigger
++ LANGUAGE plpgsql
++ SECURITY DEFINER
++ SET search_path TO 'pg_catalog', 'public'
++AS $function$
++DECLARE
++    v_actor uuid;
++    v_target_ws uuid;
++BEGIN
++    IF NEW.original_created_by_id IS DISTINCT FROM OLD.original_created_by_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_PROVENANCE_IMMUTABLE';
++    END IF;
++
++    IF NEW.created_by_id IS NOT DISTINCT FROM OLD.created_by_id THEN
++        IF NEW.creator_modified_by_id IS DISTINCT FROM OLD.creator_modified_by_id
++           OR NEW.creator_modified_at IS DISTINCT FROM OLD.creator_modified_at THEN
++            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_PROVENANCE_IMMUTABLE';
++        END IF;
++        RETURN NEW;
++    END IF;
++
++    v_actor := app_current_principal_id();
++    IF v_actor IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'RLS_CONTEXT_REQUIRED';
++    END IF;
++
++    IF NOT app_principal_has_role(NEW.project_id, ARRAY['PROJECT_ADMIN','SERVER_ADMIN']) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_FORBIDDEN';
++    END IF;
++
++    IF NOT EXISTS (SELECT 1 FROM users WHERE id = v_actor) THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_ACTOR_NOT_USER';
++    END IF;
++
++    SELECT workspace_id INTO v_target_ws FROM users WHERE id = NEW.created_by_id;
++    IF NOT FOUND OR v_target_ws <> NEW.workspace_id THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CREATOR_OVERRIDE_WORKSPACE_MISMATCH';
++    END IF;
++
++    NEW.creator_modified_by_id := v_actor;
++    NEW.creator_modified_at := clock_timestamp();
++
++    UPDATE objects SET created_by_id = NEW.created_by_id WHERE id = NEW.id;
++
++    PERFORM append_activity(
++        NEW.workspace_id,
++        NEW.id,
++        'issue'::object_kind,
++        v_actor,
++        'CREATOR_OVERRIDDEN',
++        jsonb_build_object(
++            'from_user_id', OLD.created_by_id,
++            'to_user_id', NEW.created_by_id,
++            'original_created_by_id', OLD.original_created_by_id
++        )
++    );
++
++    RETURN NEW;
++END;
++$function$
++
++-- Triggers on public.issues table
++           trigger_name           | event_manipulation | action_timing |                action_statement                 
++----------------------------------+--------------------+---------------+-------------------------------------------------
++ issues_creator_insert_bi_trg     | INSERT             | BEFORE        | EXECUTE FUNCTION issues_creator_insert_bi()
++ issues_creator_provenance_bu_trg | UPDATE             | BEFORE        | EXECUTE FUNCTION issues_creator_provenance_bu()
++ issues_validate_biu_trg          | INSERT             | BEFORE        | EXECUTE FUNCTION issues_validate_biu()
++ issues_validate_biu_trg          | UPDATE             | BEFORE        | EXECUTE FUNCTION issues_validate_biu()
++(4 rows)
++
+diff --git a/docs/qa/KANBA-47/unit-test-results.txt b/docs/qa/KANBA-47/unit-test-results.txt
+new file mode 100644
+index 0000000..bfd9af7
+--- /dev/null
++++ b/docs/qa/KANBA-47/unit-test-results.txt
+@@ -0,0 +1,69 @@
++.......                                                                  [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                                       Stmts   Miss Branch BrPart  Cover   Missing
++------------------------------------------------------------------------------------------------------
++database/__init__.py                                           1      0      0      0   100%
++database/bootstrap/__init__.py                                25      2      6      3    84%   20, 22->24, 25
++database/migrations/__init__.py                                0      0      0      0   100%
++database/migrations/env.py                                    39      5      8      4    81%   14->17, 22-23, 29->32, 47-48, 73
++database/migrations/sqlfile.py                                19      4      4      2    74%   17-18, 22-23
++database/migrations/versions/__init__.py                       0      0      0      0   100%
++database/migrations/versions/p1_01_baseline.py                10      1      0      0    90%   26
++database/migrations/versions/p1_02_objects_spine.py           10      1      0      0    90%   26
++database/migrations/versions/p1_03_principals.py              10      1      0      0    90%   26
++database/migrations/versions/p1_04_projects.py                10      1      0      0    90%   26
++database/migrations/versions/p1_05_issues.py                  10      1      0      0    90%   26
++database/migrations/versions/p1_06_parent_dag.py              10      1      0      0    90%   26
++database/migrations/versions/p1_07_creator_provenance.py      10      0      0      0   100%
++database/migrations/versions/p1_08_planning_joins.py          10      1      0      0    90%   26
++database/migrations/versions/p1_09_prose_tables.py            10      1      0      0    90%   26
++database/migrations/versions/p1_10_views.py                   10      1      0      0    90%   26
++database/migrations/versions/p1_11_object_links.py            10      1      0      0    90%   26
++database/migrations/versions/p1_12_activity_ledger.py         10      1      0      0    90%   26
++database/migrations/versions/p1_13_access_control.py          10      1      0      0    90%   26
++database/testing/__init__.py                                   0      0      0      0   100%
++database/testing/pg_harness.py                               199     34     54     19    76%   49-50, 70-71, 75, 92-93, 113->exit, 114->113, 120-124, 136->147, 138->141, 142->145, 161, 165, 183->181, 204-205, 221, 234->239, 235->234, 239->243, 259, 262, 268, 337, 352-366
++database/tests/__init__.py                                     0      0      0      0   100%
++database/tests/conftest.py                                    15      3      0      0    80%   30, 36-37
++database/tests/migration_harness.py                           88     15     12      6    79%   69, 73, 91, 95, 105, 107, 121-126, 130-134
++database/tests/migrations/__init__.py                          0      0      0      0   100%
++database/tests/migrations/test_p1_01_migration.py             65     65     12      0     0%   3-132
++database/tests/migrations/test_p1_02_migration.py             26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_03_migration.py             21     21      0      0     0%   3-69
++database/tests/migrations/test_p1_04_migration.py             25     25      0      0     0%   3-87
++database/tests/migrations/test_p1_05_migration.py             20     20      0      0     0%   3-59
++database/tests/migrations/test_p1_06_migration.py             28     28      0      0     0%   3-89
++database/tests/migrations/test_p1_07_migration.py             24      0      0      0   100%
++database/tests/migrations/test_p1_08_migration.py             21     21      0      0     0%   3-67
++database/tests/migrations/test_p1_09_migration.py             17     17      0      0     0%   3-53
++database/tests/migrations/test_p1_10_migration.py             26     26      0      0     0%   3-82
++database/tests/migrations/test_p1_11_migration.py             27     27      0      0     0%   3-89
++database/tests/migrations/test_p1_12_migration.py             21     21      0      0     0%   3-72
++database/tests/migrations/test_p1_13_migration.py             26     26      0      0     0%   3-103
++database/tests/test_harness_benchmark.py                       8      8      0      0     0%   3-19
++database/tests/test_p1_01_baseline.py                        109    109      2      0     0%   3-185
++database/tests/test_p1_02_objects.py                         145    145      0      0     0%   3-319
++database/tests/test_p1_03_principals.py                      196    196      8      0     0%   3-469
++database/tests/test_p1_04_projects.py                        161    161      4      0     0%   3-501
++database/tests/test_p1_05_issues.py                          192    192      0      0     0%   3-535
++database/tests/test_p1_05_sequence_concurrency.py             31     31      0      0     0%   3-75
++database/tests/test_p1_06_parent_concurrency.py               70     70      2      0     0%   3-197
++database/tests/test_p1_06_parent_dag.py                      178    178      2      0     0%   3-450
++database/tests/test_p1_07_creator_provenance.py              226      0      4      0   100%
++database/tests/test_p1_08_planning.py                        226    226      2      0     0%   3-806
++database/tests/test_p1_09_markdown_only_schema.py             20     20      4      0     0%   3-47
++database/tests/test_p1_09_prose.py                           272    272      2      0     0%   3-714
++database/tests/test_p1_10_views.py                           192    192      2      0     0%   3-571
++database/tests/test_p1_11_object_links.py                    167    167      4      0     0%   3-524
++database/tests/test_p1_12_activity_ledger.py                 218    218     10      0     0%   3-600
++database/tests/test_p1_12_chain_concurrency.py                27     27      2      0     0%   3-67
++database/tests/test_p1_13_access_control.py                  171    171      0      0     0%   3-569
++database/tests/test_pg_harness.py                            120    120      2      0     0%   3-224
++database/tests/test_smoke.py                                   3      3      0      0     0%   3-8
++database/tests/test_sqlfile.py                                22     22      0      0     0%   3-36
++------------------------------------------------------------------------------------------------------
++TOTAL                                                       3617   2926    146     34    20%
++7 passed in 1.33s
++Exit code: 0
