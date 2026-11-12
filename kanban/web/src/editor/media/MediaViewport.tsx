@@ -39,10 +39,13 @@ const BACKDROP_CYCLE: readonly MediaBackdropKind[] = Object.freeze([
 ]);
 
 export interface MediaViewportProps {
-  src: string;
+  src?: string | undefined;
+  blobUrl?: string | undefined;
+  kind?: string | undefined;
   alt?: string | undefined;
   rawSource?: string | undefined;
   safeFilename?: string | undefined;
+  downloadFilename?: string | undefined;
   isLightbox?: boolean | undefined;
   initialBackdrop?: MediaBackdropKind | undefined;
   onBackdropChange?: ((next: MediaBackdropKind) => void) | undefined;
@@ -53,9 +56,12 @@ export interface MediaViewportProps {
 
 export function MediaViewport({
   src,
+  blobUrl,
+  kind,
   alt = '',
   rawSource,
-  safeFilename = 'media.svg',
+  safeFilename,
+  downloadFilename,
   isLightbox = false,
   initialBackdrop = 'theme',
   onBackdropChange,
@@ -63,6 +69,8 @@ export function MediaViewport({
   resolveAttachmentUrl,
   testId = 'media-viewport',
 }: MediaViewportProps): JSX.Element {
+  const effectiveSrc = blobUrl ?? src ?? '';
+  const effectiveSafeFilename = downloadFilename ?? safeFilename ?? 'media.svg';
   const [backdrop, setBackdrop] = useState<MediaBackdropKind>(initialBackdrop);
   const [prevInitial, setPrevInitial] = useState(initialBackdrop);
   if (initialBackdrop !== prevInitial) {
@@ -84,7 +92,7 @@ export function MediaViewport({
   const lastPointerPosRef = useRef({ x: 0, y: 0 });
   const hasMovedRef = useRef(false);
 
-  const resolved = resolveMediaUrl(src, { airGapMode, resolveAttachmentUrl });
+  const resolved = resolveMediaUrl(effectiveSrc, { airGapMode, resolveAttachmentUrl });
 
   // Apply CSSOM transform strictly to maintain CSP style-src 'self'
   useEffect(() => {
@@ -188,7 +196,7 @@ export function MediaViewport({
   }, [rawSource]);
 
   // Clean filename for download attribute
-  const cleanedFilename = safeFilename.replace(/[^a-zA-Z0-9._-]/g, '_') || 'media.svg';
+  const cleanedFilename = effectiveSafeFilename.replace(/[^a-zA-Z0-9._-]/g, '_') || 'media.svg';
 
   // Render air-gap offline placeholder card if blocked
   if (resolved.isAirGapBlocked) {
@@ -223,7 +231,7 @@ export function MediaViewport({
   ].join(' ');
 
   return (
-    <div className={containerClasses} data-testid={testId}>
+    <div className={containerClasses} data-testid={testId} data-kind={kind}>
       {/* Canvas Area */}
       <div
         ref={canvasRef}

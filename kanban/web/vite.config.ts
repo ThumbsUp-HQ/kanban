@@ -5,6 +5,9 @@ import { PRODUCTION_CSP } from './e2e/support/csp.ts';
 
 export default defineConfig({
   plugins: [react(), precompress()],
+  worker: {
+    format: 'es',
+  },
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

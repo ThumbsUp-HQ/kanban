@@ -147,6 +147,7 @@ def make_project(api_env: ApiEnv) -> Callable[..., Awaitable[uuid.UUID]]:
         *,
         created_by: SeededUser,
         roles: Mapping[SeededUser, str] | None = None,
+        modules_enabled: bool = False,
     ) -> uuid.UUID:
         project_id = await create_project(
             api_env.seed,
@@ -154,6 +155,7 @@ def make_project(api_env: ApiEnv) -> Callable[..., Awaitable[uuid.UUID]]:
             identifier=identifier,
             name=f"{identifier} project",
             created_by_id=created_by.id,
+            modules_enabled=modules_enabled,
         )
         for user, role in (roles or {}).items():
             await add_role_binding(
@@ -207,12 +209,14 @@ def as_principal(api_env: ApiEnv) -> Callable[..., httpx.AsyncClient]:
         user: SeededUser,
         *,
         scopes: tuple[str, ...] = ("session",),
+        aal_level: int = 1,
         agent_principal_id: uuid.UUID | None = None,
     ) -> httpx.AsyncClient:
         api_env.resolver.principal = PrincipalContext(
             principal_id=user.id,
             workspace_id=user.workspace_id,
             token_scopes=scopes,
+            aal_level=aal_level,
             agent_principal_id=agent_principal_id,
         )
         return api_env.client

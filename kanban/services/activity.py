@@ -87,6 +87,12 @@ class ActivityEventType(StrEnum):
     LABEL_UPDATED = "LABEL_UPDATED"
     LABEL_DELETED = "LABEL_DELETED"
     ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
+    MODULE_CREATED = "MODULE_CREATED"
+    MODULE_UPDATED = "MODULE_UPDATED"
+    MODULE_DELETED = "MODULE_DELETED"
+    ISSUE_MODULES_CHANGED = "ISSUE_MODULES_CHANGED"
+    ISSUE_MODULE_ADDED = "ISSUE_MODULE_ADDED"
+    ISSUE_MODULE_REMOVED = "ISSUE_MODULE_REMOVED"
     LOCAL_ADMIN_LOGIN_SUCCEEDED = "LOCAL_ADMIN_LOGIN_SUCCEEDED"
     LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
     ASSIGNEE_ADDED = "ASSIGNEE_ADDED"
@@ -97,6 +103,27 @@ class ActivityEventType(StrEnum):
     MENTION_ACCESS_ACKNOWLEDGED = "MENTION_ACCESS_ACKNOWLEDGED"
     LINK_CREATED = "LINK_CREATED"
     LINK_DELETED = "LINK_DELETED"
+    MFA_VERIFIED = "MFA_VERIFIED"
+    MFA_FAILED = "MFA_FAILED"
+    RECOVERY_CODE_USED = "RECOVERY_CODE_USED"
+    RECOVERY_CODES_REGENERATED = "RECOVERY_CODES_REGENERATED"
+    CYCLE_CREATED = "CYCLE_CREATED"
+    CYCLE_UPDATED = "CYCLE_UPDATED"
+    CYCLE_STATUS_CHANGED = "CYCLE_STATUS_CHANGED"
+    CYCLE_ACTIVATED = "CYCLE_ACTIVATED"
+    CYCLE_COMPLETED = "CYCLE_COMPLETED"
+    CYCLE_DELETED = "CYCLE_DELETED"
+    ISSUE_CYCLE_CHANGED = "ISSUE_CYCLE_CHANGED"
+    VIEW_CREATED = "VIEW_CREATED"
+    VIEW_UPDATED = "VIEW_UPDATED"
+    VIEW_DELETED = "VIEW_DELETED"
+    ISSUE_RANK_MOVED = "ISSUE_RANK_MOVED"
+    ISSUE_MOVED = "ISSUE_MOVED"
+    WIP_HARD_LIMIT_OVERRIDDEN = "WIP_HARD_LIMIT_OVERRIDDEN"
+    WIP_LIMIT_OVERRIDDEN = "WIP_LIMIT_OVERRIDDEN"
+    BOARD_COLUMN_REBALANCED = "BOARD_COLUMN_REBALANCED"
+    ISSUE_ARCHIVED = "ISSUE_ARCHIVED"
+    ISSUE_UNARCHIVED = "ISSUE_UNARCHIVED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -130,6 +157,12 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.LABEL_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.LABEL_DELETED: ActivityCategory.HISTORY,
         ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
+        ActivityEventType.MODULE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.MODULE_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.MODULE_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MODULES_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MODULE_ADDED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MODULE_REMOVED: ActivityCategory.HISTORY,
         ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
         ActivityEventType.ASSIGNEE_ADDED: ActivityCategory.HISTORY,
@@ -140,6 +173,27 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.MENTION_ACCESS_ACKNOWLEDGED: ActivityCategory.COMMENT,
         ActivityEventType.LINK_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.LINK_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.MFA_VERIFIED: ActivityCategory.SYSTEM,
+        ActivityEventType.MFA_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.RECOVERY_CODE_USED: ActivityCategory.SYSTEM,
+        ActivityEventType.RECOVERY_CODES_REGENERATED: ActivityCategory.SYSTEM,
+        ActivityEventType.CYCLE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.CYCLE_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.CYCLE_STATUS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.CYCLE_ACTIVATED: ActivityCategory.HISTORY,
+        ActivityEventType.CYCLE_COMPLETED: ActivityCategory.HISTORY,
+        ActivityEventType.CYCLE_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_CYCLE_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.VIEW_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.VIEW_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.VIEW_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_RANK_MOVED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_MOVED: ActivityCategory.HISTORY,
+        ActivityEventType.WIP_HARD_LIMIT_OVERRIDDEN: ActivityCategory.HISTORY,
+        ActivityEventType.WIP_LIMIT_OVERRIDDEN: ActivityCategory.HISTORY,
+        ActivityEventType.BOARD_COLUMN_REBALANCED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_ARCHIVED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_UNARCHIVED: ActivityCategory.HISTORY,
     }
 )
 
