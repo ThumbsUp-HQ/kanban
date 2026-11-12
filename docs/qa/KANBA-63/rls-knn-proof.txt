@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-63/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-63
+configfile: pyproject.toml
+plugins: anyio-4.16.0, asyncio-1.4.1.post1, platformdirs-4.14.5, socket-0.8.1, cov-7.1.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 5 items / 4 deselected / 1 selected
+
+database/tests/test_object_embeddings.py::test_case_02_security_cross_project_isolation 
+--- RLS KNN PROOF: CASE 2 ---
+Executing KNN Query: SELECT object_id, chunk_index, (embedding <=> CAST(:q AS vector)) AS distance FROM object_embeddings ORDER BY embedding <=> CAST(:q AS vector) LIMIT 4
+Target Object ID (Project B): 01a1ce67-246c-7b11-a74b-eb1977eab52b
+Active Principal ID (No VIEW on Project B): baf29149-a701-4bd0-94a3-81c14eef8cc0
+Active Workspace ID: b798dffa-dfc8-43da-938c-595fa697844e
+Returned Rows Count: 0
+Returned Rows Payload: []
+Verification: 0 rows returned - project B embeddings masked by FORCE RLS.
+
+PASSED
+
+======================= 1 passed, 4 deselected in 0.16s ========================
+EXIT: 0
