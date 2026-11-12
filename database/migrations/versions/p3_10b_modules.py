@@ -3,7 +3,7 @@
 """Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
 
 Revision ID: p3_10b_modules
-Revises: p2_15_attachments
+Revises: p2_06_oidc_auth_requests
 Create Date: 2026-11-12 00:00:00.000000
 """
 

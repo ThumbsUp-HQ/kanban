@@ -1,17 +1,12 @@
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-89/.venv/bin/python
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
 rootdir: /tmp/kb-wt-KANBA-89
 configfile: pyproject.toml
 plugins: socket-0.8.1, cov-7.1.0, platformdirs-4.14.5, asyncio-1.4.1.post1, anyio-4.16.0, xdist-3.8.0
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 6 items
+collected 6 items
 
-kanban/tests/api/test_modules.py::test_case_1_positive_module_lifecycle_and_assignment PASSED [ 16%]
-kanban/tests/api/test_modules.py::test_case_2_feature_flag_modules_disabled PASSED [ 33%]
-kanban/tests/api/test_modules.py::test_case_3_security_anti_enumeration_and_rbac PASSED [ 50%]
-kanban/tests/api/test_modules.py::test_case_4_boundary_validations_and_limits PASSED [ 66%]
-kanban/tests/api/test_modules.py::test_case_5_delete_cascade_and_activity PASSED [ 83%]
-kanban/tests/api/test_modules.py::test_case_6_patch_and_granular_endpoints PASSED [100%]
+kanban/tests/api/test_modules.py ......                                  [100%]
 
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
@@ -22,6 +17,5 @@ kanban/api/v1/modules.py        50      0      0      0   100%
 kanban/services/modules.py     159      0     52      0   100%
 ------------------------------------------------------------------------
 TOTAL                          209      0     52      0   100%
-Required test coverage of 95% reached. Total coverage: 100.00%
-============================== 6 passed in 4.32s ===============================
+============================== 6 passed in 4.20s ===============================
 EXIT_CODE=0
