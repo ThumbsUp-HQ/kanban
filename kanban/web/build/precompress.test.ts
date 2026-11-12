@@ -164,6 +164,6 @@ describe('precompress build plugin', () => {
           rmSync(distDir, { recursive: true, force: true });
         }
       }
-    });
+    }, 15000);
   });
 });

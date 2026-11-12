@@ -74,14 +74,22 @@ interface TrustedHTMLInstance {
   readonly __brand?: unique symbol;
 }
 
+interface TrustedScriptURLInstance {
+  readonly __brand: unique symbol;
+}
+
 interface TrustedTypePolicy {
   createHTML(input: string): TrustedHTMLInstance;
+  createScriptURL?(input: string): TrustedScriptURLInstance;
 }
 
 interface TrustedTypePolicyFactory {
   createPolicy(
     name: string,
-    rules: { createHTML: (input: string) => string },
+    rules: {
+      createHTML: (input: string) => string;
+      createScriptURL?: ((input: string) => string) | undefined;
+    },
   ): TrustedTypePolicy;
 }
 
@@ -108,6 +116,7 @@ function getSanitizerPolicy(): TrustedTypePolicy | null {
       try {
         cachedSanitizerPolicy = win.trustedTypes.createPolicy('kanban-sanitizer', {
           createHTML: (html: string): string => html,
+          createScriptURL: (url: string): string => url,
         });
       } catch {
         cachedSanitizerPolicy = null;
@@ -115,6 +124,15 @@ function getSanitizerPolicy(): TrustedTypePolicy | null {
     }
   }
   return cachedSanitizerPolicy;
+}
+
+export function toTrustedScriptUrl(url: string | URL): string {
+  const policy = getSanitizerPolicy();
+  const urlStr = typeof url === 'string' ? url : url.href;
+  if (policy && typeof policy.createScriptURL === 'function') {
+    return policy.createScriptURL(urlStr) as unknown as string;
+  }
+  return urlStr;
 }
 
 function toTrustedHtml(markup: string): string {
