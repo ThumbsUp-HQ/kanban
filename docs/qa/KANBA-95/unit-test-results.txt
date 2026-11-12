@@ -1,0 +1,43 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-95/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-95
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 22 items
+
+kanban/tests/security/test_mcp_keys.py::test_case_1_positive_mint_and_catalog PASSED [  4%]
+kanban/tests/security/test_mcp_keys.py::test_case_2_surface_binding_and_forgery PASSED [  9%]
+kanban/tests/security/test_mcp_keys.py::test_case_3_scope_negatives PASSED [ 13%]
+kanban/tests/security/test_mcp_keys.py::test_case_4_boundaries_and_lifecycle PASSED [ 18%]
+kanban/tests/security/test_mcp_keys.py::test_case_5_session_token_binding PASSED [ 22%]
+kanban/tests/security/test_mcp_keys.py::test_case_6_rls_isolation PASSED [ 27%]
+kanban/tests/security/test_mcp_keys.py::test_introspection_result_to_dict_and_helpers PASSED [ 31%]
+kanban/tests/security/test_mcp_keys.py::test_mint_and_revoke_edge_cases PASSED [ 36%]
+kanban/tests/api/test_admin_mcp_keys_api.py::test_admin_mcp_keys_endpoints_lifecycle PASSED [ 40%]
+kanban/tests/api/test_admin_mcp_keys_api.py::test_internal_mcp_introspect_missing_session_factory PASSED [ 45%]
+mcp/tests/test_auth.py::test_401_challenge_missing_and_blank_bearer PASSED [ 50%]
+mcp/tests/test_auth.py::test_prefix_precheck_local_rejection_zero_network_call PASSED [ 54%]
+mcp/tests/test_auth.py::test_introspection_cache_positive_only_and_ttl PASSED [ 59%]
+mcp/tests/test_auth.py::test_tools_list_filtering_and_tools_call_insufficient_scope PASSED [ 63%]
+mcp/tests/test_auth.py::test_session_token_binding_mismatch_returns_404 PASSED [ 68%]
+mcp/tests/test_auth.py::test_transcript_generation PASSED                [ 72%]
+mcp/tests/test_auth.py::test_introspection_cache_methods PASSED          [ 77%]
+mcp/tests/test_auth.py::test_tool_scope_requirements_registration PASSED [ 81%]
+mcp/tests/test_auth.py::test_auth_disabled_and_non_http_scope PASSED     [ 86%]
+mcp/tests/test_auth.py::test_surface_resolution_from_path PASSED         [ 90%]
+mcp/tests/test_auth.py::test_upstream_client_unavailable_503 PASSED      [ 95%]
+mcp/tests/test_auth.py::test_upstream_introspection_error_paths PASSED   [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                    Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------------
+kanban/api/internal/mcp_introspect.py      43      0      6      0   100%
+kanban/api/v1/admin/mcp_keys.py            83      0      8      0   100%
+kanban/security/mcp_keys.py               147      2     46      2    98%   158, 370
+mcp/auth.py                               175      3     44      1    98%   293-295
+-----------------------------------------------------------------------------------
+TOTAL                                     448      5    104      3    99%
+============================== 22 passed in 1.18s ==============================

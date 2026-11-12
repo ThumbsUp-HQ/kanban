@@ -1,0 +1,451 @@
+diff --git a/database/GEMINI.md b/database/GEMINI.md
+index 2003981..7d4bd14 100644
+--- a/database/GEMINI.md
++++ b/database/GEMINI.md
+@@ -17,7 +17,7 @@ None. This is the foundational leaf module in the workspace dependency hierarchy
+ - Test harness execution isolates probe entities within kb_harness schema, which must be ignored by production RLS catalog assertions.
+ 
+ ## Outbound Contracts
+-- database.models: 38 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions), custom LtreeType, and 5 PostgreSQL StrEnums.
++- database.models: 42 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions, mcp_api_keys), custom LtreeType, and 5 PostgreSQL StrEnums.
+ - database.session: RLSContext, bind_rls_context, RLSSessionFactory, create_rls_engine, and fail-closed security exceptions (RLSContextError, UnboundRLSSessionError, RLSRoleViolationError).
+ - database.repositories: BaseRepository generic base providing type-safe CRUD operations, bounded pagination (1..500), and mandatory RLS session verification.
+ - database.outbox: OutboxEnvelope, enqueue_outbox_event, topic_matches, RealtimeBroker, PgNotifyBroker, ValkeyBroker, and OutboxRelay (run via `python -m database.outbox.relay`).
+diff --git a/database/migrations/versions/p2_06_oidc_auth_requests.py b/database/migrations/versions/p2_06_oidc_auth_requests.py
+index dfe1eb2..55f284e 100644
+--- a/database/migrations/versions/p2_06_oidc_auth_requests.py
++++ b/database/migrations/versions/p2_06_oidc_auth_requests.py
+@@ -13,7 +13,7 @@ from database.migrations.sqlfile import execute_sql_file
+ 
+ # revision identifiers, used by Alembic.
+ revision: str = "p2_06_oidc_auth_requests"
+-down_revision: str | None = "p5_16_agent_definitions"
++down_revision: str | None = "p2_15_attachments"
+ branch_labels: str | Sequence[str] | None = None
+ depends_on: str | Sequence[str] | None = None
+ 
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index c274f64..3e776de 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -23,6 +23,7 @@ from database.models.issues import (
+     IssueSubscription,
+ )
+ from database.models.knowledge import Doc, Page, PageVersion, Sticky
++from database.models.mcp_api_key import McpApiKey
+ from database.models.outbox import OutboxEvent
+ from database.models.principals import (
+     EffectiveResourceAccess,
+@@ -75,6 +76,7 @@ __all__ = [
+     "LinkKind",
+     "LinkTypeMatrix",
+     "LtreeType",
++    "McpApiKey",
+     "Module",
+     "ObjectEmbedding",
+     "ObjectKind",
+diff --git a/database/tests/test_p1_17_models.py b/database/tests/test_p1_17_models.py
+index 3bfd79a..e768c92 100644
+--- a/database/tests/test_p1_17_models.py
++++ b/database/tests/test_p1_17_models.py
+@@ -53,9 +53,10 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
+     orm_tables = set(Base.metadata.tables.keys())
+ 
+     # Exact set equality across all tables
+-    # (incl. auth, embeddings, limits, sessions, agent defs, attachments, oidc requests)
++    # (incl. auth, embeddings, limits, sessions, agent defs, attachments,
++    #  oidc requests, mcp api keys)
+     assert orm_tables == pg_tables
+-    assert len(orm_tables) == 41
++    assert len(orm_tables) == 42
+ 
+ 
+ async def _setup_test_project_spine(
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index ba6f77a..fbad8c7 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -4,6 +4,8 @@ from __future__ import annotations
+ 
+ from fastapi import APIRouter
+ 
++from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
++from kanban.api.v1.admin.mcp_keys import router as admin_mcp_keys_router
+ from kanban.api.v1.agent_definitions import router as agent_definitions_router
+ from kanban.api.v1.attachments import router as attachments_router
+ from kanban.api.v1.auth_oidc import router as auth_oidc_router
+@@ -33,4 +35,6 @@ def build_v1_router() -> APIRouter:
+     v1.include_router(docs_router)
+     v1.include_router(agent_definitions_router)
+     v1.include_router(attachments_router)
++    v1.include_router(admin_mcp_keys_router)
++    v1.include_router(mcp_introspect_router)
+     return v1
+diff --git a/kanban/app.py b/kanban/app.py
+index d2c8a4a..afabb8b 100644
+--- a/kanban/app.py
++++ b/kanban/app.py
+@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
+ from starlette.exceptions import HTTPException as StarletteHTTPException
+ 
+ from kanban.api.deps import DenyAllResolver
++from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
+ from kanban.api.problems import (
+     ProblemException,
+     problem_exception_handler,
+@@ -51,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
+ 
+     # Mount canonical /api/v1 router tree
+     app.include_router(build_v1_router(), prefix="/api/v1")
++    app.include_router(mcp_introspect_router)
+ 
+     # Fallback API router for legacy/subpath 404s
+     api_router = APIRouter(prefix="/api")
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index 628463c..6ab23f5 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -87,6 +87,8 @@ class ActivityEventType(StrEnum):
+     LABEL_UPDATED = "LABEL_UPDATED"
+     LABEL_DELETED = "LABEL_DELETED"
+     ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
++    MCP_KEY_MINTED = "MCP_KEY_MINTED"
++    MCP_KEY_REVOKED = "MCP_KEY_REVOKED"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -120,6 +122,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.LABEL_UPDATED: ActivityCategory.HISTORY,
+         ActivityEventType.LABEL_DELETED: ActivityCategory.HISTORY,
+         ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
++        ActivityEventType.MCP_KEY_MINTED: ActivityCategory.SYSTEM,
++        ActivityEventType.MCP_KEY_REVOKED: ActivityCategory.SYSTEM,
+     }
+ )
+ 
+@@ -130,7 +134,7 @@ class ActivityEnvelope:
+ 
+     activity_id: uuid.UUID
+     workspace_id: uuid.UUID
+-    object_id: uuid.UUID
++    object_id: uuid.UUID | None
+     actor_principal_id: uuid.UUID
+     event_type: ActivityEventType
+     category: ActivityCategory
+@@ -142,7 +146,7 @@ class EphemeralEnvelope:
+     """Non-persisted event (for example rank-only moves) delivered to listeners."""
+ 
+     workspace_id: uuid.UUID
+-    object_id: uuid.UUID
++    object_id: uuid.UUID | None
+     actor_principal_id: uuid.UUID
+     event_type: str
+     payload: Mapping[str, JSONValue]
+@@ -185,7 +189,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
+     session: AsyncSession,
+     *,
+     workspace_id: uuid.UUID,
+-    object_id: uuid.UUID,
++    object_id: uuid.UUID | None = None,
+     actor_principal_id: uuid.UUID,
+     event_type: ActivityEventType,
+     payload: Mapping[str, JSONValue],
+@@ -196,15 +200,17 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
+         raise ActivityPayloadTooLarge(msg)
+ 
+     async with session.begin_nested():
+-        kind = (
+-            await session.execute(
+-                text("SELECT object_type::text FROM objects WHERE id = :oid"),
+-                {"oid": object_id},
+-            )
+-        ).scalar_one_or_none()
+-        if kind is None:
+-            msg = "Activity object is not visible"
+-            raise ActivityObjectNotFound(msg)
++        kind: str | None = None
++        if object_id is not None:
++            kind = (
++                await session.execute(
++                    text("SELECT object_type::text FROM objects WHERE id = :oid"),
++                    {"oid": object_id},
++                )
++            ).scalar_one_or_none()
++            if kind is None:
++                msg = "Activity object is not visible"
++                raise ActivityObjectNotFound(msg)
+ 
+         activity_id = (
+             await session.execute(
+diff --git a/mcp/app.py b/mcp/app.py
+index d34ad62..9ed1b21 100644
+--- a/mcp/app.py
++++ b/mcp/app.py
+@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Final
+ from starlette.applications import Starlette
+ from starlette.routing import Mount, Route
+ 
++from mcp.auth import McpAuthMiddleware
+ from mcp.internal_client import KanbanApiClient
+ from mcp.protocol import InMemorySessionStore, McpProtocolHandler
+ from mcp.registry import Surface, ToolRegistry, create_placeholder_tool
+@@ -136,4 +137,11 @@ def create_mcp_app(
+     app.state.docs_registry = docs_registry
+     app.state.admin_registry = admin_registry
+ 
++    if active_settings.auth_enabled:
++        app.add_middleware(
++            McpAuthMiddleware,
++            internal_client=internal_client,
++            settings=active_settings,
++        )
++
+     return app
+diff --git a/mcp/protocol.py b/mcp/protocol.py
+index b1dfb27..0dac962 100644
+--- a/mcp/protocol.py
++++ b/mcp/protocol.py
+@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
+ 
+ from starlette.responses import JSONResponse, Response
+ 
++from mcp.auth import SCOPE_REQUIREMENTS, hash_mcp_api_key
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+ from mcp.yaml_out import dump_yaml
+@@ -48,13 +49,14 @@ class Session:
+     surface: Surface
+     created_at_s: float
+     last_seen_s: float
++    token_sha256: bytes | None = None
+ 
+ 
+ @runtime_checkable
+ class SessionStore(Protocol):
+     """Protocol for MCP session lifecycle management."""
+ 
+-    def create_session(self, surface: Surface) -> Session:
++    def create_session(self, surface: Surface, *, token_sha256: bytes | None = None) -> Session:
+         """Create and store a newly initialized session."""
+         ...
+ 
+@@ -91,7 +93,7 @@ class InMemorySessionStore:
+         )
+         self._sessions: OrderedDict[str, Session] = OrderedDict()
+ 
+-    def create_session(self, surface: Surface) -> Session:
++    def create_session(self, surface: Surface, *, token_sha256: bytes | None = None) -> Session:
+         """Create and store a new session with URL-safe random ID, evicting oldest if full."""
+         now = self._time_provider()
+         session_id = secrets.token_urlsafe(32)
+@@ -100,6 +102,7 @@ class InMemorySessionStore:
+             surface=surface,
+             created_at_s=now,
+             last_seen_s=now,
++            token_sha256=token_sha256,
+         )
+ 
+         # LRU eviction: if full, evict oldest session (first in OrderedDict)
+@@ -263,10 +266,14 @@ class McpProtocolHandler:
+         params = payload.get("params") or {}
+ 
+         if method == "initialize":
+-            return await self._handle_initialize(req_id)
++            return await self._handle_initialize(req_id, request=request)
+ 
+         session_id = request.headers.get("mcp-session-id")
+-        if not session_id or self.session_store.get_session(session_id) is None:
++        if not session_id:
++            return Response("Session not found or expired; please re-initialize", status_code=404)
++
++        session = self.session_store.get_session(session_id)
++        if session is None:
+             return Response("Session not found or expired; please re-initialize", status_code=404)
+ 
+         raw_auth = request.headers.get("x-kb-subject-token") or request.headers.get("authorization")
+@@ -276,12 +283,27 @@ class McpProtocolHandler:
+             else raw_auth
+         )
+ 
++        current_token_sha256 = getattr(request.state, "mcp_token_sha256", None)
++        if current_token_sha256 is None and subject_token:
++            current_token_sha256 = hash_mcp_api_key(subject_token)
++
++        # Enforce session token binding: if session was bound to a token, token must match
++        if (
++            session.token_sha256 is not None
++            and current_token_sha256 is not None
++            and session.token_sha256 != current_token_sha256
++        ):
++            return Response("Session bound to different token", status_code=404)
++
++        caller_scopes = getattr(request.state, "mcp_scopes", None)
++
+         return await self._dispatch_method(
+             method,
+             req_id,
+             params,
+             session_id=session_id,
+             subject_token=subject_token,
++            caller_scopes=caller_scopes,
+         )
+ 
+     def _handle_delete_session(self, request: Request) -> Response:
+@@ -290,8 +312,25 @@ class McpProtocolHandler:
+             return Response("Session not found", status_code=404)
+         return Response(status_code=204)
+ 
+-    async def _handle_initialize(self, req_id: object) -> Response:
+-        session = self.session_store.create_session(self.surface)
++    async def _handle_initialize(
++        self, req_id: object, *, request: Request | None = None
++    ) -> Response:
++        token_sha256: bytes | None = None
++        if request is not None:
++            token_sha256 = getattr(request.state, "mcp_token_sha256", None)
++            if token_sha256 is None:
++                raw_auth = request.headers.get("x-kb-subject-token") or request.headers.get(
++                    "authorization"
++                )
++                subject_token = (
++                    raw_auth[7:].strip()
++                    if raw_auth and raw_auth.lower().startswith("bearer ")
++                    else raw_auth
++                )
++                if subject_token:
++                    token_sha256 = hash_mcp_api_key(subject_token)
++
++        session = self.session_store.create_session(self.surface, token_sha256=token_sha256)
+         result: dict[str, Any] = {
+             "protocolVersion": PROTOCOL_VERSION,
+             "capabilities": {
+@@ -309,7 +348,7 @@ class McpProtocolHandler:
+             headers={"Mcp-Session-Id": session.session_id},
+         )
+ 
+-    async def _dispatch_method(
++    async def _dispatch_method(  # noqa: PLR0913
+         self,
+         method: str,
+         req_id: object,
+@@ -317,6 +356,7 @@ class McpProtocolHandler:
+         *,
+         session_id: str | None = None,
+         subject_token: str | None = None,
++        caller_scopes: frozenset[str] | None = None,
+     ) -> Response:
+         # Notifications (no id)
+         if req_id is None:
+@@ -326,7 +366,7 @@ class McpProtocolHandler:
+             return JSONResponse({"jsonrpc": "2.0", "id": req_id, "result": {}})
+ 
+         if method == "tools/list":
+-            return self._handle_tools_list(req_id)
++            return self._handle_tools_list(req_id, caller_scopes=caller_scopes)
+ 
+         if method == "tools/call":
+             return await self._handle_tools_call(
+@@ -334,6 +374,7 @@ class McpProtocolHandler:
+                 params,
+                 session_id=session_id,
+                 subject_token=subject_token,
++                caller_scopes=caller_scopes,
+             )
+ 
+         # Unknown method
+@@ -346,14 +387,27 @@ class McpProtocolHandler:
+             status_code=200,
+         )
+ 
+-    def _handle_tools_list(self, req_id: object) -> JSONResponse:
++    def _handle_tools_list(
++        self, req_id: object, *, caller_scopes: frozenset[str] | None = None
++    ) -> JSONResponse:
++        specs = self.registry.list_specs()
++        if caller_scopes is not None:
++            specs = [
++                s
++                for s in specs
++                if (
++                    SCOPE_REQUIREMENTS.get(s.name) is None
++                    or SCOPE_REQUIREMENTS[s.name].issubset(caller_scopes)
++                )
++            ]
++
+         tools_list: list[dict[str, Any]] = [
+             {
+                 "name": spec.name,
+                 "description": spec.description,
+                 "inputSchema": spec.input_schema,
+             }
+-            for spec in self.registry.list_specs()
++            for spec in specs
+         ]
+         return JSONResponse(
+             {
+@@ -393,13 +447,14 @@ class McpProtocolHandler:
+             )
+         return str(params["name"]), arguments
+ 
+-    async def _handle_tools_call(
++    async def _handle_tools_call(  # noqa: C901, PLR0911
+         self,
+         req_id: object,
+         params: object,
+         *,
+         session_id: str | None = None,
+         subject_token: str | None = None,
++        caller_scopes: frozenset[str] | None = None,
+     ) -> JSONResponse:
+         validated = self._validate_tools_call_params(req_id, params)
+         if isinstance(validated, JSONResponse):
+@@ -425,6 +480,26 @@ class McpProtocolHandler:
+                 }
+             )
+ 
++        # Check required scopes
++        req_scopes = SCOPE_REQUIREMENTS.get(tool_name)
++        if (
++            caller_scopes is not None
++            and req_scopes is not None
++            and not req_scopes.issubset(caller_scopes)
++        ):
++            msg = f"Caller lacks required scope(s) {sorted(req_scopes)} for tool '{tool_name}'"
++            err = KbMcpError(code=McpErrorCode.INSUFFICIENT_SCOPE, message=msg)
++            return JSONResponse(
++                {
++                    "jsonrpc": "2.0",
++                    "id": req_id,
++                    "result": {
++                        "content": [{"type": "text", "text": err.to_yaml()}],
++                        "isError": True,
++                    },
++                }
++            )
++
+         # Progressive disclosure: JIT help
+         if arguments.get("identifier") == "help" or arguments.get("action") == "help":
+             return await self._handle_jit_help(
+diff --git a/mcp/settings.py b/mcp/settings.py
+index 73252ad..3e39434 100644
+--- a/mcp/settings.py
++++ b/mcp/settings.py
+@@ -31,3 +31,5 @@ class McpSettings(BaseSettings):
+ 
+     request_body_limit_bytes: int = 1048576  # 1 MiB
+     response_body_limit_bytes: int = 8388608  # 8 MiB
++
++    auth_enabled: bool = False
+diff --git a/mcp/tests/conftest.py b/mcp/tests/conftest.py
+index b7660ab..42bd1d9 100644
+--- a/mcp/tests/conftest.py
++++ b/mcp/tests/conftest.py
+@@ -111,7 +111,7 @@ def transcript_recorder(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+ @pytest.fixture
+ def mcp_app() -> Starlette:
+     """Default Starlette application mounting the 3 MCP surfaces."""
+-    settings = McpSettings(mode="standalone_inprocess")
++    settings = McpSettings(mode="standalone_inprocess", auth_enabled=False)
+     return create_mcp_app(settings)
+ 
+ 

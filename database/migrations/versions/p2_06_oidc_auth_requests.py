@@ -13,7 +13,7 @@ from database.migrations.sqlfile import execute_sql_file
 
 # revision identifiers, used by Alembic.
 revision: str = "p2_06_oidc_auth_requests"
-down_revision: str | None = "p5_16_agent_definitions"
+down_revision: str | None = "p2_15_attachments"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

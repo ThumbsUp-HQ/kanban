@@ -1,0 +1,116 @@
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_adm_***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+
+HTTP/1.1 403 Forbidden
+content-length: 32
+content-type: application/json
+
+{"error":"SURFACE_KEY_MISMATCH"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Content-Length: 80
+Content-Type: application/json
+
+{"token":"kb_agt_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+Content-Length: 111
+Content-Type: application/json
+
+{"active":true,"principal_id":"018f-0000","workspace_id":"018f-0001","surface":"agent","scopes":["agent:read"]}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":3,"method":"initialize"}
+
+HTTP/1.1 200 OK
+mcp-session-id: MG2_BwTm5OV0bfs93pS9QWaF8VzcVUngh48xSIb91GM
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":3,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Mcp-Session-Id: MG2_BwTm5OV0bfs93pS9QWaF8VzcVUngh48xSIb91GM
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":4,"method":"tools/list"}
+
+HTTP/1.1 200 OK
+content-length: 212
+content-type: application/json
+
+{"jsonrpc":"2.0","id":4,"result":{"tools":[{"name":"ping_agent","description":"Diagnostic ping health check for the agent surface.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}]}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Mcp-Session-Id: MG2_BwTm5OV0bfs93pS9QWaF8VzcVUngh48xSIb91GM
+Content-Length: 98
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"test_agent_write","arguments":{}}}
+
+HTTP/1.1 200 OK
+content-length: 214
+content-type: application/json
+
+{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"error: {code: INSUFFICIENT_SCOPE, message: 'Caller lacks required scope(s) [''agent:write''] for tool ''test_agent_write'''}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------

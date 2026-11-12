@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
+from kanban.api.v1.admin.mcp_keys import router as admin_mcp_keys_router
 from kanban.api.v1.agent_definitions import router as agent_definitions_router
 from kanban.api.v1.attachments import router as attachments_router
 from kanban.api.v1.auth_oidc import router as auth_oidc_router
@@ -33,4 +35,6 @@ def build_v1_router() -> APIRouter:
     v1.include_router(docs_router)
     v1.include_router(agent_definitions_router)
     v1.include_router(attachments_router)
+    v1.include_router(admin_mcp_keys_router)
+    v1.include_router(mcp_introspect_router)
     return v1

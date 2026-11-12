@@ -23,6 +23,7 @@ from database.models.issues import (
     IssueSubscription,
 )
 from database.models.knowledge import Doc, Page, PageVersion, Sticky
+from database.models.mcp_api_key import McpApiKey
 from database.models.outbox import OutboxEvent
 from database.models.principals import (
     EffectiveResourceAccess,
@@ -75,6 +76,7 @@ __all__ = [
     "LinkKind",
     "LinkTypeMatrix",
     "LtreeType",
+    "McpApiKey",
     "Module",
     "ObjectEmbedding",
     "ObjectKind",

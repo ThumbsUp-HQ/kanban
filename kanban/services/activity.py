@@ -87,6 +87,8 @@ class ActivityEventType(StrEnum):
     LABEL_UPDATED = "LABEL_UPDATED"
     LABEL_DELETED = "LABEL_DELETED"
     ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"
+    MCP_KEY_MINTED = "MCP_KEY_MINTED"
+    MCP_KEY_REVOKED = "MCP_KEY_REVOKED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -120,6 +122,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.LABEL_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.LABEL_DELETED: ActivityCategory.HISTORY,
         ActivityEventType.ATTACHMENT_UPLOADED: ActivityCategory.HISTORY,
+        ActivityEventType.MCP_KEY_MINTED: ActivityCategory.SYSTEM,
+        ActivityEventType.MCP_KEY_REVOKED: ActivityCategory.SYSTEM,
     }
 )
 
@@ -130,7 +134,7 @@ class ActivityEnvelope:
 
     activity_id: uuid.UUID
     workspace_id: uuid.UUID
-    object_id: uuid.UUID
+    object_id: uuid.UUID | None
     actor_principal_id: uuid.UUID
     event_type: ActivityEventType
     category: ActivityCategory
@@ -142,7 +146,7 @@ class EphemeralEnvelope:
     """Non-persisted event (for example rank-only moves) delivered to listeners."""
 
     workspace_id: uuid.UUID
-    object_id: uuid.UUID
+    object_id: uuid.UUID | None
     actor_principal_id: uuid.UUID
     event_type: str
     payload: Mapping[str, JSONValue]
@@ -185,7 +189,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
     session: AsyncSession,
     *,
     workspace_id: uuid.UUID,
-    object_id: uuid.UUID,
+    object_id: uuid.UUID | None = None,
     actor_principal_id: uuid.UUID,
     event_type: ActivityEventType,
     payload: Mapping[str, JSONValue],
@@ -196,15 +200,17 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
         raise ActivityPayloadTooLarge(msg)
 
     async with session.begin_nested():
-        kind = (
-            await session.execute(
-                text("SELECT object_type::text FROM objects WHERE id = :oid"),
-                {"oid": object_id},
-            )
-        ).scalar_one_or_none()
-        if kind is None:
-            msg = "Activity object is not visible"
-            raise ActivityObjectNotFound(msg)
+        kind: str | None = None
+        if object_id is not None:
+            kind = (
+                await session.execute(
+                    text("SELECT object_type::text FROM objects WHERE id = :oid"),
+                    {"oid": object_id},
+                )
+            ).scalar_one_or_none()
+            if kind is None:
+                msg = "Activity object is not visible"
+                raise ActivityObjectNotFound(msg)
 
         activity_id = (
             await session.execute(
