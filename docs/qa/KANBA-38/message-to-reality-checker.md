@@ -46,7 +46,7 @@ All target files specified in `KB-P3-45.md` exist and are strictly verified:
 8. `kanban/web/src/dev/EditorStory.tsx` + `EditorStory.css` + `EditorStory.test.tsx` - Dev story showcase mounted at `/__dev/editor`.
 9. `kanban/web/e2e/editor/markdown-editor.spec.ts` - Playwright E2E suite validating typography, diff inspection, and raw toggle across desktop, tablet, and mobile.
 10. Feature Unit Tests:
-    - `kanban/web/src/editor/sourceSlice.test.ts` (13 comprehensive tests covering round-trip, surgical edits, structural edits, security, boundaries).
+    - `kanban/web/src/editor/sourceSlice.test.ts` (14 comprehensive tests covering round-trip, surgical edits, structural edits, security, boundaries, AST fallbacks).
     - `kanban/web/src/editor/schema.test.ts` (18 tests covering allowlist, sanitizeUri, parseDOM, toDOM, attributes).
     - `kanban/web/src/editor/editorSurfaceFactory.test.ts` (7 tests covering plugins, extension registry, keybindings, input rules).
     - `kanban/web/src/editor/MarkdownEditor.test.tsx` (8 tests covering WYSIWYG mount, raw toggle, shortcuts, byte limits, readOnly).
@@ -58,7 +58,7 @@ All target files specified in `KB-P3-45.md` exist and are strictly verified:
 | DoD Requirement | Status | Evidence / Verification Artifact |
 | :--- | :---: | :--- |
 | File existence & implementation | PASS | All 10 action files present and fully typed; zero mode-picker clutter |
-| Unit tests passing >= 95% coverage | PASS | 210 passed (210), 99.84% stmts, 95.71% branch, 100% funcs, 99.92% lines (`unit-test-results.txt`) |
+| Unit tests passing >= 95% coverage | PASS | 211 passed (211), 99.92% stmts, 98.21% overall branch (99.10% on src/editor), 100% funcs, 99.92% lines (`unit-test-results.txt`) |
 | Build / Type / Lint Clean | PASS | `tsc -b --noEmit` (0 errors), `eslint . --max-warnings 0` (0 errors), `vite build` (0 errors) (`build-check.txt`) |
 | E2E & CSP Proof | PASS | 9 Playwright tests passed across desktop, tablet, mobile in 8.4s (`e2e-results.txt`) |
 | Computed Whitespace Proof | PASS | Exact 32px 40px padding, 15px font-size, 25.95px line-height, 24x24 pill (`computed-styles-*.json`) |

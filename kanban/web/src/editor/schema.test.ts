@@ -370,18 +370,25 @@ describe('schema.ts Node Spec toDOM and getAttrs', () => {
 
   it('tests parseDOM and toDOM edge cases for table cells, task items, and images', () => {
     // Table header and cell with style.textAlign
-    const thParse = editorSchema.nodes.table_header.spec.parseDOM?.[0];
+    const thParse = editorSchema.nodes.table_header.spec.parseDOM?.[0] as CustomParseRule | undefined;
     const thEl = document.createElement('th');
     thEl.style.textAlign = 'center';
     expect(thParse?.getAttrs?.(thEl)).toEqual({ align: 'center' });
+
+    const bareTh = document.createElement('th');
+    expect(thParse?.getAttrs?.(bareTh)).toEqual({ align: null });
 
     const thWithAttr = document.createElement('th');
     thWithAttr.setAttribute('align', 'left');
     expect(thParse?.getAttrs?.(thWithAttr)).toEqual({ align: 'left' });
 
-    const tdParse = editorSchema.nodes.table_cell.spec.parseDOM?.[0];
+    const tdParse = editorSchema.nodes.table_cell.spec.parseDOM?.[0] as CustomParseRule | undefined;
+    const bareTd = document.createElement('td');
+    expect(tdParse?.getAttrs?.(bareTd)).toEqual({ align: null });
+
     const tdEl = document.createElement('td');
-    expect(tdParse?.getAttrs?.(tdEl)).toEqual({ align: null });
+    tdEl.style.textAlign = 'right';
+    expect(tdParse?.getAttrs?.(tdEl)).toEqual({ align: 'right' });
 
     const tdWithAttr = document.createElement('td');
     tdWithAttr.setAttribute('align', 'right');

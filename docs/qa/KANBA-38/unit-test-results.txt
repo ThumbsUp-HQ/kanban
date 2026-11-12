@@ -2,46 +2,43 @@
  RUN  v5.1.0 /tmp/kb-wt-KANBA-38/kanban/web
       Coverage enabled with v8
 
- ✓ src/styles/tokens.test.ts (4 tests) 30ms
- ✓ src/editor/schema.test.ts (18 tests) 109ms
- ✓ src/components/emoji/hintTiming.test.ts (15 tests) 18ms
- ✓ e2e/support/mockApi.unit.test.ts (11 tests) 91ms
- ✓ e2e/support/styleProbe.unit.test.ts (10 tests) 399ms
-   ✓ styleProbe support module (10)
-     ✓ probeStyles (4)
-       ✓ extracts computed styles and writes new JSON artifact when file does not exist 369ms
- ✓ src/editor/editorSurfaceFactory.test.ts (7 tests) 79ms
- ✓ src/components/emoji/HintPortal.test.tsx (4 tests) 165ms
- ✓ src/theme/ThemeProvider.test.tsx (14 tests) 200ms
- ✓ e2e/support/annotate.unit.test.ts (17 tests) 458ms
- ✓ src/styles/breakpoints.test.ts (10 tests) 67ms
- ✓ src/dev/EmojiStory.test.tsx (4 tests) 480ms
- ✓ src/components/emoji/EmojiHint.test.tsx (16 tests) 518ms
- ✓ src/dev/EditorStory.test.tsx (2 tests) 287ms
- ✓ src/editor/MarkdownEditor.test.tsx (8 tests) 393ms
- ✓ src/App.test.tsx (8 tests) 456ms
- ✓ src/dev/TokenStory.test.tsx (5 tests) 729ms
+ ✓ src/components/emoji/hintTiming.test.ts (15 tests) 38ms
+ ✓ src/editor/schema.test.ts (18 tests) 98ms
+ ✓ e2e/support/mockApi.unit.test.ts (11 tests) 56ms
+ ✓ src/editor/editorSurfaceFactory.test.ts (7 tests) 89ms
+ ✓ src/styles/tokens.test.ts (4 tests) 46ms
+ ✓ src/theme/ThemeProvider.test.tsx (14 tests) 168ms
+ ✓ e2e/support/styleProbe.unit.test.ts (10 tests) 324ms
+ ✓ src/components/emoji/HintPortal.test.tsx (4 tests) 110ms
+ ✓ e2e/support/annotate.unit.test.ts (17 tests) 361ms
+ ✓ src/styles/breakpoints.test.ts (10 tests) 68ms
+ ✓ src/dev/EmojiStory.test.tsx (4 tests) 598ms
+ ✓ src/components/emoji/EmojiHint.test.tsx (16 tests) 568ms
+ ✓ src/editor/MarkdownEditor.test.tsx (8 tests) 381ms
+ ✓ src/dev/EditorStory.test.tsx (2 tests) 227ms
+ ✓ src/dev/TokenStory.test.tsx (5 tests) 873ms
    ✓ TokenStory Component (/__dev/tokens) (5)
-     ✓ renders the complete S6.1 token table with all 16 rows 380ms
- ✓ src/components/emoji/emojiRegistry.test.ts (6 tests) 12ms
- ✓ src/styles/theme.test.ts (14 tests) 11ms
- ✓ src/components/emoji/positionHint.test.ts (5 tests) 9ms
- ✓ e2e/support/csp.unit.test.ts (1 test) 7ms
- ✓ build/precompress.test.ts (12 tests) 1476ms
+     ✓ renders the complete S6.1 token table with all 16 rows 522ms
+ ✓ src/App.test.tsx (8 tests) 450ms
+ ✓ build/precompress.test.ts (12 tests) 1756ms
    ✓ precompress build plugin (12)
      ✓ closeBundle and runPrecompress (5)
-       ✓ defaults to dist directory if neither customDir nor configResolved sets outDir 1387ms
- ✓ e2e/support/testGuard.unit.test.ts (6 tests) 17ms
- ✓ src/editor/sourceSlice.test.ts (13 tests) 2012ms
-   ✓ sourceSlice & Markdown Serializer Verification (13)
-     ✓ Case 6: Boundary: 1 MiB document succeeds; 1,048,577 bytes throws MARKDOWN_MAX_BYTES_EXCEEDED 1779ms
+       ✓ defaults to dist directory if neither customDir nor configResolved sets outDir 1634ms
+ ✓ src/components/emoji/emojiRegistry.test.ts (6 tests) 11ms
+ ✓ src/styles/theme.test.ts (14 tests) 16ms
+ ✓ src/components/emoji/positionHint.test.ts (5 tests) 12ms
+ ✓ e2e/support/csp.unit.test.ts (1 test) 6ms
+ ✓ e2e/support/testGuard.unit.test.ts (6 tests) 14ms
+ ✓ src/editor/sourceSlice.test.ts (14 tests) 2024ms
+   ✓ sourceSlice & Markdown Serializer Verification (14)
+     ✓ Case 6: Boundary: 1 MiB document succeeds; 1,048,577 bytes throws MARKDOWN_MAX_BYTES_EXCEEDED 1847ms
 
  Test Files  23 passed (23)
-      Tests  210 passed (210)
-   Start at  00:26:51
-   Duration  4.78s (environment 68%, tests 15%, import 12%, worker 5%, transform 1%)
+      Tests  211 passed (211)
+   Start at  00:47:49
+   Duration  4.77s (environment 69%, tests 15%, import 11%, worker 4%, transform 1%)
 
-Environment  jsdom was created 23 times · 37.34s total, 68% of tracked time
+Environment  jsdom was created 23 times · 38.71s total, 69% of tracked time
              create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
              learn more: https://vitest.dev/guide/improving-performance#test-environments
 
@@ -49,7 +46,7 @@ Environment  jsdom was created 23 times · 37.34s total, 68% of tracked time
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.84 |    95.71 |     100 |   99.92 |                   
+All files          |   99.92 |    98.21 |     100 |   99.92 |                   
  build             |     100 |      100 |     100 |     100 |                   
   precompress.ts   |     100 |      100 |     100 |     100 |                   
  e2e/support       |   99.62 |    99.04 |     100 |   99.61 |                   
@@ -71,13 +68,13 @@ All files          |   99.84 |    95.71 |     100 |   99.92 |
   EditorStory.tsx  |     100 |      100 |     100 |     100 |                   
   EmojiStory.tsx   |     100 |      100 |     100 |     100 |                   
   TokenStory.tsx   |     100 |      100 |     100 |     100 |                   
- src/editor        |   99.81 |    94.41 |     100 |     100 |                   
+ src/editor        |     100 |     99.1 |     100 |     100 |                   
   ...ownEditor.tsx |     100 |    97.91 |     100 |     100 | 81                
   ...aceFactory.ts |     100 |      100 |     100 |     100 |                   
-  parseMarkdown.ts |     100 |    87.12 |     100 |     100 | ...46-248,331,342 
-  schema.ts        |     100 |    98.95 |     100 |     100 | 290               
-  ...zeMarkdown.ts |     100 |    95.49 |     100 |     100 | 84-124,222        
-  ...licePlugin.ts |   97.82 |    95.83 |     100 |     100 | 30                
+  parseMarkdown.ts |     100 |    97.72 |     100 |     100 | 92,134-136        
+  schema.ts        |     100 |      100 |     100 |     100 |                   
+  ...zeMarkdown.ts |     100 |      100 |     100 |     100 |                   
+  ...licePlugin.ts |     100 |      100 |     100 |     100 |                   
  src/styles        |     100 |      100 |     100 |     100 |                   
   breakpoints.ts   |     100 |      100 |     100 |     100 |                   
  src/theme         |     100 |      100 |     100 |     100 |                   

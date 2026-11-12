@@ -730,4 +730,165 @@ plain code without lang
       }),
     ).not.toBeNull();
   });
+
+  it('covers remaining AST converter, serializer, and plugin branches', () => {
+    // 1. Definition node with missing identifier, label, url, title
+    const defUndefined = convertTopLevelNode({
+      type: 'definition',
+    });
+    expect(defUndefined).not.toBeNull();
+    expect(defUndefined?.attrs.identifier).toBe('');
+    expect(defUndefined?.attrs.label).toBe('');
+    expect(defUndefined?.attrs.url).toBe('');
+    expect(defUndefined?.attrs.title).toBe('');
+
+    // Definition with identifier but undefined label
+    const defWithIdOnly = convertTopLevelNode({
+      type: 'definition',
+      identifier: 'id-only',
+      url: 'https://kanban.local',
+      title: 'Title',
+    });
+    expect(defWithIdOnly).not.toBeNull();
+    expect(defWithIdOnly?.attrs.identifier).toBe('id-only');
+    expect(defWithIdOnly?.attrs.label).toBe('id-only');
+
+    // 2. LinkReference with undefined identifier
+    const linkRefUndef = convertInlines([{ type: 'linkReference' }]);
+    expect(linkRefUndef.length).toBe(0);
+
+    const linkRefWithChildren = convertInlines([
+      {
+        type: 'linkReference',
+        children: [{ type: 'text', value: 'reference text' }],
+      },
+    ]);
+    expect(linkRefWithChildren.length).toBe(1);
+    expect(linkRefWithChildren[0]?.marks[0]?.attrs.rawRef).toBe('');
+
+    // 3. Image with undefined alt and title
+    const imgUndef = convertInlines([
+      { type: 'image', url: 'https://kanban.local/a.png' },
+    ]);
+    expect(imgUndef.length).toBe(1);
+    expect(imgUndef[0]?.attrs.alt).toBe('');
+    expect(imgUndef[0]?.attrs.title).toBe('');
+
+    // 4. SourceSlicePlugin appendTransaction with mixed transactions (!docChanged followed by docChanged)
+    const plugin = createSourceSlicePlugin();
+    const appendFn = plugin.spec.appendTransaction;
+    const fakeNoChangeTr = {
+      docChanged: false,
+      getMeta: () => false,
+      steps: [],
+    } as unknown as Transaction;
+    const fakeWithChangeTr = {
+      docChanged: true,
+      getMeta: () => false,
+      steps: [
+        {
+          getMap: () => ({
+            forEach: (cb: (oldStart: number, oldEnd: number, newStart: number, newEnd: number) => void) => {
+              cb(0, 5, 0, 5);
+            },
+          }),
+        },
+      ],
+    } as unknown as Transaction;
+    const emptyDoc = editorSchema.nodes.doc.create(null, []);
+    const emptyState = EditorState.create({ doc: emptyDoc, schema: editorSchema });
+    const appendResult = appendFn?.([fakeNoChangeTr, fakeWithChangeTr], emptyState, emptyState);
+    expect(appendResult).toBeNull();
+
+    // 5. Serializer fallback branches (heading level undefined, code lang undefined, ordered_list order undefined)
+    const hNoLevel = editorSchema.nodes.heading.create({ level: 0 }, editorSchema.text('Heading'));
+    expect(serializeBlock(hNoLevel)).toBe('# Heading');
+
+    const codeNoLang = editorSchema.nodes.code_block.create({ lang: null }, editorSchema.text('code'));
+    expect(serializeBlock(codeNoLang)).toContain('```\ncode\n```');
+
+    const olNoOrder = editorSchema.nodes.ordered_list.create({ order: 0 }, [
+      editorSchema.nodes.list_item.create({}, [
+        editorSchema.nodes.paragraph.create({}, editorSchema.text('item')),
+      ]),
+    ]);
+    expect(serializeBlock(olNoOrder)).toBe('1. item');
+
+    // 6. AST converter edge cases for list items and table rows without children
+    const listUndefChildren = convertTopLevelNode({
+      type: 'list',
+      children: [{ type: 'listItem' }],
+    });
+    expect(listUndefChildren).not.toBeNull();
+
+    const tableUndefChildren = convertTopLevelNode({
+      type: 'table',
+    });
+    expect(tableUndefChildren).not.toBeNull();
+
+    const tableRowUndef = convertTopLevelNode({
+      type: 'table',
+      align: ['center'],
+      children: [
+        { type: 'tableRow' },
+        {
+          type: 'tableRow',
+          children: [
+            { type: 'tableCell' },
+            { type: 'tableCell' },
+          ],
+        },
+      ],
+    });
+    expect(tableRowUndef).not.toBeNull();
+
+    // 7. Blockquote with multiple paragraphs covering empty-line prefix
+    const bqMultiP = editorSchema.nodes.blockquote.create({}, [
+      editorSchema.nodes.paragraph.create({}, editorSchema.text('Para 1')),
+      editorSchema.nodes.paragraph.create({}, editorSchema.text('Para 2')),
+    ]);
+    expect(serializeBlock(bqMultiP)).toBe('> Para 1\n>\n> Para 2');
+
+    // 8. Inlines mark sort with unknown mark before known mark
+    const pWithUnknownFirst = {
+      childCount: 1,
+      child: () => ({
+        isText: true,
+        text: 'tagged',
+        marks: [
+          { type: { name: 'unknown_a' }, attrs: {} },
+          editorSchema.marks.strong.create(),
+        ],
+      }),
+    } as unknown as ProsemirrorNode;
+    expect(serializeInlines(pWithUnknownFirst)).toBe('**tagged**');
+
+    // 9. Additional AST converter fallbacks for paragraph, blockquote, and list items
+    const paraUndefChildren = convertTopLevelNode({
+      type: 'paragraph',
+    });
+    expect(paraUndefChildren).not.toBeNull();
+
+    const bqWithNullChild = convertTopLevelNode({
+      type: 'blockquote',
+      children: [{ type: 'unsupported_unknown_node' }],
+    });
+    expect(bqWithNullChild).not.toBeNull();
+
+    const listUndef = convertTopLevelNode({
+      type: 'list',
+    });
+    expect(listUndef).not.toBeNull();
+
+    const listItemWithNullChild = convertTopLevelNode({
+      type: 'list',
+      children: [
+        {
+          type: 'listItem',
+          children: [{ type: 'unsupported_unknown_node' }],
+        },
+      ],
+    });
+    expect(listItemWithNullChild).not.toBeNull();
+  });
 });
