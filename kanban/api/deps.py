@@ -29,6 +29,7 @@ class PrincipalContext:
     token_scopes: tuple[str, ...] = ()
     aal_level: int = 1
     session_id: uuid.UUID | None = None
+    mfa_pending: bool = False
 
     def __post_init__(self) -> None:
         """Enforce AAL level bounds."""
