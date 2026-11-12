@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kanban.hackedyour.info/schemas/kb-qa-verdict-v1.json",
+  "title": "QaPacketVerdict",
+  "description": "Reality-checker forensic QA audit verdict for a ticket proof bundle.",
+  "anyOf": [
+    {
+      "type": "object",
+      "required": [
+        "schema",
+        "grade",
+        "readiness",
+        "dod_verdicts",
+        "critical_issues",
+        "report_markdown"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "kb-qa-verdict/v1"
+        },
+        "grade": {
+          "type": "string",
+          "enum": ["A", "B+", "B", "B-", "C+", "C", "F"]
+        },
+        "readiness": {
+          "type": "string",
+          "enum": ["READY", "NEEDS_WORK", "FAILED"]
+        },
+        "dod_verdicts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["criterion", "passed", "evidence_ref"],
+            "additionalProperties": false,
+            "properties": {
+              "criterion": {
+                "type": "string"
+              },
+              "passed": {
+                "type": "boolean"
+              },
+              "evidence_ref": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "critical_issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "report_markdown": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "policy_override": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["schema_version", "command", "metrics", "schema_status"],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "kb-cli-validation-report/v1"
+        },
+        "qa_verdict": {
+          "type": ["object", "null"]
+        }
+      }
+    }
+  ]
+}

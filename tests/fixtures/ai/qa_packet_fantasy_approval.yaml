@@ -1,0 +1,24 @@
+cassette_version: 1
+matcher:
+  agent_slug: reality-checker
+  prompt_contains: ["KAN-142"]
+simulated_ttft_ms: 10.0
+usage:
+  prompt_tokens: 520
+  completion_tokens: 150
+final_verdict:
+  schema: kb-qa-verdict/v1
+  grade: B+
+  readiness: READY
+  dod_verdicts:
+    - criterion: "Unit test coverage >= 95%"
+      passed: false
+      evidence_ref: "docs/qa/KAN-142/unit-test-results.txt"
+    - criterion: "UI specialist gate review approved"
+      passed: true
+      evidence_ref: "docs/qa/KAN-142/ui-specialist-review.md"
+    - criterion: "Responsive screenshots for desktop, tablet, and mobile"
+      passed: true
+      evidence_ref: "docs/qa/KAN-142/screenshots/"
+  critical_issues: []
+  report_markdown: "# Premature Fantasy Approval\n\nModel prematurely declared READY despite failing unit test criterion."

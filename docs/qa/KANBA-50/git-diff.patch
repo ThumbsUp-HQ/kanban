@@ -1,0 +1,4013 @@
+diff --git a/agent/GEMINI.md b/agent/GEMINI.md
+index dca3de1..89049fe 100644
+--- a/agent/GEMINI.md
++++ b/agent/GEMINI.md
+@@ -170,3 +170,27 @@ The `ProviderRouter` wraps multi-candidate provider pools with 3-state per-(work
+ - Streaming Failover Barrier: Failover is permitted strictly before the first stream chunk is yielded. Once token streaming begins, upstream faults propagate immediately to prevent mixed-model corrupted generation.
+ - TTFT SLA Enforcement: When `ttft_deadline_ms` is configured, waiting for the first chunk is bounded by `asyncio.timeout`. Expiry invokes `aclose()` on the upstream stream and trips the candidate's circuit breaker with `ProviderTimeout`.
+ 
++## Local Passive Forensic QA Audit (`kanban-agent validate-qa-packet`, `agent.qa_validator`)
++
++The `validate-qa-packet` subcommand performs deterministic passive proof-bundle checks and a structured reality-checker forensic audit over `docs/qa/<ID>/` proof directories and ticket YAML/Markdown files without executing shell commands, visiting external URLs, or decoding untrusted image payloads.
++
++### Deterministic Proof Bundle Inspector (`agent.qa_validator.bundle_inspector`)
++
++- Pure Passive Containment: Resolves proof directory strictly, rejecting any symlink escaping the proof directory (`PROOF_SYMLINK_ESCAPE`), rejecting FIFOs/devices/sockets (`PROOF_INVALID_ENTRY`), and enforcing a 2 MiB per-file and 16 MiB per-bundle limit (`PROOF_BUNDLE_TOO_LARGE`).
++- Passive PNG Inspection: Validates standard PNG header (`89 50 4E 47 0D 0A 1A 0A`) and extracts width and height from the IHDR chunk via `struct.unpack` without running subprocesses or decoding untrusted raster payloads.
++- Dual Ticket Parsing: Parses both YAML ticket specifications (`examples/tickets/*.yaml`) and Markdown ticket specifications with YAML frontmatter (`docs/tickets/KB-*.md`).
++- Seven Non-Bypassable Deterministic Checks:
++  1. `CORE_ARTIFACTS_PRESENT`: Verifies `git-diff.patch`, `unit-test-results.txt`, and `build-check.txt` (or `build-or-typecheck.txt`) exist and are > 0 bytes.
++  2. `UNIT_TESTS_EXIT_ZERO`: Verifies `unit-test-results.txt` contains a positive passing summary marker and zero failure or non-zero exit markers.
++  3. `BUILD_CHECK_CLEAN`: Verifies `build-check.txt` contains zero unhandled error exit markers or exceptions.
++  4. `UI_SPECIALIST_GATE`: If `ui-specialist` is in gates or `[UI]` tag appears, verifies `ui-specialist-review.md` exists with an explicit `APPROVED` verdict, and that `screenshots/` contains >= 3 valid PNG files covering desktop, tablet, and mobile viewports (or explicitly declared `N/A - Non-UI Ticket`).
++  5. `API_SPECIALIST_GATE`: If `api-specialist` is in gates or `[API]` tag appears, verifies both `api-specialist-review.md` and `ui-specialist-review.md` exist and contain explicit `APPROVED` verdicts.
++  6. `DEPENDENCY_EVALUATION_GATE`: If `new_dependencies` is non-empty or `[DEP]` tag appears, verifies `dependency-evaluation.md` exists and references permissive license, SHA-256 hash, and specialist sign-offs.
++  7. `NO_RAW_SECRETS_IN_PROOF`: Scans all text artifacts in the proof directory with `outbound_secret_scrubber`, failing if unredacted live secrets (`sk-*`, `ghp_*`, `AKIA*`, PEM keys, `kb_*`) are present, and redacting them before LLM spotlighting.
++
++### Reality-Checker Forensic Auditor & Anti-Fantasy Gate (`agent.qa_validator.auditor`)
++
++- Passive Forensic Prompt: Ingests `.agents/agents/reality-checker.md` and appends the mandatory passive forensic mode override forbidding subprocess/URL execution.
++- Spotlight Isolation: Isolates scrubbed ticket specification and proof artifacts within randomized `<<<UNTRUSTED_QA_EVIDENCE_<hex> >>>` delimiters.
++- Hard Anti-Fantasy Invariant: Enforced in code (never trusted to model alone): if any deterministic check failed, OR `verdict.grade != "A"`, OR `len(verdict.critical_issues) > 0`, OR any `dod_verdicts` item has `passed == False`, any claimed `readiness == "READY"` is overridden to `readiness = "NEEDS_WORK"` with `policy_override = "FANTASY_APPROVAL_BLOCKED"`.
++
+diff --git a/agent/cli.py b/agent/cli.py
+index e467b20..891a013 100644
+--- a/agent/cli.py
++++ b/agent/cli.py
+@@ -13,6 +13,10 @@ from agent.cli_commands.validate_echo import (
+     configure_validate_echo_parser,
+     handle_validate_echo,
+ )
++from agent.cli_commands.validate_qa_packet import (
++    configure_validate_qa_packet_parser,
++    handle_validate_qa_packet,
++)
+ from agent.cli_report import (
+     ContextScrubber,
+     ExitCode,
+@@ -185,5 +189,15 @@ register_subcommand(
+     )
+ )
+ 
++# Register validate-qa-packet subcommand
++register_subcommand(
++    SubcommandSpec(
++        name="validate-qa-packet",
++        help="Run local reality-checker forensic QA audit over proof directory and ticket file",
++        configure_parser=configure_validate_qa_packet_parser,
++        handler=handle_validate_qa_packet,
++    )
++)
++
+ if __name__ == "__main__":
+     raise SystemExit(main())
+diff --git a/agent/cli_commands/validate_qa_packet.py b/agent/cli_commands/validate_qa_packet.py
+new file mode 100644
+index 0000000..9d2b524
+--- /dev/null
++++ b/agent/cli_commands/validate_qa_packet.py
+@@ -0,0 +1,519 @@
++# Copyright 2026 Kanban Platform Contributors
++"""CLI command handler for kanban-agent validate-qa-packet."""
++
++from __future__ import annotations
++
++import ipaddress
++import os
++import time
++import uuid
++from pathlib import Path
++from typing import TYPE_CHECKING
++
++from pydantic import HttpUrl, SecretStr
++
++from agent.cli_report import (
++    ContextScrubber,
++    ExitCode,
++    ReportMetrics,
++    SchemaStatus,
++    ValidationReport,
++    default_context_scrubber,
++    map_exception_to_exit_code,
++)
++from agent.providers.air_gap import AirGapGuard
++from agent.providers.errors import EgressDenied
++from agent.providers.gemini import GeminiSettings
++from agent.providers.ollama import OllamaSettings
++from agent.providers.openai_provider import OpenAISettings
++from agent.providers.registry import build_provider
++from agent.providers.router import ProviderRouter, RouteCandidate
++from agent.qa_validator.auditor import run_qa_packet_audit
++from agent.qa_validator.bundle_inspector import (
++    ProofBundle,
++    ProofInspectionError,
++    inspect_proof_directory,
++)
++from agent.qa_validator.schemas import (
++    DodItemAudit,
++    QaPacketVerdict,
++)
++from agent.testing.fixtures import FixtureLLMProvider, load_cassette
++from agent.testing.http_cassette import CassetteTransport
++from kanban.security.scrubber import scrub_text
++
++if TYPE_CHECKING:
++    import argparse
++
++    from agent.providers.base import LLMProvider
++
++__all__ = [
++    "configure_validate_qa_packet_parser",
++    "handle_validate_qa_packet",
++]
++
++_DEFAULT_CIDRS = (
++    ipaddress.ip_network("127.0.0.0/8"),
++    ipaddress.ip_network("10.0.0.0/8"),
++    ipaddress.ip_network("172.16.0.0/12"),
++    ipaddress.ip_network("192.168.0.0/16"),
++    ipaddress.ip_network("::1/128"),
++)
++
++
++def configure_validate_qa_packet_parser(parser: argparse.ArgumentParser) -> None:
++    """Configure CLI argument parser for validate-qa-packet subcommand."""
++    parser.add_argument(
++        "--ticket-file",
++        type=str,
++        required=True,
++        help="Path to ticket YAML file or Markdown ticket with frontmatter.",
++    )
++    parser.add_argument(
++        "--proof-dir",
++        type=str,
++        required=True,
++        help="Path to proof directory containing audit artifacts (e.g. ./docs/qa/<ID>/).",
++    )
++    parser.add_argument(
++        "--provider",
++        choices=("fixture", "ollama", "gemini", "openai", "router"),
++        default="gemini",
++        help="LLM provider for forensic audit.",
++    )
++    parser.add_argument(
++        "--model",
++        type=str,
++        default="gemini-2.5-flash",
++        help="Target model identifier (default: gemini-2.5-flash).",
++    )
++    parser.add_argument(
++        "--route",
++        type=str,
++        default="fixture,fixture",
++        help="Comma-separated candidate kinds for router (e.g. 'fixture,fixture').",
++    )
++    parser.add_argument(
++        "--cassette",
++        type=str,
++        default=None,
++        help="Path to YAML fixture cassette for offline replay.",
++    )
++    parser.add_argument(
++        "--http-cassette",
++        type=str,
++        default=None,
++        help="Path to HTTP cassette for offline HTTP provider replay.",
++    )
++    parser.add_argument(
++        "--base-url",
++        type=str,
++        default=None,
++        help="Base URL for remote or local LLM daemon.",
++    )
++    parser.add_argument(
++        "--deterministic-only",
++        action="store_true",
++        default=False,
++        help="Run deterministic proof checks only without invoking an LLM provider.",
++    )
++    parser.add_argument(
++        "--air-gap",
++        action="store_true",
++        default=False,
++        help="Enforce air-gap restrictions (blocks cloud providers before DNS/socket transport).",
++    )
++    parser.add_argument(
++        "--verbose-tools",
++        action="store_true",
++        help="Print verbose JSON arguments and results for all executed tool steps.",
++    )
++    parser.add_argument(
++        "--report",
++        choices=("text", "json"),
++        default="text",
++        help="Output report serialization format.",
++    )
++
++
++def _build_router_provider(args: argparse.Namespace, cassette_path: str | None) -> LLMProvider:
++    """Build ProviderRouter instance from CLI route specifications."""
++    route_str = getattr(args, "route", "fixture,fixture")
++    kinds = [k.strip() for k in route_str.split(",") if k.strip()]
++    candidates: list[RouteCandidate] = []
++    for idx, k in enumerate(kinds, start=1):
++        p: LLMProvider
++        if k == "fixture":
++            cas = load_cassette(Path(cassette_path)) if cassette_path else None
++            p = FixtureLLMProvider(cassettes=[cas] if cas else [])
++            tier = "fixture"
++        else:
++            p = build_provider(
++                k,
++                OllamaSettings(
++                    base_url=HttpUrl("http://127.0.0.1:11434"),
++                    allowed_ollama_cidrs=_DEFAULT_CIDRS,
++                    model_allowlist=("qwen2.5-coder:7b",),
++                ),
++            )
++            tier = "local"
++        candidates.append(
++            RouteCandidate(
++                provider_config_id=uuid.uuid4(),
++                provider=p,
++                priority=idx,
++                residency_tier=tier,
++            )
++        )
++    return ProviderRouter(
++        workspace_id=uuid.uuid4(),
++        candidates=candidates,
++        air_gap_mode=getattr(args, "air_gap", False),
++    )
++
++
++def _build_gemini_provider(args: argparse.Namespace) -> LLMProvider:
++    """Build GeminiProvider configured from CLI arguments."""
++    transport = None
++    http_cas = getattr(args, "http_cassette", None)
++    if http_cas:
++        transport = CassetteTransport(Path(http_cas))
++    api_key = os.environ.get("GEMINI_API_KEY", "dummy-gemini-key-00000000000000000000")
++    settings = GeminiSettings(
++        mode="ai_studio_paid",
++        api_key=SecretStr(api_key),
++        model_allowlist=(args.model, "gemini-2.5-flash", "gemini-2.5-pro"),
++    )
++    return build_provider("gemini", settings, transport=transport)
++
++
++def _build_openai_provider(args: argparse.Namespace) -> LLMProvider:
++    """Build OpenAIProvider configured from CLI arguments."""
++    transport = None
++    http_cas = getattr(args, "http_cassette", None)
++    if http_cas:
++        transport = CassetteTransport(Path(http_cas))
++    api_key = os.environ.get("OPENAI_API_KEY", "test-mock-openai-key")
++    base_url_str = getattr(args, "base_url", None)
++    base_url = HttpUrl(base_url_str) if base_url_str else None
++    settings_oai = OpenAISettings(
++        api_key=SecretStr(api_key),
++        base_url=base_url,
++        model_allowlist=(args.model, "gpt-4o-mini", "gpt-4.1"),
++    )
++    return build_provider("openai", settings_oai, transport=transport)
++
++
++def _build_ollama_provider(args: argparse.Namespace) -> LLMProvider:
++    """Build OllamaProvider configured from CLI arguments."""
++    base_url_str = getattr(args, "base_url", "http://127.0.0.1:11434")
++    base_url = HttpUrl(base_url_str)
++    settings_ollama = OllamaSettings(
++        base_url=base_url,
++        allowed_ollama_cidrs=_DEFAULT_CIDRS,
++        model_allowlist=(args.model, "qwen2.5-coder:7b"),
++    )
++    return build_provider("ollama", settings_ollama)
++
++
++def _resolve_qa_provider(args: argparse.Namespace) -> LLMProvider:
++    """Resolve and configure LLM provider or offline fixture for QA packet audit."""
++    if getattr(args, "air_gap", False):
++        AirGapGuard.check(getattr(args, "provider", "gemini"), air_gap_mode=True)
++
++    cassette_path = getattr(args, "cassette", None)
++    provider_kind = getattr(args, "provider", "fixture")
++
++    if provider_kind == "fixture":
++        if not cassette_path:
++            msg = "--cassette is required when using --provider fixture"
++            raise ValueError(msg)
++        c = load_cassette(Path(cassette_path))
++        return FixtureLLMProvider(cassettes=[c])
++
++    if cassette_path and provider_kind == "gemini":
++        c = load_cassette(Path(cassette_path))
++        return FixtureLLMProvider(cassettes=[c])
++
++    if provider_kind == "router":
++        return _build_router_provider(args, cassette_path)
++    if provider_kind == "gemini":
++        return _build_gemini_provider(args)
++    if provider_kind == "openai":
++        return _build_openai_provider(args)
++    if provider_kind == "ollama":
++        return _build_ollama_provider(args)
++
++    msg = f"Unsupported provider: {provider_kind}"
++    raise ValueError(msg)
++
++
++def _format_manifest(bundle: ProofBundle, scrubber: ContextScrubber) -> str:
++    """Format Section 1 rendered context manifest."""
++    passed_checks = sum(1 for c in bundle.deterministic_checks if c.passed)
++    total_checks = len(bundle.deterministic_checks)
++    lines = [
++        f"Ticket: {bundle.ticket.id} ({scrub_text(bundle.ticket.title)})",
++        f"Proof Directory: {bundle.proof_dir}",
++        f"Files Inspected: {len(bundle.files)}",
++        f"Deterministic Checks: {passed_checks}/{total_checks} passed",
++    ]
++    for c in bundle.deterministic_checks:
++        status_mark = "PASS" if c.passed else "FAIL"
++        lines.append(f"  - [{status_mark}] {c.check_id}: {c.detail}")
++    return scrubber("\n".join(lines))
++
++
++def _handle_deterministic_only(
++    bundle: ProofBundle,
++    context: str,
++    t0: float,
++) -> tuple[ValidationReport, ExitCode]:
++    """Execute deterministic checks without calling an LLM provider."""
++    total_ms = (time.perf_counter() - t0) * 1000.0
++    all_passed = all(c.passed for c in bundle.deterministic_checks)
++    if all_passed:
++        verdict = QaPacketVerdict(
++            grade="A",
++            readiness="READY",
++            dod_verdicts=[
++                DodItemAudit(
++                    criterion="Deterministic proof bundle verification",
++                    passed=True,
++                    evidence_ref="Deterministic bundle inspector",
++                )
++            ],
++            critical_issues=[],
++            report_markdown=(
++                f"# Deterministic Proof Bundle Verification: {bundle.ticket.id}\n\n"
++                f"All {len(bundle.deterministic_checks)} deterministic proof checks passed."
++            ),
++        )
++        report = ValidationReport(
++            command="validate-qa-packet",
++            rendered_context=context,
++            tool_trace=tuple(bundle.tool_steps),
++            metrics=ReportMetrics(ttft_ms=None, total_latency_ms=total_ms),
++            schema_status=SchemaStatus(
++                valid=True,
++                status=f"grade={verdict.grade}, readiness={verdict.readiness}",
++                detail=f"Grade: {verdict.grade} | Readiness: {verdict.readiness}",
++            ),
++            qa_verdict=verdict,
++        )
++        return report, ExitCode.OK
++
++    failed_details = [
++        f"{c.check_id}: {c.detail}" for c in bundle.deterministic_checks if not c.passed
++    ]
++    verdict = QaPacketVerdict(
++        grade="F",
++        readiness="NEEDS_WORK",
++        dod_verdicts=[
++            DodItemAudit(
++                criterion="Deterministic proof bundle verification",
++                passed=False,
++                evidence_ref="Deterministic bundle inspector",
++            )
++        ],
++        critical_issues=failed_details,
++        report_markdown=(
++            f"# Deterministic Proof Bundle Verification Failed: {bundle.ticket.id}\n\n"
++            f"Failed checks:\n" + "\n".join(f"- {d}" for d in failed_details)
++        ),
++    )
++    detail_msg = (
++        f"Grade: {verdict.grade} | Readiness: {verdict.readiness} | "
++        f"Failures: {'; '.join(failed_details)}"
++    )
++    report = ValidationReport(
++        command="validate-qa-packet",
++        rendered_context=context,
++        tool_trace=tuple(bundle.tool_steps),
++        metrics=ReportMetrics(ttft_ms=None, total_latency_ms=total_ms),
++        schema_status=SchemaStatus(
++            valid=False,
++            status=f"grade={verdict.grade}, readiness={verdict.readiness}",
++            error_code="DETERMINISTIC_CHECK_FAILED",
++            detail=detail_msg,
++        ),
++        qa_verdict=verdict,
++    )
++    return report, ExitCode.SCHEMA_OR_POLICY_VIOLATION
++
++
++async def _handle_llm_audit(
++    args: argparse.Namespace,
++    bundle: ProofBundle,
++    context: str,
++    t0: float,
++) -> tuple[ValidationReport, ExitCode]:
++    """Execute LLM forensic audit and enforce anti-fantasy gate."""
++    try:
++        provider = _resolve_qa_provider(args)
++    except EgressDenied as err:
++        total_ms = (time.perf_counter() - t0) * 1000.0
++        return ValidationReport(
++            command="validate-qa-packet",
++            rendered_context=context,
++            tool_trace=tuple(bundle.tool_steps),
++            metrics=ReportMetrics(total_latency_ms=total_ms),
++            schema_status=SchemaStatus(
++                valid=False,
++                status="failed",
++                error_code=err.code,
++                detail=str(err),
++            ),
++        ), ExitCode.SCHEMA_OR_POLICY_VIOLATION
++    except Exception as err:  # noqa: BLE001
++        total_ms = (time.perf_counter() - t0) * 1000.0
++        code = map_exception_to_exit_code(err)
++        return ValidationReport(
++            command="validate-qa-packet",
++            rendered_context=context,
++            tool_trace=tuple(bundle.tool_steps),
++            metrics=ReportMetrics(total_latency_ms=total_ms),
++            schema_status=SchemaStatus(
++                valid=False,
++                status="failed",
++                error_code=getattr(err, "code", type(err).__name__),
++                detail=str(err),
++            ),
++        ), code
++
++    try:
++        verdict, ttft_ms, prompt_tokens, comp_tokens = await run_qa_packet_audit(
++            bundle.ticket,
++            bundle,
++            provider,
++            model=getattr(args, "model", "gemini-2.5-flash"),
++        )
++    except Exception as err:  # noqa: BLE001
++        total_ms = (time.perf_counter() - t0) * 1000.0
++        code = map_exception_to_exit_code(err)
++        return ValidationReport(
++            command="validate-qa-packet",
++            rendered_context=context,
++            tool_trace=tuple(bundle.tool_steps),
++            metrics=ReportMetrics(ttft_ms=None, total_latency_ms=total_ms),
++            schema_status=SchemaStatus(
++                valid=False,
++                status="failed",
++                error_code=getattr(err, "code", type(err).__name__),
++                detail=str(err),
++            ),
++        ), code
++
++    total_ms = (time.perf_counter() - t0) * 1000.0
++    route_trace = tuple(getattr(provider, "last_route_trace", ()))
++    all_checks_passed = all(c.passed for c in bundle.deterministic_checks)
++    is_ready = (
++        all_checks_passed
++        and verdict.grade == "A"
++        and verdict.readiness == "READY"
++        and verdict.policy_override is None
++    )
++    exit_code = ExitCode.OK if is_ready else ExitCode.SCHEMA_OR_POLICY_VIOLATION
++    override_info = (
++        f" | Policy Override: {verdict.policy_override}" if verdict.policy_override else ""
++    )
++
++    schema_status = SchemaStatus(
++        valid=is_ready,
++        status=f"grade={verdict.grade}, readiness={verdict.readiness}",
++        error_code=verdict.policy_override if not is_ready else None,
++        detail=f"Grade: {verdict.grade} | Readiness: {verdict.readiness}{override_info}",
++    )
++    report = ValidationReport(
++        command="validate-qa-packet",
++        rendered_context=context,
++        tool_trace=tuple(bundle.tool_steps),
++        metrics=ReportMetrics(
++            ttft_ms=ttft_ms,
++            total_latency_ms=total_ms,
++            prompt_tokens=prompt_tokens,
++            completion_tokens=comp_tokens,
++            route_trace=route_trace,
++        ),
++        schema_status=schema_status,
++        qa_verdict=verdict,
++    )
++    return report, exit_code
++
++
++async def handle_validate_qa_packet(
++    args: argparse.Namespace,
++    *,
++    scrubber: ContextScrubber = default_context_scrubber,
++) -> tuple[ValidationReport, ExitCode]:
++    """Execute reality-checker forensic QA audit over proof directory and ticket file."""
++    t0 = time.perf_counter()
++    ticket_file = Path(args.ticket_file)
++    proof_dir = Path(args.proof_dir)
++
++    if not ticket_file.exists():  # noqa: ASYNC240
++        total_ms = (time.perf_counter() - t0) * 1000.0
++        return ValidationReport(
++            command="validate-qa-packet",
++            rendered_context=scrubber(f"Ticket file not found: {ticket_file}"),
++            tool_trace=(),
++            metrics=ReportMetrics(total_latency_ms=total_ms),
++            schema_status=SchemaStatus(
++                valid=False,
++                status="failed",
++                error_code="FILE_NOT_FOUND",
++                detail=f"Ticket file does not exist: {ticket_file}",
++            ),
++        ), ExitCode.RUNTIME_ERROR
++
++    if not proof_dir.exists() or not proof_dir.is_dir():  # noqa: ASYNC240
++        total_ms = (time.perf_counter() - t0) * 1000.0
++        return ValidationReport(
++            command="validate-qa-packet",
++            rendered_context=scrubber(f"Proof directory not found: {proof_dir}"),
++            tool_trace=(),
++            metrics=ReportMetrics(total_latency_ms=total_ms),
++            schema_status=SchemaStatus(
++                valid=False,
++                status="failed",
++                error_code="DIRECTORY_NOT_FOUND",
++                detail=f"Proof directory does not exist or is not a directory: {proof_dir}",
++            ),
++        ), ExitCode.RUNTIME_ERROR
++
++    try:
++        bundle: ProofBundle = inspect_proof_directory(ticket_file, proof_dir)
++    except ProofInspectionError as err:
++        total_ms = (time.perf_counter() - t0) * 1000.0
++        return ValidationReport(
++            command="validate-qa-packet",
++            rendered_context=scrubber(f"Proof inspection failed: {err.code} - {err.detail}"),
++            tool_trace=(),
++            metrics=ReportMetrics(total_latency_ms=total_ms),
++            schema_status=SchemaStatus(
++                valid=False,
++                status="failed",
++                error_code=err.code,
++                detail=err.detail,
++            ),
++        ), ExitCode.SCHEMA_OR_POLICY_VIOLATION
++    except Exception as err:  # noqa: BLE001
++        total_ms = (time.perf_counter() - t0) * 1000.0
++        return ValidationReport(
++            command="validate-qa-packet",
++            rendered_context=scrubber(f"Unexpected inspection error: {err}"),
++            tool_trace=(),
++            metrics=ReportMetrics(total_latency_ms=total_ms),
++            schema_status=SchemaStatus(
++                valid=False,
++                status="failed",
++                error_code=type(err).__name__,
++                detail=str(err),
++            ),
++        ), ExitCode.RUNTIME_ERROR
++
++    context = _format_manifest(bundle, scrubber)
++    if getattr(args, "deterministic_only", False):
++        return _handle_deterministic_only(bundle, context, t0)
++
++    return await _handle_llm_audit(args, bundle, context, t0)
+diff --git a/agent/cli_report.py b/agent/cli_report.py
+index ef60e8b..94685d1 100644
+--- a/agent/cli_report.py
++++ b/agent/cli_report.py
+@@ -4,7 +4,7 @@
+ from __future__ import annotations
+ 
+ import json
+-from collections.abc import Callable
++from collections.abc import Callable, Sequence
+ from enum import IntEnum
+ from typing import Any, Literal
+ 
+@@ -103,6 +103,53 @@ class ValidationReport(BaseModel):
+     tool_trace: tuple[ToolCallStep, ...] = ()
+     metrics: ReportMetrics
+     schema_status: SchemaStatus
++    qa_verdict: object = None
++
++
++def _render_tool_trace(
++    tool_trace: Sequence[ToolCallStep],
++    *,
++    verbose_tools: bool,
++) -> list[str]:
++    lines = ["=== 2. TOOL TRACE ==="]
++    if not tool_trace:
++        lines.append("Calls: 0; Tools: (none)")
++    elif not verbose_tools:
++        tools_list = ", ".join(step.tool for step in tool_trace)
++        lines.append(f"Calls: {len(tool_trace)}; Tools: {tools_list}")
++    else:
++        lines.append(f"Calls: {len(tool_trace)}")
++        for step in tool_trace:
++            lines.append(f"  - Tool: {step.tool}")
++            lines.append(f"    Args: {json.dumps(step.args)}")
++            lines.append(f"    Result: {json.dumps(step.result)}")
++    return lines
++
++
++def _render_schema_section(
++    schema_status: SchemaStatus,
++    qa_verdict: object,
++) -> list[str]:
++    valid_str = str(schema_status.valid).lower()
++    lines = [
++        "=== 4. SCHEMA & POLICY STATUS ===",
++        f"Valid: {valid_str} (valid: {valid_str}) | Status: {schema_status.status}",
++    ]
++    if qa_verdict:
++        grade = getattr(qa_verdict, "grade", None) or (
++            qa_verdict.get("grade") if isinstance(qa_verdict, dict) else None
++        )
++        readiness = getattr(qa_verdict, "readiness", None) or (
++            qa_verdict.get("readiness") if isinstance(qa_verdict, dict) else None
++        )
++        if grade and readiness:
++            lines.append(f"Grade: {grade} | Readiness: {readiness}")
++
++    if schema_status.error_code:
++        lines.append(f"Error Code: {schema_status.error_code}")
++    if schema_status.detail:
++        lines.append(f"Detail: {schema_status.detail}")
++    return lines
+ 
+ 
+ def render_report(
+@@ -119,20 +166,8 @@ def render_report(
+         "=== 1. RENDERED CONTEXT ===",
+         report.rendered_context,
+         "",
+-        "=== 2. TOOL TRACE ===",
+     ]
+-
+-    if not report.tool_trace:
+-        lines.append("Calls: 0; Tools: (none)")
+-    elif not verbose_tools:
+-        tools_list = ", ".join(step.tool for step in report.tool_trace)
+-        lines.append(f"Calls: {len(report.tool_trace)}; Tools: {tools_list}")
+-    else:
+-        lines.append(f"Calls: {len(report.tool_trace)}")
+-        for step in report.tool_trace:
+-            lines.append(f"  - Tool: {step.tool}")
+-            lines.append(f"    Args: {json.dumps(step.args)}")
+-            lines.append(f"    Result: {json.dumps(step.result)}")
++    lines.extend(_render_tool_trace(report.tool_trace, verbose_tools=verbose_tools))
+ 
+     ttft_str = f"{report.metrics.ttft_ms:.1f}ms" if report.metrics.ttft_ms is not None else "N/A"
+     lines.extend(
+@@ -144,19 +179,9 @@ def render_report(
+                 f"Tokens: {report.metrics.prompt_tokens} in, {report.metrics.completion_tokens} out"
+             ),
+             "",
+-            "=== 4. SCHEMA & POLICY STATUS ===",
+-            (
+-                f"Valid: {str(report.schema_status.valid).lower()} (valid: "
+-                f"{str(report.schema_status.valid).lower()}) | "
+-                f"Status: {report.schema_status.status}"
+-            ),
+         ]
+     )
+-
+-    if report.schema_status.error_code:
+-        lines.append(f"Error Code: {report.schema_status.error_code}")
+-    if report.schema_status.detail:
+-        lines.append(f"Detail: {report.schema_status.detail}")
++    lines.extend(_render_schema_section(report.schema_status, report.qa_verdict))
+ 
+     if report.metrics.route_trace:
+         lines.extend(["", "=== 5. ROUTE TRACE ==="])
+diff --git a/agent/pyproject.toml b/agent/pyproject.toml
+index 7000b8d..d7d2645 100644
+--- a/agent/pyproject.toml
++++ b/agent/pyproject.toml
+@@ -25,7 +25,7 @@ kanban-agent = "agent.cli:main"
+ "" = "agent"
+ 
+ [tool.hatch.build.targets.wheel]
+-include = ["*.py", "**/*.py", "testing/cassette.schema.json"]
++include = ["*.py", "**/*.py", "testing/cassette.schema.json", "schemas/*.json"]
+ exclude = [
+     "tests",
+     "pyproject.toml",
+diff --git a/agent/qa_validator/__init__.py b/agent/qa_validator/__init__.py
+new file mode 100644
+index 0000000..61263f2
+--- /dev/null
++++ b/agent/qa_validator/__init__.py
+@@ -0,0 +1,33 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Passive forensic reality-checker QA packet validator package."""
++
++from __future__ import annotations
++
++from agent.qa_validator.auditor import enforce_anti_fantasy, run_qa_packet_audit
++from agent.qa_validator.bundle_inspector import (
++    ProofBundle,
++    ProofFileEntry,
++    ProofInspectionError,
++    inspect_proof_directory,
++    parse_ticket_file,
++)
++from agent.qa_validator.schemas import (
++    DeterministicCheckResult,
++    DodItemAudit,
++    QaPacketVerdict,
++    TicketSpecInput,
++)
++
++__all__ = [
++    "DeterministicCheckResult",
++    "DodItemAudit",
++    "ProofBundle",
++    "ProofFileEntry",
++    "ProofInspectionError",
++    "QaPacketVerdict",
++    "TicketSpecInput",
++    "enforce_anti_fantasy",
++    "inspect_proof_directory",
++    "parse_ticket_file",
++    "run_qa_packet_audit",
++]
+diff --git a/agent/qa_validator/auditor.py b/agent/qa_validator/auditor.py
+new file mode 100644
+index 0000000..968abb1
+--- /dev/null
++++ b/agent/qa_validator/auditor.py
+@@ -0,0 +1,219 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Forensic reality-checker LLM audit runner and anti-fantasy gatekeeper."""
++
++from __future__ import annotations
++
++import secrets
++from pathlib import Path
++from typing import TYPE_CHECKING, Final
++
++from agent.providers.base import StructuredRequest
++from agent.qa_validator.schemas import (
++    DeterministicCheckResult,
++    QaPacketVerdict,
++    TicketSpecInput,
++)
++from kanban.security.scrubber import scrub_text
++
++if TYPE_CHECKING:
++    from agent.providers.base import LLMProvider
++    from agent.qa_validator.bundle_inspector import ProofBundle
++
++__all__ = [
++    "PASSIVE_FORENSIC_OVERRIDE",
++    "build_audit_prompt",
++    "enforce_anti_fantasy",
++    "load_reality_checker_system_prompt",
++    "run_qa_packet_audit",
++]
++
++_MAX_DIFF_PROMPT_LINES: Final[int] = 500
++_PREVIEW_LINES: Final[int] = 450
++
++PASSIVE_FORENSIC_OVERRIDE: Final[str] = """
++
++# MANDATORY PASSIVE FORENSIC MODE OVERRIDE
++
++You are operating strictly in PASSIVE FORENSIC AUDIT MODE.
++- You CANNOT execute shell commands, visit URLs, or spawn processes.
++- You must evaluate ONLY the passive evidence provided within the
++  <<<UNTRUSTED_QA_EVIDENCE_<hex> >>> delimiters below.
++- Do NOT hallucinate evidence that is not explicitly present in the provided bundle.
++- If any required artifact, test result, specialist review, or Definition of Done
++  item is missing, unproven, or failing, you MUST rate the ticket as NEEDS_WORK or
++  FAILED with an appropriate grade (B+, B, B-, C+, C, F).
++- Only rate Grade "A" and Readiness "READY" if ALL Definitions of Done have explicit,
++  concrete, verifiable evidence in the provided proof artifacts.
++- Every item in dod_verdicts must provide an exact evidence_ref path citing the
++  proof file that verifies it.
++"""
++
++
++def load_reality_checker_system_prompt(repo_root: Path | None = None) -> str:
++    """Load reality-checker persona prompt from repository and append passive override."""
++    candidates: list[Path] = []
++    if repo_root is not None:
++        candidates.append(repo_root / ".agents" / "agents" / "reality-checker.md")
++
++    # Current working directory candidates
++    cwd = Path.cwd()
++    candidates.append(cwd / ".agents" / "agents" / "reality-checker.md")
++    candidates.append(cwd.parent / ".agents" / "agents" / "reality-checker.md")
++    candidates.append(
++        Path(__file__).resolve().parent.parent.parent / ".agents" / "agents" / "reality-checker.md"
++    )
++
++    base_prompt = ""
++    for cand in candidates:
++        if cand.exists() and cand.is_file():
++            base_prompt = cand.read_text(encoding="utf-8")
++            break
++
++    if not base_prompt:
++        base_prompt = (
++            "# Reality-Checker Integration Agent\n\n"
++            "You are TestingRealityChecker, stopping fantasy approvals and requiring "
++            "overwhelming evidence before production certification."
++        )
++
++    return f"{base_prompt.strip()}{PASSIVE_FORENSIC_OVERRIDE}"
++
++
++def build_audit_prompt(ticket: TicketSpecInput, bundle: ProofBundle) -> tuple[str, str]:
++    """Construct system prompt and delimiter-spotlighted evidence user prompt."""
++    system_prompt = load_reality_checker_system_prompt(bundle.proof_dir.parent.parent)
++
++    delimiter = f"<<<UNTRUSTED_QA_EVIDENCE_{secrets.token_hex(8)}>>>"
++
++    lines: list[str] = [
++        "Audit the following ticket proof bundle against the ticket's Definition of Done.",
++        f"Evaluate the evidence between the delimiters: {delimiter}",
++        "",
++        delimiter,
++        "=== TICKET SPECIFICATION ===",
++        f"ID: {ticket.id}",
++        f"Title: {scrub_text(ticket.title)}",
++    ]
++    if ticket.epic:
++        lines.append(f"Epic: {ticket.epic}")
++    gates_str = ", ".join(ticket.gates) if ticket.gates else "(none)"
++    lines.append(f"Gates: {gates_str}")
++    deps_str = ", ".join(ticket.new_dependencies) if ticket.new_dependencies else "(none)"
++    lines.append(f"New Dependencies: {deps_str}")
++    lines.append("Definition of Done Criteria:")
++    for idx, dod in enumerate(ticket.definition_of_done, start=1):
++        lines.append(f"  {idx}. {scrub_text(dod)}")
++
++    if ticket.body_markdown:
++        lines.extend(["", "--- TICKET BODY ---", scrub_text(ticket.body_markdown)])
++
++    lines.extend(["", "=== PROOF ARTIFACTS MANIFEST & CONTENTS ==="])
++
++    # If message-to-reality-checker.md exists, put it first
++    message_entry = bundle.files.get("message-to-reality-checker.md")
++    if message_entry and message_entry.content:
++        lines.extend(
++            [
++                "",
++                "--- ARTIFACT: message-to-reality-checker.md ---",
++                message_entry.scrubbed_content or scrub_text(message_entry.content),
++            ]
++        )
++
++    for rel_path, entry in sorted(bundle.files.items()):
++        if rel_path == "message-to-reality-checker.md":
++            continue
++        if entry.is_png:
++            dim = entry.png_dimensions
++            dim_str = f"{dim[0]}x{dim[1]}" if dim else "unknown"
++            header_str = (
++                f"--- ARTIFACT: {rel_path} (PNG image, dimensions={dim_str}, "
++                f"bytes={entry.size_bytes}) ---"
++            )
++            lines.extend(
++                [
++                    "",
++                    header_str,
++                    "[Valid PNG screenshot present in proof bundle]",
++                ]
++            )
++        elif entry.content is not None:
++            content_to_show = entry.scrubbed_content or scrub_text(entry.content)
++            # Truncate giant patches in prompt if > _MAX_DIFF_PROMPT_LINES
++            file_lines = content_to_show.splitlines()
++            if len(file_lines) > _MAX_DIFF_PROMPT_LINES:
++                truncated_count = len(file_lines) - _PREVIEW_LINES
++                truncated_preview = (
++                    "\n".join(file_lines[:_PREVIEW_LINES])
++                    + f"\n... [truncated {truncated_count} lines] ..."
++                )
++                content_to_show = truncated_preview
++            lines.extend(
++                [
++                    "",
++                    f"--- ARTIFACT: {rel_path} (text, bytes={entry.size_bytes}) ---",
++                    content_to_show,
++                ]
++            )
++
++    lines.extend(
++        [
++            "",
++            delimiter,
++            "",
++            "Provide your structured forensic evaluation conforming to QaPacketVerdict.",
++        ]
++    )
++
++    user_prompt = "\n".join(lines)
++    return system_prompt, user_prompt
++
++
++def enforce_anti_fantasy(
++    verdict: QaPacketVerdict,
++    deterministic_checks: list[DeterministicCheckResult],
++) -> QaPacketVerdict:
++    """Enforce hard code-level anti-fantasy approval invariant."""
++    any_check_failed = any(not c.passed for c in deterministic_checks)
++    grade_not_a = verdict.grade != "A"
++    has_critical_issues = len(verdict.critical_issues) > 0
++    any_dod_failed = any(not item.passed for item in verdict.dod_verdicts)
++
++    if verdict.readiness == "READY" and (
++        any_check_failed or grade_not_a or has_critical_issues or any_dod_failed
++    ):
++        return verdict.model_copy(
++            update={
++                "readiness": "NEEDS_WORK",
++                "policy_override": "FANTASY_APPROVAL_BLOCKED",
++            }
++        )
++    return verdict
++
++
++async def run_qa_packet_audit(
++    ticket: TicketSpecInput,
++    bundle: ProofBundle,
++    provider: LLMProvider,
++    *,
++    model: str = "gemini-2.5-flash",
++) -> tuple[QaPacketVerdict, float | None, int, int]:
++    """Execute reality-checker structured audit and enforce anti-fantasy gate."""
++    system_prompt, user_prompt = build_audit_prompt(ticket, bundle)
++
++    full_prompt = f"{system_prompt}\n\n{user_prompt}"
++
++    req = StructuredRequest(
++        model=model,
++        prompt=full_prompt,
++        response_model=QaPacketVerdict,
++        metadata={
++            "agent_slug": "reality-checker",
++            "ticket_id": ticket.id,
++        },
++    )
++
++    resp = await provider.generate_structured(req)
++    verdict = enforce_anti_fantasy(resp.parsed, bundle.deterministic_checks)
++
++    return verdict, resp.ttft_ms, resp.prompt_tokens, resp.completion_tokens
+diff --git a/agent/qa_validator/bundle_inspector.py b/agent/qa_validator/bundle_inspector.py
+new file mode 100644
+index 0000000..e8e723b
+--- /dev/null
++++ b/agent/qa_validator/bundle_inspector.py
+@@ -0,0 +1,727 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Passive read-only proof bundle and ticket specification inspector."""
++
++from __future__ import annotations
++
++import re
++import struct
++from dataclasses import dataclass
++from typing import TYPE_CHECKING, Any, Final
++
++import yaml
++from pydantic import BaseModel, ConfigDict
++
++from agent.providers.base import ToolCallStep
++from agent.providers.errors import ProviderPolicyError
++from agent.qa_validator.schemas import (
++    DeterministicCheckResult,
++    TicketSpecInput,
++)
++from kanban.security.scrubber import outbound_secret_scrubber
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++__all__ = [
++    "MAX_BUNDLE_BYTES",
++    "MAX_FILE_BYTES",
++    "ProofBundle",
++    "ProofFileEntry",
++    "ProofInspectionError",
++    "inspect_png_file",
++    "inspect_proof_directory",
++    "parse_ticket_file",
++]
++
++MAX_FILE_BYTES: Final[int] = 2 * 1024 * 1024  # 2 MiB per file
++MAX_BUNDLE_BYTES: Final[int] = 16 * 1024 * 1024  # 16 MiB total bundle
++PNG_HEADER: Final[bytes] = b"\x89PNG\r\n\x1a\n"
++
++_CODE_SYMLINK_ESCAPE: Final[str] = "PROOF_SYMLINK_ESCAPE"
++_CODE_INVALID_ENTRY: Final[str] = "PROOF_INVALID_ENTRY"
++_CODE_BUNDLE_TOO_LARGE: Final[str] = "PROOF_BUNDLE_TOO_LARGE"
++
++_PNG_SIGNATURE_BYTES: Final[int] = 8
++_CHUNK_LEN_BYTES: Final[int] = 12
++_IHDR_START: Final[int] = 12
++_IHDR_END: Final[int] = 16
++_DIMS_START: Final[int] = 16
++_DIMS_END: Final[int] = 24
++
++_MIN_FRONTMATTER_PARTS: Final[int] = 2
++_MIN_SCREENSHOTS: Final[int] = 3
++
++
++class ProofInspectionError(ProviderPolicyError):
++    """Raised when proof bundle inspection fails security or containment constraints."""
++
++    def __init__(self, code: str, detail: str) -> None:
++        """Initialize ProofInspectionError with error code and detail."""
++        super().__init__(f"{code}: {detail}", code=code)
++        self.code = code
++        self.detail = detail
++
++
++class ProofFileEntry(BaseModel):
++    """Metadata and content for an inspected proof bundle file."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    rel_path: str
++    abs_path: str
++    size_bytes: int
++    is_png: bool
++    png_dimensions: tuple[int, int] | None = None
++    content: str | None = None
++    scrubbed_content: str | None = None
++
++
++@dataclass(frozen=True)
++class ProofBundle:
++    """Inspected proof bundle containing entries, deterministic checks, and tool steps."""
++
++    ticket: TicketSpecInput
++    proof_dir: Path
++    files: dict[str, ProofFileEntry]
++    deterministic_checks: list[DeterministicCheckResult]
++    tool_steps: list[ToolCallStep]
++
++
++def inspect_png_file(path: Path) -> tuple[int, int]:
++    """Inspect PNG file header and return (width, height) without decoding image."""
++    try:
++        raw = path.read_bytes()
++    except OSError as err:
++        msg = f"Failed to read PNG file {path.name}: {err}"
++        raise ValueError(msg) from err
++
++    if len(raw) < _PNG_SIGNATURE_BYTES or not raw.startswith(PNG_HEADER):
++        msg = f"Invalid PNG signature in {path.name}"
++        raise ValueError(msg)
++    if len(raw) < _CHUNK_LEN_BYTES:
++        msg = f"Truncated PNG chunk length in {path.name}"
++        raise ValueError(msg)
++    chunk_type = raw[_IHDR_START:_IHDR_END]
++    if chunk_type != b"IHDR":
++        msg = f"Expected IHDR chunk in {path.name}, got {chunk_type!r}"
++        raise ValueError(msg)
++    if len(raw) < _DIMS_END:
++        msg = f"Truncated IHDR data in {path.name}"
++        raise ValueError(msg)
++    width, height = struct.unpack(">II", raw[_DIMS_START:_DIMS_END])
++    return width, height
++
++
++def _extract_frontmatter_and_body(raw_text: str) -> tuple[dict[str, Any], str]:
++    """Split frontmatter YAML and markdown body if present."""
++    if raw_text.startswith("---"):
++        parts = raw_text.split("---", _MIN_FRONTMATTER_PARTS)
++        if len(parts) >= _MIN_FRONTMATTER_PARTS:
++            try:
++                loaded = yaml.safe_load(parts[1])
++                fm = loaded if isinstance(loaded, dict) else {}
++            except Exception as err:
++                msg = f"Failed to parse YAML frontmatter: {err}"
++                raise ValueError(msg) from err
++            body = parts[2] if len(parts) > _MIN_FRONTMATTER_PARTS else ""
++            return fm, body
++    try:
++        loaded = yaml.safe_load(raw_text)
++    except Exception as err:
++        msg = f"Failed to parse ticket YAML: {err}"
++        raise ValueError(msg) from err
++    fm = loaded if isinstance(loaded, dict) else {}
++    return fm, raw_text
++
++
++def _extract_dods_from_markdown(body_markdown: str) -> list[str]:
++    """Parse DoD bullet items from markdown body."""
++    dods: list[str] = []
++    in_dod = False
++    for line in body_markdown.splitlines():
++        line_lower = line.lower()
++        if "definition of done" in line_lower:
++            in_dod = True
++            continue
++        if in_dod and line.startswith("#"):
++            break
++        if in_dod:
++            stripped = line.strip()
++            if stripped.startswith(("- [ ]", "- [x]", "*", "-")):
++                item = stripped.lstrip("-* [x]").strip()
++                if item:
++                    dods.append(item)
++    return dods
++
++
++def _extract_dods(frontmatter_dict: dict[str, Any], body_markdown: str) -> tuple[str, ...]:
++    """Extract Definition of Done criteria list from frontmatter or body markdown."""
++    if frontmatter_dict.get("definition_of_done"):
++        raw_dods = frontmatter_dict["definition_of_done"]
++        if isinstance(raw_dods, (list, tuple)):
++            items = [str(d).strip() for d in raw_dods if str(d).strip()]
++            if items:
++                return tuple(items)
++
++    if body_markdown:
++        md_dods = _extract_dods_from_markdown(body_markdown)
++        if md_dods:
++            return tuple(md_dods)
++
++    return ("All acceptance criteria and Definition of Done items met",)
++
++
++def parse_ticket_file(ticket_path: Path) -> TicketSpecInput:
++    """Parse ticket specification from either YAML file or Markdown with frontmatter."""
++    if not ticket_path.exists():
++        msg = f"Ticket file does not exist: {ticket_path}"
++        raise FileNotFoundError(msg)
++    if ticket_path.is_dir():
++        msg = f"Ticket path is a directory, expected file: {ticket_path}"
++        raise IsADirectoryError(msg)
++
++    st = ticket_path.stat()
++    if st.st_size > MAX_FILE_BYTES:
++        msg = f"Ticket file size {st.st_size} exceeds {MAX_FILE_BYTES} bytes"
++        raise ProofInspectionError(_CODE_BUNDLE_TOO_LARGE, msg)
++
++    raw_text = ticket_path.read_text(encoding="utf-8")
++    frontmatter_dict, body_markdown = _extract_frontmatter_and_body(raw_text)
++
++    ticket_id = str(
++        frontmatter_dict.get("id")
++        or frontmatter_dict.get("identifier")
++        or frontmatter_dict.get("ticket_id")
++        or ticket_path.stem
++    )
++    title = str(frontmatter_dict.get("title") or "")
++    epic = str(frontmatter_dict["epic"]) if frontmatter_dict.get("epic") else None
++
++    raw_gates = frontmatter_dict.get("gates") or ()
++    gates = tuple(str(g).strip() for g in raw_gates if str(g).strip())
++
++    raw_deps = frontmatter_dict.get("new_dependencies") or ()
++    new_dependencies = tuple(str(d).strip() for d in raw_deps if str(d).strip())
++
++    dods = _extract_dods(frontmatter_dict, body_markdown)
++
++    lowered_raw = raw_text.lower()
++    is_non_ui = (
++        "non-ui ticket" in lowered_raw
++        or "n/a - non-ui ticket" in lowered_raw
++        or "n/a - non-ui" in lowered_raw
++    )
++    has_ui = "ui-specialist" in gates or "[ui]" in title.lower() or "[ui]" in lowered_raw[:400]
++    has_api = "api-specialist" in gates or "[api]" in title.lower() or "[api]" in lowered_raw[:400]
++    has_dep = bool(new_dependencies) or "[dep]" in title.lower() or "[dep]" in lowered_raw[:400]
++
++    return TicketSpecInput(
++        id=ticket_id,
++        title=title,
++        epic=epic,
++        gates=gates,
++        new_dependencies=new_dependencies,
++        definition_of_done=dods,
++        is_non_ui_ticket=is_non_ui,
++        has_ui_gate=has_ui,
++        has_api_gate=has_api,
++        has_dep_gate=has_dep,
++        raw_text=raw_text,
++        body_markdown=body_markdown,
++    )
++
++
++def _check_core_artifacts(
++    files: dict[str, ProofFileEntry],
++) -> DeterministicCheckResult:
++    """Check 1: CORE_ARTIFACTS_PRESENT."""
++    missing: list[str] = []
++    if "git-diff.patch" not in files or files["git-diff.patch"].size_bytes == 0:
++        missing.append("git-diff.patch")
++    if "unit-test-results.txt" not in files or files["unit-test-results.txt"].size_bytes == 0:
++        missing.append("unit-test-results.txt")
++    has_build = ("build-check.txt" in files and files["build-check.txt"].size_bytes > 0) or (
++        "build-or-typecheck.txt" in files and files["build-or-typecheck.txt"].size_bytes > 0
++    )
++    if not has_build:
++        missing.append("build-check.txt (or build-or-typecheck.txt)")
++
++    if missing:
++        return DeterministicCheckResult(
++            check_id="CORE_ARTIFACTS_PRESENT",
++            passed=False,
++            detail=f"Missing or empty core artifacts: {', '.join(missing)}",
++        )
++    return DeterministicCheckResult(
++        check_id="CORE_ARTIFACTS_PRESENT",
++        passed=True,
++        detail="Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.",
++    )
++
++
++def _check_unit_tests(
++    files: dict[str, ProofFileEntry],
++) -> DeterministicCheckResult:
++    """Check 2: UNIT_TESTS_EXIT_ZERO."""
++    entry = files.get("unit-test-results.txt")
++    if not entry or not entry.content:
++        return DeterministicCheckResult(
++            check_id="UNIT_TESTS_EXIT_ZERO",
++            passed=False,
++            detail="unit-test-results.txt is missing or empty.",
++        )
++    content = entry.content
++
++    fail_patterns = [
++        r"\b[1-9]\d*\s+failed\b",
++        r"\b[1-9]\d*\s+failures\b",
++        r"= FAILURES =",
++        r"= ERRORS =",
++        r"\bFAIL:\s+",
++        r"exit\s*=\s*[1-9]\d*",
++        r"exit code:\s*[1-9]\d*",
++        r"exit status\s*[1-9]\d*",
++    ]
++    for pat in fail_patterns:
++        match = re.search(pat, content, re.IGNORECASE)
++        if match:
++            return DeterministicCheckResult(
++                check_id="UNIT_TESTS_EXIT_ZERO",
++                passed=False,
++                detail=f"Unit test output contains failure marker: '{match.group(0)}'",
++            )
++
++    pass_patterns = [
++        r"\b\d+\s+passed\b",
++        r"\bpassed in\b",
++        r"\btests passed\b",
++        r"\bOK\b",
++    ]
++    has_pass = any(re.search(p, content, re.IGNORECASE) for p in pass_patterns)
++    if not has_pass:
++        return DeterministicCheckResult(
++            check_id="UNIT_TESTS_EXIT_ZERO",
++            passed=False,
++            detail="unit-test-results.txt does not contain a recognized passing summary marker.",
++        )
++
++    return DeterministicCheckResult(
++        check_id="UNIT_TESTS_EXIT_ZERO",
++        passed=True,
++        detail="Unit tests executed cleanly with zero failures and verified passing summary.",
++    )
++
++
++def _check_build_clean(
++    files: dict[str, ProofFileEntry],
++) -> DeterministicCheckResult:
++    """Check 3: BUILD_CHECK_CLEAN."""
++    entry = files.get("build-check.txt") or files.get("build-or-typecheck.txt")
++    if not entry or not entry.content:
++        return DeterministicCheckResult(
++            check_id="BUILD_CHECK_CLEAN",
++            passed=False,
++            detail="build-check.txt (or build-or-typecheck.txt) is missing or empty.",
++        )
++    content = entry.content
++
++    error_patterns = [
++        r"exit\s*=\s*[1-9]\d*",
++        r"exit code:\s*[1-9]\d*",
++        r"exit status\s*[1-9]\d*",
++        r"Traceback \(most recent call last\):",
++        r"\bSyntaxError\b",
++        r"\bTypeError\b",
++        r"\bImportError\b",
++        r"\bModuleNotFoundError\b",
++        r"\bFAILED\b",
++        r"\bFailed:\s*[1-9]\d*",
++    ]
++    for pat in error_patterns:
++        match = re.search(pat, content)
++        if match:
++            return DeterministicCheckResult(
++                check_id="BUILD_CHECK_CLEAN",
++                passed=False,
++                detail=f"Build check output contains error marker: '{match.group(0)}'",
++            )
++
++    return DeterministicCheckResult(
++        check_id="BUILD_CHECK_CLEAN",
++        passed=True,
++        detail="Build, typecheck, and linter checks executed cleanly with zero error exit markers.",
++    )
++
++
++def _check_ui_screenshots(
++    files: dict[str, ProofFileEntry],
++) -> DeterministicCheckResult:
++    """Validate screenshots directory contains >= 3 responsive PNG viewports."""
++    screenshots = [
++        e
++        for k, e in files.items()
++        if (k.startswith("screenshots/") or "/screenshots/" in k) and e.is_png
++    ]
++    if len(screenshots) < _MIN_SCREENSHOTS:
++        return DeterministicCheckResult(
++            check_id="UI_SPECIALIST_GATE",
++            passed=False,
++            detail=f"UI specialist gate requires >= 3 screenshots, found {len(screenshots)}.",
++        )
++
++    has_desktop = any("desktop" in e.rel_path.lower() for e in screenshots)
++    has_tablet = any("tablet" in e.rel_path.lower() for e in screenshots)
++    has_mobile = any("mobile" in e.rel_path.lower() for e in screenshots)
++
++    missing: list[str] = []
++    if not has_desktop:
++        missing.append("desktop")
++    if not has_tablet:
++        missing.append("tablet")
++    if not has_mobile:
++        missing.append("mobile")
++
++    if missing:
++        return DeterministicCheckResult(
++            check_id="UI_SPECIALIST_GATE",
++            passed=False,
++            detail=f"Screenshots missing viewports: {', '.join(missing)}.",
++        )
++
++    return DeterministicCheckResult(
++        check_id="UI_SPECIALIST_GATE",
++        passed=True,
++        detail=(
++            f"UI specialist review approved with {len(screenshots)} "
++            "responsive screenshots (desktop, tablet, mobile)."
++        ),
++    )
++
++
++def _check_ui_specialist_gate(
++    ticket: TicketSpecInput,
++    files: dict[str, ProofFileEntry],
++) -> DeterministicCheckResult:
++    """Check 4: UI_SPECIALIST_GATE."""
++    if not ticket.has_ui_gate:
++        return DeterministicCheckResult(
++            check_id="UI_SPECIALIST_GATE",
++            passed=True,
++            detail="N/A - Ticket does not require UI specialist gate.",
++        )
++
++    rev_entry = files.get("ui-specialist-review.md")
++    if not rev_entry or not rev_entry.content or rev_entry.size_bytes == 0:
++        return DeterministicCheckResult(
++            check_id="UI_SPECIALIST_GATE",
++            passed=False,
++            detail="ui-specialist-review.md is missing or empty.",
++        )
++
++    rev_text = rev_entry.content
++    has_approval = bool(
++        re.search(
++            r"\b(APPROVED|Verdict:\s*APPROVED|Status:\s*APPROVED)\b",
++            rev_text,
++            re.IGNORECASE,
++        )
++    )
++    if not has_approval:
++        return DeterministicCheckResult(
++            check_id="UI_SPECIALIST_GATE",
++            passed=False,
++            detail="ui-specialist-review.md lacks explicit APPROVED verdict.",
++        )
++
++    if ticket.is_non_ui_ticket:
++        return DeterministicCheckResult(
++            check_id="UI_SPECIALIST_GATE",
++            passed=True,
++            detail="UI specialist review approved (screenshots N/A for non-UI ticket).",
++        )
++
++    return _check_ui_screenshots(files)
++
++
++def _check_api_specialist_gate(
++    ticket: TicketSpecInput,
++    files: dict[str, ProofFileEntry],
++) -> DeterministicCheckResult:
++    """Check 5: API_SPECIALIST_GATE."""
++    if not ticket.has_api_gate:
++        return DeterministicCheckResult(
++            check_id="API_SPECIALIST_GATE",
++            passed=True,
++            detail="N/A - Ticket does not require API specialist gate.",
++        )
++
++    api_entry = files.get("api-specialist-review.md")
++    if not api_entry or not api_entry.content or api_entry.size_bytes == 0:
++        return DeterministicCheckResult(
++            check_id="API_SPECIALIST_GATE",
++            passed=False,
++            detail="api-specialist-review.md is missing or empty.",
++        )
++    if not re.search(r"\b(APPROVED|Verdict:\s*APPROVED)\b", api_entry.content, re.IGNORECASE):
++        return DeterministicCheckResult(
++            check_id="API_SPECIALIST_GATE",
++            passed=False,
++            detail="api-specialist-review.md lacks explicit APPROVED verdict.",
++        )
++
++    ui_entry = files.get("ui-specialist-review.md")
++    if not ui_entry or not ui_entry.content or ui_entry.size_bytes == 0:
++        return DeterministicCheckResult(
++            check_id="API_SPECIALIST_GATE",
++            passed=False,
++            detail=(
++                "API + UI Dual Specialist Gate requires ui-specialist-review.md (missing or empty)."
++            ),
++        )
++    if not re.search(r"\b(APPROVED|Verdict:\s*APPROVED)\b", ui_entry.content, re.IGNORECASE):
++        return DeterministicCheckResult(
++            check_id="API_SPECIALIST_GATE",
++            passed=False,
++            detail=(
++                "API + UI Dual Specialist Gate: "
++                "ui-specialist-review.md lacks explicit APPROVED verdict."
++            ),
++        )
++
++    return DeterministicCheckResult(
++        check_id="API_SPECIALIST_GATE",
++        passed=True,
++        detail="API and UI specialist gate reviews both approved with verified sign-offs.",
++    )
++
++
++def _check_dependency_evaluation(
++    ticket: TicketSpecInput,
++    files: dict[str, ProofFileEntry],
++) -> DeterministicCheckResult:
++    """Check 6: DEPENDENCY_EVALUATION_GATE."""
++    if not ticket.has_dep_gate:
++        return DeterministicCheckResult(
++            check_id="DEPENDENCY_EVALUATION_GATE",
++            passed=True,
++            detail="N/A - No new dependencies declared on ticket.",
++        )
++
++    dep_entry = files.get("dependency-evaluation.md")
++    if not dep_entry or not dep_entry.content or dep_entry.size_bytes == 0:
++        return DeterministicCheckResult(
++            check_id="DEPENDENCY_EVALUATION_GATE",
++            passed=False,
++            detail=(
++                "dependency-evaluation.md is missing or empty on ticket "
++                "introducing new dependencies."
++            ),
++        )
++
++    content = dep_entry.content
++    has_license = bool(
++        re.search(r"\b(Apache|MIT|BSD|OFL|permissive|PSF|ISC)\b", content, re.IGNORECASE)
++    )
++    has_sha = bool(re.search(r"\b(sha-?256|[0-9a-fA-F]{64})\b", content, re.IGNORECASE))
++    has_signoffs = bool(
++        re.search(
++            r"\b(architect|arch-reviewer|qa-eng|sec-eng|sign-?off|reviewed by)\b",
++            content,
++            re.IGNORECASE,
++        )
++    )
++
++    missing: list[str] = []
++    if not has_license:
++        missing.append("permissive license reference")
++    if not has_sha:
++        missing.append("SHA-256 cryptographic hash")
++    if not has_signoffs:
++        missing.append("architect and engineer sign-offs")
++
++    if missing:
++        return DeterministicCheckResult(
++            check_id="DEPENDENCY_EVALUATION_GATE",
++            passed=False,
++            detail=f"dependency-evaluation.md incomplete: missing {', '.join(missing)}.",
++        )
++
++    return DeterministicCheckResult(
++        check_id="DEPENDENCY_EVALUATION_GATE",
++        passed=True,
++        detail=(
++            "Dependency evaluation verified with permissive license, "
++            "SHA-256 hash, and specialist sign-offs."
++        ),
++    )
++
++
++def _check_no_raw_secrets(
++    files: dict[str, ProofFileEntry],
++) -> tuple[DeterministicCheckResult, dict[str, ProofFileEntry]]:
++    """Check 7: NO_RAW_SECRETS_IN_PROOF.
++
++    Scans text artifacts with outbound_secret_scrubber, fails if raw secrets appear,
++    and returns updated entries dictionary with scrubbed_content populated.
++    """
++    total_findings = 0
++    detected_kinds: set[str] = set()
++    updated_files: dict[str, ProofFileEntry] = {}
++
++    for rel_path, entry in files.items():
++        if entry.is_png or entry.content is None:
++            updated_files[rel_path] = entry
++            continue
++
++        res = outbound_secret_scrubber(entry.content)
++        scrubbed = res.text
++        if res.redacted:
++            total_findings += res.count
++            detected_kinds.update(f.kind.value for f in res.findings)
++
++        updated_files[rel_path] = ProofFileEntry(
++            rel_path=entry.rel_path,
++            abs_path=entry.abs_path,
++            size_bytes=entry.size_bytes,
++            is_png=entry.is_png,
++            png_dimensions=entry.png_dimensions,
++            content=entry.content,
++            scrubbed_content=scrubbed,
++        )
++
++    if total_findings > 0:
++        kinds_sorted = sorted(detected_kinds)
++        return (
++            DeterministicCheckResult(
++                check_id="NO_RAW_SECRETS_IN_PROOF",
++                passed=False,
++                detail=(
++                    f"Detected {total_findings} raw live secrets in proof bundle: {kinds_sorted}"
++                ),
++            ),
++            updated_files,
++        )
++
++    return (
++        DeterministicCheckResult(
++            check_id="NO_RAW_SECRETS_IN_PROOF",
++            passed=True,
++            detail="Zero raw secrets detected in proof bundle text artifacts.",
++        ),
++        updated_files,
++    )
++
++
++def _verify_entry_security(
++    entry: Path,
++    resolved_proof_dir: Path,
++) -> None:
++    """Verify an entry does not violate containment or device restrictions."""
++    if entry.is_fifo() or entry.is_socket() or entry.is_block_device() or entry.is_char_device():
++        msg = f"Forbidden special device entry: {entry.name}"
++        raise ProofInspectionError(_CODE_INVALID_ENTRY, msg)
++
++    try:
++        resolved_target = entry.resolve(strict=True)
++        if not resolved_target.is_relative_to(resolved_proof_dir):
++            msg = f"Symlink {entry.name} escapes proof directory to {resolved_target}"
++            raise ProofInspectionError(_CODE_SYMLINK_ESCAPE, msg)
++    except (ValueError, RuntimeError) as err:
++        msg = f"Symlink escape verification failed for {entry.name}: {err}"
++        raise ProofInspectionError(_CODE_SYMLINK_ESCAPE, msg) from err
++
++
++def inspect_proof_directory(ticket_file: Path, proof_dir: Path) -> ProofBundle:
++    """Inspect proof directory and ticket file passively without executing commands."""
++    ticket = parse_ticket_file(ticket_file)
++
++    if not proof_dir.exists():
++        msg = f"Proof directory does not exist: {proof_dir}"
++        raise FileNotFoundError(msg)
++    if not proof_dir.is_dir():
++        msg = f"Proof path is not a directory: {proof_dir}"
++        raise NotADirectoryError(msg)
++
++    resolved_proof_dir = proof_dir.resolve(strict=True)
++
++    total_bundle_bytes = 0
++    raw_files: dict[str, ProofFileEntry] = {}
++
++    for entry in sorted(resolved_proof_dir.rglob("*")):
++        if entry.is_dir():
++            continue
++
++        _verify_entry_security(entry, resolved_proof_dir)
++
++        st = entry.stat()
++        if st.st_size > MAX_FILE_BYTES:
++            msg = f"File {entry.name} size {st.st_size} exceeds {MAX_FILE_BYTES} bytes"
++            raise ProofInspectionError(_CODE_BUNDLE_TOO_LARGE, msg)
++
++        total_bundle_bytes += st.st_size
++        if total_bundle_bytes > MAX_BUNDLE_BYTES:
++            msg = f"Bundle total size {total_bundle_bytes} exceeds {MAX_BUNDLE_BYTES} bytes"
++            raise ProofInspectionError(_CODE_BUNDLE_TOO_LARGE, msg)
++
++        rel_path = str(entry.relative_to(resolved_proof_dir))
++        is_png = rel_path.lower().endswith(".png")
++
++        png_dim: tuple[int, int] | None = None
++        content: str | None = None
++        if is_png:
++            png_dim = inspect_png_file(entry)
++        else:
++            content = entry.read_text(encoding="utf-8", errors="replace")
++
++        raw_files[rel_path] = ProofFileEntry(
++            rel_path=rel_path,
++            abs_path=str(entry),
++            size_bytes=st.st_size,
++            is_png=is_png,
++            png_dimensions=png_dim,
++            content=content,
++            scrubbed_content=None,
++        )
++
++    check7, files = _check_no_raw_secrets(raw_files)
++
++    checks = [
++        _check_core_artifacts(files),
++        _check_unit_tests(files),
++        _check_build_clean(files),
++        _check_ui_specialist_gate(ticket, files),
++        _check_api_specialist_gate(ticket, files),
++        _check_dependency_evaluation(ticket, files),
++        check7,
++    ]
++
++    tool_steps: list[ToolCallStep] = [
++        ToolCallStep(
++            tool="deterministic_check",
++            args={"check_id": c.check_id},
++            result={"passed": c.passed, "detail": c.detail},
++        )
++        for c in checks
++    ]
++    tool_steps.extend(
++        ToolCallStep(
++            tool="inspect_file",
++            args={"path": f.rel_path},
++            result={
++                "bytes": f.size_bytes,
++                "is_png": f.is_png,
++                "png_dimensions": (
++                    f"{f.png_dimensions[0]}x{f.png_dimensions[1]}" if f.png_dimensions else None
++                ),
++            },
++        )
++        for f in files.values()
++    )
++
++    return ProofBundle(
++        ticket=ticket,
++        proof_dir=resolved_proof_dir,
++        files=files,
++        deterministic_checks=checks,
++        tool_steps=tool_steps,
++    )
+diff --git a/agent/qa_validator/schemas.py b/agent/qa_validator/schemas.py
+new file mode 100644
+index 0000000..af5067b
+--- /dev/null
++++ b/agent/qa_validator/schemas.py
+@@ -0,0 +1,77 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Data schemas and Pydantic models for passive QA packet validation."""
++
++from __future__ import annotations
++
++from typing import Literal
++
++from pydantic import BaseModel, ConfigDict, Field
++
++__all__ = [
++    "DeterministicCheckResult",
++    "DodItemAudit",
++    "QaPacketVerdict",
++    "TicketSpecInput",
++]
++
++
++class TicketSpecInput(BaseModel):
++    """Normalized ticket specification parsed from YAML or Markdown frontmatter."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    id: str
++    title: str
++    epic: str | None = None
++    gates: tuple[str, ...] = ()
++    new_dependencies: tuple[str, ...] = ()
++    definition_of_done: tuple[str, ...] = ()
++    is_non_ui_ticket: bool = False
++    has_ui_gate: bool = False
++    has_api_gate: bool = False
++    has_dep_gate: bool = False
++    raw_text: str = ""
++    body_markdown: str = ""
++
++
++class DeterministicCheckResult(BaseModel):
++    """Result of an individual deterministic proof bundle inspection check."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    check_id: str
++    passed: bool
++    detail: str
++
++
++class DodItemAudit(BaseModel):
++    """Forensic audit of an individual Definition of Done item."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    criterion: str
++    passed: bool
++    evidence_ref: str
++
++
++class QaPacketVerdict(BaseModel):
++    """Reality-checker forensic QA audit verdict for a ticket proof bundle."""
++
++    model_config = ConfigDict(
++        frozen=True,
++        extra="forbid",
++        populate_by_name=True,
++        serialize_by_alias=True,
++    )
++
++    schema_: Literal["kb-qa-verdict/v1"] = Field(
++        default="kb-qa-verdict/v1",
++        alias="schema",
++        description="Schema identifier for reality-checker verdict.",
++    )
++    grade: Literal["A", "B+", "B", "B-", "C+", "C", "F"]
++    readiness: Literal["READY", "NEEDS_WORK", "FAILED"]
++    dod_verdicts: list[DodItemAudit] = Field(min_length=1)
++    critical_issues: list[str] = Field(default_factory=list)
++    report_markdown: str = Field(min_length=1, max_length=16384)
++    policy_override: str | None = None
+diff --git a/agent/schemas/kb-qa-verdict-v1.json b/agent/schemas/kb-qa-verdict-v1.json
+new file mode 100644
+index 0000000..2e20da0
+--- /dev/null
++++ b/agent/schemas/kb-qa-verdict-v1.json
+@@ -0,0 +1,81 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://kanban.hackedyour.info/schemas/kb-qa-verdict-v1.json",
++  "title": "QaPacketVerdict",
++  "description": "Reality-checker forensic QA audit verdict for a ticket proof bundle.",
++  "anyOf": [
++    {
++      "type": "object",
++      "required": [
++        "schema",
++        "grade",
++        "readiness",
++        "dod_verdicts",
++        "critical_issues",
++        "report_markdown"
++      ],
++      "additionalProperties": true,
++      "properties": {
++        "schema": {
++          "type": "string",
++          "const": "kb-qa-verdict/v1"
++        },
++        "grade": {
++          "type": "string",
++          "enum": ["A", "B+", "B", "B-", "C+", "C", "F"]
++        },
++        "readiness": {
++          "type": "string",
++          "enum": ["READY", "NEEDS_WORK", "FAILED"]
++        },
++        "dod_verdicts": {
++          "type": "array",
++          "minItems": 1,
++          "items": {
++            "type": "object",
++            "required": ["criterion", "passed", "evidence_ref"],
++            "additionalProperties": false,
++            "properties": {
++              "criterion": {
++                "type": "string"
++              },
++              "passed": {
++                "type": "boolean"
++              },
++              "evidence_ref": {
++                "type": "string"
++              }
++            }
++          }
++        },
++        "critical_issues": {
++          "type": "array",
++          "items": {
++            "type": "string"
++          }
++        },
++        "report_markdown": {
++          "type": "string",
++          "minLength": 1,
++          "maxLength": 16384
++        },
++        "policy_override": {
++          "type": ["string", "null"]
++        }
++      }
++    },
++    {
++      "type": "object",
++      "required": ["schema_version", "command", "metrics", "schema_status"],
++      "properties": {
++        "schema_version": {
++          "type": "string",
++          "const": "kb-cli-validation-report/v1"
++        },
++        "qa_verdict": {
++          "type": ["object", "null"]
++        }
++      }
++    }
++  ]
++}
+diff --git a/agent/tests/cli/test_validate_qa_packet.py b/agent/tests/cli/test_validate_qa_packet.py
+new file mode 100644
+index 0000000..55fe7a2
+--- /dev/null
++++ b/agent/tests/cli/test_validate_qa_packet.py
+@@ -0,0 +1,522 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Mandatory feature unit tests for kanban-agent validate-qa-packet CLI."""
++
++from __future__ import annotations
++
++import argparse
++import asyncio
++import json
++import subprocess
++from pathlib import Path
++
++import jsonschema
++import pytest
++
++import agent.cli_commands.validate_qa_packet as vqp
++from agent.cli import main
++from agent.cli_commands.validate_qa_packet import (
++    _resolve_qa_provider,
++    handle_validate_qa_packet,
++)
++from agent.cli_report import ExitCode
++from agent.providers.errors import ProviderTimeout
++
++FIXTURES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "tests" / "fixtures" / "ai"
++EXAMPLES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "examples"
++
++
++def test_case_1_positive_s15_3_example_4(capsys: pytest.CaptureFixture[str]) -> None:
++    """Test Case 1: Positive run (S15.3 example 4) exiting 0 with all 4 sections."""
++    ticket_file = str(EXAMPLES_DIR / "tickets" / "kan-142.yaml")
++    proof_dir = str(EXAMPLES_DIR / "qa_packets" / "kan-142-ready")
++    cassette_file = str(FIXTURES_DIR / "qa_packet_grade_a_ready.yaml")
++
++    exit_code = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            ticket_file,
++            "--proof-dir",
++            proof_dir,
++            "--provider",
++            "fixture",
++            "--cassette",
++            cassette_file,
++        ]
++    )
++
++    assert exit_code == 0
++    captured = capsys.readouterr()
++    stdout = captured.out
++
++    assert "=== 1. RENDERED CONTEXT ===" in stdout
++    assert "KAN-142" in stdout
++    assert "=== 2. TOOL TRACE ===" in stdout
++    assert "=== 3. LATENCY & TOKENS ===" in stdout
++    assert "TTFT: 12.0ms" in stdout
++    assert "=== 4. SCHEMA & POLICY STATUS ===" in stdout
++    assert "valid: true" in stdout
++    assert "grade: a" in stdout.lower()
++    assert "readiness: ready" in stdout.lower()
++
++
++def test_case_2_positive_markdown_ticket_frontmatter(
++    tmp_path: Path, capsys: pytest.CaptureFixture[str]
++) -> None:
++    """Test Case 2: Positive parsing of Markdown ticket with frontmatter."""
++    md_ticket = Path("docs/tickets/KB-P5-27.md")
++    assert md_ticket.exists()
++
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    (proof_dir / "git-diff.patch").write_text("dummy diff", encoding="utf-8")
++    (proof_dir / "unit-test-results.txt").write_text("5 passed in 0.1s", encoding="utf-8")
++    (proof_dir / "build-check.txt").write_text("clean", encoding="utf-8")
++
++    exit_code = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            str(md_ticket),
++            "--proof-dir",
++            str(proof_dir),
++            "--deterministic-only",
++        ]
++    )
++
++    assert exit_code == 0
++    captured = capsys.readouterr()
++    assert "KB-P5-27" in captured.out
++    assert "readiness=READY" in captured.out
++
++
++def test_case_3_negative_specialist_gates_enforced(
++    capsys: pytest.CaptureFixture[str],
++) -> None:
++    """Test Case 3: Missing ui-specialist review triggers FANTASY_APPROVAL_BLOCKED."""
++    ticket_file = str(EXAMPLES_DIR / "tickets" / "kan-142.yaml")
++    proof_dir = str(EXAMPLES_DIR / "qa_packets" / "kan-142-missing-ui-review")
++    cassette_file = str(FIXTURES_DIR / "qa_packet_grade_a_ready.yaml")
++
++    exit_code = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            ticket_file,
++            "--proof-dir",
++            proof_dir,
++            "--provider",
++            "fixture",
++            "--cassette",
++            cassette_file,
++        ]
++    )
++
++    assert exit_code == 2
++    captured = capsys.readouterr()
++    stdout = captured.out
++
++    assert "[FAIL] UI_SPECIALIST_GATE" in stdout
++    assert "FANTASY_APPROVAL_BLOCKED" in stdout
++    assert "readiness: needs_work" in stdout.lower()
++
++
++def test_case_4_anti_fantasy_invariant(capsys: pytest.CaptureFixture[str]) -> None:
++    """Test Case 4: Hallucinated approval is code-blocked; needs-work exits 2."""
++    ticket_file = str(EXAMPLES_DIR / "tickets" / "kan-142.yaml")
++    proof_dir = str(EXAMPLES_DIR / "qa_packets" / "kan-142-ready")
++
++    # (a) Model hallucinating READY with grade B+
++    code_fantasy = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            ticket_file,
++            "--proof-dir",
++            proof_dir,
++            "--provider",
++            "fixture",
++            "--cassette",
++            str(FIXTURES_DIR / "qa_packet_fantasy_approval.yaml"),
++        ]
++    )
++    assert code_fantasy == 2
++    captured = capsys.readouterr()
++    assert "FANTASY_APPROVAL_BLOCKED" in captured.out
++    assert "readiness: needs_work" in captured.out.lower()
++
++    # (b) Model returning genuine NEEDS_WORK (grade B-)
++    code_needs_work = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            ticket_file,
++            "--proof-dir",
++            proof_dir,
++            "--provider",
++            "fixture",
++            "--cassette",
++            str(FIXTURES_DIR / "qa_packet_needs_work.yaml"),
++        ]
++    )
++    assert code_needs_work == 2
++    captured2 = capsys.readouterr()
++    assert "grade=B-" in captured2.out
++    assert "readiness: needs_work" in captured2.out.lower()
++
++
++def test_case_5_security_symlink_escape_and_secrets(
++    tmp_path: Path, capsys: pytest.CaptureFixture[str]
++) -> None:
++    """Test Case 5: Symlink escape rejected with PROOF_SYMLINK_ESCAPE; live secrets fail Check 7."""
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text("id: SEC-1\ntitle: Security Check\n", encoding="utf-8")
++
++    # 1. Symlink escape
++    escape_proof_dir = tmp_path / "escape_proof"
++    escape_proof_dir.mkdir()
++    outside_file = tmp_path / "passwd"
++    outside_file.write_text("root:x:0:0:root:/root:/bin/bash\n", encoding="utf-8")
++
++    (escape_proof_dir / "git-diff.patch").symlink_to(outside_file)
++
++    exit_symlink = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            str(ticket_file),
++            "--proof-dir",
++            str(escape_proof_dir),
++            "--deterministic-only",
++        ]
++    )
++    assert exit_symlink == 2
++    captured_symlink = capsys.readouterr()
++    assert "PROOF_SYMLINK_ESCAPE" in captured_symlink.out
++    assert "root:x:0:0" not in captured_symlink.out
++
++    # 2. Secret leak detection and prompt scrubbing
++    secret_proof_dir = tmp_path / "secret_proof"
++    secret_proof_dir.mkdir()
++    fake_token = "ghp_" + ("1234567890abcdef" * 2) + "1234"
++    (secret_proof_dir / "git-diff.patch").write_text(f"+{fake_token}\n", encoding="utf-8")
++    (secret_proof_dir / "unit-test-results.txt").write_text("1 passed in 0.1s", encoding="utf-8")
++    (secret_proof_dir / "build-check.txt").write_text("clean", encoding="utf-8")
++
++    exit_secret = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            str(ticket_file),
++            "--proof-dir",
++            str(secret_proof_dir),
++            "--deterministic-only",
++        ]
++    )
++    assert exit_secret == 2
++    captured_secret = capsys.readouterr()
++    assert "[FAIL] NO_RAW_SECRETS_IN_PROOF" in captured_secret.out
++
++
++def test_case_6_passive_guarantee_zero_subprocess(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Test Case 6: Passive guarantee asserts 0 subprocess invocations."""
++    spies = {"popen": 0, "exec": 0, "shell": 0}
++
++    def _fake_popen(*_args: object, **_kwargs: object) -> object:
++        spies["popen"] += 1
++        msg = "Subprocess disallowed in passive mode"
++        raise AssertionError(msg)
++
++    async def _fake_exec(*_args: object, **_kwargs: object) -> object:
++        spies["exec"] += 1
++        msg = "create_subprocess_exec disallowed in passive mode"
++        raise AssertionError(msg)
++
++    async def _fake_shell(*_args: object, **_kwargs: object) -> object:
++        spies["shell"] += 1
++        msg = "create_subprocess_shell disallowed in passive mode"
++        raise AssertionError(msg)
++
++    monkeypatch.setattr(subprocess, "Popen", _fake_popen)
++    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_exec)
++    monkeypatch.setattr(asyncio, "create_subprocess_shell", _fake_shell)
++
++    exit_code = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            str(EXAMPLES_DIR / "tickets" / "kan-142.yaml"),
++            "--proof-dir",
++            str(EXAMPLES_DIR / "qa_packets" / "kan-142-ready"),
++            "--provider",
++            "fixture",
++            "--cassette",
++            str(FIXTURES_DIR / "qa_packet_grade_a_ready.yaml"),
++        ]
++    )
++
++    assert exit_code == 0
++    assert spies["popen"] == 0
++    assert spies["exec"] == 0
++    assert spies["shell"] == 0
++
++
++def test_case_7_boundary_and_json_schema(
++    tmp_path: Path, capsys: pytest.CaptureFixture[str]
++) -> None:
++    """Test Case 7: Boundary checks, --deterministic-only 0 calls, and JSON output."""
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text("id: BND-1\ntitle: Boundary Test\n", encoding="utf-8")
++
++    # 1. Boundary: file > 2 MiB
++    proof_dir_big = tmp_path / "big_proof"
++    proof_dir_big.mkdir()
++    (proof_dir_big / "git-diff.patch").write_bytes(b"x" * (2 * 1024 * 1024 + 10))
++
++    exit_big = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            str(ticket_file),
++            "--proof-dir",
++            str(proof_dir_big),
++            "--deterministic-only",
++        ]
++    )
++    assert exit_big == 2
++    captured_big = capsys.readouterr()
++    assert "PROOF_BUNDLE_TOO_LARGE" in captured_big.out
++
++    # 2. JSON validation against kb-qa-verdict-v1.json
++    schema_path = Path("agent/schemas/kb-qa-verdict-v1.json")
++    schema = json.loads(schema_path.read_text(encoding="utf-8"))
++
++    exit_json = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            str(EXAMPLES_DIR / "tickets" / "kan-142.yaml"),
++            "--proof-dir",
++            str(EXAMPLES_DIR / "qa_packets" / "kan-142-ready"),
++            "--provider",
++            "fixture",
++            "--cassette",
++            str(FIXTURES_DIR / "qa_packet_grade_a_ready.yaml"),
++            "--report",
++            "json",
++        ]
++    )
++    assert exit_json == 0
++    captured_json = capsys.readouterr()
++    data = json.loads(captured_json.out)
++
++    jsonschema.validate(instance=data, schema=schema)
++    assert "qa_verdict" in data
++    jsonschema.validate(instance=data["qa_verdict"], schema=schema)
++
++
++def test_cli_runtime_errors_nonexistent_paths() -> None:
++    """Verify runtime error exit code 1 for missing ticket file or proof directory."""
++    code_missing_ticket = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            "nonexistent/ticket.yaml",
++            "--proof-dir",
++            str(EXAMPLES_DIR / "qa_packets" / "kan-142-ready"),
++        ]
++    )
++    assert code_missing_ticket == 1
++
++    code_missing_proof = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            str(EXAMPLES_DIR / "tickets" / "kan-142.yaml"),
++            "--proof-dir",
++            "nonexistent/proof_dir",
++        ]
++    )
++    assert code_missing_proof == 1
++
++
++def test_cli_air_gap_flag_enforcement(capsys: pytest.CaptureFixture[str]) -> None:
++    """Verify --air-gap flag blocks cloud provider before transport."""
++    exit_code = main(
++        [
++            "validate-qa-packet",
++            "--ticket-file",
++            str(EXAMPLES_DIR / "tickets" / "kan-142.yaml"),
++            "--proof-dir",
++            str(EXAMPLES_DIR / "qa_packets" / "kan-142-ready"),
++            "--provider",
++            "gemini",
++            "--air-gap",
++        ]
++    )
++    assert exit_code == 2
++    captured = capsys.readouterr()
++    assert "AIR_GAP_EGRESS_DENIED" in captured.out
++
++
++def test_resolve_qa_provider_variants() -> None:
++    """Verify provider resolution for router, gemini, openai, ollama, and errors."""
++    # 1. Fixture without cassette -> ValueError
++    args_no_cas = argparse.Namespace(provider="fixture", cassette=None, air_gap=False)
++    with pytest.raises(ValueError, match="--cassette is required"):
++        _resolve_qa_provider(args_no_cas)
++
++    # 2. Unsupported provider -> ValueError
++    args_bad = argparse.Namespace(provider="unsupported", cassette=None, air_gap=False)
++    with pytest.raises(ValueError, match="Unsupported provider"):
++        _resolve_qa_provider(args_bad)
++
++    # 3. Router provider
++    args_router = argparse.Namespace(
++        provider="router",
++        route="fixture,fixture",
++        cassette=str(FIXTURES_DIR / "qa_packet_grade_a_ready.yaml"),
++        air_gap=False,
++    )
++    p_router = _resolve_qa_provider(args_router)
++    assert p_router is not None
++
++    # 4. Gemini provider
++    args_gemini = argparse.Namespace(
++        provider="gemini",
++        cassette=None,
++        model="gemini-2.5-flash",
++        http_cassette=None,
++        air_gap=False,
++    )
++    p_gemini = _resolve_qa_provider(args_gemini)
++    assert p_gemini is not None
++
++    # 5. OpenAI provider
++    args_openai = argparse.Namespace(
++        provider="openai",
++        cassette=None,
++        model="gpt-4o-mini",
++        base_url="http://127.0.0.1:8000/v1",
++        http_cassette=None,
++        air_gap=False,
++    )
++    p_openai = _resolve_qa_provider(args_openai)
++    assert p_openai is not None
++
++    # 6. Ollama provider
++    args_ollama = argparse.Namespace(
++        provider="ollama",
++        cassette=None,
++        model="qwen2.5-coder:7b",
++        base_url="http://127.0.0.1:11434",
++        air_gap=False,
++    )
++    p_ollama = _resolve_qa_provider(args_ollama)
++    assert p_ollama is not None
++
++
++@pytest.mark.asyncio
++async def test_handle_validate_qa_packet_audit_failure(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify provider fault during audit returns error exit code."""
++
++    async def _failing_audit(*_args: object, **_kwargs: object) -> object:
++        msg = "Simulated audit timeout"
++        raise ProviderTimeout(msg)
++
++    monkeypatch.setattr(vqp, "run_qa_packet_audit", _failing_audit)
++
++    args = argparse.Namespace(
++        ticket_file=str(EXAMPLES_DIR / "tickets" / "kan-142.yaml"),
++        proof_dir=str(EXAMPLES_DIR / "qa_packets" / "kan-142-ready"),
++        provider="fixture",
++        cassette=str(FIXTURES_DIR / "qa_packet_grade_a_ready.yaml"),
++        deterministic_only=False,
++        air_gap=False,
++        model="gemini-2.5-flash",
++    )
++
++    report, code = await handle_validate_qa_packet(args)
++    assert code == ExitCode.RUNTIME_ERROR
++    assert report.schema_status.error_code == "TIMEOUT"
++
++
++@pytest.mark.asyncio
++async def test_resolve_qa_provider_all_branches(tmp_path: Path) -> None:
++    """Verify all remaining provider branches and error handlers."""
++    cassette_file = str(FIXTURES_DIR / "qa_packet_grade_a_ready.yaml")
++
++    # 1. Gemini with cassette defaults to fixture
++    args_gemini_cas = argparse.Namespace(provider="gemini", cassette=cassette_file, air_gap=False)
++    p1 = _resolve_qa_provider(args_gemini_cas)
++    assert p1 is not None
++
++    # 2. Router with ollama candidate
++    args_router_mix = argparse.Namespace(
++        provider="router",
++        route="fixture,ollama",
++        cassette=cassette_file,
++        air_gap=False,
++    )
++    p2 = _resolve_qa_provider(args_router_mix)
++    assert p2 is not None
++
++    # 3. Gemini with http_cassette
++    http_cas_file = tmp_path / "http.yaml"
++    http_cas_file.write_text("cassette_version: 1\nhttp_exchanges: []\n", encoding="utf-8")
++    args_gemini_http = argparse.Namespace(
++        provider="gemini",
++        cassette=None,
++        model="gemini-2.5-flash",
++        http_cassette=str(http_cas_file),
++        air_gap=False,
++    )
++    p3 = _resolve_qa_provider(args_gemini_http)
++    assert p3 is not None
++
++    # 4. OpenAI with http_cassette
++    args_openai_http = argparse.Namespace(
++        provider="openai",
++        cassette=None,
++        model="gpt-4o-mini",
++        base_url="http://127.0.0.1:8000/v1",
++        http_cassette=str(http_cas_file),
++        air_gap=False,
++    )
++    p4 = _resolve_qa_provider(args_openai_http)
++    assert p4 is not None
++
++    # 5. handle_validate_qa_packet with provider error
++    args_err = argparse.Namespace(
++        ticket_file=str(EXAMPLES_DIR / "tickets" / "kan-142.yaml"),
++        proof_dir=str(EXAMPLES_DIR / "qa_packets" / "kan-142-ready"),
++        provider="unsupported",
++        cassette=None,
++        deterministic_only=False,
++        air_gap=False,
++        model="gemini-2.5-flash",
++    )
++    _rep_err, code_err = await handle_validate_qa_packet(args_err)
++    assert code_err == ExitCode.RUNTIME_ERROR
++
++    # 6. handle_validate_qa_packet with unexpected inspection error
++    def _bad_inspect(*_a: object, **_kw: object) -> object:
++        msg = "Disk read error"
++        raise RuntimeError(msg)
++
++    mp = pytest.MonkeyPatch()
++    mp.setattr(vqp, "inspect_proof_directory", _bad_inspect)
++    args_ins_err = argparse.Namespace(
++        ticket_file=str(EXAMPLES_DIR / "tickets" / "kan-142.yaml"),
++        proof_dir=str(EXAMPLES_DIR / "qa_packets" / "kan-142-ready"),
++        provider="fixture",
++        cassette=cassette_file,
++        deterministic_only=False,
++        air_gap=False,
++        model="gemini-2.5-flash",
++    )
++    _rep_ins, code_ins = await handle_validate_qa_packet(args_ins_err)
++    assert code_ins == ExitCode.RUNTIME_ERROR
++    mp.undo()
+diff --git a/agent/tests/qa_validator/__init__.py b/agent/tests/qa_validator/__init__.py
+new file mode 100644
+index 0000000..f0e9db1
+--- /dev/null
++++ b/agent/tests/qa_validator/__init__.py
+@@ -0,0 +1,2 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Tests for QA packet validator."""
+diff --git a/agent/tests/qa_validator/test_auditor.py b/agent/tests/qa_validator/test_auditor.py
+new file mode 100644
+index 0000000..e735223
+--- /dev/null
++++ b/agent/tests/qa_validator/test_auditor.py
+@@ -0,0 +1,182 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Unit tests for reality-checker LLM auditor and anti-fantasy gatekeeper."""
++
++from __future__ import annotations
++
++from pathlib import Path
++
++import pytest
++
++import agent.qa_validator.auditor as aud
++from agent.qa_validator.auditor import (
++    build_audit_prompt,
++    enforce_anti_fantasy,
++    load_reality_checker_system_prompt,
++    run_qa_packet_audit,
++)
++from agent.qa_validator.bundle_inspector import (
++    ProofBundle,
++    ProofFileEntry,
++    inspect_proof_directory,
++)
++from agent.qa_validator.schemas import (
++    DeterministicCheckResult,
++    DodItemAudit,
++    QaPacketVerdict,
++    TicketSpecInput,
++)
++from agent.testing.fixtures import FixtureLLMProvider, load_cassette
++
++FIXTURES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "tests" / "fixtures" / "ai"
++
++
++def test_load_reality_checker_system_prompt() -> None:
++    """Verify loading reality-checker prompt includes passive override."""
++    prompt = load_reality_checker_system_prompt()
++    assert "MANDATORY PASSIVE FORENSIC MODE OVERRIDE" in prompt
++    assert "PASSIVE FORENSIC AUDIT MODE" in prompt
++
++
++def test_load_reality_checker_prompt_fallback(tmp_path: Path) -> None:
++    """Verify fallback prompt when reality-checker.md cannot be located."""
++    mp = pytest.MonkeyPatch()
++    # Mock Path.exists to return False for markdown files
++    orig_exists = Path.exists
++
++    def _mock_exists(self: Path) -> bool:
++        if self.name == "reality-checker.md":
++            return False
++        return orig_exists(self)
++
++    mp.setattr(Path, "exists", _mock_exists)
++    prompt = aud.load_reality_checker_system_prompt(tmp_path)
++    assert "Reality-Checker Integration Agent" in prompt
++    mp.undo()
++
++
++def test_build_audit_prompt_formatting(tmp_path: Path) -> None:
++    """Verify audit prompt builds randomized delimiters and spotlights evidence."""
++    ticket = TicketSpecInput(
++        id="T-100",
++        title="Sample Task",
++        epic="KB-E1",
++        gates=("ui-specialist",),
++        definition_of_done=("Criterion 1", "Criterion 2"),
++        raw_text="id: T-100\ntitle: Sample Task",
++        body_markdown="Details here",
++    )
++
++    # Large patch to trigger line truncation branch (> 500 lines)
++    big_patch_lines = ["+line" + str(i) for i in range(550)]
++    big_patch = "\n".join(big_patch_lines)
++
++    bundle = ProofBundle(
++        ticket=ticket,
++        proof_dir=tmp_path,
++        files={
++            "git-diff.patch": ProofFileEntry(
++                rel_path="git-diff.patch",
++                abs_path=str(tmp_path / "git-diff.patch"),
++                size_bytes=len(big_patch),
++                is_png=False,
++                content=big_patch,
++                scrubbed_content=None,
++            ),
++            "screenshots/mobile.png": ProofFileEntry(
++                rel_path="screenshots/mobile.png",
++                abs_path=str(tmp_path / "screenshots" / "mobile.png"),
++                size_bytes=1000,
++                is_png=True,
++                png_dimensions=(390, 844),
++            ),
++            "message-to-reality-checker.md": ProofFileEntry(
++                rel_path="message-to-reality-checker.md",
++                abs_path=str(tmp_path / "message-to-reality-checker.md"),
++                size_bytes=50,
++                is_png=False,
++                content="High priority note to reality checker",
++                scrubbed_content=None,
++            ),
++        },
++        deterministic_checks=[DeterministicCheckResult(check_id="C1", passed=True, detail="ok")],
++        tool_steps=[],
++    )
++
++    sys_prompt, user_prompt = build_audit_prompt(ticket, bundle)
++    assert "MANDATORY PASSIVE FORENSIC MODE OVERRIDE" in sys_prompt
++    assert "<<<UNTRUSTED_QA_EVIDENCE_" in user_prompt
++    assert "T-100" in user_prompt
++    assert "Criterion 1" in user_prompt
++    assert "message-to-reality-checker.md" in user_prompt
++    assert "screenshots/mobile.png (PNG image, dimensions=390x844" in user_prompt
++    assert "truncated" in user_prompt  # verifies > 500 lines truncation
++
++
++def test_anti_fantasy_enforcement_blocks() -> None:
++    """Verify code-enforced anti-fantasy gate blocks premature READY approvals."""
++    clean_checks = [DeterministicCheckResult(check_id="C1", passed=True, detail="ok")]
++    failed_checks = [DeterministicCheckResult(check_id="C1", passed=False, detail="failed")]
++
++    # 1. READY with grade A and all passed -> unchanged
++    v_ok = QaPacketVerdict(
++        grade="A",
++        readiness="READY",
++        dod_verdicts=[DodItemAudit(criterion="Test", passed=True, evidence_ref="ref")],
++        critical_issues=[],
++        report_markdown="ok",
++    )
++    res_ok = enforce_anti_fantasy(v_ok, clean_checks)
++    assert res_ok.readiness == "READY"
++    assert res_ok.policy_override is None
++
++    # 2. READY with failing deterministic check -> BLOCKED
++    res_fail_check = enforce_anti_fantasy(v_ok, failed_checks)
++    assert res_fail_check.readiness == "NEEDS_WORK"
++    assert res_fail_check.policy_override == "FANTASY_APPROVAL_BLOCKED"
++
++    # 3. READY with grade B+ -> BLOCKED
++    v_b = v_ok.model_copy(update={"grade": "B+"})
++    res_b = enforce_anti_fantasy(v_b, clean_checks)
++    assert res_b.readiness == "NEEDS_WORK"
++    assert res_b.policy_override == "FANTASY_APPROVAL_BLOCKED"
++
++    # 4. READY with critical issue -> BLOCKED
++    v_crit = v_ok.model_copy(update={"critical_issues": ["Issue 1"]})
++    res_crit = enforce_anti_fantasy(v_crit, clean_checks)
++    assert res_crit.readiness == "NEEDS_WORK"
++    assert res_crit.policy_override == "FANTASY_APPROVAL_BLOCKED"
++
++    # 5. READY with failed DoD item -> BLOCKED
++    v_dod_fail = v_ok.model_copy(
++        update={"dod_verdicts": [DodItemAudit(criterion="Test", passed=False, evidence_ref="ref")]}
++    )
++    res_dod = enforce_anti_fantasy(v_dod_fail, clean_checks)
++    assert res_dod.readiness == "NEEDS_WORK"
++    assert res_dod.policy_override == "FANTASY_APPROVAL_BLOCKED"
++
++    # 6. Non-READY verdict (e.g. FAILED) -> unchanged
++    v_failed = v_ok.model_copy(update={"grade": "F", "readiness": "FAILED"})
++    res_failed = enforce_anti_fantasy(v_failed, clean_checks)
++    assert res_failed.readiness == "FAILED"
++    assert res_failed.policy_override is None
++
++
++@pytest.mark.asyncio
++async def test_run_qa_packet_audit_fixture() -> None:
++    """Verify run_qa_packet_audit executes with FixtureLLMProvider."""
++    ticket_file = Path("examples/tickets/kan-142.yaml")
++    proof_dir = Path("examples/qa_packets/kan-142-ready")
++    bundle = inspect_proof_directory(ticket_file, proof_dir)
++
++    cassette = load_cassette(FIXTURES_DIR / "qa_packet_grade_a_ready.yaml")
++    provider = FixtureLLMProvider(cassettes=[cassette])
++
++    verdict, ttft, p_tok, c_tok = await run_qa_packet_audit(
++        bundle.ticket, bundle, provider, model="fixture-model"
++    )
++
++    assert verdict.grade == "A"
++    assert verdict.readiness == "READY"
++    assert ttft == 12.0
++    assert p_tok == 520
++    assert c_tok == 140
+diff --git a/agent/tests/qa_validator/test_bundle_inspector.py b/agent/tests/qa_validator/test_bundle_inspector.py
+new file mode 100644
+index 0000000..4cb873d
+--- /dev/null
++++ b/agent/tests/qa_validator/test_bundle_inspector.py
+@@ -0,0 +1,466 @@
++# Copyright 2026 Kanban Platform Contributors
++"""Unit tests for passive proof bundle inspector and ticket parser."""
++
++from __future__ import annotations
++
++import os
++import struct
++import zlib
++from typing import TYPE_CHECKING
++
++import pytest
++
++import agent.qa_validator.bundle_inspector as bi
++from agent.qa_validator.bundle_inspector import (
++    MAX_FILE_BYTES,
++    ProofInspectionError,
++    inspect_png_file,
++    inspect_proof_directory,
++    parse_ticket_file,
++)
++from agent.qa_validator.schemas import DodItemAudit, QaPacketVerdict
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++
++def _make_png(path: Path, width: int = 100, height: int = 100) -> None:
++    """Write a valid minimal PNG file."""
++    header = b"\x89PNG\r\n\x1a\n"
++    ihdr_data = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
++    ihdr_crc = struct.pack(">I", zlib.crc32(b"IHDR" + ihdr_data) & 0xFFFFFFFF)
++    ihdr_chunk = struct.pack(">I", len(ihdr_data)) + b"IHDR" + ihdr_data + ihdr_crc
++    scanlines = b"".join(b"\x00" + b"\x10\x20\x30" * width for _ in range(height))
++    compressed = zlib.compress(scanlines)
++    idat_crc = struct.pack(">I", zlib.crc32(b"IDAT" + compressed) & 0xFFFFFFFF)
++    idat_chunk = struct.pack(">I", len(compressed)) + b"IDAT" + compressed + idat_crc
++    iend_crc = struct.pack(">I", zlib.crc32(b"IEND") & 0xFFFFFFFF)
++    iend_chunk = struct.pack(">I", 0) + b"IEND" + iend_crc
++    path.write_bytes(header + ihdr_chunk + idat_chunk + iend_chunk)
++
++
++def test_png_inspection_valid(tmp_path: Path) -> None:
++    """Verify PNG header inspection returns exact dimensions."""
++    png_file = tmp_path / "valid.png"
++    _make_png(png_file, 800, 600)
++    w, h = inspect_png_file(png_file)
++    assert (w, h) == (800, 600)
++
++
++def test_png_inspection_invalid_signature(tmp_path: Path) -> None:
++    """Verify invalid PNG signature raises ValueError."""
++    bad_file = tmp_path / "bad.png"
++    bad_file.write_bytes(b"NOT_A_PNG_HEADER")
++    with pytest.raises(ValueError, match="Invalid PNG signature"):
++        inspect_png_file(bad_file)
++
++
++def test_png_inspection_truncated_chunk_length(tmp_path: Path) -> None:
++    """Verify truncated chunk length in PNG raises ValueError."""
++    bad_file = tmp_path / "trunc_chunk.png"
++    bad_file.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00")
++    with pytest.raises(ValueError, match="Truncated PNG chunk length"):
++        inspect_png_file(bad_file)
++
++
++def test_png_inspection_truncated_ihdr(tmp_path: Path) -> None:
++    """Verify truncated IHDR data raises ValueError."""
++    bad_file = tmp_path / "trunc_ihdr.png"
++    bad_file.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00")
++    with pytest.raises(ValueError, match="Truncated IHDR data"):
++        inspect_png_file(bad_file)
++
++
++def test_parse_ticket_file_yaml(tmp_path: Path) -> None:
++    """Verify parsing a valid YAML ticket file."""
++    t_file = tmp_path / "ticket.yaml"
++    t_file.write_text(
++        """id: TEST-01
++title: "[UI] Implement feature"
++gates: [ui-specialist, reality-checker]
++definition_of_done:
++  - "Criterion 1"
++  - "Criterion 2"
++""",
++        encoding="utf-8",
++    )
++    spec = parse_ticket_file(t_file)
++    assert spec.id == "TEST-01"
++    assert spec.has_ui_gate is True
++    assert len(spec.definition_of_done) == 2
++
++
++def test_parse_ticket_file_markdown(tmp_path: Path) -> None:
++    """Verify parsing a Markdown ticket file with frontmatter and body DoD."""
++    md_file = tmp_path / "ticket.md"
++    md_file.write_text(
++        """---
++id: KB-P5-99
++title: "Sample Ticket"
++gates: [api-specialist]
++new_dependencies: [pydantic]
++---
++# Ticket Body
++### Definition of Done
++- [ ] Task 1
++- [ ] Task 2
++""",
++        encoding="utf-8",
++    )
++    spec = parse_ticket_file(md_file)
++    assert spec.id == "KB-P5-99"
++    assert spec.has_api_gate is True
++    assert spec.has_dep_gate is True
++    assert len(spec.definition_of_done) == 2
++    assert "Task 1" in spec.definition_of_done[0]
++
++
++def test_parse_ticket_file_corrupt_yaml(tmp_path: Path) -> None:
++    """Verify corrupt YAML raises ValueError."""
++    bad_frontmatter = tmp_path / "bad_fm.md"
++    bad_frontmatter.write_text("---\n[invalid yaml\n---\nBody", encoding="utf-8")
++    with pytest.raises(ValueError, match="Failed to parse YAML frontmatter"):
++        parse_ticket_file(bad_frontmatter)
++
++    bad_yaml = tmp_path / "bad.yaml"
++    bad_yaml.write_text("[invalid yaml\n", encoding="utf-8")
++    with pytest.raises(ValueError, match="Failed to parse ticket YAML"):
++        parse_ticket_file(bad_yaml)
++
++
++def test_parse_ticket_file_empty_dod_fallback(tmp_path: Path) -> None:
++    """Verify ticket without DoD items falls back to default."""
++    t_file = tmp_path / "plain.yaml"
++    t_file.write_text("id: NO-DOD\ntitle: No DoD\n", encoding="utf-8")
++    spec = parse_ticket_file(t_file)
++    assert len(spec.definition_of_done) == 1
++    assert "All acceptance criteria" in spec.definition_of_done[0]
++
++
++def test_parse_ticket_file_missing_and_dir(tmp_path: Path) -> None:
++    """Verify missing ticket file or directory path raises appropriate errors."""
++    with pytest.raises(FileNotFoundError):
++        parse_ticket_file(tmp_path / "nonexistent.yaml")
++    with pytest.raises(IsADirectoryError):
++        parse_ticket_file(tmp_path)
++
++
++def test_parse_ticket_file_oversized(tmp_path: Path) -> None:
++    """Verify ticket file exceeding 2 MiB is rejected with PROOF_BUNDLE_TOO_LARGE."""
++    big_file = tmp_path / "big_ticket.yaml"
++    big_file.write_bytes(b"a" * (MAX_FILE_BYTES + 10))
++    with pytest.raises(ProofInspectionError) as exc_info:
++        parse_ticket_file(big_file)
++    assert exc_info.value.code == "PROOF_BUNDLE_TOO_LARGE"
++
++
++def test_symlink_escape_rejected(tmp_path: Path) -> None:
++    """Verify symlink escaping proof directory is rejected with PROOF_SYMLINK_ESCAPE."""
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    outside_file = tmp_path / "secret.txt"
++    outside_file.write_text("secret outside", encoding="utf-8")
++
++    link_path = proof_dir / "git-diff.patch"
++    link_path.symlink_to(outside_file)
++
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text("id: ESC-1\ntitle: Escaper\n", encoding="utf-8")
++
++    with pytest.raises(ProofInspectionError) as exc_info:
++        inspect_proof_directory(ticket_file, proof_dir)
++    assert exc_info.value.code == "PROOF_SYMLINK_ESCAPE"
++
++
++def test_file_oversized_rejected(tmp_path: Path) -> None:
++    """Verify individual file > 2 MiB in proof dir is rejected."""
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    (proof_dir / "big.patch").write_bytes(b"x" * (MAX_FILE_BYTES + 10))
++
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text("id: BIG-1\ntitle: Big\n", encoding="utf-8")
++
++    with pytest.raises(ProofInspectionError) as exc_info:
++        inspect_proof_directory(ticket_file, proof_dir)
++    assert exc_info.value.code == "PROOF_BUNDLE_TOO_LARGE"
++
++
++def test_bundle_oversized_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify total bundle size exceeding 16 MiB is rejected."""
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    (proof_dir / "file1.txt").write_text("a", encoding="utf-8")
++
++    # Lower MAX_BUNDLE_BYTES dynamically to test threshold cleanly
++    monkeypatch.setattr(bi, "MAX_BUNDLE_BYTES", 5)
++
++    (proof_dir / "file2.txt").write_text("123456", encoding="utf-8")
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text("id: BUNDLE-1\ntitle: Bundle\n", encoding="utf-8")
++
++    with pytest.raises(ProofInspectionError) as exc_info:
++        inspect_proof_directory(ticket_file, proof_dir)
++    assert exc_info.value.code == "PROOF_BUNDLE_TOO_LARGE"
++
++
++def test_missing_proof_dir(tmp_path: Path) -> None:
++    """Verify missing proof dir raises FileNotFoundError."""
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text("id: T-1\ntitle: Test\n", encoding="utf-8")
++    with pytest.raises(FileNotFoundError):
++        inspect_proof_directory(ticket_file, tmp_path / "does_not_exist")
++    with pytest.raises(NotADirectoryError):
++        inspect_proof_directory(ticket_file, ticket_file)
++
++
++def test_special_device_rejected(tmp_path: Path) -> None:
++    """Verify special FIFO entry in proof directory is rejected."""
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    fifo_path = proof_dir / "pipe.fifo"
++    try:
++        os.mkfifo(fifo_path)
++    except (AttributeError, OSError):
++        pytest.skip("mkfifo not supported on filesystem")
++
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text("id: DEV-1\ntitle: Dev\n", encoding="utf-8")
++
++    with pytest.raises(ProofInspectionError) as exc_info:
++        inspect_proof_directory(ticket_file, proof_dir)
++    assert exc_info.value.code == "PROOF_INVALID_ENTRY"
++
++
++def test_core_artifacts_missing_branches(tmp_path: Path) -> None:
++    """Verify check 1 fails when individual core artifacts are missing."""
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text("id: CORE-1\ntitle: Core\n", encoding="utf-8")
++
++    bundle = inspect_proof_directory(ticket_file, proof_dir)
++    c1 = next(c for c in bundle.deterministic_checks if c.check_id == "CORE_ARTIFACTS_PRESENT")
++    assert c1.passed is False
++    assert "git-diff.patch" in c1.detail
++
++
++def test_unit_tests_missing_and_no_pass_marker(tmp_path: Path) -> None:
++    """Verify check 2 fails when unit tests output lacks pass marker."""
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    (proof_dir / "git-diff.patch").write_text("patch", encoding="utf-8")
++    (proof_dir / "unit-test-results.txt").write_text(
++        "Some random text without pass marker", encoding="utf-8"
++    )
++    (proof_dir / "build-check.txt").write_text("clean", encoding="utf-8")
++
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text("id: UT-1\ntitle: Unit Test\n", encoding="utf-8")
++
++    bundle = inspect_proof_directory(ticket_file, proof_dir)
++    c2 = next(c for c in bundle.deterministic_checks if c.check_id == "UNIT_TESTS_EXIT_ZERO")
++    assert c2.passed is False
++    assert "does not contain a recognized passing summary marker" in c2.detail
++
++
++def test_ui_specialist_gate_missing_viewports(tmp_path: Path) -> None:
++    """Verify check 4 fails when screenshots are missing specific viewports."""
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    (proof_dir / "git-diff.patch").write_text("patch", encoding="utf-8")
++    (proof_dir / "unit-test-results.txt").write_text("10 passed", encoding="utf-8")
++    (proof_dir / "build-check.txt").write_text("clean", encoding="utf-8")
++    (proof_dir / "ui-specialist-review.md").write_text("Verdict: APPROVED", encoding="utf-8")
++
++    screenshots_dir = proof_dir / "screenshots"
++    screenshots_dir.mkdir()
++    _make_png(screenshots_dir / "shot-desktop-1.png", 100, 100)
++    _make_png(screenshots_dir / "shot-desktop-2.png", 100, 100)
++    _make_png(screenshots_dir / "shot-tablet-1.png", 100, 100)
++
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text(
++        "id: UI-VP\ntitle: '[UI] Viewport check'\ngates: [ui-specialist]\n",
++        encoding="utf-8",
++    )
++
++    bundle = inspect_proof_directory(ticket_file, proof_dir)
++    c4 = next(c for c in bundle.deterministic_checks if c.check_id == "UI_SPECIALIST_GATE")
++    assert c4.passed is False
++    assert "mobile" in c4.detail
++
++
++def test_ui_specialist_gate_non_ui_ticket_screenshots_na(tmp_path: Path) -> None:
++    """Verify non-UI ticket with ui-specialist-review.md passes without screenshots."""
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    (proof_dir / "git-diff.patch").write_text("patch", encoding="utf-8")
++    (proof_dir / "unit-test-results.txt").write_text("10 passed", encoding="utf-8")
++    (proof_dir / "build-check.txt").write_text("clean", encoding="utf-8")
++    (proof_dir / "ui-specialist-review.md").write_text("Verdict: APPROVED", encoding="utf-8")
++
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text(
++        "id: NON-UI\n"
++        "title: Non UI Task\n"
++        "gates: [ui-specialist]\n"
++        "screenshots: N/A - Non-UI Ticket\n",
++        encoding="utf-8",
++    )
++
++    bundle = inspect_proof_directory(ticket_file, proof_dir)
++    c4 = next(c for c in bundle.deterministic_checks if c.check_id == "UI_SPECIALIST_GATE")
++    assert c4.passed is True
++    assert "screenshots N/A" in c4.detail
++
++
++def test_api_specialist_gate_variants(tmp_path: Path) -> None:
++    """Verify check 5 fails when api-specialist review is missing or unapproved."""
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    (proof_dir / "git-diff.patch").write_text("patch", encoding="utf-8")
++    (proof_dir / "unit-test-results.txt").write_text("10 passed", encoding="utf-8")
++    (proof_dir / "build-check.txt").write_text("clean", encoding="utf-8")
++    (proof_dir / "ui-specialist-review.md").write_text("Verdict: APPROVED", encoding="utf-8")
++
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text(
++        "id: API-1\ntitle: '[API] Endpoint'\ngates: [api-specialist]\n",
++        encoding="utf-8",
++    )
++
++    # 1. Missing api-specialist-review.md
++    b1 = inspect_proof_directory(ticket_file, proof_dir)
++    c5_1 = next(c for c in b1.deterministic_checks if c.check_id == "API_SPECIALIST_GATE")
++    assert c5_1.passed is False
++
++    # 2. Unapproved api-specialist-review.md
++    (proof_dir / "api-specialist-review.md").write_text("Verdict: REJECTED", encoding="utf-8")
++    b2 = inspect_proof_directory(ticket_file, proof_dir)
++    c5_2 = next(c for c in b2.deterministic_checks if c.check_id == "API_SPECIALIST_GATE")
++    assert c5_2.passed is False
++
++    # 3. Both approved
++    (proof_dir / "api-specialist-review.md").write_text("Verdict: APPROVED", encoding="utf-8")
++    b3 = inspect_proof_directory(ticket_file, proof_dir)
++    c5_3 = next(c for c in b3.deterministic_checks if c.check_id == "API_SPECIALIST_GATE")
++    assert c5_3.passed is True
++
++
++def test_dependency_evaluation_gate_variants(tmp_path: Path) -> None:
++    """Verify check 6 fails on incomplete dependency evaluation."""
++    proof_dir = tmp_path / "proof"
++    proof_dir.mkdir()
++    (proof_dir / "git-diff.patch").write_text("patch", encoding="utf-8")
++    (proof_dir / "unit-test-results.txt").write_text("10 passed", encoding="utf-8")
++    (proof_dir / "build-check.txt").write_text("clean", encoding="utf-8")
++
++    ticket_file = tmp_path / "ticket.yaml"
++    ticket_file.write_text(
++        "id: DEP-1\ntitle: Dep Task\nnew_dependencies: [some-lib]\n",
++        encoding="utf-8",
++    )
++
++    # 1. Missing dependency-evaluation.md
++    b1 = inspect_proof_directory(ticket_file, proof_dir)
++    c6_1 = next(c for c in b1.deterministic_checks if c.check_id == "DEPENDENCY_EVALUATION_GATE")
++    assert c6_1.passed is False
++
++    # 2. Incomplete dependency evaluation (missing sha and signoffs)
++    (proof_dir / "dependency-evaluation.md").write_text("License: Apache-2.0", encoding="utf-8")
++    b2 = inspect_proof_directory(ticket_file, proof_dir)
++    c6_2 = next(c for c in b2.deterministic_checks if c.check_id == "DEPENDENCY_EVALUATION_GATE")
++    assert c6_2.passed is False
++    assert "SHA-256" in c6_2.detail
++
++    # 3. Complete dependency evaluation
++    sha_str = "0123456789abcdef" * 4
++    (proof_dir / "dependency-evaluation.md").write_text(
++        f"License: Apache-2.0\nSHA-256: {sha_str}\nSign-offs: arch-reviewer, qa-eng, sec-eng",
++        encoding="utf-8",
++    )
++    b3 = inspect_proof_directory(ticket_file, proof_dir)
++    c6_3 = next(c for c in b3.deterministic_checks if c.check_id == "DEPENDENCY_EVALUATION_GATE")
++    assert c6_3.passed is True
++
++
++def test_qa_verdict_schema_property() -> None:
++    """Verify QaPacketVerdict.schema property returns expected identifier."""
++    v = QaPacketVerdict(
++        grade="A",
++        readiness="READY",
++        dod_verdicts=[DodItemAudit(criterion="Test", passed=True, evidence_ref="ref")],
++        critical_issues=[],
++        report_markdown="ok",
++    )
++    assert v.schema_ == "kb-qa-verdict/v1"
++    assert v.model_dump(by_alias=True)["schema"] == "kb-qa-verdict/v1"
++
++
++def test_png_wrong_chunk_type(tmp_path: Path) -> None:
++    """Verify PNG without initial IHDR chunk raises ValueError."""
++    bad_file = tmp_path / "wrong_chunk.png"
++    bad_file.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIDAT1234567890123")
++    with pytest.raises(ValueError, match="Expected IHDR chunk"):
++        inspect_png_file(bad_file)
++
++
++def test_parse_ticket_frontmatter_non_dict(tmp_path: Path) -> None:
++    """Verify ticket with frontmatter not resolving to dict."""
++    fm_file = tmp_path / "non_dict.md"
++    fm_file.write_text("---\n'just a string'\n---\nBody", encoding="utf-8")
++    spec = parse_ticket_file(fm_file)
++    assert spec.id == "non_dict"
++
++
++def test_specific_check_failure_branches(tmp_path: Path) -> None:
++    """Verify individual failure branches for unit tests, build check, and screenshots."""
++    # 1. Unit tests with 'failures' word
++    p1 = tmp_path / "p1"
++    p1.mkdir()
++    (p1 / "git-diff.patch").write_text("patch", encoding="utf-8")
++    (p1 / "unit-test-results.txt").write_text("10 passed, 2 failures in 0.1s", encoding="utf-8")
++    (p1 / "build-check.txt").write_text("SyntaxError: bad syntax", encoding="utf-8")
++    t1 = tmp_path / "t1.yaml"
++    t1.write_text("id: T1\ntitle: T1\n", encoding="utf-8")
++    b1 = inspect_proof_directory(t1, p1)
++    checks1 = {c.check_id: c for c in b1.deterministic_checks}
++    assert checks1["UNIT_TESTS_EXIT_ZERO"].passed is False
++    assert checks1["BUILD_CHECK_CLEAN"].passed is False
++
++    # 2. UI Specialist Gate missing desktop screenshot
++    p2 = tmp_path / "p2"
++    p2.mkdir()
++    (p2 / "git-diff.patch").write_text("patch", encoding="utf-8")
++    (p2 / "unit-test-results.txt").write_text("10 passed", encoding="utf-8")
++    (p2 / "build-check.txt").write_text("clean", encoding="utf-8")
++    (p2 / "ui-specialist-review.md").write_text("Verdict: APPROVED", encoding="utf-8")
++    s2 = p2 / "screenshots"
++    s2.mkdir()
++    _make_png(s2 / "shot-tablet.png", 100, 100)
++    _make_png(s2 / "shot-mobile-1.png", 100, 100)
++    _make_png(s2 / "shot-mobile-2.png", 100, 100)
++    t2 = tmp_path / "t2.yaml"
++    t2.write_text("id: T2\ntitle: '[UI] UI T2'\ngates: [ui-specialist]\n", encoding="utf-8")
++    b2 = inspect_proof_directory(t2, p2)
++    c4 = next(c for c in b2.deterministic_checks if c.check_id == "UI_SPECIALIST_GATE")
++    assert c4.passed is False
++    assert "desktop" in c4.detail
++
++    # 3. UI Specialist Gate missing tablet screenshot
++    p3 = tmp_path / "p3"
++    p3.mkdir()
++    (p3 / "git-diff.patch").write_text("patch", encoding="utf-8")
++    (p3 / "unit-test-results.txt").write_text("10 passed", encoding="utf-8")
++    (p3 / "build-check.txt").write_text("clean", encoding="utf-8")
++    (p3 / "ui-specialist-review.md").write_text("Verdict: APPROVED", encoding="utf-8")
++    s3 = p3 / "screenshots"
++    s3.mkdir()
++    _make_png(s3 / "shot-desktop.png", 100, 100)
++    _make_png(s3 / "shot-mobile-1.png", 100, 100)
++    _make_png(s3 / "shot-mobile-2.png", 100, 100)
++    b3 = inspect_proof_directory(t2, p3)
++    c4_3 = next(c for c in b3.deterministic_checks if c.check_id == "UI_SPECIALIST_GATE")
++    assert c4_3.passed is False
++    assert "tablet" in c4_3.detail
+diff --git a/docs/qa/KANBA-50/build-check.txt b/docs/qa/KANBA-50/build-check.txt
+new file mode 100644
+index 0000000..2846caf
+--- /dev/null
++++ b/docs/qa/KANBA-50/build-check.txt
+@@ -0,0 +1,42 @@
++=== 1. ruff check agent ===
++All checks passed!
++EXIT CODE: 0
++
++=== 2. ruff format --check agent ===
++46 files already formatted
++EXIT CODE: 0
++
++=== 3. mypy --strict agent ===
++Success: no issues found in 44 source files
++EXIT CODE: 0
++
++=== 4. lint-imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 125 files, 182 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++
++Contracts: 1 kept, 0 broken.
++EXIT CODE: 0
++
++=== 5. check_no_dashes ===
++EXIT CODE: 0
++
++=== 6. license_gate ===
++SUMMARY python=92 node=1 violations=0
++EXIT CODE: 0
+diff --git a/docs/qa/KANBA-50/cli-run.txt b/docs/qa/KANBA-50/cli-run.txt
+new file mode 100644
+index 0000000..70ab508
+--- /dev/null
++++ b/docs/qa/KANBA-50/cli-run.txt
+@@ -0,0 +1,105 @@
++=== CLI RUN (a): kan-142-ready with qa_packet_grade_a_ready.yaml (exit 0) ===
++=== 1. RENDERED CONTEXT ===
++Ticket: KAN-142 ([UI] Harden Multi-Card OIDC & LDAPS Auth Studio)
++Proof Directory: /tmp/kb-wt-KANBA-50/examples/qa_packets/kan-142-ready
++Files Inspected: 8
++Deterministic Checks: 7/7 passed
++  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.
++  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.
++  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.
++  - [PASS] UI_SPECIALIST_GATE: UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile).
++  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.
++  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.
++  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.
++
++=== 2. TOOL TRACE ===
++Calls: 15; Tools: deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file
++
++=== 3. LATENCY & TOKENS ===
++TTFT: 12.0ms | Total: 4.8ms | Tokens: 520 in, 140 out
++
++=== 4. SCHEMA & POLICY STATUS ===
++Valid: true (valid: true) | Status: grade=A, readiness=READY
++Grade: A | Readiness: READY
++Detail: Grade: A | Readiness: READY
++exit=0
++
++=== CLI RUN (b): kan-142-missing-ui-review with qa_packet_grade_a_ready.yaml (exit 2) ===
++=== 1. RENDERED CONTEXT ===
++Ticket: KAN-142 ([UI] Harden Multi-Card OIDC & LDAPS Auth Studio)
++Proof Directory: /tmp/kb-wt-KANBA-50/examples/qa_packets/kan-142-missing-ui-review
++Files Inspected: 3
++Deterministic Checks: 6/7 passed
++  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.
++  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.
++  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.
++  - [FAIL] UI_SPECIALIST_GATE: ui-specialist-review.md is missing or empty.
++  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.
++  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.
++  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.
++
++=== 2. TOOL TRACE ===
++Calls: 10; Tools: deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, inspect_file, inspect_file, inspect_file
++
++=== 3. LATENCY & TOKENS ===
++TTFT: 12.0ms | Total: 4.1ms | Tokens: 520 in, 140 out
++
++=== 4. SCHEMA & POLICY STATUS ===
++Valid: false (valid: false) | Status: grade=A, readiness=NEEDS_WORK
++Grade: A | Readiness: NEEDS_WORK
++Error Code: FANTASY_APPROVAL_BLOCKED
++Detail: Grade: A | Readiness: NEEDS_WORK | Policy Override: FANTASY_APPROVAL_BLOCKED
++exit=2
++
++=== CLI RUN (c): kan-142-ready with qa_packet_fantasy_approval.yaml (exit 2) ===
++=== 1. RENDERED CONTEXT ===
++Ticket: KAN-142 ([UI] Harden Multi-Card OIDC & LDAPS Auth Studio)
++Proof Directory: /tmp/kb-wt-KANBA-50/examples/qa_packets/kan-142-ready
++Files Inspected: 8
++Deterministic Checks: 7/7 passed
++  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.
++  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.
++  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.
++  - [PASS] UI_SPECIALIST_GATE: UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile).
++  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.
++  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.
++  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.
++
++=== 2. TOOL TRACE ===
++Calls: 15; Tools: deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file, inspect_file
++
++=== 3. LATENCY & TOKENS ===
++TTFT: 10.0ms | Total: 5.0ms | Tokens: 520 in, 150 out
++
++=== 4. SCHEMA & POLICY STATUS ===
++Valid: false (valid: false) | Status: grade=B+, readiness=NEEDS_WORK
++Grade: B+ | Readiness: NEEDS_WORK
++Error Code: FANTASY_APPROVAL_BLOCKED
++Detail: Grade: B+ | Readiness: NEEDS_WORK | Policy Override: FANTASY_APPROVAL_BLOCKED
++exit=2
++
++=== CLI RUN (d): KB-P5-27 self-check --deterministic-only against docs/qa/KANBA-50/ (exit 0) ===
++=== 1. RENDERED CONTEXT ===
++Ticket: KB-P5-27 ([Phase 5 / Agent CLI] kanban-agent validate-qa-packet: local passive forensic reality-checker validator over docs/qa/<ID>/ + ticket YAML/MD)
++Proof Directory: /tmp/kb-wt-KANBA-50/docs/qa/KANBA-50
++Files Inspected: 4
++Deterministic Checks: 7/7 passed
++  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.
++  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.
++  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.
++  - [PASS] UI_SPECIALIST_GATE: N/A - Ticket does not require UI specialist gate.
++  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.
++  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.
++  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.
++
++=== 2. TOOL TRACE ===
++Calls: 11; Tools: deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, deterministic_check, inspect_file, inspect_file, inspect_file, inspect_file
++
++=== 3. LATENCY & TOKENS ===
++TTFT: N/A | Total: 15.9ms | Tokens: 0 in, 0 out
++
++=== 4. SCHEMA & POLICY STATUS ===
++Valid: true (valid: true) | Status: grade=A, readiness=READY
++Grade: A | Readiness: READY
++Detail: Grade: A | Readiness: READY
++exit=0
+diff --git a/docs/qa/KANBA-50/message-to-reality-checker.md b/docs/qa/KANBA-50/message-to-reality-checker.md
+new file mode 100644
+index 0000000..7249073
+--- /dev/null
++++ b/docs/qa/KANBA-50/message-to-reality-checker.md
+@@ -0,0 +1,64 @@
++# Message to Reality-Checker: Forensic Verification Proof for KANBA-50
++
++## Ticket Metadata
++- **Ticket ID:** KANBA-50 (`KB-P5-27`)
++- **Title:** [Phase 5 / Agent CLI] kanban-agent validate-qa-packet: local passive forensic reality-checker validator over docs/qa/<ID>/ + ticket YAML/MD
++- **Epic:** KB-E15 (Agent & Automation Runtime)
++- **Gates:** reality-checker
++- **Screenshots:** N/A - Non-UI Ticket
++
++---
++
++## Executive Summary
++
++`KANBA-50` implements the local, passive forensic `reality-checker` validation engine and CLI command `kanban-agent validate-qa-packet`.
++
++This implementation guarantees:
++1. **Zero Command/Network Execution Invariant:** Operates strictly in passive read-only audit mode over filesystem evidence. Symlinks escaping the target bundle are rejected with `PROOF_SYMLINK_ESCAPE` before reading. Special device files (FIFOs, sockets, block/char devices) are rejected with `PROOF_INVALID_ENTRY`. File reads are capped at 2 MiB per file and 16 MiB per bundle (`PROOF_BUNDLE_TOO_LARGE`). PNG screenshots are inspected via passive stdlib byte header inspection (`89 50 4E 47 0D 0A 1A 0A` + IHDR `width x height`) without decoding untrusted image payloads.
++2. **Dual-Format Ticket Parsing:** Seamlessly parses both YAML ticket specifications (`examples/tickets/kan-142.yaml`) and Markdown ticket documents containing YAML frontmatter (`docs/tickets/KB-*.md`), extracting ID, title, epic, specialist gates, dependencies, and Definition of Done criteria.
++3. **Seven Deterministic Structural Checks:**
++   - `CORE_ARTIFACTS_PRESENT`: Verifies `git-diff.patch`, `unit-test-results.txt`, and `build-check.txt` exist and are non-empty.
++   - `UNIT_TESTS_EXIT_ZERO`: Verifies zero failure/error exit markers and presence of passing summary.
++   - `BUILD_CHECK_CLEAN`: Verifies zero unhandled error exit markers in build logs.
++   - `UI_SPECIALIST_GATE`: Verifies `ui-specialist-review.md` has explicit APPROVED verdict and `screenshots/` has >= 3 valid PNGs across desktop, tablet, and mobile viewports (or respects non-UI ticket declaration).
++   - `API_SPECIALIST_GATE`: Verifies dual approval from both API and UI specialist reviews.
++   - `DEPENDENCY_EVALUATION_GATE`: Verifies `dependency-evaluation.md` references permissive license, SHA-256 hash, and specialist sign-offs.
++   - `NO_RAW_SECRETS_IN_PROOF`: Scans all text artifacts via `outbound_secret_scrubber`, failing if unredacted live secrets appear, and sanitizing before LLM prompt assembly.
++4. **Hard Anti-Fantasy Approval Invariant (Code-Enforced):** Even if an LLM hallucinates `readiness: READY`, the code automatically forces `readiness = NEEDS_WORK` with `policy_override = "FANTASY_APPROVAL_BLOCKED"` if ANY deterministic check failed, or grade is not A, or critical issues exist, or any DoD item is not passed.
++5. **Standardized S15.3 CLI Reporting:** Emits all 4 standardized sections (Rendered Context, Tool Trace, Latency/Tokens, Schema/Policy Status) with deterministic exit codes: 0 for full pass, 2 for gate/policy failure, 1 for runtime error.
++
++---
++
++## Traceability & Definition of Done Checklist
++
++| DoD Criterion | Verification Status | Forensic Evidence Reference |
++| :--- | :--- | :--- |
++| **File Existence & Implementation** | PASS | `agent/qa_validator/schemas.py`, `agent/qa_validator/bundle_inspector.py`, `agent/qa_validator/auditor.py`, `agent/schemas/kb-qa-verdict-v1.json`, `agent/cli_commands/validate_qa_packet.py`, `examples/qa_packets/kan-142-ready/`, `examples/qa_packets/kan-142-missing-ui-review/`, 3 cassettes under `tests/fixtures/ai/`, registered in `agent/cli.py` |
++| **Unit Tests & Coverage** | PASS (97.08% >= 95%) | `docs/qa/KANBA-50/unit-test-results.txt` (42 passed in 3.10s, 0 failures) |
++| **Build / Type / Lint Clean** | PASS | `docs/qa/KANBA-50/build-check.txt` (ruff 0 errors, ruff format 0 diffs, mypy 0 issues in 44 files, lint-imports 1 kept 0 broken, check_no_dashes 0 violations, make license 0 violations) |
++| **CLI Validation** | PASS | `docs/qa/KANBA-50/cli-run.txt` (all 4 runs (a)-(d) executed with expected exit codes 0, 2, 2, 0) |
++| **JSON Schema Validation** | PASS | `docs/qa/KANBA-50/report-sample.json` (captured `--report json` for both READY and FANTASY_APPROVAL_BLOCKED runs) |
++| **Unified Git Diff** | PASS | `docs/qa/KANBA-50/git-diff.patch` |
++| **Screenshots** | N/A | Non-UI Ticket (declared on ticket) |
++
++---
++
++## Detailed Test Case Coverage Matrix
++
++1. **Test Case 1 (Positive S15.3 run):** `test_case_1_positive_s15_3_example_4` validates `kan-142-ready` with `qa_packet_grade_a_ready.yaml` exits 0 with all 4 sections rendered.
++2. **Test Case 2 (Positive Markdown frontmatter):** `test_case_2_positive_markdown_frontmatter_ticket` validates reading `docs/tickets/KB-P5-27.md` directly.
++3. **Test Case 3 (Negative specialist gates):** `test_case_3_negative_specialist_gates_enforced` validates missing `ui-specialist-review.md` triggers gate failure and `FANTASY_APPROVAL_BLOCKED`.
++4. **Test Case 4 (Anti-fantasy invariant):** `test_case_4_anti_fantasy_invariant` verifies `qa_packet_fantasy_approval.yaml` downgrades to `NEEDS_WORK` with exit 2.
++5. **Test Case 5 (Security symlink escape & secret leak):** `test_case_5_security_symlink_and_secret` verifies symlink `/etc/passwd` rejected with `PROOF_SYMLINK_ESCAPE` and raw tokens trigger `NO_RAW_SECRETS_IN_PROOF` and get scrubbed.
++6. **Test Case 6 (Passive guarantee):** `test_case_6_passive_guarantee_zero_subprocesses` spies on subprocess invocations and verifies exactly 0 subprocess calls are made during validation; `pytest-socket` `--disable-socket` passes.
++7. **Test Case 7 (Boundary & JSON Schema):** `test_case_7_boundary_and_json_schema` verifies file > 2 MiB rejected with `PROOF_BUNDLE_TOO_LARGE`, `--deterministic-only` performs 0 provider calls, and output validates against `kb-qa-verdict-v1.json`.
++
++---
++
++## Raw Artifacts Index (`docs/qa/KANBA-50/`)
++- `git-diff.patch`: Unified git diff of branch `feat/KANBA-50`
++- `unit-test-results.txt`: DoD pytest command output with line + branch coverage
++- `build-check.txt`: Raw outputs of all static quality gates
++- `cli-run.txt`: Raw outputs of CLI invocations (a)-(d)
++- `report-sample.json`: Captured JSON report samples
++- `message-to-reality-checker.md`: This verification document
+diff --git a/docs/qa/KANBA-50/report-sample.json b/docs/qa/KANBA-50/report-sample.json
+new file mode 100644
+index 0000000..1823fa3
+--- /dev/null
++++ b/docs/qa/KANBA-50/report-sample.json
+@@ -0,0 +1,408 @@
++{
++  "ready_run": {
++    "schema_version": "kb-cli-validation-report/v1",
++    "command": "validate-qa-packet",
++    "rendered_context": "Ticket: KAN-142 ([UI] Harden Multi-Card OIDC & LDAPS Auth Studio)\nProof Directory: /tmp/kb-wt-KANBA-50/examples/qa_packets/kan-142-ready\nFiles Inspected: 8\nDeterministic Checks: 7/7 passed\n  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.\n  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.\n  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.\n  - [PASS] UI_SPECIALIST_GATE: UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile).\n  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.\n  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.\n  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.",
++    "tool_trace": [
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "CORE_ARTIFACTS_PRESENT"
++        },
++        "result": {
++          "passed": true,
++          "detail": "Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "UNIT_TESTS_EXIT_ZERO"
++        },
++        "result": {
++          "passed": true,
++          "detail": "Unit tests executed cleanly with zero failures and verified passing summary."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "BUILD_CHECK_CLEAN"
++        },
++        "result": {
++          "passed": true,
++          "detail": "Build, typecheck, and linter checks executed cleanly with zero error exit markers."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "UI_SPECIALIST_GATE"
++        },
++        "result": {
++          "passed": true,
++          "detail": "UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile)."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "API_SPECIALIST_GATE"
++        },
++        "result": {
++          "passed": true,
++          "detail": "N/A - Ticket does not require API specialist gate."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "DEPENDENCY_EVALUATION_GATE"
++        },
++        "result": {
++          "passed": true,
++          "detail": "N/A - No new dependencies declared on ticket."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "NO_RAW_SECRETS_IN_PROOF"
++        },
++        "result": {
++          "passed": true,
++          "detail": "Zero raw secrets detected in proof bundle text artifacts."
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "build-check.txt"
++        },
++        "result": {
++          "bytes": 215,
++          "is_png": false,
++          "png_dimensions": null
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "git-diff.patch"
++        },
++        "result": {
++          "bytes": 324,
++          "is_png": false,
++          "png_dimensions": null
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "message-to-reality-checker.md"
++        },
++        "result": {
++          "bytes": 396,
++          "is_png": false,
++          "png_dimensions": null
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "screenshots/01-auth-studio-desktop.png"
++        },
++        "result": {
++          "bytes": 8566,
++          "is_png": true,
++          "png_dimensions": "1920x1080"
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "screenshots/02-auth-studio-tablet.png"
++        },
++        "result": {
++          "bytes": 4026,
++          "is_png": true,
++          "png_dimensions": "1024x768"
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "screenshots/03-auth-studio-mobile.png"
++        },
++        "result": {
++          "bytes": 2833,
++          "is_png": true,
++          "png_dimensions": "390x844"
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "ui-specialist-review.md"
++        },
++        "result": {
++          "bytes": 502,
++          "is_png": false,
++          "png_dimensions": null
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "unit-test-results.txt"
++        },
++        "result": {
++          "bytes": 1014,
++          "is_png": false,
++          "png_dimensions": null
++        }
++      }
++    ],
++    "metrics": {
++      "ttft_ms": 12.0,
++      "total_latency_ms": 5.277274991385639,
++      "prompt_tokens": 520,
++      "completion_tokens": 140,
++      "route_trace": []
++    },
++    "schema_status": {
++      "valid": true,
++      "status": "grade=A, readiness=READY",
++      "error_code": null,
++      "detail": "Grade: A | Readiness: READY"
++    },
++    "qa_verdict": {
++      "schema": "kb-qa-verdict/v1",
++      "grade": "A",
++      "readiness": "READY",
++      "dod_verdicts": [
++        {
++          "criterion": "Unit test coverage >= 95%",
++          "passed": true,
++          "evidence_ref": "docs/qa/KAN-142/unit-test-results.txt"
++        },
++        {
++          "criterion": "UI specialist gate review approved",
++          "passed": true,
++          "evidence_ref": "docs/qa/KAN-142/ui-specialist-review.md"
++        },
++        {
++          "criterion": "Responsive screenshots for desktop, tablet, and mobile",
++          "passed": true,
++          "evidence_ref": "docs/qa/KAN-142/screenshots/"
++        }
++      ],
++      "critical_issues": [],
++      "report_markdown": "# Forensic Reality-Checker Certification: KAN-142\n\nTicket KAN-142 satisfies 100% of its Definition of Done items with verified passive proofs. Grade: A, Production Readiness: READY.",
++      "policy_override": null
++    }
++  },
++  "fantasy_approval_blocked_run": {
++    "schema_version": "kb-cli-validation-report/v1",
++    "command": "validate-qa-packet",
++    "rendered_context": "Ticket: KAN-142 ([UI] Harden Multi-Card OIDC & LDAPS Auth Studio)\nProof Directory: /tmp/kb-wt-KANBA-50/examples/qa_packets/kan-142-ready\nFiles Inspected: 8\nDeterministic Checks: 7/7 passed\n  - [PASS] CORE_ARTIFACTS_PRESENT: Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present.\n  - [PASS] UNIT_TESTS_EXIT_ZERO: Unit tests executed cleanly with zero failures and verified passing summary.\n  - [PASS] BUILD_CHECK_CLEAN: Build, typecheck, and linter checks executed cleanly with zero error exit markers.\n  - [PASS] UI_SPECIALIST_GATE: UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile).\n  - [PASS] API_SPECIALIST_GATE: N/A - Ticket does not require API specialist gate.\n  - [PASS] DEPENDENCY_EVALUATION_GATE: N/A - No new dependencies declared on ticket.\n  - [PASS] NO_RAW_SECRETS_IN_PROOF: Zero raw secrets detected in proof bundle text artifacts.",
++    "tool_trace": [
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "CORE_ARTIFACTS_PRESENT"
++        },
++        "result": {
++          "passed": true,
++          "detail": "Core artifacts git-diff.patch, unit-test-results.txt, and build-check.txt present."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "UNIT_TESTS_EXIT_ZERO"
++        },
++        "result": {
++          "passed": true,
++          "detail": "Unit tests executed cleanly with zero failures and verified passing summary."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "BUILD_CHECK_CLEAN"
++        },
++        "result": {
++          "passed": true,
++          "detail": "Build, typecheck, and linter checks executed cleanly with zero error exit markers."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "UI_SPECIALIST_GATE"
++        },
++        "result": {
++          "passed": true,
++          "detail": "UI specialist review approved with 3 responsive screenshots (desktop, tablet, mobile)."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "API_SPECIALIST_GATE"
++        },
++        "result": {
++          "passed": true,
++          "detail": "N/A - Ticket does not require API specialist gate."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "DEPENDENCY_EVALUATION_GATE"
++        },
++        "result": {
++          "passed": true,
++          "detail": "N/A - No new dependencies declared on ticket."
++        }
++      },
++      {
++        "tool": "deterministic_check",
++        "args": {
++          "check_id": "NO_RAW_SECRETS_IN_PROOF"
++        },
++        "result": {
++          "passed": true,
++          "detail": "Zero raw secrets detected in proof bundle text artifacts."
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "build-check.txt"
++        },
++        "result": {
++          "bytes": 215,
++          "is_png": false,
++          "png_dimensions": null
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "git-diff.patch"
++        },
++        "result": {
++          "bytes": 324,
++          "is_png": false,
++          "png_dimensions": null
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "message-to-reality-checker.md"
++        },
++        "result": {
++          "bytes": 396,
++          "is_png": false,
++          "png_dimensions": null
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "screenshots/01-auth-studio-desktop.png"
++        },
++        "result": {
++          "bytes": 8566,
++          "is_png": true,
++          "png_dimensions": "1920x1080"
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "screenshots/02-auth-studio-tablet.png"
++        },
++        "result": {
++          "bytes": 4026,
++          "is_png": true,
++          "png_dimensions": "1024x768"
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "screenshots/03-auth-studio-mobile.png"
++        },
++        "result": {
++          "bytes": 2833,
++          "is_png": true,
++          "png_dimensions": "390x844"
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "ui-specialist-review.md"
++        },
++        "result": {
++          "bytes": 502,
++          "is_png": false,
++          "png_dimensions": null
++        }
++      },
++      {
++        "tool": "inspect_file",
++        "args": {
++          "path": "unit-test-results.txt"
++        },
++        "result": {
++          "bytes": 1014,
++          "is_png": false,
++          "png_dimensions": null
++        }
++      }
++    ],
++    "metrics": {
++      "ttft_ms": 10.0,
++      "total_latency_ms": 5.648930964525789,
++      "prompt_tokens": 520,
++      "completion_tokens": 150,
++      "route_trace": []
++    },
++    "schema_status": {
++      "valid": false,
++      "status": "grade=B+, readiness=NEEDS_WORK",
++      "error_code": "FANTASY_APPROVAL_BLOCKED",
++      "detail": "Grade: B+ | Readiness: NEEDS_WORK | Policy Override: FANTASY_APPROVAL_BLOCKED"
++    },
++    "qa_verdict": {
++      "schema": "kb-qa-verdict/v1",
++      "grade": "B+",
++      "readiness": "NEEDS_WORK",
++      "dod_verdicts": [
++        {
++          "criterion": "Unit test coverage >= 95%",
++          "passed": false,
++          "evidence_ref": "docs/qa/KAN-142/unit-test-results.txt"
++        },
++        {
++          "criterion": "UI specialist gate review approved",
++          "passed": true,
++          "evidence_ref": "docs/qa/KAN-142/ui-specialist-review.md"
++        },
++        {
++          "criterion": "Responsive screenshots for desktop, tablet, and mobile",
++          "passed": true,
++          "evidence_ref": "docs/qa/KAN-142/screenshots/"
++        }
++      ],
++      "critical_issues": [],
++      "report_markdown": "# Premature Fantasy Approval\n\nModel prematurely declared READY despite failing unit test criterion.",
++      "policy_override": "FANTASY_APPROVAL_BLOCKED"
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/docs/qa/KANBA-50/unit-test-results.txt b/docs/qa/KANBA-50/unit-test-results.txt
+new file mode 100644
+index 0000000..d212443
+--- /dev/null
++++ b/docs/qa/KANBA-50/unit-test-results.txt
+@@ -0,0 +1,16 @@
++..........................................                               [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                       Stmts   Miss Branch BrPart  Cover   Missing
++--------------------------------------------------------------------------------------
++agent/cli_commands/validate_qa_packet.py     164      0     34      0   100%
++agent/qa_validator/__init__.py                 5      0      0      0   100%
++agent/qa_validator/auditor.py                 80      0     28      3    97%   97->99, 107->110, 140->123
++agent/qa_validator/bundle_inspector.py       311     10    128     10    95%   94-96, 119->128, 152->141, 161->166, 163->166, 166->171, 366, 430, 474, 482, 536, 630-631
++agent/qa_validator/schemas.py                 37      0      0      0   100%
++--------------------------------------------------------------------------------------
++TOTAL                                        597     10    190     13    97%
++Required test coverage of 95% reached. Total coverage: 97.08%
++42 passed in 3.10s
++exit=0
+diff --git a/examples/qa_packets/kan-142-missing-ui-review/build-check.txt b/examples/qa_packets/kan-142-missing-ui-review/build-check.txt
+new file mode 100644
+index 0000000..c1d0c88
+--- /dev/null
++++ b/examples/qa_packets/kan-142-missing-ui-review/build-check.txt
+@@ -0,0 +1,9 @@
++--- 1. uv run ruff check . ---
++All checks passed!
++
++--- 2. uv run mypy --strict agent ---
++Success: no issues found in 14 source files
++
++--- 3. uv run lint-imports ---
++Contracts: 1 kept, 0 broken.
++0 errors, 0 warnings
+diff --git a/examples/qa_packets/kan-142-missing-ui-review/git-diff.patch b/examples/qa_packets/kan-142-missing-ui-review/git-diff.patch
+new file mode 100644
+index 0000000..ac6abff
+--- /dev/null
++++ b/examples/qa_packets/kan-142-missing-ui-review/git-diff.patch
+@@ -0,0 +1,11 @@
++diff --git a/kanban/web/src/auth/AuthStudio.tsx b/kanban/web/src/auth/AuthStudio.tsx
++new file mode 100644
++index 0000000..e69de29
++--- /dev/null
+++++ b/kanban/web/src/auth/AuthStudio.tsx
++@@ -0,0 +1,15 @@
+++import React from "react";
+++
+++export function AuthStudio() {
+++  return <div className="auth-studio">Auth Studio</div>;
+++}
+diff --git a/examples/qa_packets/kan-142-missing-ui-review/unit-test-results.txt b/examples/qa_packets/kan-142-missing-ui-review/unit-test-results.txt
+new file mode 100644
+index 0000000..c65051e
+--- /dev/null
++++ b/examples/qa_packets/kan-142-missing-ui-review/unit-test-results.txt
+@@ -0,0 +1,18 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.5.0
++rootdir: /tmp/kb-wt-KANBA-50
++configfile: pyproject.toml
++plugins: anyio-4.8.0, asyncio-1.4.1.post1, cov-7.1.0, socket-0.8.1, xdist-3.8.0
++collected 109 items
++
++............................................................................. [ 70%]
++..................................                                            [100%]
++
++---------- coverage: platform linux, python 3.12.7 -----------
++Name                                    Stmts   Miss Branch BrPart  Cover   Missing
++-----------------------------------------------------------------------------------
++src/auth/AuthStudio.tsx                    45      0      6      0   100%
++-----------------------------------------------------------------------------------
++TOTAL                                      45      0      6      0   100%
++
++============================= 109 passed in 0.42s ==============================
+diff --git a/examples/qa_packets/kan-142-ready/build-check.txt b/examples/qa_packets/kan-142-ready/build-check.txt
+new file mode 100644
+index 0000000..c1d0c88
+--- /dev/null
++++ b/examples/qa_packets/kan-142-ready/build-check.txt
+@@ -0,0 +1,9 @@
++--- 1. uv run ruff check . ---
++All checks passed!
++
++--- 2. uv run mypy --strict agent ---
++Success: no issues found in 14 source files
++
++--- 3. uv run lint-imports ---
++Contracts: 1 kept, 0 broken.
++0 errors, 0 warnings
+diff --git a/examples/qa_packets/kan-142-ready/git-diff.patch b/examples/qa_packets/kan-142-ready/git-diff.patch
+new file mode 100644
+index 0000000..ac6abff
+--- /dev/null
++++ b/examples/qa_packets/kan-142-ready/git-diff.patch
+@@ -0,0 +1,11 @@
++diff --git a/kanban/web/src/auth/AuthStudio.tsx b/kanban/web/src/auth/AuthStudio.tsx
++new file mode 100644
++index 0000000..e69de29
++--- /dev/null
+++++ b/kanban/web/src/auth/AuthStudio.tsx
++@@ -0,0 +1,15 @@
+++import React from "react";
+++
+++export function AuthStudio() {
+++  return <div className="auth-studio">Auth Studio</div>;
+++}
+diff --git a/examples/qa_packets/kan-142-ready/message-to-reality-checker.md b/examples/qa_packets/kan-142-ready/message-to-reality-checker.md
+new file mode 100644
+index 0000000..bbd1816
+--- /dev/null
++++ b/examples/qa_packets/kan-142-ready/message-to-reality-checker.md
+@@ -0,0 +1,6 @@
++# Message to Reality-Checker for KAN-142
++
++All 3 Definition of Done items are verified:
++1. Unit test coverage >= 95%: 109/109 tests passed with 100% coverage (unit-test-results.txt).
++2. UI specialist gate review approved: ui-specialist-review.md contains explicit APPROVED verdict.
++3. Responsive screenshots: 3 annotated screenshots covering desktop, tablet, and mobile viewports in screenshots/.
+diff --git a/examples/qa_packets/kan-142-ready/screenshots/01-auth-studio-desktop.png b/examples/qa_packets/kan-142-ready/screenshots/01-auth-studio-desktop.png
+new file mode 100644
+index 0000000..5bfc323
+Binary files /dev/null and b/examples/qa_packets/kan-142-ready/screenshots/01-auth-studio-desktop.png differ
+diff --git a/examples/qa_packets/kan-142-ready/screenshots/02-auth-studio-tablet.png b/examples/qa_packets/kan-142-ready/screenshots/02-auth-studio-tablet.png
+new file mode 100644
+index 0000000..360829a
+Binary files /dev/null and b/examples/qa_packets/kan-142-ready/screenshots/02-auth-studio-tablet.png differ
+diff --git a/examples/qa_packets/kan-142-ready/screenshots/03-auth-studio-mobile.png b/examples/qa_packets/kan-142-ready/screenshots/03-auth-studio-mobile.png
+new file mode 100644
+index 0000000..086a0a3
+Binary files /dev/null and b/examples/qa_packets/kan-142-ready/screenshots/03-auth-studio-mobile.png differ
+diff --git a/examples/qa_packets/kan-142-ready/ui-specialist-review.md b/examples/qa_packets/kan-142-ready/ui-specialist-review.md
+new file mode 100644
+index 0000000..b3ea2e6
+--- /dev/null
++++ b/examples/qa_packets/kan-142-ready/ui-specialist-review.md
+@@ -0,0 +1,16 @@
++# UI Specialist Gate Review: KAN-142
++
++## 1. Ticket and Scope
++- Ticket: KAN-142
++- Title: [UI] Harden Multi-Card OIDC & LDAPS Auth Studio
++- Reviewer: ui-specialist
++- Gate: UI Specialist Gate
++
++## 2. Review Findings
++- S6.1 whitespace tokens and card padding verified.
++- Light and dark themes meet WCAG AAA requirements.
++- Responsive breakpoints tested across desktop (1920x1080), tablet (1024x768), and mobile (390x844).
++- 3 screenshots attached in screenshots/ directory.
++
++## 3. Verdict
++Verdict: APPROVED
+diff --git a/examples/qa_packets/kan-142-ready/unit-test-results.txt b/examples/qa_packets/kan-142-ready/unit-test-results.txt
+new file mode 100644
+index 0000000..c65051e
+--- /dev/null
++++ b/examples/qa_packets/kan-142-ready/unit-test-results.txt
+@@ -0,0 +1,18 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.5.0
++rootdir: /tmp/kb-wt-KANBA-50
++configfile: pyproject.toml
++plugins: anyio-4.8.0, asyncio-1.4.1.post1, cov-7.1.0, socket-0.8.1, xdist-3.8.0
++collected 109 items
++
++............................................................................. [ 70%]
++..................................                                            [100%]
++
++---------- coverage: platform linux, python 3.12.7 -----------
++Name                                    Stmts   Miss Branch BrPart  Cover   Missing
++-----------------------------------------------------------------------------------
++src/auth/AuthStudio.tsx                    45      0      6      0   100%
++-----------------------------------------------------------------------------------
++TOTAL                                      45      0      6      0   100%
++
++============================= 109 passed in 0.42s ==============================
+diff --git a/examples/tickets/kan-142.yaml b/examples/tickets/kan-142.yaml
+new file mode 100644
+index 0000000..e164094
+--- /dev/null
++++ b/examples/tickets/kan-142.yaml
+@@ -0,0 +1,18 @@
++id: KAN-142
++title: "[UI] Harden Multi-Card OIDC & LDAPS Auth Studio"
++epic: KB-E3
++gates:
++  - ui-specialist
++  - reality-checker
++new_dependencies: []
++state: In Review
++user_story: |
++  As an Administrator configuring authentication, I need breathable UI cards for OIDC and LDAPS with real-time validation and responsive layout.
++scoped_technical_actions:
++  - Implement Auth Studio cards in web frontend
++  - Add dark and light theme styling with WCAG compliance
++  - Provide desktop, tablet, and mobile responsive views
++definition_of_done:
++  - "Unit test coverage >= 95%"
++  - "UI specialist gate review approved"
++  - "Responsive screenshots for desktop, tablet, and mobile"
+diff --git a/tests/fixtures/ai/qa_packet_fantasy_approval.yaml b/tests/fixtures/ai/qa_packet_fantasy_approval.yaml
+new file mode 100644
+index 0000000..1bee1cf
+--- /dev/null
++++ b/tests/fixtures/ai/qa_packet_fantasy_approval.yaml
+@@ -0,0 +1,24 @@
++cassette_version: 1
++matcher:
++  agent_slug: reality-checker
++  prompt_contains: ["KAN-142"]
++simulated_ttft_ms: 10.0
++usage:
++  prompt_tokens: 520
++  completion_tokens: 150
++final_verdict:
++  schema: kb-qa-verdict/v1
++  grade: B+
++  readiness: READY
++  dod_verdicts:
++    - criterion: "Unit test coverage >= 95%"
++      passed: false
++      evidence_ref: "docs/qa/KAN-142/unit-test-results.txt"
++    - criterion: "UI specialist gate review approved"
++      passed: true
++      evidence_ref: "docs/qa/KAN-142/ui-specialist-review.md"
++    - criterion: "Responsive screenshots for desktop, tablet, and mobile"
++      passed: true
++      evidence_ref: "docs/qa/KAN-142/screenshots/"
++  critical_issues: []
++  report_markdown: "# Premature Fantasy Approval\n\nModel prematurely declared READY despite failing unit test criterion."
+diff --git a/tests/fixtures/ai/qa_packet_grade_a_ready.yaml b/tests/fixtures/ai/qa_packet_grade_a_ready.yaml
+new file mode 100644
+index 0000000..a73a983
+--- /dev/null
++++ b/tests/fixtures/ai/qa_packet_grade_a_ready.yaml
+@@ -0,0 +1,24 @@
++cassette_version: 1
++matcher:
++  agent_slug: reality-checker
++  prompt_contains: ["KAN-142"]
++simulated_ttft_ms: 12.0
++usage:
++  prompt_tokens: 520
++  completion_tokens: 140
++final_verdict:
++  schema: kb-qa-verdict/v1
++  grade: A
++  readiness: READY
++  dod_verdicts:
++    - criterion: "Unit test coverage >= 95%"
++      passed: true
++      evidence_ref: "docs/qa/KAN-142/unit-test-results.txt"
++    - criterion: "UI specialist gate review approved"
++      passed: true
++      evidence_ref: "docs/qa/KAN-142/ui-specialist-review.md"
++    - criterion: "Responsive screenshots for desktop, tablet, and mobile"
++      passed: true
++      evidence_ref: "docs/qa/KAN-142/screenshots/"
++  critical_issues: []
++  report_markdown: "# Forensic Reality-Checker Certification: KAN-142\n\nTicket KAN-142 satisfies 100% of its Definition of Done items with verified passive proofs. Grade: A, Production Readiness: READY."
+diff --git a/tests/fixtures/ai/qa_packet_needs_work.yaml b/tests/fixtures/ai/qa_packet_needs_work.yaml
+new file mode 100644
+index 0000000..d59fc69
+--- /dev/null
++++ b/tests/fixtures/ai/qa_packet_needs_work.yaml
+@@ -0,0 +1,25 @@
++cassette_version: 1
++matcher:
++  agent_slug: reality-checker
++  prompt_contains: ["KAN-142"]
++simulated_ttft_ms: 14.0
++usage:
++  prompt_tokens: 520
++  completion_tokens: 130
++final_verdict:
++  schema: kb-qa-verdict/v1
++  grade: B-
++  readiness: NEEDS_WORK
++  dod_verdicts:
++    - criterion: "Unit test coverage >= 95%"
++      passed: false
++      evidence_ref: "docs/qa/KAN-142/unit-test-results.txt"
++    - criterion: "UI specialist gate review approved"
++      passed: true
++      evidence_ref: "docs/qa/KAN-142/ui-specialist-review.md"
++    - criterion: "Responsive screenshots for desktop, tablet, and mobile"
++      passed: true
++      evidence_ref: "docs/qa/KAN-142/screenshots/"
++  critical_issues:
++    - "Missing boundary test for token expiration in unit-test-results.txt"
++  report_markdown: "# Forensic Reality-Checker Review: KAN-142\n\nTicket KAN-142 requires additional test coverage for token expiration edge cases. Grade: B-, Status: NEEDS_WORK."
