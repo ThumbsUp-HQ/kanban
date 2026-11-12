@@ -87,3 +87,9 @@ layers = [
     "kanban",
     "database",
 ]
+
+[[tool.importlinter.contracts]]
+name = "mcp forbidden from importing database"
+type = "forbidden"
+source_modules = ["mcp"]
+forbidden_modules = ["database"]
