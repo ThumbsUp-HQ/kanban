@@ -1,0 +1,559 @@
+"""Unit tests for deploy.standalone entrypoint and configuration writer."""
+
+from __future__ import annotations
+
+import signal
+import subprocess
+from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock
+
+import pytest
+
+from deploy.standalone.entrypoint import (
+    BIN_ALEMBIC,
+    BIN_INITDB,
+    BIN_PG_CTL,
+    BIN_PG_ISREADY,
+    BIN_SETPRIV,
+    BIN_UVICORN,
+    bootstrap_database,
+    build_child_env,
+    build_uvicorn_command,
+    initialize_cluster,
+    log_phase,
+    main,
+    run_as_postgres,
+    run_migrations,
+    shutdown_uvicorn,
+    start_postgres,
+    supervisor_loop,
+)
+from deploy.standalone.pg_config import configure_postgres
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+# -----------------------------------------------------------------------------
+# Case 1: Positive First Boot
+# -----------------------------------------------------------------------------
+def test_case_1_first_boot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """First boot (no PG_VERSION) runs initdb, pg_ctl, bootstrap, migrations, and uvicorn."""
+    pgdata = tmp_path / "pgdata"
+    alembic_ini = tmp_path / "alembic.ini"
+    alembic_ini.write_text("[alembic]\n", encoding="utf-8")
+
+    recorded_runs: list[dict[str, Any]] = []
+
+    def mock_run(
+        cmd: list[str],
+        *,
+        timeout: float = 30.0,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        recorded_runs.append(
+            {
+                "cmd": cmd,
+                "timeout": timeout,
+                "check": check,
+                "env": env,
+            }
+        )
+        stdout = "1" if "-tAc" in cmd else ""
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout=stdout, stderr="")
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 0
+    mock_proc.returncode = 0
+
+    def mock_popen(
+        cmd: list[str],
+        env: dict[str, str] | None = None,
+        *,
+        shell: bool = False,
+        text: bool = True,
+    ) -> MagicMock:
+        recorded_runs.append({"popen_cmd": cmd, "env": env, "shell": shell, "text": text})
+        return mock_proc
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", mock_popen)
+    monkeypatch.setattr("os.getuid", lambda: 0)
+
+    monkeypatch.setenv("KB_PGDATA_DIR", str(pgdata))
+    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("KB_ALEMBIC_INI", str(alembic_ini))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    rc = main([])
+    assert rc == 0
+
+    commands = [r.get("cmd") for r in recorded_runs if "cmd" in r]
+
+    # 1. Assert initdb command structure
+    initdb_calls = [c for c in commands if c and BIN_INITDB in c]
+    assert len(initdb_calls) == 1
+    assert "--encoding=UTF8" in initdb_calls[0]
+    assert "--locale=C.UTF-8" in initdb_calls[0]
+    assert "--auth-host=reject" in initdb_calls[0]
+
+    # 2. Assert pg_ctl start called
+    pg_start_calls = [c for c in commands if c and BIN_PG_CTL in c and "start" in c]
+    assert len(pg_start_calls) == 1
+
+    # 3. Assert alembic upgrade head called
+    alembic_calls = [c for c in commands if c and BIN_ALEMBIC in c]
+    assert len(alembic_calls) == 1
+    assert "upgrade" in alembic_calls[0]
+    assert "head" in alembic_calls[0]
+
+    # 4. Assert ALTER ROLE kanban_migrator NOLOGIN called
+    nologin_calls = [c for c in commands if c and "ALTER ROLE kanban_migrator NOLOGIN;" in c]
+    assert len(nologin_calls) == 1
+
+    # 5. Assert Uvicorn Popen called
+    popen_calls = [r for r in recorded_runs if "popen_cmd" in r]
+    assert len(popen_calls) == 1
+    assert popen_calls[0]["popen_cmd"][0] == BIN_SETPRIV
+    assert BIN_UVICORN in popen_calls[0]["popen_cmd"]
+
+
+# -----------------------------------------------------------------------------
+# Case 2: Positive Warm Boot and External DB
+# -----------------------------------------------------------------------------
+def test_case_2_warm_boot_skips_initdb(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Warm boot with existing PG_VERSION skips initdb and runs migrations if present."""
+    pgdata = tmp_path / "pgdata"
+    pgdata.mkdir(parents=True)
+    (pgdata / "PG_VERSION").write_text("16\n", encoding="utf-8")
+
+    recorded_cmds: list[list[str]] = []
+
+    def mock_run(
+        cmd: list[str],
+        *,
+        timeout: float = 30.0,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (timeout, check, env)
+        recorded_cmds.append(cmd)
+        stdout = "1" if "-tAc" in cmd else ""
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout=stdout, stderr="")
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 0
+    mock_proc.returncode = 0
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", MagicMock(return_value=mock_proc))
+    monkeypatch.setattr("os.getuid", lambda: 0)
+
+    monkeypatch.setenv("KB_PGDATA_DIR", str(pgdata))
+    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("KB_ALEMBIC_INI", str(tmp_path / "missing_alembic.ini"))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    rc = main([])
+    assert rc == 0
+
+    # Assert initdb was NEVER called
+    initdb_calls = [c for c in recorded_cmds if BIN_INITDB in c]
+    assert len(initdb_calls) == 0
+
+
+def test_case_2_external_db_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When DATABASE_URL is set, MODE=external_db execv Uvicorn with zero PG commands."""
+    recorded_execv: list[tuple[str, list[str]]] = []
+
+    def mock_execv(path: str, args: list[str]) -> None:
+        recorded_execv.append((path, args))
+        raise SystemExit(0)
+
+    monkeypatch.setattr("os.execv", mock_execv)
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://remote-db:5432/kanban")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main([])
+
+    assert exc_info.value.code == 0
+    assert len(recorded_execv) == 1
+    path, args = recorded_execv[0]
+    assert path == BIN_SETPRIV
+    assert "--reuid=65532" in args
+    assert BIN_UVICORN in args
+
+
+# -----------------------------------------------------------------------------
+# Case 3: Security Configuration, Conf, Ident, Child Env, No Shell
+# -----------------------------------------------------------------------------
+def test_case_3_security_configuration(tmp_path: Path) -> None:
+    """Validate zero host lines in pg_hba.conf, listen_addresses empty, and strict child env."""
+    pgdata = tmp_path / "pgdata"
+    run_dir = str(tmp_path / "run")
+
+    # Create dummy postgresql.conf
+    pgdata.mkdir(parents=True)
+    main_conf = pgdata / "postgresql.conf"
+    main_conf.write_text("# main config\n", encoding="utf-8")
+
+    configure_postgres(pgdata, run_dir=run_dir)
+
+    # 1. Assert pg_hba.conf contains zero host lines
+    hba_text = (pgdata / "pg_hba.conf").read_text(encoding="utf-8")
+    for line in hba_text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            assert not stripped.startswith("host"), f"Forbidden host line: {stripped}"
+            assert stripped.startswith("local")
+
+    # 2. Assert kanban.conf has listen_addresses = ''
+    kanban_conf = (pgdata / "conf.d" / "kanban.conf").read_text(encoding="utf-8")
+    assert "listen_addresses = ''" in kanban_conf
+    assert f"unix_socket_directories = '{run_dir}'" in kanban_conf
+    assert "unix_socket_permissions = 0770" in kanban_conf
+
+    # 3. Assert postgresql.conf has include_dir = 'conf.d'
+    updated_main = main_conf.read_text(encoding="utf-8")
+    assert "include_dir = 'conf.d'" in updated_main
+
+    # Re-run configure_postgres to verify idempotency when include_dir already exists
+    configure_postgres(pgdata, run_dir=run_dir)
+    assert main_conf.read_text(encoding="utf-8").count("include_dir = 'conf.d'") == 1
+
+    # 4. Assert Uvicorn command contains security flags
+    cmd = build_uvicorn_command()
+    assert cmd[0] == BIN_SETPRIV
+    assert "--reuid=65532" in cmd
+    assert "--regid=65532" in cmd
+    assert "--clear-groups" in cmd
+    assert "--inh-caps=-all" in cmd
+    assert "--no-new-privs" in cmd
+
+    # 5. Assert child env allowlist strictly enforced
+    child_env = build_child_env()
+    assert set(child_env.keys()) == {
+        "PATH",
+        "KB_WEB_DIST",
+        "KB_DEPLOYMENT_MODE",
+        "DATABASE_URL",
+        "LANG",
+    }
+    assert child_env["KB_DEPLOYMENT_MODE"] == "standalone"
+
+
+# -----------------------------------------------------------------------------
+# Case 4: Negative Error Handlers (Non-root, Timeout, Migration Failure)
+# -----------------------------------------------------------------------------
+def test_case_4_non_root_uid_exits_78(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Non-root UID in standalone mode exits 78 with STANDALONE_REQUIRES_ROOT_ENTRYPOINT."""
+    monkeypatch.setattr("os.getuid", lambda: 1000)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    rc = main([])
+    captured = capsys.readouterr()
+
+    assert rc == 78
+    assert "STANDALONE_REQUIRES_ROOT_ENTRYPOINT" in captured.err
+
+
+def test_case_4_pg_start_timeout_exits_70(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pg_isready never succeeding within timeout calls pg_ctl stop and exits 70."""
+    pgdata = tmp_path / "pgdata"
+    pgdata.mkdir(parents=True)
+    (pgdata / "postgresql.conf").write_text("", encoding="utf-8")
+
+    stopped_calls: list[list[str]] = []
+
+    def mock_run(
+        cmd: list[str],
+        *,
+        timeout: float = 30.0,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (timeout, check, env)
+        if BIN_PG_ISREADY in cmd:
+            return subprocess.CompletedProcess(cmd, returncode=1, stdout="", stderr="")
+        if BIN_PG_CTL in cmd and "stop" in cmd:
+            stopped_calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    simulated_time = 0.0
+
+    def mock_monotonic() -> float:
+        nonlocal simulated_time
+        simulated_time += 4.0
+        return simulated_time
+
+    monkeypatch.setattr("time.monotonic", mock_monotonic)
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
+
+    with pytest.raises(SystemExit) as exc_info:
+        start_postgres(pgdata, run_dir=str(tmp_path / "run"))
+
+    assert exc_info.value.code == 70
+    assert len(stopped_calls) == 1
+    assert "stop" in stopped_calls[0]
+    assert "immediate" in stopped_calls[0]
+
+
+def test_case_4_migration_failure_exits_70(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Alembic upgrade failure calls pg_ctl stop and exits 70."""
+    pgdata = tmp_path / "pgdata"
+    alembic_ini = tmp_path / "alembic.ini"
+    alembic_ini.write_text("[alembic]\n", encoding="utf-8")
+
+    stopped_calls: list[list[str]] = []
+
+    def mock_run(
+        cmd: list[str],
+        *,
+        timeout: float = 30.0,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (timeout, check, env)
+        if BIN_ALEMBIC in cmd:
+            return subprocess.CompletedProcess(
+                cmd, returncode=1, stdout="", stderr="Migration failed syntax error"
+            )
+        if BIN_PG_CTL in cmd and "stop" in cmd:
+            stopped_calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_migrations(pgdata, alembic_ini, run_dir=str(tmp_path / "run"))
+
+    assert exc_info.value.code == 70
+    assert len(stopped_calls) == 1
+    assert "fast" in stopped_calls[0]
+
+
+# -----------------------------------------------------------------------------
+# Case 5: Boundary Signals, Termination Escalation, and Postmaster Death
+# -----------------------------------------------------------------------------
+def test_case_5_shutdown_uvicorn_escalates_to_sigkill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Uvicorn ignoring SIGTERM for > 10s receives SIGKILL."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+
+    simulated_time = 0.0
+
+    def mock_monotonic() -> float:
+        nonlocal simulated_time
+        simulated_time += 4.0
+        return simulated_time
+
+    monkeypatch.setattr("time.monotonic", mock_monotonic)
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+
+    shutdown_uvicorn(mock_proc)
+
+    mock_proc.send_signal.assert_called_once()
+    mock_proc.kill.assert_called_once()
+    mock_proc.wait.assert_called_once()
+
+
+def test_case_5_shutdown_uvicorn_clean_exit() -> None:
+    """Uvicorn exiting cleanly after SIGTERM does not receive SIGKILL."""
+    mock_proc = MagicMock()
+    # First call None, subsequent call 0 (terminated)
+    mock_proc.poll.side_effect = [None, 0]
+
+    shutdown_uvicorn(mock_proc)
+
+    mock_proc.send_signal.assert_called_once()
+    mock_proc.kill.assert_not_called()
+
+
+def test_case_5_shutdown_uvicorn_already_dead() -> None:
+    """shutdown_uvicorn on an already terminated process is a no-op."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 0
+
+    shutdown_uvicorn(mock_proc)
+    mock_proc.send_signal.assert_not_called()
+
+
+def test_case_5_supervisor_detects_postmaster_death(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When PostgreSQL postmaster dies during supervisor loop, Uvicorn terminates and exits 70."""
+    pgdata = tmp_path / "pgdata"
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+
+    def mock_run(
+        cmd: list[str],
+        *,
+        timeout: float = 30.0,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (timeout, check, env)
+        if BIN_PG_CTL in cmd and "status" in cmd:
+            return subprocess.CompletedProcess(
+                cmd, returncode=3, stdout="", stderr="no server running"
+            )
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    simulated_time = 0.0
+
+    def mock_monotonic() -> float:
+        nonlocal simulated_time
+        simulated_time += 1.0
+        return simulated_time
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
+    monkeypatch.setattr("time.monotonic", mock_monotonic)
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+
+    rc = supervisor_loop(mock_proc, pgdata)
+    captured = capsys.readouterr()
+
+    assert rc == 70
+    assert "PG_DIED" in captured.err
+    mock_proc.send_signal.assert_called_once()
+
+
+def test_signal_handler_clean_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Directly test the signal handler installed in main."""
+    registered_handlers: dict[int, Any] = {}
+
+    def mock_signal(sig: int, handler: object) -> None:
+        registered_handlers[sig] = handler
+
+    monkeypatch.setattr(signal, "signal", mock_signal)
+    monkeypatch.setattr("deploy.standalone.entrypoint.supervisor_loop", lambda *_args: 0)
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", MagicMock())
+    monkeypatch.setattr("deploy.standalone.entrypoint.start_postgres", MagicMock())
+    monkeypatch.setattr("deploy.standalone.entrypoint.initialize_cluster", MagicMock())
+    monkeypatch.setattr("deploy.standalone.entrypoint.bootstrap_database", MagicMock())
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_migrations", MagicMock())
+    monkeypatch.setattr("deploy.standalone.entrypoint.configure_postgres", MagicMock())
+    monkeypatch.setattr(subprocess, "Popen", MagicMock())
+    monkeypatch.setattr("os.getuid", lambda: 0)
+
+    main([])
+    assert signal.SIGTERM in registered_handlers
+
+    # Invoke signal handler
+    stopped_pg: list[str] = []
+    monkeypatch.setattr(
+        "deploy.standalone.entrypoint.stop_postgres",
+        lambda _p, **_k: stopped_pg.append("stopped"),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        registered_handlers[signal.SIGTERM](signal.SIGTERM, None)
+
+    assert exc_info.value.code == 0
+    assert len(stopped_pg) == 1
+
+
+# -----------------------------------------------------------------------------
+# Additional Unit Coverage Tests
+# -----------------------------------------------------------------------------
+def test_log_phase(capsys: pytest.CaptureFixture[str]) -> None:
+    """Log phase output matches expected formatting."""
+    log_phase("test_phase", "sample message")
+    captured = capsys.readouterr()
+    assert "[kanban-standalone]" in captured.out
+    assert "test_phase: sample message" in captured.out
+
+
+def test_initialize_cluster_called_process_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Initdb error raises CalledProcessError and writes INITDB_FAILED."""
+    pgdata = tmp_path / "pgdata"
+
+    def mock_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(1, ["initdb"], stderr="initdb failed")
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        initialize_cluster(pgdata)
+
+
+def test_bootstrap_database_creates_database_when_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bootstrap_database executes CREATE DATABASE when check returns not found."""
+    recorded_psql: list[str] = []
+
+    def mock_run(
+        cmd: list[str],
+        *,
+        timeout: float = 30.0,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (timeout, check, env)
+        if "-tAc" in cmd:
+            return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+        if "-c" in cmd:
+            idx = cmd.index("-c")
+            recorded_psql.append(cmd[idx + 1])
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
+    bootstrap_database(run_dir=str(tmp_path))
+
+    create_db_calls = [s for s in recorded_psql if "CREATE DATABASE kanban" in s]
+    assert len(create_db_calls) == 1
+
+
+def test_run_as_postgres_real_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify run_as_postgres wraps commands with setpriv correctly."""
+    recorded_full: list[list[str]] = []
+
+    def mock_sub_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        recorded_full.append(cmd)
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", mock_sub_run)
+    run_as_postgres(["echo", "hello"], timeout=5.0)
+
+    assert len(recorded_full) == 1
+    assert recorded_full[0][:7] == [
+        BIN_SETPRIV,
+        "--reuid=postgres",
+        "--regid=postgres",
+        "--init-groups",
+        "--inh-caps=-all",
+        "--no-new-privs",
+        "--",
+    ]
+    assert recorded_full[0][7:] == ["echo", "hello"]
