@@ -1,0 +1,441 @@
+{
+  "ticket": "KANBA-84",
+  "exchanges": [
+    {
+      "name": "override_creator_200",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/PROV-1/created-by",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "61",
+          "content-type": "application/json"
+        },
+        "body": {
+          "created_by": "@new_creator",
+          "reason": "12345678901234567890"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "2176",
+          "content-type": "application/json",
+          "etag": "\"f1bcb45139ff4ab37eb3c8a5f01ffe9ef80dfa272c478228113de18e75657c75\"",
+          "x-request-id": "728f27a60a924d3ea80d49209ab76a15",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cfdb-b694-735b-b58e-24f7d45c5720",
+          "key": "PROV-1",
+          "summary": "Original issue summary",
+          "description_markdown": "# Provenance test",
+          "description_sha256": "f1bcb45139ff4ab37eb3c8a5f01ffe9ef80dfa272c478228113de18e75657c75",
+          "state": {
+            "id": "01a1cfdb-b641-759c-8246-ea98ddd50a21",
+            "name": "Backlog",
+            "group": "backlog"
+          },
+          "priority": {
+            "slug": "none",
+            "label": "None",
+            "emoji": null
+          },
+          "start_date": null,
+          "due_date": null,
+          "cycle_id": null,
+          "parent": null,
+          "labels": [],
+          "assignees": [],
+          "board_rank": "a000001",
+          "created_by_id": "01a1cfdb-b63c-7d56-87d0-ae62cec5e870",
+          "provenance": {
+            "created_by": {
+              "id": "01a1cfdb-b63c-7d56-87d0-ae62cec5e870",
+              "handle": "new_creator"
+            },
+            "original_created_by": {
+              "id": "01a1cfdb-b636-736b-8600-6d62ee6ee859",
+              "handle": "original_creator"
+            },
+            "overridden": true,
+            "creator_modified_by": {
+              "id": "01a1cfdb-b624-7289-8266-7759c2d7dd6c",
+              "handle": "admin"
+            },
+            "creator_modified_at": "2026-11-12T13:04:05.343605+00:00",
+            "reason": "12345678901234567890"
+          },
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: PROV",
+              "workspace_id": "01a1cfdb-b61e-7d97-975f-db64937d3086",
+              "workspace_name": "Engineering",
+              "project_id": "01a1cfdb-b63f-75d7-a889-990d4e91ea07",
+              "project_key": "PROV",
+              "project_name": "PROV project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1cfdb-b624-7289-8266-7759c2d7dd6c",
+                "handle": "@admin",
+                "display_name": "Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              },
+              {
+                "principal_id": "01a1cfdb-b636-736b-8600-6d62ee6ee859",
+                "handle": "@original_creator",
+                "display_name": "Original_Creator",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK"
+                ],
+                "grant_source": "project_role"
+              },
+              {
+                "principal_id": "01a1cfdb-b63c-7d56-87d0-ae62cec5e870",
+                "handle": "@new_creator",
+                "display_name": "New_Creator",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK"
+                ],
+                "grant_source": "project_role"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "archived_at": null,
+          "archive_eligibility": {
+            "allowed": false,
+            "reason": "Only completed or canceled work items can be archived"
+          }
+        }
+      }
+    },
+    {
+      "name": "override_creator_403_insufficient_capability",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/SEC-1/created-by",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "91",
+          "content-type": "application/json"
+        },
+        "body": {
+          "created_by": "01a1cfdb-b738-7f6d-a7f1-f8f2384b24de",
+          "reason": "Valid reason exceeding ten"
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "x-request-id": "1ea7eab1a6104b889e3bb3a49e824b28",
+          "content-length": "226",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:INSUFFICIENT_CAPABILITY",
+          "title": "Forbidden",
+          "status": 403,
+          "code": "INSUFFICIENT_CAPABILITY",
+          "detail": "Caller lacks PROJECT_ADMIN or SERVER_ADMIN role",
+          "request_id": "1ea7eab1a6104b889e3bb3a49e824b28"
+        }
+      }
+    },
+    {
+      "name": "override_creator_404_not_found",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/SEC-1/created-by",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "91",
+          "content-type": "application/json"
+        },
+        "body": {
+          "created_by": "01a1cfdb-b738-7f6d-a7f1-f8f2384b24de",
+          "reason": "Valid reason exceeding ten"
+        }
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "1e1cfbdc4cb9492e9c2adb56bad0927c",
+          "content-length": "139",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "request_id": "1e1cfbdc4cb9492e9c2adb56bad0927c"
+        }
+      }
+    },
+    {
+      "name": "override_creator_403_aal2_required",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/SEC-1/created-by",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "91",
+          "content-type": "application/json"
+        },
+        "body": {
+          "created_by": "01a1cfdb-b738-7f6d-a7f1-f8f2384b24de",
+          "reason": "Valid reason exceeding ten"
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "x-request-id": "f6b5d8c8550f44539b94082664c3257a",
+          "content-length": "212",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:AAL2_REQUIRED",
+          "title": "Forbidden",
+          "status": 403,
+          "code": "AAL2_REQUIRED",
+          "detail": "AAL2 verification required for administrative actions",
+          "request_id": "f6b5d8c8550f44539b94082664c3257a"
+        }
+      }
+    },
+    {
+      "name": "override_creator_422_reason_required",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/BND-1/created-by",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "74",
+          "content-type": "application/json"
+        },
+        "body": {
+          "created_by": "01a1cfdb-b860-73fe-803a-46bb60399912",
+          "reason": "123456789"
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "c366881a99c64e9b8d2037f5298ca4af",
+          "content-length": "235",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:REASON_REQUIRED",
+          "title": "Unprocessable Entity",
+          "status": 422,
+          "code": "REASON_REQUIRED",
+          "detail": "Reason must be between 10 and 500 characters",
+          "request_id": "c366881a99c64e9b8d2037f5298ca4af",
+          "field": "reason"
+        }
+      }
+    },
+    {
+      "name": "override_creator_422_creator_unchanged",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/BND-1/created-by",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "91",
+          "content-type": "application/json"
+        },
+        "body": {
+          "created_by": "01a1cfdb-b855-7bb3-abf7-1db2eb39080c",
+          "reason": "Valid reason exceeding ten"
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "96b6182e1dc54fe892b2b80c92ddd5f5",
+          "content-length": "242",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:CREATOR_UNCHANGED",
+          "title": "Unprocessable Entity",
+          "status": 422,
+          "code": "CREATOR_UNCHANGED",
+          "detail": "Target creator is already the issue creator",
+          "request_id": "96b6182e1dc54fe892b2b80c92ddd5f5",
+          "field": "created_by"
+        }
+      }
+    },
+    {
+      "name": "override_creator_422_creator_not_eligible",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/BND-1/created-by",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "91",
+          "content-type": "application/json"
+        },
+        "body": {
+          "created_by": "01a1cfdb-b864-7f3f-a87e-ca8d0c88725f",
+          "reason": "Valid reason exceeding ten"
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "8825716896644ab491222f2864fceffa",
+          "content-length": "271",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:CREATOR_NOT_ELIGIBLE",
+          "title": "Unprocessable Entity",
+          "status": 422,
+          "code": "CREATOR_NOT_ELIGIBLE",
+          "detail": "Target creator must be an active user eligible to view the project",
+          "request_id": "8825716896644ab491222f2864fceffa",
+          "field": "created_by"
+        }
+      }
+    }
+  ]
+}

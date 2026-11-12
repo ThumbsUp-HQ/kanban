@@ -20,6 +20,7 @@ from pydantic import (
 )
 
 from kanban.api.v1.schemas.assignees import AssigneeResponse  # noqa: TC001
+from kanban.api.v1.schemas.issue_provenance import IssueProvenance  # noqa: TC001
 from kanban.security.access_manifest import AccessManifest  # noqa: TC001  # Pydantic runtime type
 
 
@@ -187,6 +188,7 @@ class IssueResponse(BaseModel):
     assignees: list[AssigneeResponse] = Field(default_factory=list)
     board_rank: str
     created_by_id: uuid.UUID
+    provenance: IssueProvenance
     access_manifest: AccessManifest
     capabilities: list[str]
     archived_at: datetime | None = None

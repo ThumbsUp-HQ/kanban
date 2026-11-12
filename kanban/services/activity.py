@@ -124,6 +124,7 @@ class ActivityEventType(StrEnum):
     BOARD_COLUMN_REBALANCED = "BOARD_COLUMN_REBALANCED"
     ISSUE_ARCHIVED = "ISSUE_ARCHIVED"
     ISSUE_UNARCHIVED = "ISSUE_UNARCHIVED"
+    CREATOR_OVERRIDDEN = "CREATOR_OVERRIDDEN"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -194,6 +195,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.BOARD_COLUMN_REBALANCED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_ARCHIVED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_UNARCHIVED: ActivityCategory.HISTORY,
+        ActivityEventType.CREATOR_OVERRIDDEN: ActivityCategory.HISTORY,
     }
 )
 
