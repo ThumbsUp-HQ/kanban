@@ -293,7 +293,7 @@ async def pg_worker_db(request: pytest.FixtureRequest) -> AsyncGenerator[AsyncEn
             text(
                 "SELECT schemaname, tablename FROM pg_tables "
                 "WHERE schemaname IN ('public', 'kb_harness') "
-                "AND tablename != 'alembic_version'"
+                "AND tablename NOT IN ('alembic_version', 'link_type_matrix')"
             )
         )
         tables = [f'"{r[0]}"."{r[1]}"' for r in rows.all()]
