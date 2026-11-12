@@ -47,6 +47,7 @@ from database.models import (
 )
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.v1.schemas.issues import (
+    ArchiveEligibility,
     IssueCreate,
     IssueList,
     IssuePatch,
@@ -551,6 +552,41 @@ async def serialize_issue(
 
     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
 
+    obj = await session.get(ObjectRecord, issue.id)
+    archived_at = obj.archived_at if obj is not None else None
+
+    if archived_at is not None:
+        archive_eligibility = ArchiveEligibility(
+            allowed=False,
+            reason="Issue is already archived",
+        )
+    elif state.state_group not in ("completed", "cancelled"):
+        archive_eligibility = ArchiveEligibility(
+            allowed=False,
+            reason="Only completed or canceled work items can be archived",
+        )
+    else:
+        sub_stmt = (
+            select(Issue.id)
+            .join(WorkflowState, WorkflowState.id == Issue.state_id)
+            .join(ObjectRecord, ObjectRecord.id == Issue.id)
+            .where(
+                Issue.parent_issue_id == issue.id,
+                ObjectRecord.deleted_at.is_(None),
+                ObjectRecord.archived_at.is_(None),
+                WorkflowState.state_group.notin_(["completed", "cancelled"]),
+            )
+            .limit(1)
+        )
+        has_open_sub = (await session.execute(sub_stmt)).first() is not None
+        if has_open_sub:
+            archive_eligibility = ArchiveEligibility(
+                allowed=False,
+                reason="Cannot archive work item with open sub-issues",
+            )
+        else:
+            archive_eligibility = ArchiveEligibility(allowed=True, reason=None)
+
     return IssueResponse(
         id=issue.id,
         key=f"{project.identifier}-{issue.sequence_id}",
@@ -572,6 +608,8 @@ async def serialize_issue(
         created_by_id=issue.created_by_id,
         access_manifest=manifest,
         capabilities=capabilities_to_names(caps),
+        archived_at=archived_at,
+        archive_eligibility=archive_eligibility,
     )
 
 
@@ -715,6 +753,15 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
 ) -> tuple[IssueResponse, str]:
     """Patch issue fields under description ETag concurrency check and emit activity."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
+    obj = await session.get(ObjectRecord, issue.id)
+    if obj is not None and obj.archived_at is not None:
+        raise _problem(
+            code="ISSUE_ARCHIVED",
+            status=409,
+            title="Issue Archived",
+            detail="Archived issues are read-only and cannot be modified",
+        )
+
     project = await session.get(Project, issue.project_id)
     if project is None:  # pragma: no cover
         not_found()
@@ -998,13 +1045,15 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
     return await serialize_issue(session, caller, updated_issue), new_etag
 
 
-async def list_issues(
+async def list_issues(  # noqa: PLR0913
     session: AsyncSession,
     caller: PrincipalContext,
     project_ref: str,
     *,
     cursor: str | None,
     limit: int,
+    include_archived: bool = False,
+    only_archived: bool = False,
 ) -> IssueList:
     """List RLS-visible issues within a project in descending sequence order."""
     project = await get_project_or_404(session, caller, project_ref)
@@ -1017,9 +1066,13 @@ async def list_issues(
             Issue.workspace_id == caller.workspace_id,
             Issue.project_id == project.id,
             ObjectRecord.deleted_at.is_(None),
-            ObjectRecord.archived_at.is_(None),
         )
     )
+
+    if only_archived:
+        stmt = stmt.where(ObjectRecord.archived_at.is_not(None))
+    elif not include_archived:
+        stmt = stmt.where(ObjectRecord.archived_at.is_(None))
 
     if cursor is not None:
         last_seq = decode_issue_cursor(cursor)

@@ -27,6 +27,8 @@ from kanban.api.sse import handle_sse_endpoint
 from kanban.api.v1 import build_v1_router
 from kanban.api.ws import handle_ws_connection
 from kanban.auth.sessions.csrf import CsrfMiddleware
+from kanban.jobs import JobScheduler
+from kanban.jobs import registry as jobs_registry
 from kanban.security.headers import SecurityHeadersMiddleware
 from kanban.settings import Settings
 from kanban.web_static import PrecompressedSPAStaticApp
@@ -43,10 +45,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     hub = getattr(app.state, "realtime_hub", None)
     if hub is not None:
         await hub.start()
-    yield
-    hub = getattr(app.state, "realtime_hub", None)
-    if hub is not None:
-        await hub.drain(timeout_seconds=3.0)
+
+    scheduler = JobScheduler(jobs_registry)
+    app.state.job_scheduler = scheduler
+    app.state.job_registry = jobs_registry
+
+    session_target = getattr(app.state, "session_factory", None)
+    should_run = getattr(app.state, "enable_background_jobs", False)
+
+    if should_run and session_target is not None:
+        await scheduler.start(session_target)
+
+    try:
+        yield
+    finally:
+        if should_run and session_target is not None:
+            await scheduler.stop()
+        hub = getattr(app.state, "realtime_hub", None)
+        if hub is not None:
+            await hub.drain(timeout_seconds=3.0)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

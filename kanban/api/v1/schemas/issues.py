@@ -8,7 +8,7 @@ RestrictedParentSummary (S7.2 8h) with zero identifier leakage.
 from __future__ import annotations
 
 import uuid  # noqa: TC003  # Required at runtime by Pydantic field resolution
-from datetime import date  # noqa: TC003  # Required at runtime by Pydantic
+from datetime import date, datetime  # noqa: TC003  # Required at runtime by Pydantic
 
 from pydantic import (
     BaseModel,
@@ -157,6 +157,15 @@ class IssuePatch(BaseModel):
         return deduped
 
 
+class ArchiveEligibility(BaseModel):
+    """Eligibility status and explanatory reason for archiving (S7.2 8p)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    allowed: bool
+    reason: str | None = None
+
+
 class IssueResponse(BaseModel):
     """Canonical issue representation returned by all issue endpoints."""
 
@@ -180,6 +189,8 @@ class IssueResponse(BaseModel):
     created_by_id: uuid.UUID
     access_manifest: AccessManifest
     capabilities: list[str]
+    archived_at: datetime | None = None
+    archive_eligibility: ArchiveEligibility
 
     @model_serializer(mode="wrap")
     def _strip_module_ids_if_none(

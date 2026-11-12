@@ -15,6 +15,7 @@ from kanban.api.v1.comments import router as comments_router
 from kanban.api.v1.cycles import router as cycles_router
 from kanban.api.v1.docs import router as docs_router
 from kanban.api.v1.health import router as health_router
+from kanban.api.v1.issue_archive import router as archive_router
 from kanban.api.v1.issue_move import router as issue_move_router
 from kanban.api.v1.issues import router as issues_router
 from kanban.api.v1.links import router as links_router
@@ -51,4 +52,5 @@ def build_v1_router() -> APIRouter:
     v1.include_router(agent_definitions_router)
     v1.include_router(attachments_router)
     v1.include_router(views_router)
+    v1.include_router(archive_router)
     return v1

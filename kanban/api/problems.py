@@ -63,6 +63,18 @@ class Problem(BaseModel):
         default=None,
         description="List of mentioned users who lack access to the resource",
     )
+    state_group: str | None = Field(
+        default=None,
+        description="Current state group when archive transition is rejected",
+    )
+    open_subissue_keys: list[str] | None = Field(
+        default=None,
+        description="Keys of open sub-issues preventing archive",
+    )
+    hidden_open_count: int | None = Field(
+        default=None,
+        description="Count of open sub-issues hidden by RLS",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -81,6 +93,9 @@ class ProblemException(Exception):  # noqa: N818
         *,
         candidates: list[dict[str, str]] | None = None,
         unauthorized_mentions: list[dict[str, str]] | None = None,
+        state_group: str | None = None,
+        open_subissue_keys: list[str] | None = None,
+        hidden_open_count: int | None = None,
         type_uri: str | None = None,
         extra: dict[str, Any] | None = None,
     ) -> None:
@@ -99,6 +114,9 @@ class ProblemException(Exception):  # noqa: N818
         self.field = field
         self.candidates = candidates
         self.unauthorized_mentions = unauthorized_mentions
+        self.state_group = state_group
+        self.open_subissue_keys = open_subissue_keys
+        self.hidden_open_count = hidden_open_count
         self.type_uri = type_uri
         self.extra = extra
 
@@ -137,6 +155,9 @@ async def problem_exception_handler(
         field=exc.field,
         candidates=exc.candidates,
         unauthorized_mentions=exc.unauthorized_mentions,
+        state_group=exc.state_group,
+        open_subissue_keys=exc.open_subissue_keys,
+        hidden_open_count=exc.hidden_open_count,
         **extra_fields,
     )
     response_headers = {"x-request-id": req_id}

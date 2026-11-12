@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession  # Required by FastAPI at runtime
 
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+from kanban.api.problems import ProblemException
 from kanban.api.timing import timing_floor
 from kanban.api.v1.schemas.issues import IssueCreate, IssueList, IssuePatch, IssueResponse
 from kanban.services import issues as svc
@@ -94,13 +95,31 @@ async def patch_issue(  # noqa: PLR0913, PLR0917
     response_model=IssueList,
     summary="List issues in a project",
 )
-async def list_issues(
+async def list_issues(  # noqa: PLR0913
     project_ref: str,
     caller: Caller,
     session: Session,
+    *,
     cursor: Annotated[str | None, Query(max_length=64)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    include_archived: Annotated[bool, Query()] = False,
+    only_archived: Annotated[bool, Query()] = False,
 ) -> IssueList:
     """List RLS-visible issues within a project using keyset pagination."""
+    if not include_archived and only_archived:
+        raise ProblemException(
+            code="ARCHIVE_FILTER_CONFLICT",
+            status=422,
+            title="Archive Filter Conflict",
+            detail="Cannot filter only_archived=true when include_archived=false",
+        )
     async with timing_floor(floor_ms=25.0):
-        return await svc.list_issues(session, caller, project_ref, cursor=cursor, limit=limit)
+        return await svc.list_issues(
+            session,
+            caller,
+            project_ref,
+            cursor=cursor,
+            limit=limit,
+            include_archived=include_archived,
+            only_archived=only_archived,
+        )

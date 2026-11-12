@@ -122,6 +122,8 @@ class ActivityEventType(StrEnum):
     WIP_HARD_LIMIT_OVERRIDDEN = "WIP_HARD_LIMIT_OVERRIDDEN"
     WIP_LIMIT_OVERRIDDEN = "WIP_LIMIT_OVERRIDDEN"
     BOARD_COLUMN_REBALANCED = "BOARD_COLUMN_REBALANCED"
+    ISSUE_ARCHIVED = "ISSUE_ARCHIVED"
+    ISSUE_UNARCHIVED = "ISSUE_UNARCHIVED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -190,6 +192,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.WIP_HARD_LIMIT_OVERRIDDEN: ActivityCategory.HISTORY,
         ActivityEventType.WIP_LIMIT_OVERRIDDEN: ActivityCategory.HISTORY,
         ActivityEventType.BOARD_COLUMN_REBALANCED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_ARCHIVED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_UNARCHIVED: ActivityCategory.HISTORY,
     }
 )
 
