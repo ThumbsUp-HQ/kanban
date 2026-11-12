@@ -1,0 +1,16 @@
+=== EFFECTIVE RESOURCE ACCESS ROW FOR (DNY-1, U) ===
+object_id      : 01a1cdc0-5e95-71cd-9c27-02705f2eb3f7
+principal_id   : 01a1cdc0-5e80-7b99-8cfc-6135ad5eda00
+allow_mask     : 31 (MEMBER 31 | ALLOW 5)
+deny_mask      : 5 (DIRECT DENY EDIT 4 | SIBLING GROUP DENY VIEW 1 = 5)
+effective_mask : 26 (allow_mask & (~deny_mask) = 31 & (~5) = 26)
+
+=== APP EFFECTIVE PRINCIPAL SET FOR USER U ===
+principals: ['01a1cdc0-5e80-7b99-8cfc-6135ad5eda00', '01a1cdc0-5e81-73df-869d-95ab65b2cc5a', '01a1cdc0-5e80-73d6-b742-6fc8d59c97c9']
+
+=== S3.3 CAN_VIEW PREDICATE (EXISTS QUERY) ===
+can_view = False
+Evaluation: (allow_mask & 1 = 1) is TRUE (31 & 1 = 1), but (deny_mask & 1 = 0) is FALSE (5 & 1 = 1 != 0), so predicate returns FALSE.
+
+=== GROUP ROWS IN EFFECTIVE_RESOURCE_ACCESS ===
+count = 0 (Zero group rows materialized; group policies are folded directly into concrete active principals)
