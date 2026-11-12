@@ -1,0 +1,32 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-75/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-75
+configfile: pyproject.toml
+plugins: anyio-4.16.0, asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, xdist-3.8.0, platformdirs-4.14.5
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 11 items
+
+kanban/tests/api/test_project_config.py::test_case_1_admin_creates_state_with_wip_limits_and_activity PASSED [  9%]
+kanban/tests/api/test_project_config.py::test_case_2_capability_and_anti_enumeration_discipline PASSED [ 18%]
+kanban/tests/api/test_project_config.py::test_case_3_exclusive_group_and_label_validation PASSED [ 27%]
+kanban/tests/api/test_project_config.py::test_case_4_boundary_state_transitions_and_migrations PASSED [ 36%]
+kanban/tests/api/test_project_config.py::test_case_5_default_invariants_and_priority_management PASSED [ 45%]
+kanban/tests/api/test_project_config.py::test_state_crud_and_edge_cases PASSED [ 54%]
+kanban/tests/api/test_project_config.py::test_priority_crud_and_edge_cases PASSED [ 63%]
+kanban/tests/api/test_project_config.py::test_label_crud_and_edge_cases PASSED [ 72%]
+kanban/tests/api/test_project_config.py::test_schema_validators_and_direct_edge_cases PASSED [ 81%]
+kanban/tests/api/test_project_config.py::test_full_branch_coverage_and_404_preconditions PASSED [ 90%]
+database/tests/test_migration_wip_limits.py::test_migration_wip_limits_lifecycle_and_constraints PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/api/v1/project_config.py              66      0      0      0   100%
+kanban/api/v1/schemas/project_config.py     112      0      8      0   100%
+kanban/services/project_config.py           247      5    114      7    97%   384->393, 401->433, 587->595, 608-609, 620-621, 695, 719->751
+-------------------------------------------------------------------------------------
+TOTAL                                       425      5    122      7    98%
+Required test coverage of 95% reached. Total coverage: 97.81%
+======================== 11 passed in 81.64s (0:01:21) =========================

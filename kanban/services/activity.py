@@ -61,6 +61,16 @@ class ActivityEventType(StrEnum):
     PROJECT_CREATED = "PROJECT_CREATED"
     PROJECT_UPDATED = "PROJECT_UPDATED"
     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
+    STATE_CREATED = "STATE_CREATED"
+    STATE_UPDATED = "STATE_UPDATED"
+    STATE_DELETED = "STATE_DELETED"
+    PRIORITY_CREATED = "PRIORITY_CREATED"
+    PRIORITY_UPDATED = "PRIORITY_UPDATED"
+    PRIORITY_DELETED = "PRIORITY_DELETED"
+    LABEL_CREATED = "LABEL_CREATED"
+    LABEL_UPDATED = "LABEL_UPDATED"
+    LABEL_DELETED = "LABEL_DELETED"
+    ISSUE_FIELD_CHANGED = "ISSUE_FIELD_CHANGED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -68,6 +78,16 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.PROJECT_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.PROJECT_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
+        ActivityEventType.STATE_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.STATE_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.STATE_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.PRIORITY_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.PRIORITY_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.PRIORITY_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.LABEL_CREATED: ActivityCategory.HISTORY,
+        ActivityEventType.LABEL_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.LABEL_DELETED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_FIELD_CHANGED: ActivityCategory.HISTORY,
     }
 )
 

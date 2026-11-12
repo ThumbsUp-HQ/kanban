@@ -83,6 +83,8 @@ class WorkflowState(Base):
     color_hex: Mapped[str] = mapped_column(String, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    wip_soft_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wip_hard_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class ProjectPriority(Base):

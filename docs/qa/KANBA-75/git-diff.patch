@@ -1,0 +1,3520 @@
+diff --git a/database/migrations/sql/p3_01b_workflow_state_wip_limits.down.sql b/database/migrations/sql/p3_01b_workflow_state_wip_limits.down.sql
+new file mode 100644
+index 0000000..2b37a6b
+--- /dev/null
++++ b/database/migrations/sql/p3_01b_workflow_state_wip_limits.down.sql
+@@ -0,0 +1,15 @@
++-- Migration Downgrade: p3_01b_workflow_state_wip_limits (KB-P3-01b)
++-- Revert soft/hard WIP limits and ordering constraint from workflow_states.
++-- Restore project_labels INSERT policy to ADMIN capability (mask 64).
++
++DROP POLICY IF EXISTS project_labels_insert_rls ON project_labels;
++CREATE POLICY project_labels_insert_rls ON project_labels
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 64)
++    );
++
++ALTER TABLE workflow_states
++  DROP CONSTRAINT IF EXISTS wip_soft_le_hard,
++  DROP COLUMN IF EXISTS wip_hard_limit,
++  DROP COLUMN IF EXISTS wip_soft_limit;
+diff --git a/database/migrations/sql/p3_01b_workflow_state_wip_limits.up.sql b/database/migrations/sql/p3_01b_workflow_state_wip_limits.up.sql
+new file mode 100644
+index 0000000..d1296fb
+--- /dev/null
++++ b/database/migrations/sql/p3_01b_workflow_state_wip_limits.up.sql
+@@ -0,0 +1,15 @@
++-- Migration: p3_01b_workflow_state_wip_limits (KB-P3-01b)
++-- Add soft/hard WIP limits and ordering constraint to workflow_states.
++-- Update project_labels INSERT policy to permit EDIT capability (mask 4) per S7.2 item 8i.
++
++ALTER TABLE workflow_states
++  ADD COLUMN wip_soft_limit INTEGER CHECK (wip_soft_limit IS NULL OR wip_soft_limit BETWEEN 1 AND 999),
++  ADD COLUMN wip_hard_limit INTEGER CHECK (wip_hard_limit IS NULL OR wip_hard_limit BETWEEN 1 AND 999),
++  ADD CONSTRAINT wip_soft_le_hard CHECK (wip_soft_limit IS NULL OR wip_hard_limit IS NULL OR wip_soft_limit <= wip_hard_limit);
++
++DROP POLICY IF EXISTS project_labels_insert_rls ON project_labels;
++CREATE POLICY project_labels_insert_rls ON project_labels
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 4)
++    );
+diff --git a/database/migrations/versions/p3_01b_workflow_state_wip_limits.py b/database/migrations/versions/p3_01b_workflow_state_wip_limits.py
+new file mode 100644
+index 0000000..1d17ba7
+--- /dev/null
++++ b/database/migrations/versions/p3_01b_workflow_state_wip_limits.py
+@@ -0,0 +1,26 @@
++"""Workflow states WIP limits (KB-P3-01b).
++
++Revision ID: p3_01b_workflow_state_wip_limits
++Revises: p2_18_rate_limit_buckets
++Create Date: 2026-11-12 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p3_01b_workflow_state_wip_limits"
++down_revision: str | None = "p2_18_rate_limit_buckets"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply WIP limits columns and constraint to workflow_states."""
++    execute_sql_file("p3_01b_workflow_state_wip_limits.up.sql")
++
++
++def downgrade() -> None:
++    """Revert WIP limits columns and constraint from workflow_states."""
++    execute_sql_file("p3_01b_workflow_state_wip_limits.down.sql")
+diff --git a/database/models/projects.py b/database/models/projects.py
+index bcbcaa4..445e80f 100644
+--- a/database/models/projects.py
++++ b/database/models/projects.py
+@@ -83,6 +83,8 @@ class WorkflowState(Base):
+     color_hex: Mapped[str] = mapped_column(String, nullable=False)
+     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
++    wip_soft_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    wip_hard_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+ 
+ 
+ class ProjectPriority(Base):
+diff --git a/database/tests/test_migration_wip_limits.py b/database/tests/test_migration_wip_limits.py
+new file mode 100644
+index 0000000..418942a
+--- /dev/null
++++ b/database/tests/test_migration_wip_limits.py
+@@ -0,0 +1,154 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Migration lifecycle and constraint tests for p3_01b_workflow_state_wip_limits."""
++
++import asyncpg  # type: ignore[import-untyped]  # asyncpg does not distribute PEP 561 py.typed marker
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.asyncio
++async def test_migration_wip_limits_lifecycle_and_constraints() -> None:
++    """Verify upgrade adds WIP limits and constraint, downgrade restores catalog identically."""
++    async with MigrationHarness() as harness:
++        # 1. Upgrade to revision prior to p3_01b
++        await harness.upgrade("p2_18_rate_limit_buckets")
++
++        # Snapshot workflow_states columns before upgrade
++        pre_cols_rows = await harness.fetch(
++            "SELECT column_name, data_type, is_nullable "
++            "FROM information_schema.columns "
++            "WHERE table_name = 'workflow_states' "
++            "ORDER BY ordinal_position"
++        )
++        pre_columns = [(r["column_name"], r["data_type"], r["is_nullable"]) for r in pre_cols_rows]
++        pre_col_names = {c[0] for c in pre_columns}
++        assert "wip_soft_limit" not in pre_col_names
++        assert "wip_hard_limit" not in pre_col_names
++
++        # 2. Upgrade to p3_01b_workflow_state_wip_limits
++        await harness.upgrade("p3_01b_workflow_state_wip_limits")
++
++        post_cols_rows = await harness.fetch(
++            "SELECT column_name, data_type, is_nullable "
++            "FROM information_schema.columns "
++            "WHERE table_name = 'workflow_states' "
++            "ORDER BY ordinal_position"
++        )
++        post_col_names = {r["column_name"] for r in post_cols_rows}
++        assert "wip_soft_limit" in post_col_names
++        assert "wip_hard_limit" in post_col_names
++
++        # Check constraint existence
++        constraints = await harness.fetch(
++            "SELECT conname FROM pg_constraint "
++            "WHERE conrelid = 'workflow_states'::regclass "
++            "  AND conname = 'wip_soft_le_hard'"
++        )
++        assert len(constraints) == 1
++
++        # Check project_labels policy allows capability 4 post-upgrade
++        pol_rows = await harness.fetch(
++            "SELECT polname, pg_get_expr(polwithcheck, polrelid) as with_check "
++            "FROM pg_policy "
++            "WHERE polrelid = 'project_labels'::regclass AND polname = 'project_labels_insert_rls'"
++        )
++        assert len(pol_rows) == 1
++        assert "4" in pol_rows[0]["with_check"]
++
++        # Verify CHECK constraint enforcement in DB
++        # Seed minimal workspace and project to test constraint on workflow_states
++        seed_ws = await harness.fetch(
++            "INSERT INTO workspaces (id, name, slug) "
++            "VALUES (uuidv7(), 'Test WS', 'test-ws') RETURNING id"
++        )
++        ws_id = seed_ws[0]["id"]
++        proj_uuid = await harness.fetch("SELECT uuidv7() AS id")
++        proj_id = proj_uuid[0]["id"]
++        user_uuid = await harness.fetch("SELECT uuidv7() AS id")
++        user_id = user_uuid[0]["id"]
++
++        await harness.execute(
++            "INSERT INTO objects "
++            "(id, object_type, workspace_id, canonical_key, display_title, created_by_id) "
++            "VALUES ($1, 'project', $2, 'WIPPROJ', 'WIP Test Project', $3)",
++            proj_id,
++            ws_id,
++            user_id,
++        )
++        await harness.execute(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES ($1, $2, 'WIPPROJ', 'WIP Test Project')",
++            proj_id,
++            ws_id,
++        )
++
++        cols = (
++            "(id, workspace_id, project_id, name, state_group, color_hex, "
++            "sort_order, is_default, wip_soft_limit, wip_hard_limit) "
++        )
++
++        # Valid WIP limits
++        await harness.execute(
++            f"INSERT INTO workflow_states {cols}"
++            "VALUES (uuidv7(), $1, $2, 'Valid WIP', 'started', '#3B82F6', 10, false, 3, 5)",
++            ws_id,
++            proj_id,
++        )
++
++        # Soft limit greater than hard limit violates wip_soft_le_hard constraint
++        with pytest.raises(asyncpg.exceptions.CheckViolationError):
++            await harness.execute(
++                f"INSERT INTO workflow_states {cols}"
++                "VALUES (uuidv7(), $1, $2, 'Invalid LE', 'started', '#3B82F6', 20, false, 6, 5)",
++                ws_id,
++                proj_id,
++            )
++
++        # Soft limit greater than 999 boundary violates range check
++        with pytest.raises(asyncpg.exceptions.CheckViolationError):
++            await harness.execute(
++                f"INSERT INTO workflow_states {cols}"
++                "VALUES (uuidv7(), $1, $2, 'Invalid Range', 'started', "
++                "'#3B82F6', 30, false, 1000, 1000)",
++                ws_id,
++                proj_id,
++            )
++
++        # 3. Downgrade to p2_18_rate_limit_buckets
++        await harness.downgrade("p2_18_rate_limit_buckets")
++
++        # Snapshot workflow_states columns after downgrade
++        reverted_cols_rows = await harness.fetch(
++            "SELECT column_name, data_type, is_nullable "
++            "FROM information_schema.columns "
++            "WHERE table_name = 'workflow_states' "
++            "ORDER BY ordinal_position"
++        )
++        reverted_columns = [
++            (r["column_name"], r["data_type"], r["is_nullable"]) for r in reverted_cols_rows
++        ]
++
++        # Verify catalog is 100% identical to pre-upgrade
++        assert reverted_columns == pre_columns
++
++        # Verify constraint removed
++        no_constraints = await harness.fetch(
++            "SELECT conname FROM pg_constraint "
++            "WHERE conrelid = 'workflow_states'::regclass "
++            "  AND conname = 'wip_soft_le_hard'"
++        )
++        assert len(no_constraints) == 0
++
++        # Check project_labels policy restored to capability 64
++        reverted_pol_rows = await harness.fetch(
++            "SELECT polname, pg_get_expr(polwithcheck, polrelid) as with_check "
++            "FROM pg_policy "
++            "WHERE polrelid = 'project_labels'::regclass AND polname = 'project_labels_insert_rls'"
++        )
++        assert len(reverted_pol_rows) == 1
++        assert "64" in reverted_pol_rows[0]["with_check"]
++
++        # 4. Re-upgrade to head
++        await harness.upgrade("head")
+diff --git a/docs/qa/KANBA-75/build-check.txt b/docs/qa/KANBA-75/build-check.txt
+new file mode 100644
+index 0000000..0f22faa
+--- /dev/null
++++ b/docs/qa/KANBA-75/build-check.txt
+@@ -0,0 +1,33 @@
++=== ruff check kanban database ===
++All checks passed!
++=== ruff format --check . ===
++575 files already formatted
++=== mypy --strict kanban database ===
++Success: no issues found in 205 source files
++=== lint-imports ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 280 files, 527 dependencies.
++-------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++mcp forbidden from importing database KEPT
++
++Contracts: 2 kept, 0 broken.
++=== check_no_dashes --all ===
++=== make license ===
++uv run python -m scripts.license_gate
++SUMMARY python=110 node=1 violations=0
+diff --git a/docs/qa/KANBA-75/contract-sample.json b/docs/qa/KANBA-75/contract-sample.json
+new file mode 100644
+index 0000000..884a3cb
+--- /dev/null
++++ b/docs/qa/KANBA-75/contract-sample.json
+@@ -0,0 +1,323 @@
++{
++  "ticket": "KANBA-75",
++  "exchanges": [
++    {
++      "name": "create_state_201",
++      "request": {
++        "method": "POST",
++        "path": "/api/v1/projects/TC1/states",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "content-length": "133",
++          "content-type": "application/json"
++        },
++        "body": {
++          "name": "In Review",
++          "group": "started",
++          "color_hex": "#3B82F6",
++          "sort_order": 30,
++          "is_default": false,
++          "wip_soft_limit": 3,
++          "wip_hard_limit": 5
++        }
++      },
++      "response": {
++        "status": 201,
++        "headers": {
++          "content-length": "245",
++          "content-type": "application/json",
++          "location": "/api/v1/projects/TC1/states/01a1ceb3-79e3-7bb1-836b-0ae45726c0a2",
++          "x-request-id": "055b17e3816b4306ba45fc4ab6d7db3b",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "id": "01a1ceb3-79e3-7bb1-836b-0ae45726c0a2",
++          "project_id": "01a1ceb3-7937-7141-90d9-6c2fc51b4dca",
++          "name": "In Review",
++          "group": "started",
++          "color_hex": "#3B82F6",
++          "sort_order": 30,
++          "is_default": false,
++          "wip_soft_limit": 3,
++          "wip_hard_limit": 5,
++          "issue_count": 0
++        }
++      }
++    },
++    {
++      "name": "post_state_edit_user_403",
++      "request": {
++        "method": "POST",
++        "path": "/api/v1/projects/TC2A/states",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "content-length": "66",
++          "content-type": "application/json"
++        },
++        "body": {
++          "name": "Forbidden State",
++          "group": "started",
++          "color_hex": "#10B981"
++        }
++      },
++      "response": {
++        "status": 403,
++        "headers": {
++          "x-request-id": "91f2edeab05c4d45aaf2b673be2b6ea9",
++          "content-length": "181",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:INSUFFICIENT_CAPABILITY",
++          "title": "Insufficient Capability",
++          "status": 403,
++          "code": "INSUFFICIENT_CAPABILITY",
++          "request_id": "91f2edeab05c4d45aaf2b673be2b6ea9"
++        }
++      }
++    },
++    {
++      "name": "cross_project_id_404",
++      "request": {
++        "method": "PATCH",
++        "path": "/api/v1/projects/TC2A/labels/01a1ceb3-7b58-7fe1-9c26-1064411fb6a7",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "content-length": "18",
++          "content-type": "application/json"
++        },
++        "body": {
++          "name": "renamed"
++        }
++      },
++      "response": {
++        "status": 404,
++        "headers": {
++          "x-request-id": "18b3afcc9cc04260bae23175854a95d8",
++          "content-length": "139",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:NOT_FOUND",
++          "title": "Not Found",
++          "status": 404,
++          "code": "NOT_FOUND",
++          "request_id": "18b3afcc9cc04260bae23175854a95d8"
++        }
++      }
++    },
++    {
++      "name": "create_label_edit_user_201",
++      "request": {
++        "method": "POST",
++        "path": "/api/v1/projects/TC3/labels",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "content-length": "66",
++          "content-type": "application/json"
++        },
++        "body": {
++          "name": "type:bug",
++          "color_hex": "#EF4444",
++          "exclusive_group": "type"
++        }
++      },
++      "response": {
++        "status": 201,
++        "headers": {
++          "content-length": "162",
++          "content-type": "application/json",
++          "location": "/api/v1/projects/TC3/labels/01a1ceb3-7c89-7a75-84a9-6d8cb17244a2",
++          "x-request-id": "a2b1ea66e81048c08c5f01b3ab1a9372",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "id": "01a1ceb3-7c89-7a75-84a9-6d8cb17244a2",
++          "project_id": "01a1ceb3-7c03-7c10-ac02-d6933e16c280",
++          "name": "type:bug",
++          "color_hex": "#EF4444",
++          "exclusive_group": "type"
++        }
++      }
++    },
++    {
++      "name": "wip_invalid_422",
++      "request": {
++        "method": "POST",
++        "path": "/api/v1/projects/TC4/states",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "content-length": "100",
++          "content-type": "application/json"
++        },
++        "body": {
++          "name": "Invalid WIP",
++          "group": "started",
++          "color_hex": "#EF4444",
++          "wip_soft_limit": 6,
++          "wip_hard_limit": 5
++        }
++      },
++      "response": {
++        "status": 422,
++        "headers": {
++          "x-request-id": "edbaf936e45a4b969d6d975ccebbea07",
++          "content-length": "312",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:VALIDATION_FAILED",
++          "title": "Validation Failed",
++          "status": 422,
++          "code": "VALIDATION_FAILED",
++          "detail": "Request validation failed",
++          "request_id": "edbaf936e45a4b969d6d975ccebbea07",
++          "errors": [
++            {
++              "path": "body",
++              "message": "Value error, wip_soft_limit must be less than or equal to wip_hard_limit"
++            }
++          ]
++        }
++      }
++    },
++    {
++      "name": "delete_state_in_use_409",
++      "request": {
++        "method": "DELETE",
++        "path": "/api/v1/projects/TC4/states/01a1ceb3-7d24-7484-819c-54dae4e799f2",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1"
++        },
++        "body": null
++      },
++      "response": {
++        "status": 409,
++        "headers": {
++          "x-request-id": "86948277488b46d7b19a61a6ee2e1f6b",
++          "content-length": "148",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:STATE_IN_USE",
++          "title": "State In Use",
++          "status": 409,
++          "code": "STATE_IN_USE",
++          "request_id": "86948277488b46d7b19a61a6ee2e1f6b"
++        }
++      }
++    },
++    {
++      "name": "patch_priority_edit_user_403",
++      "request": {
++        "method": "PATCH",
++        "path": "/api/v1/projects/TC5/priorities/01a1ceb3-7f21-75fa-a937-6dd1f6dbf0df",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "content-length": "25",
++          "content-type": "application/json"
++        },
++        "body": {
++          "label": "Super Blocker"
++        }
++      },
++      "response": {
++        "status": 403,
++        "headers": {
++          "x-request-id": "1a2354a28986467c9c268d4f849fe54d",
++          "content-length": "181",
++          "content-type": "application/problem+json",
++          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
++          "x-content-type-options": "nosniff",
++          "referrer-policy": "no-referrer",
++          "x-frame-options": "DENY",
++          "cross-origin-opener-policy": "same-origin",
++          "cross-origin-resource-policy": "same-origin",
++          "permissions-policy": "camera=(), microphone=(), geolocation=()",
++          "strict-transport-security": "max-age=63072000; includeSubDomains"
++        },
++        "body": {
++          "type": "urn:kanban:problem:INSUFFICIENT_CAPABILITY",
++          "title": "Insufficient Capability",
++          "status": 403,
++          "code": "INSUFFICIENT_CAPABILITY",
++          "request_id": "1a2354a28986467c9c268d4f849fe54d"
++        }
++      }
++    }
++  ]
++}
+diff --git a/docs/qa/KANBA-75/message-to-reality-checker.md b/docs/qa/KANBA-75/message-to-reality-checker.md
+new file mode 100644
+index 0000000..ec3dd3e
+--- /dev/null
++++ b/docs/qa/KANBA-75/message-to-reality-checker.md
+@@ -0,0 +1,68 @@
++# Reality-Checker Verification Packet: KANBA-75 (KB-P3-01b)
++
++## Ticket Overview
++- **Ticket ID**: KANBA-75
++- **Specification**: docs/tickets/KB-P3-01b.md
++- **Title**: [Phase 3 / API] Project architect API (part b): workflow states, custom priorities, labels with exclusive groups & WIP limits
++- **Branch**: feat/KANBA-75
++- **Worktree**: /tmp/kb-wt-KANBA-75
++
++## Target Files Implemented
++1. `database/migrations/sql/p3_01b_workflow_state_wip_limits.up.sql`:
++   - Adds `wip_soft_limit` and `wip_hard_limit` (integer, 1..999, nullable).
++   - Adds constraint `wip_soft_le_hard` (`wip_soft_limit IS NULL OR wip_hard_limit IS NULL OR wip_soft_limit <= wip_hard_limit`).
++   - Updates `project_labels_insert_rls` to permit capability 4 (`EDIT`) per S7.2 item 8i.
++2. `database/migrations/sql/p3_01b_workflow_state_wip_limits.down.sql`:
++   - Drops constraint `wip_soft_le_hard` and columns `wip_soft_limit`, `wip_hard_limit`.
++   - Restores `project_labels_insert_rls` to capability 64 (`ADMIN`).
++3. `database/migrations/versions/p3_01b_workflow_state_wip_limits.py`:
++   - Alembic migration chained from `p2_18_rate_limit_buckets`.
++4. `database/models/projects.py`:
++   - Added mapped columns `wip_soft_limit: Mapped[int | None]` and `wip_hard_limit: Mapped[int | None]` to `WorkflowState`.
++5. `kanban/api/v1/schemas/project_config.py`:
++   - Request and response schemas for states, priorities, and labels with `extra="forbid"`.
++   - Validates WIP bounds, cross-field soft <= hard, emoji length 1..8, and regex constraints.
++6. `kanban/services/project_config.py`:
++   - CRUD logic for states, priorities, labels.
++   - Enforces single default invariant (setting `is_default=true` clears other defaults).
++   - Enforces delete invariants: default state/priority cannot be deleted (`409 DEFAULT_STATE`, `409 DEFAULT_PRIORITY`).
++   - Prevents deleting last completed, cancelled, or backlog state (`409 LAST_STATE_IN_GROUP`).
++   - Enforces migration for in-use states/priorities (`409 STATE_IN_USE`, `409 PRIORITY_IN_USE`, `422 MIGRATE_TARGET_INVALID`, max 500 issues `409 MIGRATION_TOO_LARGE`).
++   - Records activity events on project and migrated issues.
++7. `kanban/api/v1/project_config.py`:
++   - 12 REST endpoints under `/api/v1/projects/{project_ref}/states|priorities|labels`.
++   - Timing floor wrapper (25.0ms) on all endpoints.
++   - Capability enforcement: VIEW on GET, ADMIN on states/priorities and label updates, EDIT on label creation.
++8. `kanban/api/v1/__init__.py`:
++   - Mounted `project_config_router` on `build_v1_router()`.
++9. `kanban/services/activity.py`:
++   - Appended 9 project config event types (`STATE_CREATED`, `STATE_UPDATED`, `STATE_DELETED`, `PRIORITY_CREATED`, `PRIORITY_UPDATED`, `PRIORITY_DELETED`, `LABEL_CREATED`, `LABEL_UPDATED`, `LABEL_DELETED`) and `ISSUE_FIELD_CHANGED` with `ActivityCategory.HISTORY`.
++10. `database/tests/test_migration_wip_limits.py`:
++    - Tests migration upgrade/downgrade catalog equivalence, check constraints, and RLS policy updates.
++11. `kanban/tests/api/test_project_config.py`:
++    - 10 comprehensive test functions covering all mandatory cases, security anti-enumeration, exclusive groups, WIP limits, default invariants, and branch coverage.
++
++## Verification Matrix
++1. **Unit Tests and Coverage**:
++   - 11/11 tests passed in 81.64s.
++   - Coverage:
++     * `kanban/api/v1/project_config.py`: 100%
++     * `kanban/api/v1/schemas/project_config.py`: 100%
++     * `kanban/services/project_config.py`: 97%
++     * **TOTAL**: 97.81% (exceeds mandatory >= 95% threshold).
++   - Stored in `docs/qa/KANBA-75/unit-test-results.txt`.
++2. **Static Quality Checks**:
++   - `ruff check kanban database`: Clean (0 errors).
++   - `ruff format --check .`: Clean (575 files already formatted).
++   - `mypy --strict kanban database`: Clean (0 errors across 205 files).
++   - `lint-imports`: 2 kept, 0 broken.
++   - `scripts.check_no_dashes --all`: Clean (0 non-ASCII dashes repo-wide).
++   - `make license`: Clean (violations=0).
++   - Stored in `docs/qa/KANBA-75/build-check.txt`.
++3. **Artifacts**:
++   - `docs/qa/KANBA-75/schema-dump.sql`: DDL dump for `workflow_states`, `project_priorities`, `project_labels`.
++   - `docs/qa/KANBA-75/contract-sample.json`: Recorded HTTP exchanges including 201 Created and error cases.
++
++## Specialist Gate Approvals
++- API Specialist Gate (`api-specialist-review.md`): Requested from `@arch-reviewer`.
++- UI Specialist Gate (`ui-specialist-review.md`): Requested from `@ui-specialist`.
+diff --git a/docs/qa/KANBA-75/schema-dump.sql b/docs/qa/KANBA-75/schema-dump.sql
+new file mode 100644
+index 0000000..12f5ba4
+--- /dev/null
++++ b/docs/qa/KANBA-75/schema-dump.sql
+@@ -0,0 +1,363 @@
++--
++-- PostgreSQL database dump
++--
++
++\restrict gA6BFtlZ0bQmjFTdSE2cJK1gQUDkXZybgWvKJfuRh8AB8MCcKwWurZlW2c53MkC
++
++-- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
++-- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
++
++SET statement_timeout = 0;
++SET lock_timeout = 0;
++SET idle_in_transaction_session_timeout = 0;
++SET client_encoding = 'UTF8';
++SET standard_conforming_strings = on;
++SELECT pg_catalog.set_config('search_path', '', false);
++SET check_function_bodies = false;
++SET xmloption = content;
++SET client_min_messages = warning;
++SET row_security = off;
++
++SET default_tablespace = '';
++
++SET default_table_access_method = heap;
++
++--
++-- Name: project_labels; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.project_labels (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    workspace_id uuid NOT NULL,
++    project_id uuid NOT NULL,
++    name text NOT NULL,
++    color_hex text NOT NULL,
++    exclusive_group text,
++    CONSTRAINT project_labels_color_hex_check CHECK ((color_hex ~ '^#[0-9A-Fa-f]{6}$'::text)),
++    CONSTRAINT project_labels_exclusive_group_check CHECK (((exclusive_group IS NULL) OR (exclusive_group ~ '^[a-z][a-z0-9_-]{0,31}$'::text))),
++    CONSTRAINT project_labels_name_check CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 100)))
++);
++
++ALTER TABLE ONLY public.project_labels FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.project_labels OWNER TO kanban_migrator;
++
++--
++-- Name: project_priorities; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.project_priorities (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    workspace_id uuid NOT NULL,
++    project_id uuid NOT NULL,
++    slug text NOT NULL,
++    label text NOT NULL,
++    emoji text,
++    color_hex text NOT NULL,
++    sort_order integer NOT NULL,
++    is_default boolean DEFAULT false NOT NULL,
++    CONSTRAINT project_priorities_color_hex_check CHECK ((color_hex ~ '^#[0-9A-Fa-f]{6}$'::text)),
++    CONSTRAINT project_priorities_emoji_check CHECK (((emoji IS NULL) OR ((char_length(emoji) >= 1) AND (char_length(emoji) <= 8)))),
++    CONSTRAINT project_priorities_label_check CHECK (((char_length(btrim(label)) >= 1) AND (char_length(btrim(label)) <= 50))),
++    CONSTRAINT project_priorities_slug_check CHECK ((slug ~ '^[a-z][a-z0-9_-]{0,31}$'::text))
++);
++
++ALTER TABLE ONLY public.project_priorities FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.project_priorities OWNER TO kanban_migrator;
++
++--
++-- Name: workflow_states; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.workflow_states (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    workspace_id uuid NOT NULL,
++    project_id uuid NOT NULL,
++    name text NOT NULL,
++    state_group text NOT NULL,
++    color_hex text NOT NULL,
++    sort_order integer DEFAULT 0 NOT NULL,
++    is_default boolean DEFAULT false NOT NULL,
++    CONSTRAINT workflow_states_color_hex_check CHECK ((color_hex ~ '^#[0-9A-Fa-f]{6}$'::text)),
++    CONSTRAINT workflow_states_name_check CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 100))),
++    CONSTRAINT workflow_states_state_group_check CHECK ((state_group = ANY (ARRAY['backlog'::text, 'unstarted'::text, 'started'::text, 'completed'::text, 'cancelled'::text])))
++);
++
++ALTER TABLE ONLY public.workflow_states FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.workflow_states OWNER TO kanban_migrator;
++
++--
++-- Name: project_labels project_labels_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_labels
++    ADD CONSTRAINT project_labels_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: project_labels project_labels_project_id_name_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_labels
++    ADD CONSTRAINT project_labels_project_id_name_key UNIQUE (project_id, name);
++
++
++--
++-- Name: project_priorities project_priorities_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_priorities
++    ADD CONSTRAINT project_priorities_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: project_priorities project_priorities_project_id_slug_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_priorities
++    ADD CONSTRAINT project_priorities_project_id_slug_key UNIQUE (project_id, slug);
++
++
++--
++-- Name: workflow_states workflow_states_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.workflow_states
++    ADD CONSTRAINT workflow_states_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: workflow_states workflow_states_project_id_name_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.workflow_states
++    ADD CONSTRAINT workflow_states_project_id_name_key UNIQUE (project_id, name);
++
++
++--
++-- Name: project_priorities_one_default; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE UNIQUE INDEX project_priorities_one_default ON public.project_priorities USING btree (project_id) WHERE is_default;
++
++
++--
++-- Name: workflow_states_one_default; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE UNIQUE INDEX workflow_states_one_default ON public.workflow_states USING btree (project_id) WHERE is_default;
++
++
++--
++-- Name: project_labels project_labels_workspace_match_biu_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER project_labels_workspace_match_biu_trg BEFORE INSERT OR UPDATE ON public.project_labels FOR EACH ROW EXECUTE FUNCTION public.project_labels_workspace_match_biu();
++
++
++--
++-- Name: project_priorities project_priorities_workspace_match_biu_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER project_priorities_workspace_match_biu_trg BEFORE INSERT OR UPDATE ON public.project_priorities FOR EACH ROW EXECUTE FUNCTION public.project_priorities_workspace_match_biu();
++
++
++--
++-- Name: workflow_states workflow_states_group_guard_bd_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER workflow_states_group_guard_bd_trg BEFORE DELETE ON public.workflow_states FOR EACH ROW EXECUTE FUNCTION public.workflow_states_group_guard_bd();
++
++
++--
++-- Name: workflow_states workflow_states_workspace_match_biu_trg; Type: TRIGGER; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TRIGGER workflow_states_workspace_match_biu_trg BEFORE INSERT OR UPDATE ON public.workflow_states FOR EACH ROW EXECUTE FUNCTION public.workflow_states_workspace_match_biu();
++
++
++--
++-- Name: project_labels project_labels_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_labels
++    ADD CONSTRAINT project_labels_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: project_labels project_labels_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_labels
++    ADD CONSTRAINT project_labels_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: project_priorities project_priorities_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_priorities
++    ADD CONSTRAINT project_priorities_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: project_priorities project_priorities_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.project_priorities
++    ADD CONSTRAINT project_priorities_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: workflow_states workflow_states_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.workflow_states
++    ADD CONSTRAINT workflow_states_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: workflow_states workflow_states_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.workflow_states
++    ADD CONSTRAINT workflow_states_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE RESTRICT;
++
++
++--
++-- Name: project_labels; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.project_labels ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: project_labels project_labels_delete_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY project_labels_delete_rls ON public.project_labels FOR DELETE USING (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64)));
++
++
++--
++-- Name: project_labels project_labels_insert_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY project_labels_insert_rls ON public.project_labels FOR INSERT WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64)));
++
++
++--
++-- Name: project_labels project_labels_select_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY project_labels_select_rls ON public.project_labels FOR SELECT USING (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 1)));
++
++
++--
++-- Name: project_labels project_labels_update_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY project_labels_update_rls ON public.project_labels FOR UPDATE USING (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64))) WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64)));
++
++
++--
++-- Name: project_priorities; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.project_priorities ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: project_priorities project_priorities_delete_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY project_priorities_delete_rls ON public.project_priorities FOR DELETE USING (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64)));
++
++
++--
++-- Name: project_priorities project_priorities_insert_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY project_priorities_insert_rls ON public.project_priorities FOR INSERT WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64)));
++
++
++--
++-- Name: project_priorities project_priorities_select_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY project_priorities_select_rls ON public.project_priorities FOR SELECT USING (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 1)));
++
++
++--
++-- Name: project_priorities project_priorities_update_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY project_priorities_update_rls ON public.project_priorities FOR UPDATE USING (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64))) WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64)));
++
++
++--
++-- Name: workflow_states; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.workflow_states ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: workflow_states workflow_states_delete_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY workflow_states_delete_rls ON public.workflow_states FOR DELETE USING (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64)));
++
++
++--
++-- Name: workflow_states workflow_states_insert_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY workflow_states_insert_rls ON public.workflow_states FOR INSERT WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64)));
++
++
++--
++-- Name: workflow_states workflow_states_select_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY workflow_states_select_rls ON public.workflow_states FOR SELECT USING (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 1)));
++
++
++--
++-- Name: workflow_states workflow_states_update_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY workflow_states_update_rls ON public.workflow_states FOR UPDATE USING (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64))) WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND public.app_has_object_capability(project_id, 64)));
++
++
++--
++-- Name: TABLE project_labels; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.project_labels TO kanban_app;
++GRANT SELECT ON TABLE public.project_labels TO app_rls_reader;
++
++
++--
++-- Name: TABLE project_priorities; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.project_priorities TO kanban_app;
++GRANT SELECT ON TABLE public.project_priorities TO app_rls_reader;
++
++
++--
++-- Name: TABLE workflow_states; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.workflow_states TO kanban_app;
++GRANT SELECT ON TABLE public.workflow_states TO app_rls_reader;
++
++
++--
++-- PostgreSQL database dump complete
++--
++
++\unrestrict gA6BFtlZ0bQmjFTdSE2cJK1gQUDkXZybgWvKJfuRh8AB8MCcKwWurZlW2c53MkC
++
+diff --git a/docs/qa/KANBA-75/unit-test-results.txt b/docs/qa/KANBA-75/unit-test-results.txt
+new file mode 100644
+index 0000000..e636698
+--- /dev/null
++++ b/docs/qa/KANBA-75/unit-test-results.txt
+@@ -0,0 +1,32 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-75/.venv/bin/python
++rootdir: /tmp/kb-wt-KANBA-75
++configfile: pyproject.toml
++plugins: anyio-4.16.0, asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, xdist-3.8.0, platformdirs-4.14.5
++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
++collecting ... collected 11 items
++
++kanban/tests/api/test_project_config.py::test_case_1_admin_creates_state_with_wip_limits_and_activity PASSED [  9%]
++kanban/tests/api/test_project_config.py::test_case_2_capability_and_anti_enumeration_discipline PASSED [ 18%]
++kanban/tests/api/test_project_config.py::test_case_3_exclusive_group_and_label_validation PASSED [ 27%]
++kanban/tests/api/test_project_config.py::test_case_4_boundary_state_transitions_and_migrations PASSED [ 36%]
++kanban/tests/api/test_project_config.py::test_case_5_default_invariants_and_priority_management PASSED [ 45%]
++kanban/tests/api/test_project_config.py::test_state_crud_and_edge_cases PASSED [ 54%]
++kanban/tests/api/test_project_config.py::test_priority_crud_and_edge_cases PASSED [ 63%]
++kanban/tests/api/test_project_config.py::test_label_crud_and_edge_cases PASSED [ 72%]
++kanban/tests/api/test_project_config.py::test_schema_validators_and_direct_edge_cases PASSED [ 81%]
++kanban/tests/api/test_project_config.py::test_full_branch_coverage_and_404_preconditions PASSED [ 90%]
++database/tests/test_migration_wip_limits.py::test_migration_wip_limits_lifecycle_and_constraints PASSED [100%]
++
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                      Stmts   Miss Branch BrPart  Cover   Missing
++-------------------------------------------------------------------------------------
++kanban/api/v1/project_config.py              66      0      0      0   100%
++kanban/api/v1/schemas/project_config.py     112      0      8      0   100%
++kanban/services/project_config.py           247      5    114      7    97%   384->393, 401->433, 587->595, 608-609, 620-621, 695, 719->751
++-------------------------------------------------------------------------------------
++TOTAL                                       425      5    122      7    98%
++Required test coverage of 95% reached. Total coverage: 97.81%
++======================== 11 passed in 81.64s (0:01:21) =========================
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index e8c0227..fca6c81 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -6,6 +6,7 @@ from fastapi import APIRouter
+ 
+ from kanban.api.v1.health import router as health_router
+ from kanban.api.v1.objects_access import router as objects_access_router
++from kanban.api.v1.project_config import router as project_config_router
+ from kanban.api.v1.projects import router as projects_router
+ from kanban.api.v1.resolve import router as resolve_router
+ 
+@@ -16,6 +17,7 @@ def build_v1_router() -> APIRouter:
+     v1.include_router(health_router)
+     v1.include_router(objects_access_router)
+     v1.include_router(projects_router)
++    v1.include_router(project_config_router)
+     v1.include_router(resolve_router)
+     return v1
+ 
+diff --git a/kanban/api/v1/project_config.py b/kanban/api/v1/project_config.py
+new file mode 100644
+index 0000000..2bb0f86
+--- /dev/null
++++ b/kanban/api/v1/project_config.py
+@@ -0,0 +1,207 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Project configuration endpoints: workflow states, priorities & labels (KB-P3-01b)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003  # Runtime import required for FastAPI path parameter parsing
++from typing import Annotated
++
++from fastapi import APIRouter, Depends, Query, Response
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.timing import timing_floor
++from kanban.api.v1.schemas.project_config import (
++    LabelCreate,
++    LabelPatch,
++    LabelResponse,
++    PriorityCreate,
++    PriorityPatch,
++    PriorityResponse,
++    StateCreate,
++    StatePatch,
++    StateResponse,
++)
++from kanban.services import project_config as svc
++
++router = APIRouter(prefix="/projects/{project_ref}", tags=["project-config"])
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++# ---------------------------------------------------------------------------
++# Workflow States Endpoints
++# ---------------------------------------------------------------------------
++
++
++@router.get("/states", response_model=list[StateResponse], summary="List workflow states")
++async def list_states(
++    project_ref: str,
++    caller: Caller,
++    session: Session,
++) -> list[StateResponse]:
++    """List workflow states ordered by sort_order."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.list_states(session, caller, project_ref)
++
++
++@router.post(
++    "/states", status_code=201, response_model=StateResponse, summary="Create a workflow state"
++)
++async def create_state(
++    project_ref: str,
++    body: StateCreate,
++    caller: Caller,
++    session: Session,
++    response: Response,
++) -> StateResponse:
++    """Create a workflow state (project ADMIN only)."""
++    async with timing_floor(floor_ms=25.0):
++        result = await svc.create_state(session, caller, project_ref, body)
++        response.headers["Location"] = f"/api/v1/projects/{project_ref}/states/{result.id}"
++        return result
++
++
++@router.patch("/states/{state_id}", response_model=StateResponse, summary="Update a workflow state")
++async def patch_state(
++    project_ref: str,
++    state_id: uuid.UUID,
++    body: StatePatch,
++    caller: Caller,
++    session: Session,
++) -> StateResponse:
++    """Update a workflow state (project ADMIN only)."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.update_state(session, caller, project_ref, state_id, body)
++
++
++@router.delete("/states/{state_id}", status_code=204, summary="Delete a workflow state")
++async def delete_state(
++    project_ref: str,
++    state_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++    migrate_to: Annotated[uuid.UUID | None, Query()] = None,
++) -> None:
++    """Delete a workflow state, optionally migrating issues (project ADMIN only)."""
++    async with timing_floor(floor_ms=25.0):
++        await svc.delete_state(session, caller, project_ref, state_id, migrate_to=migrate_to)
++
++
++# ---------------------------------------------------------------------------
++# Project Priorities Endpoints
++# ---------------------------------------------------------------------------
++
++
++@router.get("/priorities", response_model=list[PriorityResponse], summary="List project priorities")
++async def list_priorities(
++    project_ref: str,
++    caller: Caller,
++    session: Session,
++) -> list[PriorityResponse]:
++    """List priorities for a project ordered by sort_order."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.list_priorities(session, caller, project_ref)
++
++
++@router.post(
++    "/priorities", status_code=201, response_model=PriorityResponse, summary="Create a priority"
++)
++async def create_priority(
++    project_ref: str,
++    body: PriorityCreate,
++    caller: Caller,
++    session: Session,
++    response: Response,
++) -> PriorityResponse:
++    """Create a custom project priority (project ADMIN only)."""
++    async with timing_floor(floor_ms=25.0):
++        result = await svc.create_priority(session, caller, project_ref, body)
++        response.headers["Location"] = f"/api/v1/projects/{project_ref}/priorities/{result.id}"
++        return result
++
++
++@router.patch(
++    "/priorities/{priority_id}", response_model=PriorityResponse, summary="Update a priority"
++)
++async def patch_priority(
++    project_ref: str,
++    priority_id: uuid.UUID,
++    body: PriorityPatch,
++    caller: Caller,
++    session: Session,
++) -> PriorityResponse:
++    """Update mutable priority fields (project ADMIN only)."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.update_priority(session, caller, project_ref, priority_id, body)
++
++
++@router.delete("/priorities/{priority_id}", status_code=204, summary="Delete a priority")
++async def delete_priority(
++    project_ref: str,
++    priority_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++    migrate_to: Annotated[uuid.UUID | None, Query()] = None,
++) -> None:
++    """Delete a custom priority, optionally migrating issues (project ADMIN only)."""
++    async with timing_floor(floor_ms=25.0):
++        await svc.delete_priority(session, caller, project_ref, priority_id, migrate_to=migrate_to)
++
++
++# ---------------------------------------------------------------------------
++# Project Labels Endpoints
++# ---------------------------------------------------------------------------
++
++
++@router.get("/labels", response_model=list[LabelResponse], summary="List project labels")
++async def list_labels(
++    project_ref: str,
++    caller: Caller,
++    session: Session,
++) -> list[LabelResponse]:
++    """List labels for a project ordered by name."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.list_labels(session, caller, project_ref)
++
++
++@router.post("/labels", status_code=201, response_model=LabelResponse, summary="Create a label")
++async def create_label(
++    project_ref: str,
++    body: LabelCreate,
++    caller: Caller,
++    session: Session,
++    response: Response,
++) -> LabelResponse:
++    """Create a project label (project EDIT or ADMIN allowed)."""
++    async with timing_floor(floor_ms=25.0):
++        result = await svc.create_label(session, caller, project_ref, body)
++        response.headers["Location"] = f"/api/v1/projects/{project_ref}/labels/{result.id}"
++        return result
++
++
++@router.patch("/labels/{label_id}", response_model=LabelResponse, summary="Update a label")
++async def patch_label(
++    project_ref: str,
++    label_id: uuid.UUID,
++    body: LabelPatch,
++    caller: Caller,
++    session: Session,
++) -> LabelResponse:
++    """Update a project label (project ADMIN only)."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.update_label(session, caller, project_ref, label_id, body)
++
++
++@router.delete("/labels/{label_id}", status_code=204, summary="Delete a label")
++async def delete_label(
++    project_ref: str,
++    label_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++) -> None:
++    """Delete a project label and detach from issues (project ADMIN only)."""
++    async with timing_floor(floor_ms=25.0):
++        await svc.delete_label(session, caller, project_ref, label_id)
+diff --git a/kanban/api/v1/schemas/project_config.py b/kanban/api/v1/schemas/project_config.py
+new file mode 100644
+index 0000000..5aafccc
+--- /dev/null
++++ b/kanban/api/v1/schemas/project_config.py
+@@ -0,0 +1,188 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Project configuration request and response schemas (KB-P3-01b).
++
++Covers workflow states, custom priorities, and labels with exclusive groups.
++All models forbid unknown keys.
++"""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003  # Runtime import required for Pydantic v2 type evaluation
++from typing import Annotated, Literal
++
++from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
++
++HEX_COLOR_PATTERN = r"^#[0-9A-Fa-f]{6}$"
++PRIORITY_SLUG_PATTERN = r"^[a-z][a-z0-9_-]{0,31}$"
++EXCLUSIVE_GROUP_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,31}$"
++MAX_EMOJI_LENGTH = 8
++
++StateGroupName = Literal["backlog", "unstarted", "started", "completed", "cancelled"]
++
++StateName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
++PriorityLabel = Annotated[
++    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
++]
++LabelName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
++HexColor = Annotated[str, Field(pattern=HEX_COLOR_PATTERN)]
++PrioritySlug = Annotated[str, Field(pattern=PRIORITY_SLUG_PATTERN)]
++ExclusiveGroup = Annotated[str, Field(pattern=EXCLUSIVE_GROUP_PATTERN)]
++
++
++class StateCreate(BaseModel):
++    """Payload for POST /api/v1/projects/{project_ref}/states."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    name: StateName
++    group: StateGroupName
++    color_hex: HexColor
++    sort_order: int = 0
++    is_default: bool = False
++    wip_soft_limit: int | None = Field(default=None, ge=1, le=999)
++    wip_hard_limit: int | None = Field(default=None, ge=1, le=999)
++
++    @model_validator(mode="after")
++    def validate_wip_limits(self) -> StateCreate:
++        """Enforce wip_soft_limit <= wip_hard_limit when both are present."""
++        if (
++            self.wip_soft_limit is not None
++            and self.wip_hard_limit is not None
++            and self.wip_soft_limit > self.wip_hard_limit
++        ):
++            msg = "wip_soft_limit must be less than or equal to wip_hard_limit"
++            raise ValueError(msg)
++        return self
++
++
++class StatePatch(BaseModel):
++    """Payload for PATCH /api/v1/projects/{project_ref}/states/{state_id}."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    name: StateName | None = None
++    group: StateGroupName | None = None
++    color_hex: HexColor | None = None
++    sort_order: int | None = None
++    is_default: bool | None = None
++    wip_soft_limit: int | None = Field(default=None, ge=1, le=999)
++    wip_hard_limit: int | None = Field(default=None, ge=1, le=999)
++
++    @model_validator(mode="after")
++    def validate_wip_limits(self) -> StatePatch:
++        """Enforce wip_soft_limit <= wip_hard_limit when both are present."""
++        if (
++            self.wip_soft_limit is not None
++            and self.wip_hard_limit is not None
++            and self.wip_soft_limit > self.wip_hard_limit
++        ):
++            msg = "wip_soft_limit must be less than or equal to wip_hard_limit"
++            raise ValueError(msg)
++        return self
++
++
++class StateResponse(BaseModel):
++    """Response model for a workflow state."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID
++    project_id: uuid.UUID
++    name: str
++    group: StateGroupName
++    color_hex: str
++    sort_order: int
++    is_default: bool
++    wip_soft_limit: int | None = None
++    wip_hard_limit: int | None = None
++    issue_count: int = 0
++
++
++class PriorityCreate(BaseModel):
++    """Payload for POST /api/v1/projects/{project_ref}/priorities."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    slug: PrioritySlug
++    label: PriorityLabel
++    emoji: str | None = None
++    color_hex: HexColor
++    sort_order: int = 0
++    is_default: bool = False
++
++    @model_validator(mode="after")
++    def validate_emoji(self) -> PriorityCreate:
++        """Enforce emoji length 1..8 code points if provided."""
++        if self.emoji is not None and not (1 <= len(self.emoji) <= MAX_EMOJI_LENGTH):
++            msg = "emoji must be between 1 and 8 code points"
++            raise ValueError(msg)
++        return self
++
++
++class PriorityPatch(BaseModel):
++    """Payload for PATCH /api/v1/projects/{project_ref}/priorities/{priority_id}."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    slug: PrioritySlug | None = None
++    label: PriorityLabel | None = None
++    emoji: str | None = None
++    color_hex: HexColor | None = None
++    sort_order: int | None = None
++    is_default: bool | None = None
++
++    @model_validator(mode="after")
++    def validate_emoji(self) -> PriorityPatch:
++        """Enforce emoji length 1..8 code points if provided."""
++        if self.emoji is not None and not (1 <= len(self.emoji) <= MAX_EMOJI_LENGTH):
++            msg = "emoji must be between 1 and 8 code points"
++            raise ValueError(msg)
++        return self
++
++
++class PriorityResponse(BaseModel):
++    """Response model for a project priority."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID
++    project_id: uuid.UUID
++    slug: str
++    label: str
++    emoji: str | None = None
++    color_hex: str
++    sort_order: int
++    is_default: bool
++
++
++class LabelCreate(BaseModel):
++    """Payload for POST /api/v1/projects/{project_ref}/labels."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    name: LabelName
++    color_hex: HexColor
++    exclusive_group: ExclusiveGroup | None = None
++
++
++class LabelPatch(BaseModel):
++    """Payload for PATCH /api/v1/projects/{project_ref}/labels/{label_id}."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    name: LabelName | None = None
++    color_hex: HexColor | None = None
++    exclusive_group: ExclusiveGroup | None = None
++
++
++class LabelResponse(BaseModel):
++    """Response model for a project label."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID
++    project_id: uuid.UUID
++    name: str
++    color_hex: str
++    exclusive_group: str | None = None
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index de04ad6..0e5821b 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -61,6 +61,16 @@ class ActivityEventType(StrEnum):
+     PROJECT_CREATED = "PROJECT_CREATED"
+     PROJECT_UPDATED = "PROJECT_UPDATED"
+     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
++    STATE_CREATED = "STATE_CREATED"
++    STATE_UPDATED = "STATE_UPDATED"
++    STATE_DELETED = "STATE_DELETED"
++    PRIORITY_CREATED = "PRIORITY_CREATED"
++    PRIORITY_UPDATED = "PRIORITY_UPDATED"
++    PRIORITY_DELETED = "PRIORITY_DELETED"
++    LABEL_CREATED = "LABEL_CREATED"
++    LABEL_UPDATED = "LABEL_UPDATED"
++    LABEL_DELETED = "LABEL_DELETED"
++    ISSUE_FIELD_CHANGED = "ISSUE_FIELD_CHANGED"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -68,6 +78,16 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.PROJECT_CREATED: ActivityCategory.HISTORY,
+         ActivityEventType.PROJECT_UPDATED: ActivityCategory.HISTORY,
+         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
++        ActivityEventType.STATE_CREATED: ActivityCategory.HISTORY,
++        ActivityEventType.STATE_UPDATED: ActivityCategory.HISTORY,
++        ActivityEventType.STATE_DELETED: ActivityCategory.HISTORY,
++        ActivityEventType.PRIORITY_CREATED: ActivityCategory.HISTORY,
++        ActivityEventType.PRIORITY_UPDATED: ActivityCategory.HISTORY,
++        ActivityEventType.PRIORITY_DELETED: ActivityCategory.HISTORY,
++        ActivityEventType.LABEL_CREATED: ActivityCategory.HISTORY,
++        ActivityEventType.LABEL_UPDATED: ActivityCategory.HISTORY,
++        ActivityEventType.LABEL_DELETED: ActivityCategory.HISTORY,
++        ActivityEventType.ISSUE_FIELD_CHANGED: ActivityCategory.HISTORY,
+     }
+ )
+ 
+diff --git a/kanban/services/project_config.py b/kanban/services/project_config.py
+new file mode 100644
+index 0000000..0980a9c
+--- /dev/null
++++ b/kanban/services/project_config.py
+@@ -0,0 +1,973 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Project configuration business logic (KB-P3-01b).
++
++Implements management of workflow states (with WIP limits), custom priorities,
++and labels (with exclusive groups).
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any
++
++from sqlalchemy import delete, func, select, update
++
++from database.models import (
++    Issue,
++    IssueLabel,
++    ObjectRecord,
++    ProjectPriority,
++    WorkflowState,
++)
++from database.models.projects import ProjectLabel
++from kanban.api.problems import ProblemException, not_found
++from kanban.api.v1.schemas.project_config import (
++    LabelCreate,
++    LabelPatch,
++    LabelResponse,
++    PriorityCreate,
++    PriorityPatch,
++    PriorityResponse,
++    StateCreate,
++    StatePatch,
++    StateResponse,
++)
++from kanban.security.permissions import Capability, require_capability
++from kanban.services.activity import ActivityEventType, record_activity
++from kanban.services.projects import get_project_or_404
++
++if TYPE_CHECKING:
++    import uuid
++
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.api.deps import PrincipalContext
++
++MAX_MIGRATION_ISSUES: int = 500
++
++
++# ---------------------------------------------------------------------------
++# Workflow States
++# ---------------------------------------------------------------------------
++
++
++async def list_states(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++) -> list[StateResponse]:
++    """List workflow states for a project ordered by sort_order."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.VIEW)
++
++    # Aggregate non-archived, non-deleted issues per state
++    counts_query = (
++        select(Issue.state_id, func.count(Issue.id).label("cnt"))
++        .join(ObjectRecord, ObjectRecord.id == Issue.id)
++        .where(
++            Issue.project_id == project.id,
++            ObjectRecord.archived_at.is_(None),
++            ObjectRecord.deleted_at.is_(None),
++        )
++        .group_by(Issue.state_id)
++    )
++    counts_res = await session.execute(counts_query)
++    issue_counts: dict[uuid.UUID, int] = {row[0]: row[1] for row in counts_res.all()}
++
++    states_query = (
++        select(WorkflowState)
++        .where(WorkflowState.project_id == project.id)
++        .order_by(WorkflowState.sort_order, WorkflowState.name)
++    )
++    res = await session.execute(states_query)
++    states = res.scalars().all()
++
++    return [
++        StateResponse(
++            id=s.id,
++            project_id=s.project_id,
++            name=s.name,
++            group=s.state_group,  # type: ignore[arg-type]
++            color_hex=s.color_hex,
++            sort_order=s.sort_order,
++            is_default=s.is_default,
++            wip_soft_limit=s.wip_soft_limit,
++            wip_hard_limit=s.wip_hard_limit,
++            issue_count=issue_counts.get(s.id, 0),
++        )
++        for s in states
++    ]
++
++
++async def create_state(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    data: StateCreate,
++) -> StateResponse:
++    """Create a new workflow state for a project."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.ADMIN)
++
++    # Check case-insensitive name uniqueness within project
++    existing = await session.execute(
++        select(WorkflowState.id).where(
++            WorkflowState.project_id == project.id,
++            func.lower(WorkflowState.name) == data.name.lower(),
++        )
++    )
++    if existing.scalar_one_or_none() is not None:
++        raise ProblemException(
++            status=409,
++            code="STATE_NAME_TAKEN",
++            title="State Name Taken",
++            detail=None,
++        )
++
++    # Single default invariant: setting is_default=true clears previous default
++    if data.is_default:
++        await session.execute(
++            update(WorkflowState)
++            .where(WorkflowState.project_id == project.id)
++            .values(is_default=False)
++        )
++
++    new_state = WorkflowState(
++        workspace_id=project.workspace_id,
++        project_id=project.id,
++        name=data.name,
++        state_group=data.group,
++        color_hex=data.color_hex,
++        sort_order=data.sort_order,
++        is_default=data.is_default,
++        wip_soft_limit=data.wip_soft_limit,
++        wip_hard_limit=data.wip_hard_limit,
++    )
++    session.add(new_state)
++    await session.flush()
++
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=project.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.STATE_CREATED,
++        payload={
++            "state_id": str(new_state.id),
++            "name": new_state.name,
++            "group": new_state.state_group,
++            "color_hex": new_state.color_hex,
++            "sort_order": new_state.sort_order,
++            "is_default": new_state.is_default,
++        },
++    )
++
++    return StateResponse(
++        id=new_state.id,
++        project_id=new_state.project_id,
++        name=new_state.name,
++        group=new_state.state_group,  # type: ignore[arg-type]
++        color_hex=new_state.color_hex,
++        sort_order=new_state.sort_order,
++        is_default=new_state.is_default,
++        wip_soft_limit=new_state.wip_soft_limit,
++        wip_hard_limit=new_state.wip_hard_limit,
++        issue_count=0,
++    )
++
++
++async def update_state(  # noqa: C901, PLR0912
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    state_id: uuid.UUID,
++    data: StatePatch,
++) -> StateResponse:
++    """Update mutable fields of a workflow state."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.ADMIN)
++
++    res = await session.execute(
++        select(WorkflowState).where(
++            WorkflowState.project_id == project.id,
++            WorkflowState.id == state_id,
++        )
++    )
++    state = res.scalar_one_or_none()
++    if state is None:
++        not_found()
++
++    # Validate combined WIP limits if partial updates given
++    effective_soft = (
++        data.wip_soft_limit if data.wip_soft_limit is not None else state.wip_soft_limit
++    )
++    effective_hard = (
++        data.wip_hard_limit if data.wip_hard_limit is not None else state.wip_hard_limit
++    )
++    if (
++        effective_soft is not None
++        and effective_hard is not None
++        and effective_soft > effective_hard
++    ):
++        raise ProblemException(
++            status=422,
++            code="INVALID_WIP_LIMITS",
++            title="Invalid WIP Limits",
++            detail=None,
++        )
++
++    # Name uniqueness check
++    if data.name is not None and data.name.lower() != state.name.lower():
++        existing = await session.execute(
++            select(WorkflowState.id).where(
++                WorkflowState.project_id == project.id,
++                WorkflowState.id != state_id,
++                func.lower(WorkflowState.name) == data.name.lower(),
++            )
++        )
++        if existing.scalar_one_or_none() is not None:
++            raise ProblemException(
++                status=409,
++                code="STATE_NAME_TAKEN",
++                title="State Name Taken",
++                detail=None,
++            )
++
++    # Exactly one default invariant
++    if data.is_default is True:
++        await session.execute(
++            update(WorkflowState)
++            .where(
++                WorkflowState.project_id == project.id,
++                WorkflowState.id != state_id,
++            )
++            .values(is_default=False)
++        )
++
++    changes: dict[str, dict[str, Any]] = {}
++
++    if data.name is not None and data.name != state.name:
++        changes["name"] = {"old": state.name, "new": data.name}
++        state.name = data.name
++
++    if data.group is not None and data.group != state.state_group:
++        changes["group"] = {"old": state.state_group, "new": data.group}
++        state.state_group = data.group
++
++    if data.color_hex is not None and data.color_hex != state.color_hex:
++        changes["color_hex"] = {"old": state.color_hex, "new": data.color_hex}
++        state.color_hex = data.color_hex
++
++    if data.sort_order is not None and data.sort_order != state.sort_order:
++        changes["sort_order"] = {"old": state.sort_order, "new": data.sort_order}
++        state.sort_order = data.sort_order
++
++    if data.is_default is not None and data.is_default != state.is_default:
++        changes["is_default"] = {"old": state.is_default, "new": data.is_default}
++        state.is_default = data.is_default
++
++    if (
++        data.wip_soft_limit is not None or "wip_soft_limit" in data.model_fields_set
++    ) and data.wip_soft_limit != state.wip_soft_limit:
++        changes["wip_soft_limit"] = {"old": state.wip_soft_limit, "new": data.wip_soft_limit}
++        state.wip_soft_limit = data.wip_soft_limit
++
++    if (
++        data.wip_hard_limit is not None or "wip_hard_limit" in data.model_fields_set
++    ) and data.wip_hard_limit != state.wip_hard_limit:
++        changes["wip_hard_limit"] = {"old": state.wip_hard_limit, "new": data.wip_hard_limit}
++        state.wip_hard_limit = data.wip_hard_limit
++
++    await session.flush()
++
++    if changes:
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=project.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.STATE_UPDATED,
++            payload={
++                "state_id": str(state.id),
++                "changes": changes,
++            },
++        )
++
++    # Issue count for response
++    cnt_res = await session.execute(
++        select(func.count(Issue.id))
++        .join(ObjectRecord, ObjectRecord.id == Issue.id)
++        .where(
++            Issue.project_id == project.id,
++            Issue.state_id == state.id,
++            ObjectRecord.archived_at.is_(None),
++            ObjectRecord.deleted_at.is_(None),
++        )
++    )
++    issue_count = cnt_res.scalar_one()
++
++    return StateResponse(
++        id=state.id,
++        project_id=state.project_id,
++        name=state.name,
++        group=state.state_group,  # type: ignore[arg-type]
++        color_hex=state.color_hex,
++        sort_order=state.sort_order,
++        is_default=state.is_default,
++        wip_soft_limit=state.wip_soft_limit,
++        wip_hard_limit=state.wip_hard_limit,
++        issue_count=issue_count,
++    )
++
++
++async def delete_state(  # noqa: C901
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    state_id: uuid.UUID,
++    migrate_to: uuid.UUID | None = None,
++) -> None:
++    """Delete a workflow state, optionally migrating in-flight issues."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.ADMIN)
++
++    res = await session.execute(
++        select(WorkflowState).where(
++            WorkflowState.project_id == project.id,
++            WorkflowState.id == state_id,
++        )
++    )
++    state = res.scalar_one_or_none()
++    if state is None:
++        not_found()
++
++    # Validate migrate_to if provided
++    if migrate_to is not None:
++        if migrate_to == state_id:
++            raise ProblemException(
++                status=422,
++                code="MIGRATE_TARGET_INVALID",
++                title="Invalid Migration Target",
++                detail=None,
++            )
++        target_res = await session.execute(
++            select(WorkflowState).where(
++                WorkflowState.project_id == project.id,
++                WorkflowState.id == migrate_to,
++            )
++        )
++        if target_res.scalar_one_or_none() is None:
++            raise ProblemException(
++                status=422,
++                code="MIGRATE_TARGET_INVALID",
++                title="Invalid Migration Target",
++                detail=None,
++            )
++
++    # Rule: cannot delete default state
++    if state.is_default:
++        raise ProblemException(
++            status=409,
++            code="DEFAULT_STATE",
++            title="Default State Cannot Be Deleted",
++            detail=None,
++        )
++
++    # Rule: cannot delete last state in completed, cancelled, or backlog
++    if state.state_group in ("completed", "cancelled", "backlog"):
++        grp_count_res = await session.execute(
++            select(func.count(WorkflowState.id)).where(
++                WorkflowState.project_id == project.id,
++                WorkflowState.state_group == state.state_group,
++            )
++        )
++        if grp_count_res.scalar_one() <= 1:
++            raise ProblemException(
++                status=409,
++                code="LAST_STATE_IN_GROUP",
++                title="Cannot Delete Last State In Group",
++                detail=None,
++            )
++
++    # Query issues currently using this state
++    issues_res = await session.execute(
++        select(Issue).where(
++            Issue.project_id == project.id,
++            Issue.state_id == state_id,
++        )
++    )
++    issues = issues_res.scalars().all()
++
++    if issues:
++        if migrate_to is None:
++            raise ProblemException(
++                status=409,
++                code="STATE_IN_USE",
++                title="State In Use",
++                detail=None,
++            )
++        if len(issues) > MAX_MIGRATION_ISSUES:
++            raise ProblemException(
++                status=409,
++                code="MIGRATION_TOO_LARGE",
++                title="Migration Too Large",
++                detail=None,
++            )
++
++        for issue in issues:
++            issue.state_id = migrate_to
++            await record_activity(
++                session,
++                workspace_id=caller.workspace_id,
++                object_id=issue.id,
++                actor_principal_id=caller.principal_id,
++                event_type=ActivityEventType.ISSUE_FIELD_CHANGED,
++                payload={
++                    "field": "state_id",
++                    "old": str(state_id),
++                    "new": str(migrate_to),
++                    "reason": "state_deleted",
++                },
++            )
++
++    await session.delete(state)
++    await session.flush()
++
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=project.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.STATE_DELETED,
++        payload={
++            "state_id": str(state_id),
++            "migrated_issue_count": len(issues),
++            "migrate_to": str(migrate_to) if migrate_to else None,
++        },
++    )
++
++
++# ---------------------------------------------------------------------------
++# Project Priorities
++# ---------------------------------------------------------------------------
++
++
++async def list_priorities(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++) -> list[PriorityResponse]:
++    """List priorities for a project ordered by sort_order."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.VIEW)
++
++    res = await session.execute(
++        select(ProjectPriority)
++        .where(ProjectPriority.project_id == project.id)
++        .order_by(ProjectPriority.sort_order, ProjectPriority.label)
++    )
++    priorities = res.scalars().all()
++
++    return [
++        PriorityResponse(
++            id=p.id,
++            project_id=p.project_id,
++            slug=p.slug,
++            label=p.label,
++            emoji=p.emoji,
++            color_hex=p.color_hex,
++            sort_order=p.sort_order,
++            is_default=p.is_default,
++        )
++        for p in priorities
++    ]
++
++
++async def create_priority(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    data: PriorityCreate,
++) -> PriorityResponse:
++    """Create a custom priority for a project."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.ADMIN)
++
++    existing = await session.execute(
++        select(ProjectPriority.id).where(
++            ProjectPriority.project_id == project.id,
++            ProjectPriority.slug == data.slug,
++        )
++    )
++    if existing.scalar_one_or_none() is not None:
++        raise ProblemException(
++            status=409,
++            code="PRIORITY_SLUG_TAKEN",
++            title="Priority Slug Taken",
++            detail=None,
++        )
++
++    # Setting default clears previous defaults
++    if data.is_default:
++        await session.execute(
++            update(ProjectPriority)
++            .where(ProjectPriority.project_id == project.id)
++            .values(is_default=False)
++        )
++
++    new_prio = ProjectPriority(
++        workspace_id=project.workspace_id,
++        project_id=project.id,
++        slug=data.slug,
++        label=data.label,
++        emoji=data.emoji,
++        color_hex=data.color_hex,
++        sort_order=data.sort_order,
++        is_default=data.is_default,
++    )
++    session.add(new_prio)
++    await session.flush()
++
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=project.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.PRIORITY_CREATED,
++        payload={
++            "priority_id": str(new_prio.id),
++            "slug": new_prio.slug,
++            "label": new_prio.label,
++            "sort_order": new_prio.sort_order,
++            "is_default": new_prio.is_default,
++        },
++    )
++
++    return PriorityResponse(
++        id=new_prio.id,
++        project_id=new_prio.project_id,
++        slug=new_prio.slug,
++        label=new_prio.label,
++        emoji=new_prio.emoji,
++        color_hex=new_prio.color_hex,
++        sort_order=new_prio.sort_order,
++        is_default=new_prio.is_default,
++    )
++
++
++async def update_priority(  # noqa: C901
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    priority_id: uuid.UUID,
++    data: PriorityPatch,
++) -> PriorityResponse:
++    """Update mutable fields of a project priority."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.ADMIN)
++
++    res = await session.execute(
++        select(ProjectPriority).where(
++            ProjectPriority.project_id == project.id,
++            ProjectPriority.id == priority_id,
++        )
++    )
++    prio = res.scalar_one_or_none()
++    if prio is None:
++        not_found()
++
++    if data.slug is not None and data.slug != prio.slug:
++        existing = await session.execute(
++            select(ProjectPriority.id).where(
++                ProjectPriority.project_id == project.id,
++                ProjectPriority.id != priority_id,
++                ProjectPriority.slug == data.slug,
++            )
++        )
++        if existing.scalar_one_or_none() is not None:
++            raise ProblemException(
++                status=409,
++                code="PRIORITY_SLUG_TAKEN",
++                title="Priority Slug Taken",
++                detail=None,
++            )
++
++    if data.is_default is True:
++        await session.execute(
++            update(ProjectPriority)
++            .where(
++                ProjectPriority.project_id == project.id,
++                ProjectPriority.id != priority_id,
++            )
++            .values(is_default=False)
++        )
++
++    changes: dict[str, dict[str, Any]] = {}
++
++    if data.slug is not None and data.slug != prio.slug:
++        changes["slug"] = {"old": prio.slug, "new": data.slug}
++        prio.slug = data.slug
++
++    if data.label is not None and data.label != prio.label:
++        changes["label"] = {"old": prio.label, "new": data.label}
++        prio.label = data.label
++
++    if (data.emoji is not None or "emoji" in data.model_fields_set) and data.emoji != prio.emoji:
++        changes["emoji"] = {"old": prio.emoji, "new": data.emoji}
++        prio.emoji = data.emoji
++
++    if data.color_hex is not None and data.color_hex != prio.color_hex:
++        changes["color_hex"] = {"old": prio.color_hex, "new": data.color_hex}
++        prio.color_hex = data.color_hex
++
++    if data.sort_order is not None and data.sort_order != prio.sort_order:
++        changes["sort_order"] = {"old": prio.sort_order, "new": data.sort_order}
++        prio.sort_order = data.sort_order
++
++    if data.is_default is not None and data.is_default != prio.is_default:
++        changes["is_default"] = {"old": prio.is_default, "new": data.is_default}
++        prio.is_default = data.is_default
++
++    await session.flush()
++
++    if changes:
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=project.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.PRIORITY_UPDATED,
++            payload={
++                "priority_id": str(prio.id),
++                "changes": changes,
++            },
++        )
++
++    return PriorityResponse(
++        id=prio.id,
++        project_id=prio.project_id,
++        slug=prio.slug,
++        label=prio.label,
++        emoji=prio.emoji,
++        color_hex=prio.color_hex,
++        sort_order=prio.sort_order,
++        is_default=prio.is_default,
++    )
++
++
++async def delete_priority(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    priority_id: uuid.UUID,
++    migrate_to: uuid.UUID | None = None,
++) -> None:
++    """Delete a custom priority, optionally migrating issues."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.ADMIN)
++
++    res = await session.execute(
++        select(ProjectPriority).where(
++            ProjectPriority.project_id == project.id,
++            ProjectPriority.id == priority_id,
++        )
++    )
++    prio = res.scalar_one_or_none()
++    if prio is None:
++        not_found()
++
++    # Validate migrate_to if provided
++    if migrate_to is not None:
++        if migrate_to == priority_id:
++            raise ProblemException(
++                status=422,
++                code="MIGRATE_TARGET_INVALID",
++                title="Invalid Migration Target",
++                detail=None,
++            )
++        target_res = await session.execute(
++            select(ProjectPriority).where(
++                ProjectPriority.project_id == project.id,
++                ProjectPriority.id == migrate_to,
++            )
++        )
++        if target_res.scalar_one_or_none() is None:
++            raise ProblemException(
++                status=422,
++                code="MIGRATE_TARGET_INVALID",
++                title="Invalid Migration Target",
++                detail=None,
++            )
++
++    # Rule: cannot delete default priority
++    if prio.is_default:
++        raise ProblemException(
++            status=409,
++            code="DEFAULT_PRIORITY",
++            title="Default Priority Cannot Be Deleted",
++            detail=None,
++        )
++
++    issues_res = await session.execute(
++        select(Issue).where(
++            Issue.project_id == project.id,
++            Issue.priority_id == priority_id,
++        )
++    )
++    issues = issues_res.scalars().all()
++
++    if issues:
++        if migrate_to is None:
++            raise ProblemException(
++                status=409,
++                code="PRIORITY_IN_USE",
++                title="Priority In Use",
++                detail=None,
++            )
++        if len(issues) > MAX_MIGRATION_ISSUES:
++            raise ProblemException(
++                status=409,
++                code="MIGRATION_TOO_LARGE",
++                title="Migration Too Large",
++                detail=None,
++            )
++
++        for issue in issues:
++            issue.priority_id = migrate_to
++            await record_activity(
++                session,
++                workspace_id=caller.workspace_id,
++                object_id=issue.id,
++                actor_principal_id=caller.principal_id,
++                event_type=ActivityEventType.ISSUE_FIELD_CHANGED,
++                payload={
++                    "field": "priority_id",
++                    "old": str(priority_id),
++                    "new": str(migrate_to),
++                    "reason": "priority_deleted",
++                },
++            )
++
++    await session.delete(prio)
++    await session.flush()
++
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=project.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.PRIORITY_DELETED,
++        payload={
++            "priority_id": str(priority_id),
++            "migrated_issue_count": len(issues),
++            "migrate_to": str(migrate_to) if migrate_to else None,
++        },
++    )
++
++
++# ---------------------------------------------------------------------------
++# Project Labels
++# ---------------------------------------------------------------------------
++
++
++async def list_labels(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++) -> list[LabelResponse]:
++    """List labels for a project ordered by name."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.VIEW)
++
++    res = await session.execute(
++        select(ProjectLabel)
++        .where(ProjectLabel.project_id == project.id)
++        .order_by(ProjectLabel.name)
++    )
++    labels = res.scalars().all()
++
++    return [
++        LabelResponse(
++            id=lbl.id,
++            project_id=lbl.project_id,
++            name=lbl.name,
++            color_hex=lbl.color_hex,
++            exclusive_group=lbl.exclusive_group,
++        )
++        for lbl in labels
++    ]
++
++
++async def create_label(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    data: LabelCreate,
++) -> LabelResponse:
++    """Create a project label. Requires EDIT capability (S7.2 8i instant creation)."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.EDIT)
++
++    existing = await session.execute(
++        select(ProjectLabel.id).where(
++            ProjectLabel.project_id == project.id,
++            func.lower(ProjectLabel.name) == data.name.lower(),
++        )
++    )
++    if existing.scalar_one_or_none() is not None:
++        raise ProblemException(
++            status=409,
++            code="LABEL_NAME_TAKEN",
++            title="Label Name Taken",
++            detail=None,
++        )
++
++    new_label = ProjectLabel(
++        workspace_id=project.workspace_id,
++        project_id=project.id,
++        name=data.name,
++        color_hex=data.color_hex,
++        exclusive_group=data.exclusive_group,
++    )
++    session.add(new_label)
++    await session.flush()
++
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=project.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.LABEL_CREATED,
++        payload={
++            "label_id": str(new_label.id),
++            "name": new_label.name,
++            "exclusive_group": new_label.exclusive_group,
++        },
++    )
++
++    return LabelResponse(
++        id=new_label.id,
++        project_id=new_label.project_id,
++        name=new_label.name,
++        color_hex=new_label.color_hex,
++        exclusive_group=new_label.exclusive_group,
++    )
++
++
++async def update_label(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    label_id: uuid.UUID,
++    data: LabelPatch,
++) -> LabelResponse:
++    """Update a project label (project ADMIN only)."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.ADMIN)
++
++    res = await session.execute(
++        select(ProjectLabel).where(
++            ProjectLabel.project_id == project.id,
++            ProjectLabel.id == label_id,
++        )
++    )
++    label = res.scalar_one_or_none()
++    if label is None:
++        not_found()
++
++    if data.name is not None and data.name.lower() != label.name.lower():
++        existing = await session.execute(
++            select(ProjectLabel.id).where(
++                ProjectLabel.project_id == project.id,
++                ProjectLabel.id != label_id,
++                func.lower(ProjectLabel.name) == data.name.lower(),
++            )
++        )
++        if existing.scalar_one_or_none() is not None:
++            raise ProblemException(
++                status=409,
++                code="LABEL_NAME_TAKEN",
++                title="Label Name Taken",
++                detail=None,
++            )
++
++    changes: dict[str, dict[str, Any]] = {}
++
++    if data.name is not None and data.name != label.name:
++        changes["name"] = {"old": label.name, "new": data.name}
++        label.name = data.name
++
++    if data.color_hex is not None and data.color_hex != label.color_hex:
++        changes["color_hex"] = {"old": label.color_hex, "new": data.color_hex}
++        label.color_hex = data.color_hex
++
++    if (
++        data.exclusive_group is not None or "exclusive_group" in data.model_fields_set
++    ) and data.exclusive_group != label.exclusive_group:
++        changes["exclusive_group"] = {
++            "old": label.exclusive_group,
++            "new": data.exclusive_group,
++        }
++        label.exclusive_group = data.exclusive_group
++
++    await session.flush()
++
++    if changes:
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=project.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.LABEL_UPDATED,
++            payload={
++                "label_id": str(label.id),
++                "changes": changes,
++            },
++        )
++
++    return LabelResponse(
++        id=label.id,
++        project_id=label.project_id,
++        name=label.name,
++        color_hex=label.color_hex,
++        exclusive_group=label.exclusive_group,
++    )
++
++
++async def delete_label(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    project_ref: str,
++    label_id: uuid.UUID,
++) -> None:
++    """Delete a project label and detach it from all issues (project ADMIN only)."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.ADMIN)
++
++    res = await session.execute(
++        select(ProjectLabel).where(
++            ProjectLabel.project_id == project.id,
++            ProjectLabel.id == label_id,
++        )
++    )
++    label = res.scalar_one_or_none()
++    if label is None:
++        not_found()
++
++    # Detach label from all issues in this project
++    await session.execute(delete(IssueLabel).where(IssueLabel.label_id == label_id))
++
++    await session.delete(label)
++    await session.flush()
++
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=project.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.LABEL_DELETED,
++        payload={
++            "label_id": str(label_id),
++            "name": label.name,
++        },
++    )
+diff --git a/kanban/tests/api/test_project_config.py b/kanban/tests/api/test_project_config.py
+new file mode 100644
+index 0000000..f1fcbe7
+--- /dev/null
++++ b/kanban/tests/api/test_project_config.py
+@@ -0,0 +1,974 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Project configuration API tests: workflow states, priorities & labels (KB-P3-01b)."""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++
++from kanban.tests.security.helpers import add_role_binding, rebuild_era
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++    from kanban.tests.contract import ContractRecorder
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _count(env: ApiEnv, sql: str, **params: object) -> int:
++    """Return a scalar count from the committed seed session."""
++    await env.seed.rollback()
++    return int((await env.seed.execute(text(sql), params)).scalar_one())
++
++
++async def _seed_issue(  # noqa: PLR0913, PLR0917
++    api_env: ApiEnv,
++    proj_id: str,
++    pref: str,
++    admin_uid: uuid.UUID,
++    state_id: str,
++    priority_id: str,
++    summary: str = "Test Issue",
++) -> uuid.UUID:
++    """Seed an issue using proper sequence allocation and spine registration."""
++    ws_id = (
++        await api_env.seed.execute(
++            text("SELECT workspace_id FROM projects WHERE id = :p"), {"p": proj_id}
++        )
++    ).scalar_one()
++    seq_val = (
++        await api_env.seed.execute(text("SELECT allocate_issue_sequence(:p)"), {"p": proj_id})
++    ).scalar_one()
++    issue_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text(
++            "SELECT register_object('issue'::object_kind, :ws, :proj, :ckey, :title, :creator, :id)"
++        ),
++        {
++            "ws": ws_id,
++            "proj": proj_id,
++            "ckey": f"{pref}-{seq_val}",
++            "title": summary,
++            "creator": admin_uid,
++            "id": issue_id,
++        },
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO issues (id, workspace_id, project_id, sequence_id, "
++            "state_id, priority_id, summary, created_by_id, original_created_by_id, board_rank) "
++            "VALUES (:id, :ws, :proj, :seq, :st, :pr, :title, :creator, :creator, '0|hzzzzz:')"
++        ),
++        {
++            "id": issue_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "seq": seq_val,
++            "st": state_id,
++            "pr": priority_id,
++            "title": summary,
++            "creator": admin_uid,
++        },
++    )
++    await api_env.seed.commit()
++    return issue_id
++
++
++async def _setup_project_with_roles(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    identifier: str = "CONF",
++) -> tuple[str, str, SeededUser, SeededUser, SeededUser, SeededUser, httpx.AsyncClient]:
++    """Seed a project and return (proj_id, identifier, admin, editor, viewer, outsider, client)."""
++    admin = await make_user(f"adm_{identifier.lower()}", workspace_role="WORKSPACE_ADMIN")
++    editor = await make_user(f"edt_{identifier.lower()}")
++    viewer = await make_user(f"viw_{identifier.lower()}")
++    outsider = await make_user(f"out_{identifier.lower()}")
++
++    client = as_principal(admin)
++
++    # Create project as admin
++    resp = await client.post(
++        "/api/v1/projects",
++        json={"identifier": identifier, "name": f"Config Project {identifier}"},
++    )
++    assert resp.status_code == 201, resp.text
++    proj_id = resp.json()["id"]
++
++    # Bind roles
++    ws_id = admin.workspace_id
++    await add_role_binding(api_env.seed, ws_id, editor.id, "MEMBER", project_id=uuid.UUID(proj_id))
++    await add_role_binding(api_env.seed, ws_id, viewer.id, "VIEWER", project_id=uuid.UUID(proj_id))
++    await rebuild_era(api_env.seed, ws_id)
++    await api_env.seed.commit()
++
++    return proj_id, identifier, admin, editor, viewer, outsider, client
++
++
++# ---------------------------------------------------------------------------
++# Mandatory Feature Test Cases
++# ---------------------------------------------------------------------------
++
++
++async def test_case_1_admin_creates_state_with_wip_limits_and_activity(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 1: Admin creates started state with wip_soft_limit=3, wip_hard_limit=5."""
++    proj_id, pref, admin, _, viewer, _, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="TC1"
++    )
++
++    as_principal(admin)
++    resp = await client.post(
++        f"/api/v1/projects/{pref}/states",
++        json={
++            "name": "In Review",
++            "group": "started",
++            "color_hex": "#3B82F6",
++            "sort_order": 30,
++            "is_default": False,
++            "wip_soft_limit": 3,
++            "wip_hard_limit": 5,
++        },
++    )
++    contract_recorder.record("create_state_201", resp.request, resp)
++    assert resp.status_code == 201, resp.text
++    body = resp.json()
++    assert body["name"] == "In Review"
++    assert body["group"] == "started"
++    assert body["color_hex"] == "#3B82F6"
++    assert body["wip_soft_limit"] == 3
++    assert body["wip_hard_limit"] == 5
++    assert body["issue_count"] == 0
++    state_id = body["id"]
++    assert resp.headers["Location"] == f"/api/v1/projects/{pref}/states/{state_id}"
++
++    # GET .../states returns it with issue_count: 0
++    as_principal(viewer)
++    list_resp = await client.get(f"/api/v1/projects/{pref}/states")
++    assert list_resp.status_code == 200
++    states = list_resp.json()
++    created_state = next((s for s in states if s["id"] == state_id), None)
++    assert created_state is not None
++    assert created_state["issue_count"] == 0
++
++    # STATE_CREATED activity row exists
++    assert (
++        await _count(
++            api_env,
++            "SELECT count(*) FROM activity_records WHERE object_id = :p "
++            "  AND event_type = 'STATE_CREATED' AND payload->>'state_id' = :sid",
++            p=proj_id,
++            sid=state_id,
++        )
++        == 1
++    )
++
++
++async def test_case_2_capability_and_anti_enumeration_discipline(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 2: EDIT user POST states -> 403; non-member -> 404; label id cross-project -> 404."""
++    _, p1_ref, admin1, edit1, _, outsider, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="TC2A"
++    )
++    _, p2_ref, admin2, _, _, _, _ = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="TC2B"
++    )
++
++    # 1. EDIT user tries to POST /states -> 403 INSUFFICIENT_CAPABILITY
++    as_principal(edit1)
++    resp_403 = await client.post(
++        f"/api/v1/projects/{p1_ref}/states",
++        json={"name": "Forbidden State", "group": "started", "color_hex": "#10B981"},
++    )
++    contract_recorder.record("post_state_edit_user_403", resp_403.request, resp_403)
++    assert resp_403.status_code == 403
++    assert resp_403.json()["code"] == "INSUFFICIENT_CAPABILITY"
++
++    # 2. Non-member (outsider) tries to access project -> equalized 404 NOT_FOUND
++    as_principal(outsider)
++    resp_404 = await client.get(f"/api/v1/projects/{p1_ref}/states")
++    assert resp_404.status_code == 404
++    assert resp_404.json()["code"] == "NOT_FOUND"
++
++    # 3. Create a label in project 2
++    as_principal(admin2)
++    l2_resp = await client.post(
++        f"/api/v1/projects/{p2_ref}/labels",
++        json={"name": "backend", "color_hex": "#6366F1"},
++    )
++    assert l2_resp.status_code == 201
++    l2_id = l2_resp.json()["id"]
++
++    # Patch label from project 2 via project 1 path -> equalized 404 NOT_FOUND
++    as_principal(admin1)
++    cross_resp = await client.patch(
++        f"/api/v1/projects/{p1_ref}/labels/{l2_id}",
++        json={"name": "renamed"},
++    )
++    contract_recorder.record("cross_project_id_404", cross_resp.request, cross_resp)
++    assert cross_resp.status_code == 404
++    assert cross_resp.json()["code"] == "NOT_FOUND"
++
++
++async def test_case_3_exclusive_group_and_label_validation(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 3: Creating label type:bug with group type succeeds; group Type! returns 422."""
++    _, pref, _, edit_user, _, _, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="TC3"
++    )
++
++    # EDIT user creates label with valid exclusive group -> 201
++    as_principal(edit_user)
++    resp_ok = await client.post(
++        f"/api/v1/projects/{pref}/labels",
++        json={"name": "type:bug", "color_hex": "#EF4444", "exclusive_group": "type"},
++    )
++    contract_recorder.record("create_label_edit_user_201", resp_ok.request, resp_ok)
++    assert resp_ok.status_code == 201, resp_ok.text
++    body = resp_ok.json()
++    assert body["name"] == "type:bug"
++    assert body["exclusive_group"] == "type"
++
++    # Invalid exclusive group regex (contains uppercase and exclamation mark) -> 422
++    resp_bad = await client.post(
++        f"/api/v1/projects/{pref}/labels",
++        json={"name": "type:feature", "color_hex": "#3B82F6", "exclusive_group": "Type!"},
++    )
++    assert resp_bad.status_code == 422
++
++
++async def test_case_4_boundary_state_transitions_and_migrations(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 4: WIP bounds, deleting only completed state 409, in-use state migration."""
++    proj_id, pref, admin, _, _, _, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="TC4"
++    )
++    as_principal(admin)
++
++    # 1. wip_soft_limit > wip_hard_limit returns 422
++    resp_inv_wip = await client.post(
++        f"/api/v1/projects/{pref}/states",
++        json={
++            "name": "Invalid WIP",
++            "group": "started",
++            "color_hex": "#EF4444",
++            "wip_soft_limit": 6,
++            "wip_hard_limit": 5,
++        },
++    )
++    contract_recorder.record("wip_invalid_422", resp_inv_wip.request, resp_inv_wip)
++    assert resp_inv_wip.status_code == 422
++
++    # 2. 999 accepted, 1000 rejected
++    resp_999 = await client.post(
++        f"/api/v1/projects/{pref}/states",
++        json={
++            "name": "Bound 999",
++            "group": "started",
++            "color_hex": "#10B981",
++            "wip_soft_limit": 999,
++            "wip_hard_limit": 999,
++        },
++    )
++    assert resp_999.status_code == 201
++
++    resp_1000 = await client.post(
++        f"/api/v1/projects/{pref}/states",
++        json={
++            "name": "Bound 1000",
++            "group": "started",
++            "color_hex": "#10B981",
++            "wip_soft_limit": 1000,
++        },
++    )
++    assert resp_1000.status_code == 422
++
++    # 3. Deleting the only completed state returns 409 LAST_STATE_IN_GROUP
++    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
++    done_state = next(s for s in states if s["group"] == "completed")
++    resp_last = await client.delete(f"/api/v1/projects/{pref}/states/{done_state['id']}")
++    assert resp_last.status_code == 409
++    assert resp_last.json()["code"] == "LAST_STATE_IN_GROUP"
++
++    # 4. Deleting an in-use state without migrate_to returns 409 STATE_IN_USE
++    # Seed an issue into an unstarted state
++    todo_state = next(s for s in states if s["group"] == "unstarted" and not s["is_default"])
++    target_state = next(s for s in states if s["group"] == "started")
++
++    # Get priority ID
++    prios = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
++    prio_id = prios[0]["id"]
++
++    issue_id = await _seed_issue(
++        api_env,
++        proj_id,
++        pref,
++        admin.id,
++        todo_state["id"],
++        prio_id,
++        "Test Issue 1",
++    )
++
++    # Attempt delete without migrate_to -> 409 STATE_IN_USE
++    del_in_use = await client.delete(f"/api/v1/projects/{pref}/states/{todo_state['id']}")
++    contract_recorder.record("delete_state_in_use_409", del_in_use.request, del_in_use)
++    assert del_in_use.status_code == 409
++    assert del_in_use.json()["code"] == "STATE_IN_USE"
++
++    # Attempt delete with valid migrate_to -> 204 and moves issues
++    del_migrated = await client.delete(
++        f"/api/v1/projects/{pref}/states/{todo_state['id']}?migrate_to={target_state['id']}"
++    )
++    assert del_migrated.status_code == 204
++
++    # Verify issue state updated
++    new_st = (
++        await api_env.seed.execute(
++            text("SELECT state_id FROM issues WHERE id = :id"), {"id": issue_id}
++        )
++    ).scalar_one()
++    assert str(new_st) == target_state["id"]
++
++    # Verify ISSUE_FIELD_CHANGED activity recorded
++    assert (
++        await _count(
++            api_env,
++            "SELECT count(*) FROM activity_records WHERE object_id = :iss "
++            "  AND event_type = 'ISSUE_FIELD_CHANGED' AND payload->>'field' = 'state_id'",
++            iss=issue_id,
++        )
++        == 1
++    )
++
++
++async def test_case_5_default_invariants_and_priority_management(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 5: Setting second default leaves one is_default=true; delete default -> 409."""
++    _, pref, admin, editor, _, _, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="TC5"
++    )
++    as_principal(admin)
++
++    # 1. Priorities: create a new default priority
++    prio_resp = await client.post(
++        f"/api/v1/projects/{pref}/priorities",
++        json={
++            "slug": "blocker",
++            "label": "Blocker",
++            "emoji": "🧯",
++            "color_hex": "#B91C1C",
++            "sort_order": 0,
++            "is_default": True,
++        },
++    )
++    assert prio_resp.status_code == 201
++    blocker_id = prio_resp.json()["id"]
++
++    # Assert exactly one priority has is_default = True
++    prios = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
++    defaults = [p for p in prios if p["is_default"]]
++    assert len(defaults) == 1
++    assert defaults[0]["id"] == blocker_id
++
++    # 2. Deleting default priority returns 409 DEFAULT_PRIORITY
++    del_default = await client.delete(f"/api/v1/projects/{pref}/priorities/{blocker_id}")
++    assert del_default.status_code == 409
++    assert del_default.json()["code"] == "DEFAULT_PRIORITY"
++
++    # 3. Priority patch by EDIT user returns 403
++    as_principal(editor)
++    patch_edit = await client.patch(
++        f"/api/v1/projects/{pref}/priorities/{blocker_id}",
++        json={"label": "Super Blocker"},
++    )
++    contract_recorder.record("patch_priority_edit_user_403", patch_edit.request, patch_edit)
++    assert patch_edit.status_code == 403
++    assert patch_edit.json()["code"] == "INSUFFICIENT_CAPABILITY"
++
++
++# ---------------------------------------------------------------------------
++# Additional Depth & Branch Coverage Tests
++# ---------------------------------------------------------------------------
++
++
++async def test_state_crud_and_edge_cases(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Comprehensive branch coverage for states CRUD, duplicate name, patching, and default."""
++    _proj_id, pref, admin, _, _, _, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="STCRUD"
++    )
++    as_principal(admin)
++
++    # 1. Duplicate state name returns 409 STATE_NAME_TAKEN
++    resp_dup = await client.post(
++        f"/api/v1/projects/{pref}/states",
++        json={"name": "Todo", "group": "unstarted", "color_hex": "#94A3B8"},
++    )
++    assert resp_dup.status_code == 409
++    assert resp_dup.json()["code"] == "STATE_NAME_TAKEN"
++
++    # 2. Patch state fields
++    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
++    target_state = states[0]
++    patch_resp = await client.patch(
++        f"/api/v1/projects/{pref}/states/{target_state['id']}",
++        json={
++            "name": "Backlog Renamed",
++            "color_hex": "#64748B",
++            "sort_order": 99,
++            "wip_soft_limit": 2,
++            "wip_hard_limit": 4,
++        },
++    )
++    assert patch_resp.status_code == 200
++    p_body = patch_resp.json()
++    assert p_body["name"] == "Backlog Renamed"
++    assert p_body["color_hex"] == "#64748B"
++    assert p_body["sort_order"] == 99
++    assert p_body["wip_soft_limit"] == 2
++    assert p_body["wip_hard_limit"] == 4
++
++    # Patch with invalid conflicting WIP limits
++    patch_bad_wip = await client.patch(
++        f"/api/v1/projects/{pref}/states/{target_state['id']}",
++        json={"wip_soft_limit": 10},  # soft 10 > hard 4
++    )
++    assert patch_bad_wip.status_code == 422
++
++    # Patch duplicate name on another state
++    patch_dup = await client.patch(
++        f"/api/v1/projects/{pref}/states/{states[1]['id']}",
++        json={"name": "Backlog Renamed"},
++    )
++    assert patch_dup.status_code == 409
++    assert patch_dup.json()["code"] == "STATE_NAME_TAKEN"
++
++    # Patch default state
++    patch_def = await client.patch(
++        f"/api/v1/projects/{pref}/states/{states[1]['id']}",
++        json={"is_default": True},
++    )
++    assert patch_def.status_code == 200
++    assert patch_def.json()["is_default"] is True
++
++    # 3. Delete default state -> 409 DEFAULT_STATE
++    del_def = await client.delete(f"/api/v1/projects/{pref}/states/{states[1]['id']}")
++    assert del_def.status_code == 409
++    assert del_def.json()["code"] == "DEFAULT_STATE"
++
++    # 4. Migrate to same state -> 422 MIGRATE_TARGET_INVALID
++    del_same = await client.delete(
++        f"/api/v1/projects/{pref}/states/{states[0]['id']}?migrate_to={states[0]['id']}"
++    )
++    assert del_same.status_code == 422
++    assert del_same.json()["code"] == "MIGRATE_TARGET_INVALID"
++
++    # 5. Migrate to invalid target UUID -> 422 MIGRATE_TARGET_INVALID
++    del_fake = await client.delete(
++        f"/api/v1/projects/{pref}/states/{states[0]['id']}?migrate_to={uuid.uuid4()}"
++    )
++    assert del_fake.status_code == 422
++    assert del_fake.json()["code"] == "MIGRATE_TARGET_INVALID"
++
++
++async def test_priority_crud_and_edge_cases(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Comprehensive branch coverage for priorities CRUD, duplicates, and migration."""
++    proj_id, pref, admin, _, _, _, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="PRCRUD"
++    )
++    as_principal(admin)
++
++    # 1. Duplicate slug returns 409 PRIORITY_SLUG_TAKEN
++    resp_dup = await client.post(
++        f"/api/v1/projects/{pref}/priorities",
++        json={
++            "slug": "urgent",
++            "label": "Urgent",
++            "color_hex": "#EF4444",
++            "sort_order": 1,
++        },
++    )
++    assert resp_dup.status_code == 409
++    assert resp_dup.json()["code"] == "PRIORITY_SLUG_TAKEN"
++
++    # 2. Patch priority
++    prios = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
++    prio_to_patch = next(p for p in prios if not p["is_default"])
++    patch_resp = await client.patch(
++        f"/api/v1/projects/{pref}/priorities/{prio_to_patch['id']}",
++        json={
++            "label": "Urgent Escalated",
++            "emoji": "🔥",
++            "color_hex": "#DC2626",
++            "sort_order": 2,
++        },
++    )
++    assert patch_resp.status_code == 200
++    p_body = patch_resp.json()
++    assert p_body["label"] == "Urgent Escalated"
++    assert p_body["emoji"] == "🔥"
++    assert p_body["color_hex"] == "#DC2626"
++
++    # Patch with duplicate slug on another priority
++    patch_dup_slug = await client.patch(
++        f"/api/v1/projects/{pref}/priorities/{prio_to_patch['id']}",
++        json={"slug": "none"},
++    )
++    assert patch_dup_slug.status_code == 409
++    assert patch_dup_slug.json()["code"] == "PRIORITY_SLUG_TAKEN"
++
++    # 3. Delete in-use priority without migrate_to
++    # Seed an issue with prio_to_patch
++    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
++    state_id = states[0]["id"]
++    iss_id = await _seed_issue(
++        api_env,
++        proj_id,
++        pref,
++        admin.id,
++        state_id,
++        prio_to_patch["id"],
++        "Priority Test Issue",
++    )
++
++    del_in_use = await client.delete(f"/api/v1/projects/{pref}/priorities/{prio_to_patch['id']}")
++    assert del_in_use.status_code == 409
++    assert del_in_use.json()["code"] == "PRIORITY_IN_USE"
++
++    # Delete with invalid migrate_to (same priority) -> 422
++    del_same = await client.delete(
++        f"/api/v1/projects/{pref}/priorities/{prio_to_patch['id']}?migrate_to={prio_to_patch['id']}"
++    )
++    assert del_same.status_code == 422
++    assert del_same.json()["code"] == "MIGRATE_TARGET_INVALID"
++
++    # Delete with valid migrate_to -> 204
++    target_prio = next(p for p in prios if p["id"] != prio_to_patch["id"])
++    del_ok = await client.delete(
++        f"/api/v1/projects/{pref}/priorities/{prio_to_patch['id']}?migrate_to={target_prio['id']}"
++    )
++    assert del_ok.status_code == 204
++
++    # Verify issue priority updated
++    new_pr = (
++        await api_env.seed.execute(
++            text("SELECT priority_id FROM issues WHERE id = :id"), {"id": iss_id}
++        )
++    ).scalar_one()
++    assert str(new_pr) == target_prio["id"]
++
++
++async def test_label_crud_and_edge_cases(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Comprehensive branch coverage for labels CRUD, duplicates, patching, and detach on delete."""
++    proj_id, pref, admin, edit_user, _, _, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="LBLCRUD"
++    )
++
++    # 1. Create labels as edit user
++    as_principal(edit_user)
++    l1 = (
++        await client.post(
++            f"/api/v1/projects/{pref}/labels",
++            json={"name": "frontend", "color_hex": "#3B82F6", "exclusive_group": "tier"},
++        )
++    ).json()
++
++    await client.post(
++        f"/api/v1/projects/{pref}/labels",
++        json={"name": "backend", "color_hex": "#10B981", "exclusive_group": "tier"},
++    )
++
++    # Duplicate name -> 409 LABEL_NAME_TAKEN
++    dup_resp = await client.post(
++        f"/api/v1/projects/{pref}/labels",
++        json={"name": "frontend", "color_hex": "#000000"},
++    )
++    assert dup_resp.status_code == 409
++    assert dup_resp.json()["code"] == "LABEL_NAME_TAKEN"
++
++    # List labels ordered by name as admin
++    as_principal(admin)
++    list_resp = await client.get(f"/api/v1/projects/{pref}/labels")
++    assert list_resp.status_code == 200
++    labels = list_resp.json()
++    names = [lbl["name"] for lbl in labels]
++    assert names == sorted(names)
++
++    # 2. Patch label
++    patch_resp = await client.patch(
++        f"/api/v1/projects/{pref}/labels/{l1['id']}",
++        json={"name": "frontend-ui", "color_hex": "#2563EB", "exclusive_group": "domain"},
++    )
++    assert patch_resp.status_code == 200
++    assert patch_resp.json()["name"] == "frontend-ui"
++    assert patch_resp.json()["color_hex"] == "#2563EB"
++    assert patch_resp.json()["exclusive_group"] == "domain"
++
++    # Patch with duplicate name -> 409
++    patch_dup = await client.patch(
++        f"/api/v1/projects/{pref}/labels/{l1['id']}",
++        json={"name": "backend"},
++    )
++    assert patch_dup.status_code == 409
++    assert patch_dup.json()["code"] == "LABEL_NAME_TAKEN"
++
++    # 3. Delete label detaches from issue_labels
++    # Attach l1 to an issue
++    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
++    prios = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
++
++    iss_id = await _seed_issue(
++        api_env,
++        proj_id,
++        pref,
++        admin.id,
++        states[0]["id"],
++        prios[0]["id"],
++        "Label Test Issue",
++    )
++    await api_env.seed.execute(
++        text("INSERT INTO issue_labels (issue_id, label_id) VALUES (:iss, :lbl)"),
++        {"iss": iss_id, "lbl": l1["id"]},
++    )
++    await api_env.seed.commit()
++
++    # Assert issue_labels row exists
++    assert (
++        await _count(
++            api_env,
++            "SELECT count(*) FROM issue_labels WHERE issue_id = :iss AND label_id = :lbl",
++            iss=iss_id,
++            lbl=l1["id"],
++        )
++        == 1
++    )
++
++    # Delete label
++    del_resp = await client.delete(f"/api/v1/projects/{pref}/labels/{l1['id']}")
++    assert del_resp.status_code == 204
++
++    # Assert issue_labels row was removed
++    assert (
++        await _count(
++            api_env,
++            "SELECT count(*) FROM issue_labels WHERE issue_id = :iss AND label_id = :lbl",
++            iss=iss_id,
++            lbl=l1["id"],
++        )
++        == 0
++    )
++
++
++async def test_schema_validators_and_direct_edge_cases(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify schema validators for WIP limits and emoji constraints."""
++    _, pref, admin, _, _, _, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="SCHEM"
++    )
++    as_principal(admin)
++
++    # 1. StatePatch with invalid WIP limits (soft > hard) returns 422
++    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
++    resp_patch_wip = await client.patch(
++        f"/api/v1/projects/{pref}/states/{states[0]['id']}",
++        json={"wip_soft_limit": 10, "wip_hard_limit": 5},
++    )
++    assert resp_patch_wip.status_code == 422
++
++    # 2. PriorityCreate with invalid emoji length (empty or > 8)
++    resp_prio_emoji_long = await client.post(
++        f"/api/v1/projects/{pref}/priorities",
++        json={
++            "slug": "toolong",
++            "label": "Too Long Emoji",
++            "emoji": "123456789",
++            "color_hex": "#EF4444",
++        },
++    )
++    assert resp_prio_emoji_long.status_code == 422
++
++    resp_prio_emoji_empty = await client.post(
++        f"/api/v1/projects/{pref}/priorities",
++        json={
++            "slug": "emptyemoji",
++            "label": "Empty Emoji",
++            "emoji": "",
++            "color_hex": "#EF4444",
++        },
++    )
++    assert resp_prio_emoji_empty.status_code == 422
++
++    # 3. PriorityPatch with invalid emoji length
++    prios = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
++    resp_patch_emoji_long = await client.patch(
++        f"/api/v1/projects/{pref}/priorities/{prios[0]['id']}",
++        json={"emoji": "123456789"},
++    )
++    assert resp_patch_emoji_long.status_code == 422
++
++    resp_patch_emoji_empty = await client.patch(
++        f"/api/v1/projects/{pref}/priorities/{prios[0]['id']}",
++        json={"emoji": ""},
++    )
++    assert resp_patch_emoji_empty.status_code == 422
++
++
++async def test_full_branch_coverage_and_404_preconditions(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Exercise remaining branches: 404s, group changes, default clearing, and migration limits."""
++    proj_id, pref, admin, _, _, _, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="BRANCH"
++    )
++    as_principal(admin)
++
++    # 1. State: create with is_default=True clears previous default
++    states_before = (await client.get(f"/api/v1/projects/{pref}/states")).json()
++    prev_default = next(s for s in states_before if s["is_default"])
++
++    create_def_state = await client.post(
++        f"/api/v1/projects/{pref}/states",
++        json={
++            "name": "New Default State",
++            "group": "unstarted",
++            "color_hex": "#3B82F6",
++            "is_default": True,
++        },
++    )
++    assert create_def_state.status_code == 201
++    new_def_state_id = create_def_state.json()["id"]
++
++    # Verify previous default was cleared
++    states_after = (await client.get(f"/api/v1/projects/{pref}/states")).json()
++    prev_st_updated = next(s for s in states_after if s["id"] == prev_default["id"])
++    assert prev_st_updated["is_default"] is False
++    new_st_updated = next(s for s in states_after if s["id"] == new_def_state_id)
++    assert new_st_updated["is_default"] is True
++
++    # 2. State: nonexistent ID -> 404 on PATCH and DELETE
++    fake_id = uuid.uuid4()
++    assert (
++        await client.patch(
++            f"/api/v1/projects/{pref}/states/{fake_id}",
++            json={"name": "Ghost"},
++        )
++    ).status_code == 404
++    assert (await client.delete(f"/api/v1/projects/{pref}/states/{fake_id}")).status_code == 404
++
++    # 3. State: patch changing group and clearing wip limits to None
++    patch_grp = await client.patch(
++        f"/api/v1/projects/{pref}/states/{new_def_state_id}",
++        json={
++            "group": "started",
++            "wip_soft_limit": None,
++            "wip_hard_limit": None,
++        },
++    )
++    assert patch_grp.status_code == 200
++    assert patch_grp.json()["group"] == "started"
++
++    # 4. State: patch with no changes
++    patch_noop = await client.patch(
++        f"/api/v1/projects/{pref}/states/{new_def_state_id}",
++        json={},
++    )
++    assert patch_noop.status_code == 200
++
++    # 5. Priority: nonexistent ID -> 404 on PATCH and DELETE
++    assert (
++        await client.patch(
++            f"/api/v1/projects/{pref}/priorities/{fake_id}",
++            json={"label": "Ghost"},
++        )
++    ).status_code == 404
++    assert (await client.delete(f"/api/v1/projects/{pref}/priorities/{fake_id}")).status_code == 404
++
++    # 6. Priority: patch with no changes, and patch updating sort_order and clearing emoji
++    prios = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
++    non_def_prio = next(p for p in prios if not p["is_default"])
++    p_noop = await client.patch(
++        f"/api/v1/projects/{pref}/priorities/{non_def_prio['id']}",
++        json={},
++    )
++    assert p_noop.status_code == 200
++
++    p_patch_details = await client.patch(
++        f"/api/v1/projects/{pref}/priorities/{non_def_prio['id']}",
++        json={"sort_order": 77, "emoji": None},
++    )
++    assert p_patch_details.status_code == 200
++    assert p_patch_details.json()["sort_order"] == 77
++    assert p_patch_details.json()["emoji"] is None
++
++    # 7. Priority: patch setting is_default=True clears previous default
++    prev_def_prio = next(p for p in prios if p["is_default"])
++    p_set_def = await client.patch(
++        f"/api/v1/projects/{pref}/priorities/{non_def_prio['id']}",
++        json={"is_default": True},
++    )
++    assert p_set_def.status_code == 200
++    assert p_set_def.json()["is_default"] is True
++
++    prios_after = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
++    old_def_refetched = next(p for p in prios_after if p["id"] == prev_def_prio["id"])
++    assert old_def_refetched["is_default"] is False
++
++    # 8. Label: nonexistent ID -> 404 on PATCH and DELETE
++    assert (
++        await client.patch(
++            f"/api/v1/projects/{pref}/labels/{fake_id}",
++            json={"name": "Ghost"},
++        )
++    ).status_code == 404
++    assert (await client.delete(f"/api/v1/projects/{pref}/labels/{fake_id}")).status_code == 404
++
++    # 9. Label: create, patch clearing exclusive_group to None, patch noop
++    l_create = (
++        await client.post(
++            f"/api/v1/projects/{pref}/labels",
++            json={"name": "scoped-lbl", "color_hex": "#10B981", "exclusive_group": "group1"},
++        )
++    ).json()
++    l_id = l_create["id"]
++
++    l_noop = await client.patch(f"/api/v1/projects/{pref}/labels/{l_id}", json={})
++    assert l_noop.status_code == 200
++
++    l_clear_grp = await client.patch(
++        f"/api/v1/projects/{pref}/labels/{l_id}",
++        json={"exclusive_group": None},
++    )
++    assert l_clear_grp.status_code == 200
++    assert l_clear_grp.json()["exclusive_group"] is None
++
++    # 10. MIGRATION_TOO_LARGE: > 500 issues on delete state and priority
++    # Create throwaway state and priority to hold 501 issues
++    st_overflow = (
++        await client.post(
++            f"/api/v1/projects/{pref}/states",
++            json={"name": "Overflow State", "group": "started", "color_hex": "#F59E0B"},
++        )
++    ).json()
++    st_target = (
++        await client.post(
++            f"/api/v1/projects/{pref}/states",
++            json={"name": "Target State", "group": "started", "color_hex": "#10B981"},
++        )
++    ).json()
++
++    pr_overflow = (
++        await client.post(
++            f"/api/v1/projects/{pref}/priorities",
++            json={
++                "slug": "overflowprio",
++                "label": "Overflow Prio",
++                "color_hex": "#DC2626",
++                "sort_order": 90,
++            },
++        )
++    ).json()
++    pr_target = prios_after[0]
++
++    # Bulk insert 501 issues in the committed session
++    proj_uuid = uuid.UUID(proj_id)
++    ws_id = (
++        await api_env.seed.execute(
++            text("SELECT workspace_id FROM projects WHERE id = :p"), {"p": proj_uuid}
++        )
++    ).scalar_one()
++
++    await api_env.seed.execute(
++        text("UPDATE projects SET issue_seq_counter = 2000 WHERE id = :p"),
++        {"p": proj_uuid},
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO objects "
++            "(id, object_type, workspace_id, project_id, canonical_key, "
++            "display_title, created_by_id) "
++            "SELECT uuidv7(), 'issue'::object_kind, :ws, :p, :pref || '-' || (1000 + i), "
++            "'Bulk ' || i, :creator "
++            "FROM generate_series(1, 501) AS i"
++        ),
++        {"ws": ws_id, "p": proj_uuid, "pref": pref, "creator": admin.id},
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO issues "
++            "(id, workspace_id, project_id, sequence_id, summary, state_id, "
++            "priority_id, created_by_id, original_created_by_id, board_rank) "
++            "SELECT o.id, :ws, :p, (1000 + i), 'Bulk ' || i, :st, :pr, "
++            ":creator, :creator, '0|hzzzzz:' "
++            "FROM generate_series(1, 501) AS i "
++            "JOIN objects o ON o.canonical_key = :pref || '-' || (1000 + i) "
++            "AND o.project_id = :p"
++        ),
++        {
++            "ws": ws_id,
++            "p": proj_uuid,
++            "pref": pref,
++            "st": uuid.UUID(st_overflow["id"]),
++            "pr": uuid.UUID(pr_overflow["id"]),
++            "creator": admin.id,
++        },
++    )
++    await api_env.seed.commit()
++
++    # Attempt delete state with > 500 issues -> 409 MIGRATION_TOO_LARGE
++    del_st_overflow = await client.delete(
++        f"/api/v1/projects/{pref}/states/{st_overflow['id']}?migrate_to={st_target['id']}"
++    )
++    assert del_st_overflow.status_code == 409
++    assert del_st_overflow.json()["code"] == "MIGRATION_TOO_LARGE"
++
++    # Attempt delete priority with > 500 issues -> 409 MIGRATION_TOO_LARGE
++    del_pr_overflow = await client.delete(
++        f"/api/v1/projects/{pref}/priorities/{pr_overflow['id']}?migrate_to={pr_target['id']}"
++    )
++    assert del_pr_overflow.status_code == 409
++    assert del_pr_overflow.json()["code"] == "MIGRATION_TOO_LARGE"
