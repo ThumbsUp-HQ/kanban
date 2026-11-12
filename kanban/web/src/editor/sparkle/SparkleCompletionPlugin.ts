@@ -24,6 +24,14 @@ import {
   type SparkleClientOptions,
   type EditorSurfaceKind,
 } from './sparkleClient';
+import {
+  resolveContextMenu,
+  computeCaretDistance,
+  isOverSpellingNode,
+  isOnBadge,
+  setBadgeContextMenuSuppression,
+  consumeBadgeContextMenuSuppression,
+} from './contextMenuMatrix';
 import './sparkle.css';
 
 export interface SparklePluginState {
@@ -232,6 +240,58 @@ export function createSparkleCompletionPlugin(
         return sparklePluginKey.getState(state)?.decorations;
       },
 
+      handleDOMEvents: {
+        contextmenu(view, event) {
+          // If badge was accepted on pointerdown, suppress subsequent contextmenu once
+          if (consumeBadgeContextMenuSuppression()) {
+            event.preventDefault();
+            return true;
+          }
+
+          const pluginState = sparklePluginKey.getState(view.state);
+          const sparkleState = pluginState?.machine.name ?? 'IDLE';
+          const selectionEmpty = view.state.selection.empty;
+          const onBadge = isOnBadge(event.target);
+          const overSpellingNode = isOverSpellingNode(event.target);
+
+          let caretCoords: { left: number; top: number; bottom: number } | null = null;
+          if (
+            pluginState?.activePos !== null &&
+            pluginState?.activePos !== undefined
+          ) {
+            try {
+              caretCoords = view.coordsAtPos(pluginState.activePos);
+            } catch {
+              caretCoords = null;
+            }
+          }
+
+          const distancePx = computeCaretDistance(
+            event.clientX,
+            event.clientY,
+            caretCoords,
+          );
+
+          const action = resolveContextMenu({
+            sparkleState,
+            selectionEmpty,
+            onBadge,
+            distancePx,
+            overSpellingNode,
+            shiftKey: event.shiftKey,
+          });
+
+          if (action === 'ACCEPT') {
+            event.preventDefault();
+            acceptSparkleSuggestion(view);
+            return true;
+          }
+
+          // NATIVE: never call preventDefault or stopPropagation
+          return false;
+        },
+      },
+
       handleKeyDown(view, event) {
         const pluginState = sparklePluginKey.getState(view.state);
         if (pluginState?.machine.name !== 'READY_BLINKING') {
@@ -334,6 +394,22 @@ export function createSparkleCompletionPlugin(
               e.preventDefault();
               e.stopPropagation();
               acceptSparkleSuggestion(editorView);
+            });
+
+            badgeEl.addEventListener('pointerdown', (e: PointerEvent) => {
+              if (e.button === 2) {
+                e.preventDefault();
+                acceptSparkleSuggestion(editorView);
+                setBadgeContextMenuSuppression();
+              }
+            });
+
+            badgeEl.addEventListener('contextmenu', (e: MouseEvent) => {
+              if (e.shiftKey) return;
+              e.preventDefault();
+              if (!consumeBadgeContextMenuSuppression()) {
+                acceptSparkleSuggestion(editorView);
+              }
             });
 
             parent.appendChild(badgeEl);
