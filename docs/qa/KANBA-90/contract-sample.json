@@ -1,0 +1,772 @@
+{
+  "ticket": "KANBA-90",
+  "exchanges": [
+    {
+      "name": "create_view_shared_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/VPRJ/views",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "239",
+          "content-type": "application/json"
+        },
+        "body": {
+          "name": "Sprint Board",
+          "description_markdown": "Board view for active sprint",
+          "layout": "board",
+          "group_by": "state",
+          "sub_group_by": "priority",
+          "is_shared": true,
+          "wip_limits_override": {
+            "01a1ceff-9819-7ac7-a3b1-29a3689cec78": {
+              "soft": 2,
+              "hard": 5
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "1554",
+          "content-type": "application/json",
+          "x-request-id": "e5ac040cba3748cb97ee99392a38724d",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1ceff-9885-7299-b6c1-8900f8998099",
+          "project_id": "01a1ceff-9816-7afc-9ae2-8c27979eed23",
+          "name": "Sprint Board",
+          "description_markdown": "Board view for active sprint",
+          "layout": "board",
+          "group_by": "state",
+          "sub_group_by": "priority",
+          "filters": {
+            "state_ids": [],
+            "state_groups": [],
+            "priority_ids": [],
+            "assignee_ids": [],
+            "has_free_text_assignee": null,
+            "label_ids": [],
+            "label_match": "any",
+            "cycle_ids": [],
+            "module_ids": [],
+            "parent_issue_id": null,
+            "start_date_from": null,
+            "start_date_to": null,
+            "due_date_from": null,
+            "due_date_to": null,
+            "overdue_only": false,
+            "blocked": null,
+            "gate_status": null,
+            "include_archived": false,
+            "search_query": null
+          },
+          "wip_limits_override": {
+            "01a1ceff-9819-7ac7-a3b1-29a3689cec78": {
+              "soft": 2,
+              "hard": 5
+            }
+          },
+          "is_shared": true,
+          "visibility": "project",
+          "owner": {
+            "id": "01a1ceff-9805-774d-a0fb-749619fb9a4b",
+            "display_name": "Admin",
+            "handle": "admin"
+          },
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: VPRJ",
+              "workspace_id": "01a1ceff-97ff-7c11-8e12-402d21c1c623",
+              "workspace_name": "Engineering",
+              "project_id": "01a1ceff-9816-7afc-9ae2-8c27979eed23",
+              "project_key": "VPRJ",
+              "project_name": "VPRJ project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1ceff-9805-774d-a0fb-749619fb9a4b",
+                "handle": "@admin",
+                "display_name": "Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ]
+        }
+      }
+    },
+    {
+      "name": "query_issues_2d_swimlane_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/VPRJ/issues:query",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "66",
+          "content-type": "application/json"
+        },
+        "body": {
+          "layout": "timeline",
+          "group_by": "state",
+          "sub_group_by": "priority"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "7873",
+          "content-type": "application/json",
+          "x-request-id": "68dc83ced12c4db39066da7c20392e53",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "items": [
+            {
+              "id": "baeb84fb-afb2-4c63-a003-d4b381187213",
+              "key": "VPRJ-1",
+              "summary": "Issue 1",
+              "description_markdown": "",
+              "description_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "state": {
+                "id": "01a1ceff-9819-7ac7-a3b1-29a3689cec78",
+                "name": "Backlog",
+                "group": "backlog"
+              },
+              "priority": {
+                "slug": "urgent",
+                "label": "Urgent",
+                "emoji": "\ud83d\udd25"
+              },
+              "start_date": null,
+              "due_date": null,
+              "cycle_id": null,
+              "parent": null,
+              "labels": [],
+              "module_ids": [],
+              "board_rank": "a000001",
+              "created_by_id": "01a1ceff-9805-774d-a0fb-749619fb9a4b",
+              "access_manifest": {
+                "pill_label": "Project",
+                "explicit_grant_count": 0,
+                "inherited_scope": {
+                  "kind": "project",
+                  "scope_label": "Project: VPRJ",
+                  "workspace_id": "01a1ceff-97ff-7c11-8e12-402d21c1c623",
+                  "workspace_name": "Engineering",
+                  "project_id": "01a1ceff-9816-7afc-9ae2-8c27979eed23",
+                  "project_key": "VPRJ",
+                  "project_name": "VPRJ project"
+                },
+                "users": [
+                  {
+                    "principal_id": "01a1ceff-9805-774d-a0fb-749619fb9a4b",
+                    "handle": "@admin",
+                    "display_name": "Admin",
+                    "capabilities": [
+                      "VIEW",
+                      "COMMENT",
+                      "EDIT",
+                      "TRANSITION",
+                      "LINK",
+                      "SHARE",
+                      "ADMIN",
+                      "DELETE"
+                    ],
+                    "grant_source": "project_owner"
+                  }
+                ],
+                "groups": [],
+                "agents": [],
+                "deny_overrides": [],
+                "redacted_entries": [],
+                "redacted_count": 0
+              },
+              "capabilities": [
+                "VIEW",
+                "COMMENT",
+                "EDIT",
+                "TRANSITION",
+                "LINK",
+                "SHARE",
+                "ADMIN",
+                "DELETE"
+              ]
+            },
+            {
+              "id": "571bd319-3f6e-4711-a342-e586ea21bb85",
+              "key": "VPRJ-2",
+              "summary": "Issue 2",
+              "description_markdown": "",
+              "description_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "state": {
+                "id": "01a1ceff-9819-7e27-9fee-4363160c0c90",
+                "name": "Todo",
+                "group": "unstarted"
+              },
+              "priority": {
+                "slug": "urgent",
+                "label": "Urgent",
+                "emoji": "\ud83d\udd25"
+              },
+              "start_date": null,
+              "due_date": null,
+              "cycle_id": null,
+              "parent": null,
+              "labels": [],
+              "module_ids": [],
+              "board_rank": "a000002",
+              "created_by_id": "01a1ceff-9805-774d-a0fb-749619fb9a4b",
+              "access_manifest": {
+                "pill_label": "Project",
+                "explicit_grant_count": 0,
+                "inherited_scope": {
+                  "kind": "project",
+                  "scope_label": "Project: VPRJ",
+                  "workspace_id": "01a1ceff-97ff-7c11-8e12-402d21c1c623",
+                  "workspace_name": "Engineering",
+                  "project_id": "01a1ceff-9816-7afc-9ae2-8c27979eed23",
+                  "project_key": "VPRJ",
+                  "project_name": "VPRJ project"
+                },
+                "users": [
+                  {
+                    "principal_id": "01a1ceff-9805-774d-a0fb-749619fb9a4b",
+                    "handle": "@admin",
+                    "display_name": "Admin",
+                    "capabilities": [
+                      "VIEW",
+                      "COMMENT",
+                      "EDIT",
+                      "TRANSITION",
+                      "LINK",
+                      "SHARE",
+                      "ADMIN",
+                      "DELETE"
+                    ],
+                    "grant_source": "project_owner"
+                  }
+                ],
+                "groups": [],
+                "agents": [],
+                "deny_overrides": [],
+                "redacted_entries": [],
+                "redacted_count": 0
+              },
+              "capabilities": [
+                "VIEW",
+                "COMMENT",
+                "EDIT",
+                "TRANSITION",
+                "LINK",
+                "SHARE",
+                "ADMIN",
+                "DELETE"
+              ]
+            }
+          ],
+          "groups": [
+            {
+              "group_key": "state:01a1ceff-9819-7ac7-a3b1-29a3689cec78",
+              "key": "state:01a1ceff-9819-7ac7-a3b1-29a3689cec78",
+              "label": "Backlog",
+              "count": 1,
+              "wip": null,
+              "sub_groups": [
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-76b5-bdfc-1d831bff2aa5",
+                  "key": "priority:01a1ceff-981a-76b5-bdfc-1d831bff2aa5",
+                  "label": "Urgent",
+                  "count": 1,
+                  "issue_ids": [
+                    "baeb84fb-afb2-4c63-a003-d4b381187213"
+                  ],
+                  "items": [
+                    "baeb84fb-afb2-4c63-a003-d4b381187213"
+                  ]
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-7246-9120-02f4f2170ce4",
+                  "key": "priority:01a1ceff-981a-7246-9120-02f4f2170ce4",
+                  "label": "High",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-797d-b429-68cfaf71936f",
+                  "key": "priority:01a1ceff-981a-797d-b429-68cfaf71936f",
+                  "label": "Medium",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-79c3-9ce2-a5b9b31c5c16",
+                  "key": "priority:01a1ceff-981a-79c3-9ce2-a5b9b31c5c16",
+                  "label": "Low",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-7101-8302-96ebd5a55917",
+                  "key": "priority:01a1ceff-981a-7101-8302-96ebd5a55917",
+                  "label": "None",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                }
+              ]
+            },
+            {
+              "group_key": "state:01a1ceff-9819-7e27-9fee-4363160c0c90",
+              "key": "state:01a1ceff-9819-7e27-9fee-4363160c0c90",
+              "label": "Todo",
+              "count": 1,
+              "wip": null,
+              "sub_groups": [
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-76b5-bdfc-1d831bff2aa5",
+                  "key": "priority:01a1ceff-981a-76b5-bdfc-1d831bff2aa5",
+                  "label": "Urgent",
+                  "count": 1,
+                  "issue_ids": [
+                    "571bd319-3f6e-4711-a342-e586ea21bb85"
+                  ],
+                  "items": [
+                    "571bd319-3f6e-4711-a342-e586ea21bb85"
+                  ]
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-7246-9120-02f4f2170ce4",
+                  "key": "priority:01a1ceff-981a-7246-9120-02f4f2170ce4",
+                  "label": "High",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-797d-b429-68cfaf71936f",
+                  "key": "priority:01a1ceff-981a-797d-b429-68cfaf71936f",
+                  "label": "Medium",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-79c3-9ce2-a5b9b31c5c16",
+                  "key": "priority:01a1ceff-981a-79c3-9ce2-a5b9b31c5c16",
+                  "label": "Low",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-7101-8302-96ebd5a55917",
+                  "key": "priority:01a1ceff-981a-7101-8302-96ebd5a55917",
+                  "label": "None",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                }
+              ]
+            },
+            {
+              "group_key": "state:01a1ceff-9819-7d85-9733-56e5a78c8ad6",
+              "key": "state:01a1ceff-9819-7d85-9733-56e5a78c8ad6",
+              "label": "In Progress",
+              "count": 0,
+              "wip": null,
+              "sub_groups": [
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-76b5-bdfc-1d831bff2aa5",
+                  "key": "priority:01a1ceff-981a-76b5-bdfc-1d831bff2aa5",
+                  "label": "Urgent",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-7246-9120-02f4f2170ce4",
+                  "key": "priority:01a1ceff-981a-7246-9120-02f4f2170ce4",
+                  "label": "High",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-797d-b429-68cfaf71936f",
+                  "key": "priority:01a1ceff-981a-797d-b429-68cfaf71936f",
+                  "label": "Medium",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-79c3-9ce2-a5b9b31c5c16",
+                  "key": "priority:01a1ceff-981a-79c3-9ce2-a5b9b31c5c16",
+                  "label": "Low",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-7101-8302-96ebd5a55917",
+                  "key": "priority:01a1ceff-981a-7101-8302-96ebd5a55917",
+                  "label": "None",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                }
+              ]
+            },
+            {
+              "group_key": "state:01a1ceff-9819-7643-97c4-fa48be3bf381",
+              "key": "state:01a1ceff-9819-7643-97c4-fa48be3bf381",
+              "label": "Done",
+              "count": 0,
+              "wip": null,
+              "sub_groups": [
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-76b5-bdfc-1d831bff2aa5",
+                  "key": "priority:01a1ceff-981a-76b5-bdfc-1d831bff2aa5",
+                  "label": "Urgent",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-7246-9120-02f4f2170ce4",
+                  "key": "priority:01a1ceff-981a-7246-9120-02f4f2170ce4",
+                  "label": "High",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-797d-b429-68cfaf71936f",
+                  "key": "priority:01a1ceff-981a-797d-b429-68cfaf71936f",
+                  "label": "Medium",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-79c3-9ce2-a5b9b31c5c16",
+                  "key": "priority:01a1ceff-981a-79c3-9ce2-a5b9b31c5c16",
+                  "label": "Low",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-7101-8302-96ebd5a55917",
+                  "key": "priority:01a1ceff-981a-7101-8302-96ebd5a55917",
+                  "label": "None",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                }
+              ]
+            },
+            {
+              "group_key": "state:01a1ceff-9819-7d06-a753-e838c0394846",
+              "key": "state:01a1ceff-9819-7d06-a753-e838c0394846",
+              "label": "Cancelled",
+              "count": 0,
+              "wip": null,
+              "sub_groups": [
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-76b5-bdfc-1d831bff2aa5",
+                  "key": "priority:01a1ceff-981a-76b5-bdfc-1d831bff2aa5",
+                  "label": "Urgent",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-7246-9120-02f4f2170ce4",
+                  "key": "priority:01a1ceff-981a-7246-9120-02f4f2170ce4",
+                  "label": "High",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-797d-b429-68cfaf71936f",
+                  "key": "priority:01a1ceff-981a-797d-b429-68cfaf71936f",
+                  "label": "Medium",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-79c3-9ce2-a5b9b31c5c16",
+                  "key": "priority:01a1ceff-981a-79c3-9ce2-a5b9b31c5c16",
+                  "label": "Low",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                },
+                {
+                  "sub_group_key": "priority:01a1ceff-981a-7101-8302-96ebd5a55917",
+                  "key": "priority:01a1ceff-981a-7101-8302-96ebd5a55917",
+                  "label": "None",
+                  "count": 0,
+                  "issue_ids": [],
+                  "items": []
+                }
+              ]
+            }
+          ],
+          "timeline_links": [
+            {
+              "source_key": "VPRJ-1",
+              "target_key": "VPRJ-2",
+              "link_type": "BLOCKS"
+            }
+          ],
+          "next_cursor": null,
+          "total_matching": 2
+        }
+      }
+    },
+    {
+      "name": "get_view_private_unreadable_404",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/views/01a1ceff-9c23-7934-a0cc-78ba09153f49",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "a00441e9f8c34515ab796b56b4876df6",
+          "content-length": "139",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:NOT_FOUND",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "request_id": "a00441e9f8c34515ab796b56b4876df6"
+        }
+      }
+    },
+    {
+      "name": "modules_disabled_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/NOMOD/views",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "42",
+          "content-type": "application/json"
+        },
+        "body": {
+          "name": "Module View",
+          "group_by": "module"
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "a6fee76114484cebaeff597740487378",
+          "content-length": "215",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:MODULES_DISABLED",
+          "title": "Modules Disabled",
+          "status": 422,
+          "code": "MODULES_DISABLED",
+          "detail": "Modules feature is disabled on this project",
+          "request_id": "a6fee76114484cebaeff597740487378"
+        }
+      }
+    },
+    {
+      "name": "duplicate_group_axis_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/BND/views",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "61",
+          "content-type": "application/json"
+        },
+        "body": {
+          "name": "Dup View",
+          "group_by": "state",
+          "sub_group_by": "state"
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "5e0d523f553646a4a7c4d0c6b3359722",
+          "content-length": "239",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:DUPLICATE_GROUP_AXIS",
+          "title": "Duplicate Group Axis",
+          "status": 422,
+          "code": "DUPLICATE_GROUP_AXIS",
+          "detail": "sub_group_by cannot match group_by unless both are none",
+          "request_id": "5e0d523f553646a4a7c4d0c6b3359722"
+        }
+      }
+    },
+    {
+      "name": "invalid_cursor_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/BND/issues:query",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "306",
+          "content-type": "application/json"
+        },
+        "body": {
+          "cursor": "eyJ2IjoiNSIsImkiOiJiNzEzMWNhZS03MjhkLTQ1NGYtYjNlNC0wMjJmMTA4NjQwM2UiLCJxIjoiNDlmNjI1ZTBlZDQyZjM4MTlhNTQzNDRiMzU4MDY4MjQyNWEzMTUzYzNiYTcwYmZlNTk1N2E0OTZjYTVkMTk4MiIsInMiOiJkYzVlM2NjZGY5MDYyYTJiZWQyOWZmYTljZjViYWE2OWQ0MWI5OTgzMTRjYzgzZjQwODAwMTY2MDk1N2ZlMDRjIn0",
+          "filters": {
+            "search_query": "beta"
+          }
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "585a4031265c41eeb1ae2bf3a26d1082",
+          "content-length": "205",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:INVALID_CURSOR",
+          "title": "Invalid Cursor",
+          "status": 422,
+          "code": "INVALID_CURSOR",
+          "detail": "Cursor was issued for a different query",
+          "request_id": "585a4031265c41eeb1ae2bf3a26d1082"
+        }
+      }
+    }
+  ]
+}
