@@ -12,6 +12,7 @@ from kanban.api.v1.auth_mfa import router as auth_mfa_router
 from kanban.api.v1.auth_oidc import router as auth_oidc_router
 from kanban.api.v1.auth_session import router as auth_session_router
 from kanban.api.v1.comments import router as comments_router
+from kanban.api.v1.cycles import router as cycles_router
 from kanban.api.v1.docs import router as docs_router
 from kanban.api.v1.health import router as health_router
 from kanban.api.v1.issues import router as issues_router
@@ -40,6 +41,7 @@ def build_v1_router() -> APIRouter:
     v1.include_router(auth_local_router)
     v1.include_router(auth_oidc_router)
     v1.include_router(auth_mfa_router)
+    v1.include_router(cycles_router)
     v1.include_router(docs_router)
     v1.include_router(agent_definitions_router)
     v1.include_router(attachments_router)
