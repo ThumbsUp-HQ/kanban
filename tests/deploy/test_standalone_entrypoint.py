@@ -28,6 +28,7 @@ from deploy.standalone.entrypoint import (
     start_postgres,
     supervisor_loop,
 )
+from deploy.standalone.keyring import Keyring, KeyringError
 from deploy.standalone.pg_config import configure_postgres
 
 if TYPE_CHECKING:
@@ -170,6 +171,7 @@ def test_case_2_warm_boot_skips_initdb(
 
 
 def test_case_2_external_db_mode(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When DATABASE_URL is set, MODE=external_db execv Uvicorn with zero PG commands."""
@@ -181,6 +183,7 @@ def test_case_2_external_db_mode(
 
     monkeypatch.setattr("os.execv", mock_execv)
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://remote-db:5432/kanban")
+    monkeypatch.setenv("KB_STANDALONE_STATUS_PATH", str(tmp_path / "standalone_status.json"))
 
     with pytest.raises(SystemExit) as exc_info:
         main([])
@@ -247,8 +250,32 @@ def test_case_3_security_configuration(tmp_path: Path) -> None:
         "KB_DEPLOYMENT_MODE",
         "DATABASE_URL",
         "LANG",
+        "KB_STANDALONE_STATUS_PATH",
     }
     assert child_env["KB_DEPLOYMENT_MODE"] == "standalone"
+
+    kr = Keyring(
+        version=1,
+        created_at="2026-01-01T00:00:00Z",
+        master_kek=b"\x01" * 32,
+        auth_pepper=b"\x02" * 32,
+        session_hmac_key=b"\x03" * 32,
+        kanban_app_password=b"\x04" * 32,
+        kanban_migrator_password=b"\x05" * 32,
+    )
+    kr_env = build_child_env(keyring=kr)
+    assert set(kr_env.keys()) == {
+        "PATH",
+        "KB_WEB_DIST",
+        "KB_DEPLOYMENT_MODE",
+        "DATABASE_URL",
+        "LANG",
+        "KB_STANDALONE_STATUS_PATH",
+        "KB_MASTER_KEK_B64",
+        "KB_AUTH_PEPPER_B64",
+        "KB_SESSION_HMAC_KEY_B64",
+    }
+    assert kr_env["KB_MASTER_KEK_B64"] == kr.master_kek_b64
 
 
 # -----------------------------------------------------------------------------
@@ -443,6 +470,7 @@ def test_case_5_supervisor_detects_postmaster_death(
 
 
 def test_signal_handler_clean_exit(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Directly test the signal handler installed in main."""
@@ -461,6 +489,10 @@ def test_signal_handler_clean_exit(
     monkeypatch.setattr("deploy.standalone.entrypoint.configure_postgres", MagicMock())
     monkeypatch.setattr(subprocess, "Popen", MagicMock())
     monkeypatch.setattr("os.getuid", lambda: 0)
+
+    monkeypatch.setenv("KB_PGDATA_DIR", str(tmp_path / "pgdata"))
+    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("KB_STANDALONE_STATUS_PATH", str(tmp_path / "standalone_status.json"))
 
     main([])
     assert signal.SIGTERM in registered_handlers
@@ -533,6 +565,72 @@ def test_bootstrap_database_creates_database_when_missing(
 
     create_db_calls = [s for s in recorded_psql if "CREATE DATABASE kanban" in s]
     assert len(create_db_calls) == 1
+
+
+def test_keyring_error_exits_78(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When load_or_create_keyring raises KeyringError, main exits 78 with KEYRING_INVALID."""
+    msg = "Insecure keyring permissions"
+
+    def mock_keyring_fail(*_args: object, **_kwargs: object) -> None:
+        raise KeyringError(msg)
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.load_or_create_keyring", mock_keyring_fail)
+    monkeypatch.setattr("os.getuid", lambda: 0)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("KB_PGDATA_DIR", str(tmp_path / "pgdata"))
+    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
+
+    rc = main([])
+    assert rc == 78
+    captured = capsys.readouterr()
+    assert "KEYRING_INVALID" in captured.err
+    assert "Insecure keyring permissions" in captured.err
+
+
+def test_bootstrap_database_with_keyring(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bootstrap_database applies SCRAM passwords when keyring is provided."""
+    recorded_psql: list[str] = []
+
+    def mock_run(
+        cmd: list[str],
+        *,
+        timeout: float = 30.0,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (timeout, check, env)
+        if "-tAc" in cmd:
+            return subprocess.CompletedProcess(cmd, returncode=0, stdout="1", stderr="")
+        if "-c" in cmd:
+            idx = cmd.index("-c")
+            recorded_psql.append(cmd[idx + 1])
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
+
+    kr = Keyring(
+        version=1,
+        created_at="2026-01-01T00:00:00Z",
+        master_kek=b"\x01" * 32,
+        auth_pepper=b"\x02" * 32,
+        session_hmac_key=b"\x03" * 32,
+        kanban_app_password=b"\x04" * 32,
+        kanban_migrator_password=b"\x05" * 32,
+    )
+
+    bootstrap_database(run_dir=str(tmp_path), keyring=kr)
+
+    scram_calls = [s for s in recorded_psql if "SCRAM-SHA-256$" in s]
+    assert len(scram_calls) == 1
+    assert "ALTER ROLE kanban_app PASSWORD 'SCRAM-SHA-256$" in scram_calls[0]
+    assert "ALTER ROLE kanban_migrator PASSWORD 'SCRAM-SHA-256$" in scram_calls[0]
 
 
 def test_run_as_postgres_real_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
