@@ -1,0 +1,42 @@
+=== 1. ruff check ===
+All checks passed!
+=== 2. ruff format --check ===
+610 files already formatted
+=== 3. mypy --strict kanban database ===
+Success: no issues found in 235 source files
+=== 4. lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 310 files, 625 dependencies.
+-------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT
+
+Contracts: 2 kept, 0 broken.
+=== 5. license_gate.py ===
+SUMMARY python=111 node=1 violations=0
+=== 6. check_no_dashes.py --all ===
+=== 7. banned imports audit ===
+kanban/tests/fixtures/fake_idp.py:20:from joserfc import jwt
+kanban/tests/fixtures/fake_idp.py:21:from joserfc.jwk import RSAKey
+kanban/tests/auth/test_oidc_tokens.py:13:from joserfc import jwt
+kanban/tests/auth/test_oidc_tokens.py:14:from joserfc.jwk import ECKey, KeySet
+kanban/tests/auth/test_oidc_discovery.py:12:from joserfc.jwk import KeySet
+kanban/auth/oidc/tokens.py:15:from joserfc import jwt
+kanban/auth/oidc/tokens.py:16:from joserfc.jwk import ECKey, KeySet, RSAKey
+kanban/auth/oidc/discovery.py:13:from joserfc.errors import JoseError
+kanban/auth/oidc/discovery.py:14:from joserfc.jwk import KeySet
