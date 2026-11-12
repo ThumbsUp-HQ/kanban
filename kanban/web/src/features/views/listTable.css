@@ -1,0 +1,689 @@
+/**
+ * Breathable List & Configurable Table layout styling (KB-P3-38, S6.1, S6.2, S6.4).
+ */
+
+/* ==========================================================================
+   List View Container & Section Rhythm (S6.1, S6.4)
+   ========================================================================== */
+
+.list-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  box-sizing: border-box;
+  background: var(--bg-canvas);
+}
+
+.list-section {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--space-6, 24px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 10px);
+  overflow: hidden;
+}
+
+.list-section:last-child {
+  margin-bottom: 0;
+}
+
+.list-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 var(--space-4, 16px);
+  background: var(--bg-surface-raised, #ffffff);
+  border-bottom: 1px solid var(--border-subtle);
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.list-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--fg-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.list-section-toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.list-section-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--fg-muted);
+  transition: transform 150ms ease;
+}
+
+.list-section-toggle[aria-expanded="false"] .list-section-toggle-icon {
+  transform: rotate(-90deg);
+}
+
+.list-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 9999px;
+  background: var(--bg-hover);
+  color: var(--fg-secondary);
+}
+
+.list-section-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px 8px;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-secondary);
+  cursor: pointer;
+}
+
+.list-section-new-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+/* ==========================================================================
+   Breathable 46px List Row (S6.1, S6.4 item 2)
+   ========================================================================== */
+
+.list-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--list-row-h, 46px);
+  height: var(--list-row-h, 46px);
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  column-gap: var(--space-3, 12px);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  box-sizing: border-box;
+  text-decoration: none;
+  color: inherit;
+  transition: background-color 100ms ease;
+}
+
+.list-row .emoji-hint {
+  flex-shrink: 0;
+}
+
+.list-row:last-child {
+  border-bottom: none;
+}
+
+.list-row:hover {
+  background: var(--bg-hover);
+}
+
+.list-row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.list-row--selected {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.list-row-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  min-width: 0;
+  flex: 1;
+}
+
+.list-row-checkbox-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  min-height: 20px;
+}
+
+.list-row-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--focus-ring);
+}
+
+.list-row-key {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--fg-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.list-row-key:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
+.list-row-summary {
+  font-family: var(--font-sans);
+  font-size: var(--text-body, 0.9375rem);
+  color: var(--fg-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.list-row-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Table View & Semantic Table Styling (S6.4 item 2, S7.2 8f)
+   ========================================================================== */
+
+.table-view-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 10px);
+  overflow: hidden;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 var(--space-4, 16px);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised, #ffffff);
+}
+
+.table-scroll-wrap {
+  width: 100%;
+  overflow-x: auto;
+  position: relative;
+}
+
+.issues-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+}
+
+.issues-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg-surface-raised, #ffffff);
+}
+
+.issues-table thead tr {
+  height: 40px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.issues-table th {
+  padding: 0 var(--space-4, 16px);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--fg-secondary);
+  white-space: nowrap;
+  background: var(--bg-surface-raised, #ffffff);
+}
+
+.issues-table th.sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: var(--bg-surface-raised, #ffffff);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.issues-table-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.issues-table-sort-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.issues-table-sort-icon {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+
+.issues-table-body tr {
+  height: var(--list-row-h, 46px);
+  min-height: var(--list-row-h, 46px);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  transition: background-color 100ms ease;
+}
+
+.issues-table-body tr:last-child {
+  border-bottom: none;
+}
+
+.issues-table-body tr:hover {
+  background: var(--bg-hover);
+}
+
+.issues-table td {
+  height: var(--list-row-h, 46px);
+  padding: 0 var(--space-4, 16px);
+  color: var(--fg-primary);
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.issues-table td.sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.table-key-header {
+  width: 140px;
+}
+
+.table-key-cell-content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.table-key-link {
+  color: var(--fg-secondary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.table-key-link:hover {
+  text-decoration: underline;
+}
+
+.table-priority-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.table-chips-wrap {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.issues-table-body tr:hover td.sticky-col {
+  background: var(--bg-hover);
+}
+
+/* ==========================================================================
+   Metadata Pills & Tags (S6.2, S7.2)
+   ========================================================================== */
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-hover);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-secondary);
+}
+
+.label-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-hover);
+  font-size: 0.75rem;
+  color: var(--fg-secondary);
+}
+
+.label-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.due-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+}
+
+.due-pill--overdue {
+  color: var(--danger-fg, #881337);
+  background: var(--danger-bg, #ffe4e6);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+  font-weight: 600;
+}
+
+.assignee-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--fg-secondary);
+}
+
+.assignee-chip--external {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm, 4px);
+  padding: 1px 6px;
+  color: var(--fg-primary);
+  background: var(--bg-hover);
+}
+
+.module-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-hover);
+  font-size: 0.75rem;
+  color: var(--fg-secondary);
+}
+
+.cycle-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-hover);
+  font-size: 0.75rem;
+  color: var(--fg-secondary);
+}
+
+/* ==========================================================================
+   Column Configurator Popover Dialog (S6.4, S7.2 8f)
+   ========================================================================== */
+
+.column-configurator-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--fg-primary);
+  cursor: pointer;
+}
+
+.column-configurator-trigger:hover {
+  background: var(--bg-hover);
+}
+
+.column-configurator-trigger:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.column-configurator-dialog {
+  position: absolute;
+  top: 48px;
+  right: var(--space-4, 16px);
+  z-index: 10;
+  width: 280px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  padding: var(--space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.column-configurator-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-2, 8px);
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--fg-primary);
+}
+
+.column-configurator-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.column-configurator-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.8125rem;
+}
+
+.column-configurator-item:hover {
+  background: var(--bg-hover);
+}
+
+.column-configurator-item-left {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  cursor: pointer;
+  flex: 1;
+}
+
+.column-configurator-item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.column-configurator-btn-move {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.75rem;
+}
+
+.column-configurator-btn-move:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.column-configurator-btn-move:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.column-configurator-reset {
+  margin-top: var(--space-2, 8px);
+  padding: 6px var(--space-3, 12px);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  text-align: center;
+}
+
+.column-configurator-reset:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+/* ==========================================================================
+   Empty State & Pagination (S6.4)
+   ========================================================================== */
+
+.view-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12, 48px) var(--space-4, 16px);
+  text-align: center;
+  color: var(--fg-muted);
+}
+
+.view-empty-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg-primary);
+  margin-bottom: var(--space-1, 4px);
+}
+
+.view-empty-desc {
+  font-size: 0.875rem;
+  margin-bottom: var(--space-4, 16px);
+}
+
+.view-empty-create-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  background: var(--accent-primary);
+  color: var(--accent-primary-fg);
+  border: none;
+  border-radius: var(--radius-md, 6px);
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.view-empty-create-btn:hover {
+  opacity: 0.9;
+}
+
+.view-load-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4, 16px);
+}
+
+.view-load-more-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 6px);
+  padding: 8px 24px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fg-primary);
+  cursor: pointer;
+}
+
+.view-load-more-btn:hover {
+  background: var(--bg-hover);
+}
+
+/* ==========================================================================
+   Responsive Adaptations (Mobile <= 767px)
+   ========================================================================== */
+
+@media (max-width: 767px) {
+  .list-row {
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+  }
+
+  .list-row-checkbox-wrap {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .list-row-summary {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+  }
+
+  /* Secondary metadata pills collapse on mobile */
+  .list-row-right .label-pill,
+  .list-row-right .cycle-pill,
+  .list-row-right .module-pill {
+    display: none;
+  }
+}
