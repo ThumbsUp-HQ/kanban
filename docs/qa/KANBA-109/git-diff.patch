@@ -810,7 +810,7 @@ index 0000000..eedfdcb
 +p2_12_setup_claim_tokens (head)
 diff --git a/docs/qa/KANBA-109/contract-sample.json b/docs/qa/KANBA-109/contract-sample.json
 new file mode 100644
-index 0000000..14c0897
+index 0000000..952d51e
 --- /dev/null
 +++ b/docs/qa/KANBA-109/contract-sample.json
 @@ -0,0 +1,109 @@
@@ -835,7 +835,7 @@ index 0000000..14c0897
 +        "X-CSRF-Token": "<pre-session-csrf-token>"
 +      },
 +      "body": {
-+        "token": "kb_setup_REDACTED_ENTROPY_32_BYTES_SAMPLE",
++        "token": "kb_setup_[REDACTED]",
 +        "username": "rootadmin",
 +        "display_name": "Root Administrator",
 +        "email": "root@kanban.example",
@@ -877,7 +877,7 @@ index 0000000..14c0897
 +        "X-CSRF-Token": "<csrf-token>"
 +      },
 +      "body": {
-+        "token": "kb_setup_invalid_or_expired_or_already_consumed",
++        "token": "kb_setup_invalid",
 +        "username": "rootadmin",
 +        "display_name": "Root Administrator",
 +        "password": "SecurePassword1234!"
@@ -902,7 +902,7 @@ index 0000000..14c0897
 +        "X-CSRF-Token": "<csrf-token>"
 +      },
 +      "body": {
-+        "token": "kb_setup_rate_limited_token",
++        "token": "kb_setup_exceeded",
 +        "username": "rootadmin",
 +        "display_name": "Root Administrator",
 +        "password": "SecurePassword1234!"
