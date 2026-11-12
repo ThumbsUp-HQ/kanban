@@ -32,7 +32,7 @@ A forensic UI/UX architecture and consumer contract audit was conducted for `KAN
      ```json
      {
        "id": "0192e21b-1234-7000-8000-000000000001",
-       "token": "kb_agt_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_9a1b",
+       "token": "<REDACTED:KANBAN_KEY>",
        "surface": "agent",
        "key_prefix": "kb_agt_",
        "display_hint": "9a1b",
