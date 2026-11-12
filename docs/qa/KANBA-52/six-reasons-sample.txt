@@ -1,0 +1,25 @@
+QUERY:
+SELECT
+            a.reason::text AS reason,
+            a.link_snapshot->>'link_type' AS link_type,
+            ol.link_state::text AS link_state,
+            a.link_id,
+            (a.source_snapshot IS NOT NULL) AS has_source_snapshot,
+            (a.target_snapshot IS NOT NULL) AS has_target_snapshot
+        FROM invalid_object_link_audits a
+        JOIN object_links ol ON ol.id = a.link_id
+        WHERE a.workspace_id = :ws
+        ORDER BY a.reason, a.link_id;
+
+RESULT:
+reason                       | link_type      | link_state       | link_id                                | has_src  | has_tgt 
+-------------------------------------------------------------------------------------------------------------------------------
+DANGLING_SOURCE              | BLOCKS         | FLAGGED_INVALID  | 01a1cdf8-be02-711f-8cdb-2fe761edae27   | False    | True    
+DANGLING_TARGET              | BLOCKS         | FLAGGED_INVALID  | 01a1cdf8-be06-78c6-bf33-cf3c067e0a1e   | True     | False   
+SOFT_DELETED_ENDPOINT        | BLOCKS         | FLAGGED_INVALID  | 01a1cdf8-be0a-763f-b0eb-d0d08083a498   | True     | True    
+ARCHIVED_POLICY_VIOLATION    | BLOCKS         | FLAGGED_INVALID  | 01a1cdf8-be16-7769-bd04-1eddbe3e4fec   | True     | True    
+TYPE_MATRIX_VIOLATION        | ASSIGNED_TO    | FLAGGED_INVALID  | b7988f14-85c9-4109-9170-89dced70dd13   | True     | True    
+CROSS_WORKSPACE_LEAK         | BLOCKS         | FLAGGED_INVALID  | 0afbe44f-dab2-405c-8792-a3bd1645b61f   | True     | True    
+PERMISSION_SEVERED           | RELATES_TO     | FLAGGED_INVALID  | 01a1cdf8-be29-737a-a428-82635c305410   | True     | True    
+PERMISSION_SEVERED           | BLOCKS         | FLAGGED_INVALID  | 0afbe44f-dab2-405c-8792-a3bd1645b61f   | True     | True    
+(8 rows)
