@@ -193,6 +193,7 @@ class IssueResponse(BaseModel):
     capabilities: list[str]
     archived_at: datetime | None = None
     archive_eligibility: ArchiveEligibility
+    note: str | None = None
 
     @model_serializer(mode="wrap")
     def _strip_module_ids_if_none(

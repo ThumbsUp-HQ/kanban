@@ -79,6 +79,10 @@ class Problem(BaseModel):
         default=None,
         description="Numeric seconds after which the client may retry rate-limited requests",
     )
+    current_preview: dict[str, Any] | None = Field(
+        default=None,
+        description="Fresh blast radius preview when precondition 412 BLAST_RADIUS_CHANGED fails",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -103,6 +107,7 @@ class ProblemException(Exception):  # noqa: N818
         type_uri: str | None = None,
         extra: dict[str, Any] | None = None,
         retry_after_seconds: int | None = None,
+        current_preview: dict[str, Any] | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -125,6 +130,7 @@ class ProblemException(Exception):  # noqa: N818
         self.type_uri = type_uri
         self.extra = extra
         self.retry_after_seconds = retry_after_seconds
+        self.current_preview = current_preview
 
 
 def not_found() -> NoReturn:
@@ -165,6 +171,7 @@ async def problem_exception_handler(
         open_subissue_keys=exc.open_subissue_keys,
         hidden_open_count=exc.hidden_open_count,
         retry_after_seconds=exc.retry_after_seconds,
+        current_preview=exc.current_preview,
         **extra_fields,
     )
     response_headers = {"x-request-id": req_id}

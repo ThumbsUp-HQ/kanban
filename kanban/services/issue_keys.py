@@ -26,7 +26,11 @@ _ISSUE_KEY_RE: Final[re.Pattern[str]] = re.compile(ISSUE_KEY_PATTERN)
 
 
 async def resolve_issue_ref(
-    session: AsyncSession, caller: PrincipalContext, issue_ref: str
+    session: AsyncSession,
+    caller: PrincipalContext,
+    issue_ref: str,
+    *,
+    include_deleted: bool = False,
 ) -> Issue:
     """Resolve an issue reference through RLS or raise the canonical 404.
 
@@ -39,17 +43,16 @@ async def resolve_issue_ref(
 
     Raises:
         ProblemException: 404 NOT_FOUND if the issue does not exist, belongs to another
-        workspace, has been soft-deleted, or the caller lacks VIEW capability.
+        workspace, has been soft-deleted (when include_deleted=False), or the caller lacks VIEW.
 
     """
     stmt = (
         select(Issue)
         .join(ObjectRecord, ObjectRecord.id == Issue.id)
-        .where(
-            Issue.workspace_id == caller.workspace_id,
-            ObjectRecord.deleted_at.is_(None),
-        )
+        .where(Issue.workspace_id == caller.workspace_id)
     )
+    if not include_deleted:
+        stmt = stmt.where(ObjectRecord.deleted_at.is_(None))
 
     if _ISSUE_KEY_RE.fullmatch(issue_ref):
         ident, seq_str = issue_ref.rsplit("-", 1)

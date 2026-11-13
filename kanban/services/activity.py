@@ -125,6 +125,9 @@ class ActivityEventType(StrEnum):
     BOARD_COLUMN_REBALANCED = "BOARD_COLUMN_REBALANCED"
     ISSUE_ARCHIVED = "ISSUE_ARCHIVED"
     ISSUE_UNARCHIVED = "ISSUE_UNARCHIVED"
+    ISSUE_TRASHED = "ISSUE_TRASHED"
+    ISSUE_RESTORED = "ISSUE_RESTORED"
+    ISSUE_PURGED = "ISSUE_PURGED"
     CREATOR_OVERRIDDEN = "CREATOR_OVERRIDDEN"
     MCP_KEY_MINTED = "MCP_KEY_MINTED"
     MCP_KEY_REVOKED = "MCP_KEY_REVOKED"
@@ -217,6 +220,9 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.BOARD_COLUMN_REBALANCED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_ARCHIVED: ActivityCategory.HISTORY,
         ActivityEventType.ISSUE_UNARCHIVED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_TRASHED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_RESTORED: ActivityCategory.HISTORY,
+        ActivityEventType.ISSUE_PURGED: ActivityCategory.HISTORY,
         ActivityEventType.CREATOR_OVERRIDDEN: ActivityCategory.HISTORY,
         ActivityEventType.MCP_KEY_MINTED: ActivityCategory.SYSTEM,
         ActivityEventType.MCP_KEY_REVOKED: ActivityCategory.SYSTEM,

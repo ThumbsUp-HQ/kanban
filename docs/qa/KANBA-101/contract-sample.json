@@ -1,0 +1,400 @@
+{
+  "ticket": "KANBA-101",
+  "exchanges": [
+    {
+      "name": "get_delete_preview_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/issues/DEL-1/delete-preview",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "294",
+          "content-type": "application/json",
+          "x-request-id": "93a0888a960b4217b1ae5d245163f871",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "issue_key": "DEL-1",
+          "sub_issues_unparented": 2,
+          "inbound_links_flagged": 3,
+          "outbound_links": 0,
+          "comments": 0,
+          "attachments": 0,
+          "summary_text": "2 sub-issues unparented, 3 inbound object_links flagged",
+          "blast_hash": "aad16bb75eeb1fdc9be1b11982153b820e8246b12889b2b69566908189b7d1d7",
+          "retention_days": 30
+        }
+      }
+    },
+    {
+      "name": "delete_issue_200",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/issues/DEL-1",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "kb-blast-hash": "aad16bb75eeb1fdc9be1b11982153b820e8246b12889b2b69566908189b7d1d7",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "108",
+          "content-type": "application/json",
+          "x-request-id": "df530454670d4d9ba2ea2703970dbca5",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "issue_key": "DEL-1",
+          "deleted_at": "2026-11-12T12:43:51.082128Z",
+          "purge_after": "2026-12-12T12:43:51.082128Z"
+        }
+      }
+    },
+    {
+      "name": "list_trash_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/projects/DEL/trash",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "442",
+          "content-type": "application/json",
+          "x-request-id": "1852858130ba4c809ca456bbb89c0e58",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "items": [
+            {
+              "id": "01a1cfc9-2e90-7ab8-b41d-f51457401825",
+              "key": "DEL-1",
+              "summary": "Parent Issue to Delete",
+              "deleted_at": "2026-11-12T12:43:51.082128Z",
+              "purge_after": "2026-12-12T12:43:51.082128Z",
+              "state": {
+                "id": "01a1cfc9-2e45-7ee6-82e6-64869f61f6fd",
+                "name": "Backlog",
+                "group": "backlog"
+              },
+              "priority": {
+                "slug": "none",
+                "label": "None",
+                "emoji": null
+              },
+              "capabilities": [
+                "VIEW",
+                "COMMENT",
+                "EDIT",
+                "TRANSITION",
+                "LINK",
+                "SHARE",
+                "ADMIN",
+                "DELETE"
+              ]
+            }
+          ],
+          "next_cursor": null
+        }
+      }
+    },
+    {
+      "name": "delete_missing_hash_428",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/issues/CNC-1",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 428,
+        "headers": {
+          "x-request-id": "8217bfc8a7064cd68f6ee26445183ee1",
+          "content-length": "234",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:BLAST_HASH_REQUIRED",
+          "title": "Blast Hash Required",
+          "status": 428,
+          "code": "BLAST_HASH_REQUIRED",
+          "detail": "Header 'Kb-Blast-Hash' is required to delete an issue",
+          "request_id": "8217bfc8a7064cd68f6ee26445183ee1"
+        }
+      }
+    },
+    {
+      "name": "delete_blast_radius_changed_412",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/issues/CNC-1",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "kb-blast-hash": "eb3c216bd20bae0581207d915d02116cf25e4a760829b0bda5d201ebae743ce9",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 412,
+        "headers": {
+          "x-request-id": "3441fb8c9a7e463e8e8888c717bed285",
+          "content-length": "563",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:BLAST_RADIUS_CHANGED",
+          "title": "Blast Radius Changed",
+          "status": 412,
+          "code": "BLAST_RADIUS_CHANGED",
+          "detail": "The issue blast radius has changed since the preview was generated",
+          "request_id": "3441fb8c9a7e463e8e8888c717bed285",
+          "current_preview": {
+            "issue_key": "CNC-1",
+            "sub_issues_unparented": 0,
+            "inbound_links_flagged": 4,
+            "outbound_links": 0,
+            "comments": 0,
+            "attachments": 0,
+            "summary_text": "0 sub-issues unparented, 4 inbound object_links flagged",
+            "blast_hash": "d95410f27747ca79ae6bde88bf062b9225f2302986dcd8df5266f42b03f1afab",
+            "retention_days": 30
+          }
+        }
+      }
+    },
+    {
+      "name": "restore_issue_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/RES-1/restore",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1402",
+          "content-type": "application/json",
+          "x-request-id": "2d317d4556bc486495f6e99b232aef83",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "01a1cfc9-33d5-7e5a-abcf-67b9a483b34e",
+          "key": "RES-1",
+          "summary": "Restorable Parent",
+          "description_markdown": "",
+          "description_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "state": {
+            "id": "01a1cfc9-33a4-7a4c-8d05-2c75c885aa19",
+            "name": "Backlog",
+            "group": "backlog"
+          },
+          "priority": {
+            "slug": "none",
+            "label": "None",
+            "emoji": null
+          },
+          "start_date": null,
+          "due_date": null,
+          "cycle_id": null,
+          "parent": null,
+          "labels": [],
+          "module_ids": [],
+          "board_rank": "a000001",
+          "created_by_id": "01a1cfc9-339d-7336-ba24-9da9d0713b97",
+          "access_manifest": {
+            "pill_label": "Project",
+            "explicit_grant_count": 0,
+            "inherited_scope": {
+              "kind": "project",
+              "scope_label": "Project: RES",
+              "workspace_id": "01a1cfc9-3399-7690-97a1-3bf08a969195",
+              "workspace_name": "Engineering",
+              "project_id": "01a1cfc9-33a3-711b-9913-51260a9c1d6f",
+              "project_key": "RES",
+              "project_name": "RES project"
+            },
+            "users": [
+              {
+                "principal_id": "01a1cfc9-339d-7336-ba24-9da9d0713b97",
+                "handle": "@res_admin",
+                "display_name": "Res_Admin",
+                "capabilities": [
+                  "VIEW",
+                  "COMMENT",
+                  "EDIT",
+                  "TRANSITION",
+                  "LINK",
+                  "SHARE",
+                  "ADMIN",
+                  "DELETE"
+                ],
+                "grant_source": "project_owner"
+              }
+            ],
+            "groups": [],
+            "agents": [],
+            "deny_overrides": [],
+            "redacted_entries": [],
+            "redacted_count": 0
+          },
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "archived_at": null,
+          "archive_eligibility": {
+            "allowed": false,
+            "reason": "Only completed or canceled work items can be archived"
+          },
+          "note": "sub-issues remain unparented"
+        }
+      }
+    },
+    {
+      "name": "restore_retention_expired_409",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/RES-1/restore",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "x-request-id": "beae339a8e7a49d1a5db6c650a052c91",
+          "content-length": "232",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:RETENTION_EXPIRED",
+          "title": "Retention Expired",
+          "status": 409,
+          "code": "RETENTION_EXPIRED",
+          "detail": "Issue retention window has expired and cannot be restored",
+          "request_id": "beae339a8e7a49d1a5db6c650a052c91"
+        }
+      }
+    }
+  ]
+}

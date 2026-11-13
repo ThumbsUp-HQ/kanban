@@ -14,6 +14,11 @@ from kanban.jobs.auto_archive import (
     run_auto_archive,
     run_auto_archive_pass,
 )
+from kanban.jobs.trash_purge import (
+    PurgeReport,
+    run_trash_purge,
+    run_trash_purge_pass,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -66,6 +71,11 @@ registry.register(
     name="auto_archive",
     interval_seconds=3600.0,
     func=run_auto_archive,
+)
+registry.register(
+    name="trash_purge",
+    interval_seconds=3600.0,
+    func=run_trash_purge,
 )
 
 
@@ -141,8 +151,11 @@ __all__ = [
     "JobDefinition",
     "JobRegistry",
     "JobScheduler",
+    "PurgeReport",
     "lifespan",
     "registry",
     "run_auto_archive",
     "run_auto_archive_pass",
+    "run_trash_purge",
+    "run_trash_purge_pass",
 ]
