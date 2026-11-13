@@ -24,11 +24,11 @@ if [ -n "${CI:-}" ] || [ -f /.dockerenv ]; then
     --tmpfs /var/lib/postgresql/data:rw,size=1g \
     pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f \
     postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=200 \
-    -c listen_addresses= -c "unix_socket_directories=${WS_SOCK_DIR}" -c unix_socket_permissions=0777
+    -c listen_addresses= -c "unix_socket_directories=/var/run/postgresql,${WS_SOCK_DIR}" -c unix_socket_permissions=0777
 
   # Wait for readiness
-  for i in $(seq 1 30); do
-    if docker exec kanban-pg-test-1 pg_isready -h "${WS_SOCK_DIR}" -U kanban_test >/dev/null 2>&1; then
+  for i in $(seq 1 45); do
+    if docker exec kanban-pg-test-1 pg_isready -h /var/run/postgresql -U kanban_test >/dev/null 2>&1 && test -S "${WS_SOCK_DIR}/.s.PGSQL.5432"; then
       echo "PostgreSQL test container is healthy at ${WS_SOCK_DIR}"
       exit 0
     fi
