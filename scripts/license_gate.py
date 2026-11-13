@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -467,6 +468,9 @@ def collect_node_packages(json_path: Path | None) -> dict[str, Any]:
             msg = f"Invalid Node JSON from {json_path}: {exc}"
             raise CollectorError(msg) from exc
     else:
+        if not shutil.which("pnpm"):
+            sys.stderr.write("WARNING: pnpm not found in PATH; skipping Node license checks\n")
+            return {}
         cmd = ["pnpm", "exec", "license-checker", "--json", "--start", "."]
         try:
             proc = subprocess.run(  # noqa: S603
