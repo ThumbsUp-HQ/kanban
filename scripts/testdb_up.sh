@@ -18,6 +18,7 @@ if [ -n "${CI:-}" ] || [ -f /.dockerenv ]; then
   docker rm -f kanban-pg-test-1 2>/dev/null || true
   docker run -d --name kanban-pg-test-1 \
     --volumes-from "${CID}" \
+    --label com.docker.compose.service=pg-test \
     -e POSTGRES_USER=kanban_test \
     -e POSTGRES_DB=postgres \
     -e POSTGRES_HOST_AUTH_METHOD=trust \

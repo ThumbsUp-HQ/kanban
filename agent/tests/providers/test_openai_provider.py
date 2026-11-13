@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -478,7 +479,7 @@ def test_make_strict_json_schema_nested_and_lists() -> None:
     assert "score" in nested_schema["required"]
 
 
-async def test_stream_ttft_deadline_breach() -> None:
+async def test_stream_ttft_deadline_breach(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify TTFT deadline breach triggers ProviderTimeout during streaming."""
     cassette_path = FIXTURES_DIR / "openai_stream_ok.yaml"
     transport = CassetteTransport(cassette_path)
@@ -490,6 +491,9 @@ async def test_stream_ttft_deadline_breach() -> None:
         prompt="Hello Sparkle",
         ttft_deadline_ms=1,  # 1ms deadline will be breached
     )
+
+    perf_times = [0.0, 0.05]
+    monkeypatch.setattr(time, "perf_counter", lambda: perf_times.pop(0) if perf_times else 1.0)
 
     with pytest.raises(ProviderTimeout, match="TTFT SLA breached"):
         async for _ in provider.stream_complete(req):

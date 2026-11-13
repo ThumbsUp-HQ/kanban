@@ -22,12 +22,20 @@ def dump_schema(db_name: str) -> str:
     # Docker fallback: locate running pg-test container
     socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     res = subprocess.run(
-        ["docker", "ps", "--filter", f"volume={socket_dir}", "--format", "{{.ID}}"],
+        ["docker", "ps", "--filter", "name=kanban-pg-test", "--format", "{{.ID}}"],
         capture_output=True,
         text=True,
         check=True,
     )
     cid = res.stdout.strip().splitlines()[0] if res.stdout.strip() else None
+    if not cid:
+        res = subprocess.run(
+            ["docker", "ps", "--filter", f"volume={socket_dir}", "--format", "{{.ID}}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        cid = res.stdout.strip().splitlines()[0] if res.stdout.strip() else None
     if not cid:
         filter_arg = "label=com.docker.compose.service=pg-test"
         res = subprocess.run(

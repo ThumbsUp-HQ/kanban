@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -610,6 +611,7 @@ def test_python_collector_subprocess_not_array(monkeypatch: pytest.MonkeyPatch) 
 def test_node_collector_subprocess_bad_json(monkeypatch: pytest.MonkeyPatch) -> None:
     """Node collector subprocess emitting invalid JSON causes exit 3."""
     py_json = FIXTURES_DIR / "python_clean.json"
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/pnpm")
 
     def mock_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
@@ -626,6 +628,7 @@ def test_node_collector_subprocess_bad_json(monkeypatch: pytest.MonkeyPatch) -> 
 def test_node_collector_subprocess_not_dict(monkeypatch: pytest.MonkeyPatch) -> None:
     """Node collector subprocess emitting JSON array instead of dict causes exit 3."""
     py_json = FIXTURES_DIR / "python_clean.json"
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/pnpm")
 
     def mock_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
