@@ -4,6 +4,7 @@ import { EmojiStory } from './dev/EmojiStory';
 import { EditorStory } from './dev/EditorStory';
 import { MediaStory } from './dev/MediaStory';
 import { RealtimeStory } from './dev/RealtimeStory';
+import { AppRoutes } from './app/routes';
 import './App.css';
 
 /**
@@ -38,6 +39,11 @@ export function App(): JSX.Element {
     if (window.location.pathname === '/__dev/realtime') {
       return <RealtimeStory />;
     }
+  }
+
+  const route = AppRoutes();
+  if (route) {
+    return route;
   }
 
   return (
