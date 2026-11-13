@@ -15,11 +15,10 @@ license:
 	uv run python -m scripts.license_gate
 
 testdb-up:
-	install -d -m 0700 $${KB_TEST_PGSOCKET_DIR:-/tmp/kb-pgsock} 2>/dev/null || test -d $${KB_TEST_PGSOCKET_DIR:-/tmp/kb-pgsock}
-	docker compose -f docker-compose.test.yml up -d --wait
+	./scripts/testdb_up.sh
 
 testdb-down:
-	docker compose -f docker-compose.test.yml down
+	./scripts/testdb_down.sh
 
 image-slim:
 	docker build --target runtime-slim -t kanban:runtime-slim .
