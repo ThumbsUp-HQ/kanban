@@ -30,3 +30,16 @@ Contracts: 2 kept, 0 broken.
 uv run python -m scripts.check_no_dashes --all
 uv run python -m scripts.license_gate
 SUMMARY python=115 node=1 violations=0
+
+=== Remote Dash CI Status ===
+curl -k -s -L "https://dash.hackedyour.info/api/status?provider=forgejo&owner=AI&repo=thumbs-up-kanban"
+Provider: forgejo
+Owner: AI
+Repo: thumbs-up-kanban
+Status: success
+Commit Message: fix(ci): install postgresql-client and harden test harness isolation in CI
+Run URL: https://git.adamoutler.com/AI/thumbs-up-kanban/actions/runs/10/jobs/0/attempt/1
+Duration: 272.0s
+Result: 1739 passed, 1 deselected, 32 warnings in 172.86s
+Docker Hub image: build & push succeeded
+Dash logs uploaded successfully
