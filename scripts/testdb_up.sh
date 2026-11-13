@@ -7,7 +7,8 @@ if [ -n "${CI:-}" ] || [ -f /.dockerenv ]; then
   # Sibling container in CI / act_runner:
   # Share workspace volume via --volumes-from to allow socket access
   WS_SOCK_DIR="$(pwd)/.kb-pgsock"
-  install -d -m 0777 "${WS_SOCK_DIR}"
+  mkdir -p "${WS_SOCK_DIR}"
+  chmod 0777 "${WS_SOCK_DIR}"
   if [ -n "${GITHUB_ENV:-}" ]; then
     echo "KB_TEST_PGHOST=${WS_SOCK_DIR}" >> "${GITHUB_ENV}"
     echo "KB_TEST_PGSOCKET_DIR=${WS_SOCK_DIR}" >> "${GITHUB_ENV}"
@@ -33,7 +34,8 @@ if [ -n "${CI:-}" ] || [ -f /.dockerenv ]; then
     fi
     sleep 1
   done
-  echo "PostgreSQL failed to become ready in time" >&2
+  echo "PostgreSQL failed to become ready in time. Container logs:" >&2
+  docker logs kanban-pg-test-1 >&2 || true
   exit 1
 else
   # Local host environment
