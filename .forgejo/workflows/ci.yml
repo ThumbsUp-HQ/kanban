@@ -32,13 +32,8 @@ jobs:
         run: |
           set -o pipefail
           echo "=== Test Database Startup ===" >> build.log
+          docker inspect $(hostname) | grep -A 30 Mounts >> build.log || true
           make testdb-up 2>&1 | tee -a build.log
-          echo "=== Runner Diagnostics ===" >> build.log
-          id >> build.log
-          pwd >> build.log
-          ls -la /tmp >> build.log
-          ls -la /tmp/kb-pgsock >> build.log || true
-          docker inspect thumbs-up-kanban-pg-test-1 | grep -A 10 Mounts >> build.log || true
 
       - name: Run tests
         shell: bash
