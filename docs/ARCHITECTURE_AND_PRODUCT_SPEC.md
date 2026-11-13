@@ -1,10 +1,11 @@
-# Architecture & Product Specification (v2): Security-First, Agent-First Kanban & Knowledge Platform
+# Architecture & Product Specification (v2): 👍kanban - Security-First, Agent-First Kanban & Knowledge Platform
 
-- **License:** `Apache-2.0` (Permissive open-source; zero `GPL`, `AGPL`, or `SSPL` runtime dependencies allowed)
+- **Official Brand & Namespace Convention:** Public brand **`👍kanban`** (`<title>👍kanban</title>`, `FastAPI(title="👍kanban API")`, WebAuthn `rp.name = "👍kanban"` paired with strict ASCII FQDN `rp.id`); upstream repository & container slug `thumbs-up-kanban` (`thumbs-up-kanban:latest`); internal Python root module `kanban` (`@kanban/web` for frontend)
+- **License:** `Apache-2.0` (Permissive open-source; zero `GPL`, `AGPL`, `LGPL`, or `SSPL` runtime dependencies allowed)
 - **Repository Modules:** `[kanban, database, mcp, agent]`
 - **Priority Hierarchy:** **Priority #0: Security & Access Transparency** | **Priority #1: Native Agent-First Ergonomics & Scriptable Workflows** | **Priority #2: Generous Breathable Whitespace & Emoji Hover-Elaboration UX**
-- **Deployment Modes:** Hardened Multi-Container Stack (`docker-compose.yml` + PostgreSQL 16+ + Valkey 8 + Caddy 2) **AND** Zero-Config Single-Container Standalone (`docker run -p 8080:8080 kanban:latest` with embedded Unix-socket PG16 & `⚠️` Standalone banner)
-- **Bootstrap Tracking Board:** `https://kanban.hackedyour.info/kanban/`
+- **Deployment Modes:** Hardened Multi-Container Stack (`docker-compose.yml` + PostgreSQL 16+ + Valkey 8 + Caddy 2) **AND** Zero-Config Single-Container Standalone (`docker run -p 8080:8080 thumbs-up-kanban:latest` with embedded Unix-socket PG16 & `⚠️` Standalone banner)
+- **Bootstrap Tracking Board:** `https://kanban.hackedyour.info/kanban/` (`workspace: kanban`, `project: KANBA`)
 - **Engineering & QA Standard:** **`>= 95%` Automated Unit Test Coverage** (fast per-test clean DB + pluggable AI fixtures + local CLI agent validation), Mandatory UI Specialist Gate, Dual API+UI Specialist Gate, Local `reality-checker` Forensic QA Gate, and Dash CI/CD Verification
 
 ---
@@ -62,15 +63,15 @@ Autonomous coding agents (`Gemini CLI / Antigravity`, `Claude Code`, `OpenAI Cod
 2. **CRUD-Wrapper MCP Context Collapse (`Issues #29`, `#87`):** Generating 1:1 MCP tools from REST endpoints dumps `70-120+` tools (`45,000+` schema tokens) into context, returns bloated unpruned JSON full of `null`s and raw UUIDs, and exposes single-step hard deletes without friction gates.
 3. **Rejection of Intent-Based Multi-Surface MCP (`PRs #99`, `#268`):** Scoped intent surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`), `EntityResolver` human keys (`KAN-42`), `summary`/`standard`/`full` LOD tiers, and `InlineSafeDumper` YAML (`~89%` schema token savings) were ignored or rejected upstream.
 
-**Our Mandate:** Build a clean-sheet **`Apache-2.0`** platform where **Security is Priority #0**, **Native Agent-First Ergonomics & Scriptable Workflows are Priority #1**, and **Breathable Whitespace + Emoji Hover-Elaboration UX is Priority #2** - with zero seat taxes and zero AI paywalls.
+**Our Mandate:** Build **`👍kanban`** (`thumbs-up-kanban`), a clean-sheet **`Apache-2.0`** platform where **Security is Priority #0**, **Native Agent-First Ergonomics & Scriptable Workflows are Priority #1**, and **Breathable Whitespace + Emoji Hover-Elaboration UX is Priority #2** - with zero seat taxes and zero AI paywalls.
 
 ---
 
-### 1.2 Plane Paywall Gap Matrix vs. Our Day-1 `Apache-2.0` Platform
+### 1.2 Plane Paywall Gap Matrix vs. `👍kanban` (`Apache-2.0` Day-1 Core)
 
-| Capability Domain | Plane Community (`AGPLv3`) | Plane Pro / Business / Enterprise | Our `Apache-2.0` Platform (Day-1 Core) |
+| Capability Domain | Plane Community (`AGPLv3`) | Plane Pro / Business / Enterprise | `👍kanban` (`Apache-2.0` Day-1 Core) |
 | :--- | :--- | :--- | :--- |
-| **License & Deployment** | `AGPLv3` multi-container stack | Commercial proprietary license | **`Apache-2.0`:** Both hardened multi-container `docker-compose.yml` AND 1-command `docker run -p 8080:8080` standalone mode. |
+| **License & Deployment** | `AGPLv3` multi-container stack | Commercial proprietary license | **`Apache-2.0`:** Both hardened multi-container `docker-compose.yml` AND 1-command `docker run -p 8080:8080 thumbs-up-kanban:latest` standalone mode. |
 | **Authentication & Identity** | Basic email/password & single OAuth; no LDAP/AD | **Pro:** OIDC<br>**Bus/Ent:** SAML, LDAP/AD, Group Sync | **Multi-Card Auth Studio:** Simultaneous OIDC, OAuth2, LDAPS/StartTLS, WebAuthn/Passkeys, & Local Break-Glass Admin with enable/disable/reordering. |
 | **RBAC & Sharing Transparency** | Coarse roles; opaque permission inheritance | **Bus/Ent:** Custom RBAC, permission schemes | **Hybrid RBAC + Resource ACLs + Postgres `FORCE RLS`:** Ubiquitous **`🛡️` Shared-With Emoji Pill** + Effective Access Inspector on every object. |
 | **Audit Logs & Provenance** | Mutable/basic issue activity | **Enterprise:** Workspace Audit Logs | **Immutable SHA-256 Hash-Chained Ledger:** Monthly-partitioned `activity_records` covering human edits, `🔄` creator overrides, ACL diffs, and agent/script runs. |
@@ -98,13 +99,16 @@ The repository uses a single Python 3.12+ `uv` workspace (`uv sync --locked --no
 ```text
 /home/adamoutler/kanban/
 ├── LICENSE                            # Apache License, Version 2.0
+├── README.md                          # 👍kanban quickstart, deployment modes & CLI guide
 ├── AGENTS.md                          # Workspace security, >=95% coverage & specialist QA rules
 ├── CLAUDE.md -> AGENTS.md             # Cross-harness symlink
 ├── .agents/
 │   ├── agents/                        # Local reality-checker, ui-designer, ux-architect, backend-architect, api-tester, security-engineer
 │   └── skills/                        # Local kanban-ticket & kanban-agent-manager skills
+├── .forgejo/workflows/ci.yml          # Forgejo CI pipeline + Dash build.log upload
 ├── docs/
 │   ├── ARCHITECTURE_AND_PRODUCT_SPEC.md
+│   ├── PROMOTION_AND_BACKUP.md        # KBBAK1 AES-256-GCM streaming backup & standalone -> prod promotion
 │   └── qa/                            # Passive forensic proof bundles (docs/qa/<TICKET_ID>/)
 ├── Dockerfile                         # Multi-stage build producing `runtime-slim` AND default `standalone`
 ├── docker-compose.yml                 # Hardened multi-network production stack (Caddy + PG16 + Valkey 8)
@@ -114,7 +118,7 @@ The repository uses a single Python 3.12+ `uv` workspace (`uv sync --locked --no
 │   ├── standalone/entrypoint.py       # PID-1 tini supervisor for zero-config `docker run` embedded PG16
 │   └── seccomp/sandbox-profile.json   # Strict seccomp-BPF syscall allowlist for Tier B / CLI sandboxes
 ├── database/                          # MODULE 1: PostgreSQL Graph, Canonical Markdown DDL, FORCE RLS, Link Auditor
-├── kanban/                            # MODULE 2: FastAPI REST/WS/SSE, Multi-Card Auth, Sanitizer, Workflows & React SPA
+├── kanban/                            # MODULE 2: FastAPI ("👍kanban API"), Multi-Card Auth, Sanitizer, Workflows & React SPA ("<title>👍kanban</title>")
 ├── mcp/                               # MODULE 3: Three-Surface MCP Gateway (/mcp/agent, /mcp/docs, /mcp/admin)
 └── agent/                             # MODULE 4: OpenAI/Ollama/Gemini Providers, CLI/Remote Runners, Sparkle, Fixtures & CLI Bench
 ```
@@ -123,7 +127,7 @@ The repository uses a single Python 3.12+ `uv` workspace (`uv sync --locked --no
 
 ### 2.2 Standalone `docker run` Mode ("Not Recommended" All-in-One) vs. Production Stack
 
-A core usability requirement is that **`docker run -p 8080:8080 kanban:latest` must "just work" out of the box with zero external containers and zero required flags**, while clearly signaling that single-container consolidation is not recommended for multi-node production.
+A core usability requirement is that **`docker run -p 8080:8080 thumbs-up-kanban:latest` must "just work" out of the box with zero external containers and zero required flags**, while clearly signaling that single-container consolidation is not recommended for multi-node production.
 
 #### Architectural Decision: Embedded Unix-Socket PostgreSQL 16+ vs. SQLite Fallback
 
@@ -132,9 +136,9 @@ A core usability requirement is that **`docker run -p 8080:8080 kanban:latest` m
 | **Priority #0 Security (`FORCE RLS`)** | **100% Identical:** Enforces exact same kernel-level `FORCE ROW LEVEL SECURITY` (`NOBYPASSRLS`) and `effective_resource_access` policies in standalone and prod. | **Broken:** SQLite has zero Row-Level Security, forcing fragile duplicate ORM `WHERE` clauses and breaking our RLS security guarantees. |
 | **Graph, `ltree`, Triggers & Link Auditor** | **100% Identical:** Native `ltree`, composite FKs, `COLLATE "C"`, PL/pgSQL `audit_object_links()`, and `pgcrypto` SHA-256 hash-chained `activity_records`. | **Broken:** Lacks `ltree`, PL/pgSQL, per-column `ON DELETE SET NULL (col)`, and row-level `FOR UPDATE` DAG locks. |
 | **Semantic RAG (`pgvector`) & Realtime** | **100% Identical:** Native `pgvector` HNSW + built-in Postgres `LISTEN/NOTIFY` `RealtimeBroker` (zero Valkey container needed!). | **Broken:** Requires maintaining a second divergent vector/event codebase. |
-| **Upgrade Path to Production HA** | **1-Command Lossless Promotion:** `pg_dump -Fc` -> `pg_restore` into external/managed PostgreSQL 16+ with zero type conversion. | **Custom ETL Required:** Painful schema/type migration across JSON, UUIDs, and hash chains. |
+| **Upgrade Path to Production HA** | **1-Command Lossless Promotion (`KBBAK1`):** Streaming 4 MiB AES-256-GCM encrypted `.kbbak` backup (`pg_dump -Fc` + `MASTER_KEK`/`KB_AUTH_PEPPER` carryover + rotated session/DB credentials) restored into external PostgreSQL 16+ via `kanban-ctl` (see [`docs/PROMOTION_AND_BACKUP.md`](./PROMOTION_AND_BACKUP.md)). | **Custom ETL Required:** Painful schema/type migration across JSON, UUIDs, and hash chains. |
 
-#### Exact Zero-Config Boot Lifecycle (`docker run -p 8080:8080 kanban:latest`)
+#### Exact Zero-Config Boot Lifecycle (`docker run -p 8080:8080 thumbs-up-kanban:latest`)
 
 When `DATABASE_URL` is omitted, `kanban-standalone-entrypoint` (supervised by `tini` as PID 1) automatically boots in `standalone_embedded_pg` mode in `< 3 seconds`:
 
@@ -170,16 +174,16 @@ A single root `Dockerfile` produces **both** the lean production image (`--targe
 
 | Container Service | Image Target | Networks (`docker-compose.yml`) | Role & Security Isolation Boundary |
 | :--- | :--- | :--- | :--- |
-| **`kanban-standalone`** *(Standalone only)* | `kanban:latest` (`standalone`) | Default Docker bridge (`-p 8080:8080`) | All-in-one evaluation/homelab container: Unix-socket PG16 + Uvicorn SPA/API/WS/MCP + PG `LISTEN/NOTIFY` broker + Tier A `Wasmtime`. |
+| **`kanban-standalone`** *(Standalone only)* | `thumbs-up-kanban:latest` (`standalone`) | Default Docker bridge (`-p 8080:8080`) | All-in-one evaluation/homelab container: Unix-socket PG16 + Uvicorn SPA/API/WS/MCP + PG `LISTEN/NOTIFY` broker + Tier A `Wasmtime`. |
 | **`reverse-proxy`** | `caddy:2.8-alpine` | `edge_net`, `app_net` | Terminates TLS 1.3 (`:80/:443`), enforces strict CSP/HSTS, serves `/srv/www` `.br`/`.gz` SPA assets, routes `/api/*` -> `kanban-api` and `/mcp/*` -> `mcp-server`. |
-| **`kanban-api`** | `kanban:runtime-slim` | `app_net`, `data_net` | Core domain state machines, Multi-Card AuthN, RBAC/ACL manifest resolver, Rust `nh3` + Markdown converter, REST, and WS/SSE hubs. |
-| **`mcp-server`** | `kanban:runtime-slim` | `app_net` **ONLY (zero `data_net` route!)** | Mounts `/mcp/agent`, `/mcp/docs`, `/mcp/admin`; holds **zero** Postgres write credentials; calls `kanban-api` over internal mTLS HTTP/2. |
-| **`agent-runtime`** | `kanban:runtime-slim` | `app_net`, `egress_llm_net` (+ `:ro` `git-mirrors`) | Multi-provider `LLMProvider` router, `<150ms` Sparkle FIM (`app_rls_reader` `READ ONLY` 18ms cap), and workflow interceptor coordinator. |
-| **`script-sandbox`** | `kanban:sandbox` (`nsjail`) | `sandbox_net` (`internal: true`, **zero internet!**) | Runs Tier B polyglot custom field scripts & local `cli_pipe` (`agy -p` / `codex -p`) behind `sandbox-egress-proxy` (ephemeral token injector). |
-| **`outbox-relay`** | `kanban:runtime-slim` | `data_net` **ONLY** | `LISTEN outbox_wakeup` + `FOR UPDATE SKIP LOCKED` -> Valkey 8 Streams & PubSub. |
+| **`kanban-api`** | `thumbs-up-kanban:runtime-slim` | `app_net`, `data_net` | Core domain state machines, Multi-Card AuthN, RBAC/ACL manifest resolver, Rust `nh3` + Markdown converter, REST, and WS/SSE hubs. |
+| **`mcp-server`** | `thumbs-up-kanban:runtime-slim` | `app_net` **ONLY (zero `data_net` route!)** | Mounts `/mcp/agent`, `/mcp/docs`, `/mcp/admin`; holds **zero** Postgres write credentials; calls `kanban-api` over internal mTLS HTTP/2. |
+| **`agent-runtime`** | `thumbs-up-kanban:runtime-slim` | `app_net`, `egress_llm_net` (+ `:ro` `git-mirrors`) | Multi-provider `LLMProvider` router, `<150ms` Sparkle FIM (`app_rls_reader` `READ ONLY` 18ms cap), and workflow interceptor coordinator. |
+| **`script-sandbox`** | `thumbs-up-kanban:sandbox` (`nsjail`) | `sandbox_net` (`internal: true`, **zero internet!**) | Runs Tier B polyglot custom field scripts & local `cli_pipe` (`agy -p` / `codex -p`) behind `sandbox-egress-proxy` (ephemeral token injector). |
+| **`outbox-relay`** | `thumbs-up-kanban:runtime-slim` | `data_net` **ONLY** | `LISTEN outbox_wakeup` + `FOR UPDATE SKIP LOCKED` -> Valkey 8 Streams & PubSub. |
 | **`postgres`** | `pgvector/pgvector:pg16` | `data_net` (`internal: true`) | Authoritative Universal Object Graph, `FORCE RLS`, `ltree`, `pgvector` HNSW, and partitioned SHA-256 `activity_records`. |
 | **`valkey`** | `valkey/valkey:8.0-alpine` | `data_net` (`internal: true`) | Multi-replica WebSocket fanout, consumer groups, and sliding-window rate buckets (`BSD-3` licensed). |
-| **`kanban-agent-runner`** *(Optional Remote Host)* | `kanban:agent-runner` | Outbound TLS 1.3 `WSS` to `reverse-proxy` | Runs on remote dev/CI/GPU hosts mounting local Git repos `:ro` to execute `ollama`, `gemini`, `agy -p`, or `codex -p` transition gates with zero inbound firewall ports. |
+| **`kanban-agent-runner`** *(Optional Remote Host)* | `thumbs-up-kanban:agent-runner` | Outbound TLS 1.3 `WSS` to `reverse-proxy` | Runs on remote dev/CI/GPU hosts mounting local Git repos `:ro` to execute `ollama`, `gemini`, `agy -p`, or `codex -p` transition gates with zero inbound firewall ports. |
 
 ---
 
@@ -321,7 +325,7 @@ CREATE TABLE auth_provider_cards (
 
 1. **OAuth 2.0 / OIDC Cards:** Mandatory PKCE (`S256`), single-use `128-bit` `state` + `nonce` (`TTL = 300s`), `iss`/`aud`/`azp` pinning, and `private_key_jwt` support.
 2. **LDAPS / StartTLS Cards:** Strictly `ldaps://` (TLS 1.2+) or `ldap://` upgraded via `StartTLS` **prior to** any bind (`TLS_HARD`), optional custom CA PEM / SPKI SHA-256 pin, RFC 4515 AST filter escaping (`\2a`, `\28`, `\29`, `\5c`, `\00`), and **ephemeral user-bind password verification** (user LDAP passwords are never stored or logged).
-3. **Local Admin & Break-Glass Card:** `Argon2id` (`m = 64 MiB`, `t = 3`, `p = 4`) + server-side HMAC-SHA256 pepper + mandatory **WebAuthn/Passkey** (`FIDO2`, `userVerification = "required"`) or **TOTP** (`AAL2`) for Admin roles + offline one-time recovery codes.
+3. **Local Admin & Break-Glass Card:** `Argon2id` (`m = 64 MiB`, `t = 3`, `p = 4`) + server-side HMAC-SHA256 pepper + mandatory **WebAuthn/Passkey** (`FIDO2`, `userVerification = "required"`, `rp.name = "👍kanban"` UTF-8 display brand paired with strict ASCII FQDN `rp.id`) or **TOTP** (`AAL2`) for Admin roles + offline one-time recovery codes. Every `/api/v1/admin/*` router MUST enforce `Depends(require_admin_aal2)` at the router dependency boundary (`assert_admin_routes_protected`).
 4. **Zero Implicit Cross-Card Account Linking:** Matching `email` across two cards **never** silently merges accounts (blocking pre-hijack and rogue-IdP takeover). Identities map strictly via `(auth_card_id, immutable_subject_id)` (`OIDC sub` or `LDAP objectGUID`/`entryUUID`); linking an additional card requires re-authenticating the existing session (`AAL2`) + authenticating the new card.
 
 ---
@@ -330,7 +334,7 @@ CREATE TABLE auth_provider_cards (
 
 ```text
 +------------------------------ LOGIN SCREEN -------------------------------+
-|                        🛡️  KANBAN WORKSPACE SIGN-IN                       |
+|                       🛡️  👍KANBAN WORKSPACE SIGN-IN                      |
 |                                                                           |
 |   +-------------------------------------------------------------------+   |
 |   |  🔑  Continue with Okta Workforce OIDC                 [Primary]  |   |
@@ -361,7 +365,7 @@ CREATE TABLE auth_provider_cards (
 Per architectural directive, **100% of prose across `issues`, `comments`, `docs`, `pages`, and `stickies` is stored in PostgreSQL strictly as canonical UTF-8 GitHub-Flavored Markdown (`*_markdown TEXT NOT NULL`)**:
 
 - **Zero Mode Switcher Clutter:** There is no `[Mode: Rich | MD | HTML]` dropdown on tickets, comments, or docs. Users type naturally in Rich WYSIWYG or raw Markdown syntax (`Cmd/Ctrl+Shift+M` toggles raw source inspection `📝`) and paste freely from browsers, Jira, Confluence, Google Docs, Word, Notion, terminals, or IDEs.
-- **Zero HTML or JSONB AST Columns in PostgreSQL:** Every API/MCP ingress runs a deterministic server-side normalization & sanitization pass (`nh3` + hidden-DOM pruner + canonical GFM serializer) before `INSERT`/`UPDATE`, guaranteeing clean diffs, zero stored-XSS surface, and minimum MCP token overhead.
+- **Zero HTML or JSONB AST Columns in PostgreSQL:** Every API/MCP ingress runs a deterministic server-side normalization & sanitization pass (`normalize_inspect` UTF-16 lone-surrogate pre-check `0xD800 <= ord(c) <= 0xDFFF` -> `INVALID_UTF8_SURROGATE` *before* `.encode("utf-8")`, followed by Rust `nh3` + hidden-DOM pruner + canonical GFM serializer) before `INSERT`/`UPDATE`, guaranteeing clean diffs, zero unhandled `UnicodeEncodeError` 500s, zero stored-XSS surface, and minimum MCP token overhead.
 
 ---
 
@@ -394,7 +398,7 @@ Fenced ```` ```mermaid ```` blocks (`flowchart`, `sequenceDiagram`, `stateDiagra
 | Media Type | Server-Side & Browser Hardening Pipeline | Interactive Web UI (`<MediaViewport>`) |
 | :--- | :--- | :--- |
 | **Uploaded Raster Pictures (`PNG`, `JPEG`, `WebP`, `AVIF`, `GIF`)** | Magic-byte sniff (rejecting extension spoofing); decompression-bomb guard (`MAX_IMAGE_PIXELS = 40,000,000`, `<= 25 MB`); re-encode/strip all EXIF/XMP/IPTC metadata (GPS coordinates, serial numbers); served via short-lived (`TTL = 300s`) RLS-checked URLs with `X-Content-Type-Options: nosniff`. | Responsive aspect-ratio skeleton (zero layout shift), click-to-open Lightbox (`10% - 800%` cursor-centered wheel/pinch zoom, drag pan), `Alt` badge, and Download button. |
-| **External Markdown Images (`https://...`)** | Never fetched directly by user browsers (blocking IP/cookie tracking & LAN SSRF). Rewritten to cookieless `/api/v1/media-proxy?u=...&sig=<HMAC>`: blocks RFC1918 / loopback / link-local `169.254.0.0/16` / IPv6 ULA **after DNS resolution** (zero redirects, `<= 10 MB`). In `📴 air_gap_mode`, renders an offline placeholder card. | Shows subtle `🌐` external-image badge (`Hover: "Proxied anonymously via Kanban Media Shield"`). |
+| **External Markdown Images (`https://...`)** | Never fetched directly by user browsers (blocking IP/cookie tracking & LAN SSRF). Rewritten to cookieless `/api/v1/media-proxy?u=...&sig=<HMAC>`: blocks RFC1918 / loopback / link-local `169.254.0.0/16` / IPv6 ULA **after DNS resolution** with socket IP pinning (zero redirects, `<= 10 MB`). In `📴 air_gap_mode`, returns a 67-byte transparent PNG with `X-Kanban-Media-Status: air-gap-placeholder` for clean offline rendering. | Shows subtle `🌐` external-image badge (`Hover: "Proxied anonymously via 👍kanban Media Shield"`). |
 | **Uploaded `.svg` Attachments & Fenced ```` ```svg ```` Blocks** | **Dual-Layer Scrub:** Server Rust `roxmltree` + client `DOMPurify` (`USE_PROFILES: { svg: true, svgFilters: false }`) allowlists pure vector geometry (`svg`, `g`, `path`, `rect`, `circle`, `line`, `polyline`, `polygon`, `text`, `tspan`, `defs`, `linearGradient`, `clipPath`, `marker`) and **strips** `<script>`, `<foreignObject>`, `<iframe>`, `<image>`, `<style>`, SMIL `<animate*>`, `on*` handlers, and external `href`s. `<use href="#id">` is validated as an acyclic local DAG (`depth <= 4`, expansion `<= 500` nodes).<br>**Direct-URL Navigation Shield:** `/attachments/*.svg` sets `Content-Security-Policy: default-src 'none'; sandbox` + `X-Content-Type-Options: nosniff` + `Content-Disposition: attachment` whenever `Sec-Fetch-Dest != "image"`, making direct-tab SVG XSS impossible. | Rendered strictly via `<img src="blob:...">` inside `<MediaViewport>` (`max-height: 520px`) with pan/zoom, `🌓` Light/Dark checkerboard backdrop toggle (for dark-stroke SVGs in dark mode), Copy Raw Source, and Download `.svg`. |
 
 #### Production `Content-Security-Policy` Header
@@ -1078,8 +1082,9 @@ Testing is a first-class architectural pillar: **every module (`database`, `kanb
 
 1. **Why Real PostgreSQL 16 (Never SQLite Mocks) in Tests:** Testing against SQLite would skip `FORCE ROW LEVEL SECURITY`, `ltree`, `COLLATE "C"`, `pgvector`, and PL/pgSQL triggers (`LOCKOUT_PREVENTED`, `audit_object_links()`). Instead, `docker-compose.test.yml` (or the embedded PG binary) runs Postgres on RAM-backed `tmpfs` (`fsync=off`, `synchronous_commit=off`, `full_page_writes=off`).
 2. **Golden `kanban_template` DB + `pytest-xdist` Worker Clones (`~35ms` once per worker):** At session start, `conftest.py` runs `alembic upgrade head` **once** on `kanban_template`. Each `pytest-xdist` worker (`gw0..gwN`) clones `CREATE DATABASE kanban_test_gw0 TEMPLATE kanban_template` in `~35ms`.
-3. **Per-Test Nested `SAVEPOINT` Rollback (`~0.3ms` Clean DB Guarantee):**
+3. **Per-Test Nested `SAVEPOINT` Rollback & Pre-RLS Bootstrap (`~0.3ms` Clean DB Guarantee):**
    - Each test opens an outer connection transaction, binds SQLAlchemy `AsyncSession(..., join_transaction_mode="create_savepoint")` so application `await session.commit()` calls release nested `SAVEPOINT`s while still firing `DEFERRABLE INITIALLY IMMEDIATE` constraint triggers and `FORCE RLS` policies, and issues an outer `ROLLBACK` on teardown in **`0.3ms`**!
+   - **Pre-RLS Fixture Bootstrap Invariant (`KANBA-162`):** Initial workspace and admin bootstrap fixtures MUST execute under `kanban_migrator`/superuser authority and immediately reset session authorization to `kanban_app` (`FORCE ROW LEVEL SECURITY` active) prior to running test assertions; non-tenant `SECURITY DEFINER`-isolated auth tables (`oidc_auth_requests`, `auth_provider_cards`, `local_admin_credentials`, `sessions`) are verified for zero direct `kanban_app` table privileges (`has_table_privilege = false`). Non-top-level `conftest.py` files MUST NOT declare `pytest_plugins` (Pytest 9.2+ invariant).
    - For multi-connection concurrency / `LISTEN-NOTIFY` tests (`@pytest.mark.committed_db`), a companion fixture runs `TRUNCATE ... RESTART IDENTITY CASCADE` across dirty tables in `< 8ms`.
 4. **Coverage Enforcement Commands (Hard CI Failure Below `95%`):**
    - **Python (`[database, kanban, mcp, agent]`):** `uv run pytest -n auto --cov=database --cov=kanban --cov=mcp --cov=agent --cov-branch --cov-report=term-missing --cov-fail-under=95`

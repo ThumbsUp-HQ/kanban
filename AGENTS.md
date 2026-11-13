@@ -1,12 +1,13 @@
-# Agent-First, Security-First Kanban Platform (`[kanban, database, mcp, agent]`)
+# 👍kanban: Agent-First, Security-First Kanban Platform (`[kanban, database, mcp, agent]`)
 
 ## Architecture & Mission
 
-This repository implements an open-source, **Security-First (Priority #0), Agent-First (Priority #1)** Kanban, Ticketing, and Knowledge Platform designed to eliminate SaaS AI paywalls and CRUD-wrapper MCP context bloat.
+This repository implements **`👍kanban`** (`thumbs-up-kanban`), an open-source, **Security-First (Priority #0), Agent-First (Priority #1)** Kanban, Ticketing, and Knowledge Platform designed to eliminate SaaS AI paywalls and CRUD-wrapper MCP context bloat.
 
-- **License:** `Apache-2.0` (Strictly permissive; zero `GPL`, `AGPL`, or `SSPL` runtime dependencies permitted)
-- **Initial Tracking Board:** `https://kanban.hackedyour.info/kanban/`
-- **Authoritative Specification:** [`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`](./docs/ARCHITECTURE_AND_PRODUCT_SPEC.md)
+- **Public Brand & Namespace Convention:** User-facing surfaces, HTML document titles (`<title>👍kanban</title>`), OpenAPI specifications (`title="👍kanban API"`), and WebAuthn Relying Party display strings (`rp.name = "👍kanban"`, paired with strict ASCII FQDN `rp.id`) use **`👍kanban`**. Upstream repository and container image slugs use `thumbs-up-kanban` (`thumbs-up-kanban:latest`), while internal Python workspace root packages remain `kanban` (`@kanban/web` for frontend).
+- **License:** `Apache-2.0` (Strictly permissive; zero `GPL`, `AGPL`, `LGPL`, or `SSPL` runtime dependencies permitted)
+- **Initial Tracking Board:** `https://kanban.hackedyour.info/kanban/` (`workspace: kanban`, `project: KANBA`)
+- **Authoritative Specifications:** [`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`](./docs/ARCHITECTURE_AND_PRODUCT_SPEC.md) and [`docs/PROMOTION_AND_BACKUP.md`](./docs/PROMOTION_AND_BACKUP.md)
 - **Top-Level Module Topology:**
   - `kanban/` - Web UI & HTTP/WebSocket application server (Plane-parity board & ticket screen, breathable Jira/Plane whitespace + semantic emojis with hover elaboration, Multi-Card OAuth/LDAP/Local authentication, blinking cursor Sparkle completion + right-click accept, auto-detected & auto-converted canonical Markdown with Mermaid/Pictures/SVG rendering, Project Stickies with smart Doc promotion, and standalone `docker run` + multi-container deployment modes).
   - `database/` - PostgreSQL Universal Object Graph (`Issues`, `Stickies`, `Docs`, `Users`, `Projects`, `Cycles`, `Modules`, `Views`, `Pages`) storing canonical UTF-8 Markdown only, typed `object_links`, Invalid Object Link Auditor & Purger, Row-Level Security (`FORCE RLS`), and immutable Activity & Audit Ledger.
@@ -37,12 +38,13 @@ Every ticket managed under [`.agents/skills/kanban-ticket/SKILL.md`](./.agents/s
 ## Core Security & Engineering Invariants
 
 1. **Transparent Access Visibility:** Every object (`Project`, `Issue`, `Sticky`, `Doc`, `Page`, `View`) must compute and expose explicit sharing metadata (`Users`, `Groups`, `Agents`, `Inherited Scope`) without cross-tenant or unauthorized principal enumeration.
-2. **Hostile Input & Sanitization:** Auto-detect Plain Text, Markdown, and HTML at ingestion; enforce server-side allowlist sanitization (stripping scripts, event handlers, dangerous URI schemes, SVG/MathML vectors, and hidden prompt-injection payloads) paired with a strict `Content-Security-Policy`.
-3. **Multi-Card Auth Integrity:** Support multiple OAuth2/OIDC, LDAPS/StartTLS, and Local Admin auth cards with enable/disable and ordering controls, break-glass lockout prevention, and verified-claim account linking.
+2. **Hostile Input & Sanitization:** Auto-detect Plain Text, Markdown, and HTML at ingestion; enforce UTF-16 lone-surrogate rejection (`0xD800 <= ord(c) <= 0xDFFF` -> `INVALID_UTF8_SURROGATE`) prior to `.encode("utf-8")`, hidden-DOM paste-jacking pruning, and server-side allowlist sanitization (stripping scripts, event handlers, dangerous URI schemes, SVG/MathML vectors, and hidden prompt-injection payloads) paired with a strict `Content-Security-Policy`.
+3. **Multi-Card Auth & Admin AAL2 Integrity:** Support multiple OAuth2/OIDC, LDAPS/StartTLS, WebAuthn/Passkeys (`rp.name = "👍kanban"` with strict ASCII FQDN `rp.id`), TOTP, and Local Admin auth cards with enable/disable and ordering controls, break-glass lockout prevention, and verified-claim account linking (zero implicit email auto-merge). Every `/api/v1/admin/*` route MUST declare `Depends(require_admin_aal2)` at the router/route dependency layer (`assert_admin_routes_protected`).
 4. **Hardened Custom Script Boundaries:** Only Admins may define custom fields or scripts. Script execution defaults to an ephemeral API token scoped strictly to the current **Project** inside an isolated sandbox; escalating token scope to **Workspace** or **Server** (or running under Project/Server Admin credentials instead of invoking User credentials) requires explicit cryptographic approval by an administrator of that target tier.
 5. **Universal Object Graph Integrity:** Every entity is a registered Object; every relationship is a typed `object_link`. Broken, orphaned, or policy-invalid links must never fail silently - they must be surfaced by the Object Link Auditor for forensic inspection and explicit audited deletion.
-6. **Quality, `>=95%` Coverage, Clean-DB Speed & Testable AI Agents:**
+6. **Quality, `>=95%` Coverage, Clean-DB RLS Speed & Testable AI Agents:**
    - Maintain **`>=95%` automated unit test coverage**, zero compiler/linter warnings, fast parallel execution (`tmpfs` Postgres template DB + sub-millisecond `SAVEPOINT` rollback isolation providing a 100% clean database per test), and verified CI/CD builds via Dash (`https://dash.hackedyour.info/llms.txt`).
+   - Database test fixtures MUST provision bootstrap workspace/admin rows under `kanban_migrator`/superuser authority and immediately drop session authorization back to `kanban_app` with `FORCE ROW LEVEL SECURITY` active before executing test assertions (`KANBA-162` invariant). Non-top-level `conftest.py` files MUST NOT declare `pytest_plugins` (forbidden by Pytest 9.2+).
    - All AI agent workflows (`agent/`) MUST support pluggable deterministic **AI Response Fixtures** (`FixtureLLMProvider` / `FixtureCLIRunner`) for fast offline tests AND direct **local manual CLI validation** (`kanban-agent validate-*`) given explicit input parameters/files.
    - Before introducing **any** new external dependency, consult at least 1 architect sub-agent and multiple engineer sub-agents to verify `Apache-2.0` license compatibility, evaluate supply-chain risk, and check native alternatives.
    - Maintain self-describing `GEMINI.md` (and cross-harness `AGENTS.md` symlink) manifests inside each top-level module (`kanban/`, `database/`, `mcp/`, `agent/`) documenting module responsibilities, inbound/outbound contracts, performance budgets, and failure modes.

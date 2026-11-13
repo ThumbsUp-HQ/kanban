@@ -24,8 +24,15 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          echo "=== Lint and Type Checks ===" >> build.log
-          (uv sync --locked && make check) 2>&1 | tee -a build.log
+          echo "=== Lint, Type Checks, and License Gate ===" >> build.log
+          (uv sync --locked && make check && make license) 2>&1 | tee -a build.log
+
+      - name: Start test database
+        shell: bash
+        run: |
+          set -o pipefail
+          echo "=== Test Database Startup ===" >> build.log
+          make testdb-up 2>&1 | tee -a build.log
 
       - name: Run tests
         shell: bash
@@ -33,6 +40,12 @@ jobs:
           set -o pipefail
           echo "=== Unit Tests ===" >> build.log
           (uv run pytest -q) 2>&1 | tee -a build.log
+
+      - name: Stop test database
+        if: always()
+        shell: bash
+        run: |
+          make testdb-down 2>&1 | tee -a build.log || true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

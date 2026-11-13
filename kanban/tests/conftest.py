@@ -3,6 +3,29 @@
 import coverage.inorout
 import pytest
 
+from kanban.tests.api.conftest import (
+    ApiEnv,
+    SeededUser,
+    api_env,
+    as_principal,
+    contract_recorder,
+    make_module,
+    make_project,
+    make_user,
+)
+
+__all__ = [
+    "ApiEnv",
+    "SeededUser",
+    "api_env",
+    "as_principal",
+    "contract_recorder",
+    "make_module",
+    "make_project",
+    "make_user",
+    "pytest_configure",
+]
+
 
 def pytest_configure(config: pytest.Config) -> None:
     """Normalize file-based --cov targets to package module specs for coverage.py."""

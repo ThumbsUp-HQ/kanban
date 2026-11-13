@@ -157,6 +157,7 @@ async def query_view_issues_post(
     "/projects/{project_ref}/issues/query",
     response_model=ViewQueryResponse,
     summary="Ad-hoc query issues in a project (slash alias)",
+    include_in_schema=False,
 )
 async def query_project_issues_adhoc(
     project_ref: str,

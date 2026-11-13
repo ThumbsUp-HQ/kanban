@@ -6,26 +6,25 @@ from __future__ import annotations
 
 import uuid  # noqa: TC003  # Runtime import required for Pydantic and type annotations
 from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic type annotations
-from typing import Annotated, Final, Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.mcp_api_key import McpApiKey
-from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
-from kanban.api.problems import ProblemException, not_found
+from kanban.api.deps import PrincipalContext, get_rls_session
+from kanban.api.problems import not_found
+from kanban.auth.mfa.policy import require_admin_aal2
 from kanban.security.mcp_keys import (
     mint_mcp_api_key,
     revoke_mcp_api_key,
 )
 
-router = APIRouter(tags=["admin-mcp-keys"])
+router = APIRouter(tags=["admin-mcp-keys"], dependencies=[Depends(require_admin_aal2)])
 
-_REQUIRED_AAL_LEVEL: Final[int] = 2
-
-Caller = Annotated[PrincipalContext, Depends(get_principal)]
+Caller = Annotated[PrincipalContext, Depends(require_admin_aal2)]
 Session = Annotated[AsyncSession, Depends(get_rls_session)]
 
 
@@ -79,28 +78,6 @@ class McpApiKeyResponse(BaseModel):
     last_used_at: datetime | None = None
 
 
-async def require_admin_aal2(caller: PrincipalContext, session: AsyncSession) -> None:
-    """Enforce AAL2 authentication and workspace/server admin role."""
-    if caller.aal_level < _REQUIRED_AAL_LEVEL:
-        raise ProblemException(
-            code="AAL2_REQUIRED",
-            status=403,
-            title="AAL2 Required",
-            detail="Managing MCP API keys requires AAL2 authentication.",
-        )
-
-    stmt = text("SELECT app_principal_has_role(NULL, CAST(:roles AS text[]))")
-    roles = ["SERVER_ADMIN", "WORKSPACE_ADMIN"]
-    is_admin = (await session.execute(stmt, {"roles": roles})).scalar_one()
-    if not is_admin:
-        raise ProblemException(
-            code="FORBIDDEN",
-            status=403,
-            title="Forbidden",
-            detail="Caller lacks required workspace admin role.",
-        )
-
-
 @router.post(
     "/admin/mcp-keys",
     status_code=status.HTTP_201_CREATED,
@@ -114,8 +91,6 @@ async def mint_key(
     response: Response,
 ) -> McpApiKeyMintResponse:
     """Mint a surface-bound MCP API key and return plaintext token once."""
-    await require_admin_aal2(caller, session)
-
     target_principal_id = body.principal_id or caller.principal_id
 
     key_record, plaintext_token = await mint_mcp_api_key(
@@ -158,8 +133,6 @@ async def list_keys(
     surface: Annotated[str | None, Query(description="Optional surface filter")] = None,
 ) -> list[McpApiKeyResponse]:
     """List metadata for MCP API keys belonging to the workspace."""
-    await require_admin_aal2(caller, session)
-
     stmt = select(McpApiKey).where(McpApiKey.workspace_id == caller.workspace_id)
     if surface:
         stmt = stmt.where(McpApiKey.surface == surface)
@@ -198,8 +171,6 @@ async def revoke_key(
     session: Session,
 ) -> None:
     """Revoke an MCP API key by ID."""
-    await require_admin_aal2(caller, session)
-
     key = await session.get(McpApiKey, key_id)
     if key is None or key.workspace_id != caller.workspace_id:
         not_found()

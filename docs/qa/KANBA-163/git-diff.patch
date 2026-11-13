@@ -1,0 +1,935 @@
+diff --git a/.forgejo/workflows/ci.yml b/.forgejo/workflows/ci.yml
+index 9216682..66aedf3 100644
+--- a/.forgejo/workflows/ci.yml
++++ b/.forgejo/workflows/ci.yml
+@@ -24,8 +24,15 @@ jobs:
+         shell: bash
+         run: |
+           set -o pipefail
+-          echo "=== Lint and Type Checks ===" >> build.log
+-          (uv sync --locked && make check) 2>&1 | tee -a build.log
++          echo "=== Lint, Type Checks, and License Gate ===" >> build.log
++          (uv sync --locked && make check && make license) 2>&1 | tee -a build.log
++
++      - name: Start test database
++        shell: bash
++        run: |
++          set -o pipefail
++          echo "=== Test Database Startup ===" >> build.log
++          make testdb-up 2>&1 | tee -a build.log
+ 
+       - name: Run tests
+         shell: bash
+@@ -34,6 +41,12 @@ jobs:
+           echo "=== Unit Tests ===" >> build.log
+           (uv run pytest -q) 2>&1 | tee -a build.log
+ 
++      - name: Stop test database
++        if: always()
++        shell: bash
++        run: |
++          make testdb-down 2>&1 | tee -a build.log || true
++
+       - name: Set up Docker Buildx
+         uses: docker/setup-buildx-action@v3
+ 
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 9216682..66aedf3 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -24,8 +24,15 @@ jobs:
+         shell: bash
+         run: |
+           set -o pipefail
+-          echo "=== Lint and Type Checks ===" >> build.log
+-          (uv sync --locked && make check) 2>&1 | tee -a build.log
++          echo "=== Lint, Type Checks, and License Gate ===" >> build.log
++          (uv sync --locked && make check && make license) 2>&1 | tee -a build.log
++
++      - name: Start test database
++        shell: bash
++        run: |
++          set -o pipefail
++          echo "=== Test Database Startup ===" >> build.log
++          make testdb-up 2>&1 | tee -a build.log
+ 
+       - name: Run tests
+         shell: bash
+@@ -34,6 +41,12 @@ jobs:
+           echo "=== Unit Tests ===" >> build.log
+           (uv run pytest -q) 2>&1 | tee -a build.log
+ 
++      - name: Stop test database
++        if: always()
++        shell: bash
++        run: |
++          make testdb-down 2>&1 | tee -a build.log || true
++
+       - name: Set up Docker Buildx
+         uses: docker/setup-buildx-action@v3
+ 
+diff --git a/AGENTS.md b/AGENTS.md
+index 8d24cc3..cb22418 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -1,12 +1,13 @@
+-# Agent-First, Security-First Kanban Platform (`[kanban, database, mcp, agent]`)
++# 👍kanban: Agent-First, Security-First Kanban Platform (`[kanban, database, mcp, agent]`)
+ 
+ ## Architecture & Mission
+ 
+-This repository implements an open-source, **Security-First (Priority #0), Agent-First (Priority #1)** Kanban, Ticketing, and Knowledge Platform designed to eliminate SaaS AI paywalls and CRUD-wrapper MCP context bloat.
++This repository implements **`👍kanban`** (`thumbs-up-kanban`), an open-source, **Security-First (Priority #0), Agent-First (Priority #1)** Kanban, Ticketing, and Knowledge Platform designed to eliminate SaaS AI paywalls and CRUD-wrapper MCP context bloat.
+ 
+-- **License:** `Apache-2.0` (Strictly permissive; zero `GPL`, `AGPL`, or `SSPL` runtime dependencies permitted)
+-- **Initial Tracking Board:** `https://kanban.hackedyour.info/kanban/`
+-- **Authoritative Specification:** [`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`](./docs/ARCHITECTURE_AND_PRODUCT_SPEC.md)
++- **Public Brand & Namespace Convention:** User-facing surfaces, HTML document titles (`<title>👍kanban</title>`), OpenAPI specifications (`title="👍kanban API"`), and WebAuthn Relying Party display strings (`rp.name = "👍kanban"`, paired with strict ASCII FQDN `rp.id`) use **`👍kanban`**. Upstream repository and container image slugs use `thumbs-up-kanban` (`thumbs-up-kanban:latest`), while internal Python workspace root packages remain `kanban` (`@kanban/web` for frontend).
++- **License:** `Apache-2.0` (Strictly permissive; zero `GPL`, `AGPL`, `LGPL`, or `SSPL` runtime dependencies permitted)
++- **Initial Tracking Board:** `https://kanban.hackedyour.info/kanban/` (`workspace: kanban`, `project: KANBA`)
++- **Authoritative Specifications:** [`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`](./docs/ARCHITECTURE_AND_PRODUCT_SPEC.md) and [`docs/PROMOTION_AND_BACKUP.md`](./docs/PROMOTION_AND_BACKUP.md)
+ - **Top-Level Module Topology:**
+   - `kanban/` - Web UI & HTTP/WebSocket application server (Plane-parity board & ticket screen, breathable Jira/Plane whitespace + semantic emojis with hover elaboration, Multi-Card OAuth/LDAP/Local authentication, blinking cursor Sparkle completion + right-click accept, auto-detected & auto-converted canonical Markdown with Mermaid/Pictures/SVG rendering, Project Stickies with smart Doc promotion, and standalone `docker run` + multi-container deployment modes).
+   - `database/` - PostgreSQL Universal Object Graph (`Issues`, `Stickies`, `Docs`, `Users`, `Projects`, `Cycles`, `Modules`, `Views`, `Pages`) storing canonical UTF-8 Markdown only, typed `object_links`, Invalid Object Link Auditor & Purger, Row-Level Security (`FORCE RLS`), and immutable Activity & Audit Ledger.
+@@ -37,12 +38,13 @@ Every ticket managed under [`.agents/skills/kanban-ticket/SKILL.md`](./.agents/s
+ ## Core Security & Engineering Invariants
+ 
+ 1. **Transparent Access Visibility:** Every object (`Project`, `Issue`, `Sticky`, `Doc`, `Page`, `View`) must compute and expose explicit sharing metadata (`Users`, `Groups`, `Agents`, `Inherited Scope`) without cross-tenant or unauthorized principal enumeration.
+-2. **Hostile Input & Sanitization:** Auto-detect Plain Text, Markdown, and HTML at ingestion; enforce server-side allowlist sanitization (stripping scripts, event handlers, dangerous URI schemes, SVG/MathML vectors, and hidden prompt-injection payloads) paired with a strict `Content-Security-Policy`.
+-3. **Multi-Card Auth Integrity:** Support multiple OAuth2/OIDC, LDAPS/StartTLS, and Local Admin auth cards with enable/disable and ordering controls, break-glass lockout prevention, and verified-claim account linking.
++2. **Hostile Input & Sanitization:** Auto-detect Plain Text, Markdown, and HTML at ingestion; enforce UTF-16 lone-surrogate rejection (`0xD800 <= ord(c) <= 0xDFFF` -> `INVALID_UTF8_SURROGATE`) prior to `.encode("utf-8")`, hidden-DOM paste-jacking pruning, and server-side allowlist sanitization (stripping scripts, event handlers, dangerous URI schemes, SVG/MathML vectors, and hidden prompt-injection payloads) paired with a strict `Content-Security-Policy`.
++3. **Multi-Card Auth & Admin AAL2 Integrity:** Support multiple OAuth2/OIDC, LDAPS/StartTLS, WebAuthn/Passkeys (`rp.name = "👍kanban"` with strict ASCII FQDN `rp.id`), TOTP, and Local Admin auth cards with enable/disable and ordering controls, break-glass lockout prevention, and verified-claim account linking (zero implicit email auto-merge). Every `/api/v1/admin/*` route MUST declare `Depends(require_admin_aal2)` at the router/route dependency layer (`assert_admin_routes_protected`).
+ 4. **Hardened Custom Script Boundaries:** Only Admins may define custom fields or scripts. Script execution defaults to an ephemeral API token scoped strictly to the current **Project** inside an isolated sandbox; escalating token scope to **Workspace** or **Server** (or running under Project/Server Admin credentials instead of invoking User credentials) requires explicit cryptographic approval by an administrator of that target tier.
+ 5. **Universal Object Graph Integrity:** Every entity is a registered Object; every relationship is a typed `object_link`. Broken, orphaned, or policy-invalid links must never fail silently - they must be surfaced by the Object Link Auditor for forensic inspection and explicit audited deletion.
+-6. **Quality, `>=95%` Coverage, Clean-DB Speed & Testable AI Agents:**
++6. **Quality, `>=95%` Coverage, Clean-DB RLS Speed & Testable AI Agents:**
+    - Maintain **`>=95%` automated unit test coverage**, zero compiler/linter warnings, fast parallel execution (`tmpfs` Postgres template DB + sub-millisecond `SAVEPOINT` rollback isolation providing a 100% clean database per test), and verified CI/CD builds via Dash (`https://dash.hackedyour.info/llms.txt`).
++   - Database test fixtures MUST provision bootstrap workspace/admin rows under `kanban_migrator`/superuser authority and immediately drop session authorization back to `kanban_app` with `FORCE ROW LEVEL SECURITY` active before executing test assertions (`KANBA-162` invariant). Non-top-level `conftest.py` files MUST NOT declare `pytest_plugins` (forbidden by Pytest 9.2+).
+    - All AI agent workflows (`agent/`) MUST support pluggable deterministic **AI Response Fixtures** (`FixtureLLMProvider` / `FixtureCLIRunner`) for fast offline tests AND direct **local manual CLI validation** (`kanban-agent validate-*`) given explicit input parameters/files.
+    - Before introducing **any** new external dependency, consult at least 1 architect sub-agent and multiple engineer sub-agents to verify `Apache-2.0` license compatibility, evaluate supply-chain risk, and check native alternatives.
+    - Maintain self-describing `GEMINI.md` (and cross-harness `AGENTS.md` symlink) manifests inside each top-level module (`kanban/`, `database/`, `mcp/`, `agent/`) documenting module responsibilities, inbound/outbound contracts, performance budgets, and failure modes.
+diff --git a/database/tests/test_p1_14_rls_policies.py b/database/tests/test_p1_14_rls_policies.py
+index 13c80ac..b74e0d6 100644
+--- a/database/tests/test_p1_14_rls_policies.py
++++ b/database/tests/test_p1_14_rls_policies.py
+@@ -403,7 +403,7 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
+     """Test Case 1: kanban_app & app_rls_reader return 0 rows across EVERY table without context."""
+     await _seed_two_workspaces(db_session)
+ 
+-    # Query all public tables except exempt catalog tables
++    # Query all public tables except exempt catalog and security-definer isolated tables
+     tbl_rows = await db_session.execute(
+         text(
+             "SELECT c.relname FROM pg_class c "
+@@ -411,7 +411,9 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
+             "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
+             "  AND c.relname NOT IN ("
+             "    'alembic_version', 'link_type_matrix', 'auth_provider_cards', "
+-            "    'rate_limit_buckets', 'local_admin_credentials', 'sessions'"
++            "    'rate_limit_buckets', 'local_admin_credentials', 'sessions', "
++            "    'totp_factors', 'recovery_codes', 'webauthn_credentials', "
++            "    'webauthn_challenges', 'oidc_auth_requests'"
+             "  ) "
+             "ORDER BY c.relname"
+         )
+@@ -455,6 +457,32 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
+     # Reset authorization back to superuser
+     await db_session.execute(text("RESET SESSION AUTHORIZATION"))
+ 
++    # 4. Positive security assertion: verify privileges are revoked for kb_auth_owner tables
++    auth_isolated_tables = [
++        "sessions",
++        "auth_provider_cards",
++        "local_admin_credentials",
++        "totp_factors",
++        "recovery_codes",
++        "webauthn_credentials",
++        "webauthn_challenges",
++        "oidc_auth_requests",
++    ]
++    for auth_tbl in auth_isolated_tables:
++        for priv in ("SELECT", "INSERT", "UPDATE", "DELETE"):
++            app_priv = await db_session.scalar(
++                text(f"SELECT has_table_privilege('kanban_app', '{auth_tbl}', '{priv}')")
++            )
++            assert app_priv is False, (
++                f"Security breach: kanban_app has {priv} on security-definer table {auth_tbl}"
++            )
++            reader_priv = await db_session.scalar(
++                text(f"SELECT has_table_privilege('app_rls_reader', '{auth_tbl}', '{priv}')")
++            )
++            assert reader_priv is False, (
++                f"Security breach: app_rls_reader has {priv} on security-definer table {auth_tbl}"
++            )
++
+ 
+ # ==============================================================================
+ # TEST CASE 2: Cross-Workspace & Cross-Project Isolation
+diff --git a/docs/ARCHITECTURE_AND_PRODUCT_SPEC.md b/docs/ARCHITECTURE_AND_PRODUCT_SPEC.md
+index d835be3..b931082 100644
+--- a/docs/ARCHITECTURE_AND_PRODUCT_SPEC.md
++++ b/docs/ARCHITECTURE_AND_PRODUCT_SPEC.md
+@@ -1,10 +1,11 @@
+-# Architecture & Product Specification (v2): Security-First, Agent-First Kanban & Knowledge Platform
++# Architecture & Product Specification (v2): 👍kanban - Security-First, Agent-First Kanban & Knowledge Platform
+ 
+-- **License:** `Apache-2.0` (Permissive open-source; zero `GPL`, `AGPL`, or `SSPL` runtime dependencies allowed)
++- **Official Brand & Namespace Convention:** Public brand **`👍kanban`** (`<title>👍kanban</title>`, `FastAPI(title="👍kanban API")`, WebAuthn `rp.name = "👍kanban"` paired with strict ASCII FQDN `rp.id`); upstream repository & container slug `thumbs-up-kanban` (`thumbs-up-kanban:latest`); internal Python root module `kanban` (`@kanban/web` for frontend)
++- **License:** `Apache-2.0` (Permissive open-source; zero `GPL`, `AGPL`, `LGPL`, or `SSPL` runtime dependencies allowed)
+ - **Repository Modules:** `[kanban, database, mcp, agent]`
+ - **Priority Hierarchy:** **Priority #0: Security & Access Transparency** | **Priority #1: Native Agent-First Ergonomics & Scriptable Workflows** | **Priority #2: Generous Breathable Whitespace & Emoji Hover-Elaboration UX**
+-- **Deployment Modes:** Hardened Multi-Container Stack (`docker-compose.yml` + PostgreSQL 16+ + Valkey 8 + Caddy 2) **AND** Zero-Config Single-Container Standalone (`docker run -p 8080:8080 kanban:latest` with embedded Unix-socket PG16 & `⚠️` Standalone banner)
+-- **Bootstrap Tracking Board:** `https://kanban.hackedyour.info/kanban/`
++- **Deployment Modes:** Hardened Multi-Container Stack (`docker-compose.yml` + PostgreSQL 16+ + Valkey 8 + Caddy 2) **AND** Zero-Config Single-Container Standalone (`docker run -p 8080:8080 thumbs-up-kanban:latest` with embedded Unix-socket PG16 & `⚠️` Standalone banner)
++- **Bootstrap Tracking Board:** `https://kanban.hackedyour.info/kanban/` (`workspace: kanban`, `project: KANBA`)
+ - **Engineering & QA Standard:** **`>= 95%` Automated Unit Test Coverage** (fast per-test clean DB + pluggable AI fixtures + local CLI agent validation), Mandatory UI Specialist Gate, Dual API+UI Specialist Gate, Local `reality-checker` Forensic QA Gate, and Dash CI/CD Verification
+ 
+ ---
+@@ -62,15 +63,15 @@ Autonomous coding agents (`Gemini CLI / Antigravity`, `Claude Code`, `OpenAI Cod
+ 2. **CRUD-Wrapper MCP Context Collapse (`Issues #29`, `#87`):** Generating 1:1 MCP tools from REST endpoints dumps `70-120+` tools (`45,000+` schema tokens) into context, returns bloated unpruned JSON full of `null`s and raw UUIDs, and exposes single-step hard deletes without friction gates.
+ 3. **Rejection of Intent-Based Multi-Surface MCP (`PRs #99`, `#268`):** Scoped intent surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`), `EntityResolver` human keys (`KAN-42`), `summary`/`standard`/`full` LOD tiers, and `InlineSafeDumper` YAML (`~89%` schema token savings) were ignored or rejected upstream.
+ 
+-**Our Mandate:** Build a clean-sheet **`Apache-2.0`** platform where **Security is Priority #0**, **Native Agent-First Ergonomics & Scriptable Workflows are Priority #1**, and **Breathable Whitespace + Emoji Hover-Elaboration UX is Priority #2** - with zero seat taxes and zero AI paywalls.
++**Our Mandate:** Build **`👍kanban`** (`thumbs-up-kanban`), a clean-sheet **`Apache-2.0`** platform where **Security is Priority #0**, **Native Agent-First Ergonomics & Scriptable Workflows are Priority #1**, and **Breathable Whitespace + Emoji Hover-Elaboration UX is Priority #2** - with zero seat taxes and zero AI paywalls.
+ 
+ ---
+ 
+-### 1.2 Plane Paywall Gap Matrix vs. Our Day-1 `Apache-2.0` Platform
++### 1.2 Plane Paywall Gap Matrix vs. `👍kanban` (`Apache-2.0` Day-1 Core)
+ 
+-| Capability Domain | Plane Community (`AGPLv3`) | Plane Pro / Business / Enterprise | Our `Apache-2.0` Platform (Day-1 Core) |
++| Capability Domain | Plane Community (`AGPLv3`) | Plane Pro / Business / Enterprise | `👍kanban` (`Apache-2.0` Day-1 Core) |
+ | :--- | :--- | :--- | :--- |
+-| **License & Deployment** | `AGPLv3` multi-container stack | Commercial proprietary license | **`Apache-2.0`:** Both hardened multi-container `docker-compose.yml` AND 1-command `docker run -p 8080:8080` standalone mode. |
++| **License & Deployment** | `AGPLv3` multi-container stack | Commercial proprietary license | **`Apache-2.0`:** Both hardened multi-container `docker-compose.yml` AND 1-command `docker run -p 8080:8080 thumbs-up-kanban:latest` standalone mode. |
+ | **Authentication & Identity** | Basic email/password & single OAuth; no LDAP/AD | **Pro:** OIDC<br>**Bus/Ent:** SAML, LDAP/AD, Group Sync | **Multi-Card Auth Studio:** Simultaneous OIDC, OAuth2, LDAPS/StartTLS, WebAuthn/Passkeys, & Local Break-Glass Admin with enable/disable/reordering. |
+ | **RBAC & Sharing Transparency** | Coarse roles; opaque permission inheritance | **Bus/Ent:** Custom RBAC, permission schemes | **Hybrid RBAC + Resource ACLs + Postgres `FORCE RLS`:** Ubiquitous **`🛡️` Shared-With Emoji Pill** + Effective Access Inspector on every object. |
+ | **Audit Logs & Provenance** | Mutable/basic issue activity | **Enterprise:** Workspace Audit Logs | **Immutable SHA-256 Hash-Chained Ledger:** Monthly-partitioned `activity_records` covering human edits, `🔄` creator overrides, ACL diffs, and agent/script runs. |
+@@ -98,13 +99,16 @@ The repository uses a single Python 3.12+ `uv` workspace (`uv sync --locked --no
+ ```text
+ /home/adamoutler/kanban/
+ ├── LICENSE                            # Apache License, Version 2.0
++├── README.md                          # 👍kanban quickstart, deployment modes & CLI guide
+ ├── AGENTS.md                          # Workspace security, >=95% coverage & specialist QA rules
+ ├── CLAUDE.md -> AGENTS.md             # Cross-harness symlink
+ ├── .agents/
+ │   ├── agents/                        # Local reality-checker, ui-designer, ux-architect, backend-architect, api-tester, security-engineer
+ │   └── skills/                        # Local kanban-ticket & kanban-agent-manager skills
++├── .forgejo/workflows/ci.yml          # Forgejo CI pipeline + Dash build.log upload
+ ├── docs/
+ │   ├── ARCHITECTURE_AND_PRODUCT_SPEC.md
++│   ├── PROMOTION_AND_BACKUP.md        # KBBAK1 AES-256-GCM streaming backup & standalone -> prod promotion
+ │   └── qa/                            # Passive forensic proof bundles (docs/qa/<TICKET_ID>/)
+ ├── Dockerfile                         # Multi-stage build producing `runtime-slim` AND default `standalone`
+ ├── docker-compose.yml                 # Hardened multi-network production stack (Caddy + PG16 + Valkey 8)
+@@ -114,7 +118,7 @@ The repository uses a single Python 3.12+ `uv` workspace (`uv sync --locked --no
+ │   ├── standalone/entrypoint.py       # PID-1 tini supervisor for zero-config `docker run` embedded PG16
+ │   └── seccomp/sandbox-profile.json   # Strict seccomp-BPF syscall allowlist for Tier B / CLI sandboxes
+ ├── database/                          # MODULE 1: PostgreSQL Graph, Canonical Markdown DDL, FORCE RLS, Link Auditor
+-├── kanban/                            # MODULE 2: FastAPI REST/WS/SSE, Multi-Card Auth, Sanitizer, Workflows & React SPA
++├── kanban/                            # MODULE 2: FastAPI ("👍kanban API"), Multi-Card Auth, Sanitizer, Workflows & React SPA ("<title>👍kanban</title>")
+ ├── mcp/                               # MODULE 3: Three-Surface MCP Gateway (/mcp/agent, /mcp/docs, /mcp/admin)
+ └── agent/                             # MODULE 4: OpenAI/Ollama/Gemini Providers, CLI/Remote Runners, Sparkle, Fixtures & CLI Bench
+ ```
+@@ -123,7 +127,7 @@ The repository uses a single Python 3.12+ `uv` workspace (`uv sync --locked --no
+ 
+ ### 2.2 Standalone `docker run` Mode ("Not Recommended" All-in-One) vs. Production Stack
+ 
+-A core usability requirement is that **`docker run -p 8080:8080 kanban:latest` must "just work" out of the box with zero external containers and zero required flags**, while clearly signaling that single-container consolidation is not recommended for multi-node production.
++A core usability requirement is that **`docker run -p 8080:8080 thumbs-up-kanban:latest` must "just work" out of the box with zero external containers and zero required flags**, while clearly signaling that single-container consolidation is not recommended for multi-node production.
+ 
+ #### Architectural Decision: Embedded Unix-Socket PostgreSQL 16+ vs. SQLite Fallback
+ 
+@@ -132,9 +136,9 @@ A core usability requirement is that **`docker run -p 8080:8080 kanban:latest` m
+ | **Priority #0 Security (`FORCE RLS`)** | **100% Identical:** Enforces exact same kernel-level `FORCE ROW LEVEL SECURITY` (`NOBYPASSRLS`) and `effective_resource_access` policies in standalone and prod. | **Broken:** SQLite has zero Row-Level Security, forcing fragile duplicate ORM `WHERE` clauses and breaking our RLS security guarantees. |
+ | **Graph, `ltree`, Triggers & Link Auditor** | **100% Identical:** Native `ltree`, composite FKs, `COLLATE "C"`, PL/pgSQL `audit_object_links()`, and `pgcrypto` SHA-256 hash-chained `activity_records`. | **Broken:** Lacks `ltree`, PL/pgSQL, per-column `ON DELETE SET NULL (col)`, and row-level `FOR UPDATE` DAG locks. |
+ | **Semantic RAG (`pgvector`) & Realtime** | **100% Identical:** Native `pgvector` HNSW + built-in Postgres `LISTEN/NOTIFY` `RealtimeBroker` (zero Valkey container needed!). | **Broken:** Requires maintaining a second divergent vector/event codebase. |
+-| **Upgrade Path to Production HA** | **1-Command Lossless Promotion:** `pg_dump -Fc` -> `pg_restore` into external/managed PostgreSQL 16+ with zero type conversion. | **Custom ETL Required:** Painful schema/type migration across JSON, UUIDs, and hash chains. |
++| **Upgrade Path to Production HA** | **1-Command Lossless Promotion (`KBBAK1`):** Streaming 4 MiB AES-256-GCM encrypted `.kbbak` backup (`pg_dump -Fc` + `MASTER_KEK`/`KB_AUTH_PEPPER` carryover + rotated session/DB credentials) restored into external PostgreSQL 16+ via `kanban-ctl` (see [`docs/PROMOTION_AND_BACKUP.md`](./PROMOTION_AND_BACKUP.md)). | **Custom ETL Required:** Painful schema/type migration across JSON, UUIDs, and hash chains. |
+ 
+-#### Exact Zero-Config Boot Lifecycle (`docker run -p 8080:8080 kanban:latest`)
++#### Exact Zero-Config Boot Lifecycle (`docker run -p 8080:8080 thumbs-up-kanban:latest`)
+ 
+ When `DATABASE_URL` is omitted, `kanban-standalone-entrypoint` (supervised by `tini` as PID 1) automatically boots in `standalone_embedded_pg` mode in `< 3 seconds`:
+ 
+@@ -170,16 +174,16 @@ A single root `Dockerfile` produces **both** the lean production image (`--targe
+ 
+ | Container Service | Image Target | Networks (`docker-compose.yml`) | Role & Security Isolation Boundary |
+ | :--- | :--- | :--- | :--- |
+-| **`kanban-standalone`** *(Standalone only)* | `kanban:latest` (`standalone`) | Default Docker bridge (`-p 8080:8080`) | All-in-one evaluation/homelab container: Unix-socket PG16 + Uvicorn SPA/API/WS/MCP + PG `LISTEN/NOTIFY` broker + Tier A `Wasmtime`. |
++| **`kanban-standalone`** *(Standalone only)* | `thumbs-up-kanban:latest` (`standalone`) | Default Docker bridge (`-p 8080:8080`) | All-in-one evaluation/homelab container: Unix-socket PG16 + Uvicorn SPA/API/WS/MCP + PG `LISTEN/NOTIFY` broker + Tier A `Wasmtime`. |
+ | **`reverse-proxy`** | `caddy:2.8-alpine` | `edge_net`, `app_net` | Terminates TLS 1.3 (`:80/:443`), enforces strict CSP/HSTS, serves `/srv/www` `.br`/`.gz` SPA assets, routes `/api/*` -> `kanban-api` and `/mcp/*` -> `mcp-server`. |
+-| **`kanban-api`** | `kanban:runtime-slim` | `app_net`, `data_net` | Core domain state machines, Multi-Card AuthN, RBAC/ACL manifest resolver, Rust `nh3` + Markdown converter, REST, and WS/SSE hubs. |
+-| **`mcp-server`** | `kanban:runtime-slim` | `app_net` **ONLY (zero `data_net` route!)** | Mounts `/mcp/agent`, `/mcp/docs`, `/mcp/admin`; holds **zero** Postgres write credentials; calls `kanban-api` over internal mTLS HTTP/2. |
+-| **`agent-runtime`** | `kanban:runtime-slim` | `app_net`, `egress_llm_net` (+ `:ro` `git-mirrors`) | Multi-provider `LLMProvider` router, `<150ms` Sparkle FIM (`app_rls_reader` `READ ONLY` 18ms cap), and workflow interceptor coordinator. |
+-| **`script-sandbox`** | `kanban:sandbox` (`nsjail`) | `sandbox_net` (`internal: true`, **zero internet!**) | Runs Tier B polyglot custom field scripts & local `cli_pipe` (`agy -p` / `codex -p`) behind `sandbox-egress-proxy` (ephemeral token injector). |
+-| **`outbox-relay`** | `kanban:runtime-slim` | `data_net` **ONLY** | `LISTEN outbox_wakeup` + `FOR UPDATE SKIP LOCKED` -> Valkey 8 Streams & PubSub. |
++| **`kanban-api`** | `thumbs-up-kanban:runtime-slim` | `app_net`, `data_net` | Core domain state machines, Multi-Card AuthN, RBAC/ACL manifest resolver, Rust `nh3` + Markdown converter, REST, and WS/SSE hubs. |
++| **`mcp-server`** | `thumbs-up-kanban:runtime-slim` | `app_net` **ONLY (zero `data_net` route!)** | Mounts `/mcp/agent`, `/mcp/docs`, `/mcp/admin`; holds **zero** Postgres write credentials; calls `kanban-api` over internal mTLS HTTP/2. |
++| **`agent-runtime`** | `thumbs-up-kanban:runtime-slim` | `app_net`, `egress_llm_net` (+ `:ro` `git-mirrors`) | Multi-provider `LLMProvider` router, `<150ms` Sparkle FIM (`app_rls_reader` `READ ONLY` 18ms cap), and workflow interceptor coordinator. |
++| **`script-sandbox`** | `thumbs-up-kanban:sandbox` (`nsjail`) | `sandbox_net` (`internal: true`, **zero internet!**) | Runs Tier B polyglot custom field scripts & local `cli_pipe` (`agy -p` / `codex -p`) behind `sandbox-egress-proxy` (ephemeral token injector). |
++| **`outbox-relay`** | `thumbs-up-kanban:runtime-slim` | `data_net` **ONLY** | `LISTEN outbox_wakeup` + `FOR UPDATE SKIP LOCKED` -> Valkey 8 Streams & PubSub. |
+ | **`postgres`** | `pgvector/pgvector:pg16` | `data_net` (`internal: true`) | Authoritative Universal Object Graph, `FORCE RLS`, `ltree`, `pgvector` HNSW, and partitioned SHA-256 `activity_records`. |
+ | **`valkey`** | `valkey/valkey:8.0-alpine` | `data_net` (`internal: true`) | Multi-replica WebSocket fanout, consumer groups, and sliding-window rate buckets (`BSD-3` licensed). |
+-| **`kanban-agent-runner`** *(Optional Remote Host)* | `kanban:agent-runner` | Outbound TLS 1.3 `WSS` to `reverse-proxy` | Runs on remote dev/CI/GPU hosts mounting local Git repos `:ro` to execute `ollama`, `gemini`, `agy -p`, or `codex -p` transition gates with zero inbound firewall ports. |
++| **`kanban-agent-runner`** *(Optional Remote Host)* | `thumbs-up-kanban:agent-runner` | Outbound TLS 1.3 `WSS` to `reverse-proxy` | Runs on remote dev/CI/GPU hosts mounting local Git repos `:ro` to execute `ollama`, `gemini`, `agy -p`, or `codex -p` transition gates with zero inbound firewall ports. |
+ 
+ ---
+ 
+@@ -321,7 +325,7 @@ CREATE TABLE auth_provider_cards (
+ 
+ 1. **OAuth 2.0 / OIDC Cards:** Mandatory PKCE (`S256`), single-use `128-bit` `state` + `nonce` (`TTL = 300s`), `iss`/`aud`/`azp` pinning, and `private_key_jwt` support.
+ 2. **LDAPS / StartTLS Cards:** Strictly `ldaps://` (TLS 1.2+) or `ldap://` upgraded via `StartTLS` **prior to** any bind (`TLS_HARD`), optional custom CA PEM / SPKI SHA-256 pin, RFC 4515 AST filter escaping (`\2a`, `\28`, `\29`, `\5c`, `\00`), and **ephemeral user-bind password verification** (user LDAP passwords are never stored or logged).
+-3. **Local Admin & Break-Glass Card:** `Argon2id` (`m = 64 MiB`, `t = 3`, `p = 4`) + server-side HMAC-SHA256 pepper + mandatory **WebAuthn/Passkey** (`FIDO2`, `userVerification = "required"`) or **TOTP** (`AAL2`) for Admin roles + offline one-time recovery codes.
++3. **Local Admin & Break-Glass Card:** `Argon2id` (`m = 64 MiB`, `t = 3`, `p = 4`) + server-side HMAC-SHA256 pepper + mandatory **WebAuthn/Passkey** (`FIDO2`, `userVerification = "required"`, `rp.name = "👍kanban"` UTF-8 display brand paired with strict ASCII FQDN `rp.id`) or **TOTP** (`AAL2`) for Admin roles + offline one-time recovery codes. Every `/api/v1/admin/*` router MUST enforce `Depends(require_admin_aal2)` at the router dependency boundary (`assert_admin_routes_protected`).
+ 4. **Zero Implicit Cross-Card Account Linking:** Matching `email` across two cards **never** silently merges accounts (blocking pre-hijack and rogue-IdP takeover). Identities map strictly via `(auth_card_id, immutable_subject_id)` (`OIDC sub` or `LDAP objectGUID`/`entryUUID`); linking an additional card requires re-authenticating the existing session (`AAL2`) + authenticating the new card.
+ 
+ ---
+@@ -330,7 +334,7 @@ CREATE TABLE auth_provider_cards (
+ 
+ ```text
+ +------------------------------ LOGIN SCREEN -------------------------------+
+-|                        🛡️  KANBAN WORKSPACE SIGN-IN                       |
++|                       🛡️  👍KANBAN WORKSPACE SIGN-IN                      |
+ |                                                                           |
+ |   +-------------------------------------------------------------------+   |
+ |   |  🔑  Continue with Okta Workforce OIDC                 [Primary]  |   |
+@@ -361,7 +365,7 @@ CREATE TABLE auth_provider_cards (
+ Per architectural directive, **100% of prose across `issues`, `comments`, `docs`, `pages`, and `stickies` is stored in PostgreSQL strictly as canonical UTF-8 GitHub-Flavored Markdown (`*_markdown TEXT NOT NULL`)**:
+ 
+ - **Zero Mode Switcher Clutter:** There is no `[Mode: Rich | MD | HTML]` dropdown on tickets, comments, or docs. Users type naturally in Rich WYSIWYG or raw Markdown syntax (`Cmd/Ctrl+Shift+M` toggles raw source inspection `📝`) and paste freely from browsers, Jira, Confluence, Google Docs, Word, Notion, terminals, or IDEs.
+-- **Zero HTML or JSONB AST Columns in PostgreSQL:** Every API/MCP ingress runs a deterministic server-side normalization & sanitization pass (`nh3` + hidden-DOM pruner + canonical GFM serializer) before `INSERT`/`UPDATE`, guaranteeing clean diffs, zero stored-XSS surface, and minimum MCP token overhead.
++- **Zero HTML or JSONB AST Columns in PostgreSQL:** Every API/MCP ingress runs a deterministic server-side normalization & sanitization pass (`normalize_inspect` UTF-16 lone-surrogate pre-check `0xD800 <= ord(c) <= 0xDFFF` -> `INVALID_UTF8_SURROGATE` *before* `.encode("utf-8")`, followed by Rust `nh3` + hidden-DOM pruner + canonical GFM serializer) before `INSERT`/`UPDATE`, guaranteeing clean diffs, zero unhandled `UnicodeEncodeError` 500s, zero stored-XSS surface, and minimum MCP token overhead.
+ 
+ ---
+ 
+@@ -394,7 +398,7 @@ Fenced ```` ```mermaid ```` blocks (`flowchart`, `sequenceDiagram`, `stateDiagra
+ | Media Type | Server-Side & Browser Hardening Pipeline | Interactive Web UI (`<MediaViewport>`) |
+ | :--- | :--- | :--- |
+ | **Uploaded Raster Pictures (`PNG`, `JPEG`, `WebP`, `AVIF`, `GIF`)** | Magic-byte sniff (rejecting extension spoofing); decompression-bomb guard (`MAX_IMAGE_PIXELS = 40,000,000`, `<= 25 MB`); re-encode/strip all EXIF/XMP/IPTC metadata (GPS coordinates, serial numbers); served via short-lived (`TTL = 300s`) RLS-checked URLs with `X-Content-Type-Options: nosniff`. | Responsive aspect-ratio skeleton (zero layout shift), click-to-open Lightbox (`10% - 800%` cursor-centered wheel/pinch zoom, drag pan), `Alt` badge, and Download button. |
+-| **External Markdown Images (`https://...`)** | Never fetched directly by user browsers (blocking IP/cookie tracking & LAN SSRF). Rewritten to cookieless `/api/v1/media-proxy?u=...&sig=<HMAC>`: blocks RFC1918 / loopback / link-local `169.254.0.0/16` / IPv6 ULA **after DNS resolution** (zero redirects, `<= 10 MB`). In `📴 air_gap_mode`, renders an offline placeholder card. | Shows subtle `🌐` external-image badge (`Hover: "Proxied anonymously via Kanban Media Shield"`). |
++| **External Markdown Images (`https://...`)** | Never fetched directly by user browsers (blocking IP/cookie tracking & LAN SSRF). Rewritten to cookieless `/api/v1/media-proxy?u=...&sig=<HMAC>`: blocks RFC1918 / loopback / link-local `169.254.0.0/16` / IPv6 ULA **after DNS resolution** with socket IP pinning (zero redirects, `<= 10 MB`). In `📴 air_gap_mode`, returns a 67-byte transparent PNG with `X-Kanban-Media-Status: air-gap-placeholder` for clean offline rendering. | Shows subtle `🌐` external-image badge (`Hover: "Proxied anonymously via 👍kanban Media Shield"`). |
+ | **Uploaded `.svg` Attachments & Fenced ```` ```svg ```` Blocks** | **Dual-Layer Scrub:** Server Rust `roxmltree` + client `DOMPurify` (`USE_PROFILES: { svg: true, svgFilters: false }`) allowlists pure vector geometry (`svg`, `g`, `path`, `rect`, `circle`, `line`, `polyline`, `polygon`, `text`, `tspan`, `defs`, `linearGradient`, `clipPath`, `marker`) and **strips** `<script>`, `<foreignObject>`, `<iframe>`, `<image>`, `<style>`, SMIL `<animate*>`, `on*` handlers, and external `href`s. `<use href="#id">` is validated as an acyclic local DAG (`depth <= 4`, expansion `<= 500` nodes).<br>**Direct-URL Navigation Shield:** `/attachments/*.svg` sets `Content-Security-Policy: default-src 'none'; sandbox` + `X-Content-Type-Options: nosniff` + `Content-Disposition: attachment` whenever `Sec-Fetch-Dest != "image"`, making direct-tab SVG XSS impossible. | Rendered strictly via `<img src="blob:...">` inside `<MediaViewport>` (`max-height: 520px`) with pan/zoom, `🌓` Light/Dark checkerboard backdrop toggle (for dark-stroke SVGs in dark mode), Copy Raw Source, and Download `.svg`. |
+ 
+ #### Production `Content-Security-Policy` Header
+@@ -1078,8 +1082,9 @@ Testing is a first-class architectural pillar: **every module (`database`, `kanb
+ 
+ 1. **Why Real PostgreSQL 16 (Never SQLite Mocks) in Tests:** Testing against SQLite would skip `FORCE ROW LEVEL SECURITY`, `ltree`, `COLLATE "C"`, `pgvector`, and PL/pgSQL triggers (`LOCKOUT_PREVENTED`, `audit_object_links()`). Instead, `docker-compose.test.yml` (or the embedded PG binary) runs Postgres on RAM-backed `tmpfs` (`fsync=off`, `synchronous_commit=off`, `full_page_writes=off`).
+ 2. **Golden `kanban_template` DB + `pytest-xdist` Worker Clones (`~35ms` once per worker):** At session start, `conftest.py` runs `alembic upgrade head` **once** on `kanban_template`. Each `pytest-xdist` worker (`gw0..gwN`) clones `CREATE DATABASE kanban_test_gw0 TEMPLATE kanban_template` in `~35ms`.
+-3. **Per-Test Nested `SAVEPOINT` Rollback (`~0.3ms` Clean DB Guarantee):**
++3. **Per-Test Nested `SAVEPOINT` Rollback & Pre-RLS Bootstrap (`~0.3ms` Clean DB Guarantee):**
+    - Each test opens an outer connection transaction, binds SQLAlchemy `AsyncSession(..., join_transaction_mode="create_savepoint")` so application `await session.commit()` calls release nested `SAVEPOINT`s while still firing `DEFERRABLE INITIALLY IMMEDIATE` constraint triggers and `FORCE RLS` policies, and issues an outer `ROLLBACK` on teardown in **`0.3ms`**!
++   - **Pre-RLS Fixture Bootstrap Invariant (`KANBA-162`):** Initial workspace and admin bootstrap fixtures MUST execute under `kanban_migrator`/superuser authority and immediately reset session authorization to `kanban_app` (`FORCE ROW LEVEL SECURITY` active) prior to running test assertions; non-tenant `SECURITY DEFINER`-isolated auth tables (`oidc_auth_requests`, `auth_provider_cards`, `local_admin_credentials`, `sessions`) are verified for zero direct `kanban_app` table privileges (`has_table_privilege = false`). Non-top-level `conftest.py` files MUST NOT declare `pytest_plugins` (Pytest 9.2+ invariant).
+    - For multi-connection concurrency / `LISTEN-NOTIFY` tests (`@pytest.mark.committed_db`), a companion fixture runs `TRUNCATE ... RESTART IDENTITY CASCADE` across dirty tables in `< 8ms`.
+ 4. **Coverage Enforcement Commands (Hard CI Failure Below `95%`):**
+    - **Python (`[database, kanban, mcp, agent]`):** `uv run pytest -n auto --cov=database --cov=kanban --cov=mcp --cov=agent --cov-branch --cov-report=term-missing --cov-fail-under=95`
+diff --git a/docs/PROMOTION_AND_BACKUP.md b/docs/PROMOTION_AND_BACKUP.md
+index 79838c4..c01ff05 100644
+--- a/docs/PROMOTION_AND_BACKUP.md
++++ b/docs/PROMOTION_AND_BACKUP.md
+@@ -1,8 +1,8 @@
+-# Production Promotion and Encrypted Backup Runbook
++# 👍kanban: Production Promotion and Encrypted Backup Runbook
+ 
+ ## 1. Overview and Architecture
+ 
+-The Kanban platform supports two primary deployment topologies:
++The **`👍kanban`** (`thumbs-up-kanban`) platform supports two primary deployment topologies:
+ 1. **Standalone Single-Container Mode (`docker run`):**
+    An all-in-one container running PostgreSQL 16, pgvector, and FastAPI behind a PID-1 supervisor on an internal Unix domain socket.
+ 2. **Hardened Multi-Container Production Stack (`docker compose`):**
+diff --git a/docs/qa/KANBA-57/timing-equalization.txt b/docs/qa/KANBA-57/timing-equalization.txt
+index 3de526c..46cc8d3 100644
+--- a/docs/qa/KANBA-57/timing-equalization.txt
++++ b/docs/qa/KANBA-57/timing-equalization.txt
+@@ -5,14 +5,14 @@ Configured timing floor: 25.0 ms
+ 
+ Group A (Non-existent object UUID):
+   Count:  100
+-  Median: 27.70 ms
+-  P95:    29.58 ms
++  Median: 27.95 ms
++  P95:    32.15 ms
+ 
+ Group B (Existing object, unreadable under PostgreSQL RLS):
+   Count:  100
+-  Median: 27.66 ms
+-  P95:    29.26 ms
++  Median: 27.82 ms
++  P95:    32.37 ms
+ 
+-Absolute Median Delta: 0.04 ms
++Absolute Median Delta: 0.13 ms
+ Requirement: abs(median(a) - median(b)) <= 5.0 ms
+-Status: PASS (Delta 0.04 ms <= 5.0 ms threshold)
++Status: PASS (Delta 0.13 ms <= 5.0 ms threshold)
+diff --git a/docs/qa/KANBA-59/contract-sample.json b/docs/qa/KANBA-59/contract-sample.json
+index cb04614..2859ea2 100644
+--- a/docs/qa/KANBA-59/contract-sample.json
++++ b/docs/qa/KANBA-59/contract-sample.json
+@@ -13,15 +13,15 @@
+             "inherited_scope": {
+               "kind": "project",
+               "scope_label": "Project: KAN",
+-              "workspace_id": "01a1cf17-7a74-7378-87b4-2555cc39670f",
++              "workspace_id": "01a1d733-15f0-7cdc-a4a1-ba5ec144f237",
+               "workspace_name": "Platform Engineering",
+-              "project_id": "01a1cf17-7a82-78e8-aeeb-059529c1cde3",
++              "project_id": "01a1d733-15fd-7413-8cb7-684e43e062f5",
+               "project_key": "KAN",
+               "project_name": "Kanban"
+             },
+             "users": [
+               {
+-                "principal_id": "01a1cf17-7a74-7ce6-88f3-4e14d21f816b",
++                "principal_id": "01a1d733-15f0-795e-8664-f8d8b210f251",
+                 "handle": "@admin_user",
+                 "display_name": "Admin User",
+                 "capabilities": [
+@@ -37,7 +37,7 @@
+                 "grant_source": "project_owner"
+               },
+               {
+-                "principal_id": "01a1cf17-7a78-784f-b47f-80556b8eae03",
++                "principal_id": "01a1d733-15f4-7cfc-9b25-421d68dc46a7",
+                 "handle": "@viewer_user",
+                 "display_name": "Viewer User",
+                 "capabilities": [
+@@ -50,7 +50,7 @@
+                 "grant_source": "project_role"
+               },
+               {
+-                "principal_id": "01a1cf17-7a7b-7185-b877-4171a804c796",
++                "principal_id": "01a1d733-15f6-714a-b723-e953d6b57ed4",
+                 "handle": "@guest_ext",
+                 "display_name": "Guest Partner",
+                 "capabilities": [
+@@ -59,7 +59,7 @@
+                 "grant_source": "direct_share"
+               },
+               {
+-                "principal_id": "01a1cf17-7a7e-7580-8c12-d61361fece1c",
++                "principal_id": "01a1d733-15fa-76de-85b1-83478629da84",
+                 "handle": "@core_member",
+                 "display_name": "Core Member",
+                 "capabilities": [
+@@ -74,7 +74,7 @@
+             ],
+             "groups": [
+               {
+-                "principal_id": "01a1cf17-7a7d-7ff6-b117-d7dc3dc8962b",
++                "principal_id": "01a1d733-15f8-7bbd-9231-74208e65f475",
+                 "name": "Core Platform Team",
+                 "member_count": 1,
+                 "external_source": "LDAP",
+@@ -87,7 +87,7 @@
+             ],
+             "agents": [
+               {
+-                "principal_id": "01a1cf17-7a7c-72cd-8d11-6aeb31eb6508",
++                "principal_id": "01a1d733-15f8-7889-a113-2e625d5ff5c1",
+                 "display_name": "Codebot (openai/gpt-4o)",
+                 "principal_type": "AGENT",
+                 "provider_badge": "openai/gpt-4o",
+@@ -100,7 +100,7 @@
+             ],
+             "deny_overrides": [
+               {
+-                "principal_id": "01a1cf17-7a7e-7383-bfa1-75ec8ea0966b",
++                "principal_id": "01a1d733-15f9-75b6-8dd4-fb7b1e393172",
+                 "principal_type": "GROUP",
+                 "display_name": "Third-Party Contractors",
+                 "redacted": false,
+@@ -126,7 +126,7 @@
+             "title": "Not Found",
+             "status": 404,
+             "code": "NOT_FOUND",
+-            "request_id": "8822151992ef40ac95c6d4eabb070de5"
++            "request_id": "bcc4816225d04e13a29d11fb0cb045c8"
+           }
+         }
+       }
+@@ -142,7 +142,7 @@
+             "title": "Insufficient Capability",
+             "status": 403,
+             "code": "INSUFFICIENT_CAPABILITY",
+-            "request_id": "30200429b69e49849b2b02cb3dc86eed"
++            "request_id": "a48a26c9727c4acea845095e766cf09d"
+           }
+         }
+       }
+diff --git a/docs/qa/KANBA-59/timing-equalization.txt b/docs/qa/KANBA-59/timing-equalization.txt
+index 4035595..1f8b5be 100644
+--- a/docs/qa/KANBA-59/timing-equalization.txt
++++ b/docs/qa/KANBA-59/timing-equalization.txt
+@@ -2,7 +2,7 @@ KANBA-59 / KB-P2-11 Timing Equalization Statistical Verification (S3.4)
+ =========================================================================
+ Samples per class:      50 alternating pairs (100 requests total)
+ Floor Duration:         25.0 ms
+-Class A (Non-existent): Median = 27.581 ms | p95 = 28.767 ms
+-Class B (Unreadable):   Median = 27.619 ms | p95 = 29.260 ms
+-Median Delta:           0.038 ms (Mandate: <= 5.0 ms)
++Class A (Non-existent): Median = 27.522 ms | p95 = 32.336 ms
++Class B (Unreadable):   Median = 27.600 ms | p95 = 31.478 ms
++Median Delta:           0.077 ms (Mandate: <= 5.0 ms)
+ Anti-enumeration Check: PASS (Indistinguishable 404 status, headers & body)
+diff --git a/docs/qa/KANBA-66/contract-sample.json b/docs/qa/KANBA-66/contract-sample.json
+index 33f918a..d56566d 100644
+--- a/docs/qa/KANBA-66/contract-sample.json
++++ b/docs/qa/KANBA-66/contract-sample.json
+@@ -8,7 +8,7 @@
+         "content-type": "image/png",
+         "content-length": "16",
+         "cache-control": "private, max-age=3600",
+-        "x-request-id": "cdae08e95d3d4f4f9aa452b7f28b59ef",
++        "x-request-id": "46f2ae6368c244fcada496c56c4f4975",
+         "content-security-policy": "default-src 'none'; sandbox",
+         "x-content-type-options": "nosniff",
+         "referrer-policy": "no-referrer",
+@@ -27,7 +27,7 @@
+         "content-length": "67",
+         "x-kanban-media-status": "air-gap-placeholder",
+         "cache-control": "private, no-store",
+-        "x-request-id": "bbcbed1ce23e48a0925694904c4e1ef4",
++        "x-request-id": "a4f2f2e7dbf844ee87d12ab5d5140667",
+         "content-security-policy": "default-src 'none'; sandbox",
+         "x-content-type-options": "nosniff",
+         "referrer-policy": "no-referrer",
+@@ -47,7 +47,7 @@
+         "status": 403,
+         "code": "INVALID_SIGNATURE",
+         "detail": "Missing or invalid HMAC signature for media proxy URL",
+-        "request_id": "4c13b97d97864edfa61beb5118548999"
++        "request_id": "69fb846a05f944e68eb85a2716e3fcc0"
+       }
+     },
+     "403_MEDIA_HOST_BLOCKED": {
+@@ -58,7 +58,7 @@
+         "status": 403,
+         "code": "MEDIA_HOST_BLOCKED",
+         "detail": "External media host 'img.example.com' resolved to blocked non-public IP address '169.254.169.254' (SSRF guard)",
+-        "request_id": "5f6f22491943491b923ce57735db3f2e"
++        "request_id": "c16dae2218a042418566d1913a1000fe"
+       }
+     },
+     "502_MEDIA_REDIRECT_BLOCKED": {
+@@ -69,7 +69,7 @@
+         "status": 502,
+         "code": "MEDIA_REDIRECT_BLOCKED",
+         "detail": "Upstream host 'img.example.com' attempted redirect with status 302",
+-        "request_id": "5e630ec7e3524e008bb2918f79df6a23"
++        "request_id": "1bd56139db6b4b1d8f32dff8f363c2c6"
+       }
+     },
+     "502_MEDIA_TOO_LARGE": {
+@@ -80,7 +80,7 @@
+         "status": 502,
+         "code": "MEDIA_TOO_LARGE",
+         "detail": "Declared Content-Length 10485761 exceeds maximum limit of 10485760 bytes",
+-        "request_id": "7506e5304933495dbe59d646704a53d5"
++        "request_id": "c0b8a63c97e94fce955c0f8abb2fa283"
+       }
+     }
+   }
+diff --git a/docs/qa/KANBA-69/contract-sample.json b/docs/qa/KANBA-69/contract-sample.json
+index 90e625c..f2c8843 100644
+--- a/docs/qa/KANBA-69/contract-sample.json
++++ b/docs/qa/KANBA-69/contract-sample.json
+@@ -2,7 +2,7 @@
+   "resolve_200_success": {
+     "status": 200,
+     "body": {
+-      "id": "f690f3ab-630e-4350-8f94-933900e97cdc",
++      "id": "14fd2874-eaa3-4254-8101-ef21dfbe373b",
+       "kind": "project",
+       "key": "KAN",
+       "title": "Kanban Core"
+@@ -15,7 +15,7 @@
+       "title": "Not Found",
+       "status": 404,
+       "code": "NOT_FOUND",
+-      "request_id": "d17f50136b7241f99f849da6c5fa2f5a"
++      "request_id": "896cf68dd27345dd91e7db7953317d32"
+     }
+   },
+   "resolve_409_ambiguous_identifier": {
+@@ -26,7 +26,7 @@
+       "status": 409,
+       "code": "AMBIGUOUS_IDENTIFIER",
+       "detail": "Reference 'bug' matched multiple candidates for kind 'label'",
+-      "request_id": "4c4acf0fba894b1382e329bbfbb23940",
++      "request_id": "d46bd07825a648d2837e3a58ed4e4ceb",
+       "candidates": [
+         {
+           "key": "Bug",
+diff --git a/docs/qa/KANBA-70/rls-canary-proof.txt b/docs/qa/KANBA-70/rls-canary-proof.txt
+index e2aa970..2de7315 100644
+--- a/docs/qa/KANBA-70/rls-canary-proof.txt
++++ b/docs/qa/KANBA-70/rls-canary-proof.txt
+@@ -1,7 +1,7 @@
+ === CASE 3: RLS CANARY ISOLATION AUDIT PROOF ===
+ Target Canary String: SEC-CANARY-7731
+-Caller Principal ID : 9c753fd2-6ec3-4113-966d-96293b2f0f3d (Member of project PUB only)
+-Unreadable Project  : a52fffaa-9109-43ae-ab64-6c43d3a874bf (Project SEC containing canary sticky)
++Caller Principal ID : 7770e441-8716-4b64-b58a-45ca58c36a50 (Member of project PUB only)
++Unreadable Project  : d1f45c89-0e0b-4793-9921-360403474e2d (Project SEC containing canary sticky)
+ Canary Match Count  : 0
+ 
+ --- CAPTURED PROVIDER PROMPT ---
+diff --git a/docs/qa/KANBA-72/enumeration-timing.txt b/docs/qa/KANBA-72/enumeration-timing.txt
+index 73e6941..3089f59 100644
+--- a/docs/qa/KANBA-72/enumeration-timing.txt
++++ b/docs/qa/KANBA-72/enumeration-timing.txt
+@@ -1,10 +1,10 @@
+ Timing Side-Channel Analysis Report (KB-P2-04 / KANBA-72)
+ ========================================================
+ Unknown-User Sample Count: 50
+-Unknown-User Median Latency: 49.02 ms
+-Unknown-User P95 Latency: 51.92 ms
++Unknown-User Median Latency: 52.56 ms
++Unknown-User P95 Latency: 57.59 ms
+ Wrong-Password Sample Count: 50
+-Wrong-Password Median Latency: 51.31 ms
+-Wrong-Password P95 Latency: 59.32 ms
+-Median Delta: 2.29 ms (Maximum Allowed: 15.00 ms)
++Wrong-Password Median Latency: 51.93 ms
++Wrong-Password P95 Latency: 57.40 ms
++Median Delta: 0.63 ms (Maximum Allowed: 15.00 ms)
+ Evaluation Result: PASS
+diff --git a/docs/qa/KANBA-83/suggestions-explain.txt b/docs/qa/KANBA-83/suggestions-explain.txt
+index 4471025..fe93976 100644
+--- a/docs/qa/KANBA-83/suggestions-explain.txt
++++ b/docs/qa/KANBA-83/suggestions-explain.txt
+@@ -1,29 +1,25 @@
+-Limit  (cost=21.24..21.24 rows=1 width=112) (actual time=0.033..0.034 rows=2 loops=1)
++Limit  (cost=16.69..16.70 rows=1 width=112) (actual time=0.041..0.043 rows=2 loops=1)
+   Buffers: shared hit=10
+-  ->  Sort  (cost=21.24..21.24 rows=1 width=112) (actual time=0.032..0.033 rows=2 loops=1)
++  ->  Sort  (cost=16.69..16.70 rows=1 width=112) (actual time=0.041..0.042 rows=2 loops=1)
+         Sort Key: p.display_name, o.canonical_key
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=10
+-        ->  Nested Loop  (cost=4.48..21.23 rows=1 width=112) (actual time=0.023..0.027 rows=2 loops=1)
++        ->  Nested Loop  (cost=0.44..16.68 rows=1 width=112) (actual time=0.027..0.033 rows=2 loops=1)
+               Buffers: shared hit=10
+-              ->  Nested Loop  (cost=4.34..20.93 rows=1 width=64) (actual time=0.015..0.017 rows=2 loops=1)
++              ->  Nested Loop  (cost=0.30..16.38 rows=1 width=64) (actual time=0.016..0.020 rows=2 loops=1)
+                     Buffers: shared hit=6
+-                    ->  Bitmap Heap Scan on effective_resource_access era  (cost=4.19..12.72 rows=1 width=16) (actual time=0.010..0.011 rows=2 loops=1)
+-                          Recheck Cond: (object_id = '01a1cf17-0c78-7877-8004-10c5271af83f'::uuid)
+-                          Filter: ((workspace_id = '01a1cf17-0c69-7743-96fa-e7c4d8d6a829'::uuid) AND ((allow_mask & 1) = 1) AND ((deny_mask & 1) = 0))
+-                          Heap Blocks: exact=1
++                    ->  Index Scan using effective_resource_access_pkey on effective_resource_access era  (cost=0.15..8.18 rows=1 width=16) (actual time=0.011..0.012 rows=2 loops=1)
++                          Index Cond: (object_id = '01a1d732-8047-7953-bba9-b50e0bde23a5'::uuid)
++                          Filter: ((workspace_id = '01a1d732-8036-705f-82e0-786e52292c0a'::uuid) AND ((allow_mask & 1) = 1) AND ((deny_mask & 1) = 0))
+                           Buffers: shared hit=2
+-                          ->  Bitmap Index Scan on effective_resource_access_pkey  (cost=0.00..4.19 rows=5 width=0) (actual time=0.004..0.004 rows=8 loops=1)
+-                                Index Cond: (object_id = '01a1cf17-0c78-7877-8004-10c5271af83f'::uuid)
+-                                Buffers: shared hit=1
+                     ->  Index Scan using objects_id_object_type_key on objects o  (cost=0.15..8.17 rows=1 width=48) (actual time=0.002..0.002 rows=1 loops=2)
+                           Index Cond: (id = era.principal_id)
+                           Buffers: shared hit=4
+-              ->  Index Scan using principals_id_principal_type_key on principals p  (cost=0.15..0.29 rows=1 width=80) (actual time=0.004..0.004 rows=1 loops=2)
++              ->  Index Scan using principals_id_principal_type_key on principals p  (cost=0.15..0.29 rows=1 width=80) (actual time=0.006..0.006 rows=1 loops=2)
+                     Index Cond: (id = o.id)
+-                    Filter: ((principal_type = ANY ('{USER,AGENT}'::text[])) AND (workspace_id = '01a1cf17-0c69-7743-96fa-e7c4d8d6a829'::uuid) AND (status = 'ACTIVE'::text) AND ((o.canonical_key ~~* 'a%'::text) OR (display_name ~~* 'a%'::text)))
++                    Filter: ((principal_type = ANY ('{USER,AGENT}'::text[])) AND (workspace_id = '01a1d732-8036-705f-82e0-786e52292c0a'::uuid) AND (status = 'ACTIVE'::text) AND ((o.canonical_key ~~* 'a%'::text) OR (display_name ~~* 'a%'::text)))
+                     Buffers: shared hit=4
+ Planning:
+   Buffers: shared hit=10
+-Planning Time: 0.318 ms
+-Execution Time: 0.055 ms
++Planning Time: 0.400 ms
++Execution Time: 0.069 ms
+diff --git a/docs/tickets/BACKLOG_MANIFEST.md b/docs/tickets/BACKLOG_MANIFEST.md
+index 72a6380..93ad280 100644
+--- a/docs/tickets/BACKLOG_MANIFEST.md
++++ b/docs/tickets/BACKLOG_MANIFEST.md
+@@ -1,6 +1,7 @@
+-# Backlog Manifest (Architect-Owned Work Breakdown)
++# 👍kanban: Backlog Manifest (Architect-Owned Work Breakdown)
+ 
+ - **Source of truth for scope:** [`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`](../ARCHITECTURE_AND_PRODUCT_SPEC.md) (cited below as `S<section>`).
++- **Official Brand & Slugs:** Public brand **`👍kanban`**, container/repo slug `thumbs-up-kanban`, internal Python root module `kanban`.
+ - **Ticket format:** [`.agents/skills/kanban-ticket/SKILL.md`](../../.agents/skills/kanban-ticket/SKILL.md) mandatory template, verbatim section headings.
+ - **Local IDs:** `KB-<PHASE>-<NN>` are stable placeholder IDs. When tickets are bulk-created on `https://kanban.hackedyour.info/kanban/`, the real key (`KANBA-*`) is recorded in [`INDEX.md`](./INDEX.md) and every `docs/qa/<TICKET_ID>/` path uses the real key.
+ - **Executor profile:** Each ticket is sized for ONE fast-model (Flash-class) implementer session: roughly 1 module, 2-8 source files, 1-3 test files, `<= ~600` lines of production code. If a drafter finds a unit too large, split it as `KB-xx-NNa` / `KB-xx-NNb` and note it in `INDEX.md`.
+@@ -188,4 +189,11 @@
+ | KB-P6-02 | Cutover runbook & zero-invalid-link verification | `docs/CUTOVER.md`, scripted verification (counts parity, `audit_object_links()` = 0 invalid, QA bundle paths), rollback plan. | KB-P6-01, KB-P1-15 | S15.5 | - |
+ | KB-P6-03 | STRIDE security regression suite | One automated test per S3.5 row (prompt-injection exfiltration, hostile media, CLI pipe injection, standalone misconfig) across layers; `docs/SECURITY.md` threat model. | KB-P4-07, KB-P5-21, KB-P2-15 | S3.5 | - |
+ | KB-P6-04 | Performance budget suite | Automated checks: drag `< 12ms` frame (Playwright trace), Sparkle p95 `< 150ms` (fixture), sync hooks `< 25ms`, 1,000 tests `< 10s`, standalone boot `< 3s`; CI job. | KB-P5-09, KB-P5-17, KB-P0-08 | S1.3, S9, S14, S15.1 | - |
+-| KB-P6-05 | Backup/restore & standalone -> production promotion | `kanban-ctl backup` (encrypted `pg_dump -Fc`), `restore`, documented + tested promotion into external PG16; compose export. | KB-P0-08, KB-P0-11 | S2.2 | - |
++| KB-P6-05 | Backup/restore & standalone -> production promotion | `kanban-ctl backup` (encrypted `pg_dump -Fc` `KBBAK1`), `restore`, documented + tested promotion into external PG16 (`docs/PROMOTION_AND_BACKUP.md`); compose export. | KB-P0-08, KB-P0-11 | S2.2 | - |
++
++## Priority #0 Swarm & Post-Audit Remediation Tickets (`KANBA-162+`)
++
++| ID | Title | Scope | Deps | Spec | Tags |
++| :-- | :-- | :-- | :-- | :-- | :-- |
++| KANBA-162 | Pre-RLS test seeding & `normalize_inspect` lone-surrogate guard (`Done`) | Bootstrap workspace/admin fixtures under `kanban_migrator`/superuser authority before dropping session authorization to `kanban_app` under `FORCE RLS`; reject UTF-16 lone surrogates (`0xD800..0xDFFF`) before `.encode("utf-8")` in `kanban/content/normalize.py`. | KB-P1-14, KB-P2-13 | S3.3, S5.2, S15.1 | `[API]` |
++| KANBA-163 | Root `pytest` collection, RLS privilege-revoked table assertion, `/admin/mcp-keys` AAL2 gate & Dash CI `testdb` (`Todo` Urgent) | Remove non-top-level `pytest_plugins` in `kanban/tests/{agents,attachments}/conftest.py` via `kanban/tests/conftest.py` re-exports; assert `has_table_privilege = false` for `kb_auth_owner` tables (`oidc_auth_requests`, etc.) in `test_p1_14_rls_policies.py`; wire canonical `require_admin_aal2` on `kanban/api/v1/admin/mcp_keys.py` + `WORKSPACE_ADMIN` in `policy.py` + MFA seed in `test_admin_mcp_keys_api.py`; deduplicate `/issues/query` `operation_id` in `views.py`; add `make testdb-up` / `if: always() make testdb-down` + Vitest `--coverage` + `make license` to CI workflows. | KANBA-18, KANBA-28, KANBA-73, KANBA-81, KANBA-95, KANBA-162 | S4.2, S11.1, S15.1, S15.4 | `[API]` |
+diff --git a/docs/tickets/INDEX.md b/docs/tickets/INDEX.md
+index e1486c3..f3e8483 100644
+--- a/docs/tickets/INDEX.md
++++ b/docs/tickets/INDEX.md
+@@ -1,7 +1,7 @@
+-# Ticket Index & Topological Execution Plan (`docs/tickets/`)
++# 👍kanban: Ticket Index & Topological Execution Plan (`docs/tickets/`)
+ 
+-- **Total Artifacts:** `154` (`7` Phase Epics + `147` Granular Flash-Ready Tickets across `29` acyclic parallel waves)
+-- **Target Board:** `https://kanban.hackedyour.info/kanban/` (`workspace='kanban'`, `project='KANBA'`, configured in `.gemini/settings.json` and `.agents/mcp_config.json`).
++- **Total Artifacts:** `156` (`7` Phase Epics + `147` Granular Flash-Ready Tickets across `29` acyclic parallel waves + `2` Priority #0 Remediation Tickets `KANBA-162..163`)
++- **Target Board:** `https://kanban.hackedyour.info/kanban/` (`workspace='kanban'`, `project='KANBA'`, official product brand **`👍kanban`** / `thumbs-up-kanban`).
+ - **Bulk Publisher:** Run `python3 docs/tickets/publish_to_board.py` to create all Epics and Tickets in topological order, populate `Board Key` below, and rewrite `<TICKET_ID>` + dependency references to live `KANBA-*` keys.
+ 
+ ---
+@@ -173,3 +173,12 @@ Tickets within the same **Wave** have all prerequisites satisfied by earlier wav
+ | **W27** | [`KB-P5-22b`](./KB-P5-22b.md) | `KANBA-159` | `KB-E5` | `reality-checker` | `KB-P5-22a`, `KB-P5-20`, `KB-P5-21`, `KB-P0-08` | [Phase 5 / Agent + Deploy] kanban-agent-runner outbound mTLS WSS daemon, local :ro repo/CLI execution & Dockerfile agent-runner target |
+ | **W27** | [`KB-P6-03`](./KB-P6-03.md) | `KANBA-160` | `KB-E6` | `reality-checker` | `KB-P4-07`, `KB-P4-13`, `KB-P5-21`, `KB-P2-15`, `KB-P2-16`, `KB-P2-17`, `KB-P0-09`, `KB-P2-12` | [Phase 6 / Hardening] Cross-layer STRIDE security regression suite (S3.5 threat matrix) & docs/SECURITY.md |
+ | **W28** | [`KB-P5-23`](./KB-P5-23.md) | `KANBA-161` | `KB-E5` | `reality-checker` | `KB-P5-20`, `KB-P5-21`, `KB-P5-22a`, `KB-P5-22b`, `KB-P0-13` | [Phase 5 / Agent CLI] kanban-agent validate-transition workbench across in_app_sdk, cli_pipe & remote_runner harnesses |
++
++---
++
++## 3. Swarm & Post-Audit Priority #0 Remediation Tickets (`KANBA-162+`)
++
++| Priority | Ticket File | Board Key | Epic | Gates | Status | Title |
++| :---: | :--- | :--- | :---: | :--- | :---: | :--- |
++| **P0** | [`KANBA-162`](./KANBA-162.md) | `KANBA-162` | `KB-E0` | `reality-checker`, `api-specialist`, `ui-specialist` | `Done` | [Phase 1+2 / Remediation] Align pre-RLS P1 database test seeding with FORCE RLS & harden normalize_inspect lone-surrogate guard |
++| **P0** | [`KANBA-163`](./KANBA-163.md) | `KANBA-163` | `KB-E0` | `reality-checker`, `api-specialist`, `ui-specialist` | `Todo` (`Urgent`) | [Phase 0+2 / Priority #0 Remediation] Restore green root pytest, RLS privilege-revoked table assertion, admin MCP-keys AAL2 dependency & Dash CI testdb lifecycle |
+diff --git a/kanban/api/v1/admin/mcp_keys.py b/kanban/api/v1/admin/mcp_keys.py
+index f65505c..30e99b1 100644
+--- a/kanban/api/v1/admin/mcp_keys.py
++++ b/kanban/api/v1/admin/mcp_keys.py
+@@ -6,26 +6,25 @@ from __future__ import annotations
+ 
+ import uuid  # noqa: TC003  # Runtime import required for Pydantic and type annotations
+ from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic type annotations
+-from typing import Annotated, Final, Literal
++from typing import Annotated, Literal
+ 
+ from fastapi import APIRouter, Depends, Query, Response, status
+ from pydantic import BaseModel, ConfigDict, Field
+-from sqlalchemy import select, text
++from sqlalchemy import select
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from database.models.mcp_api_key import McpApiKey
+-from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+-from kanban.api.problems import ProblemException, not_found
++from kanban.api.deps import PrincipalContext, get_rls_session
++from kanban.api.problems import not_found
++from kanban.auth.mfa.policy import require_admin_aal2
+ from kanban.security.mcp_keys import (
+     mint_mcp_api_key,
+     revoke_mcp_api_key,
+ )
+ 
+-router = APIRouter(tags=["admin-mcp-keys"])
++router = APIRouter(tags=["admin-mcp-keys"], dependencies=[Depends(require_admin_aal2)])
+ 
+-_REQUIRED_AAL_LEVEL: Final[int] = 2
+-
+-Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Caller = Annotated[PrincipalContext, Depends(require_admin_aal2)]
+ Session = Annotated[AsyncSession, Depends(get_rls_session)]
+ 
+ 
+@@ -79,28 +78,6 @@ class McpApiKeyResponse(BaseModel):
+     last_used_at: datetime | None = None
+ 
+ 
+-async def require_admin_aal2(caller: PrincipalContext, session: AsyncSession) -> None:
+-    """Enforce AAL2 authentication and workspace/server admin role."""
+-    if caller.aal_level < _REQUIRED_AAL_LEVEL:
+-        raise ProblemException(
+-            code="AAL2_REQUIRED",
+-            status=403,
+-            title="AAL2 Required",
+-            detail="Managing MCP API keys requires AAL2 authentication.",
+-        )
+-
+-    stmt = text("SELECT app_principal_has_role(NULL, CAST(:roles AS text[]))")
+-    roles = ["SERVER_ADMIN", "WORKSPACE_ADMIN"]
+-    is_admin = (await session.execute(stmt, {"roles": roles})).scalar_one()
+-    if not is_admin:
+-        raise ProblemException(
+-            code="FORBIDDEN",
+-            status=403,
+-            title="Forbidden",
+-            detail="Caller lacks required workspace admin role.",
+-        )
+-
+-
+ @router.post(
+     "/admin/mcp-keys",
+     status_code=status.HTTP_201_CREATED,
+@@ -114,8 +91,6 @@ async def mint_key(
+     response: Response,
+ ) -> McpApiKeyMintResponse:
+     """Mint a surface-bound MCP API key and return plaintext token once."""
+-    await require_admin_aal2(caller, session)
+-
+     target_principal_id = body.principal_id or caller.principal_id
+ 
+     key_record, plaintext_token = await mint_mcp_api_key(
+@@ -158,8 +133,6 @@ async def list_keys(
+     surface: Annotated[str | None, Query(description="Optional surface filter")] = None,
+ ) -> list[McpApiKeyResponse]:
+     """List metadata for MCP API keys belonging to the workspace."""
+-    await require_admin_aal2(caller, session)
+-
+     stmt = select(McpApiKey).where(McpApiKey.workspace_id == caller.workspace_id)
+     if surface:
+         stmt = stmt.where(McpApiKey.surface == surface)
+@@ -198,8 +171,6 @@ async def revoke_key(
+     session: Session,
+ ) -> None:
+     """Revoke an MCP API key by ID."""
+-    await require_admin_aal2(caller, session)
+-
+     key = await session.get(McpApiKey, key_id)
+     if key is None or key.workspace_id != caller.workspace_id:
+         not_found()
+diff --git a/kanban/api/v1/views.py b/kanban/api/v1/views.py
+index 047fedd..471533a 100644
+--- a/kanban/api/v1/views.py
++++ b/kanban/api/v1/views.py
+@@ -157,6 +157,7 @@ async def query_view_issues_post(
+     "/projects/{project_ref}/issues/query",
+     response_model=ViewQueryResponse,
+     summary="Ad-hoc query issues in a project (slash alias)",
++    include_in_schema=False,
+ )
+ async def query_project_issues_adhoc(
+     project_ref: str,
+diff --git a/kanban/auth/mfa/policy.py b/kanban/auth/mfa/policy.py
+index c89895e..8e628ba 100644
+--- a/kanban/auth/mfa/policy.py
++++ b/kanban/auth/mfa/policy.py
+@@ -107,7 +107,7 @@ async def require_admin_aal2(
+             text(
+                 "SELECT 1 FROM role_bindings "
+                 "WHERE principal_id = :p_id "
+-                "  AND role IN ('SERVER_ADMIN', 'PROJECT_ADMIN')"
++                "  AND role IN ('SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN')"
+             ),
+             {"p_id": principal.principal_id},
+         )
+diff --git a/kanban/tests/agents/conftest.py b/kanban/tests/agents/conftest.py
+index f2a2e53..7c2d145 100644
+--- a/kanban/tests/agents/conftest.py
++++ b/kanban/tests/agents/conftest.py
+@@ -1,3 +1 @@
+ """Shared fixtures for agents tests."""
+-
+-pytest_plugins = ["kanban.tests.api.conftest"]
+diff --git a/kanban/tests/api/test_admin_mcp_keys_api.py b/kanban/tests/api/test_admin_mcp_keys_api.py
+index a4bfd2d..f7251d4 100644
+--- a/kanban/tests/api/test_admin_mcp_keys_api.py
++++ b/kanban/tests/api/test_admin_mcp_keys_api.py
+@@ -8,6 +8,7 @@ import base64
+ from typing import TYPE_CHECKING
+ 
+ import pytest
++from sqlalchemy import text
+ from starlette.requests import Request
+ 
+ from kanban.api.deps import PrincipalContext
+@@ -47,6 +48,27 @@ async def test_admin_mcp_keys_endpoints_lifecycle(  # noqa: PLR0915
+     admin_user = await make_user("mcp_admin", workspace_role="WORKSPACE_ADMIN")
+     member_user = await make_user("mcp_member", workspace_role="WORKSPACE_MEMBER")
+ 
++    # Seed confirmed TOTP factor for admin_user so AAL2 policy permits evaluation
++    await api_env.seed.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {
++            "p_id": admin_user.id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await api_env.seed.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": admin_user.id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await api_env.seed.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await api_env.seed.commit()
++
+     client = api_env.client
+ 
+     # 1. AAL1 caller is rejected with 403 AAL2_REQUIRED
+@@ -62,6 +84,28 @@ async def test_admin_mcp_keys_endpoints_lifecycle(  # noqa: PLR0915
+     assert resp_aal1.status_code == 403
+     assert resp_aal1.json()["code"] == "AAL2_REQUIRED"
+ 
++    resp_aal1_get = await client.get("/api/v1/admin/mcp-keys")
++    assert resp_aal1_get.status_code == 403
++    assert resp_aal1_get.json()["code"] == "AAL2_REQUIRED"
++
++    # 1b. MFA-unenrolled admin is rejected with 403 MFA_ENROLLMENT_REQUIRED
++    unenrolled_admin = await make_user("mcp_unenrolled_admin", workspace_role="WORKSPACE_ADMIN")
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=unenrolled_admin.id,
++        workspace_id=unenrolled_admin.workspace_id,
++        aal_level=1,
++    )
++    resp_unenrolled = await client.post(
++        "/api/v1/admin/mcp-keys",
++        json={"surface": "agent", "scopes": ["agent:read"]},
++    )
++    assert resp_unenrolled.status_code == 403
++    assert resp_unenrolled.json()["code"] == "MFA_ENROLLMENT_REQUIRED"
++
++    resp_unenrolled_get = await client.get("/api/v1/admin/mcp-keys")
++    assert resp_unenrolled_get.status_code == 403
++    assert resp_unenrolled_get.json()["code"] == "MFA_ENROLLMENT_REQUIRED"
++
+     # 2. Non-admin caller with AAL2 rejected with 403 FORBIDDEN
+     api_env.resolver.principal = PrincipalContext(
+         principal_id=member_user.id,
+diff --git a/kanban/tests/attachments/conftest.py b/kanban/tests/attachments/conftest.py
+index c35aae2..7d3c92b 100644
+--- a/kanban/tests/attachments/conftest.py
++++ b/kanban/tests/attachments/conftest.py
+@@ -1,3 +1 @@
+ """Shared fixtures for attachments tests."""
+-
+-pytest_plugins = ["kanban.tests.api.conftest"]
+diff --git a/kanban/tests/conftest.py b/kanban/tests/conftest.py
+index 5cfdd3f..673d71a 100644
+--- a/kanban/tests/conftest.py
++++ b/kanban/tests/conftest.py
+@@ -3,6 +3,29 @@
+ import coverage.inorout
+ import pytest
+ 
++from kanban.tests.api.conftest import (
++    ApiEnv,
++    SeededUser,
++    api_env,
++    as_principal,
++    contract_recorder,
++    make_module,
++    make_project,
++    make_user,
++)
++
++__all__ = [
++    "ApiEnv",
++    "SeededUser",
++    "api_env",
++    "as_principal",
++    "contract_recorder",
++    "make_module",
++    "make_project",
++    "make_user",
++    "pytest_configure",
++]
++
+ 
+ def pytest_configure(config: pytest.Config) -> None:
+     """Normalize file-based --cov targets to package module specs for coverage.py."""

@@ -1,6 +1,7 @@
-# Backlog Manifest (Architect-Owned Work Breakdown)
+# 👍kanban: Backlog Manifest (Architect-Owned Work Breakdown)
 
 - **Source of truth for scope:** [`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`](../ARCHITECTURE_AND_PRODUCT_SPEC.md) (cited below as `S<section>`).
+- **Official Brand & Slugs:** Public brand **`👍kanban`**, container/repo slug `thumbs-up-kanban`, internal Python root module `kanban`.
 - **Ticket format:** [`.agents/skills/kanban-ticket/SKILL.md`](../../.agents/skills/kanban-ticket/SKILL.md) mandatory template, verbatim section headings.
 - **Local IDs:** `KB-<PHASE>-<NN>` are stable placeholder IDs. When tickets are bulk-created on `https://kanban.hackedyour.info/kanban/`, the real key (`KANBA-*`) is recorded in [`INDEX.md`](./INDEX.md) and every `docs/qa/<TICKET_ID>/` path uses the real key.
 - **Executor profile:** Each ticket is sized for ONE fast-model (Flash-class) implementer session: roughly 1 module, 2-8 source files, 1-3 test files, `<= ~600` lines of production code. If a drafter finds a unit too large, split it as `KB-xx-NNa` / `KB-xx-NNb` and note it in `INDEX.md`.
@@ -188,4 +189,11 @@
 | KB-P6-02 | Cutover runbook & zero-invalid-link verification | `docs/CUTOVER.md`, scripted verification (counts parity, `audit_object_links()` = 0 invalid, QA bundle paths), rollback plan. | KB-P6-01, KB-P1-15 | S15.5 | - |
 | KB-P6-03 | STRIDE security regression suite | One automated test per S3.5 row (prompt-injection exfiltration, hostile media, CLI pipe injection, standalone misconfig) across layers; `docs/SECURITY.md` threat model. | KB-P4-07, KB-P5-21, KB-P2-15 | S3.5 | - |
 | KB-P6-04 | Performance budget suite | Automated checks: drag `< 12ms` frame (Playwright trace), Sparkle p95 `< 150ms` (fixture), sync hooks `< 25ms`, 1,000 tests `< 10s`, standalone boot `< 3s`; CI job. | KB-P5-09, KB-P5-17, KB-P0-08 | S1.3, S9, S14, S15.1 | - |
-| KB-P6-05 | Backup/restore & standalone -> production promotion | `kanban-ctl backup` (encrypted `pg_dump -Fc`), `restore`, documented + tested promotion into external PG16; compose export. | KB-P0-08, KB-P0-11 | S2.2 | - |
+| KB-P6-05 | Backup/restore & standalone -> production promotion | `kanban-ctl backup` (encrypted `pg_dump -Fc` `KBBAK1`), `restore`, documented + tested promotion into external PG16 (`docs/PROMOTION_AND_BACKUP.md`); compose export. | KB-P0-08, KB-P0-11 | S2.2 | - |
+
+## Priority #0 Swarm & Post-Audit Remediation Tickets (`KANBA-162+`)
+
+| ID | Title | Scope | Deps | Spec | Tags |
+| :-- | :-- | :-- | :-- | :-- | :-- |
+| KANBA-162 | Pre-RLS test seeding & `normalize_inspect` lone-surrogate guard (`Done`) | Bootstrap workspace/admin fixtures under `kanban_migrator`/superuser authority before dropping session authorization to `kanban_app` under `FORCE RLS`; reject UTF-16 lone surrogates (`0xD800..0xDFFF`) before `.encode("utf-8")` in `kanban/content/normalize.py`. | KB-P1-14, KB-P2-13 | S3.3, S5.2, S15.1 | `[API]` |
+| KANBA-163 | Root `pytest` collection, RLS privilege-revoked table assertion, `/admin/mcp-keys` AAL2 gate & Dash CI `testdb` (`Todo` Urgent) | Remove non-top-level `pytest_plugins` in `kanban/tests/{agents,attachments}/conftest.py` via `kanban/tests/conftest.py` re-exports; assert `has_table_privilege = false` for `kb_auth_owner` tables (`oidc_auth_requests`, etc.) in `test_p1_14_rls_policies.py`; wire canonical `require_admin_aal2` on `kanban/api/v1/admin/mcp_keys.py` + `WORKSPACE_ADMIN` in `policy.py` + MFA seed in `test_admin_mcp_keys_api.py`; deduplicate `/issues/query` `operation_id` in `views.py`; add `make testdb-up` / `if: always() make testdb-down` + Vitest `--coverage` + `make license` to CI workflows. | KANBA-18, KANBA-28, KANBA-73, KANBA-81, KANBA-95, KANBA-162 | S4.2, S11.1, S15.1, S15.4 | `[API]` |

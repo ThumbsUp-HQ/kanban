@@ -107,7 +107,7 @@ async def require_admin_aal2(
             text(
                 "SELECT 1 FROM role_bindings "
                 "WHERE principal_id = :p_id "
-                "  AND role IN ('SERVER_ADMIN', 'PROJECT_ADMIN')"
+                "  AND role IN ('SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN')"
             ),
             {"p_id": principal.principal_id},
         )

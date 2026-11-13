@@ -1,8 +1,8 @@
-# Production Promotion and Encrypted Backup Runbook
+# 👍kanban: Production Promotion and Encrypted Backup Runbook
 
 ## 1. Overview and Architecture
 
-The Kanban platform supports two primary deployment topologies:
+The **`👍kanban`** (`thumbs-up-kanban`) platform supports two primary deployment topologies:
 1. **Standalone Single-Container Mode (`docker run`):**
    An all-in-one container running PostgreSQL 16, pgvector, and FastAPI behind a PID-1 supervisor on an internal Unix domain socket.
 2. **Hardened Multi-Container Production Stack (`docker compose`):**

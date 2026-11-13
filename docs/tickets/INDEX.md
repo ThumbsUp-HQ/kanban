@@ -1,7 +1,7 @@
-# Ticket Index & Topological Execution Plan (`docs/tickets/`)
+# 👍kanban: Ticket Index & Topological Execution Plan (`docs/tickets/`)
 
-- **Total Artifacts:** `154` (`7` Phase Epics + `147` Granular Flash-Ready Tickets across `29` acyclic parallel waves)
-- **Target Board:** `https://kanban.hackedyour.info/kanban/` (`workspace='kanban'`, `project='KANBA'`, configured in `.gemini/settings.json` and `.agents/mcp_config.json`).
+- **Total Artifacts:** `156` (`7` Phase Epics + `147` Granular Flash-Ready Tickets across `29` acyclic parallel waves + `2` Priority #0 Remediation Tickets `KANBA-162..163`)
+- **Target Board:** `https://kanban.hackedyour.info/kanban/` (`workspace='kanban'`, `project='KANBA'`, official product brand **`👍kanban`** / `thumbs-up-kanban`).
 - **Bulk Publisher:** Run `python3 docs/tickets/publish_to_board.py` to create all Epics and Tickets in topological order, populate `Board Key` below, and rewrite `<TICKET_ID>` + dependency references to live `KANBA-*` keys.
 
 ---
@@ -173,3 +173,12 @@ Tickets within the same **Wave** have all prerequisites satisfied by earlier wav
 | **W27** | [`KB-P5-22b`](./KB-P5-22b.md) | `KANBA-159` | `KB-E5` | `reality-checker` | `KB-P5-22a`, `KB-P5-20`, `KB-P5-21`, `KB-P0-08` | [Phase 5 / Agent + Deploy] kanban-agent-runner outbound mTLS WSS daemon, local :ro repo/CLI execution & Dockerfile agent-runner target |
 | **W27** | [`KB-P6-03`](./KB-P6-03.md) | `KANBA-160` | `KB-E6` | `reality-checker` | `KB-P4-07`, `KB-P4-13`, `KB-P5-21`, `KB-P2-15`, `KB-P2-16`, `KB-P2-17`, `KB-P0-09`, `KB-P2-12` | [Phase 6 / Hardening] Cross-layer STRIDE security regression suite (S3.5 threat matrix) & docs/SECURITY.md |
 | **W28** | [`KB-P5-23`](./KB-P5-23.md) | `KANBA-161` | `KB-E5` | `reality-checker` | `KB-P5-20`, `KB-P5-21`, `KB-P5-22a`, `KB-P5-22b`, `KB-P0-13` | [Phase 5 / Agent CLI] kanban-agent validate-transition workbench across in_app_sdk, cli_pipe & remote_runner harnesses |
+
+---
+
+## 3. Swarm & Post-Audit Priority #0 Remediation Tickets (`KANBA-162+`)
+
+| Priority | Ticket File | Board Key | Epic | Gates | Status | Title |
+| :---: | :--- | :--- | :---: | :--- | :---: | :--- |
+| **P0** | [`KANBA-162`](./KANBA-162.md) | `KANBA-162` | `KB-E0` | `reality-checker`, `api-specialist`, `ui-specialist` | `Done` | [Phase 1+2 / Remediation] Align pre-RLS P1 database test seeding with FORCE RLS & harden normalize_inspect lone-surrogate guard |
+| **P0** | [`KANBA-163`](./KANBA-163.md) | `KANBA-163` | `KB-E0` | `reality-checker`, `api-specialist`, `ui-specialist` | `Todo` (`Urgent`) | [Phase 0+2 / Priority #0 Remediation] Restore green root pytest, RLS privilege-revoked table assertion, admin MCP-keys AAL2 dependency & Dash CI testdb lifecycle |

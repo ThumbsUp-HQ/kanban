@@ -403,7 +403,7 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
     """Test Case 1: kanban_app & app_rls_reader return 0 rows across EVERY table without context."""
     await _seed_two_workspaces(db_session)
 
-    # Query all public tables except exempt catalog tables
+    # Query all public tables except exempt catalog and security-definer isolated tables
     tbl_rows = await db_session.execute(
         text(
             "SELECT c.relname FROM pg_class c "
@@ -411,7 +411,9 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
             "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
             "  AND c.relname NOT IN ("
             "    'alembic_version', 'link_type_matrix', 'auth_provider_cards', "
-            "    'rate_limit_buckets', 'local_admin_credentials', 'sessions'"
+            "    'rate_limit_buckets', 'local_admin_credentials', 'sessions', "
+            "    'totp_factors', 'recovery_codes', 'webauthn_credentials', "
+            "    'webauthn_challenges', 'oidc_auth_requests'"
             "  ) "
             "ORDER BY c.relname"
         )
@@ -454,6 +456,32 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
 
     # Reset authorization back to superuser
     await db_session.execute(text("RESET SESSION AUTHORIZATION"))
+
+    # 4. Positive security assertion: verify privileges are revoked for kb_auth_owner tables
+    auth_isolated_tables = [
+        "sessions",
+        "auth_provider_cards",
+        "local_admin_credentials",
+        "totp_factors",
+        "recovery_codes",
+        "webauthn_credentials",
+        "webauthn_challenges",
+        "oidc_auth_requests",
+    ]
+    for auth_tbl in auth_isolated_tables:
+        for priv in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+            app_priv = await db_session.scalar(
+                text(f"SELECT has_table_privilege('kanban_app', '{auth_tbl}', '{priv}')")
+            )
+            assert app_priv is False, (
+                f"Security breach: kanban_app has {priv} on security-definer table {auth_tbl}"
+            )
+            reader_priv = await db_session.scalar(
+                text(f"SELECT has_table_privilege('app_rls_reader', '{auth_tbl}', '{priv}')")
+            )
+            assert reader_priv is False, (
+                f"Security breach: app_rls_reader has {priv} on security-definer table {auth_tbl}"
+            )
 
 
 # ==============================================================================

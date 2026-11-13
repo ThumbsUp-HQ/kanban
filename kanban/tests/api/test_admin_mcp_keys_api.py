@@ -8,6 +8,7 @@ import base64
 from typing import TYPE_CHECKING
 
 import pytest
+from sqlalchemy import text
 from starlette.requests import Request
 
 from kanban.api.deps import PrincipalContext
@@ -47,6 +48,27 @@ async def test_admin_mcp_keys_endpoints_lifecycle(  # noqa: PLR0915
     admin_user = await make_user("mcp_admin", workspace_role="WORKSPACE_ADMIN")
     member_user = await make_user("mcp_member", workspace_role="WORKSPACE_MEMBER")
 
+    # Seed confirmed TOTP factor for admin_user so AAL2 policy permits evaluation
+    await api_env.seed.execute(
+        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
+        {
+            "p_id": admin_user.id,
+            "blob": b"\x01" + b"\x00" * 28,
+            "dek": b"\x01" + b"\x00" * 44,
+        },
+    )
+    res = await api_env.seed.execute(
+        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
+        {"p_id": admin_user.id},
+    )
+    p_row = res.mappings().first()
+    if p_row:
+        await api_env.seed.execute(
+            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
+            {"p_fid": p_row["id"]},
+        )
+    await api_env.seed.commit()
+
     client = api_env.client
 
     # 1. AAL1 caller is rejected with 403 AAL2_REQUIRED
@@ -61,6 +83,28 @@ async def test_admin_mcp_keys_endpoints_lifecycle(  # noqa: PLR0915
     )
     assert resp_aal1.status_code == 403
     assert resp_aal1.json()["code"] == "AAL2_REQUIRED"
+
+    resp_aal1_get = await client.get("/api/v1/admin/mcp-keys")
+    assert resp_aal1_get.status_code == 403
+    assert resp_aal1_get.json()["code"] == "AAL2_REQUIRED"
+
+    # 1b. MFA-unenrolled admin is rejected with 403 MFA_ENROLLMENT_REQUIRED
+    unenrolled_admin = await make_user("mcp_unenrolled_admin", workspace_role="WORKSPACE_ADMIN")
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=unenrolled_admin.id,
+        workspace_id=unenrolled_admin.workspace_id,
+        aal_level=1,
+    )
+    resp_unenrolled = await client.post(
+        "/api/v1/admin/mcp-keys",
+        json={"surface": "agent", "scopes": ["agent:read"]},
+    )
+    assert resp_unenrolled.status_code == 403
+    assert resp_unenrolled.json()["code"] == "MFA_ENROLLMENT_REQUIRED"
+
+    resp_unenrolled_get = await client.get("/api/v1/admin/mcp-keys")
+    assert resp_unenrolled_get.status_code == 403
+    assert resp_unenrolled_get.json()["code"] == "MFA_ENROLLMENT_REQUIRED"
 
     # 2. Non-admin caller with AAL2 rejected with 403 FORBIDDEN
     api_env.resolver.principal = PrincipalContext(
