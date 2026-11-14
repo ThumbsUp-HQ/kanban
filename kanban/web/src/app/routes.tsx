@@ -6,6 +6,7 @@
 import React, { useEffect, type JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
+import { IssuesWorkspaceRoute } from '../features/views/viewRegistry.tsx';
 import {
   createBrowserRouter,
   createMemoryRouter,
@@ -221,4 +222,19 @@ export function createAppRouter(
     return createMemoryRouter(appRoutes, { initialEntries });
   }
   return createBrowserRouter(appRoutes);
+}
+
+/**
+ * Client router matching /projects/:projectKey/issues (KB-P3-37, KB-P3-34).
+ */
+export function AppRoutes(): JSX.Element | null {
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const match = /^\/projects\/([^/]+)\/issues\/?$/.exec(pathname);
+
+  if (match?.[1]) {
+    const projectKey = decodeURIComponent(match[1]);
+    return <IssuesWorkspaceRoute projectKey={projectKey} />;
+  }
+
+  return null;
 }

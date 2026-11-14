@@ -1,0 +1,32 @@
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/board/fractionalRank.test.ts (10 tests) 14ms
+ ✓ src/features/board/boardApi.test.ts (6 tests) 15ms
+ ✓ src/features/views/viewRegistry.test.tsx (3 tests) 124ms
+ ✓ src/features/board/BoardCard.test.tsx (9 tests) 191ms
+ ✓ src/features/board/BoardColumn.test.tsx (6 tests) 176ms
+ ✓ src/features/board/HardWipOverrideModal.test.tsx (5 tests) 294ms
+ ✓ src/features/board/BoardView.test.tsx (14 tests) 1194ms
+
+ Test Files  7 passed (7)
+      Tests  53 passed (53)
+   Start at  19:31:11
+   Duration  2.69s (environment 64%, tests 21%, import 10%, worker 4%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.47 |    96.94 |     100 |     100 |                   
+ board             |   99.46 |    96.88 |     100 |     100 |                   
+  BoardCard.tsx    |     100 |      100 |     100 |     100 |                   
+  BoardColumn.tsx  |     100 |      100 |     100 |     100 |                   
+  BoardView.tsx    |   98.78 |    92.75 |     100 |     100 | ...29,323-325,333 
+  ...rideModal.tsx |     100 |      100 |     100 |     100 |                   
+  boardApi.ts      |     100 |      100 |     100 |     100 |                   
+  ...tionalRank.ts |     100 |      100 |     100 |     100 |                   
+ views             |     100 |      100 |     100 |     100 |                   
+  viewRegistry.tsx |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

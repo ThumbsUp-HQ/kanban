@@ -1,0 +1,215 @@
+{
+  "items": [
+    {
+      "id": "iss-wip-1",
+      "key": "KAN-101",
+      "summary": "Backlog task item ready for triage",
+      "state_id": "state-backlog",
+      "board_rank": "0000000000000001",
+      "priority": {
+        "id": "p-low",
+        "label": "Low",
+        "slug": "low"
+      },
+      "assignees": [
+        {
+          "id": "u-adam",
+          "handle": "adam"
+        }
+      ]
+    },
+    {
+      "id": "iss-wip-2",
+      "key": "KAN-102",
+      "summary": "Second backlog task for drag tests",
+      "state_id": "state-backlog",
+      "board_rank": "0000000000000002",
+      "priority": {
+        "id": "p-med",
+        "label": "Medium",
+        "slug": "medium"
+      },
+      "assignees": [
+        {
+          "id": "u-adam",
+          "handle": "adam"
+        }
+      ]
+    },
+    {
+      "id": "iss-wip-3",
+      "key": "KAN-142",
+      "summary": "Harden Multi-Card OIDC & LDAPS Auth Studio",
+      "state_id": "state-in-progress",
+      "board_rank": "0000000000000010",
+      "priority": {
+        "id": "p-urg",
+        "label": "Urgent",
+        "slug": "urgent"
+      },
+      "assignees": [
+        {
+          "id": "u-adam",
+          "handle": "adam"
+        },
+        {
+          "id": "u-sec",
+          "free_text": "Ext: SecAudit"
+        }
+      ],
+      "due_date": "2026-11-18",
+      "cycle": {
+        "id": "c-4",
+        "name": "Cycle 4: Sec"
+      },
+      "has_explicit_acl": true
+    },
+    {
+      "id": "iss-wip-4",
+      "key": "KAN-143",
+      "summary": "Verify LDAPS certificate pinning",
+      "state_id": "state-in-progress",
+      "board_rank": "0000000000000020",
+      "priority": {
+        "id": "p-high",
+        "label": "High",
+        "slug": "high"
+      },
+      "assignees": [
+        {
+          "id": "u-adam",
+          "handle": "adam"
+        }
+      ]
+    },
+    {
+      "id": "iss-wip-5",
+      "key": "KAN-144",
+      "summary": "Audit OAuth PKCE S256 token exchange",
+      "state_id": "state-in-progress",
+      "board_rank": "0000000000000030",
+      "priority": {
+        "id": "p-med",
+        "label": "Medium",
+        "slug": "medium"
+      },
+      "assignees": [
+        {
+          "id": "u-adam",
+          "handle": "adam"
+        }
+      ]
+    },
+    {
+      "id": "iss-wip-6",
+      "key": "KAN-145",
+      "summary": "Implement break-glass admin lockout guard",
+      "state_id": "state-in-progress",
+      "board_rank": "0000000000000040",
+      "priority": {
+        "id": "p-urg",
+        "label": "Urgent",
+        "slug": "urgent"
+      },
+      "assignees": [
+        {
+          "id": "u-adam",
+          "handle": "adam"
+        }
+      ]
+    },
+    {
+      "id": "iss-wip-7",
+      "key": "KAN-201",
+      "summary": "Security auditor review for gate approval",
+      "state_id": "state-in-review",
+      "board_rank": "0000000000000050",
+      "priority": {
+        "id": "p-high",
+        "label": "High",
+        "slug": "high"
+      },
+      "assignees": [
+        {
+          "id": "u-agent",
+          "is_agent": true,
+          "name": "SecurityAuditor"
+        }
+      ],
+      "gate_status": "pending"
+    },
+    {
+      "id": "iss-wip-8",
+      "key": "KAN-202",
+      "summary": "Database migration review for universal graph",
+      "state_id": "state-in-review",
+      "board_rank": "0000000000000060",
+      "priority": {
+        "id": "p-med",
+        "label": "Medium",
+        "slug": "medium"
+      },
+      "assignees": [
+        {
+          "id": "u-adam",
+          "handle": "adam"
+        }
+      ]
+    },
+    {
+      "id": "iss-wip-9",
+      "key": "KAN-203",
+      "summary": "API route review for OpenAPI parity",
+      "state_id": "state-in-review",
+      "board_rank": "0000000000000070",
+      "priority": {
+        "id": "p-low",
+        "label": "Low",
+        "slug": "low"
+      },
+      "assignees": [
+        {
+          "id": "u-adam",
+          "handle": "adam"
+        }
+      ]
+    },
+    {
+      "id": "iss-wip-10",
+      "key": "KAN-301",
+      "summary": "Phase 0 governance checks",
+      "state_id": "state-done",
+      "board_rank": "0000000000000080",
+      "priority": {
+        "id": "p-med",
+        "label": "Medium",
+        "slug": "medium"
+      },
+      "assignees": [
+        {
+          "id": "u-adam",
+          "handle": "adam"
+        }
+      ],
+      "gate_status": "approved"
+    },
+    {
+      "id": "iss-wip-11",
+      "key": "KAN-302",
+      "summary": "Architecture and product spec documentation",
+      "state_id": "state-done",
+      "board_rank": "0000000000000090",
+      "priority": {
+        "id": "p-low",
+        "label": "Low",
+        "slug": "low"
+      },
+      "assignees": [
+        {
+          "id": "u-adam",
+          "handle": "adam"
+        }
+      ]
+    }
+  ]
+}

@@ -5,7 +5,7 @@ import { EmojiStory } from './dev/EmojiStory';
 import { EditorStory } from './dev/EditorStory';
 import { MediaStory } from './dev/MediaStory';
 import { RealtimeStory } from './dev/RealtimeStory';
-import { createAppRouter } from './app/routes';
+import { createAppRouter, AppRoutes } from './app/routes';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ShellPanelsProvider } from './app/shellPanels';
 import './App.css';
@@ -61,8 +61,12 @@ export function App(): JSX.Element {
     );
   }
 
-  const router = createAppRouter();
+  const route = AppRoutes();
+  if (route) {
+    return route;
+  }
 
+  const router = createAppRouter();
   return (
     <QueryClientProvider client={appQueryClient}>
       <ShellPanelsProvider>

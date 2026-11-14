@@ -5,8 +5,8 @@
   "states": [
     { "id": "state-backlog", "name": "Backlog", "group": "backlog" },
     { "id": "state-todo", "name": "Todo", "group": "unstarted" },
-    { "id": "state-in-progress", "name": "In Progress", "group": "started", "wip_soft": 3 },
-    { "id": "state-in-review", "name": "In Review", "group": "started" },
+    { "id": "state-in-progress", "name": "In Progress", "group": "started", "wip_soft": 3, "wip_soft_limit": 3 },
+    { "id": "state-in-review", "name": "In Review", "group": "started", "wip_hard": 3, "wip_hard_limit": 3 },
     { "id": "state-done", "name": "Done", "group": "completed" },
     { "id": "state-canceled", "name": "Canceled", "group": "cancelled" }
   ],

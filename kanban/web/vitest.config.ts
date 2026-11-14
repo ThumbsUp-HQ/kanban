@@ -13,8 +13,17 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.{ts,tsx}', 'build/**/*.ts', 'e2e/support/**/*.ts'],
-      exclude: ['src/main.tsx', '**/*.test.*', '**/*.spec.*', 'src/api/schema.gen.ts', '**/*.gen.ts'],
+      include: process.env.COVERAGE_INCLUDE
+        ? process.env.COVERAGE_INCLUDE.split(',')
+        : ['src/**/*.{ts,tsx}', 'build/**/*.ts', 'e2e/support/**/*.ts'],
+      exclude: [
+        'src/main.tsx',
+        '**/*.test.*',
+        '**/*.spec.*',
+        'src/api/schema.gen.ts',
+        '**/*.gen.ts',
+        '**/*.css',
+      ],
       thresholds: {
         lines: 95,
         functions: 95,
