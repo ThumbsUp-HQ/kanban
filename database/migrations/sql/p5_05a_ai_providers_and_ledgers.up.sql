@@ -63,13 +63,13 @@ REVOKE SELECT ON ai_provider_configs FROM app_rls_reader;
 GRANT SELECT (
     id, workspace_id, project_id, provider_kind, display_name,
     base_url, model_allowlist, residency_tier, priority,
-    settings_json, is_enabled, created_at, updated_at
+    settings_json, dek_kid, is_enabled, created_at, updated_at
 ) ON ai_provider_configs TO kanban_app;
 
 GRANT SELECT (
     id, workspace_id, project_id, provider_kind, display_name,
     base_url, model_allowlist, residency_tier, priority,
-    settings_json, is_enabled, created_at, updated_at
+    settings_json, dek_kid, is_enabled, created_at, updated_at
 ) ON ai_provider_configs TO app_rls_reader;
 
 -- Column-level privilege: REVOKE SELECT (wrapped_api_key, api_key_nonce, wrapped_dek) ON ai_provider_configs FROM kanban_app

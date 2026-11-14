@@ -4,14 +4,16 @@
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import urllib.parse
 import uuid
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any, Final
 
 from sqlalchemy import delete, select, text
 
-from database.models.ai import AIProviderConfig
+from database.models.ai import AIProviderConfig, AITokenLedger
 from kanban.security.envelope import (
     BLOB_VERSION,
     CODE_TAG_MISMATCH,
@@ -36,6 +38,7 @@ _LOOPBACK_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "::1", "localho
 
 _MAX_DISPLAY_NAME_LEN: Final[int] = 80
 _MAX_MODELS_LEN: Final[int] = 32
+_MAX_TOKEN_CAP: Final[int] = 10_000_000_000
 
 _DEFAULT_KEK_FALLBACK = StaticKekProvider(
     keys={"kek-v1": b"k" * 32},
@@ -116,6 +119,14 @@ def validate_base_url(base_url: str | None) -> str | None:
     if parsed.scheme != "https" and host not in _LOOPBACK_HOSTS:
         msg = "base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost)"
         raise AIConfigValidationError(msg)
+
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_link_local or ip in ipaddress.ip_network("169.254.0.0/16"):
+            msg = f"base_url must not target link-local or metadata address '{host}'"
+            raise AIConfigValidationError(msg)
+    except ValueError:
+        pass
 
     return trimmed
 
@@ -318,6 +329,7 @@ class AIProviderConfigService:
         priority: int | None = None,
         settings_json: dict[str, Any] | None = None,
         api_key: bytearray | bytes | str | None = None,
+        clear_api_key: bool = False,
         is_enabled: bool | None = None,
         air_gap_mode: bool | None = None,
     ) -> AIProviderConfig:
@@ -368,7 +380,12 @@ class AIProviderConfigService:
         if is_enabled is not None:
             config.is_enabled = is_enabled
 
-        if api_key is not None:
+        if clear_api_key:
+            config.wrapped_api_key = None
+            config.api_key_nonce = None
+            config.wrapped_dek = None
+            config.dek_kid = None
+        elif api_key is not None:
             wrapped_key, nonce, wrapped_dek, dek_kid = self._seal_key_material(
                 config_id=config.id,
                 workspace_id=config.workspace_id,
@@ -488,3 +505,96 @@ class AIProviderConfigService:
             dek_kid=dek_kid,
             kek_provider=self._kek,
         )
+
+    async def get_budgets(
+        self,
+        provider_config_id: uuid.UUID,
+        project_id: uuid.UUID | None = None,
+    ) -> list[AITokenLedger]:
+        """List active and historical token ledger rows for provider config."""
+        stmt = select(AITokenLedger).where(AITokenLedger.provider_config_id == provider_config_id)
+        if project_id is not None:
+            stmt = stmt.where(AITokenLedger.project_id == project_id)
+        stmt = stmt.order_by(AITokenLedger.period_start.desc(), AITokenLedger.period_kind.asc())
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def set_budget(  # noqa: PLR0912, PLR0913
+        self,
+        workspace_id: uuid.UUID,
+        provider_config_id: uuid.UUID,
+        period_kind: str,
+        token_cap: int,
+        *,
+        project_id: uuid.UUID | None = None,
+        now_dt: datetime | None = None,
+    ) -> AITokenLedger:
+        """Upsert current-period token ledger cap for daily or monthly period."""
+        if period_kind not in ("daily", "monthly"):
+            msg = f"period_kind must be 'daily' or 'monthly' (got {period_kind!r})"
+            raise AIConfigValidationError(msg)
+        if not (0 <= token_cap <= _MAX_TOKEN_CAP):
+            msg = f"token_cap must be between 0 and {_MAX_TOKEN_CAP} (got {token_cap})"
+            raise AIConfigValidationError(msg)
+
+        current_utc = now_dt.astimezone(UTC) if now_dt is not None else datetime.now(UTC)
+        if period_kind == "daily":
+            p_start = current_utc.date()
+        else:
+            p_start = date(current_utc.year, current_utc.month, 1)
+
+        stmt = select(AITokenLedger).where(
+            AITokenLedger.workspace_id == workspace_id,
+            AITokenLedger.provider_config_id == provider_config_id,
+            AITokenLedger.period_kind == period_kind,
+            AITokenLedger.period_start == p_start,
+        )
+        if project_id is not None:
+            stmt = stmt.where(AITokenLedger.project_id == project_id)
+        else:
+            stmt = stmt.where(AITokenLedger.project_id.is_(None))
+
+        res = await self._session.execute(stmt)
+        existing = res.scalars().first()
+
+        if existing is not None:
+            if token_cap < existing.tokens_used + existing.tokens_reserved:
+                msg = (
+                    f"New token_cap ({token_cap}) is less than currently used + reserved tokens "
+                    f"({existing.tokens_used + existing.tokens_reserved})"
+                )
+                raise AIConfigValidationError(msg)
+            existing.token_cap = token_cap
+            ledger = existing
+        else:
+            ledger = AITokenLedger(
+                id=uuid.uuid4(),
+                workspace_id=workspace_id,
+                project_id=project_id,
+                provider_config_id=provider_config_id,
+                period_kind=period_kind,
+                period_start=p_start,
+                token_cap=token_cap,
+                tokens_reserved=0,
+                tokens_used=0,
+            )
+            self._session.add(ledger)
+
+        future_stmt = select(AITokenLedger).where(
+            AITokenLedger.workspace_id == workspace_id,
+            AITokenLedger.provider_config_id == provider_config_id,
+            AITokenLedger.period_kind == period_kind,
+            AITokenLedger.period_start > p_start,
+        )
+        if project_id is not None:
+            future_stmt = future_stmt.where(AITokenLedger.project_id == project_id)
+        else:
+            future_stmt = future_stmt.where(AITokenLedger.project_id.is_(None))
+
+        fut_res = await self._session.execute(future_stmt)
+        for fut in fut_res.scalars().all():
+            if token_cap >= fut.tokens_used + fut.tokens_reserved:
+                fut.token_cap = token_cap
+
+        await self._session.flush()
+        return ledger
