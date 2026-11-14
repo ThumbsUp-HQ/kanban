@@ -147,6 +147,13 @@ class ActivityEventType(StrEnum):
     GATE_REJECTED = "GATE_REJECTED"
     GATE_TIMED_OUT = "GATE_TIMED_OUT"
     GATE_CANCELLED = "GATE_CANCELLED"
+    AUTH_CARD_CREATED = "AUTH_CARD_CREATED"
+    AUTH_CARD_UPDATED = "AUTH_CARD_UPDATED"
+    AUTH_CARD_ENABLED = "AUTH_CARD_ENABLED"
+    AUTH_CARD_DISABLED = "AUTH_CARD_DISABLED"
+    AUTH_CARD_REORDERED = "AUTH_CARD_REORDERED"
+    AUTH_CARD_DELETED = "AUTH_CARD_DELETED"
+    AUTH_CARD_HANDSHAKE_TESTED = "AUTH_CARD_HANDSHAKE_TESTED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -239,6 +246,13 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.GATE_REJECTED: ActivityCategory.AGENT_GATE,
         ActivityEventType.GATE_TIMED_OUT: ActivityCategory.AGENT_GATE,
         ActivityEventType.GATE_CANCELLED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.AUTH_CARD_CREATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_ENABLED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_DISABLED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_REORDERED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_DELETED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_HANDSHAKE_TESTED: ActivityCategory.SYSTEM,
     }
 )
 

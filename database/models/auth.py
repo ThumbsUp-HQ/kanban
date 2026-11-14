@@ -61,6 +61,9 @@ class AuthProviderCard(Base):
     last_health_status: Mapped[str] = mapped_column(
         String(64), nullable=False, default="UNVERIFIED", server_default=text("'UNVERIFIED'")
     )
+    last_admin_handshake_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )

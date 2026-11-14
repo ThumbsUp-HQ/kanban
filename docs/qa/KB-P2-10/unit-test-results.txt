@@ -1,0 +1,68 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KB-P2-10/.venv/bin/python
+rootdir: /tmp/kb-wt-KB-P2-10
+configfile: pyproject.toml
+plugins: anyio-4.16.0, socket-0.8.1, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 39 items
+
+kanban/tests/util/test_fractional_rank.py::test_base62_alphabet_properties PASSED [  2%]
+kanban/tests/util/test_fractional_rank.py::test_midpoint_rank_edge_cases PASSED [  5%]
+kanban/tests/util/test_fractional_rank.py::test_midpoint_rank_validation_errors PASSED [  7%]
+kanban/tests/util/test_fractional_rank.py::test_initial_ranks_and_rebalance PASSED [ 10%]
+kanban/tests/util/test_fractional_rank.py::test_random_insertions_sequence PASSED [ 12%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_2_security_zero_secret_leakage PASSED [ 15%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_3_fractional_rank_collate_c PASSED [ 17%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_4_handshake_probe_diagnostics PASSED [ 20%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_5_lockout_enforcement_over_http PASSED [ 23%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_6_delete_confirmation PASSED [ 25%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_7_authz_and_aal2_wall PASSED [ 28%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_8_validation_boundaries PASSED [ 30%]
+kanban/tests/auth/test_auth_cards_public_api.py::test_case_1_positive_crud_and_public_projection PASSED [ 33%]
+kanban/tests/auth/test_auth_cards_public_api.py::test_case_2_public_zero_leakage PASSED [ 35%]
+kanban/tests/auth/test_auth_cards_public_api.py::test_public_start_endpoint_routing PASSED [ 38%]
+kanban/tests/auth/test_auth_cards_public_api.py::test_public_start_endpoint_success_and_oidc_errors PASSED [ 41%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_oidc_missing_issuer PASSED [ 43%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_oauth2_missing_endpoints PASSED [ 46%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_oauth2_success PASSED [ 48%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_oauth2_500_failure PASSED [ 51%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_oauth2_default_client_failure PASSED [ 53%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_ldap_with_service_bind PASSED [ 56%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_local_admin_success PASSED [ 58%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_local_admin_verification_failure PASSED [ 61%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_unsupported_kind PASSED [ 64%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_timeout PASSED [ 66%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_ldap_tls_error PASSED [ 69%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py::test_probe_generic_exception PASSED [ 71%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_lockout_helpers PASSED [ 74%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_schemas_validation PASSED [ 76%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_fractional_rank_edge_cases PASSED [ 79%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_to_admin_schema_none_timestamps PASSED [ 82%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_get_auth_card_service_initialization PASSED [ 84%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_admin_service_crud_extended PASSED [ 87%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_service_reorder_auto_rebalance PASSED [ 89%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_service_create_and_update_edge_branches PASSED [ 92%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_admin_api_enable_and_lockout_handlers PASSED [ 94%]
+kanban/tests/auth/test_card_repository.py::test_09_serializer_and_repr_invariants PASSED [ 97%]
+kanban/tests/auth/test_card_repository.py::test_card_repository_lifecycle PASSED [100%]/tmp/kb-wt-KB-P2-10/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.auth_cards_public was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+/tmp/kb-wt-KB-P2-10/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.admin.auth_cards was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+/tmp/kb-wt-KB-P2-10/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.util.fractional_rank was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                              Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------
+kanban/auth/cards/__init__.py         6      0      0      0   100%
+kanban/auth/cards/handshake.py       94      2     28      3    96%   100->122, 183, 185
+kanban/auth/cards/lockout.py         28      0      4      0   100%
+kanban/auth/cards/repository.py      58      0     12      1    99%   198->181
+kanban/auth/cards/schemas.py         82      0      2      0   100%
+kanban/auth/cards/service.py        269     16    104     12    92%   141->143, 196, 253, 309->311, 320->334, 378-385, 422, 460, 482, 574, 591, 661
+-----------------------------------------------------------------------------
+TOTAL                               537     18    150     16    95%
+============================= 39 passed in 11.69s ==============================
