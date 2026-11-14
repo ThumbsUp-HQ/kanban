@@ -30,6 +30,9 @@ import { RealtimeStory } from '../dev/RealtimeStory';
 import { DrawerStory } from '../dev/DrawerStory';
 import { RailStory } from '../dev/RailStory';
 import { DrawerActionsStory } from '../dev/DrawerActionsStory';
+import { StickiesStory } from '../dev/StickiesStory';
+import { ProjectOverviewView } from '../features/stickies/ProjectOverviewView';
+import { WorkspaceStickiesView } from '../features/stickies/WorkspaceStickiesView';
 import { apiClient } from '../api/client';
 import type { IssueDetail } from '../features/drawer/slots';
 import { LoginPage } from '../features/auth/LoginPage';
@@ -115,7 +118,7 @@ export function ProjectIssueDetailRoute(): JSX.Element {
 }
 
 export function ProjectOverviewRoute(): JSX.Element {
-  return <RoutePlaceholder route="/projects/:projectKey/overview" />;
+  return <ProjectOverviewView />;
 }
 
 export function ProjectDocsRoute(): JSX.Element {
@@ -136,6 +139,7 @@ export function DevStoryRoute(): JSX.Element {
   if (loc.pathname === '/__dev/drawer') return <DrawerStory />;
   if (loc.pathname === '/__dev/drawer-rail' || loc.pathname === '/__dev/rail') return <RailStory />;
   if (loc.pathname === '/__dev/drawer-actions') return <DrawerActionsStory />;
+  if (loc.pathname === '/__dev/stickies') return <StickiesStory />;
   return <NotFoundView />;
 }
 
@@ -235,7 +239,7 @@ export const appRoutes: RouteObject[] = [
           },
           {
             path: 'stickies',
-            element: <RoutePlaceholder route="/stickies" />,
+            element: <WorkspaceStickiesView />,
           },
           {
             path: 'admin/auth',

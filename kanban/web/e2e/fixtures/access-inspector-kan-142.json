@@ -1,0 +1,82 @@
+{
+  "object_id": "c0000000-0000-0000-0000-000000000142",
+  "object_type": "issue",
+  "canonical_key": "KAN-142",
+  "pill_label": "Project + 2",
+  "explicit_grant_count": 2,
+  "caller_capabilities": ["VIEW", "COMMENT", "EDIT", "SHARE", "ADMIN"],
+  "inherited_scope": {
+    "kind": "project",
+    "scope_label": "📂 Project \"kanban\" (Workspace: Default)",
+    "workspace_id": "a0000000-0000-0000-0000-000000000001",
+    "workspace_name": "Default",
+    "project_id": "b0000000-0000-0000-0000-000000000001",
+    "project_key": "KAN",
+    "project_name": "kanban"
+  },
+  "users": [
+    {
+      "principal_id": "d0000000-0000-0000-0000-000000000001",
+      "handle": "@adam",
+      "display_name": "Adam Outler",
+      "capabilities": ["ADMIN", "EDIT", "COMMENT", "VIEW"],
+      "grant_source": "project_owner"
+    },
+    {
+      "principal_id": "d0000000-0000-0000-0000-000000000002",
+      "handle": "@maya",
+      "display_name": "Maya Lin",
+      "capabilities": ["EDIT", "COMMENT", "VIEW"],
+      "grant_source": "direct_share"
+    }
+  ],
+  "groups": [
+    {
+      "principal_id": "e0000000-0000-0000-0000-000000000001",
+      "name": "Core Backend",
+      "member_count": 11,
+      "external_source": "LDAP",
+      "capabilities": ["EDIT", "COMMENT", "VIEW"],
+      "grant_source": "project_role"
+    },
+    {
+      "principal_id": "e0000000-0000-0000-0000-000000000002",
+      "name": "SecOps Reviewers",
+      "member_count": 4,
+      "external_source": "OIDC",
+      "capabilities": ["COMMENT", "VIEW"],
+      "grant_source": "direct_share"
+    }
+  ],
+  "agents": [
+    {
+      "principal_id": "f0000000-0000-0000-0000-000000000001",
+      "display_name": "Local Sparkle",
+      "principal_type": "AGENT",
+      "provider_badge": "ollama/qwen2.5-coder",
+      "scope_summary": "Project Scoped",
+      "role": "Read",
+      "capabilities": ["VIEW"]
+    },
+    {
+      "principal_id": "f0000000-0000-0000-0000-000000000002",
+      "display_name": "Transition Gate",
+      "principal_type": "SERVICE_PRINCIPAL",
+      "provider_badge": "cli: agy -p, :ro repo",
+      "scope_summary": "In Review->Done",
+      "role": "Gate",
+      "capabilities": ["TRANSITION", "VIEW"]
+    }
+  ],
+  "deny_overrides": [
+    {
+      "principal_id": "e0000000-0000-0000-0000-000000000003",
+      "principal_type": "GROUP",
+      "display_name": "Contractors Group",
+      "redacted": false,
+      "denied_capabilities": ["EDIT", "TRANSITION", "SHARE"]
+    }
+  ],
+  "redacted_entries": [],
+  "redacted_count": 0
+}

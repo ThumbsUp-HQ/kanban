@@ -294,13 +294,14 @@ def _compile_search_gate_predicates(filters: FilterSpec) -> list[Any]:
 
 def compile_issue_filter_predicates(
     session: AsyncSession,
-    project: Project,
+    project: Project | None,
     filters: FilterSpec,
     caller_principal_id: uuid.UUID,
 ) -> list[Any]:
     """Compile a FilterSpec DSL into a list of SQLAlchemy filter predicates."""
     _ = session
-    validate_group_axes(project, None, None, filters)
+    if project is not None:
+        validate_group_axes(project, None, None, filters)
 
     obj_alias = aliased(ObjectRecord, name="issue_object")
     archived_clause = (
@@ -308,7 +309,6 @@ def compile_issue_filter_predicates(
     )
 
     predicates: list[Any] = [
-        Issue.project_id == project.id,
         exists().where(
             obj_alias.id == Issue.id,
             obj_alias.deleted_at.is_(None),
@@ -316,10 +316,18 @@ def compile_issue_filter_predicates(
         ),
     ]
 
-    predicates.extend(_compile_state_predicates(project, filters))
+    if project is not None:
+        predicates.append(Issue.project_id == project.id)
+        predicates.extend(_compile_state_predicates(project, filters))
+        predicates.extend(_compile_cycle_predicates(project, filters))
+    else:
+        if filters.state_ids:
+            predicates.append(Issue.state_id.in_(filters.state_ids))
+        if filters.priority_ids:
+            predicates.append(Issue.priority_id.in_(filters.priority_ids))
+
     predicates.extend(_compile_assignee_predicates(filters, caller_principal_id))
     predicates.extend(_compile_labels_predicates(filters))
-    predicates.extend(_compile_cycle_predicates(project, filters))
     predicates.extend(_compile_module_parent_predicates(filters))
     predicates.extend(_compile_dates_predicates(filters))
     predicates.extend(_compile_blocked_predicate(filters))

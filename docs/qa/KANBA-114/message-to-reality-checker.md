@@ -1,10 +1,11 @@
-# Reality-Checker Verification Packet: KANBA-114 (KB-P5-12)
+# Reality-Checker Verification Packet: KANBA-114 (KB-P3-49)
 
-- **Ticket:** `KANBA-114` (`KB-P5-12`: `[Phase 5 / Database + API] Cryptographic manifest_sha256 escalation approvals (Scope x Principal matrix, AAL2 & tamper auto-revocation)`)
+- **Ticket:** `KANBA-114` (`KB-P3-49`: `[Phase 3 / Frontend] Effective Access Inspector popover: Users, Groups, Agents kill-switch, Deny overrides & redaction`)
 - **Branch:** `feat/KANBA-114`
-- **Linear Alembic Chain:** `p5_11_custom_fields` -> `p5_12_custom_field_approvals`
-- **Module Coverage:** 96.95% branch + line (exceeds mandatory >=95% threshold)
-- **Static Analysis:** All clean (Ruff, Ruff format, Mypy strict, Lint-imports, License gate, Check-no-dashes)
+- **Worktree:** `/tmp/kb-wt-KANBA-114`
+- **Unit Test Coverage:** 100% Statements, 96.57% Branches, 100% Functions, 100% Lines (exceeds mandatory >=95% threshold)
+- **Static Analysis & Builds:** All clean (TypeScript typecheck exit 0, ESLint exit 0 with 0 warnings, Vite build exit 0, Check-no-dashes 0 violations)
+- **E2E Tests:** 9/9 passing across desktop, tablet, and mobile projects in Playwright
 
 ---
 
@@ -12,40 +13,35 @@
 
 | Requirement / Criterion | Status | Evidence File / Command |
 | :--- | :--- | :--- |
-| **DDL & Migration:** `custom_field_approvals` with ENABLE & FORCE RLS | PASS | `docs/qa/KANBA-114/schema-dump.sql`<br>`database/migrations/versions/p5_12_custom_field_approvals.py` |
-| **Database Constraints:** Scope x Principal matrix & dual approver distinct | PASS | `database/tests/test_custom_field_approvals_trigger.py` |
-| **PostgreSQL Trigger:** `custom_field_manifest_tamper_revoke` auto-revocation | PASS | `database/tests/test_custom_field_approvals_trigger.py`<br>`docs/qa/KANBA-114/schema-dump.sql` |
-| **Escalation Policy & Tier Enforcement:** S13.2 Scope x Principal matrix | PASS | `kanban/custom_fields/approvals.py`<br>`kanban/tests/custom_fields/test_approvals_matrix.py` |
-| **HMAC Signature & Tamper Detection:** HKDF-derived key & fail-closed execution check | PASS | `kanban/custom_fields/approvals.py`<br>`kanban/tests/custom_fields/test_approvals_matrix.py` |
-| **Cache Partition Key:** Scope-aware partition keys & user_access_hash | PASS | `kanban/custom_fields/approvals.py`<br>`kanban/tests/custom_fields/test_approvals_matrix.py` |
-| **REST Router & Endpoints:** POST request, POST approve, GET history with 25.0ms floor | PASS | `kanban/api/v1/custom_field_approvals.py`<br>`kanban/tests/custom_fields/test_custom_field_approvals_api.py` |
-| **AAL2 Freshness & Dual-Control:** <=900s AAL2 freshness & two distinct Server Admins | PASS | `kanban/tests/custom_fields/test_custom_field_approvals_api.py` |
-| **Activity Ledger:** APPROVAL_REQUESTED, APPROVED_PRIMARY, APPROVED, APPROVAL_REVOKED | PASS | `kanban/services/activity.py` |
-| **Wire Sample Capture:** RFC 7807 problem details & wire exchanges | PASS | `docs/qa/KANBA-114/contract-sample.json` |
-| **Specialist Gates:** API & UI reviews | PENDING | `docs/qa/KANBA-114/api-specialist-review.md`<br>`docs/qa/KANBA-114/ui-specialist-review.md` |
+| **Component Files:** `AccessInspectorPopover.tsx`, `.css`, `AgentKillSwitchControl.tsx`, `useAccessInspector.tsx`, `index.ts`, `types.ts` | PASS | `kanban/web/src/features/access/` |
+| **AppShell Integration:** `<AccessInspectorHost />` wired inside shell | PASS | `kanban/web/src/app/AppShell.tsx` |
+| **Unit Test Coverage (>=95%):** 22 tests passing with 100% stmts, 96.57% branch, 100% funcs, 100% lines | PASS | `docs/qa/KANBA-114/unit-test-results.txt` |
+| **Build / Type / Lint Clean:** `typecheck`, `lint`, and `build` exit 0 with 0 errors | PASS | `docs/qa/KANBA-114/build-check.txt` |
+| **Playwright E2E:** 9/9 tests passed across desktop, tablet, and mobile | PASS | `docs/qa/KANBA-114/e2e-results.txt` |
+| **Computed Whitespace Proof:** `min-height: 38px`, `24px x 24px` emoji hints, `8.6:1` contrast | PASS | `docs/qa/KANBA-114/computed-styles-*.json` |
+| **Annotated Screenshots:** 9 responsive screenshots (3 scenarios x 3 viewports) | PASS | `docs/qa/KANBA-114/screenshots/` |
+| **Contract Sample:** Raw `access_manifest` and `POST .../agent-kill-switch` exchange | PASS | `docs/qa/KANBA-114/contract-sample.json` |
+| **Specialist Gates:** UI and API specialist reviews | PENDING | `docs/qa/KANBA-114/ui-specialist-review.md`<br>`docs/qa/KANBA-114/api-specialist-review.md` |
 
 ---
 
-### 2. Security Invariants Preserved
-1. **Scope x Principal Escalation Matrix:** Validates all combinations per S13.2:
-   - `(PROJECT, INVOKING_USER)`: Baseline passthrough, zero extra approval needed.
-   - `(PROJECT, PROJECT_ADMIN_SP)`: Requires `PROJECT_ADMIN` with AAL2 and `sp_warning_acknowledged=True`.
-   - `(WORKSPACE, INVOKING_USER)`: Requires `WORKSPACE_ADMIN` with AAL2.
-   - `(WORKSPACE, PROJECT_ADMIN_SP)`: Requires `WORKSPACE_ADMIN` with AAL2 and `sp_warning_acknowledged=True`.
-   - `(SERVER, INVOKING_USER)`: Requires dual-control `SERVER_ADMIN_DUAL` (two distinct Server Admins with AAL2).
-   - `(SERVER, SERVER_ADMIN_SP)`: Requires dual-control `SERVER_ADMIN_DUAL` (two distinct Server Admins with AAL2 and `sp_warning_acknowledged=True`).
-   - All invalid combinations (such as `(PROJECT, SERVER_ADMIN_SP)`) are rejected at API (422) and database CHECK constraint.
-2. **Dual-Control Distinct Approvers:** When approving SERVER tier fields, primary and secondary approvers must be distinct principals (`secondary_approver_id <> primary_approver_id`). Both the service layer and database CHECK constraint enforce this strictly.
-3. **AAL2 Freshness Gate:** Approvals require an active AAL2 session verified within the last 900 seconds (`aal2_verified_at >= now() - 900s`). Stale sessions or AAL1 sessions fail with `403 AAL2_REQUIRED`.
-4. **Trigger-Based Tamper Auto-Revocation:** The database trigger `custom_field_manifest_tamper_revoke` executes `AFTER UPDATE OF manifest_sha256 ON custom_field_definitions`. Any change to manifest_sha256 immediately updates all active approvals (`PENDING`, `PENDING_SECOND_APPROVER`, `APPROVED`) to `REVOKED` with `revoked_reason = 'MANIFEST_SHA256_CHANGED'`.
-5. **Cryptographic Signature Verification:** `assert_execution_authorized` independently recalculates HMAC-SHA256 over `(field_id, manifest_sha256, target_scope, credential_mode, primary_approver_id, secondary_approver_id)` using an HKDF-derived subkey `auth/custom_field_approvals`. If signature verification fails, execution fails closed with `tamper detected`.
-6. **Timing Equalization:** All approval endpoints execute inside `timing_floor(floor_ms=25.0)` to eliminate timing side-channels.
+### 2. Core Invariants Preserved
 
----
-
-### 3. Test & Verification Artifacts
-- `unit-test-results.txt`: 20/20 tests passing with 96.95% branch+line coverage across target modules.
-- `build-check.txt`: Ruff clean, Ruff format clean, Mypy strict clean (348 files), Lint-imports clean (2 kept, 0 broken), License gate clean (0 violations), Check-no-dashes clean (0 non-ASCII dashes).
-- `schema-dump.sql`: Complete DDL, `relforcerowsecurity = t`, CHECK constraints, and trigger definition.
-- `contract-sample.json`: Wire exchanges for request 201, 403 AAL2_REQUIRED, dual-control primary/secondary, 409 MANIFEST_MISMATCH, and post-edit REVOKED state.
-- `git-diff.patch`: Full unified diff for KANBA-114.
+1. **Wireframe Parity (Spec S3.4):**
+   - Header with object type, mono canonical key (e.g. `EFFECTIVE ACCESS FOR ISSUE KAN-142`), and `[Manage Access...]` button rendered strictly when caller has `ADMIN` or `SHARE` capability.
+   - Inherited Scope banner (`📂 Project "kanban" (Workspace: Default)`).
+   - 4 ordered sections: `👤 USERS (<N> Direct)`, `👥 GROUPS (<N>)`, `🤖 AGENTS & WORKFLOW RUNNERS (<N> Active)`, and `🔒 RESTRICTED OVERRIDES (<N>)`. Empty sections render calm `None` line.
+2. **Anti-Enumeration Redaction & Sanitization (Spec S3.4 item 2, S5.4):**
+   - Redacted entries render strictly as neutral summary rows: `<N> External Collaborator(s) - outside your visibility boundary` (singular for 1). Leaked fields (like email or handle) on redacted objects are strictly ignored.
+   - Hostile principal names (e.g. `<img src=x onerror=alert(1)>`) render as literal text without DOM script execution or `<img>` injection.
+3. **Indistinguishable 403 / 404 (Spec S3.4):**
+   - Both HTTP 403 and 404 render byte-identical message: `Object was not found or you do not have access.` (zero existence oracle).
+4. **Agent Kill Switch Safety & Focus Trapping (Spec S3.4, S6.3):**
+   - 2-step inline confirmation banner (`Revoke all active agent grants on <KEY>?`).
+   - Default focus is placed on `[Cancel]` button to prevent accidental Enter activation.
+   - Optimistic revocation with CSRF protection (`X-CSRF-Token` header) and automatic rollback announcement on failure.
+5. **Responsive Spatial Rhythm (Spec S6.1, S6.2):**
+   - Principal rows enforce `min-height: var(--prop-row-h)` (38px).
+   - Emoji hints sized at 24px x 24px with tooltip metadata.
+   - High-contrast Explicit DENY pill (`8.6:1` contrast ratio, exceeding 4.5:1 requirement).
+   - Mobile viewport renders full-width bottom sheet (100vw, max-height 88dvh) with rounded top corners.

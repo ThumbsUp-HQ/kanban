@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from kanban.api.deps import DenyAllResolver
+from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
 from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
 from kanban.api.problems import (
     ProblemException,
@@ -126,6 +127,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Mount canonical /api/v1 router tree
     app.include_router(build_v1_router(), prefix="/api/v1")
     app.include_router(mcp_introspect_router)
+    app.include_router(mcp_ephemeral_router)
     app.include_router(oauth_root_router)
 
     # Register activity listener for notifications and auto-subscriptions

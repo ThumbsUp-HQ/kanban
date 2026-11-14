@@ -43,6 +43,10 @@ class Settings(BaseSettings):
             "KANBAN_PUBLIC_BASE_URL", "KB_PUBLIC_BASE_URL", "public_base_url"
         ),
     )
+    air_gap_mode: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("KB_AIR_GAP_MODE", "KANBAN_AIR_GAP_MODE", "air_gap_mode"),
+    )
 
     public_origin: str | None = Field(
         default=None,

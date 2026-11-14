@@ -103,3 +103,10 @@ export function useShellPanels(): ShellPanelsContextValue {
   }
   return ctx;
 }
+
+/**
+ * Accesses shell panel activation controls optionally without throwing.
+ */
+export function useOptionalShellPanels(): ShellPanelsContextValue | null {
+  return useContext(ShellPanelsContext);
+}

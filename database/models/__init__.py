@@ -29,6 +29,7 @@ from database.models.base import (
 from database.models.custom_field import CustomFieldDefinition, CustomFieldValue
 from database.models.custom_field_approval import CustomFieldApproval
 from database.models.embeddings import ObjectEmbedding
+from database.models.import_mapping import ImportEntityMapping
 from database.models.issues import (
     CommentReaction,
     Issue,
@@ -40,6 +41,7 @@ from database.models.issues import (
 )
 from database.models.knowledge import Doc, Page, PageVersion, Sticky
 from database.models.mcp_api_key import McpApiKey
+from database.models.mcp_ephemeral_token import McpEphemeralToken
 from database.models.notifications import Notification
 from database.models.oauth import (
     OAuthAuthorizationCode,
@@ -94,6 +96,7 @@ __all__ = [
     "EffectiveResourceAccess",
     "Group",
     "IdentityLinkIntent",
+    "ImportEntityMapping",
     "InvalidLinkReason",
     "InvalidObjectLinkAudit",
     "Issue",
@@ -108,6 +111,7 @@ __all__ = [
     "LocalAdminCredential",
     "LtreeType",
     "McpApiKey",
+    "McpEphemeralToken",
     "Module",
     "Notification",
     "OAuthAuthorizationCode",

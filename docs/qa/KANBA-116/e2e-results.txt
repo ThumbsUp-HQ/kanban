@@ -1,0 +1,23 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 12 tests using 10 workers
+
+  ✓   5 [desktop] › e2e/stickies/stickies-promotion.spec.ts:349:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 04-stickies-dark-theme: preserves WCAG AA contrast across 6-palette surfaces under dark theme (1.6s)
+  ✓   6 [tablet] › e2e/stickies/stickies-promotion.spec.ts:349:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 04-stickies-dark-theme: preserves WCAG AA contrast across 6-palette surfaces under dark theme (1.7s)
+  ✓   3 [desktop] › e2e/stickies/stickies-promotion.spec.ts:94:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 01-stickies-six-palette-grid: renders responsive grid with all 6 palette cards, padding, and access pills (1.8s)
+  ✓   2 [mobile] › e2e/stickies/stickies-promotion.spec.ts:94:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 01-stickies-six-palette-grid: renders responsive grid with all 6 palette cards, padding, and access pills (1.9s)
+  ✓   9 [desktop] › e2e/stickies/stickies-promotion.spec.ts:250:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 03-promoted-doc-stub: converts sticky into compact doc stub with open link and unarchive copy (1.8s)
+  ✓   8 [tablet] › e2e/stickies/stickies-promotion.spec.ts:250:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 03-promoted-doc-stub: converts sticky into compact doc stub with open link and unarchive copy (1.9s)
+  ✓   1 [tablet] › e2e/stickies/stickies-promotion.spec.ts:94:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 01-stickies-six-palette-grid: renders responsive grid with all 6 palette cards, padding, and access pills (2.1s)
+  ✓   7 [mobile] › e2e/stickies/stickies-promotion.spec.ts:193:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 02-promotion-banner-and-hint: surfaces non-modal banner on complex sticky with elaboration popover and snooze (1.9s)
+  ✓   4 [tablet] › e2e/stickies/stickies-promotion.spec.ts:193:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 02-promotion-banner-and-hint: surfaces non-modal banner on complex sticky with elaboration popover and snooze (2.1s)
+  ✓  10 [desktop] › e2e/stickies/stickies-promotion.spec.ts:193:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 02-promotion-banner-and-hint: surfaces non-modal banner on complex sticky with elaboration popover and snooze (1.9s)
+  ✓  11 [mobile] › e2e/stickies/stickies-promotion.spec.ts:349:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 04-stickies-dark-theme: preserves WCAG AA contrast across 6-palette surfaces under dark theme (675ms)
+  ✓  12 [mobile] › e2e/stickies/stickies-promotion.spec.ts:250:3 › Stickies 6-Palette Grid & Promotion E2E (KB-P3-51) › 03-promoted-doc-stub: converts sticky into compact doc stub with open link and unarchive copy (824ms)
+
+  12 passed (21.2s)
+EXIT CODE: 0

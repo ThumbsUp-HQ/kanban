@@ -1,157 +1,129 @@
-# API Specialist Gate Final Audit: APPROVED for KANBA-114 (KB-P5-12)
+# API Specialist Gate Review: KANBA-114 (KB-P3-49)
 
-- Reviewer: arch-reviewer (Swarm Systems/Backend Architect & API Specialist Gate)
-- Worktree: `/tmp/kb-wt-KANBA-114`
-- Branch: `feat/KANBA-114`
-- Head Commit SHA: `ca9b4dd`
-- Ticket: `KANBA-114` (`KB-P5-12`: `[Phase 5 / Database + API] Cryptographic manifest_sha256 escalation approvals (Scope x Principal matrix, AAL2 & tamper auto-revocation)`)
+- **Ticket**: `KANBA-114` (`KB-P3-49`: `[Phase 3 / Frontend] Effective Access Inspector popover: Users, Groups, Agents kill-switch, Deny overrides & redaction`)
+- **Reviewer**: `@arch-reviewer` (Systems/Backend Architect & API Specialist)
+- **Worktree**: `/tmp/kb-wt-KANBA-114`
+- **Branch**: `feat/KANBA-114` (commit `6343fb0`)
+- **Verdict**: **APPROVED**
 
 ---
 
-### 1. Executive Summary & Verification Matrix
+## 1. Executive Summary & Verification Matrix
 
-A comprehensive systems architecture, database schema, cryptographic protocol, and REST API specialist audit was conducted for `KANBA-114` (`KB-P5-12`) in `/tmp/kb-wt-KANBA-114`. This ticket implements the cryptographic escalation approval subsystem governing custom field scope and principal escalations beyond the default `(PROJECT, INVOKING_USER)` boundary according to Section 13.2, Section 4.2, and Section 3.2 specifications.
+As Systems/Backend Architect & API Specialist, I have conducted a rigorous architectural and API consumption audit of `KANBA-114` (`KB-P3-49`), implementing the Effective Access Inspector popover according to specifications in `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` (Sections 3.4, 3.2, 6.1, 6.2).
 
-All architectural invariants, database constraints, tamper auto-revocation triggers, dual-control workflows, and timing safety gates have been rigorously inspected and verified.
+The implementation satisfies all architectural, API contract, security, anti-enumeration, and CSRF requirements:
+- **API Wire Contract Consumption (`GET /api/v1/objects/{id}/access`)**: Consumes the full `AccessManifest` model (inherited scope, direct users, synced groups, active agents, deny overrides, and caller capabilities) with clean fallback and optimistic updates.
+- **Anti-Enumeration Redaction Invariant (S3.4 item 2, S3.5)**: Out-of-boundary principals marked with `redacted: true` (or enumerated in `redacted_count`) render strictly as `<N> External Collaborator(s) - outside your visibility boundary` (or `"1 External Collaborator"`). Any leaked fields on redacted entries (such as email or handle) are strictly pruned and never emitted to the DOM.
+- **Indistinguishable 403/404 Parity (S3.4, S3.5)**: HTTP 403 Forbidden and 404 Not Found return byte-identical client error messaging (`Object was not found or you do not have access.`), eliminating object existence oracles.
+- **Agent Kill Switch Hook & CSRF Protection (S3.2, S3.4)**: `AgentKillSwitchControl` enforces 2-step inline confirmation with default focus on Cancel to prevent accidental activation; dispatches `POST /api/v1/objects/{id}/access/agent-kill-switch` with mandatory `X-CSRF-Token`; executes optimistic agent revocation with deterministic rollback on network or server failure.
+- **Input Sanitization & Egress Protection**: UUID validation via strict regex `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i` rejects malformed strings and path-traversal inputs before initiating network calls.
 
-| Verification Dimension | Specification Target | Observed Status | Verdict |
+| Verification Dimension | Specification Target | Observed Implementation | Verdict |
 | :--- | :--- | :--- | :--- |
-| **S13.2 Scope x Principal Matrix** | 4 valid escalated rows; disallow invalid combos | Enforced in DB CHECK constraint & service layer (`422 ESCALATION_COMBO_INVALID`) | PASS |
-| **Database DDL & Named Constraints** | Strict CHECKs on scope, principal, AAL, and dual control | `custom_field_approvals_scope_principal_combo_check` & `dual_approver_distinct_check` verified | PASS |
-| **FORCE Row-Level Security** | `ENABLE` + `FORCE RLS` on `custom_field_approvals` | `relforcerowsecurity = t`; SELECT for admins; INSERT/UPDATE require AAL >= 2 | PASS |
-| **Tamper Auto-Revocation Trigger** | Auto-revoke approvals on `manifest_sha256` update | Trigger `custom_field_manifest_tamper_revoke` marks rows `REVOKED` (`MANIFEST_SHA256_CHANGED`) | PASS |
-| **Dual-Control Enforcement** | Distinct Server Admins for SERVER scope approvals | Multi-step `PENDING -> PENDING_SECOND_APPROVER -> APPROVED`; self-second approval rejected | PASS |
-| **AAL2 Step-Up & Freshness Gate** | AAL level >= 2 verified within <= 900 seconds | Rejects AAL1 and expired AAL2 (>900s) with RFC 7807 403 `AAL2_REQUIRED` | PASS |
-| **Service Principal Warning** | Explicit `sp_warning_acknowledged` required for SP modes | Rejects approval without acknowledgement with RFC 7807 422 `SP_WARNING_ACK_REQUIRED` | PASS |
-| **Cryptographic HMAC Signature** | 32-byte HMAC-SHA256 bound to manifest and approvers | `compute_approval_signature_hmac` using subkey `custom-field-approval/v1`; constant-time check | PASS |
-| **Fail-Closed Execution Gate** | `assert_execution_authorized` fails closed on tamper | Raises `ApprovalRevokedError(code="APPROVAL_REVOKED")` if manifest or HMAC tampered | PASS |
-| **Cache Partitioning Isolation** | Scope-aware key generation preventing cross-tenant leaks | `user_access_hash` for user OBO; `b""` for SP; `should_cache=False` for SERVER scope | PASS |
-| **REST Endpoints & Timing Floor** | Wrapped in 25.0ms timing floor; anti-enumeration | `timing_floor(floor_ms=25.0)` on request, approve, and list routes; uniform 404s | PASS |
-| **Audit Ledger Recording** | Immutable audit records on lifecycle transitions | Emits `CUSTOM_FIELD_APPROVAL_REQUESTED`, `APPROVED_PRIMARY`, `APPROVED`, `REVOKED` | PASS |
-| **Test Coverage & Metrics** | >= 95% line + branch coverage across target modules | 20/20 passed in 4.88s; **96.95%** total branch + line coverage | PASS |
-| **Static Code Quality** | Zero compiler, typing, formatting, or contract errors | Ruff clean, Ruff format clean (795 files), Mypy strict clean, Lint-imports clean | PASS |
-| **Typography Standard** | Strictly plain ASCII hyphens `-` only | Zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) | PASS |
+| **API Manifest Model** | S3.4 full access manifest consumption | `types.ts` & `AccessInspectorPopover.tsx` cleanly deserialize all 5 sections | PASS |
+| **Anti-Enumeration** | S3.4 item 2 zero principal leakage | Redacted rows render `"1 External Collaborator"`; extra fields pruned | PASS |
+| **Hostile Input & XSS** | React text child nodes; zero HTML injection | Group name `<img src=x onerror=alert(1)>` renders literal text | PASS |
+| **Existence Oracle Defense** | S3.4 byte-identical 403/404 handling | Uniform string: `"Object was not found or you do not have access."` | PASS |
+| **CSRF on Mutations** | Double-submit CSRF protection on POST | `apiFetch` transmits `X-CSRF-Token` header on kill-switch mutation | PASS |
+| **Optimistic Rollback** | Immediate state update + rollback on error | Optimistic empty `agents: []` with rollback announcement on 500 | PASS |
+| **Input Validation** | Canonical UUID format validation | Strict regex `/^[0-9a-f]{8}-...-[0-9a-f]{12}$/i` rejects non-UUIDs | PASS |
+| **Role Gating** | Caller capabilities determine controls | Non-admin callers see zero kill-switch and manage-access buttons | PASS |
+| **Unit Test Coverage** | >= 95% lines, branches, funcs, stmts | 22/22 passed in 2.18s; **100%** lines, **96.57%** branch coverage | PASS |
+| **Static Code Quality** | Zero compiler, linter, or type errors | `tsc -b --noEmit`, `eslint`, `vite build` clean (exit code 0) | PASS |
+| **Typography Standard** | Plain ASCII hyphens `-` only | Zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) | PASS |
 
 ---
 
-### 2. Deep Technical & Security Invariant Audits
+## 2. Deep Technical & Security Invariant Audits
 
-#### A. S13.2 Scope x Principal Escalation Matrix & Database Constraints
-1. **Scope x Principal Permitted Combinations:**
-   - Section 13.2 mandates that custom fields execute strictly within specific permission tiers:
-     * `(PROJECT, INVOKING_USER)`: Default execution boundary. No escalation approval required.
-     * `(PROJECT, PROJECT_ADMIN_SP)`: Project scope under elevated Service Principal. Requires `PROJECT_ADMIN` tier approval and explicit acknowledgement of `sp_warning_acknowledged = True`.
-     * `(WORKSPACE, INVOKING_USER)`: Workspace-wide scope under invoking user credentials. Requires `WORKSPACE_ADMIN` tier approval.
-     * `(WORKSPACE, PROJECT_ADMIN_SP)`: Workspace-wide scope under elevated Service Principal. Requires `WORKSPACE_ADMIN` tier approval and `sp_warning_acknowledged = True`.
-     * `(SERVER, INVOKING_USER)`: Server-wide scope under invoking user credentials. Requires `SERVER_ADMIN_DUAL` dual-control approval.
-     * `(SERVER, SERVER_ADMIN_SP)`: Server-wide scope under elevated Service Principal. Requires `SERVER_ADMIN_DUAL` dual-control approval and `sp_warning_acknowledged = True`.
-2. **PostgreSQL Named CHECK Constraints (`p5_12_custom_field_approvals.up.sql`):**
-   - The PostgreSQL migration enforces the matrix directly at the storage layer via named constraint `custom_field_approvals_scope_principal_combo_check`:
-     ```sql
-     CONSTRAINT custom_field_approvals_scope_principal_combo_check CHECK (
-         (target_scope = 'PROJECT'   AND credential_mode IN ('INVOKING_USER', 'PROJECT_ADMIN_SP')) OR
-         (target_scope = 'WORKSPACE' AND credential_mode IN ('INVOKING_USER', 'PROJECT_ADMIN_SP')) OR
-         (target_scope = 'SERVER'    AND credential_mode IN ('INVOKING_USER', 'SERVER_ADMIN_SP'))
-     )
-     ```
-   - Invalid combinations (e.g. `(PROJECT, SERVER_ADMIN_SP)` or `(SERVER, PROJECT_ADMIN_SP)`) fail at both the REST API layer (`422 ESCALATION_COMBO_INVALID`) and the database storage layer.
-3. **Dual Approver Distinctness:**
-   - Named constraint `custom_field_approvals_dual_approver_distinct_check`:
-     ```sql
-     CONSTRAINT custom_field_approvals_dual_approver_distinct_check CHECK (
-         secondary_approver_id IS NULL OR secondary_approver_id <> primary_approver_id
-     )
-     ```
-   - Guarantees that a single administrator can never satisfy dual-control requirements through self-approval.
+### 2.1 API Consumption & Capability Gating (`GET /api/v1/objects/{id}/access`)
+- **Query Key & Lifecycle**: `AccessInspectorPopover.tsx` uses `useQuery` bound to `qk.access(objectId)` with standard query configuration.
+- **Capability-Gated Surface Controls**:
+  * `[Manage Access...]` button: Only mounted when `caller_capabilities` contains `'SHARE'` or `'ADMIN'`. Dispatches `kb:open-manage-access` custom event.
+  * `[ Kill Switch ]` button: Only mounted when `caller_capabilities` contains `'ADMIN'` AND active agents count > 0.
+  * When caller holds only `VIEW` or `COMMENT`, administrative controls are completely absent from the DOM, not hidden via CSS.
 
-#### B. PostgreSQL Tamper Auto-Revocation Trigger
-1. **Trigger Architecture (`custom_field_manifest_tamper_revoke`):**
-   - Attached to `custom_field_definitions` as:
-     ```sql
-     CREATE TRIGGER custom_field_manifest_tamper_revoke
-     AFTER UPDATE OF manifest_sha256 ON custom_field_definitions
-     FOR EACH ROW
-     EXECUTE FUNCTION custom_field_manifest_tamper_revoke_tf();
-     ```
-   - When any update to a custom field definition modifies `manifest_sha256` (`NEW.manifest_sha256 IS DISTINCT FROM OLD.manifest_sha256`), the trigger executes within the same atomic transaction:
-     ```sql
-     UPDATE custom_field_approvals
-     SET status = 'REVOKED',
-         revoked_at = clock_timestamp(),
-         revoked_reason = 'MANIFEST_SHA256_CHANGED'
-     WHERE field_id = NEW.id
-       AND status IN ('PENDING', 'PENDING_SECOND_APPROVER', 'APPROVED');
-     ```
-2. **Single-Byte Tamper Verification:**
-   - Verified via unit test `test_custom_field_approvals_trigger.py`: modifying a single byte in `script_source` or `output_format_metadata` changes the SHA-256 manifest hash, immediately tripping the trigger and updating active approvals to `REVOKED`.
-   - Verified that `assert_execution_authorized` fails closed with `ApprovalRevokedError(code="APPROVAL_REVOKED")`.
+### 2.2 Anti-Enumeration Redaction & XSS Defense (S3.4, S5.4)
+- **Redaction Sanitization**: In `AccessInspectorPopover.tsx`, the redacted section renders:
+  ```tsx
+  {hasRedacted && (
+    <section className="access-inspector__section">
+      {hasRedactedEntries ? (
+        (manifest.redacted_entries ?? []).map((entry, idx) => (
+          <div key={`redacted-${String(idx)}`} className="access-inspector__row access-inspector__row--redacted">
+            <span className="access-inspector__redacted-label">
+              {formatRedactedLabel(manifest.redacted_count, entry.label)} - outside your visibility boundary
+            </span>
+          </div>
+        ))
+      ) : (
+        <div className="access-inspector__row access-inspector__row--redacted">
+          <span className="access-inspector__redacted-label">
+            {formatRedactedLabel(manifest.redacted_count)} - outside your visibility boundary
+          </span>
+        </div>
+      )}
+    </section>
+  )}
+  ```
+- **Defense-in-Depth Leak Proof**: Even if an upstream API bug were to serialize private fields (e.g., `email: "secret@vendor.io"`), the component only ever references `entry.label`. Unit test `AccessInspectorPopover.test.tsx` verifies that `secret@vendor.io` is never present anywhere in `document.body.textContent`.
+- **XSS Immunity**: Hostile principal names (e.g. `<img src=x onerror=alert(1)>`) are passed directly into React string children (`<span>{group.name}</span>`), preventing DOM script execution (`querySelector('img') === null`).
 
-#### C. Cryptographic HMAC Signature & Execution Authorization Gate
-1. **Subkey Derivation & Signature Computation:**
-   - `compute_approval_signature_hmac` derives a purpose-bound cryptographic key via HKDF:
-     `subkey = derive_subkey(auth_pepper, "custom-field-approval/v1")`.
-   - The HMAC-SHA256 signature is computed over the canonical binary concatenation:
-     `field_id.bytes + manifest_sha256 + target_scope.encode() + credential_mode.encode() + primary_approver_id.bytes + (secondary_approver_id.bytes if present else 16 zero-bytes)`.
-2. **Fail-Closed Execution Gate (`assert_execution_authorized`):**
-   - For `(PROJECT, INVOKING_USER)` fields, returns `None` immediately without database overhead.
-   - For escalated fields:
-     * Queries `custom_field_approvals` for an `APPROVED` record matching `field_id` and `manifest_sha256`.
-     * Rejects missing or non-approved records with `ApprovalRevokedError`.
-     * Validates that `approval_signature_hmac` matches the recomputed HMAC using constant-time `hmac.compare_digest`.
-     * Defends against direct database tampering: even if an attacker directly updates `status = 'APPROVED'` in PostgreSQL, execution remains blocked because the cryptographic signature check fails closed.
+### 2.3 Indistinguishable 403 / 404 Response Handling (S3.4)
+- When a caller lacks access to an object, or when an object does not exist, the component catches the failure and renders:
+  ```tsx
+  {isError && (
+    <div className="access-inspector__error" role="alert">
+      Object was not found or you do not have access.
+    </div>
+  )}
+  ```
+- Both HTTP 403 and 404 trigger `isError`, outputting the byte-identical string without revealing whether the target UUID exists in the system.
 
-#### D. Dual-Control Approval Workflow & AAL2 Freshness Gates
-1. **Multi-Step Approval Lifecycle for SERVER Tier:**
-   - Step 1: First Server Administrator submits approval. Row status transitions from `PENDING` to `PENDING_SECOND_APPROVER`, recording `primary_approver_id`, `primary_approver_aal`, and `primary_approved_at`. Activity record `CUSTOM_FIELD_APPROVED_PRIMARY` is emitted.
-   - Step 2: Second distinct Server Administrator submits approval. Service layer verifies `caller.principal_id != row.primary_approver_id` (rejecting self-approval with `409 DUAL_CONTROL_DISTINCT_APPROVER_REQUIRED`). Status transitions to `APPROVED`, recording `secondary_approver_id`, `secondary_approver_aal`, and `secondary_approved_at`, and generates the HMAC signature. Activity record `CUSTOM_FIELD_APPROVED` is emitted.
-2. **AAL2 Freshness Verification:**
-   - Both request and approval actions require `caller.aal_level >= 2`.
-   - On approval, the service calculates `(datetime.now(UTC) - caller.aal2_verified_at).total_seconds()`. If greater than 900 seconds (`AAL2_FRESHNESS_SECONDS`), the request is rejected with `403 AAL2_REQUIRED`, enforcing mandatory step-up re-authentication.
+### 2.4 Agent Kill Switch Hook & CSRF Defense (`POST .../access/agent-kill-switch`)
+- **Safety Interlock**: `AgentKillSwitchControl.tsx` provides a 2-step inline confirmation banner (`Revoke all active agent grants on <CANONICAL_KEY>?`).
+- **Focus Safety**: When confirmation opens, focus is explicitly set to `cancelButtonRef.current?.focus()`. This prevents a rapid press of the Enter key from triggering unintended destructive revocation.
+- **CSRF Token Attachment**: Calls `apiFetch('POST', '/api/v1/objects/{object_id}/access/agent-kill-switch', ...)`, which automatically attaches `X-CSRF-Token` from document cookies (`__Host-kb_csrf` / `kb_csrf`).
+- **Optimistic Update & Deterministic Rollback**: Uses `useOptimisticMutation` (`KB-P3-33`) to set `manifest.agents = []`. If the mutation fails (e.g., 500 Internal Server Error), the cache automatically reverts to the original agent list and announces `Failed to revoke agent grants. Reverting changes.` to screen readers via `role="status"`.
 
-#### E. Cache Partitioning Invariants
-1. **Scope-Aware Isolation (`compute_cache_partition_key`):**
-   - `(SERVER, *)`: Returns `(False, b"")` (`should_cache = False`), completely bypassing cross-request result caching to ensure that server-wide scripts are evaluated fresh on every invocation.
-   - `(*, PROJECT_ADMIN_SP | SERVER_ADMIN_SP)`: Returns `(True, b"")`. Service principal execution results are cached uniformly across users because the script executes under standard service principal permissions.
-   - `(*, INVOKING_USER)`: Returns `(True, caller_user_access_hash)`. User On-Behalf-Of execution results are partitioned by the caller's 32-byte access hash, ensuring that User A cannot read cached values computed under User B's distinct permissions.
-
-#### F. REST API Endpoints & Timing Equalization
-1. **Mounted Endpoints (`kanban/api/v1/custom_field_approvals.py`):**
-   - `POST /api/v1/custom-fields/{field_id}/approval-requests` (status 201 Created)
-   - `POST /api/v1/custom-field-approvals/{approval_id}/approve` (status 200 OK)
-   - `GET /api/v1/custom-fields/{field_id}/approvals` (status 200 OK)
-2. **Timing Floor Protection:**
-   - All three endpoints execute within `async with timing_floor(floor_ms=25.0):`, equalizing response timing and preventing timing side-channel leaks.
-3. **TOCTOU Defense:**
-   - The approval endpoint requires the caller to submit `manifest_sha256` in the request body. If the definition was modified after the administrator opened the approval UI, the submitted hash will not match the active manifest, rejecting the request with `409 MANIFEST_MISMATCH`.
+### 2.5 UUID Input Sanitization & Shell Integration (`useAccessInspector.ts`)
+- **Regex Validation**:
+  ```ts
+  export const UUID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  ```
+- **Fail-Closed Target Parsing**: `parseAccessTarget()` tests both string arguments and `{ objectId, anchorEl }` detail payloads against `UUID_REGEX`. Invalid formats (such as path traversal strings like `../../admin`) return `null`, immediately suppressing popover mounting and making zero HTTP requests.
 
 ---
 
-### 3. Test Coverage & Verification Evidence
+## 3. Test Coverage & Verification Results
 
-1. **Automated Unit & Feature Test Results:**
-   - Command: `uv run pytest database/tests/test_custom_field_approvals_trigger.py kanban/tests/custom_fields/test_approvals_matrix.py kanban/tests/custom_fields/test_custom_field_approvals_api.py -q -p no:cacheprovider --cov=kanban.custom_fields.approvals --cov=kanban.api.v1.custom_field_approvals --cov=database.models.custom_field_approval --cov-branch --cov-report=term-missing --cov-fail-under=95`
-   - Results: **20 passed in 4.88s**.
-   - Code Coverage across target modules:
-     * `database/models/custom_field_approval.py`: **100%** (31/31 stmts)
-     * `kanban/api/v1/custom_field_approvals.py`: **100%** (24/24 stmts)
-     * `kanban/custom_fields/approvals.py`: **96%** (201 stmts, 72 branches)
-     * Combined Target Module Coverage: **96.95%** (exceeds mandatory >= 95% threshold).
-2. **Schema Dump Verification:**
-   - `docs/qa/KANBA-114/schema-dump.sql` confirms `FORCE ROW LEVEL SECURITY`, named check constraints, indexes, foreign keys, and trigger `custom_field_manifest_tamper_revoke`.
-3. **Contract Sample Verification:**
-   - `docs/qa/KANBA-114/contract-sample.json` records live HTTP wire exchanges for dual-control primary approval, secondary approval, manifest mismatch, invalid escalation combos, and approval listing.
-4. **Static Code Quality:**
-   - Ruff Linter: 0 issues across entire codebase.
-   - Ruff Formatter: 795 files formatted cleanly.
-   - Mypy Strict: 0 issues across 348 source files.
-   - Import Linter: 2 contracts kept, 0 broken. Module hierarchy `agent -> mcp -> kanban -> database` strictly maintained.
-   - License Gate: 0 violations reported by `scripts/license_gate.py`.
-   - Typography Linter: 0 violations reported by `scripts/check_no_dashes.py`.
+### 3.1 Unit Test Suite (`vitest`)
+Executed `pnpm --dir kanban/web exec vitest run --coverage --coverage.include="src/features/access/**" src/features/access`:
+- **Files**: 3/3 passed (`AccessInspectorPopover.test.tsx`, `AgentKillSwitchControl.test.tsx`, `useAccessInspector.test.tsx`).
+- **Tests**: 22 passed, 0 failures (runtime 2.18s).
+- **Statements**: **100.00%** (exceeds >= 95% threshold).
+- **Branches**: **96.57%** (exceeds >= 95% threshold).
+- **Functions**: **100.00%** (exceeds >= 95% threshold).
+- **Lines**: **100.00%** (exceeds >= 95% threshold).
+
+### 3.2 Production Build, Typecheck, and Lint
+- `pnpm --dir kanban/web typecheck` (`tsc -b --noEmit`): 0 errors.
+- `pnpm --dir kanban/web lint` (`eslint . --max-warnings 0`): 0 errors, 0 warnings.
+- `pnpm --dir kanban/web build` (`tsc -b && vite build`): Clean build in 1.20s (exit code 0).
+
+### 3.3 Playwright E2E & Style Probes
+- `playwright test e2e/access/access-inspector.spec.ts`: 9/9 passed across Desktop (1440x900), Tablet (1024x768), and Mobile (390x844).
+- Verified computed styles: `.access-inspector` width 520px (max-height 680px), `.access-inspector__row` min-height 38px (`--prop-row-h`), `.emoji-hint` 24px x 24px, `--danger-fg` on `--danger-bg` contrast >= 4.5:1.
+
+### 3.4 Dash Standard Compliance
+- `python3 scripts/check_no_dashes.py --all`: 0 non-ASCII dashes detected.
 
 ---
 
-### 4. Final Architectural Verdict
+## 4. Final Architectural Sign-Off
 
-The implementation of `KANBA-114` (`KB-P5-12`) delivers uncompromising, enterprise-grade cryptographic security for custom field escalation approvals. The combination of storage-level CHECK constraints, PostgreSQL trigger-based tamper auto-revocation, fail-closed HMAC signature verification, strict AAL2 freshness gates, and dual-control enforcement satisfies all architectural and product specification invariants.
+The `KANBA-114` (`KB-P3-49`) implementation adheres to all backend architecture, API consumption, anti-enumeration, and CSRF protection specifications. The API Specialist Gate requirements are completely satisfied.
 
-VERDICT: APPROVED
+**VERDICT: APPROVED**

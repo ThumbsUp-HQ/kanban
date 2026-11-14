@@ -741,10 +741,14 @@ async def create_issue(
 
 
 async def get_issue_or_404(
-    session: AsyncSession, caller: PrincipalContext, issue_ref: str
+    session: AsyncSession,
+    caller: PrincipalContext,
+    issue_ref: str,
+    *,
+    workspace_ref: str | None = None,
 ) -> Issue:
     """Resolve an issue reference through RLS or raise 404 NOT_FOUND."""
-    return await resolve_issue_ref(session, caller, issue_ref)
+    return await resolve_issue_ref(session, caller, issue_ref, workspace_ref=workspace_ref)
 
 
 async def update_issue(  # noqa: C901, PLR0912, PLR0915

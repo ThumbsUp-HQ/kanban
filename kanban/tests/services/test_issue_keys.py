@@ -150,4 +150,28 @@ async def test_resolve_issue_ref_by_key_and_uuid(  # noqa: PLR0915
             await resolve_issue_ref(rls_sess, viewer_ctx, "KEYTEST-1")
         assert exc_info.value.status == 404
 
+        # include_deleted=True resolves soft-deleted issue by key and uuid
+        del_by_key = await resolve_issue_ref(
+            rls_sess, viewer_ctx, "KEYTEST-1", include_deleted=True
+        )
+        assert del_by_key.id == issue_id
+
+        del_by_uuid = await resolve_issue_ref(
+            rls_sess, viewer_ctx, str(issue_id), include_deleted=True
+        )
+        assert del_by_uuid.id == issue_id
+
+        # resolve with workspace_ref (uuid)
+        ws_by_uuid = await resolve_issue_ref(
+            rls_sess, viewer_ctx, "KEYTEST-1", workspace_ref=str(ws_id), include_deleted=True
+        )
+        assert ws_by_uuid.id == issue_id
+
+        # resolve with workspace_ref (non-existent slug -> 404)
+        with pytest.raises(ProblemException) as exc_ws:
+            await resolve_issue_ref(
+                rls_sess, viewer_ctx, "KEYTEST-1", workspace_ref="nonexistent-slug"
+            )
+        assert exc_ws.value.status == 404
+
     await app_engine.dispose()

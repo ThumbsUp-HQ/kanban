@@ -7,11 +7,18 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
 
 export interface SystemStatus {
-  readonly deployment_mode: 'standalone_embedded_pg' | 'standalone' | 'multi_container';
+  readonly deployment_mode:
+    | 'standalone_embedded_pg'
+    | 'standalone'
+    | 'production_multi_container'
+    | 'multi_container';
   readonly persistent_volume: boolean;
   readonly air_gap_mode: boolean;
   readonly local_llm_endpoint_host: string | null;
   readonly is_server_admin?: boolean;
+  readonly data_mount_point?: string | null;
+  readonly data_mount_fstype?: string | null;
+  readonly tier_b_sandbox_available?: boolean;
 }
 
 export async function fetchSystemStatus(signal?: AbortSignal): Promise<SystemStatus> {

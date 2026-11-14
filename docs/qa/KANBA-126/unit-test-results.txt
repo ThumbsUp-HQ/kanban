@@ -1,0 +1,66 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-126/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-126
+configfile: pyproject.toml
+plugins: asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, platformdirs-4.14.5, anyio-4.16.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 13 items
+
+mcp/tests/agent/test_read_ticket.py::test_case_1_positive_read_ticket_all_lods PASSED [  7%]
+mcp/tests/agent/test_read_ticket.py::test_case_2_rls_security_identical_404 PASSED [ 15%]
+mcp/tests/agent/test_read_ticket.py::test_case_3_boundary_validation_read_ticket PASSED [ 23%]
+mcp/tests/agent/test_read_ticket.py::test_case_5_read_ticket_help PASSED [ 30%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_formatting_helpers PASSED [ 38%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_additional_validations PASSED [ 46%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_comments_limit_zero PASSED [ 53%]
+mcp/tests/agent/test_search_tickets.py::test_case_1_positive_search_tickets PASSED [ 61%]
+mcp/tests/agent/test_search_tickets.py::test_case_2_rls_security_search_tickets PASSED [ 69%]
+mcp/tests/agent/test_search_tickets.py::test_case_3_boundary_validation_and_pagination PASSED [ 76%]
+mcp/tests/agent/test_search_tickets.py::test_case_4_lod_hybrid_mode_and_gate_status PASSED [ 84%]
+mcp/tests/agent/test_search_tickets.py::test_search_tickets_additional_validations PASSED [ 92%]
+mcp/tests/agent/test_search_tickets.py::test_tools_list_agent_surface PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                     Stmts   Miss Branch BrPart  Cover
+--------------------------------------------------------------------------
+mcp/__init__.py                              8      0      0      0   100%
+mcp/app.py                                  55      2     16      8    86%
+mcp/auth.py                                177    133     46      0    20%
+mcp/bench/__init__.py                        0      0      0      0   100%
+mcp/bench/token_benchmark.py                42     42      8      0     0%
+mcp/context.py                              19      0      0      0   100%
+mcp/errors.py                               33      2      4      2    89%
+mcp/help.py                                 48     23     18      5    48%
+mcp/internal_client.py                     116     34     38     11    63%
+mcp/lod.py                                 149     78     92     13    43%
+mcp/metadata.py                             19     13      4      0    26%
+mcp/protocol.py                            215     53     80     34    68%
+mcp/registry.py                             42      5      4      2    85%
+mcp/resolver.py                             37      7      6      2    79%
+mcp/settings.py                             19      0      0      0   100%
+mcp/surfaces/__init__.py                     0      0      0      0   100%
+mcp/surfaces/agent/__init__.py              10      0      0      0   100%
+mcp/surfaces/agent/read_ticket.py          141     17     64     12    86%
+mcp/surfaces/agent/search_tickets.py       164     14     78      8    91%
+mcp/tests/__init__.py                        0      0      0      0   100%
+mcp/tests/agent/__init__.py                  0      0      0      0   100%
+mcp/tests/agent/conftest.py                123      1      6      1    98%
+mcp/tests/agent/test_read_ticket.py        164      0      4      1    99%
+mcp/tests/agent/test_search_tickets.py     172      0      6      0   100%
+mcp/tests/conftest.py                       61     38     12      1    33%
+mcp/tests/test_auth.py                     314    314     10      0     0%
+mcp/tests/test_internal_client.py          143    143     14      0     0%
+mcp/tests/test_lod_help.py                 190    190      6      0     0%
+mcp/tests/test_metadata.py                  42     42      0      0     0%
+mcp/tests/test_protocol.py                 195    195      2      0     0%
+mcp/tests/test_registry_isolation.py        76     76      0      0     0%
+mcp/tests/test_resolver.py                  59     59      4      0     0%
+mcp/tests/test_smoke.py                      3      3      0      0     0%
+mcp/tests/test_token_benchmark.py           36     36      0      0     0%
+mcp/tests/test_yaml_out.py                  50     50      0      0     0%
+mcp/yaml_out.py                             66      9     30      5    83%
+--------------------------------------------------------------------------
+TOTAL                                     2988   1579    552    105    47%
+============================== 13 passed in 9.08s ==============================

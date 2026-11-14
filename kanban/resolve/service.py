@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from database.models.issues import Issue
 from database.models.principals import Principal, User
 from database.models.projects import Cycle, Module, Project, ProjectLabel, WorkflowState
+from database.models.spine import Workspace
 from kanban.api.problems import FieldError, ProblemException, not_found
 
 if TYPE_CHECKING:
@@ -42,6 +43,7 @@ class ResolvedRef:
     kind: str
     key: str
     title: str
+    workspace: str | None = None
 
 
 class KindProvider(Protocol):
@@ -127,9 +129,20 @@ class ResolutionService:
         project_ref: str | None = None,
         caller_principal_id: uuid.UUID | None = None,
         caller_workspace_id: uuid.UUID | None = None,
+        workspace_ref: str | None = None,
     ) -> ResolvedRef:
         """Resolve entity reference within scope or raise appropriate ProblemException."""
         self._validate_ref(ref)
+
+        effective_ws_id = caller_workspace_id
+        if workspace_ref:
+            try:
+                effective_ws_id = uuid.UUID(workspace_ref)
+            except ValueError:
+                ws_stmt = select(Workspace.id).where(Workspace.slug == workspace_ref)
+                effective_ws_id = (await session.execute(ws_stmt)).scalar_one_or_none()
+                if effective_ws_id is None:
+                    not_found()
 
         project_context: ResolvedRef | None = None
         if kind in ("state", "cycle", "module", "label"):
@@ -146,7 +159,7 @@ class ResolutionService:
                 session,
                 "project",
                 project_ref,
-                caller_workspace_id=caller_workspace_id,
+                caller_workspace_id=effective_ws_id,
             )
 
         matches = await self._find_matches(
@@ -155,21 +168,32 @@ class ResolutionService:
             ref=ref,
             project_context=project_context,
             caller_principal_id=caller_principal_id,
-            caller_workspace_id=caller_workspace_id,
+            caller_workspace_id=effective_ws_id,
         )
 
         if not matches:
             not_found()
 
         if len(matches) > 1:
-            candidates = [{"key": m.key, "title": m.title} for m in matches[:5]]
+            candidates = [
+                {
+                    "key": m.key,
+                    "title": m.title,
+                    **({"workspace": m.workspace} if m.workspace else {}),
+                }
+                for m in matches[:5]
+            ]
             msg = f"Reference '{ref}' matched multiple candidates for kind '{kind}'"
+            extra = {}
+            if kind == "issue":
+                extra["hint"] = "pass workspace=<slug> or connect via /mcp/agent/w/<slug>"
             raise ProblemException(
                 code="AMBIGUOUS_IDENTIFIER",
                 status=409,
                 title="Ambiguous Identifier",
                 detail=msg,
                 candidates=candidates,
+                extra=extra or None,
             )
 
         return matches[0]
@@ -193,7 +217,9 @@ class ResolutionService:
             )
 
         if kind == "issue":
-            return await self._resolve_issue(session, ref, is_uuid=is_uuid, uuid_val=uuid_val)
+            return await self._resolve_issue(
+                session, ref, is_uuid=is_uuid, uuid_val=uuid_val, workspace_id=caller_workspace_id
+            )
 
         if kind == "user":
             return await self._resolve_user(
@@ -302,25 +328,28 @@ class ResolutionService:
         *,
         is_uuid: bool,
         uuid_val: uuid.UUID | None,
+        workspace_id: uuid.UUID | None = None,
     ) -> list[ResolvedRef]:
         if is_uuid and uuid_val is not None:
             stmt = (
-                select(Issue, Project.identifier)
+                select(Issue, Project.identifier, Workspace.slug)
                 .join(Project, Issue.project_id == Project.id)
+                .join(Workspace, Project.workspace_id == Workspace.id)
                 .where(Issue.id == uuid_val)
             )
-            row = (await session.execute(stmt)).first()
-            if row is not None:
-                issue, proj_ident = row
-                return [
-                    ResolvedRef(
-                        id=issue.id,
-                        kind="issue",
-                        key=f"{proj_ident}-{issue.sequence_id}",
-                        title=issue.summary,
-                    )
-                ]
-            return []
+            if workspace_id is not None:
+                stmt = stmt.where(Project.workspace_id == workspace_id)
+            rows = (await session.execute(stmt)).all()
+            return [
+                ResolvedRef(
+                    id=issue.id,
+                    kind="issue",
+                    key=f"{proj_ident}-{issue.sequence_id}",
+                    title=issue.summary,
+                    workspace=ws_slug,
+                )
+                for issue, proj_ident, ws_slug in rows
+            ]
 
         match = _ISSUE_KEY_REGEX.match(ref)
         if not match:
@@ -330,22 +359,24 @@ class ResolutionService:
         seq_id = int(match.group(2))
 
         stmt_key = (
-            select(Issue, Project.identifier)
+            select(Issue, Project.identifier, Workspace.slug)
             .join(Project, Issue.project_id == Project.id)
+            .join(Workspace, Project.workspace_id == Workspace.id)
             .where(Project.identifier == proj_ident, Issue.sequence_id == seq_id)
         )
-        row_key = (await session.execute(stmt_key)).first()
-        if row_key is not None:
-            issue, p_ident = row_key
-            return [
-                ResolvedRef(
-                    id=issue.id,
-                    kind="issue",
-                    key=f"{p_ident}-{issue.sequence_id}",
-                    title=issue.summary,
-                )
-            ]
-        return []
+        if workspace_id is not None:
+            stmt_key = stmt_key.where(Project.workspace_id == workspace_id)
+        rows_key = (await session.execute(stmt_key)).all()
+        return [
+            ResolvedRef(
+                id=issue.id,
+                kind="issue",
+                key=f"{p_ident}-{issue.sequence_id}",
+                title=issue.summary,
+                workspace=ws_slug,
+            )
+            for issue, p_ident, ws_slug in rows_key
+        ]
 
     async def _resolve_user(  # noqa: PLR0913
         self,
