@@ -1,0 +1,37 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 27 tests using 10 workers
+
+  ✓   4 [desktop] › e2e/auth/login-setup.spec.ts:464:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 09-setup-invalid-token: asserts invalid setup link message and absence of form (1.5s)
+  ✓   1 [desktop] › e2e/auth/login-setup.spec.ts:336:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 07-setup-step1: verifies clean address bar, token hygiene, and Step 1 fields (1.6s)
+  ✓   8 [desktop] › e2e/auth/login-setup.spec.ts:295:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 06-login-hostile-card: renders hostile card with literal text escaping and clamped length (1.4s)
+  ✓   2 [desktop] › e2e/auth/login-setup.spec.ts:27:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 01-login-cards: renders 3 top cards, Primary badge, gap 12px, collapsed disclosure (1.8s)
+  ✓  10 [desktop] › e2e/auth/login-setup.spec.ts:100:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 02-login-ldap-expanded: expands LDAP form, checks inputs and submit button (1.7s)
+  ✓   7 [tablet] › e2e/auth/login-setup.spec.ts:27:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 01-login-cards: renders 3 top cards, Primary badge, gap 12px, collapsed disclosure (1.8s)
+  ✓   5 [desktop] › e2e/auth/login-setup.spec.ts:249:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 05-login-error: tests role=alert with exact error copy and verifies alert focus (2.0s)
+  ✓   9 [desktop] › e2e/auth/login-setup.spec.ts:196:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 04-second-factor-totp: tests tablist, Authenticator code tab, 6-digit input (1.9s)
+  ✓   3 [desktop] › e2e/auth/login-setup.spec.ts:147:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 03-local-admin-hint: expands disclosure, hovers lock trigger, asserts exact EmojiHint text (2.1s)
+  ✓   6 [desktop] › e2e/auth/login-setup.spec.ts:375:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 08-setup-recovery-codes: walks through setup to Step 3, asserts 10 codes and disabled button (2.4s)
+  ✓  11 [tablet] › e2e/auth/login-setup.spec.ts:336:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 07-setup-step1: verifies clean address bar, token hygiene, and Step 1 fields (815ms)
+  ✓  15 [tablet] › e2e/auth/login-setup.spec.ts:295:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 06-login-hostile-card: renders hostile card with literal text escaping and clamped length (1.5s)
+  ✓  19 [tablet] › e2e/auth/login-setup.spec.ts:464:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 09-setup-invalid-token: asserts invalid setup link message and absence of form (1.3s)
+  ✓  17 [mobile] › e2e/auth/login-setup.spec.ts:27:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 01-login-cards: renders 3 top cards, Primary badge, gap 12px, collapsed disclosure (1.7s)
+  ✓  13 [tablet] › e2e/auth/login-setup.spec.ts:249:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 05-login-error: tests role=alert with exact error copy and verifies alert focus (2.0s)
+  ✓  14 [tablet] › e2e/auth/login-setup.spec.ts:100:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 02-login-ldap-expanded: expands LDAP form, checks inputs and submit button (2.0s)
+  ✓  12 [tablet] › e2e/auth/login-setup.spec.ts:147:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 03-local-admin-hint: expands disclosure, hovers lock trigger, asserts exact EmojiHint text (2.2s)
+  ✓  16 [tablet] › e2e/auth/login-setup.spec.ts:196:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 04-second-factor-totp: tests tablist, Authenticator code tab, 6-digit input (1.9s)
+  ✓  20 [mobile] › e2e/auth/login-setup.spec.ts:100:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 02-login-ldap-expanded: expands LDAP form, checks inputs and submit button (1.6s)
+  ✓  18 [tablet] › e2e/auth/login-setup.spec.ts:375:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 08-setup-recovery-codes: walks through setup to Step 3, asserts 10 codes and disabled button (2.3s)
+  ✓  22 [mobile] › e2e/auth/login-setup.spec.ts:295:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 06-login-hostile-card: renders hostile card with literal text escaping and clamped length (860ms)
+  ✓  21 [mobile] › e2e/auth/login-setup.spec.ts:147:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 03-local-admin-hint: expands disclosure, hovers lock trigger, asserts exact EmojiHint text (1.8s)
+  ✓  23 [mobile] › e2e/auth/login-setup.spec.ts:196:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 04-second-factor-totp: tests tablist, Authenticator code tab, 6-digit input (1.4s)
+  ✓  24 [mobile] › e2e/auth/login-setup.spec.ts:249:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 05-login-error: tests role=alert with exact error copy and verifies alert focus (1.5s)
+  ✓  26 [mobile] › e2e/auth/login-setup.spec.ts:464:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 09-setup-invalid-token: asserts invalid setup link message and absence of form (1.3s)
+  ✓  25 [mobile] › e2e/auth/login-setup.spec.ts:336:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 07-setup-step1: verifies clean address bar, token hygiene, and Step 1 fields (1.4s)
+  ✓  27 [mobile] › e2e/auth/login-setup.spec.ts:375:3 › Login & Setup Claim E2E Specifications (KB-P3-35) › 08-setup-recovery-codes: walks through setup to Step 3, asserts 10 codes and disabled button (2.3s)
+
+  27 passed (27.2s)

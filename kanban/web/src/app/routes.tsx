@@ -32,6 +32,8 @@ import { RailStory } from '../dev/RailStory';
 import { DrawerActionsStory } from '../dev/DrawerActionsStory';
 import { apiClient } from '../api/client';
 import type { IssueDetail } from '../features/drawer/slots';
+import { LoginPage } from '../features/auth/LoginPage';
+import { SetupClaimPage } from '../features/auth/SetupClaimPage';
 
 export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
 
@@ -216,6 +218,14 @@ export const appRoutes: RouteObject[] = [
         ],
       },
       {
+        path: 'login',
+        element: <LoginPage />,
+      },
+      {
+        path: 'setup',
+        element: <SetupClaimPage />,
+      },
+      {
         element: <RootShellLayout />,
         children: [
           {
@@ -225,14 +235,6 @@ export const appRoutes: RouteObject[] = [
           {
             path: 'stickies',
             element: <RoutePlaceholder route="/stickies" />,
-          },
-          {
-            path: 'login',
-            element: <RoutePlaceholder route="/login" />,
-          },
-          {
-            path: 'setup',
-            element: <RoutePlaceholder route="/setup" />,
           },
           {
             path: 'admin/auth',
