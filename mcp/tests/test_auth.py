@@ -179,17 +179,6 @@ async def test_prefix_precheck_local_rejection_zero_network_call() -> None:
         assert resp.json() == {"error": "SURFACE_KEY_MISMATCH"}
         assert call_count == 0
 
-        # Reserved ephemeral prefix kb_agt_eph_ rejected
-        eph_token = "kb_agt_eph_" + "z" * 43
-        resp_eph = await c_agent.post(
-            "/mcp/agent",
-            headers={"Authorization": f"Bearer {eph_token}"},
-            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
-        )
-        assert resp_eph.status_code == 403
-        assert resp_eph.json() == {"error": "SURFACE_KEY_MISMATCH"}
-        assert call_count == 0
-
     async with httpx.AsyncClient(transport=t_admin, base_url="http://test") as c_admin:
         # Present kb_agt_ on /mcp/admin -> 403
         resp = await c_admin.post(
@@ -199,6 +188,17 @@ async def test_prefix_precheck_local_rejection_zero_network_call() -> None:
         )
         assert resp.status_code == 403
         assert resp.json() == {"error": "SURFACE_KEY_MISMATCH"}
+        assert call_count == 0
+
+        # Present ephemeral prefix kb_agt_eph_ on /mcp/admin -> 403
+        eph_token = "kb_agt_eph_" + "z" * 43
+        resp_eph = await c_admin.post(
+            "/mcp/admin",
+            headers={"Authorization": f"Bearer {eph_token}"},
+            json={"jsonrpc": "2.0", "id": 4, "method": "tools/list"},
+        )
+        assert resp_eph.status_code == 403
+        assert resp_eph.json() == {"error": "SURFACE_KEY_MISMATCH"}
         assert call_count == 0
 
 

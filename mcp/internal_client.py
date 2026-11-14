@@ -75,6 +75,7 @@ class KanbanApiClient:
             self._client = httpx.AsyncClient(
                 transport=active_transport,
                 base_url="http://kanban.local",
+                headers={"X-KB-Service-Principal": "mcp-gateway"},
                 timeout=timeout,
             )
         else:
@@ -131,9 +132,15 @@ class KanbanApiClient:
         """Async context manager exit."""
         await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
-    async def _ensure_csrf_token(self, req_headers: dict[str, str], method: str) -> None:
+    async def _ensure_csrf_token(
+        self, req_headers: dict[str, str], method: str, path: str = ""
+    ) -> None:
         unsafe_methods = ("POST", "PUT", "PATCH", "DELETE")
-        if method.upper() not in unsafe_methods or "X-CSRF-Token" in req_headers:
+        if (
+            method.upper() not in unsafe_methods
+            or path.startswith("/internal/")
+            or "X-CSRF-Token" in req_headers
+        ):
             return
         if self._csrf_token is None:
             try:
@@ -143,7 +150,7 @@ class KanbanApiClient:
                     if isinstance(data, dict) and "csrf_token" in data:
                         self._csrf_token = str(data["csrf_token"])
                         self._client.cookies.set("__Host-kb_csrf", self._csrf_token)
-            except httpx.HTTPError:
+            except (httpx.HTTPError, ValueError):
                 pass
         if self._csrf_token:
             req_headers["X-CSRF-Token"] = self._csrf_token
@@ -166,7 +173,7 @@ class KanbanApiClient:
         if mcp_session_id:
             req_headers["X-KB-MCP-Session"] = mcp_session_id
 
-        await self._ensure_csrf_token(req_headers, method)
+        await self._ensure_csrf_token(req_headers, method, path)
 
         try:
             req = self._client.build_request(
