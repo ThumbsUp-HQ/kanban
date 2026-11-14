@@ -18,7 +18,7 @@ import httpx
 import pytest
 from joserfc import jwt
 from joserfc.jwk import OctKey
-from sqlalchemy import update
+from sqlalchemy import text, update
 
 from database.models.oauth import (
     OAuthAuthorizationCode,
@@ -795,7 +795,27 @@ async def test_case_5_admin_aal_and_approval_gate(
     )
     assert resp_patch_aal1.status_code == 403
 
-    # Switch caller to AAL2 Workspace Admin
+    # Switch caller to AAL2 Workspace Admin (with confirmed TOTP factor for require_admin_aal2)
+    await api_env.seed.execute(
+        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
+        {
+            "p_id": user_aal1.id,
+            "blob": b"\x01" + b"\x00" * 28,
+            "dek": b"\x01" + b"\x00" * 44,
+        },
+    )
+    res_mfa = await api_env.seed.execute(
+        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
+        {"p_id": user_aal1.id},
+    )
+    p_row = res_mfa.mappings().first()
+    if p_row:
+        await api_env.seed.execute(
+            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
+            {"p_fid": p_row["id"]},
+        )
+    await api_env.seed.commit()
+
     api_env.resolver.principal = PrincipalContext(
         principal_id=user_aal1.id,
         workspace_id=user_aal1.workspace_id,
