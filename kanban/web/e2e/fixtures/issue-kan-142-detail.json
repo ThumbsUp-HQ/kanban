@@ -1,0 +1,119 @@
+{
+  "key": "KAN-142",
+  "object_id": "018f6c4a-0000-7000-8000-000000000142",
+  "project_key": "KAN",
+  "project_name": "Platform Core",
+  "summary": "Harden Multi-Card OIDC & LDAPS Auth Studio",
+  "description_markdown": "Full description here",
+  "state": {
+    "id": "state-in-progress",
+    "name": "In Progress",
+    "group": "started"
+  },
+  "priority": {
+    "slug": "urgent",
+    "label": "Urgent",
+    "emoji": "🔥",
+    "sort_order": 1,
+    "sla_target": "4h"
+  },
+  "assignees": [
+    {
+      "id": "asg-1",
+      "kind": "principal",
+      "principal": {
+        "id": "018f6c4a-0000-7000-8000-000000000001",
+        "handle": "adam",
+        "display_name": "Adam Outler",
+        "type": "USER"
+      }
+    },
+    {
+      "id": "asg-2",
+      "kind": "principal",
+      "principal": {
+        "id": "018f6c4a-0000-7000-8000-000000000002",
+        "handle": "codex",
+        "display_name": "Codex Agent",
+        "type": "AGENT"
+      }
+    },
+    {
+      "id": "asg-3",
+      "kind": "free_text",
+      "free_text": "Ext: SecAudit",
+      "notify": false,
+      "hint": "External free-text label - grants zero access and sends zero notifications"
+    }
+  ],
+  "provenance": {
+    "created_by": {
+      "id": "018f6c4a-0000-7000-8000-000000000003",
+      "handle": "maya"
+    },
+    "original_created_by": {
+      "id": "018f6c4a-0000-7000-8000-000000000004",
+      "handle": "bot-import"
+    },
+    "overridden": true,
+    "creator_modified_by": {
+      "id": "018f6c4a-0000-7000-8000-000000000001",
+      "handle": "adam"
+    },
+    "creator_modified_at": "2026-11-11T12:00:00Z",
+    "reason": "Administrative reassignment to primary component owner"
+  },
+  "start_date": "2026-11-11",
+  "due_date": "2026-11-18",
+  "module_ids": ["mod-auth-core"],
+  "modules": [
+    {
+      "id": "mod-auth-core",
+      "name": "Auth Core"
+    }
+  ],
+  "cycle_id": "cycle-4",
+  "cycle": {
+    "id": "cycle-4",
+    "name": "Cycle 4: Sec",
+    "status": "active",
+    "completed_count": 5,
+    "issue_count": 8
+  },
+  "parent": {
+    "key": "KAN-100",
+    "summary": "Security Architecture Epic",
+    "restricted": false
+  },
+  "sub_issues": [
+    {
+      "key": "KAN-143",
+      "summary": "Verify LDAPS certificate pinning",
+      "state_group": "completed"
+    },
+    {
+      "key": "KAN-144",
+      "summary": "Audit TLS session tickets",
+      "state_group": "completed"
+    },
+    {
+      "key": "KAN-145",
+      "summary": "Implement break-glass admin lockout guard",
+      "state_group": "started"
+    }
+  ],
+  "sub_issues_rollup": {
+    "total": 3,
+    "completed": 2,
+    "percent": 67
+  },
+  "label_ids": ["label-sec"],
+  "labels": [
+    {
+      "id": "label-sec",
+      "name": "security",
+      "color": "#e11d48"
+    }
+  ],
+  "capabilities": ["EDIT", "TRANSITION", "ADMIN"]
+}

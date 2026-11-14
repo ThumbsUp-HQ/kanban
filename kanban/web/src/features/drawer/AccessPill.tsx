@@ -34,8 +34,9 @@ function getCount(val: unknown): number {
 }
 
 export function AccessPill({ issue }: AccessPillProps): JSX.Element {
-  const objectId = issue.object_id;
-  const projectName = issue.project_name || 'Project';
+  const objectId = issue.object_id ?? '';
+  const rawName = issue.project_name ?? '';
+  const projectName = rawName.length > 0 ? rawName : 'Project';
 
   const { data, isLoading, isError } = useQuery<AccessSummaryData>({
     queryKey: qk.access(objectId),

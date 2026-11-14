@@ -28,6 +28,7 @@ import { EditorStory } from '../dev/EditorStory';
 import { MediaStory } from '../dev/MediaStory';
 import { RealtimeStory } from '../dev/RealtimeStory';
 import { DrawerStory } from '../dev/DrawerStory';
+import { RailStory } from '../dev/RailStory';
 import { apiClient } from '../api/client';
 import type { IssueDetail } from '../features/drawer/slots';
 
@@ -129,6 +130,7 @@ export function DevStoryRoute(): JSX.Element {
   if (loc.pathname === '/__dev/media') return <MediaStory />;
   if (loc.pathname === '/__dev/realtime') return <RealtimeStory />;
   if (loc.pathname === '/__dev/drawer') return <DrawerStory />;
+  if (loc.pathname === '/__dev/drawer-rail' || loc.pathname === '/__dev/rail') return <RailStory />;
   return <NotFoundView />;
 }
 

@@ -1,0 +1,34 @@
+.rail-story {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+  padding: var(--space-6, 24px);
+}
+
+.rail-story__header {
+  display: flex;
+  gap: var(--space-3, 12px);
+  align-items: center;
+}
+
+.rail-story__title {
+  margin: 0;
+  font-size: var(--text-lg, 18px);
+}
+
+.rail-story__controls {
+  display: flex;
+  gap: var(--space-2, 8px);
+}
+
+.rail-story__main {
+  display: flex;
+  justify-content: flex-start;
+  min-height: 600px;
+}
+
+.rail-story__rail-container {
+  width: 320px;
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+}

@@ -1,0 +1,194 @@
+{
+  "ticket": "KANBA-123",
+  "spec_section": "S7.2 8b-8i",
+  "exchanges": [
+    {
+      "name": "assignee_add_principal_200",
+      "description": "Add authenticated agent collaborator to issue assignees",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/KAN-142/assignees",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "principal": "codex"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "01918a22-3333-7000-8000-000000000002",
+          "issue_id": "01918a22-1111-7000-8000-000000000001",
+          "principal": "codex",
+          "kind": "AGENT",
+          "created_at": "2026-11-12T14:30:00Z"
+        }
+      }
+    },
+    {
+      "name": "assignee_add_free_text_200",
+      "description": "Add external non-authenticated collaborator free-text label",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/KAN-142/assignees",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "free_text": "Ext: SecAudit"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "01918a22-3333-7000-8000-000000000003",
+          "issue_id": "01918a22-1111-7000-8000-000000000001",
+          "free_text": "Ext: SecAudit",
+          "kind": "EXTERNAL",
+          "created_at": "2026-11-12T14:30:05Z"
+        }
+      }
+    },
+    {
+      "name": "creator_override_admin_200",
+      "description": "Project Admin creator provenance override with mandatory audit reason",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/KAN-142/created-by",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "created_by": "maya",
+          "reason": "Transfer ownership after original creator account deprovisioned"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "key": "KAN-142",
+          "created_by": {
+            "handle": "maya",
+            "name": "Maya Lin",
+            "redacted": false
+          },
+          "provenance": {
+            "overridden": true,
+            "original_creator": {
+              "handle": "bot-import",
+              "redacted": false
+            },
+            "modified_by": {
+              "handle": "adam",
+              "redacted": false
+            },
+            "modified_at": "2026-11-12T14:31:00Z",
+            "reason": "Transfer ownership after original creator account deprovisioned"
+          }
+        }
+      }
+    },
+    {
+      "name": "modules_put_200",
+      "description": "Update assigned modules when project.modules_enabled is true",
+      "request": {
+        "method": "PUT",
+        "path": "/api/v1/issues/KAN-142/modules",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "module_ids": [
+            "01918a22-4444-7000-8000-000000000001"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "module_ids": [
+            "01918a22-4444-7000-8000-000000000001"
+          ]
+        }
+      }
+    },
+    {
+      "name": "labels_patch_exclusive_group_200",
+      "description": "Selecting exclusive label atomically replaces conflicting label in same group",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/KAN-142",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "label_ids": [
+            "01918a22-5555-7000-8000-000000000002"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "key": "KAN-142",
+          "labels": [
+            {
+              "id": "01918a22-5555-7000-8000-000000000002",
+              "name": "type:bug",
+              "color": "#ef4444",
+              "exclusive_group": "type"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "parent_cycle_409",
+      "description": "Setting parent that induces a cyclic dependency rejected with 409 PARENT_CYCLE",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/KAN-142",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "parent": "KAN-145"
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": {
+            "code": "PARENT_CYCLE",
+            "message": "Cannot set parent: this would create a parent cycle."
+          }
+        }
+      }
+    }
+  ]
+}
