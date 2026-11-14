@@ -34,6 +34,7 @@ import { DocsWorkspaceView } from '../features/docs/DocsWorkspaceView';
 import { StickiesStory } from '../dev/StickiesStory';
 import { ProjectOverviewView } from '../features/stickies/ProjectOverviewView';
 import { WorkspaceStickiesView } from '../features/stickies/WorkspaceStickiesView';
+import ProjectCustomFieldsSettingsRoute from '../routes/projects/settings/custom-fields';
 import { apiClient } from '../api/client';
 import type { IssueDetail } from '../features/drawer/slots';
 import { LoginPage } from '../features/auth/LoginPage';
@@ -226,6 +227,10 @@ export const appRoutes: RouteObject[] = [
           {
             path: 'settings/mcp',
             element: <McpAccessStudio tier="project" />,
+          },
+          {
+            path: 'settings/custom-fields',
+            element: <ProjectCustomFieldsSettingsRoute />,
           },
         ],
       },

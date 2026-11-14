@@ -25,6 +25,7 @@ import { AssigneesRow } from './AssigneesRow';
 import { CreatedByRow } from './CreatedByRow';
 import { DatesCycleModulesRows } from './DatesCycleModulesRows';
 import { ParentLabelsRows } from './ParentLabelsRows';
+import { CustomFieldsRailSection } from '../custom-fields/CustomFieldsRailSection';
 import './PropertiesRail.css';
 
 export interface PropertiesRailProps {
@@ -255,8 +256,14 @@ export function PropertiesRail({
         onCreateLabel={handleCreateLabel}
       />
 
-      {/* Trailing extension hook for KB-P5-15 Custom Fields */}
-      <div data-slot="custom-fields-rail" />
+      {/* Admin-Defined Custom Fields section (KB-P5-15) */}
+      <div data-slot="custom-fields-rail">
+        <CustomFieldsRailSection
+          projectKey={projectKey}
+          issueKey={currentIssue.key}
+          canEdit={canEdit}
+        />
+      </div>
     </aside>
   );
 }

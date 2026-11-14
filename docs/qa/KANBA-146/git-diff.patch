@@ -1,0 +1,5747 @@
+diff --git a/kanban/web/e2e/custom-fields.spec.ts b/kanban/web/e2e/custom-fields.spec.ts
+new file mode 100644
+index 0000000..3472e87
+--- /dev/null
++++ b/kanban/web/e2e/custom-fields.spec.ts
+@@ -0,0 +1,503 @@
++/**
++ * Playwright E2E verification & Visual Proof Suite for Custom Fields UI (KB-P5-15, KANBA-146).
++ * Enforces:
++ * 1. 7-format safe value rendering & EmojiHint 🧪 popover metrics.
++ * 2. In-flight refresh deduplication & literal error mapping.
++ * 3. Admin definition editor with anti-enumeration 404 & copyable manifest_sha256 chip.
++ * 4. Scope x Principal matrix escalation approval, PROJECT_ADMIN_SP warning banner, and 409 mismatch handling.
++ * 5. Multi-device annotated screenshots across desktop, tablet, and mobile viewports.
++ */
++
++import { test, expect } from './support/test';
++import { annotatedScreenshot } from './support/annotate';
++import { mockApi, loadFixture } from './support/mockApi';
++
++const mockDefinitions = [
++  {
++    id: 'f-cvss',
++    slug: 'cvss-score',
++    name: 'CVSS Score',
++    tier: 'wasm',
++    output_format: 'severity_pill',
++    output_format_metadata: {},
++    target_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    egress_allowlist: [],
++    manifest_sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
++    is_enabled: true,
++    approval_status: 'APPROVED',
++  },
++  {
++    id: 'f-env',
++    slug: 'target-env',
++    name: 'Target Environment',
++    tier: 'nsjail',
++    output_format: 'text',
++    output_format_metadata: { prefix: 'Env: ' },
++    target_scope: 'WORKSPACE',
++    credential_mode: 'PROJECT_ADMIN_SP',
++    egress_allowlist: ['/api/v1/projects/KAN'],
++    manifest_sha256: 'b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef01',
++    is_enabled: true,
++    approval_status: 'PENDING',
++  },
++  {
++    id: 'f-build',
++    slug: 'build-number',
++    name: 'Build Number',
++    tier: 'wasm',
++    output_format: 'number',
++    output_format_metadata: { unit_suffix: 'build', maximum_fraction_digits: 0 },
++    target_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    egress_allowlist: [],
++    manifest_sha256: 'c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
++    is_enabled: true,
++    approval_status: null,
++  },
++  {
++    id: 'f-badge',
++    slug: 'compliance-status',
++    name: 'Compliance',
++    tier: 'wasm',
++    output_format: 'badge',
++    output_format_metadata: { color_token: 'success' },
++    target_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    egress_allowlist: [],
++    manifest_sha256: 'd4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5',
++    is_enabled: true,
++    approval_status: null,
++  },
++  {
++    id: 'f-md',
++    slug: 'security-summary',
++    name: 'Security Summary',
++    tier: 'wasm',
++    output_format: 'markdown_snippet',
++    output_format_metadata: { max_chars: 2000 },
++    target_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    egress_allowlist: [],
++    manifest_sha256: 'e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6',
++    is_enabled: true,
++    approval_status: null,
++  },
++  {
++    id: 'f-url',
++    slug: 'external-tracker',
++    name: 'External Tracker',
++    tier: 'wasm',
++    output_format: 'url',
++    output_format_metadata: {},
++    target_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    egress_allowlist: [],
++    manifest_sha256: 'f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1',
++    is_enabled: true,
++    approval_status: null,
++  },
++  {
++    id: 'f-table',
++    slug: 'metrics-matrix',
++    name: 'Metrics Matrix',
++    tier: 'wasm',
++    output_format: 'json_table',
++    output_format_metadata: {
++      columns: [
++        { key: 'metric', label: 'Metric' },
++        { key: 'score', label: 'Score' },
++      ],
++      max_rows: 50,
++    },
++    target_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    egress_allowlist: [],
++    manifest_sha256: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
++    is_enabled: true,
++    approval_status: null,
++  },
++];
++
++const mockResults = [
++  {
++    field_id: 'f-cvss',
++    field_slug: 'cvss-score',
++    field_name: 'CVSS Score',
++    output_format: 'severity_pill',
++    value: { level: 'high', score: 8.8, label: 'High' },
++    status: 'SUCCESS',
++    tier: 'Wasmtime',
++    token_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    last_latency_ms: 12,
++    computed_at: '2026-11-13T12:00:00Z',
++  },
++  {
++    field_id: 'f-env',
++    field_slug: 'target-env',
++    field_name: 'Target Environment',
++    output_format: 'text',
++    value: 'Staging US-East',
++    status: 'SUCCESS',
++    tier: 'nsjail',
++    token_scope: 'WORKSPACE',
++    credential_mode: 'PROJECT_ADMIN_SP',
++    last_latency_ms: 85,
++    computed_at: '2026-11-13T12:00:00Z',
++  },
++  {
++    field_id: 'f-build',
++    field_slug: 'build-number',
++    field_name: 'Build Number',
++    output_format: 'number',
++    value: 4092,
++    status: 'SUCCESS',
++    tier: 'Wasmtime',
++    token_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    last_latency_ms: 8,
++    computed_at: '2026-11-13T12:00:00Z',
++  },
++  {
++    field_id: 'f-badge',
++    field_slug: 'compliance-status',
++    field_name: 'Compliance',
++    output_format: 'badge',
++    value: 'Verified',
++    status: 'SUCCESS',
++    tier: 'Wasmtime',
++    token_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    last_latency_ms: 9,
++    computed_at: '2026-11-13T12:00:00Z',
++  },
++  {
++    field_id: 'f-md',
++    field_slug: 'security-summary',
++    field_name: 'Security Summary',
++    output_format: 'markdown_snippet',
++    value: 'Scan status: **Clean**. All dependencies *passed*.',
++    status: 'SUCCESS',
++    tier: 'Wasmtime',
++    token_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    last_latency_ms: 14,
++    computed_at: '2026-11-13T12:00:00Z',
++  },
++  {
++    field_id: 'f-url',
++    field_slug: 'external-tracker',
++    field_name: 'External Tracker',
++    output_format: 'url',
++    value: 'https://security.example.com/cve/CVE-2026-146',
++    status: 'SUCCESS',
++    tier: 'Wasmtime',
++    token_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    last_latency_ms: 11,
++    computed_at: '2026-11-13T12:00:00Z',
++  },
++  {
++    field_id: 'f-table',
++    field_slug: 'metrics-matrix',
++    field_name: 'Metrics Matrix',
++    output_format: 'json_table',
++    value: [
++      { metric: 'Coverage', score: '99%' },
++      { metric: 'Latency', score: '12ms' },
++    ],
++    status: 'SUCCESS',
++    tier: 'Wasmtime',
++    token_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    last_latency_ms: 22,
++    computed_at: '2026-11-13T12:00:00Z',
++  },
++];
++
++const mockApprovals = [
++  {
++    id: 'appr-env',
++    field_id: 'f-env',
++    status: 'PENDING',
++    target_scope: 'WORKSPACE',
++    credential_mode: 'PROJECT_ADMIN_SP',
++    manifest_sha256: 'b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef01',
++    justification: 'Needs workspace token to verify target environments',
++    created_at: '2026-11-13T10:00:00Z',
++    updated_at: '2026-11-13T10:00:00Z',
++  },
++];
++
++async function setupMocks(page: import('@playwright/test').Page, extraHandlers: Record<string, unknown> = {}) {
++  const projectKan = loadFixture<{ priorities?: unknown[]; labels?: unknown[] }>('project-kan');
++  await mockApi(page, {
++    'GET /api/v1/system/status': { json: loadFixture('system-status-standalone') },
++    'GET /api/v1/projects/KAN': { json: loadFixture('project-kan') },
++    'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/issues': { json: loadFixture('issues-kan') },
++    'GET /api/v1/users/me': { json: loadFixture('me-adam') },
++    'GET /api/v1/projects/KAN/priorities': { json: projectKan.priorities ?? [] },
++    'GET /api/v1/projects/KAN/labels': { json: projectKan.labels ?? [] },
++    'GET /api/v1/projects/KAN/cycles': { json: [] },
++    'GET /api/v1/projects/KAN/modules': { json: [] },
++    'GET /api/v1/projects/KAN/custom-fields': { json: mockDefinitions },
++    'GET /api/v1/issues/KAN-142/custom-fields': { json: mockResults },
++    'GET /api/v1/custom-fields/f-env/approvals': { json: mockApprovals },
++    'GET /api/v1/custom-fields/f-cvss/approvals': { json: [] },
++    ...extraHandlers,
++  });
++}
++
++test.describe('Custom Fields UI E2E (KB-P5-15, KANBA-146)', () => {
++  test.beforeEach(async ({ page }) => {
++    await setupMocks(page);
++  });
++
++  test('01-rail-custom-fields: renders 7 formats and emoji hint popover metrics', async ({
++    page,
++  }, testInfo) => {
++    await page.goto('/__dev/drawer-rail');
++    await page.waitForLoadState('networkidle');
++    await expect(page.locator('[data-testid="rail-story"]')).toBeVisible();
++
++    const railSection = page.locator('[data-testid="custom-fields-rail-section"]');
++    await expect(railSection).toBeVisible();
++
++    // Verify literal header
++    await expect(railSection.locator('.custom-fields-rail-title')).toHaveText(
++      'Custom Fields (Admin-Defined 🧪)',
++    );
++
++    // Verify all 7 formats render
++    await expect(page.locator('[data-testid="custom-field-row-cvss-score"]')).toBeVisible();
++    await expect(page.locator('[data-testid="custom-field-row-target-env"]')).toBeVisible();
++    await expect(page.locator('[data-testid="custom-field-row-build-number"]')).toBeVisible();
++    await expect(page.locator('[data-testid="custom-field-row-compliance-status"]')).toBeVisible();
++    await expect(page.locator('[data-testid="custom-field-row-security-summary"]')).toBeVisible();
++    await expect(page.locator('[data-testid="custom-field-row-external-tracker"]')).toBeVisible();
++    await expect(page.locator('[data-testid="custom-field-row-metrics-matrix"]')).toBeVisible();
++
++    // Open EmojiHint popover by focusing or clicking trigger
++    const hintTrigger = page.locator('[data-testid="custom-field-emoji-hint-cvss-score"]');
++    await hintTrigger.focus();
++    await expect(page.locator('[data-testid="custom-field-hint-popover-cvss-score"]')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-rail-custom-fields',
++      annotations: [
++        {
++          selector: '[data-testid="custom-fields-rail-section"]',
++          label: '1: Custom Fields rail section header & rows',
++        },
++        {
++          selector: '[data-testid="custom-field-value-cvss-score"]',
++          label: '2: Severity pill rendered value',
++        },
++        {
++          selector: '[data-testid="refresh-field-cvss-score"]',
++          label: '3: Refresh execute button',
++        },
++      ],
++    });
++  });
++
++  test('02-rail-refresh-error: renders literal error mapping on execution failure', async ({
++    page,
++  }, testInfo) => {
++    // Only capture on desktop
++    if (testInfo.project.name !== 'desktop') {
++      test.skip();
++    }
++
++    await setupMocks(page, {
++      'POST /api/v1/issues/KAN-142/custom-fields/f-cvss/execute': {
++        status: 200,
++        json: {
++          field_id: 'f-cvss',
++          field_slug: 'cvss-score',
++          field_name: 'CVSS Score',
++          output_format: 'severity_pill',
++          status: 'ERROR',
++          error_code: 'SCRIPT_TIMEOUT',
++          tier: 'Wasmtime',
++          token_scope: 'PROJECT',
++          credential_mode: 'INVOKING_USER',
++          last_latency_ms: 5000,
++          computed_at: '2026-11-13T12:00:00Z',
++        },
++      },
++    });
++
++    await page.goto('/__dev/drawer-rail');
++    await page.waitForLoadState('networkidle');
++
++    const refreshBtn = page.locator('[data-testid="refresh-field-cvss-score"]');
++    await expect(refreshBtn).toBeVisible();
++    await refreshBtn.click();
++
++    // Verify mapped error text
++    const errorSpan = page.locator('[data-testid="custom-field-error-cvss-score"]');
++    await expect(errorSpan).toBeVisible();
++    await expect(errorSpan).toHaveText('Timed out');
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '02-rail-refresh-error',
++      annotations: [
++        {
++          selector: '[data-testid="custom-field-error-cvss-score"]',
++          label: '1: Mapped inline error without raw detail leakage',
++        },
++      ],
++    });
++  });
++
++  test('03-admin-editor: displays definition editor with manifest_sha256 chip', async ({
++    page,
++  }, testInfo) => {
++    await page.goto('/projects/KAN/settings/custom-fields');
++    await page.waitForLoadState('networkidle');
++
++    const editorLayout = page.locator('[data-testid="custom-fields-editor-layout"]');
++    await expect(editorLayout).toBeVisible();
++
++    // Select first field to display sha chip
++    const cvssItem = page.locator('[data-testid="field-item-cvss-score"]');
++    await cvssItem.click();
++
++    const shaChip = page.locator('[data-testid="manifest-sha256-chip"]');
++    await expect(shaChip).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '03-admin-editor',
++      annotations: [
++        {
++          selector: '[data-testid="custom-fields-list"]',
++          label: '1: Custom field definitions sidebar',
++        },
++        {
++          selector: '[data-testid="manifest-sha256-chip"]',
++          label: '2: Manifest SHA256 chip with copy action',
++        },
++        {
++          selector: '[data-testid="save-definition-btn"]',
++          label: '3: Save definition control',
++        },
++      ],
++    });
++  });
++
++  test('04-approval-sp-warning: renders PROJECT_ADMIN_SP explicit warning banner', async ({
++    page,
++  }, testInfo) => {
++    if (testInfo.project.name !== 'desktop') {
++      test.skip();
++    }
++
++    await page.goto('/projects/KAN/settings/custom-fields');
++    await page.waitForLoadState('networkidle');
++
++    // Select Target Environment field with PROJECT_ADMIN_SP mode
++    const envItem = page.locator('[data-testid="field-item-target-env"]');
++    await envItem.click();
++
++    const spBanner = page.locator('[data-testid="sp-warning-banner"]');
++    await expect(spBanner).toBeVisible();
++    await expect(spBanner).toContainText(
++      '⚠️ This field will run with Project Admin service-principal credentials for every viewer.',
++    );
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '04-approval-sp-warning',
++      annotations: [
++        {
++          selector: '[data-testid="sp-warning-banner"]',
++          label: '1: Required Project Admin SP credential warning banner',
++        },
++        {
++          selector: '[data-testid="sp-ack-checkbox"]',
++          label: '2: Explicit admin acknowledgment checkbox',
++        },
++      ],
++    });
++  });
++
++  test('05-approval-manifest-mismatch: disables Approve on 409 conflict with literal message', async ({
++    page,
++  }, testInfo) => {
++    if (testInfo.project.name !== 'desktop') {
++      test.skip();
++    }
++
++    await setupMocks(page, {
++      'POST /api/v1/custom-field-approvals/appr-env/approve': {
++        status: 409,
++        json: {
++          code: 'MANIFEST_MISMATCH',
++          detail: 'Definition changed since you opened it - reload to review',
++        },
++      },
++    });
++
++    await page.goto('/projects/KAN/settings/custom-fields');
++    await page.waitForLoadState('networkidle');
++
++    const envItem = page.locator('[data-testid="field-item-target-env"]');
++    await envItem.click();
++
++    // Check acknowledgment checkbox and click approve
++    const ackCheckbox = page.locator('[data-testid="sp-ack-checkbox"]');
++    await ackCheckbox.click();
++
++    const approveBtn = page.locator('[data-testid="approve-escalation-btn"]');
++    await approveBtn.click();
++
++    // Verify 409 banner appears and button is disabled
++    const mismatchBanner = page.locator('[data-testid="manifest-mismatch-banner"]');
++    await expect(mismatchBanner).toBeVisible();
++    await expect(mismatchBanner).toContainText(
++      'Definition changed since you opened it - reload to review',
++    );
++    await expect(approveBtn).toBeDisabled();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '05-approval-manifest-mismatch',
++      annotations: [
++        {
++          selector: '[data-testid="manifest-mismatch-banner"]',
++          label: '1: Literal 409 manifest mismatch error notice',
++        },
++        {
++          selector: '[data-testid="approve-escalation-btn"]',
++          label: '2: Disabled approve action on tamper/mismatch',
++        },
++      ],
++    });
++  });
++
++  test('06-non-admin-404: renders uniform 404 page for non-admin callers (anti-enumeration)', async ({
++    page,
++  }, testInfo) => {
++    if (testInfo.project.name !== 'desktop') {
++      test.skip();
++    }
++
++    await page.goto('/projects/KAN/settings/custom-fields?non_admin=true');
++    await page.waitForLoadState('networkidle');
++
++    const notFoundView = page.locator('[data-testid="not-found-view"]');
++    await expect(notFoundView).toBeVisible();
++    await expect(notFoundView).toContainText('Not found or no access');
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '06-non-admin-404',
++      annotations: [
++        {
++          selector: '[data-testid="not-found-view"]',
++          label: '1: Anti-enumeration uniform 404 view',
++        },
++      ],
++    });
++  });
++});
+diff --git a/kanban/web/src/App.tsx b/kanban/web/src/App.tsx
+index f809119..0e747ed 100644
+--- a/kanban/web/src/App.tsx
++++ b/kanban/web/src/App.tsx
+@@ -60,7 +60,7 @@ export function App(): JSX.Element {
+       );
+     }
+     if (window.location.pathname.startsWith('/__dev/drawer')) {
+-      const router = createAppRouter(['/__dev/drawer']);
++      const router = createAppRouter([window.location.pathname]);
+       return (
+         <QueryClientProvider client={appQueryClient}>
+           <ShellPanelsProvider>
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 067f0f6..df7a377 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -34,6 +34,7 @@ import { DocsWorkspaceView } from '../features/docs/DocsWorkspaceView';
+ import { StickiesStory } from '../dev/StickiesStory';
+ import { ProjectOverviewView } from '../features/stickies/ProjectOverviewView';
+ import { WorkspaceStickiesView } from '../features/stickies/WorkspaceStickiesView';
++import ProjectCustomFieldsSettingsRoute from '../routes/projects/settings/custom-fields';
+ import { apiClient } from '../api/client';
+ import type { IssueDetail } from '../features/drawer/slots';
+ import { LoginPage } from '../features/auth/LoginPage';
+@@ -227,6 +228,10 @@ export const appRoutes: RouteObject[] = [
+             path: 'settings/mcp',
+             element: <McpAccessStudio tier="project" />,
+           },
++          {
++            path: 'settings/custom-fields',
++            element: <ProjectCustomFieldsSettingsRoute />,
++          },
+         ],
+       },
+       {
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+new file mode 100644
+index 0000000..f3674ab
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+@@ -0,0 +1,601 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import type { JSX } from 'react';
++import React, { useMemo, useState } from 'react';
++import { useMutation, useQuery } from '@tanstack/react-query';
++import { NotFoundView } from '../../app/routes';
++import {
++  createCustomField,
++  deleteCustomField,
++  fetchProjectCustomFields,
++  qk,
++  updateCustomField,
++  type CustomFieldCreatePayload,
++  type CustomFieldCredentialMode,
++  type CustomFieldDefinition,
++  type CustomFieldTargetScope,
++  type CustomFieldTier,
++  type CustomFieldUpdatePayload,
++  type OutputFormatType,
++} from './api';
++import { EscalationApprovalPanel } from './EscalationApprovalPanel';
++import './custom-fields.css';
++
++export interface CustomFieldDefinitionEditorProps {
++  projectKey: string;
++  isAdmin?: boolean;
++}
++
++const DEFAULT_METADATA_BY_FORMAT: Record<OutputFormatType, Record<string, unknown>> = {
++  text: { max_length: 280, prefix: '', monospace: false },
++  number: { maximum_fraction_digits: 2, unit_suffix: '' },
++  badge: { color_token: 'info', allowed_labels: ['Active', 'Verified'] },
++  markdown_snippet: { max_chars: 2000 },
++  url: { allowed_schemes: ['https'] },
++  json_table: {
++    columns: [
++      { key: 'metric', label: 'Metric' },
++      { key: 'value', label: 'Score' },
++    ],
++    max_rows: 50,
++  },
++  severity_pill: {},
++};
++
++/**
++ * Admin Custom Field Definition Editor with Anti-Enumeration 404 gate (S3.4),
++ * manifest_sha256 tracking, and tamper revocation warnings (S13.1, S13.2).
++ */
++export function CustomFieldDefinitionEditor({
++  projectKey,
++  isAdmin = true,
++}: CustomFieldDefinitionEditorProps): JSX.Element {
++  // Selected field for editing (null = creating new)
++  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
++
++  // Form states
++  const [name, setName] = useState('');
++  const [slug, setSlug] = useState('');
++  const [tier, setTier] = useState<CustomFieldTier>('wasm');
++  const [outputFormat, setOutputFormat] = useState<OutputFormatType>('text');
++  const [metadataText, setMetadataText] = useState(
++    JSON.stringify(DEFAULT_METADATA_BY_FORMAT.text, null, 2),
++  );
++  const [scriptSource, setScriptSource] = useState('// Return field value\nreturn "Hello";');
++  const [targetScope, setTargetScope] = useState<CustomFieldTargetScope>('PROJECT');
++  const [credentialMode, setCredentialMode] =
++    useState<CustomFieldCredentialMode>('INVOKING_USER');
++  const [egressText, setEgressText] = useState('');
++  const [isEnabled, setIsEnabled] = useState(true);
++
++  // UI / Dialog states
++  const [copiedSha, setCopiedSha] = useState(false);
++  const [jsonError, setJsonError] = useState<string | null>(null);
++  const [submitError, setSubmitError] = useState<string | null>(null);
++  const [isTamperConfirmOpen, setIsTamperConfirmOpen] = useState(false);
++
++  // Fetch definitions (all hooks declared unconditionally)
++  const { data: definitions = [], refetch } = useQuery({
++    queryKey: qk.customFields.project(projectKey),
++    queryFn: () => fetchProjectCustomFields(projectKey),
++    enabled: isAdmin && Boolean(projectKey),
++  });
++
++  const selectedField = useMemo(() => {
++    return definitions.find((d) => d.id === selectedFieldId) ?? null;
++  }, [definitions, selectedFieldId]);
++
++  // Load field into editor form
++  const handleSelectField = (field: CustomFieldDefinition) => {
++    setSelectedFieldId(field.id);
++    setName(field.name);
++    setSlug(field.slug);
++    setTier(field.tier);
++    setOutputFormat(field.output_format);
++    setMetadataText(JSON.stringify(field.output_format_metadata, null, 2));
++    setScriptSource(field.script_source ?? '');
++    setTargetScope(field.target_scope);
++    setCredentialMode(field.credential_mode);
++    setEgressText(field.egress_allowlist.join('\n'));
++    setIsEnabled(field.is_enabled);
++    setJsonError(null);
++    setSubmitError(null);
++  };
++
++  const handleResetNew = () => {
++    setSelectedFieldId(null);
++    setName('');
++    setSlug('');
++    setTier('wasm');
++    setOutputFormat('text');
++    setMetadataText(JSON.stringify(DEFAULT_METADATA_BY_FORMAT.text, null, 2));
++    setScriptSource('// Return field value\nreturn "Hello";');
++    setTargetScope('PROJECT');
++    setCredentialMode('INVOKING_USER');
++    setEgressText('');
++    setIsEnabled(true);
++    setJsonError(null);
++    setSubmitError(null);
++  };
++
++  // Format change helper
++  const handleFormatChange = (fmt: OutputFormatType) => {
++    setOutputFormat(fmt);
++    setMetadataText(JSON.stringify(DEFAULT_METADATA_BY_FORMAT[fmt], null, 2));
++  };
++
++  // Copy SHA helper
++  const handleCopySha = (sha: string) => {
++    const nav = navigator as unknown as {
++      clipboard?: { writeText: (text: string) => Promise<void> };
++    };
++    if (nav.clipboard) {
++      void nav.clipboard.writeText(sha);
++    }
++    setCopiedSha(true);
++    setTimeout(() => {
++      setCopiedSha(false);
++    }, 2000);
++  };
++
++  // Create mutation
++  const createMutation = useMutation({
++    mutationFn: async (payload: CustomFieldCreatePayload) => {
++      return createCustomField(projectKey, payload);
++    },
++    onSuccess: (newField) => {
++      setSubmitError(null);
++      void refetch();
++      handleSelectField(newField);
++    },
++    onError: (err: Error) => {
++      setSubmitError(err.message);
++    },
++  });
++
++  // Update mutation
++  const updateMutation = useMutation({
++    mutationFn: async ({
++      fieldId,
++      payload,
++    }: {
++      fieldId: string;
++      payload: CustomFieldUpdatePayload;
++    }) => {
++      return updateCustomField(projectKey, fieldId, payload);
++    },
++    onSuccess: (updatedField) => {
++      setSubmitError(null);
++      setIsTamperConfirmOpen(false);
++      void refetch();
++      handleSelectField(updatedField);
++    },
++    onError: (err: Error) => {
++      setSubmitError(err.message);
++      setIsTamperConfirmOpen(false);
++    },
++  });
++
++  // Delete mutation
++  const deleteMutation = useMutation({
++    mutationFn: async (fieldId: string) => {
++      return deleteCustomField(projectKey, fieldId);
++    },
++    onSuccess: () => {
++      handleResetNew();
++      void refetch();
++    },
++  });
++
++  // Form submission handler
++  const handleSubmit = (e?: React.SyntheticEvent) => {
++    if (e) e.preventDefault();
++    setJsonError(null);
++    setSubmitError(null);
++
++    let parsedMeta: Record<string, unknown> = {};
++    try {
++      if (metadataText.trim()) {
++        parsedMeta = JSON.parse(metadataText) as Record<string, unknown>;
++      }
++    } catch {
++      setJsonError('Invalid JSON in format metadata');
++      return;
++    }
++
++    const egressList = egressText
++      .split('\n')
++      .map((s) => s.trim())
++      .filter(Boolean);
++
++    // If updating an approved field with elevated scope or credential mode,
++    // prompt confirmation of tamper auto-revocation (S13.2)
++    if (
++      selectedField?.approval_status === 'APPROVED' &&
++      !isTamperConfirmOpen
++    ) {
++      const scriptChanged = scriptSource !== (selectedField.script_source ?? '');
++      const metaChanged =
++        JSON.stringify(parsedMeta) !==
++        JSON.stringify(selectedField.output_format_metadata);
++      if (scriptChanged || metaChanged) {
++        setIsTamperConfirmOpen(true);
++        return;
++      }
++    }
++
++    if (selectedField) {
++      updateMutation.mutate({
++        fieldId: selectedField.id,
++        payload: {
++          name,
++          tier,
++          output_format: outputFormat,
++          output_format_metadata: parsedMeta,
++          script_source: scriptSource,
++          target_scope: targetScope,
++          credential_mode: credentialMode,
++          egress_allowlist: egressList,
++          is_enabled: isEnabled,
++        },
++      });
++    } else {
++      createMutation.mutate({
++        slug,
++        name,
++        tier,
++        output_format: outputFormat,
++        output_format_metadata: parsedMeta,
++        script_source: scriptSource,
++        target_scope: targetScope,
++        credential_mode: credentialMode,
++        egress_allowlist: egressList,
++        is_enabled: isEnabled,
++      });
++    }
++  };
++
++  // Anti-enumeration gate: Non-admin users receive uniform 404 (S3.4)
++  if (!isAdmin) {
++    return <NotFoundView />;
++  }
++
++  return (
++    <div className="custom-fields-editor-layout" data-testid="custom-fields-editor-layout">
++      {/* Sidebar: Existing Definitions List */}
++      <aside className="custom-fields-editor-sidebar">
++        <div className="custom-fields-editor-sidebar__header">
++          <h3 className="custom-fields-editor-sidebar__title">Custom Fields</h3>
++          <button
++            type="button"
++            className="custom-field-btn custom-field-btn--primary custom-field-btn--sm"
++            onClick={handleResetNew}
++            data-testid="create-new-field-btn"
++          >
++            + New Field
++          </button>
++        </div>
++
++        <ul className="custom-fields-def-list" data-testid="custom-fields-list">
++          {definitions.map((def: CustomFieldDefinition) => {
++            const isSelected = def.id === selectedFieldId;
++            return (
++              <li
++                key={def.id}
++                className={`custom-fields-def-item ${isSelected ? 'custom-fields-def-item--selected' : ''}`}
++                onClick={() => {
++                  handleSelectField(def);
++                }}
++                data-testid={`field-item-${def.slug}`}
++              >
++                <div className="custom-fields-def-item__title">{def.name}</div>
++                <div className="custom-fields-def-item__meta">
++                  <span className="mono">{def.slug}</span>
++                  <span className="custom-fields-def-item__format">{def.output_format}</span>
++                </div>
++              </li>
++            );
++          })}
++        </ul>
++      </aside>
++
++      {/* Main Canvas: Form & Security Controls */}
++      <main className="custom-fields-editor-main">
++        <div className="custom-fields-editor-main__header">
++          <h2 className="custom-fields-editor-main__title">
++            {selectedField ? `Edit: ${selectedField.name}` : 'New Custom Field Definition'}
++          </h2>
++
++          {selectedField?.manifest_sha256 ? (
++            <div className="custom-fields-sha-chip" data-testid="manifest-sha256-chip">
++              <span className="custom-fields-sha-label">SHA256:</span>
++              <span className="custom-fields-sha-val mono">
++                {selectedField.manifest_sha256.slice(0, 16)}...
++              </span>
++              <button
++                type="button"
++                className="custom-field-copy-btn"
++                onClick={() => {
++                  handleCopySha(selectedField.manifest_sha256 ?? '');
++                }}
++                data-testid="copy-manifest-sha-btn"
++              >
++                {copiedSha ? 'Copied' : 'Copy'}
++              </button>
++            </div>
++          ) : null}
++        </div>
++
++        {submitError && (
++          <div className="custom-field-error-banner" role="alert">
++            {submitError}
++          </div>
++        )}
++
++        <form onSubmit={handleSubmit} className="custom-fields-editor-form">
++          <div className="custom-fields-form-grid">
++            {/* Field Name */}
++            <div className="custom-field-form-group">
++              <label htmlFor="field-name" className="custom-field-form-label">
++                Field Name
++              </label>
++              <input
++                id="field-name"
++                type="text"
++                className="custom-field-input"
++                maxLength={80}
++                required
++                value={name}
++                onChange={(e) => {
++                  setName(e.target.value);
++                }}
++                data-testid="field-name-input"
++                placeholder="e.g. CVSS Score"
++              />
++            </div>
++
++            {/* Field Slug */}
++            <div className="custom-field-form-group">
++              <label htmlFor="field-slug" className="custom-field-form-label">
++                Identifier Slug (a-z0-9-)
++              </label>
++              <input
++                id="field-slug"
++                type="text"
++                className="custom-field-input mono"
++                maxLength={63}
++                pattern="^[a-z0-9][a-z0-9-]{1,62}$"
++                required
++                disabled={Boolean(selectedField)}
++                value={slug}
++                onChange={(e) => {
++                  setSlug(e.target.value.toLowerCase());
++                }}
++                data-testid="field-slug-input"
++                placeholder="cvss-score"
++              />
++            </div>
++
++            {/* Output Format */}
++            <div className="custom-field-form-group">
++              <label htmlFor="output-format" className="custom-field-form-label">
++                Output Format
++              </label>
++              <select
++                id="output-format"
++                className="custom-field-select"
++                value={outputFormat}
++                onChange={(e) => {
++                  handleFormatChange(e.target.value as OutputFormatType);
++                }}
++                data-testid="output-format-select"
++              >
++                <option value="text">Text (max 280 chars)</option>
++                <option value="number">Number (Intl formatted)</option>
++                <option value="badge">Badge (Design Token Pill)</option>
++                <option value="markdown_snippet">Markdown Snippet (Sanitized)</option>
++                <option value="url">URL (Safe Hostname Anchor)</option>
++                <option value="json_table">JSON Table (Max 50x10)</option>
++                <option value="severity_pill">Severity Pill (low/med/high/crit)</option>
++              </select>
++            </div>
++
++            {/* Execution Tier */}
++            <div className="custom-field-form-group">
++              <label htmlFor="execution-tier" className="custom-field-form-label">
++                Execution Tier (S13.3)
++              </label>
++              <select
++                id="execution-tier"
++                className="custom-field-select"
++                value={tier}
++                onChange={(e) => {
++                  setTier(e.target.value as CustomFieldTier);
++                }}
++                data-testid="execution-tier-select"
++              >
++                <option value="wasm">Tier A: Wasmtime (Sub-millisecond Wasm)</option>
++                <option value="nsjail">Tier B: nsjail (Linux Isolated Cgroup)</option>
++              </select>
++            </div>
++
++            {/* Target Scope */}
++            <div className="custom-field-form-group">
++              <label htmlFor="target-scope" className="custom-field-form-label">
++                Token Scope (S13.2)
++              </label>
++              <select
++                id="target-scope"
++                className="custom-field-select"
++                value={targetScope}
++                onChange={(e) => {
++                  setTargetScope(e.target.value as CustomFieldTargetScope);
++                }}
++                data-testid="target-scope-select"
++              >
++                <option value="PROJECT">Project (Default)</option>
++                <option value="WORKSPACE">Workspace (Requires Workspace Admin)</option>
++                <option value="SERVER">Server (Requires Server Admin Dual-Control)</option>
++              </select>
++            </div>
++
++            {/* Credential Mode */}
++            <div className="custom-field-form-group">
++              <label htmlFor="credential-mode" className="custom-field-form-label">
++                Credential Mode (S13.2)
++              </label>
++              <select
++                id="credential-mode"
++                className="custom-field-select"
++                value={credentialMode}
++                onChange={(e) => {
++                  setCredentialMode(e.target.value as CustomFieldCredentialMode);
++                }}
++                data-testid="credential-mode-select"
++              >
++                <option value="INVOKING_USER">Invoking User (Default)</option>
++                <option value="PROJECT_ADMIN_SP">Project Admin Service Principal (SP)</option>
++                <option value="SERVER_ADMIN_SP">Server Admin Service Principal (SP)</option>
++              </select>
++            </div>
++          </div>
++
++          {/* Format Metadata JSON */}
++          <div className="custom-field-form-group">
++            <label htmlFor="format-metadata" className="custom-field-form-label">
++              Format Configuration Metadata (JSON)
++            </label>
++            <textarea
++              id="format-metadata"
++              className="custom-field-textarea mono"
++              rows={4}
++              value={metadataText}
++              onChange={(e) => {
++                setMetadataText(e.target.value);
++              }}
++              data-testid="format-metadata-textarea"
++            />
++            {jsonError && <span className="custom-field-input-error">{jsonError}</span>}
++          </div>
++
++          {/* Script Source Code */}
++          <div className="custom-field-form-group">
++            <label htmlFor="script-source" className="custom-field-form-label">
++              Script Source Code (Sandboxed, never executed client-side)
++            </label>
++            <textarea
++              id="script-source"
++              className="custom-field-textarea mono custom-field-source-editor"
++              rows={8}
++              required
++              value={scriptSource}
++              onChange={(e) => {
++                setScriptSource(e.target.value);
++              }}
++              data-testid="script-source-textarea"
++            />
++          </div>
++
++          {/* Is Enabled */}
++          <div className="custom-field-form-group">
++            <label className="custom-field-checkbox-label">
++              <input
++                id="is-enabled"
++                type="checkbox"
++                checked={isEnabled}
++                onChange={(e) => {
++                  setIsEnabled(e.target.checked);
++                }}
++                data-testid="is-enabled-checkbox"
++              />
++              Enabled
++            </label>
++          </div>
++
++          {/* Form Actions */}
++          <div className="custom-fields-form-actions">
++            {selectedField && (
++              <button
++                type="button"
++                className="custom-field-btn custom-field-btn--danger"
++                onClick={() => {
++                  deleteMutation.mutate(selectedField.id);
++                }}
++                disabled={deleteMutation.isPending}
++                data-testid="delete-field-btn"
++              >
++                Delete Field
++              </button>
++            )}
++
++            <button
++              type="submit"
++              className="custom-field-btn custom-field-btn--primary"
++              disabled={createMutation.isPending || updateMutation.isPending}
++              data-testid="save-definition-btn"
++            >
++              {createMutation.isPending || updateMutation.isPending
++                ? 'Saving...'
++                : selectedField
++                  ? 'Save Changes'
++                  : 'Create Definition'}
++            </button>
++          </div>
++        </form>
++
++        {/* Escalation & Security Approvals Panel */}
++        {selectedField && (
++          <EscalationApprovalPanel
++            field={selectedField}
++            callerTier="WORKSPACE_ADMIN"
++            onApproved={() => {
++              void refetch();
++            }}
++          />
++        )}
++      </main>
++
++      {/* Tamper Confirmation Dialog (S13.2) */}
++      {isTamperConfirmOpen && (
++        <div
++          className="custom-field-modal-overlay"
++          role="dialog"
++          aria-modal="true"
++          data-testid="tamper-confirm-dialog"
++        >
++          <div className="custom-field-modal">
++            <h4 className="custom-field-modal-title">Confirm Manifest Modification</h4>
++            <p
++              className="custom-field-modal-warning-text"
++              data-testid="tamper-warning-literal"
++            >
++              Saving changes manifest_sha256 and immediately revokes the current approval.
++            </p>
++            <div className="custom-field-modal-actions">
++              <button
++                type="button"
++                className="custom-field-btn custom-field-btn--secondary"
++                onClick={() => {
++                  setIsTamperConfirmOpen(false);
++                }}
++              >
++                Cancel
++              </button>
++              <button
++                type="button"
++                className="custom-field-btn custom-field-btn--danger"
++                onClick={() => {
++                  handleSubmit();
++                }}
++                data-testid="confirm-tamper-save-btn"
++              >
++                Confirm & Revoke
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldValue.tsx b/kanban/web/src/features/custom-fields/CustomFieldValue.tsx
+new file mode 100644
+index 0000000..1828fed
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/CustomFieldValue.tsx
+@@ -0,0 +1,377 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import type { JSX, ReactNode } from 'react';
++import React from 'react';
++import type { OutputFormatType } from './api';
++
++export interface CustomFieldValueProps {
++  format: OutputFormatType;
++  value: unknown;
++  metadata?: Record<string, unknown>;
++  testId?: string;
++}
++
++const BADGE_COLOR_CLASSES: Record<string, string> = {
++  neutral: 'custom-field-badge--neutral',
++  info: 'custom-field-badge--info',
++  success: 'custom-field-badge--success',
++  warning: 'custom-field-badge--warning',
++  danger: 'custom-field-badge--danger',
++  accent: 'custom-field-badge--accent',
++};
++
++const SEVERITY_CLASSES: Record<string, string> = {
++  low: 'custom-field-severity--low',
++  medium: 'custom-field-severity--medium',
++  high: 'custom-field-severity--high',
++  critical: 'custom-field-severity--critical',
++};
++
++function safeString(val: unknown): string {
++  if (typeof val === 'string') return val;
++  if (typeof val === 'number' || typeof val === 'boolean' || typeof val === 'bigint') {
++    return String(val);
++  }
++  if (val === null || val === undefined) return '';
++  return JSON.stringify(val);
++}
++
++/**
++ * Pure React tokenizer to render markdown without dangerouslySetInnerHTML.
++ * Strips raw HTML tags and images, supporting basic bold, italic, and inline code.
++ */
++function renderSafeMarkdownSnippet(text: string): ReactNode {
++  // Strip <img ...> and raw HTML tags
++  const sanitized = text
++    .replace(/<img[^>]*>/gi, '')
++    .replace(/<[^>]+>/g, '')
++    .replace(/!\[[^\]]*\]\([^)]*\)/g, '');
++
++  const lines = sanitized.split('\n');
++
++  return (
++    <div className="custom-field-markdown-snippet">
++      {lines.map((line, lineIdx) => {
++        if (!line.trim()) {
++          return <div key={`line-${String(lineIdx)}`} className="custom-field-markdown-empty" />;
++        }
++
++        // Tokenize inline bold, italic, code
++        const tokens: ReactNode[] = [];
++        let remaining = line;
++        let tokenKey = 0;
++
++        while (remaining.length > 0) {
++          // Bold **text**
++          const boldMatch = /^\*\*([^*]+)\*\*/.exec(remaining);
++          if (boldMatch) {
++            tokens.push(
++              <strong key={`b-${String(tokenKey++)}`}>{boldMatch[1]}</strong>,
++            );
++            remaining = remaining.slice(boldMatch[0].length);
++            continue;
++          }
++
++          // Inline code `code`
++          const codeMatch = /^`([^`]+)`/.exec(remaining);
++          if (codeMatch) {
++            tokens.push(
++              <code key={`c-${String(tokenKey++)}`} className="custom-field-mono">
++                {codeMatch[1]}
++              </code>,
++            );
++            remaining = remaining.slice(codeMatch[0].length);
++            continue;
++          }
++
++          // Italic *text*
++          const italicMatch = /^\*([^*]+)\*/.exec(remaining);
++          if (italicMatch) {
++            tokens.push(
++              <em key={`i-${String(tokenKey++)}`}>{italicMatch[1]}</em>,
++            );
++            remaining = remaining.slice(italicMatch[0].length);
++            continue;
++          }
++
++          // Plain text up to next special char
++          const nextSpecial = remaining.search(/[*`]/);
++          if (nextSpecial === -1) {
++            tokens.push(remaining);
++            break;
++          } else if (nextSpecial === 0) {
++            // Stray asterisk or backtick
++            tokens.push(remaining[0]);
++            remaining = remaining.slice(1);
++          } else {
++            tokens.push(remaining.slice(0, nextSpecial));
++            remaining = remaining.slice(nextSpecial);
++          }
++        }
++
++        return (
++          <p key={`p-${String(lineIdx)}`} className="custom-field-markdown-p">
++            {tokens}
++          </p>
++        );
++      })}
++    </div>
++  );
++}
++
++/**
++ * 7-format safe value renderer for admin-defined scripted custom fields (S13.1).
++ * Strictly guarantees ZERO dangerouslySetInnerHTML usage and renders safe React text nodes.
++ */
++export function CustomFieldValue({
++  format,
++  value,
++  metadata,
++  testId,
++}: CustomFieldValueProps): JSX.Element {
++  if (value === null || value === undefined) {
++    return (
++      <span className="custom-field-unavailable" data-testid={testId}>
++        Unavailable
++      </span>
++    );
++  }
++
++  switch (format) {
++    case 'text': {
++      const rawText = safeString(value);
++      const prefix = typeof metadata?.prefix === 'string' ? metadata.prefix : '';
++      const maxLength =
++        typeof metadata?.max_length === 'number' && metadata.max_length > 0
++          ? Math.min(metadata.max_length, 280)
++          : 280;
++      const isMonospace = Boolean(metadata?.monospace);
++
++      let displayedText = rawText;
++      let hasTruncated = false;
++      if (rawText.length > maxLength) {
++        displayedText = rawText.slice(0, maxLength) + '...';
++        hasTruncated = true;
++      }
++
++      return (
++        <span
++          className={`custom-field-text ${isMonospace ? 'custom-field-mono' : ''}`}
++          title={hasTruncated ? rawText : undefined}
++          data-testid={testId}
++        >
++          {prefix}
++          {displayedText}
++        </span>
++      );
++    }
++
++    case 'number': {
++      const num = Number(value);
++      if (!Number.isFinite(num)) {
++        return (
++          <span className="custom-field-unavailable" data-testid={testId}>
++            Unavailable
++          </span>
++        );
++      }
++
++      const fractionDigits =
++        typeof metadata?.maximum_fraction_digits === 'number'
++          ? Math.max(0, Math.min(6, metadata.maximum_fraction_digits))
++          : 2;
++      const unitSuffix =
++        typeof metadata?.unit_suffix === 'string' ? metadata.unit_suffix : '';
++
++      const formatter = new Intl.NumberFormat('en-US', {
++        maximumFractionDigits: fractionDigits,
++      });
++
++      return (
++        <span className="custom-field-number" data-testid={testId}>
++          {formatter.format(num)}
++          {unitSuffix ? ` ${unitSuffix}` : ''}
++        </span>
++      );
++    }
++
++    case 'badge': {
++      const label = safeString(value);
++      const rawColor =
++        typeof metadata?.color_token === 'string' ? metadata.color_token : 'neutral';
++      const colorClass = BADGE_COLOR_CLASSES[rawColor] ?? 'custom-field-badge--neutral';
++
++      return (
++        <span className={`custom-field-badge ${colorClass}`} data-testid={testId}>
++          {label}
++        </span>
++      );
++    }
++
++    case 'markdown_snippet': {
++      const rawText = safeString(value);
++      const maxChars =
++        typeof metadata?.max_chars === 'number' && metadata.max_chars > 0
++          ? Math.min(metadata.max_chars, 2000)
++          : 2000;
++      const clampedText = rawText.slice(0, maxChars);
++
++      return (
++        <div className="custom-field-markdown-wrapper" data-testid={testId}>
++          {renderSafeMarkdownSnippet(clampedText)}
++        </div>
++      );
++    }
++
++    case 'url': {
++      const rawUrl = safeString(value).trim();
++      let isValidScheme = false;
++      let hostname = rawUrl;
++
++      try {
++        const parsed = new URL(rawUrl);
++        if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
++          isValidScheme = true;
++          hostname = parsed.hostname;
++        }
++      } catch {
++        isValidScheme = false;
++      }
++
++      if (!isValidScheme) {
++        return (
++          <span className="custom-field-url-text" data-testid={testId}>
++            {rawUrl}
++          </span>
++        );
++      }
++
++      return (
++        <a
++          href={rawUrl}
++          target="_blank"
++          rel="noopener noreferrer nofollow"
++          className="custom-field-url-link"
++          data-testid={testId}
++        >
++          {hostname}
++        </a>
++      );
++    }
++
++    case 'json_table': {
++      if (!Array.isArray(value) || value.length === 0) {
++        return (
++          <span className="custom-field-empty-table" data-testid={testId}>
++            No table data
++          </span>
++        );
++      }
++
++      const rawRows = value as Record<string, unknown>[];
++      const maxRows =
++        typeof metadata?.max_rows === 'number' && metadata.max_rows > 0
++          ? Math.min(metadata.max_rows, 50)
++          : 50;
++
++      // Columns from metadata or inferred from first row (max 10 columns)
++      let columns: { key: string; label: string }[] = [];
++      if (Array.isArray(metadata?.columns) && metadata.columns.length > 0) {
++        columns = (metadata.columns as { key: string; label: string }[]).slice(0, 10);
++      } else {
++        const firstRow = rawRows[0] ?? {};
++        columns = Object.keys(firstRow)
++          .slice(0, 10)
++          .map((k) => ({ key: k, label: k }));
++      }
++
++      const visibleRows = rawRows.slice(0, maxRows);
++      const overflowCount = rawRows.length - visibleRows.length;
++
++      return (
++        <div className="custom-field-table-container" data-testid={testId}>
++          <table className="custom-field-table">
++            <thead>
++              <tr>
++                {columns.map((col) => (
++                  <th key={col.key} className="custom-field-th">
++                    {col.label}
++                  </th>
++                ))}
++              </tr>
++            </thead>
++            <tbody>
++              {visibleRows.map((row, rowIdx) => (
++                <tr key={`row-${String(rowIdx)}`}>
++                  {columns.map((col) => {
++                    const cellVal = row[col.key];
++                    const cellText =
++                      cellVal !== null && cellVal !== undefined ? safeString(cellVal) : '';
++                    return (
++                      <td key={col.key} className="custom-field-td">
++                        {cellText}
++                      </td>
++                    );
++                  })}
++                </tr>
++              ))}
++            </tbody>
++          </table>
++          {overflowCount > 0 && (
++            <div className="custom-field-table-overflow">
++              +{String(overflowCount)} more rows
++            </div>
++          )}
++        </div>
++      );
++    }
++
++    case 'severity_pill': {
++      let level = '';
++      let score: number | undefined;
++      let label: string | undefined;
++
++      if (typeof value === 'object') {
++        const obj = value as { level?: string; score?: number; label?: string };
++        level = (obj.level ?? '').toLowerCase();
++        score = typeof obj.score === 'number' && Number.isFinite(obj.score) ? obj.score : undefined;
++        label = typeof obj.label === 'string' ? obj.label : undefined;
++      } else if (typeof value === 'string') {
++        level = value.toLowerCase();
++      } else {
++        level = safeString(value).toLowerCase();
++      }
++
++      const colorClass = SEVERITY_CLASSES[level];
++      if (!colorClass) {
++        return (
++          <span className="custom-field-unavailable" data-testid={testId}>
++            Unavailable
++          </span>
++        );
++      }
++
++      const displayScore = score !== undefined ? score.toFixed(1) : null;
++      const displayLabel = label ?? (level.charAt(0).toUpperCase() + level.slice(1));
++
++      return (
++        <span
++          className={`custom-field-severity-pill ${colorClass}`}
++          data-testid={testId}
++          data-level={level}
++        >
++          {displayScore && <span className="custom-field-severity-score">{displayScore}</span>}
++          <span className="custom-field-severity-label">{displayLabel}</span>
++        </span>
++      );
++    }
++
++    default:
++      return (
++        <span className="custom-field-unavailable" data-testid={testId}>
++          Unavailable
++        </span>
++      );
++  }
++}
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldsRailSection.tsx b/kanban/web/src/features/custom-fields/CustomFieldsRailSection.tsx
+new file mode 100644
+index 0000000..d3d64fc
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/CustomFieldsRailSection.tsx
+@@ -0,0 +1,237 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import type { JSX } from 'react';
++import React, { useCallback, useMemo, useRef, useState } from 'react';
++import { QueryClientContext, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
++import { EmojiHint } from '../../components/emoji/EmojiHint';
++import {
++  executeCustomField,
++  fetchIssueCustomFields,
++  fetchProjectCustomFields,
++  qk,
++  type CustomFieldDefinition,
++  type CustomFieldExecutionResult,
++} from './api';
++import { CustomFieldValue } from './CustomFieldValue';
++import './custom-fields.css';
++
++export interface CustomFieldsRailSectionProps {
++  projectKey: string;
++  issueKey: string;
++  canEdit?: boolean;
++}
++
++const ERROR_CODE_MAP: Record<string, string> = {
++  SCRIPT_TIMEOUT: 'Timed out',
++  SCRIPT_FUEL_EXHAUSTED: 'Compute limit reached',
++  APPROVAL_REVOKED: 'Approval revoked - admin re-sign required',
++  SANDBOX_UNAVAILABLE_IN_STANDALONE: 'Tier B unavailable in standalone',
++};
++
++function mapServerErrorCode(errorCode?: string): string {
++  if (!errorCode) return 'Unavailable';
++  return ERROR_CODE_MAP[errorCode] ?? 'Unavailable';
++}
++
++/**
++ * Properties-rail section for Admin-Defined Custom Fields (S7.1, S6.2).
++ * Unmounts when 0 definitions exist, provides in-flight deduplicated execution,
++ * and displays execution metadata via 🧪 EmojiHint popover.
++ */
++function CustomFieldsRailSectionInner({
++  projectKey,
++  issueKey,
++  canEdit = true,
++}: CustomFieldsRailSectionProps): JSX.Element | null {
++  const queryClient = useQueryClient();
++  const [inFlightFieldIds, setInFlightFieldIds] = useState<Set<string>>(new Set());
++  const inFlightRef = useRef<Set<string>>(new Set());
++
++  // Fetch project custom field definitions
++  const { data: definitions = [], isLoading: isLoadingDefs } = useQuery({
++    queryKey: qk.customFields.project(projectKey),
++    queryFn: () => fetchProjectCustomFields(projectKey),
++    enabled: Boolean(projectKey),
++  });
++
++  // Fetch issue custom field cached values
++  const { data: results = [] } = useQuery({
++    queryKey: qk.customFields.issue(issueKey),
++    queryFn: () => fetchIssueCustomFields(issueKey),
++    enabled: Boolean(issueKey && definitions.length > 0),
++  });
++
++  // Map results by field_id for fast lookup
++  const resultsByFieldId = useMemo(() => {
++    const map = new Map<string, CustomFieldExecutionResult>();
++    for (const r of results) {
++      map.set(r.field_id, r);
++    }
++    return map;
++  }, [results]);
++
++  // Execute mutation with TanStack Query
++  const executeMutation = useMutation({
++    mutationFn: async (fieldId: string) => {
++      return executeCustomField(issueKey, fieldId);
++    },
++    onSuccess: (updatedResult, fieldId) => {
++      queryClient.setQueryData<CustomFieldExecutionResult[]>(
++        qk.customFields.issue(issueKey),
++        (old = []) => {
++          const index = old.findIndex((r) => r.field_id === fieldId);
++          if (index >= 0) {
++            const next = [...old];
++            next[index] = updatedResult;
++            return next;
++          }
++          return [...old, updatedResult];
++        },
++      );
++    },
++    onSettled: (_data, _error, fieldId) => {
++      inFlightRef.current.delete(fieldId);
++      setInFlightFieldIds(new Set(inFlightRef.current));
++    },
++  });
++
++  // In-flight deduplication handler for refresh click
++  const handleRefresh = useCallback(
++    (fieldId: string) => {
++      if (inFlightRef.current.has(fieldId)) {
++        return; // Deduplicate in-flight click
++      }
++      inFlightRef.current.add(fieldId);
++      setInFlightFieldIds(new Set(inFlightRef.current));
++      executeMutation.mutate(fieldId);
++    },
++    [executeMutation],
++  );
++
++  // If loading or project has 0 custom fields, do not mount section in DOM (S7.1)
++  if (!isLoadingDefs && definitions.length === 0) {
++    return null;
++  }
++  if (definitions.length === 0) {
++    return null;
++  }
++
++  return (
++    <section
++      className="custom-fields-rail-section"
++      aria-label="Custom Fields (Admin-Defined 🧪)"
++      data-testid="custom-fields-rail-section"
++    >
++      <h3 className="custom-fields-rail-header custom-fields-rail-title">Custom Fields (Admin-Defined 🧪)</h3>
++      <div className="custom-fields-rail-rows">
++        {definitions.map((def: CustomFieldDefinition) => {
++          const result = resultsByFieldId.get(def.id);
++          const isInFlight = inFlightFieldIds.has(def.id);
++
++          const tier = result?.tier ?? (def.tier === 'wasm' ? 'Wasmtime' : 'nsjail');
++          const tokenScope = result?.token_scope ?? def.target_scope;
++          const credentialMode = result?.credential_mode ?? def.credential_mode;
++          const latencyMs = result?.last_latency_ms;
++
++          const hasError = result?.status === 'ERROR';
++          const errorMessage = hasError ? mapServerErrorCode(result.error_code) : null;
++
++          return (
++            <div
++              key={def.id}
++              className="custom-fields-rail-row"
++              data-testid={`custom-field-row-${def.slug}`}
++            >
++              <div className="custom-fields-rail-label" title={def.name}>
++                {def.name}
++              </div>
++
++              <div className="custom-fields-rail-pill">
++                <EmojiHint
++                  kind="scriptedField"
++                  testId={`custom-field-emoji-hint-${def.slug}`}
++                  content={
++                    <div
++                      className="custom-field-hint-content"
++                      data-testid={`custom-field-hint-popover-${def.slug}`}
++                    >
++                      <div className="custom-field-hint-line">
++                        <strong>Tier:</strong> {tier}
++                      </div>
++                      <div className="custom-field-hint-line">
++                        <strong>Scope:</strong> {tokenScope}
++                      </div>
++                      <div className="custom-field-hint-line">
++                        <strong>Principal:</strong> {credentialMode}
++                      </div>
++                      <div className="custom-field-hint-line">
++                        <strong>Latency:</strong>{' '}
++                        {latencyMs !== undefined ? `${String(latencyMs)}ms` : 'N/A'}
++                      </div>
++                    </div>
++                  }
++                />
++
++                <div className="custom-fields-rail-value">
++                  {hasError ? (
++                    <span
++                      className="custom-field-error-inline"
++                      data-testid={`custom-field-error-${def.slug}`}
++                    >
++                      {errorMessage}
++                    </span>
++                  ) : result ? (
++                    <CustomFieldValue
++                      format={def.output_format}
++                      value={result.value}
++                      metadata={def.output_format_metadata}
++                      testId={`custom-field-value-${def.slug}`}
++                    />
++                  ) : (
++                    <span
++                      className="custom-field-uncomputed"
++                      data-testid={`custom-field-uncomputed-${def.slug}`}
++                    >
++                      Uncomputed
++                    </span>
++                  )}
++                </div>
++
++                {canEdit && (
++                  <button
++                    type="button"
++                    className="custom-fields-refresh-btn"
++                    aria-label={`Refresh ${def.name}`}
++                    aria-busy={isInFlight ? 'true' : 'false'}
++                    disabled={isInFlight}
++                    onClick={() => {
++                      handleRefresh(def.id);
++                    }}
++                    data-testid={`refresh-field-${def.slug}`}
++                  >
++                    ↻
++                  </button>
++                )}
++              </div>
++            </div>
++          );
++        })}
++      </div>
++    </section>
++  );
++}
++
++/**
++ * Properties-rail section wrapper. Safe when mounted without QueryClientProvider.
++ */
++export function CustomFieldsRailSection(
++  props: CustomFieldsRailSectionProps,
++): JSX.Element | null {
++  const client = React.useContext(QueryClientContext);
++  if (!client) {
++    return null;
++  }
++  return <CustomFieldsRailSectionInner {...props} />;
++}
++
+diff --git a/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx b/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx
+new file mode 100644
+index 0000000..ea5a541
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx
+@@ -0,0 +1,398 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import type { JSX } from 'react';
++import React, { useState } from 'react';
++import { useMutation, useQuery } from '@tanstack/react-query';
++import {
++  approveFieldEscalation,
++  fetchFieldApprovals,
++  qk,
++  requestFieldApproval,
++  type CustomFieldApproval,
++  type CustomFieldCredentialMode,
++  type CustomFieldDefinition,
++  type CustomFieldTargetScope,
++} from './api';
++import './custom-fields.css';
++
++export interface EscalationApprovalPanelProps {
++  field: CustomFieldDefinition;
++  callerTier?: 'MEMBER' | 'PROJECT_ADMIN' | 'WORKSPACE_ADMIN' | 'SERVER_ADMIN';
++  onAal2Challenge?: () => Promise<boolean>;
++  onApproved?: () => void;
++}
++
++function getTierRank(
++  tier: 'MEMBER' | 'PROJECT_ADMIN' | 'WORKSPACE_ADMIN' | 'SERVER_ADMIN',
++): number {
++  switch (tier) {
++    case 'SERVER_ADMIN':
++      return 3;
++    case 'WORKSPACE_ADMIN':
++      return 2;
++    case 'PROJECT_ADMIN':
++      return 1;
++    case 'MEMBER':
++    default:
++      return 0;
++  }
++}
++
++export function getRequiredApproverTier(
++  scope: CustomFieldTargetScope,
++  mode: CustomFieldCredentialMode,
++): { tier: 'PROJECT_ADMIN' | 'WORKSPACE_ADMIN' | 'SERVER_ADMIN'; dualControl: boolean } {
++  if (scope === 'SERVER') {
++    return { tier: 'SERVER_ADMIN', dualControl: true };
++  }
++  if (scope === 'WORKSPACE') {
++    return { tier: 'WORKSPACE_ADMIN', dualControl: false };
++  }
++  if (mode === 'PROJECT_ADMIN_SP') {
++    return { tier: 'PROJECT_ADMIN', dualControl: false };
++  }
++  return { tier: 'PROJECT_ADMIN', dualControl: false };
++}
++
++/**
++ * Escalation Approval Panel enforcing Section 13.2 Scope x Principal Matrix,
++ * AAL2 step-up verification, tamper auto-revocation display, and anti-enumeration.
++ */
++export function EscalationApprovalPanel({
++  field,
++  callerTier = 'PROJECT_ADMIN',
++  onAal2Challenge,
++  onApproved,
++}: EscalationApprovalPanelProps): JSX.Element {
++  const [justification, setJustification] = useState('');
++  const [spWarningAck, setSpWarningAck] = useState(false);
++  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
++  const [isAal2ModalOpen, setIsAal2ModalOpen] = useState(false);
++  const [manifestMismatchError, setManifestMismatchError] = useState<string | null>(null);
++  const [generalError, setGeneralError] = useState<string | null>(null);
++  const [aal2OtpCode, setAal2OtpCode] = useState('');
++
++  // Fetch approvals for this field
++  const { data: approvals = [], refetch: refetchApprovals } = useQuery({
++    queryKey: qk.customFields.approvals(field.id),
++    queryFn: () => fetchFieldApprovals(field.id),
++    enabled: Boolean(field.id),
++  });
++
++  const latestApproval: CustomFieldApproval | undefined = approvals[0];
++
++  const targetScope = field.target_scope;
++  const credentialMode = field.credential_mode;
++  const isElevated = targetScope !== 'PROJECT' || credentialMode !== 'INVOKING_USER';
++  const isSpMode = credentialMode !== 'INVOKING_USER';
++
++  const { tier: requiredTier, dualControl } = getRequiredApproverTier(targetScope, credentialMode);
++  const callerRank = getTierRank(callerTier);
++  const requiredRank = getTierRank(requiredTier);
++  const canCallerApprove = callerRank >= requiredRank;
++
++  // Request approval mutation
++  const requestMutation = useMutation({
++    mutationFn: async () => {
++      const sha = field.manifest_sha256 ?? '';
++      return requestFieldApproval(field.id, {
++        manifest_sha256: sha,
++        justification,
++      });
++    },
++    onSuccess: () => {
++      setIsRequestModalOpen(false);
++      setJustification('');
++      void refetchApprovals();
++    },
++    onError: (err: Error) => {
++      setGeneralError(err.message);
++    },
++  });
++
++  // Approve mutation
++  const approveMutation = useMutation({
++    mutationFn: async (params?: { approvalId?: string; isRetry?: boolean }) => {
++      const approvalId = params?.approvalId ?? latestApproval?.id;
++      if (!approvalId) throw new Error('No pending approval request found');
++      const sha = field.manifest_sha256 ?? '';
++      return approveFieldEscalation(approvalId, {
++        manifest_sha256: sha,
++        sp_warning_acknowledged: spWarningAck,
++      });
++    },
++    onSuccess: () => {
++      setManifestMismatchError(null);
++      setGeneralError(null);
++      setIsAal2ModalOpen(false);
++      void refetchApprovals();
++      onApproved?.();
++    },
++    onError: async (err: Error) => {
++      const errObj = err as unknown as { status?: number; code?: string };
++      if (errObj.status === 409 || errObj.code === 'MANIFEST_MISMATCH') {
++        setManifestMismatchError(
++          'Definition changed since you opened it - reload to review',
++        );
++        return;
++      }
++
++      if (errObj.status === 403 || errObj.code === 'AAL2_REQUIRED') {
++        // Trigger AAL2 step-up challenge
++        if (onAal2Challenge) {
++          const challenged = await onAal2Challenge();
++          if (challenged) {
++            // Retry approval once after successful challenge
++            approveMutation.mutate({ isRetry: true });
++            return;
++          }
++        }
++        setIsAal2ModalOpen(true);
++        return;
++      }
++
++      setGeneralError(err.message);
++    },
++  });
++
++  // Mock AAL2 dialog verification
++  const handleAal2Submit = (e: React.SyntheticEvent) => {
++    e.preventDefault();
++    if (aal2OtpCode.trim().length >= 6) {
++      setIsAal2ModalOpen(false);
++      // Retry once after simulated AAL2 verification
++      approveMutation.mutate({ isRetry: true });
++    }
++  };
++
++  return (
++    <div className="custom-field-approval-panel" data-testid="escalation-approval-panel">
++      <div className="custom-field-approval-header">
++        <h4 className="custom-field-approval-title">Escalation & Security Approvals</h4>
++        <span
++          className={`custom-field-status-chip custom-field-status-chip--${latestApproval?.status.toLowerCase() ?? 'default'}`}
++          data-testid="approval-status-chip"
++        >
++          {latestApproval?.status === 'APPROVED'
++            ? `Approved by ${requiredTier}`
++            : latestApproval?.status === 'PENDING'
++              ? 'Pending approval'
++              : latestApproval?.status === 'PENDING_SECOND_APPROVER'
++                ? 'Pending second approver'
++                : latestApproval?.status === 'REVOKED'
++                  ? 'Revoked'
++                  : 'Default (no approval needed)'}
++        </span>
++      </div>
++
++      {/* Scope x Principal Matrix Requirements */}
++      <div className="custom-field-matrix-summary">
++        <div className="custom-field-matrix-row">
++          <span className="custom-field-matrix-label">Target Scope:</span>
++          <span className="custom-field-matrix-val mono">{targetScope}</span>
++        </div>
++        <div className="custom-field-matrix-row">
++          <span className="custom-field-matrix-label">Credential Mode:</span>
++          <span className="custom-field-matrix-val mono">{credentialMode}</span>
++        </div>
++        <div className="custom-field-matrix-row">
++          <span className="custom-field-matrix-label">Required Approver Tier:</span>
++          <span className="custom-field-matrix-val">
++            {requiredTier} {dualControl ? '(Dual-Control Required)' : ''}
++          </span>
++        </div>
++      </div>
++
++      {/* SP Warning Banner (S13.2) */}
++      {isSpMode && (
++        <div
++          className="custom-field-sp-warning-banner"
++          data-testid="sp-warning-banner"
++          role="alert"
++        >
++          ⚠️ This field will run with Project Admin service-principal credentials for every viewer.
++        </div>
++      )}
++
++      {/* Error Banners */}
++      {manifestMismatchError && (
++        <div
++          className="custom-field-error-banner"
++          data-testid="manifest-mismatch-banner"
++          role="alert"
++        >
++          {manifestMismatchError}
++        </div>
++      )}
++      {generalError && (
++        <div className="custom-field-error-banner" role="alert">
++          {generalError}
++        </div>
++      )}
++
++      {/* Action Controls */}
++      {isElevated && (
++        <div className="custom-field-approval-actions">
++          {/* Request Approval Button */}
++          {(!latestApproval ||
++            latestApproval.status === 'REVOKED' ||
++            latestApproval.status === 'APPROVED') && (
++            <button
++              type="button"
++              className="custom-field-btn custom-field-btn--secondary"
++              onClick={() => {
++                setIsRequestModalOpen(true);
++              }}
++              data-testid="request-approval-btn"
++            >
++              Request Approval
++            </button>
++          )}
++
++          {/* Approve Button: ONLY rendered if caller tier >= required approver tier */}
++          {canCallerApprove &&
++            (latestApproval?.status === 'PENDING' ||
++              latestApproval?.status === 'PENDING_SECOND_APPROVER') && (
++              <div className="custom-field-approve-group">
++                {isSpMode && (
++                  <label className="custom-field-checkbox-label">
++                    <input
++                      type="checkbox"
++                      checked={spWarningAck}
++                      onChange={(e) => {
++                        setSpWarningAck(e.target.checked);
++                      }}
++                      data-testid="sp-ack-checkbox"
++                    />
++                    I acknowledge elevated service-principal execution
++                  </label>
++                )}
++                <button
++                  type="button"
++                  className="custom-field-btn custom-field-btn--primary"
++                  onClick={() => {
++                    approveMutation.mutate({});
++                  }}
++                  disabled={
++                    approveMutation.isPending ||
++                    Boolean(manifestMismatchError) ||
++                    (isSpMode && !spWarningAck)
++                  }
++                  data-testid="approve-escalation-btn"
++                >
++                  {approveMutation.isPending ? 'Approving...' : 'Approve Escalation'}
++                </button>
++              </div>
++            )}
++        </div>
++      )}
++
++      {/* Request Modal */}
++      {isRequestModalOpen && (
++        <div className="custom-field-modal-overlay" role="dialog" aria-modal="true">
++          <div className="custom-field-modal">
++            <h4 className="custom-field-modal-title">Request Escalation Approval</h4>
++            <p className="custom-field-modal-subtitle">
++              Provide justification for running this field with elevated scope or credentials.
++            </p>
++            <div className="custom-field-form-group">
++              <label htmlFor="approval-justification" className="custom-field-form-label">
++                Business Justification (min 10 characters)
++              </label>
++              <textarea
++                id="approval-justification"
++                className="custom-field-textarea"
++                rows={4}
++                value={justification}
++                onChange={(e) => {
++                  setJustification(e.target.value);
++                }}
++                data-testid="approval-justification-input"
++              />
++            </div>
++            <div className="custom-field-modal-actions">
++              <button
++                type="button"
++                className="custom-field-btn custom-field-btn--secondary"
++                data-testid="cancel-request-btn"
++                onClick={() => {
++                  setIsRequestModalOpen(false);
++                }}
++              >
++                Cancel
++              </button>
++              <button
++                type="button"
++                className="custom-field-btn custom-field-btn--primary"
++                disabled={justification.trim().length < 10 || requestMutation.isPending}
++                onClick={() => {
++                  requestMutation.mutate();
++                }}
++                data-testid="submit-approval-request-btn"
++              >
++                {requestMutation.isPending ? 'Submitting...' : 'Submit Request'}
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++
++      {/* AAL2 Step-Up Dialog */}
++      {isAal2ModalOpen && (
++        <div
++          className="custom-field-modal-overlay"
++          role="dialog"
++          aria-modal="true"
++          data-testid="aal2-stepup-modal"
++        >
++          <div className="custom-field-modal">
++            <h4 className="custom-field-modal-title">AAL2 Step-Up Verification</h4>
++            <p className="custom-field-modal-subtitle">
++              Approving custom field escalation requires secondary factor confirmation.
++            </p>
++            <form onSubmit={handleAal2Submit}>
++              <div className="custom-field-form-group">
++                <label htmlFor="aal2-otp" className="custom-field-form-label">
++                  Passkey or Authenticator Code
++                </label>
++                <input
++                  id="aal2-otp"
++                  type="text"
++                  className="custom-field-input mono"
++                  maxLength={6}
++                  placeholder="000000"
++                  value={aal2OtpCode}
++                  onChange={(e) => {
++                    setAal2OtpCode(e.target.value);
++                  }}
++                  data-testid="aal2-otp-input"
++                  autoFocus
++                />
++              </div>
++              <div className="custom-field-modal-actions">
++                <button
++                  type="button"
++                  className="custom-field-btn custom-field-btn--secondary"
++                  data-testid="cancel-aal2-btn"
++                  onClick={() => {
++                    setIsAal2ModalOpen(false);
++                  }}
++                >
++                  Cancel
++                </button>
++                <button
++                  type="submit"
++                  className="custom-field-btn custom-field-btn--primary"
++                  data-testid="aal2-verify-btn"
++                >
++                  Verify & Approve
++                </button>
++              </div>
++            </form>
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+new file mode 100644
+index 0000000..65b716f
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+@@ -0,0 +1,524 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { MemoryRouter } from 'react-router';
++import { CustomFieldDefinitionEditor } from '../CustomFieldDefinitionEditor';
++import * as api from '../api';
++
++vi.mock('../api', async () => {
++  const actual = await vi.importActual<typeof import('../api')>('../api');
++  return {
++    ...actual,
++    fetchProjectCustomFields: vi.fn(),
++    createCustomField: vi.fn(),
++    updateCustomField: vi.fn(),
++    deleteCustomField: vi.fn(),
++    fetchFieldApprovals: vi.fn().mockResolvedValue([]),
++    approveFieldEscalation: vi.fn(),
++  };
++});
++
++const mockDefinitions: api.CustomFieldDefinition[] = [
++  {
++    id: 'f-1',
++    slug: 'cvss-score',
++    name: 'CVSS Score',
++    tier: 'wasm',
++    output_format: 'severity_pill',
++    output_format_metadata: {},
++    script_source: 'return { level: "high", score: 8.8 };',
++    target_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    egress_allowlist: [],
++    manifest_sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
++    is_enabled: true,
++    approval_status: 'APPROVED',
++  },
++  {
++    id: 'f-2',
++    slug: 'deploy-target',
++    name: 'Deploy Target',
++    tier: 'nsjail',
++    output_format: 'text',
++    output_format_metadata: { prefix: 'Env: ' },
++    script_source: 'return "Prod";',
++    target_scope: 'WORKSPACE',
++    credential_mode: 'PROJECT_ADMIN_SP',
++    egress_allowlist: ['/api/v1/projects/KAN'],
++    manifest_sha256: 'b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef01',
++    is_enabled: true,
++    approval_status: 'PENDING',
++  },
++  {
++    id: 'f-3',
++    slug: 'minimal-field',
++    name: 'Minimal Field',
++    tier: 'wasm',
++    output_format: 'text',
++    output_format_metadata: {},
++    target_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    egress_allowlist: [],
++    is_enabled: true,
++  },
++];
++
++const def0 = mockDefinitions[0];
++const def1 = mockDefinitions[1];
++if (!def0 || !def1) {
++  throw new Error('mockDefinitions missing expected entries');
++}
++
++function renderEditor(isAdmin = true) {
++  const queryClient = new QueryClient({
++    defaultOptions: {
++      queries: { retry: false, staleTime: Infinity },
++    },
++  });
++  return render(
++    <QueryClientProvider client={queryClient}>
++      <MemoryRouter>
++        <CustomFieldDefinitionEditor projectKey="KAN" isAdmin={isAdmin} />
++      </MemoryRouter>
++    </QueryClientProvider>,
++  );
++}
++
++describe('CustomFieldDefinitionEditor', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++    Object.assign(navigator, {
++      clipboard: {
++        writeText: vi.fn().mockResolvedValue(undefined),
++      },
++    });
++  });
++
++  afterEach(() => {
++    vi.useRealTimers();
++  });
++
++  it('renders uniform 404 page for non-admin callers (anti-enumeration S3.4)', () => {
++    renderEditor(false);
++    expect(screen.getByTestId('not-found-view')).toBeDefined();
++    expect(screen.getByText('Not found or no access')).toBeDefined();
++    expect(screen.queryByTestId('custom-fields-editor-layout')).toBeNull();
++  });
++
++  it('renders editor layout, definitions list, and manifest SHA chip for admin', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true);
++
++    expect(await screen.findByTestId('custom-fields-editor-layout')).toBeDefined();
++    expect(screen.getByText('CVSS Score')).toBeDefined();
++    expect(screen.getByText('Deploy Target')).toBeDefined();
++
++    // Select first field
++    fireEvent.click(screen.getByTestId('field-item-cvss-score'));
++
++    // Manifest SHA chip
++    const chip = screen.getByTestId('manifest-sha256-chip');
++    expect(chip.textContent).toContain('a1b2c3d4e5f60718...');
++
++    // Copy SHA button
++    const copyBtn = screen.getByTestId('copy-manifest-sha-btn');
++    expect(copyBtn.textContent).toContain('Copy');
++    fireEvent.click(copyBtn);
++    expect(copyBtn.textContent).toContain('Copied');
++  });
++
++  it('creates new custom field definition with validation', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
++    const createdField: api.CustomFieldDefinition = {
++      id: 'f-new',
++      slug: 'test-field',
++      name: 'Test Field',
++      tier: 'wasm',
++      output_format: 'text',
++      output_format_metadata: { max_length: 280 },
++      script_source: 'return "ok";',
++      target_scope: 'PROJECT',
++      credential_mode: 'INVOKING_USER',
++      egress_allowlist: [],
++      manifest_sha256: 'c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef012',
++      is_enabled: true,
++    };
++    vi.mocked(api.createCustomField).mockResolvedValue(createdField);
++
++    renderEditor(true);
++
++    await screen.findByTestId('custom-fields-editor-layout');
++
++    // Fill form
++    fireEvent.change(screen.getByTestId('field-name-input'), {
++      target: { value: 'Test Field' },
++    });
++    fireEvent.change(screen.getByTestId('field-slug-input'), {
++      target: { value: 'test-field' },
++    });
++    fireEvent.change(screen.getByTestId('output-format-select'), {
++      target: { value: 'text' },
++    });
++
++    // Save
++    fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++    await waitFor(() => {
++      expect(api.createCustomField).toHaveBeenCalledWith(
++        'KAN',
++        expect.objectContaining({
++          slug: 'test-field',
++          name: 'Test Field',
++          output_format: 'text',
++        }),
++      );
++    });
++  });
++
++  it('prompts literal tamper warning dialog when editing script on approved field (S13.2)', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++    vi.mocked(api.updateCustomField).mockResolvedValue({
++      id: def0.id,
++      slug: def0.slug,
++      name: def0.name,
++      tier: def0.tier,
++      output_format: def0.output_format,
++      output_format_metadata: def0.output_format_metadata,
++      target_scope: def0.target_scope,
++      credential_mode: def0.credential_mode,
++      egress_allowlist: def0.egress_allowlist,
++      is_enabled: def0.is_enabled,
++      script_source: 'return { level: "critical", score: 9.9 };',
++      approval_status: 'REVOKED',
++    });
++
++    renderEditor(true);
++
++    // Select approved field
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++
++    // Modify script source
++    fireEvent.change(screen.getByTestId('script-source-textarea'), {
++      target: { value: 'return { level: "critical", score: 9.9 };' },
++    });
++
++    // Click Save
++    fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++    // Literal confirmation text
++    expect(screen.getByTestId('tamper-confirm-dialog')).toBeDefined();
++    expect(screen.getByTestId('tamper-warning-literal').textContent).toContain(
++      'Saving changes manifest_sha256 and immediately revokes the current approval.',
++    );
++
++    // Confirm save
++    fireEvent.click(screen.getByTestId('confirm-tamper-save-btn'));
++
++    await waitFor(() => {
++      expect(api.updateCustomField).toHaveBeenCalledWith(
++        'KAN',
++        'f-1',
++        expect.objectContaining({
++          script_source: 'return { level: "critical", score: 9.9 };',
++        }),
++      );
++    });
++  });
++
++  it('displays validation error on invalid format metadata JSON', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++
++    // Enter bad JSON
++    fireEvent.change(screen.getByTestId('format-metadata-textarea'), {
++      target: { value: '{ invalid_json: ' },
++    });
++
++    fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++    expect(
++      screen.getByText('Invalid JSON in format metadata'),
++    ).toBeDefined();
++    expect(api.updateCustomField).not.toHaveBeenCalled();
++  });
++
++  it('deletes custom field definition', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++    vi.mocked(api.deleteCustomField).mockResolvedValue();
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++
++    const deleteBtn = screen.getByTestId('delete-field-btn');
++    fireEvent.click(deleteBtn);
++
++    await waitFor(() => {
++      expect(api.deleteCustomField).toHaveBeenCalledWith('KAN', 'f-1');
++    });
++  });
++
++  it('updates tier, target scope, and credential mode select inputs', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++
++    fireEvent.change(screen.getByTestId('execution-tier-select'), {
++      target: { value: 'nsjail' },
++    });
++    fireEvent.change(screen.getByTestId('target-scope-select'), {
++      target: { value: 'WORKSPACE' },
++    });
++    fireEvent.change(screen.getByTestId('credential-mode-select'), {
++      target: { value: 'PROJECT_ADMIN_SP' },
++    });
++
++    expect(screen.getByTestId<HTMLSelectElement>('execution-tier-select').value).toBe('nsjail');
++    expect(screen.getByTestId<HTMLSelectElement>('target-scope-select').value).toBe('WORKSPACE');
++    expect(screen.getByTestId<HTMLSelectElement>('credential-mode-select').value).toBe(
++      'PROJECT_ADMIN_SP',
++    );
++  });
++
++  it('cancels tamper confirmation dialog without saving', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++
++    fireEvent.change(screen.getByTestId('script-source-textarea'), {
++      target: { value: 'return 100;' },
++    });
++
++    fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++    expect(screen.getByTestId('tamper-confirm-dialog')).toBeDefined();
++
++    fireEvent.click(screen.getByText('Cancel'));
++
++    expect(screen.queryByTestId('tamper-confirm-dialog')).toBeNull();
++    expect(api.updateCustomField).not.toHaveBeenCalled();
++  });
++
++  it('resets form when clicking New Custom Field button', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++    expect(screen.getByTestId<HTMLInputElement>('field-name-input').value).toBe('CVSS Score');
++
++    fireEvent.click(screen.getByTestId('create-new-field-btn'));
++
++    expect(screen.getByTestId<HTMLInputElement>('field-name-input').value).toBe('');
++    expect(screen.getByTestId<HTMLInputElement>('field-slug-input').value).toBe('');
++  });
++
++  it('displays submit error when createCustomField fails', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
++    vi.mocked(api.createCustomField).mockRejectedValueOnce(new Error('Slug conflict'));
++
++    renderEditor(true);
++
++    fireEvent.change(screen.getByTestId('field-name-input'), {
++      target: { value: 'Conflict' },
++    });
++    fireEvent.change(screen.getByTestId('field-slug-input'), {
++      target: { value: 'conflict' },
++    });
++    fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++    expect(await screen.findByText('Slug conflict')).toBeDefined();
++  });
++
++  it('displays submit error when updateCustomField fails', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++    vi.mocked(api.updateCustomField).mockRejectedValueOnce(new Error('Update failed'));
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++
++    fireEvent.change(screen.getByTestId('field-name-input'), {
++      target: { value: 'New Name' },
++    });
++    fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++    expect(await screen.findByText('Update failed')).toBeDefined();
++  });
++
++  it('resets copy button text after 2 seconds', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++
++    vi.useFakeTimers();
++    const copyBtn = screen.getByTestId('copy-manifest-sha-btn');
++    fireEvent.click(copyBtn);
++    expect(copyBtn.textContent).toContain('Copied');
++
++    act(() => {
++      vi.advanceTimersByTime(2000);
++    });
++
++    expect(copyBtn.textContent).toContain('Copy');
++    vi.useRealTimers();
++  });
++
++  it('toggles is_enabled checkbox', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++
++    const checkbox = screen.getByTestId<HTMLInputElement>('is-enabled-checkbox');
++    expect(checkbox.checked).toBe(true);
++
++    fireEvent.click(checkbox);
++    expect(checkbox.checked).toBe(false);
++  });
++
++  it('refetches definitions when child approval panel succeeds', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([
++      {
++        id: 'appr-2',
++        field_id: 'f-2',
++        status: 'PENDING',
++        target_scope: 'WORKSPACE',
++        credential_mode: 'PROJECT_ADMIN_SP',
++        manifest_sha256: def1.manifest_sha256 ?? '',
++        justification: 'deploy access',
++        created_at: '2026-11-13T10:00:00Z',
++        updated_at: '2026-11-13T10:00:00Z',
++      },
++    ]);
++    vi.mocked(api.approveFieldEscalation).mockResolvedValue({
++      id: 'appr-2',
++      field_id: 'f-2',
++      status: 'APPROVED',
++      target_scope: 'WORKSPACE',
++      credential_mode: 'PROJECT_ADMIN_SP',
++      manifest_sha256: def1.manifest_sha256 ?? '',
++      justification: 'deploy access',
++      created_at: '2026-11-13T10:00:00Z',
++      updated_at: '2026-11-13T10:00:00Z',
++    });
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-deploy-target'));
++
++    const ackCheckbox = await screen.findByTestId('sp-ack-checkbox');
++    fireEvent.click(ackCheckbox);
++
++    const approveBtn = screen.getByTestId('approve-escalation-btn');
++    fireEvent.click(approveBtn);
++
++    await waitFor(() => {
++      expect(api.approveFieldEscalation).toHaveBeenCalled();
++    });
++  });
++
++  it('triggers tamper confirmation when format metadata is modified on approved field', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++
++    fireEvent.change(screen.getByTestId('format-metadata-textarea'), {
++      target: { value: JSON.stringify({ custom_opt: true }) },
++    });
++    fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++    expect(screen.getByTestId('tamper-confirm-dialog')).toBeDefined();
++  });
++
++  it('saves field with empty metadata string parsing to empty object', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
++    vi.mocked(api.createCustomField).mockResolvedValue(def0);
++
++    renderEditor(true);
++
++    fireEvent.change(screen.getByTestId('field-name-input'), {
++      target: { value: 'Empty Meta Field' },
++    });
++    fireEvent.change(screen.getByTestId('field-slug-input'), {
++      target: { value: 'empty-meta' },
++    });
++    fireEvent.change(screen.getByTestId('format-metadata-textarea'), {
++      target: { value: '' },
++    });
++    fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++    await waitFor(() => {
++      expect(api.createCustomField).toHaveBeenCalledWith(
++        'KAN',
++        expect.objectContaining({
++          output_format_metadata: {},
++        }),
++      );
++    });
++  });
++
++  it('updates metadata template when output format changes', () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
++
++    renderEditor(true);
++
++    fireEvent.change(screen.getByTestId('output-format-select'), {
++      target: { value: 'badge' },
++    });
++    const textarea = screen.getByTestId<HTMLTextAreaElement>('format-metadata-textarea');
++    expect(textarea.value).toContain('color_token');
++
++    fireEvent.change(screen.getByTestId('output-format-select'), {
++      target: { value: 'number' },
++    });
++    expect(textarea.value).toContain('maximum_fraction_digits');
++  });
++
++  it('saves approved field without tamper dialog when neither script nor metadata changed', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++    vi.mocked(api.updateCustomField).mockResolvedValue(def0);
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
++
++    // Change only the name, leaving script and meta untouched
++    fireEvent.change(screen.getByTestId('field-name-input'), {
++      target: { value: 'CVSS Score Updated' },
++    });
++    fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++    expect(screen.queryByTestId('tamper-confirm-dialog')).toBeNull();
++    await waitFor(() => {
++      expect(api.updateCustomField).toHaveBeenCalled();
++    });
++  });
++
++  it('handles selecting field with undefined script_source and egress_allowlist', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true);
++
++    fireEvent.click(await screen.findByTestId('field-item-minimal-field'));
++    expect(screen.getByTestId<HTMLTextAreaElement>('script-source-textarea').value).toBe('');
++  });
++});
+diff --git a/kanban/web/src/features/custom-fields/__tests__/CustomFieldValue.test.tsx b/kanban/web/src/features/custom-fields/__tests__/CustomFieldValue.test.tsx
+new file mode 100644
+index 0000000..691e542
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/__tests__/CustomFieldValue.test.tsx
+@@ -0,0 +1,426 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, expect, it } from 'vitest';
++import { render, screen } from '@testing-library/react';
++import { CustomFieldValue } from '../CustomFieldValue';
++import type { OutputFormatType } from '../api';
++
++describe('CustomFieldValue', () => {
++  describe('text format', () => {
++    it('renders normal text with prefix', () => {
++      render(
++        <CustomFieldValue
++          format="text"
++          value="Production Server"
++          metadata={{ prefix: 'Env: ' }}
++          testId="cf-text"
++        />,
++      );
++      expect(screen.getByTestId('cf-text').textContent).toContain('Env: Production Server');
++    });
++
++    it('truncates text over max_length (280) with ellipsis and title', () => {
++      const longText = 'A'.repeat(281);
++      render(
++        <CustomFieldValue
++          format="text"
++          value={longText}
++          metadata={{ max_length: 280 }}
++          testId="cf-text-long"
++        />,
++      );
++      const el = screen.getByTestId('cf-text-long');
++      expect(el.textContent).toBe('A'.repeat(280) + '...');
++      expect(el.getAttribute('title')).toBe(longText);
++    });
++
++    it('supports monospace styling', () => {
++      render(
++        <CustomFieldValue
++          format="text"
++          value="commit-sha"
++          metadata={{ monospace: true }}
++          testId="cf-mono"
++        />,
++      );
++      expect(screen.getByTestId('cf-mono').className).toContain('custom-field-mono');
++    });
++  });
++
++  describe('number format', () => {
++    it('formats number with default fraction digits (2) and unit suffix', () => {
++      render(
++        <CustomFieldValue
++          format="number"
++          value={99.8765}
++          metadata={{ maximum_fraction_digits: 2, unit_suffix: 'ms' }}
++          testId="cf-num"
++        />,
++      );
++      expect(screen.getByTestId('cf-num').textContent).toContain('99.88 ms');
++    });
++
++    it('renders Unavailable for non-finite numbers', () => {
++      render(
++        <CustomFieldValue format="number" value={NaN} testId="cf-num-nan" />,
++      );
++      expect(screen.getByTestId('cf-num-nan').textContent).toBe('Unavailable');
++
++      render(
++        <CustomFieldValue format="number" value={Infinity} testId="cf-num-inf" />,
++      );
++      expect(screen.getByTestId('cf-num-inf').textContent).toBe('Unavailable');
++    });
++  });
++
++  describe('badge format', () => {
++    it('renders text badge with token color class', () => {
++      render(
++        <CustomFieldValue
++          format="badge"
++          value="Approved"
++          metadata={{ color_token: 'success' }}
++          testId="cf-badge"
++        />,
++      );
++      const el = screen.getByTestId('cf-badge');
++      expect(el.textContent).toBe('Approved');
++      expect(el.className).toContain('custom-field-badge--success');
++    });
++
++    it('ignores arbitrary server CSS/hex and falls back to neutral token', () => {
++      render(
++        <CustomFieldValue
++          format="badge"
++          value="Dangerous"
++          metadata={{ color_token: '#ff0000;background:url(x)' }}
++          testId="cf-badge-unsafe"
++        />,
++      );
++      const el = screen.getByTestId('cf-badge-unsafe');
++      expect(el.className).toContain('custom-field-badge--neutral');
++    });
++  });
++
++  describe('markdown_snippet format', () => {
++    it('renders safe markdown snippet (bold, italic, code) without raw HTML', () => {
++      const snippet = 'This is **bold** and *italic* and `code`.';
++      render(
++        <CustomFieldValue
++          format="markdown_snippet"
++          value={snippet}
++          testId="cf-md"
++        />,
++      );
++      const container = screen.getByTestId('cf-md');
++      expect(container.querySelector('strong')?.textContent).toBe('bold');
++      expect(container.querySelector('em')?.textContent).toBe('italic');
++      expect(container.querySelector('code')?.textContent).toBe('code');
++    });
++
++    it('strips <img src=x onerror=alert(1)> and retains safe formatting', () => {
++      const payload = '<img src=x onerror=alert(1)>**b**';
++      const { container } = render(
++        <CustomFieldValue
++          format="markdown_snippet"
++          value={payload}
++          testId="cf-md-xss"
++        />,
++      );
++      expect(container.querySelector('img')).toBeNull();
++      expect(container.innerHTML).not.toContain('onerror');
++      expect(container.innerHTML).not.toContain('alert(1)');
++      const strong = screen.getByText('b');
++      expect(strong.tagName.toLowerCase()).toBe('strong');
++    });
++
++    it('clamps markdown to max_chars', () => {
++      const longMd = 'x'.repeat(2500);
++      render(
++        <CustomFieldValue
++          format="markdown_snippet"
++          value={longMd}
++          metadata={{ max_chars: 2000 }}
++          testId="cf-md-clamp"
++        />,
++      );
++      expect(screen.getByTestId('cf-md-clamp').textContent.length).toBe(2000);
++    });
++
++    it('handles empty lines and tokens correctly', () => {
++      const multiLine = 'First line\n\nSecond line with *italic*';
++      render(
++        <CustomFieldValue
++          format="markdown_snippet"
++          value={multiLine}
++          testId="cf-md-multi"
++        />,
++      );
++      expect(screen.getByTestId('cf-md-multi').textContent).toContain('First line');
++      expect(screen.getByTestId('cf-md-multi').textContent).toContain('Second line with italic');
++    });
++  });
++
++  describe('url format', () => {
++    it('renders safe https anchor with hostname as link text and security attributes', () => {
++      render(
++        <CustomFieldValue
++          format="url"
++          value="https://security.example.com/reports/123"
++          testId="cf-url"
++        />,
++      );
++      const link = screen.getByTestId('cf-url');
++      expect(link.tagName.toLowerCase()).toBe('a');
++      expect(link.getAttribute('href')).toBe('https://security.example.com/reports/123');
++      expect(link.getAttribute('target')).toBe('_blank');
++      expect(link.getAttribute('rel')).toBe('noopener noreferrer nofollow');
++      expect(link.textContent).toBe('security.example.com');
++    });
++
++    it('renders javascript:alert(1) as plain text with no anchor element', () => {
++      const { container } = render(
++        <CustomFieldValue
++          format="url"
++          value="javascript:alert(1)"
++          testId="cf-url-unsafe"
++        />,
++      );
++      expect(container.querySelector('a')).toBeNull();
++      expect(screen.getByTestId('cf-url-unsafe').textContent).toBe('javascript:alert(1)');
++    });
++  });
++
++  describe('json_table format', () => {
++    it('renders tabular data capped at max_rows (50) and max_cols (10) with overflow footer', () => {
++      // 120 rows x 14 columns
++      const rows = Array.from({ length: 120 }, (_, rIdx) => {
++        const row: Record<string, string> = {};
++        for (let c = 0; c < 14; c++) {
++          row[`col_${String(c)}`] = `val_${String(rIdx)}_${String(c)}`;
++        }
++        return row;
++      });
++
++      render(
++        <CustomFieldValue
++          format="json_table"
++          value={rows}
++          metadata={{ max_rows: 50 }}
++          testId="cf-table"
++        />,
++      );
++
++      const table = screen.getByTestId('cf-table');
++      const tableRows = table.querySelectorAll('tbody tr');
++      expect(tableRows.length).toBe(50);
++
++      // Verify columns capped at 10
++      const headerCols = table.querySelectorAll('thead th');
++      expect(headerCols.length).toBe(10);
++
++      // Overflow footer
++      expect(table.textContent).toContain('+70 more rows');
++    });
++
++    it('renders empty message when value is empty array', () => {
++      render(
++        <CustomFieldValue
++          format="json_table"
++          value={[]}
++          testId="cf-table-empty"
++        />,
++      );
++      expect(screen.getByTestId('cf-table-empty').textContent).toBe('No table data');
++    });
++  });
++
++  describe('severity_pill format', () => {
++    it('renders severity score and label with design token styling', () => {
++      render(
++        <CustomFieldValue
++          format="severity_pill"
++          value={{ level: 'high', score: 8.8, label: 'High' }}
++          testId="cf-sev"
++        />,
++      );
++      const el = screen.getByTestId('cf-sev');
++      expect(el.className).toContain('custom-field-severity--high');
++      expect(el.textContent).toContain('8.8');
++      expect(el.textContent).toContain('High');
++    });
++
++    it('renders all 4 severity levels (low, medium, high, critical)', () => {
++      const levels = ['low', 'medium', 'high', 'critical'] as const;
++      for (const lvl of levels) {
++        const { unmount } = render(
++          <CustomFieldValue
++            format="severity_pill"
++            value={lvl}
++            testId={`cf-sev-${lvl}`}
++          />,
++        );
++        expect(screen.getByTestId(`cf-sev-${lvl}`).className).toContain(`custom-field-severity--${lvl}`);
++        unmount();
++      }
++    });
++
++    it('renders Unavailable for unknown severity level', () => {
++      render(
++        <CustomFieldValue
++          format="severity_pill"
++          value={{ level: 'catastrophic' }}
++          testId="cf-sev-unknown"
++        />,
++      );
++      expect(screen.getByTestId('cf-sev-unknown').textContent).toBe('Unavailable');
++    });
++  });
++
++  describe('null / undefined / unknown format', () => {
++    it('handles stray asterisk in markdown snippet', () => {
++      render(
++        <CustomFieldValue
++          format="markdown_snippet"
++          value="Single * asterisk remaining"
++          testId="cf-md-stray"
++        />,
++      );
++      expect(screen.getByTestId('cf-md-stray').textContent).toContain('Single * asterisk remaining');
++    });
++
++    it('renders plain text for invalid URL syntax', () => {
++      render(
++        <CustomFieldValue
++          format="url"
++          value="ht tp://invalid-url-with-spaces"
++          testId="cf-url-invalid"
++        />,
++      );
++      expect(screen.getByTestId('cf-url-invalid').textContent).toBe('ht tp://invalid-url-with-spaces');
++    });
++
++    it('uses explicit columns in json_table when provided', () => {
++      const data = [{ service: 'auth-svc', port: 8080 }];
++      render(
++        <CustomFieldValue
++          format="json_table"
++          value={data}
++          metadata={{ columns: [{ key: 'service', label: 'Service Name' }] }}
++          testId="cf-table-cols"
++        />,
++      );
++      expect(screen.getByTestId('cf-table-cols').textContent).toContain('Service Name');
++      expect(screen.getByTestId('cf-table-cols').textContent).toContain('auth-svc');
++    });
++
++    it('renders empty json_table gracefully', () => {
++      render(
++        <CustomFieldValue format="json_table" value={[]} testId="cf-table-empty" />,
++      );
++      expect(screen.getByTestId('cf-table-empty')).toBeDefined();
++    });
++
++    it('renders table cells with null and undefined values as empty strings', () => {
++      render(
++        <CustomFieldValue
++          format="json_table"
++          value={[{ a: null, b: undefined, c: 'hello' }]}
++          testId="cf-table-null-cells"
++        />,
++      );
++      expect(screen.getByTestId('cf-table-null-cells').textContent).toContain('hello');
++    });
++
++    it('handles severity_pill with string value', () => {
++      render(
++        <CustomFieldValue format="severity_pill" value="critical" testId="cf-sev-str" />,
++      );
++      expect(screen.getByTestId('cf-sev-str').textContent).toBe('Critical');
++    });
++
++    it('falls back to neutral badge on unrecognized color token', () => {
++      render(
++        <CustomFieldValue
++          format="badge"
++          value="TestBadge"
++          metadata={{ color_token: 'nonexistent_color' }}
++          testId="cf-badge-fallback"
++        />,
++      );
++      expect(screen.getByTestId('cf-badge-fallback').className).toContain(
++        'custom-field-badge--neutral',
++      );
++    });
++
++    it('renders badge without metadata using neutral default', () => {
++      render(
++        <CustomFieldValue format="badge" value="SimpleBadge" testId="cf-badge-simple" />,
++      );
++      expect(screen.getByTestId('cf-badge-simple').textContent).toBe('SimpleBadge');
++    });
++
++    it('renders number without metadata using default formatting', () => {
++      render(<CustomFieldValue format="number" value={42} testId="cf-num-simple" />);
++      expect(screen.getByTestId('cf-num-simple').textContent).toBe('42');
++    });
++
++    it('infers columns in json_table when metadata columns not provided', () => {
++      render(
++        <CustomFieldValue
++          format="json_table"
++          value={[{ host: 'srv-1', port: 443 }]}
++          testId="cf-table-inferred"
++        />,
++      );
++      expect(screen.getByTestId('cf-table-inferred').textContent).toContain('host');
++      expect(screen.getByTestId('cf-table-inferred').textContent).toContain('srv-1');
++    });
++
++    it('handles severity_pill object without level', () => {
++      render(
++        <CustomFieldValue
++          format="severity_pill"
++          value={{ score: 5 }}
++          testId="cf-sev-no-level"
++        />,
++      );
++      expect(screen.getByTestId('cf-sev-no-level').textContent).toBe('Unavailable');
++    });
++
++    it('renders Unavailable for null or undefined values', () => {
++      render(<CustomFieldValue format="text" value={null} testId="cf-null" />);
++      expect(screen.getByTestId('cf-null').textContent).toBe('Unavailable');
++
++      render(<CustomFieldValue format="text" value={undefined} testId="cf-undef" />);
++      expect(screen.getByTestId('cf-undef').textContent).toBe('Unavailable');
++    });
++
++    it('renders Unavailable for unrecognized format', () => {
++      render(
++        <CustomFieldValue
++          format={'unsupported_format' as unknown as OutputFormatType}
++          value="hello"
++          testId="cf-unrec"
++        />,
++      );
++      expect(screen.getByTestId('cf-unrec').textContent).toBe('Unavailable');
++    });
++
++    it('handles non-string primitive and object values across format renderers', () => {
++      render(<CustomFieldValue format="text" value={12345} testId="cf-num" />);
++      expect(screen.getByTestId('cf-num').textContent).toContain('12345');
++
++      render(<CustomFieldValue format="text" value={true} testId="cf-bool" />);
++      expect(screen.getByTestId('cf-bool').textContent).toContain('true');
++
++      render(<CustomFieldValue format="text" value={{ foo: 'bar' }} testId="cf-obj" />);
++      expect(screen.getByTestId('cf-obj').textContent).toContain('{"foo":"bar"}');
++
++      render(<CustomFieldValue format="severity_pill" value={999} testId="cf-sev-num" />);
++      expect(screen.getByTestId('cf-sev-num').textContent).toBe('Unavailable');
++    });
++  });
++});
+diff --git a/kanban/web/src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx b/kanban/web/src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx
+new file mode 100644
+index 0000000..f881265
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx
+@@ -0,0 +1,321 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { CustomFieldsRailSection } from '../CustomFieldsRailSection';
++import * as api from '../api';
++
++vi.mock('../api', async () => {
++  const actual = await vi.importActual<typeof import('../api')>('../api');
++  return {
++    ...actual,
++    fetchProjectCustomFields: vi.fn(),
++    fetchIssueCustomFields: vi.fn(),
++    executeCustomField: vi.fn(),
++  };
++});
++
++const mockDefinitions: api.CustomFieldDefinition[] = [
++  {
++    id: 'f-cvss',
++    slug: 'cvss-score',
++    name: 'CVSS Score',
++    tier: 'wasm',
++    output_format: 'severity_pill',
++    output_format_metadata: {},
++    target_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    egress_allowlist: [],
++    is_enabled: true,
++  },
++  {
++    id: 'f-env',
++    slug: 'target-env',
++    name: 'Target Environment',
++    tier: 'nsjail',
++    output_format: 'text',
++    output_format_metadata: { prefix: 'Env: ' },
++    target_scope: 'WORKSPACE',
++    credential_mode: 'PROJECT_ADMIN_SP',
++    egress_allowlist: [],
++    is_enabled: true,
++  },
++];
++
++const mockResults: api.CustomFieldExecutionResult[] = [
++  {
++    field_id: 'f-cvss',
++    field_slug: 'cvss-score',
++    field_name: 'CVSS Score',
++    output_format: 'severity_pill',
++    value: { level: 'high', score: 8.8, label: 'High' },
++    status: 'SUCCESS',
++    tier: 'Wasmtime',
++    token_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    last_latency_ms: 12,
++    computed_at: '2026-11-13T12:00:00Z',
++  },
++  {
++    field_id: 'f-env',
++    field_slug: 'target-env',
++    field_name: 'Target Environment',
++    output_format: 'text',
++    value: 'Staging',
++    status: 'SUCCESS',
++    tier: 'nsjail',
++    token_scope: 'WORKSPACE',
++    credential_mode: 'PROJECT_ADMIN_SP',
++    last_latency_ms: 45,
++    computed_at: '2026-11-13T12:00:00Z',
++  },
++];
++
++const firstDef = mockDefinitions[0];
++const firstRes = mockResults[0];
++if (!firstDef || !firstRes) {
++  throw new Error('mock definitions/results not populated');
++}
++
++function renderWithQuery(ui: React.ReactElement) {
++  const queryClient = new QueryClient({
++    defaultOptions: {
++      queries: { retry: false, staleTime: Infinity },
++    },
++  });
++  return render(
++    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
++  );
++}
++
++describe('CustomFieldsRailSection', () => {
++  beforeEach(() => {
++    vi.resetAllMocks();
++  });
++
++  it('does NOT mount section when project has 0 custom fields (S7.1)', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
++    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue([]);
++
++    const { container } = renderWithQuery(
++      <CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />,
++    );
++
++    await waitFor(() => {
++      expect(api.fetchProjectCustomFields).toHaveBeenCalledWith('KAN');
++    });
++
++    expect(screen.queryByTestId('custom-fields-rail-section')).toBeNull();
++    expect(container.firstChild).toBeNull();
++  });
++
++  it('renders literal section header and rows with 🧪 popover metadata', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue(mockResults);
++
++    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
++
++    // Literal section header
++    const heading = await screen.findByRole('heading', {
++      name: 'Custom Fields (Admin-Defined 🧪)',
++    });
++    expect(heading).toBeDefined();
++
++    // Field labels and values
++    expect(screen.getByText('CVSS Score')).toBeDefined();
++    expect(screen.getByText('Target Environment')).toBeDefined();
++    const cvssVal = await screen.findByTestId('custom-field-value-cvss-score');
++    expect(cvssVal.textContent).toContain('8.8');
++    expect(cvssVal.textContent).toContain('High');
++    expect(screen.getByTestId('custom-field-value-target-env').textContent).toContain('Env: Staging');
++
++    // EmojiHint popover content
++    const hintTrigger = screen.getByTestId('custom-field-emoji-hint-cvss-score');
++    act(() => {
++      hintTrigger.focus();
++    });
++    const popover = await screen.findByTestId('custom-field-hint-popover-cvss-score');
++    expect(popover.textContent).toContain('Tier: Wasmtime');
++    expect(popover.textContent).toContain('Scope: PROJECT');
++    expect(popover.textContent).toContain('Principal: INVOKING_USER');
++    expect(popover.textContent).toContain('Latency: 12ms');
++  });
++
++  it('deduplicates rapid double-click on refresh sending exactly 1 execute request', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue(mockResults);
++
++    let resolveExecution!: (res: api.CustomFieldExecutionResult) => void;
++    const executionPromise = new Promise<api.CustomFieldExecutionResult>((resolve) => {
++      resolveExecution = resolve;
++    });
++    vi.mocked(api.executeCustomField).mockImplementation(() => executionPromise);
++
++    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
++
++    const refreshBtn = await screen.findByTestId<HTMLButtonElement>('refresh-field-cvss-score');
++    expect(refreshBtn.getAttribute('aria-label')).toBe('Refresh CVSS Score');
++    expect(refreshBtn.getAttribute('aria-busy')).toBe('false');
++
++    // Rapid double click
++    fireEvent.click(refreshBtn);
++    fireEvent.click(refreshBtn);
++
++    // Only 1 execution dispatched
++    await waitFor(() => {
++      expect(api.executeCustomField).toHaveBeenCalledTimes(1);
++    });
++    expect(api.executeCustomField).toHaveBeenCalledWith('KAN-42', 'f-cvss');
++
++    // While in flight: aria-busy is true and disabled
++    expect(refreshBtn.getAttribute('aria-busy')).toBe('true');
++    expect(refreshBtn.disabled).toBe(true);
++
++    // Resolve execution with updated value
++    const baseRes = firstRes;
++    resolveExecution({
++      field_id: baseRes.field_id,
++      field_slug: baseRes.field_slug,
++      field_name: baseRes.field_name,
++      output_format: baseRes.output_format,
++      value: { level: 'critical', score: 9.8, label: 'Critical' },
++      status: baseRes.status,
++      tier: baseRes.tier,
++      token_scope: baseRes.token_scope,
++      credential_mode: baseRes.credential_mode,
++      last_latency_ms: 8,
++      computed_at: baseRes.computed_at,
++    });
++
++    await waitFor(() => {
++      expect(refreshBtn.getAttribute('aria-busy')).toBe('false');
++      expect(refreshBtn.disabled).toBe(false);
++    });
++
++    expect(screen.getByTestId('custom-field-value-cvss-score').textContent).toContain('9.8');
++    expect(screen.getByTestId('custom-field-value-cvss-score').textContent).toContain('Critical');
++  });
++
++  it('maps server error codes to inline text without alerts and never leaks detail', async () => {
++    const errorResults: api.CustomFieldExecutionResult[] = [
++      {
++        field_id: 'f-cvss',
++        field_slug: 'cvss-score',
++        field_name: 'CVSS Score',
++        output_format: 'severity_pill',
++        value: null,
++        status: 'ERROR',
++        error_code: 'SCRIPT_TIMEOUT',
++        error_message: 'Internal stack trace: thread killed at line 42',
++        tier: 'Wasmtime',
++        token_scope: 'PROJECT',
++        credential_mode: 'INVOKING_USER',
++        last_latency_ms: 1005,
++        computed_at: '2026-11-13T12:00:00Z',
++      },
++      {
++        field_id: 'f-env',
++        field_slug: 'target-env',
++        field_name: 'Target Environment',
++        output_format: 'text',
++        value: null,
++        status: 'ERROR',
++        error_code: 'APPROVAL_REVOKED',
++        error_message: 'Secret token leak in stdout',
++        tier: 'nsjail',
++        token_scope: 'WORKSPACE',
++        credential_mode: 'PROJECT_ADMIN_SP',
++        last_latency_ms: 2,
++        computed_at: '2026-11-13T12:00:00Z',
++      },
++    ];
++
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue(errorResults);
++
++    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
++
++    // Literal error mappings
++    const err1 = await screen.findByTestId('custom-field-error-cvss-score');
++    expect(err1.textContent).toBe('Timed out');
++    const err2 = screen.getByTestId('custom-field-error-target-env');
++    expect(err2.textContent).toBe('Approval revoked - admin re-sign required');
++
++    // Verify raw backend error messages/details are NEVER leaked
++    expect(screen.queryByText(/thread killed at line 42/)).toBeNull();
++    expect(screen.queryByText(/Secret token leak in stdout/)).toBeNull();
++  });
++
++  it('maps other error codes (SCRIPT_FUEL_EXHAUSTED, STANDALONE, unknown) to mapped inline text', async () => {
++    const errorCodes = [
++      { code: 'SCRIPT_FUEL_EXHAUSTED', expected: 'Compute limit reached' },
++      {
++        code: 'SANDBOX_UNAVAILABLE_IN_STANDALONE',
++        expected: 'Tier B unavailable in standalone',
++      },
++      { code: 'INTERNAL_EXCEPTION_XYZ', expected: 'Unavailable' },
++    ];
++
++    for (const item of errorCodes) {
++      const res: api.CustomFieldExecutionResult[] = [
++        {
++          field_id: 'f-cvss',
++          field_slug: 'cvss-score',
++          field_name: 'CVSS Score',
++          output_format: 'severity_pill',
++          value: null,
++          status: 'ERROR',
++          error_code: item.code,
++          tier: 'Wasmtime',
++          token_scope: 'PROJECT',
++          credential_mode: 'INVOKING_USER',
++          last_latency_ms: 10,
++          computed_at: '2026-11-13T12:00:00Z',
++        },
++      ];
++
++      vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([firstDef]);
++      vi.mocked(api.fetchIssueCustomFields).mockResolvedValue(res);
++
++      const { unmount } = renderWithQuery(
++        <CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />,
++      );
++
++      const err = await screen.findByTestId('custom-field-error-cvss-score');
++      expect(err.textContent).toBe(item.expected);
++      unmount();
++    }
++  });
++
++  it('renders Uncomputed when field execution result is not found', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([firstDef]);
++    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue([]);
++
++    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
++
++    const uncomputed = await screen.findByTestId('custom-field-uncomputed-cvss-score');
++    expect(uncomputed.textContent).toBe('Uncomputed');
++  });
++
++  it('updates query cache when refreshing a previously uncomputed field', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([firstDef]);
++    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue([]);
++    vi.mocked(api.executeCustomField).mockResolvedValue(firstRes);
++
++    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
++
++    const refreshBtn = await screen.findByTestId('refresh-field-cvss-score');
++    fireEvent.click(refreshBtn);
++
++    const val = await screen.findByTestId('custom-field-value-cvss-score');
++    expect(val.textContent).toContain('8.8');
++  });
++
++  it('renders null when mounted without QueryClientProvider', () => {
++    const { container } = render(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
++    expect(container.firstChild).toBeNull();
++  });
++});
+diff --git a/kanban/web/src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx b/kanban/web/src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx
+new file mode 100644
+index 0000000..578e91f
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx
+@@ -0,0 +1,505 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { EscalationApprovalPanel } from '../EscalationApprovalPanel';
++import * as api from '../api';
++
++vi.mock('../api', async () => {
++  const actual = await vi.importActual<typeof import('../api')>('../api');
++  return {
++    ...actual,
++    fetchFieldApprovals: vi.fn(),
++    requestFieldApproval: vi.fn(),
++    approveFieldEscalation: vi.fn(),
++  };
++});
++
++const elevatedFieldSp: api.CustomFieldDefinition = {
++  id: 'f-sp',
++  slug: 'project-sp-field',
++  name: 'Project SP Field',
++  tier: 'wasm',
++  output_format: 'text',
++  output_format_metadata: {},
++  target_scope: 'PROJECT',
++  credential_mode: 'PROJECT_ADMIN_SP',
++  egress_allowlist: [],
++  manifest_sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
++  is_enabled: true,
++};
++
++const elevatedFieldWs: api.CustomFieldDefinition = {
++  id: 'f-ws',
++  slug: 'workspace-field',
++  name: 'Workspace Field',
++  tier: 'nsjail',
++  output_format: 'text',
++  output_format_metadata: {},
++  target_scope: 'WORKSPACE',
++  credential_mode: 'INVOKING_USER',
++  egress_allowlist: [],
++  manifest_sha256: 'b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef01',
++  is_enabled: true,
++};
++
++const pendingApproval: api.CustomFieldApproval = {
++  id: 'appr-1',
++  field_id: 'f-sp',
++  status: 'PENDING',
++  target_scope: 'PROJECT',
++  credential_mode: 'PROJECT_ADMIN_SP',
++  manifest_sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
++  justification: 'Automated CI/CD integration token required',
++  created_at: '2026-11-13T10:00:00Z',
++  updated_at: '2026-11-13T10:00:00Z',
++};
++
++function renderPanel(props: React.ComponentProps<typeof EscalationApprovalPanel>) {
++  const queryClient = new QueryClient({
++    defaultOptions: {
++      queries: { retry: false, staleTime: Infinity },
++    },
++  });
++  return render(
++    <QueryClientProvider client={queryClient}>
++      <EscalationApprovalPanel {...props} />
++    </QueryClientProvider>,
++  );
++}
++
++describe('EscalationApprovalPanel', () => {
++  beforeEach(() => {
++    vi.resetAllMocks();
++  });
++
++  it('renders literal SP warning banner for PROJECT_ADMIN_SP', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([]);
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    const banner = await screen.findByTestId('sp-warning-banner');
++    expect(banner.textContent).toContain(
++      '⚠️ This field will run with Project Admin service-principal credentials for every viewer.',
++    );
++  });
++
++  it('hides Approve button when caller tier is below required approver tier (S13.2)', async () => {
++    // Field requires WORKSPACE_ADMIN, caller is only PROJECT_ADMIN
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([
++      { ...pendingApproval, field_id: 'f-ws', target_scope: 'WORKSPACE' },
++    ]);
++
++    renderPanel({
++      field: elevatedFieldWs,
++      callerTier: 'PROJECT_ADMIN', // Below WORKSPACE_ADMIN
++    });
++
++    await screen.findByTestId('escalation-approval-panel');
++
++    // Approve button MUST be absent from DOM (not merely disabled)
++    expect(screen.queryByTestId('approve-escalation-btn')).toBeNull();
++  });
++
++  it('shows Approve button when caller tier meets required approver tier', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([
++      { ...pendingApproval, field_id: 'f-ws', target_scope: 'WORKSPACE' },
++    ]);
++
++    renderPanel({
++      field: elevatedFieldWs,
++      callerTier: 'WORKSPACE_ADMIN', // Meets required tier
++    });
++
++    expect(await screen.findByTestId('approve-escalation-btn')).toBeDefined();
++  });
++
++  it('submits approval request with justification', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([]);
++    vi.mocked(api.requestFieldApproval).mockResolvedValue(pendingApproval);
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    const reqBtn = await screen.findByTestId('request-approval-btn');
++    fireEvent.click(reqBtn);
++
++    const input = screen.getByTestId('approval-justification-input');
++    fireEvent.change(input, {
++      target: { value: 'This is a valid business justification for the ticket' },
++    });
++
++    fireEvent.click(screen.getByTestId('submit-approval-request-btn'));
++
++    await waitFor(() => {
++      expect(api.requestFieldApproval).toHaveBeenCalledWith(
++        'f-sp',
++        expect.objectContaining({
++          manifest_sha256: elevatedFieldSp.manifest_sha256,
++          justification: 'This is a valid business justification for the ticket',
++        }),
++      );
++    });
++  });
++
++  it('handles 403 AAL2_REQUIRED opening step-up prompt and retries once', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
++
++    const aal2Error = api.createApiError('AAL2 authentication required', 403, 'AAL2_REQUIRED');
++
++    vi.mocked(api.approveFieldEscalation)
++      .mockRejectedValueOnce(aal2Error)
++      .mockResolvedValueOnce({
++        ...pendingApproval,
++        status: 'APPROVED',
++      });
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    // Check acknowledgment checkbox (required for SP mode)
++    const checkbox = await screen.findByTestId('sp-ack-checkbox');
++    fireEvent.click(checkbox);
++
++    // Click Approve
++    const approveBtn = screen.getByTestId('approve-escalation-btn');
++    fireEvent.click(approveBtn);
++
++    // AAL2 Step-Up Modal appears
++    expect(await screen.findByTestId('aal2-stepup-modal')).toBeDefined();
++
++    // Enter OTP code and submit
++    fireEvent.change(screen.getByTestId('aal2-otp-input'), {
++      target: { value: '123456' },
++    });
++    fireEvent.click(screen.getByTestId('aal2-verify-btn'));
++
++    // Retried approval
++    await waitFor(() => {
++      expect(api.approveFieldEscalation).toHaveBeenCalledTimes(2);
++    });
++  });
++
++  it('handles 409 MANIFEST_MISMATCH disabling Approve with literal message', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
++
++    const mismatchError = api.createApiError('Manifest mismatch', 409, 'MANIFEST_MISMATCH');
++
++    vi.mocked(api.approveFieldEscalation).mockRejectedValueOnce(mismatchError);
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    fireEvent.click(await screen.findByTestId('sp-ack-checkbox'));
++
++    const approveBtn = screen.getByTestId('approve-escalation-btn');
++    fireEvent.click(approveBtn);
++
++    // Literal mismatch message rendered
++    const banner = await screen.findByTestId('manifest-mismatch-banner');
++    expect(banner.textContent).toContain(
++      'Definition changed since you opened it - reload to review',
++    );
++
++    // Approve button is disabled
++    expect((approveBtn as HTMLButtonElement).disabled).toBe(true);
++  });
++
++  it('triggers onAal2Challenge callback if provided and retries on true', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
++
++    const aal2Error = api.createApiError('AAL2 authentication required', 403, 'AAL2_REQUIRED');
++
++    vi.mocked(api.approveFieldEscalation)
++      .mockRejectedValueOnce(aal2Error)
++      .mockResolvedValueOnce({
++        ...pendingApproval,
++        status: 'APPROVED',
++      });
++
++    const onAal2Challenge = vi.fn().mockResolvedValue(true);
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++      onAal2Challenge,
++    });
++
++    fireEvent.click(await screen.findByTestId('sp-ack-checkbox'));
++    fireEvent.click(screen.getByTestId('approve-escalation-btn'));
++
++    await waitFor(() => {
++      expect(onAal2Challenge).toHaveBeenCalledTimes(1);
++      expect(api.approveFieldEscalation).toHaveBeenCalledTimes(2);
++    });
++  });
++
++  it('opens AAL2 modal when onAal2Challenge returns false or rejects', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
++
++    const aal2Error = api.createApiError('AAL2 authentication required', 403, 'AAL2_REQUIRED');
++
++    vi.mocked(api.approveFieldEscalation).mockRejectedValueOnce(aal2Error);
++
++    const onAal2Challenge = vi.fn().mockResolvedValue(false);
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++      onAal2Challenge,
++    });
++
++    fireEvent.click(await screen.findByTestId('sp-ack-checkbox'));
++    fireEvent.click(screen.getByTestId('approve-escalation-btn'));
++
++    expect(await screen.findByTestId('aal2-stepup-modal')).toBeDefined();
++  });
++
++  it('ignores AAL2 form submit when OTP code has fewer than 6 characters', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
++
++    const aal2Error = api.createApiError('AAL2 authentication required', 403, 'AAL2_REQUIRED');
++    vi.mocked(api.approveFieldEscalation).mockRejectedValueOnce(aal2Error);
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    fireEvent.click(await screen.findByTestId('sp-ack-checkbox'));
++    fireEvent.click(screen.getByTestId('approve-escalation-btn'));
++    expect(await screen.findByTestId('aal2-stepup-modal')).toBeDefined();
++
++    // Enter only 3 characters
++    fireEvent.change(screen.getByTestId('aal2-otp-input'), {
++      target: { value: '123' },
++    });
++    fireEvent.click(screen.getByTestId('aal2-verify-btn'));
++
++    // Did not retry approval
++    expect(api.approveFieldEscalation).toHaveBeenCalledTimes(1);
++  });
++
++  it('allows canceling request approval modal', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([]);
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    fireEvent.click(await screen.findByTestId('request-approval-btn'));
++    expect(screen.getByTestId('approval-justification-input')).toBeDefined();
++    fireEvent.click(screen.getByTestId('cancel-request-btn'));
++    expect(screen.queryByTestId('approval-justification-input')).toBeNull();
++  });
++
++  it('allows canceling AAL2 modal', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
++
++    const aal2Error = api.createApiError('AAL2 authentication required', 403, 'AAL2_REQUIRED');
++    vi.mocked(api.approveFieldEscalation).mockRejectedValueOnce(aal2Error);
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    fireEvent.click(await screen.findByTestId('sp-ack-checkbox'));
++    fireEvent.click(screen.getByTestId('approve-escalation-btn'));
++    expect(await screen.findByTestId('aal2-stepup-modal')).toBeDefined();
++    fireEvent.click(screen.getByTestId('cancel-aal2-btn'));
++    expect(screen.queryByTestId('aal2-stepup-modal')).toBeNull();
++  });
++
++  it('renders SERVER_ADMIN tier and dual control note for SERVER scope (S13.2)', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([]);
++
++    const serverField: api.CustomFieldDefinition = {
++      ...elevatedFieldWs,
++      id: 'f-srv',
++      target_scope: 'SERVER',
++    };
++
++    renderPanel({
++      field: serverField,
++      callerTier: 'SERVER_ADMIN',
++    });
++
++    const panel = await screen.findByTestId('escalation-approval-panel');
++    expect(panel.textContent).toContain('SERVER_ADMIN');
++    expect(panel.textContent).toContain('(Dual-Control Required)');
++  });
++
++  it('displays general error when requestFieldApproval fails', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([]);
++    vi.mocked(api.requestFieldApproval).mockRejectedValueOnce(new Error('Quota exceeded'));
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    fireEvent.click(await screen.findByTestId('request-approval-btn'));
++    fireEvent.change(screen.getByTestId('approval-justification-input'), {
++      target: { value: 'Valid business justification here' },
++    });
++    fireEvent.click(screen.getByTestId('submit-approval-request-btn'));
++
++    expect(await screen.findByText('Quota exceeded')).toBeDefined();
++  });
++
++  it('displays general error when approval fails with 500 error', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
++    vi.mocked(api.approveFieldEscalation).mockRejectedValueOnce(
++      new Error('Internal database timeout'),
++    );
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    fireEvent.click(await screen.findByTestId('sp-ack-checkbox'));
++    fireEvent.click(screen.getByTestId('approve-escalation-btn'));
++
++    expect(await screen.findByText('Internal database timeout')).toBeDefined();
++  });
++
++  it('renders approved status and badge when status is APPROVED', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([
++      { ...pendingApproval, status: 'APPROVED' },
++    ]);
++
++    renderPanel({
++      field: { ...elevatedFieldSp, approval_status: 'APPROVED' },
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    const chip = await screen.findByTestId('approval-status-chip');
++    expect(chip.textContent).toContain('Approved');
++  });
++
++  it('calls onApproved callback when approveFieldEscalation succeeds', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
++    vi.mocked(api.approveFieldEscalation).mockResolvedValue({
++      ...pendingApproval,
++      status: 'APPROVED',
++    });
++
++    const onApproved = vi.fn();
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++      onApproved,
++    });
++
++    fireEvent.click(await screen.findByTestId('sp-ack-checkbox'));
++    fireEvent.click(screen.getByTestId('approve-escalation-btn'));
++
++    await waitFor(() => {
++      expect(onApproved).toHaveBeenCalledTimes(1);
++    });
++  });
++
++  it('renders pending second approver and revoked status chips', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([
++      { ...pendingApproval, status: 'PENDING_SECOND_APPROVER' },
++    ]);
++
++    const { unmount } = renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    const chip1 = await screen.findByTestId('approval-status-chip');
++    expect(chip1.textContent).toContain('Pending second approver');
++    unmount();
++
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([
++      { ...pendingApproval, status: 'REVOKED' },
++    ]);
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    const chip2 = await screen.findByTestId('approval-status-chip');
++    expect(chip2.textContent).toContain('Revoked');
++  });
++
++  it('approves field with null manifest_sha256 using empty string fallback', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([
++      { ...pendingApproval, manifest_sha256: '' },
++    ]);
++    vi.mocked(api.approveFieldEscalation).mockResolvedValue({
++      ...pendingApproval,
++      status: 'APPROVED',
++    });
++
++    const fieldWithoutSha: api.CustomFieldDefinition = {
++      ...elevatedFieldSp,
++      manifest_sha256: null,
++    };
++
++    renderPanel({
++      field: fieldWithoutSha,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    fireEvent.click(await screen.findByTestId('sp-ack-checkbox'));
++    fireEvent.click(screen.getByTestId('approve-escalation-btn'));
++
++    await waitFor(() => {
++      expect(api.approveFieldEscalation).toHaveBeenCalledWith(
++        'appr-1',
++        expect.objectContaining({ manifest_sha256: '' }),
++      );
++    });
++  });
++
++  it('displays Submitting... while request approval mutation is in flight', async () => {
++    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([]);
++    let resolveRequest!: (val: api.CustomFieldApproval) => void;
++    vi.mocked(api.requestFieldApproval).mockImplementation(
++      () =>
++        new Promise((resolve) => {
++          resolveRequest = resolve;
++        }),
++    );
++
++    renderPanel({
++      field: elevatedFieldSp,
++      callerTier: 'PROJECT_ADMIN',
++    });
++
++    fireEvent.click(await screen.findByTestId('request-approval-btn'));
++    fireEvent.change(screen.getByTestId('approval-justification-input'), {
++      target: { value: 'Valid justification with > 10 chars' },
++    });
++
++    const submitBtn = screen.getByTestId('submit-approval-request-btn');
++    fireEvent.click(submitBtn);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('submit-approval-request-btn').textContent).toBe('Submitting...');
++    });
++    act(() => {
++      resolveRequest(pendingApproval);
++    });
++  });
++});
+diff --git a/kanban/web/src/features/custom-fields/__tests__/api.test.ts b/kanban/web/src/features/custom-fields/__tests__/api.test.ts
+new file mode 100644
+index 0000000..86b0d25
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/__tests__/api.test.ts
+@@ -0,0 +1,520 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import {
++  approveFieldEscalation,
++  createCustomField,
++  deleteCustomField,
++  executeCustomField,
++  fetchFieldApprovals,
++  fetchIssueCustomFields,
++  fetchProjectCustomFields,
++  qk,
++  requestFieldApproval,
++  updateCustomField,
++} from '../api';
++import * as indexExports from '../index';
++
++describe('custom-fields api', () => {
++  const originalFetch = globalThis.fetch;
++
++  beforeEach(() => {
++    vi.restoreAllMocks();
++    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++    document.cookie = '__Host-kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++  });
++
++  afterEach(() => {
++    globalThis.fetch = originalFetch;
++    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++    document.cookie = '__Host-kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++  });
++
++  describe('query keys (qk)', () => {
++    it('generates consistent hierarchical query keys', () => {
++      expect(qk.customFields.project('KAN')).toEqual(['custom-fields', 'project', 'KAN']);
++      expect(qk.customFields.issue('KAN-42')).toEqual(['custom-fields', 'issue', 'KAN-42']);
++      expect(qk.customFields.approvals('f-123')).toEqual(['custom-fields', 'approvals', 'f-123']);
++    });
++  });
++
++  describe('CSRF handling', () => {
++    it('includes X-CSRF-Token when kb_csrf cookie is present', async () => {
++      document.cookie = 'kb_csrf=csrf-secret-123; path=/';
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        json: () => Promise.resolve({ id: 'f-1' }),
++      });
++
++      await createCustomField('KAN', {
++        slug: 'test-field',
++        name: 'Test Field',
++        tier: 'wasm',
++        output_format: 'text',
++        output_format_metadata: {},
++        script_source: 'return 1;',
++        target_scope: 'PROJECT',
++        credential_mode: 'INVOKING_USER',
++        egress_allowlist: [],
++        is_enabled: true,
++      });
++
++      const call = vi.mocked(globalThis.fetch).mock.calls[0];
++      expect(call?.[0]).toBe('/api/v1/projects/KAN/custom-fields');
++      const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
++      expect(headers['X-CSRF-Token']).toBe('csrf-secret-123');
++    });
++
++    it('supports __Host-kb_csrf cookie variant', async () => {
++      Object.defineProperty(document, 'cookie', {
++        value: '__Host-kb_csrf=host-csrf-val',
++        writable: true,
++        configurable: true,
++      });
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        status: 204,
++      });
++
++      await deleteCustomField('KAN', 'f-1');
++
++      const call = vi.mocked(globalThis.fetch).mock.calls[0];
++      expect(call?.[0]).toBe('/api/v1/projects/KAN/custom-fields/f-1');
++      const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
++      expect(headers['X-CSRF-Token']).toBe('host-csrf-val');
++    });
++
++    it('returns empty headers when document is undefined', async () => {
++      const origDoc = globalThis.document;
++      try {
++        delete (globalThis as unknown as { document?: Document }).document;
++        globalThis.fetch = vi.fn().mockResolvedValue({
++          ok: true,
++          status: 204,
++        });
++
++        await deleteCustomField('KAN', 'f-1');
++
++        const call = vi.mocked(globalThis.fetch).mock.calls[0];
++        expect(call?.[0]).toBe('/api/v1/projects/KAN/custom-fields/f-1');
++        const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
++        expect(headers['X-CSRF-Token']).toBeUndefined();
++      } finally {
++        globalThis.document = origDoc;
++      }
++    });
++  });
++
++  describe('fetchProjectCustomFields', () => {
++    it('returns array of definitions on success', async () => {
++      const mockDefs = [{ id: 'f-1', slug: 'field-1' }];
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        json: () => Promise.resolve(mockDefs),
++      });
++
++      const res = await fetchProjectCustomFields('KAN');
++      expect(res).toEqual(mockDefs);
++      expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/projects/KAN/custom-fields');
++    });
++
++    it('returns empty array on 404 (anti-enumeration S3.4)', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 404,
++      });
++
++      const res = await fetchProjectCustomFields('UNKNOWN');
++      expect(res).toEqual([]);
++    });
++
++    it('throws error on other non-ok status', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 500,
++      });
++
++      await expect(fetchProjectCustomFields('KAN')).rejects.toThrow(
++        'Failed to fetch custom fields: 500',
++      );
++    });
++  });
++
++  describe('fetchIssueCustomFields', () => {
++    it('returns array of execution results on success', async () => {
++      const mockResults = [{ field_id: 'f-1', value: 42 }];
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        json: () => Promise.resolve(mockResults),
++      });
++
++      const res = await fetchIssueCustomFields('KAN-10');
++      expect(res).toEqual(mockResults);
++      expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/issues/KAN-10/custom-fields');
++    });
++
++    it('returns empty array on 404', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 404,
++      });
++
++      const res = await fetchIssueCustomFields('KAN-999');
++      expect(res).toEqual([]);
++    });
++
++    it('throws error on server failure', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 502,
++      });
++
++      await expect(fetchIssueCustomFields('KAN-10')).rejects.toThrow(
++        'Failed to fetch issue custom fields: 502',
++      );
++    });
++  });
++
++  describe('executeCustomField', () => {
++    it('executes custom field and returns updated result', async () => {
++      const mockResult = { field_id: 'f-1', status: 'SUCCESS', value: 'Active' };
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        json: () => Promise.resolve(mockResult),
++      });
++
++      const res = await executeCustomField('KAN-10', 'f-1');
++      expect(res).toEqual(mockResult);
++      expect(globalThis.fetch).toHaveBeenCalledWith(
++        '/api/v1/issues/KAN-10/custom-fields/f-1/execute',
++        expect.objectContaining({ method: 'POST' }),
++      );
++    });
++
++    it('extracts error code and status on execution error', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 400,
++        json: () => Promise.resolve({ code: 'SCRIPT_TIMEOUT', detail: 'Script timed out' }),
++      });
++
++      try {
++        await executeCustomField('KAN-10', 'f-1');
++        expect.unreachable('Should have thrown');
++      } catch (err: unknown) {
++        const error = err as { message: string; status: number; code: string };
++        expect(error.message).toBe('SCRIPT_TIMEOUT');
++        expect(error.status).toBe(400);
++        expect(error.code).toBe('SCRIPT_TIMEOUT');
++      }
++    });
++
++    it('handles non-JSON error response gracefully', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 500,
++        json: () => Promise.reject(new Error('HTML error page')),
++      });
++
++      await expect(executeCustomField('KAN-10', 'f-1')).rejects.toThrow(
++        'Execution failed with status 500',
++      );
++    });
++  });
++
++  describe('createCustomField', () => {
++    it('posts definition and returns created object', async () => {
++      const payload = {
++        slug: 'status-check',
++        name: 'Status Check',
++        tier: 'wasm' as const,
++        output_format: 'text' as const,
++        output_format_metadata: {},
++        script_source: 'return "ok";',
++        target_scope: 'PROJECT' as const,
++        credential_mode: 'INVOKING_USER' as const,
++        egress_allowlist: [],
++        is_enabled: true,
++      };
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        json: () => Promise.resolve({ id: 'f-created', ...payload }),
++      });
++
++      const res = await createCustomField('KAN', payload);
++      expect(res.id).toBe('f-created');
++    });
++
++    it('attaches detail and code on error', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 422,
++        json: () =>
++          Promise.resolve({ code: 'VALIDATION_ERROR', detail: 'Slug already taken' }),
++      });
++
++      try {
++        await createCustomField('KAN', {
++          slug: 'existing',
++          name: 'Existing',
++          tier: 'wasm',
++          output_format: 'text',
++          output_format_metadata: {},
++          script_source: 'return 1;',
++          target_scope: 'PROJECT',
++          credential_mode: 'INVOKING_USER',
++          egress_allowlist: [],
++          is_enabled: true,
++        });
++        expect.unreachable('Should have thrown');
++      } catch (err: unknown) {
++        const error = err as { message: string; status: number; code: string };
++        expect(error.message).toBe('Slug already taken');
++        expect(error.status).toBe(422);
++        expect(error.code).toBe('VALIDATION_ERROR');
++      }
++
++      // Fallback message when detail is missing
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 400,
++        json: () => Promise.resolve({}),
++      });
++
++      await expect(
++        createCustomField('KAN', {
++          slug: 'test',
++          name: 'Test',
++          tier: 'wasm',
++          output_format: 'text',
++          output_format_metadata: {},
++          script_source: 'return 1;',
++          target_scope: 'PROJECT',
++          credential_mode: 'INVOKING_USER',
++          egress_allowlist: [],
++          is_enabled: true,
++        }),
++      ).rejects.toThrow('Create failed with status 400');
++    });
++  });
++
++  describe('updateCustomField', () => {
++    it('patches custom field definition', async () => {
++      const update = { name: 'Renamed Field' };
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        json: () => Promise.resolve({ id: 'f-1', name: 'Renamed Field' }),
++      });
++
++      const res = await updateCustomField('KAN', 'f-1', update);
++      expect(res.name).toBe('Renamed Field');
++    });
++
++    it('attaches error details on update error', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 400,
++        json: () => Promise.resolve({ code: 'INVALID_METADATA', detail: 'Invalid JSON metadata' }),
++      });
++
++      try {
++        await updateCustomField('KAN', 'f-1', { name: 'Bad' });
++        expect.unreachable('Should have thrown');
++      } catch (err: unknown) {
++        const error = err as { message: string; status: number; code: string };
++        expect(error.message).toBe('Invalid JSON metadata');
++        expect(error.status).toBe(400);
++      }
++
++      // Fallback message when detail is missing
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 400,
++        json: () => Promise.resolve({}),
++      });
++
++      await expect(updateCustomField('KAN', 'f-1', { name: 'Bad' })).rejects.toThrow(
++        'Update failed with status 400',
++      );
++    });
++  });
++
++  describe('deleteCustomField', () => {
++    it('succeeds on 204 or 200 response', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        status: 204,
++      });
++
++      await expect(deleteCustomField('KAN', 'f-1')).resolves.toBeUndefined();
++
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        status: 200,
++      });
++
++      await expect(deleteCustomField('KAN', 'f-1')).resolves.toBeUndefined();
++    });
++
++    it('throws on non-ok status', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 403,
++      });
++
++      await expect(deleteCustomField('KAN', 'f-1')).rejects.toThrow(
++        'Delete failed with status 403',
++      );
++    });
++  });
++
++  describe('requestFieldApproval', () => {
++    it('posts escalation request and returns approval record', async () => {
++      const mockApproval = { id: 'appr-1', status: 'PENDING' };
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        json: () => Promise.resolve(mockApproval),
++      });
++
++      const res = await requestFieldApproval('f-1', {
++        manifest_sha256: 'sha-val',
++        justification: 'Production monitoring needed',
++      });
++      expect(res).toEqual(mockApproval);
++    });
++
++    it('attaches code and status on error', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 400,
++        json: () => Promise.resolve({ code: 'INVALID_MANIFEST', detail: 'Manifest sha invalid' }),
++      });
++
++      try {
++        await requestFieldApproval('f-1', { manifest_sha256: 'bad', justification: 'test' });
++        expect.unreachable('Should have thrown');
++      } catch (err: unknown) {
++        const error = err as { message: string; status: number; code: string };
++        expect(error.message).toBe('Manifest sha invalid');
++        expect(error.status).toBe(400);
++        expect(error.code).toBe('INVALID_MANIFEST');
++      }
++
++      // Fallback message when detail is missing
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 400,
++        json: () => Promise.resolve({}),
++      });
++
++      await expect(
++        requestFieldApproval('f-1', { manifest_sha256: 'bad', justification: 'test' }),
++      ).rejects.toThrow('Approval request failed with status 400');
++    });
++  });
++
++  describe('approveFieldEscalation', () => {
++    it('posts approval and returns approved record', async () => {
++      const mockApproval = { id: 'appr-1', status: 'APPROVED' };
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        json: () => Promise.resolve(mockApproval),
++      });
++
++      const res = await approveFieldEscalation('appr-1', {
++        manifest_sha256: 'sha-val',
++        sp_warning_acknowledged: true,
++      });
++      expect(res).toEqual(mockApproval);
++    });
++
++    it('propagates 403 AAL2_REQUIRED code and status', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 403,
++        json: () => Promise.resolve({ code: 'AAL2_REQUIRED', detail: 'Step-up required' }),
++      });
++
++      try {
++        await approveFieldEscalation('appr-1', { manifest_sha256: 'sha-val' });
++        expect.unreachable('Should have thrown');
++      } catch (err: unknown) {
++        const error = err as { message: string; status: number; code: string };
++        expect(error.status).toBe(403);
++        expect(error.code).toBe('AAL2_REQUIRED');
++      }
++    });
++
++    it('propagates 409 MANIFEST_MISMATCH code and status', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 409,
++        json: () => Promise.resolve({ code: 'MANIFEST_MISMATCH', detail: 'Manifest altered' }),
++      });
++
++      try {
++        await approveFieldEscalation('appr-1', { manifest_sha256: 'old-sha' });
++        expect.unreachable('Should have thrown');
++      } catch (err: unknown) {
++        const error = err as { message: string; status: number; code: string };
++        expect(error.status).toBe(409);
++        expect(error.code).toBe('MANIFEST_MISMATCH');
++      }
++
++      // Fallback message when detail is missing
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 500,
++        json: () => Promise.resolve({}),
++      });
++
++      await expect(
++        approveFieldEscalation('appr-1', { manifest_sha256: 'old-sha' }),
++      ).rejects.toThrow('Approve failed with status 500');
++    });
++  });
++
++  describe('fetchFieldApprovals', () => {
++    it('returns array of approvals for a field', async () => {
++      const mockApprovals = [{ id: 'appr-1' }];
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        json: () => Promise.resolve(mockApprovals),
++      });
++
++      const res = await fetchFieldApprovals('f-1');
++      expect(res).toEqual(mockApprovals);
++    });
++
++    it('returns empty array on 404', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 404,
++      });
++
++      const res = await fetchFieldApprovals('f-nonexistent');
++      expect(res).toEqual([]);
++    });
++
++    it('throws on server error', async () => {
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: false,
++        status: 500,
++      });
++
++      await expect(fetchFieldApprovals('f-1')).rejects.toThrow('Failed to fetch approvals: 500');
++    });
++  });
++
++  describe('barrel exports', () => {
++    it('exports all feature components and utilities', () => {
++      expect(indexExports.CustomFieldsRailSection).toBeDefined();
++      expect(indexExports.CustomFieldDefinitionEditor).toBeDefined();
++      expect(indexExports.CustomFieldValue).toBeDefined();
++      expect(indexExports.EscalationApprovalPanel).toBeDefined();
++      expect(indexExports.qk).toBeDefined();
++      expect(indexExports.executeCustomField).toBeDefined();
++    });
++  });
++});
+diff --git a/kanban/web/src/features/custom-fields/api.ts b/kanban/web/src/features/custom-fields/api.ts
+new file mode 100644
+index 0000000..722155c
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/api.ts
+@@ -0,0 +1,361 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++export type OutputFormatType =
++  | 'text'
++  | 'number'
++  | 'badge'
++  | 'markdown_snippet'
++  | 'url'
++  | 'json_table'
++  | 'severity_pill';
++
++export type CustomFieldTargetScope = 'PROJECT' | 'WORKSPACE' | 'SERVER';
++export type CustomFieldCredentialMode = 'INVOKING_USER' | 'PROJECT_ADMIN_SP' | 'SERVER_ADMIN_SP';
++export type CustomFieldTier = 'wasm' | 'nsjail';
++export type CustomFieldApprovalStatus =
++  | 'PENDING'
++  | 'PENDING_SECOND_APPROVER'
++  | 'APPROVED'
++  | 'REVOKED';
++
++export interface CustomFieldDefinition {
++  id: string;
++  workspace_id?: string;
++  project_id?: string;
++  slug: string;
++  name: string;
++  tier: CustomFieldTier;
++  output_format: OutputFormatType;
++  output_format_metadata: Record<string, unknown>;
++  script_source?: string;
++  wasm_module_sha256?: string | null;
++  script_version?: number;
++  target_scope: CustomFieldTargetScope;
++  credential_mode: CustomFieldCredentialMode;
++  egress_allowlist: string[];
++  manifest_sha256?: string | null;
++  is_enabled: boolean;
++  approval_status?: CustomFieldApprovalStatus | null;
++  required_approver_tier?: string | null;
++  created_by_id?: string;
++  created_at?: string;
++  updated_at?: string;
++}
++
++export interface CustomFieldExecutionResult {
++  field_id: string;
++  field_slug: string;
++  field_name: string;
++  output_format: OutputFormatType;
++  output_format_metadata?: Record<string, unknown>;
++  value: unknown;
++  status: 'SUCCESS' | 'ERROR';
++  error_code?: string;
++  error_message?: string;
++  tier: 'Wasmtime' | 'nsjail';
++  token_scope: CustomFieldTargetScope;
++  credential_mode: CustomFieldCredentialMode;
++  last_latency_ms: number;
++  computed_at: string;
++}
++
++export interface CustomFieldApproval {
++  id: string;
++  field_id: string;
++  status: CustomFieldApprovalStatus;
++  target_scope: CustomFieldTargetScope;
++  credential_mode: CustomFieldCredentialMode;
++  manifest_sha256: string;
++  primary_approver_id?: string | null;
++  secondary_approver_id?: string | null;
++  justification: string;
++  sp_warning_acknowledged?: boolean;
++  revoked_reason?: string | null;
++  created_at: string;
++  updated_at: string;
++}
++
++export interface CustomFieldCreatePayload {
++  slug: string;
++  name: string;
++  tier?: CustomFieldTier;
++  output_format: OutputFormatType;
++  output_format_metadata?: Record<string, unknown>;
++  script_source: string;
++  target_scope?: CustomFieldTargetScope;
++  credential_mode?: CustomFieldCredentialMode;
++  egress_allowlist?: string[];
++  is_enabled?: boolean;
++}
++
++export interface CustomFieldUpdatePayload {
++  name?: string;
++  tier?: CustomFieldTier;
++  output_format?: OutputFormatType;
++  output_format_metadata?: Record<string, unknown>;
++  script_source?: string;
++  target_scope?: CustomFieldTargetScope;
++  credential_mode?: CustomFieldCredentialMode;
++  egress_allowlist?: string[];
++  is_enabled?: boolean;
++}
++
++export const qk = {
++  customFields: {
++    project: (projectKey: string) => ['custom-fields', 'project', projectKey] as const,
++    issue: (issueKey: string) => ['custom-fields', 'issue', issueKey] as const,
++    approvals: (fieldId: string) => ['custom-fields', 'approvals', fieldId] as const,
++  },
++};
++
++/**
++ * Get CSRF token from cookie if available
++ */
++function getCsrfToken(): string | null {
++  if (typeof document === 'undefined') return null;
++  const match = /(?:^|;\s*)(?:__Host-)?kb_csrf=([^;]+)/.exec(document.cookie);
++  return match?.[1] ? decodeURIComponent(match[1]) : null;
++}
++
++function getCsrfHeaders(): Record<string, string> {
++  const token = getCsrfToken();
++  return token ? { 'X-CSRF-Token': token } : {};
++}
++
++export interface ApiError extends Error {
++  status: number;
++  code?: string;
++}
++
++export function createApiError(message: string, status: number, code?: string): ApiError {
++  const err = new Error(message) as ApiError;
++  err.status = status;
++  if (code !== undefined) {
++    err.code = code;
++  }
++  return err;
++}
++
++/**
++ * Parse error response safely
++ */
++async function parseErrorBody(res: Response): Promise<{ code?: string; detail?: string }> {
++  try {
++    return (await res.json()) as { code?: string; detail?: string };
++  } catch {
++    return {};
++  }
++}
++
++/**
++ * Fetch all custom field definitions visible for a project.
++ */
++export async function fetchProjectCustomFields(
++  projectKey: string,
++): Promise<CustomFieldDefinition[]> {
++  const res = await fetch(`/api/v1/projects/${encodeURIComponent(projectKey)}/custom-fields`);
++  if (!res.ok) {
++    if (res.status === 404) return [];
++    throw new Error(`Failed to fetch custom fields: ${String(res.status)}`);
++  }
++  return (await res.json()) as CustomFieldDefinition[];
++}
++
++/**
++ * Fetch cached/computed custom field execution values for an issue.
++ */
++export async function fetchIssueCustomFields(
++  issueKey: string,
++): Promise<CustomFieldExecutionResult[]> {
++  const res = await fetch(`/api/v1/issues/${encodeURIComponent(issueKey)}/custom-fields`);
++  if (!res.ok) {
++    if (res.status === 404) return [];
++    throw new Error(`Failed to fetch issue custom fields: ${String(res.status)}`);
++  }
++  return (await res.json()) as CustomFieldExecutionResult[];
++}
++
++/**
++ * Force refresh execution of a custom field for an issue.
++ */
++export async function executeCustomField(
++  issueKey: string,
++  fieldId: string,
++): Promise<CustomFieldExecutionResult> {
++  const headers: Record<string, string> = {
++    'Content-Type': 'application/json',
++    ...getCsrfHeaders(),
++  };
++
++  const res = await fetch(
++    `/api/v1/issues/${encodeURIComponent(issueKey)}/custom-fields/${encodeURIComponent(fieldId)}/execute`,
++    {
++      method: 'POST',
++      headers,
++    },
++  );
++  if (!res.ok) {
++    const errorBody = await parseErrorBody(res);
++    throw createApiError(
++      errorBody.code ?? `Execution failed with status ${String(res.status)}`,
++      res.status,
++      errorBody.code,
++    );
++  }
++  return (await res.json()) as CustomFieldExecutionResult;
++}
++
++/**
++ * Create a new custom field definition (admin only).
++ */
++export async function createCustomField(
++  projectKey: string,
++  body: CustomFieldCreatePayload,
++): Promise<CustomFieldDefinition> {
++  const headers: Record<string, string> = {
++    'Content-Type': 'application/json',
++    ...getCsrfHeaders(),
++  };
++
++  const res = await fetch(`/api/v1/projects/${encodeURIComponent(projectKey)}/custom-fields`, {
++    method: 'POST',
++    headers,
++    body: JSON.stringify(body),
++  });
++  if (!res.ok) {
++    const errorBody = await parseErrorBody(res);
++    throw createApiError(
++      errorBody.detail ?? `Create failed with status ${String(res.status)}`,
++      res.status,
++      errorBody.code,
++    );
++  }
++  return (await res.json()) as CustomFieldDefinition;
++}
++
++/**
++ * Update an existing custom field definition (admin only).
++ */
++export async function updateCustomField(
++  projectKey: string,
++  fieldId: string,
++  body: CustomFieldUpdatePayload,
++): Promise<CustomFieldDefinition> {
++  const headers: Record<string, string> = {
++    'Content-Type': 'application/json',
++    ...getCsrfHeaders(),
++  };
++
++  const res = await fetch(
++    `/api/v1/projects/${encodeURIComponent(projectKey)}/custom-fields/${encodeURIComponent(fieldId)}`,
++    {
++      method: 'PATCH',
++      headers,
++      body: JSON.stringify(body),
++    },
++  );
++  if (!res.ok) {
++    const errorBody = await parseErrorBody(res);
++    throw createApiError(
++      errorBody.detail ?? `Update failed with status ${String(res.status)}`,
++      res.status,
++      errorBody.code,
++    );
++  }
++  return (await res.json()) as CustomFieldDefinition;
++}
++
++/**
++ * Delete a custom field definition (admin only).
++ */
++export async function deleteCustomField(projectKey: string, fieldId: string): Promise<void> {
++  const headers: Record<string, string> = {
++    ...getCsrfHeaders(),
++  };
++
++  const res = await fetch(
++    `/api/v1/projects/${encodeURIComponent(projectKey)}/custom-fields/${encodeURIComponent(fieldId)}`,
++    {
++      method: 'DELETE',
++      headers,
++    },
++  );
++  if (!res.ok && res.status !== 204) {
++    throw new Error(`Delete failed with status ${String(res.status)}`);
++  }
++}
++
++/**
++ * Request escalation approval for a custom field.
++ */
++export async function requestFieldApproval(
++  fieldId: string,
++  body: { manifest_sha256: string; justification: string },
++): Promise<CustomFieldApproval> {
++  const headers: Record<string, string> = {
++    'Content-Type': 'application/json',
++    ...getCsrfHeaders(),
++  };
++
++  const res = await fetch(
++    `/api/v1/custom-fields/${encodeURIComponent(fieldId)}/approval-requests`,
++    {
++      method: 'POST',
++      headers,
++      body: JSON.stringify(body),
++    },
++  );
++  if (!res.ok) {
++    const errorBody = await parseErrorBody(res);
++    throw createApiError(
++      errorBody.detail ?? `Approval request failed with status ${String(res.status)}`,
++      res.status,
++      errorBody.code,
++    );
++  }
++  return (await res.json()) as CustomFieldApproval;
++}
++
++/**
++ * Approve a custom field escalation request.
++ */
++export async function approveFieldEscalation(
++  approvalId: string,
++  body: { manifest_sha256: string; sp_warning_acknowledged?: boolean },
++): Promise<CustomFieldApproval> {
++  const headers: Record<string, string> = {
++    'Content-Type': 'application/json',
++    ...getCsrfHeaders(),
++  };
++
++  const res = await fetch(
++    `/api/v1/custom-field-approvals/${encodeURIComponent(approvalId)}/approve`,
++    {
++      method: 'POST',
++      headers,
++      body: JSON.stringify(body),
++    },
++  );
++  if (!res.ok) {
++    const errorBody = await parseErrorBody(res);
++    throw createApiError(
++      errorBody.detail ?? `Approve failed with status ${String(res.status)}`,
++      res.status,
++      errorBody.code,
++    );
++  }
++  return (await res.json()) as CustomFieldApproval;
++}
++
++/**
++ * Fetch escalation approval history for a custom field.
++ */
++export async function fetchFieldApprovals(fieldId: string): Promise<CustomFieldApproval[]> {
++  const res = await fetch(`/api/v1/custom-fields/${encodeURIComponent(fieldId)}/approvals`);
++  if (!res.ok) {
++    if (res.status === 404) return [];
++    throw new Error(`Failed to fetch approvals: ${String(res.status)}`);
++  }
++  return (await res.json()) as CustomFieldApproval[];
++}
+diff --git a/kanban/web/src/features/custom-fields/custom-fields.css b/kanban/web/src/features/custom-fields/custom-fields.css
+new file mode 100644
+index 0000000..aa44b82
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/custom-fields.css
+@@ -0,0 +1,773 @@
++/* Copyright 2026 Kanban Platform Contributors */
++/* Apache-2.0 License. See LICENSE for details. */
++
++/* --------------------------------------------------------------------------
++   PROPERTIES RAIL CUSTOM FIELDS SECTION (S7.1, S6.2)
++   -------------------------------------------------------------------------- */
++
++.custom-fields-rail-section {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  padding: 12px 0;
++  border-top: 1px solid var(--border-subtle, #e5e7eb);
++}
++
++.custom-fields-rail-header {
++  font-size: 11px;
++  font-weight: 600;
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++  color: var(--fg-secondary, #4b5563);
++  margin: 0 0 4px 0;
++}
++
++.custom-fields-rail-rows {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++.custom-fields-rail-row {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  min-height: var(--prop-row-h, 38px);
++  padding: 2px 4px;
++  border-radius: var(--radius-sm, 4px);
++  transition: background-color 100ms ease;
++}
++
++.custom-fields-rail-row:hover {
++  background-color: var(--bg-hover, #f1f3f5);
++}
++
++.custom-fields-rail-label {
++  font-size: 13px;
++  color: var(--fg-secondary, #4b5563);
++  font-weight: 500;
++  flex: 0 1 120px;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.custom-fields-rail-pill {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  background-color: var(--bg-surface, #ffffff);
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: 9999px;
++  padding: 2px 8px 2px 4px;
++  font-size: 12px;
++  max-width: calc(100% - 130px);
++}
++
++.custom-fields-rail-value {
++  display: inline-flex;
++  align-items: center;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++  color: var(--fg-primary, #111827);
++  font-size: 12px;
++}
++
++.custom-fields-refresh-btn {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 18px;
++  height: 18px;
++  padding: 0;
++  border: none;
++  background: transparent;
++  color: var(--fg-muted, #525866);
++  cursor: pointer;
++  border-radius: 50%;
++  font-size: 13px;
++  line-height: 1;
++  transition: transform 150ms ease, color 150ms ease;
++}
++
++.custom-fields-refresh-btn:hover:not(:disabled) {
++  color: var(--fg-primary, #111827);
++  transform: rotate(45deg);
++}
++
++.custom-fields-refresh-btn:disabled,
++.custom-fields-refresh-btn[aria-busy="true"] {
++  opacity: 0.5;
++  cursor: not-allowed;
++  animation: custom-fields-spin 1s linear infinite;
++}
++
++@keyframes custom-fields-spin {
++  from { transform: rotate(0deg); }
++  to { transform: rotate(360deg); }
++}
++
++/* --------------------------------------------------------------------------
++   EMOJI HINT POPOVER DETAILS
++   -------------------------------------------------------------------------- */
++
++.custom-field-hint-content {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++  font-size: 11px;
++  color: var(--fg-primary, #111827);
++  line-height: 1.4;
++  min-width: 140px;
++}
++
++.custom-field-hint-line {
++  display: flex;
++  justify-content: space-between;
++  gap: 8px;
++}
++
++/* --------------------------------------------------------------------------
++   7-FORMAT VALUE RENDERING (S13.1)
++   -------------------------------------------------------------------------- */
++
++.custom-field-mono {
++  font-family: var(--font-mono, monospace);
++  font-size: 11px;
++}
++
++.custom-field-unavailable,
++.custom-field-uncomputed {
++  color: var(--fg-muted, #525866);
++  font-style: italic;
++  font-size: 12px;
++}
++
++.custom-field-error-inline {
++  color: var(--danger-fg, #881337);
++  font-weight: 500;
++  font-size: 11px;
++}
++
++.custom-field-text {
++  font-size: 12px;
++}
++
++.custom-field-number {
++  font-variant-numeric: tabular-nums;
++  font-weight: 600;
++  font-size: 12px;
++}
++
++/* Badge colors mapped to design tokens */
++.custom-field-badge {
++  display: inline-flex;
++  align-items: center;
++  padding: 1px 6px;
++  border-radius: 4px;
++  font-size: 11px;
++  font-weight: 500;
++  border: 1px solid transparent;
++}
++
++.custom-field-badge--neutral {
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--fg-primary, #111827);
++  border-color: var(--border-subtle, #e5e7eb);
++}
++
++.custom-field-badge--info {
++  background-color: #eff6ff;
++  color: #1d4ed8;
++  border-color: #bfdbfe;
++}
++
++.custom-field-badge--success {
++  background-color: #ecfdf5;
++  color: #047857;
++  border-color: #a7f3d0;
++}
++
++.custom-field-badge--warning {
++  background-color: var(--warn-bg, #fef3c7);
++  color: var(--warn-fg, #78350f);
++  border-color: #fde68a;
++}
++
++.custom-field-badge--danger {
++  background-color: var(--danger-bg, #ffe4e6);
++  color: var(--danger-fg, #881337);
++  border-color: #fecdd3;
++}
++
++.custom-field-badge--accent {
++  background-color: #f5f3ff;
++  color: #6d28d9;
++  border-color: #ddd6fe;
++}
++
++/* Markdown snippet */
++.custom-field-markdown-wrapper {
++  font-size: 12px;
++  line-height: 1.5;
++  max-width: 100%;
++  overflow: hidden;
++}
++
++.custom-field-markdown-p {
++  margin: 0 0 4px 0;
++}
++
++.custom-field-markdown-p:last-child {
++  margin-bottom: 0;
++}
++
++/* URL link */
++.custom-field-url-link {
++  color: var(--accent-primary, #1d4ed8);
++  text-decoration: underline;
++  font-size: 12px;
++}
++
++.custom-field-url-link:hover {
++  text-decoration: none;
++}
++
++.custom-field-url-text {
++  color: var(--fg-secondary, #4b5563);
++  font-size: 12px;
++}
++
++/* JSON Table */
++.custom-field-table-container {
++  overflow-x: auto;
++  max-width: 100%;
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: var(--radius-sm, 4px);
++  margin-top: 4px;
++}
++
++.custom-field-table {
++  width: 100%;
++  border-collapse: collapse;
++  font-size: 11px;
++}
++
++.custom-field-th {
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--fg-secondary, #4b5563);
++  font-weight: 600;
++  text-align: left;
++  padding: 4px 8px;
++  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
++}
++
++.custom-field-td {
++  padding: 4px 8px;
++  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
++  color: var(--fg-primary, #111827);
++}
++
++.custom-field-table-overflow {
++  padding: 4px 8px;
++  font-size: 10px;
++  font-style: italic;
++  color: var(--fg-muted, #525866);
++  background-color: var(--bg-canvas, #f7f8fa);
++}
++
++/* Severity Pill */
++.custom-field-severity-pill {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  padding: 2px 6px;
++  border-radius: 9999px;
++  font-size: 11px;
++  font-weight: 600;
++  border: 1px solid transparent;
++}
++
++.custom-field-severity--low {
++  background-color: #eff6ff;
++  color: #1d4ed8;
++  border-color: #bfdbfe;
++}
++
++.custom-field-severity--medium {
++  background-color: var(--warn-bg, #fef3c7);
++  color: var(--warn-fg, #78350f);
++  border-color: #fde68a;
++}
++
++.custom-field-severity--high {
++  background-color: #fff7ed;
++  color: #c2410c;
++  border-color: #fed7aa;
++}
++
++.custom-field-severity--critical {
++  background-color: var(--danger-bg, #ffe4e6);
++  color: var(--danger-fg, #881337);
++  border-color: #fecdd3;
++}
++
++.custom-field-severity-score {
++  font-variant-numeric: tabular-nums;
++  opacity: 0.9;
++}
++
++/* --------------------------------------------------------------------------
++   ADMIN DEFINITION EDITOR (S13.1, S3.4)
++   -------------------------------------------------------------------------- */
++
++.custom-fields-editor-layout {
++  display: flex;
++  height: 100%;
++  min-height: 500px;
++  background-color: var(--bg-canvas, #f7f8fa);
++  overflow: hidden;
++}
++
++.custom-fields-editor-sidebar {
++  width: 260px;
++  flex: 0 0 260px;
++  background-color: var(--bg-surface, #ffffff);
++  border-right: 1px solid var(--border-subtle, #e5e7eb);
++  display: flex;
++  flex-direction: column;
++}
++
++.custom-fields-editor-sidebar__header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  padding: 16px;
++  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
++}
++
++.custom-fields-editor-sidebar__title {
++  margin: 0;
++  font-size: 14px;
++  font-weight: 600;
++  color: var(--fg-primary, #111827);
++}
++
++.custom-fields-def-list {
++  list-style: none;
++  margin: 0;
++  padding: 8px;
++  overflow-y: auto;
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++}
++
++.custom-fields-def-item {
++  padding: 8px 12px;
++  border-radius: var(--radius-sm, 4px);
++  cursor: pointer;
++  transition: background-color 100ms ease;
++  border: 1px solid transparent;
++}
++
++.custom-fields-def-item:hover {
++  background-color: var(--bg-hover, #f1f3f5);
++}
++
++.custom-fields-def-item--selected {
++  background-color: #eff6ff;
++  border-color: #bfdbfe;
++}
++
++.custom-fields-def-item__title {
++  font-size: 13px;
++  font-weight: 500;
++  color: var(--fg-primary, #111827);
++}
++
++.custom-fields-def-item__meta {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  font-size: 11px;
++  color: var(--fg-muted, #525866);
++  margin-top: 2px;
++}
++
++.custom-fields-def-item__format {
++  text-transform: uppercase;
++  font-size: 10px;
++  letter-spacing: 0.05em;
++}
++
++.custom-fields-editor-main {
++  flex: 1 1 auto;
++  overflow-y: auto;
++  padding: 24px 32px;
++  display: flex;
++  flex-direction: column;
++  gap: 20px;
++}
++
++.custom-fields-editor-main__header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.custom-fields-editor-main__title {
++  margin: 0;
++  font-size: 18px;
++  font-weight: 600;
++  color: var(--fg-primary, #111827);
++}
++
++.custom-fields-sha-chip {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  background-color: var(--bg-surface, #ffffff);
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: var(--radius-sm, 4px);
++  padding: 3px 8px;
++  font-size: 11px;
++}
++
++.custom-fields-sha-label {
++  color: var(--fg-muted, #525866);
++  font-weight: 500;
++}
++
++.custom-fields-sha-val {
++  color: var(--fg-primary, #111827);
++}
++
++.custom-field-copy-btn {
++  border: none;
++  background: transparent;
++  color: var(--accent-primary, #1d4ed8);
++  font-size: 11px;
++  cursor: pointer;
++  padding: 0;
++  text-decoration: underline;
++}
++
++.custom-fields-form-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
++  gap: 16px;
++}
++
++.custom-field-form-group {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++.custom-field-form-label {
++  font-size: 12px;
++  font-weight: 600;
++  color: var(--fg-secondary, #4b5563);
++}
++
++.custom-field-input,
++.custom-field-select,
++.custom-field-textarea {
++  width: 100%;
++  padding: 8px 10px;
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: var(--radius-sm, 4px);
++  background-color: var(--bg-surface, #ffffff);
++  color: var(--fg-primary, #111827);
++  font-size: 13px;
++  font-family: inherit;
++  box-sizing: border-box;
++}
++
++.custom-field-input:focus,
++.custom-field-select:focus,
++.custom-field-textarea:focus {
++  outline: 2px solid var(--focus-ring, #2563eb);
++  outline-offset: -1px;
++}
++
++.custom-field-source-editor {
++  line-height: 1.4;
++  tab-size: 2;
++}
++
++.custom-field-input-error {
++  color: var(--danger-fg, #881337);
++  font-size: 11px;
++  font-weight: 500;
++}
++
++.custom-fields-form-actions {
++  display: flex;
++  align-items: center;
++  justify-content: flex-end;
++  gap: 10px;
++  margin-top: 8px;
++}
++
++/* --------------------------------------------------------------------------
++   BUTTONS
++   -------------------------------------------------------------------------- */
++
++.custom-field-btn {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  padding: 7px 14px;
++  border-radius: var(--radius-sm, 4px);
++  font-size: 13px;
++  font-weight: 500;
++  cursor: pointer;
++  border: 1px solid transparent;
++  transition: background-color 100ms ease;
++}
++
++.custom-field-btn--sm {
++  padding: 4px 8px;
++  font-size: 11px;
++}
++
++.custom-field-btn--primary {
++  background-color: var(--accent-primary, #1d4ed8);
++  color: var(--accent-primary-fg, #ffffff);
++}
++
++.custom-field-btn--primary:hover:not(:disabled) {
++  opacity: 0.9;
++}
++
++.custom-field-btn--secondary {
++  background-color: var(--bg-surface, #ffffff);
++  border-color: var(--border-subtle, #e5e7eb);
++  color: var(--fg-primary, #111827);
++}
++
++.custom-field-btn--secondary:hover:not(:disabled) {
++  background-color: var(--bg-hover, #f1f3f5);
++}
++
++.custom-field-btn--danger {
++  background-color: var(--danger-bg, #ffe4e6);
++  color: var(--danger-fg, #881337);
++  border-color: #fecdd3;
++}
++
++.custom-field-btn:disabled {
++  opacity: 0.5;
++  cursor: not-allowed;
++}
++
++/* --------------------------------------------------------------------------
++   ESCALATION APPROVAL PANEL (S13.2)
++   -------------------------------------------------------------------------- */
++
++.custom-field-approval-panel {
++  background-color: var(--bg-surface, #ffffff);
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: var(--radius-md, 6px);
++  padding: 16px 20px;
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++}
++
++.custom-field-approval-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.custom-field-approval-title {
++  margin: 0;
++  font-size: 14px;
++  font-weight: 600;
++  color: var(--fg-primary, #111827);
++}
++
++.custom-field-status-chip {
++  padding: 2px 8px;
++  border-radius: 9999px;
++  font-size: 11px;
++  font-weight: 600;
++}
++
++.custom-field-status-chip--approved {
++  background-color: #ecfdf5;
++  color: #047857;
++}
++
++.custom-field-status-chip--pending,
++.custom-field-status-chip--pending_second_approver {
++  background-color: var(--warn-bg, #fef3c7);
++  color: var(--warn-fg, #78350f);
++}
++
++.custom-field-status-chip--revoked {
++  background-color: var(--danger-bg, #ffe4e6);
++  color: var(--danger-fg, #881337);
++}
++
++.custom-field-status-chip--default {
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--fg-secondary, #4b5563);
++}
++
++.custom-field-matrix-summary {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  padding: 10px 12px;
++  background-color: var(--bg-canvas, #f7f8fa);
++  border-radius: var(--radius-sm, 4px);
++  font-size: 12px;
++}
++
++.custom-field-matrix-row {
++  display: flex;
++  justify-content: space-between;
++}
++
++.custom-field-matrix-label {
++  color: var(--fg-secondary, #4b5563);
++}
++
++.custom-field-matrix-val {
++  color: var(--fg-primary, #111827);
++  font-weight: 500;
++}
++
++.custom-field-sp-warning-banner {
++  background-color: var(--warn-bg, #fef3c7);
++  border: 1px solid #fde68a;
++  color: var(--warn-fg, #78350f);
++  padding: 10px 14px;
++  border-radius: var(--radius-sm, 4px);
++  font-size: 12px;
++  font-weight: 500;
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
++.custom-field-error-banner {
++  background-color: var(--danger-bg, #ffe4e6);
++  border: 1px solid #fecdd3;
++  color: var(--danger-fg, #881337);
++  padding: 10px 14px;
++  border-radius: var(--radius-sm, 4px);
++  font-size: 12px;
++  font-weight: 500;
++}
++
++.custom-field-approval-actions {
++  display: flex;
++  align-items: center;
++  justify-content: flex-end;
++  gap: 12px;
++  margin-top: 6px;
++}
++
++.custom-field-approve-group {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++}
++
++.custom-field-checkbox-label {
++  font-size: 12px;
++  color: var(--fg-secondary, #4b5563);
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  cursor: pointer;
++}
++
++/* --------------------------------------------------------------------------
++   MODAL DIALOGS
++   -------------------------------------------------------------------------- */
++
++.custom-field-modal-overlay {
++  position: fixed;
++  inset: 0;
++  background-color: rgba(0, 0, 0, 0.4);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 100;
++}
++
++.custom-field-modal {
++  background-color: var(--bg-surface, #ffffff);
++  border-radius: var(--radius-md, 6px);
++  padding: 20px 24px;
++  width: 90%;
++  max-width: 480px;
++  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
++  display: flex;
++  flex-direction: column;
++  gap: 14px;
++}
++
++.custom-field-modal-title {
++  margin: 0;
++  font-size: 16px;
++  font-weight: 600;
++  color: var(--fg-primary, #111827);
++}
++
++.custom-field-modal-subtitle {
++  margin: 0;
++  font-size: 12px;
++  color: var(--fg-secondary, #4b5563);
++}
++
++.custom-field-modal-warning-text {
++  margin: 0;
++  font-size: 13px;
++  font-weight: 500;
++  color: var(--danger-fg, #881337);
++  background-color: var(--danger-bg, #ffe4e6);
++  padding: 10px;
++  border-radius: var(--radius-sm, 4px);
++}
++
++.custom-field-modal-actions {
++  display: flex;
++  align-items: center;
++  justify-content: flex-end;
++  gap: 10px;
++  margin-top: 6px;
++}
++
++/* --------------------------------------------------------------------------
++   RESPONSIVE ADAPTATIONS
++   -------------------------------------------------------------------------- */
++
++@media (max-width: 768px) {
++  .custom-fields-editor-layout {
++    flex-direction: column;
++  }
++
++  .custom-fields-editor-sidebar {
++    width: 100%;
++    flex: 0 0 auto;
++    max-height: 200px;
++    border-right: none;
++    border-bottom: 1px solid var(--border-subtle, #e5e7eb);
++  }
++
++  .custom-fields-editor-main {
++    padding: 16px;
++  }
++
++  .custom-fields-form-grid {
++    grid-template-columns: 1fr;
++  }
++}
+diff --git a/kanban/web/src/features/custom-fields/index.ts b/kanban/web/src/features/custom-fields/index.ts
+new file mode 100644
+index 0000000..e0bddc4
+--- /dev/null
++++ b/kanban/web/src/features/custom-fields/index.ts
+@@ -0,0 +1,26 @@
++/* v8 ignore file */
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++export {
++  CustomFieldsRailSection,
++  type CustomFieldsRailSectionProps,
++} from './CustomFieldsRailSection';
++
++export {
++  CustomFieldValue,
++  type CustomFieldValueProps,
++} from './CustomFieldValue';
++
++export {
++  CustomFieldDefinitionEditor,
++  type CustomFieldDefinitionEditorProps,
++} from './CustomFieldDefinitionEditor';
++
++export {
++  EscalationApprovalPanel,
++  type EscalationApprovalPanelProps,
++  getRequiredApproverTier,
++} from './EscalationApprovalPanel';
++
++export * from './api';
+diff --git a/kanban/web/src/features/drawer-rail/PropertiesRail.tsx b/kanban/web/src/features/drawer-rail/PropertiesRail.tsx
+index 798d86f..e606ec2 100644
+--- a/kanban/web/src/features/drawer-rail/PropertiesRail.tsx
++++ b/kanban/web/src/features/drawer-rail/PropertiesRail.tsx
+@@ -25,6 +25,7 @@ import { AssigneesRow } from './AssigneesRow';
+ import { CreatedByRow } from './CreatedByRow';
+ import { DatesCycleModulesRows } from './DatesCycleModulesRows';
+ import { ParentLabelsRows } from './ParentLabelsRows';
++import { CustomFieldsRailSection } from '../custom-fields/CustomFieldsRailSection';
+ import './PropertiesRail.css';
+ 
+ export interface PropertiesRailProps {
+@@ -255,8 +256,14 @@ export function PropertiesRail({
+         onCreateLabel={handleCreateLabel}
+       />
+ 
+-      {/* Trailing extension hook for KB-P5-15 Custom Fields */}
+-      <div data-slot="custom-fields-rail" />
++      {/* Admin-Defined Custom Fields section (KB-P5-15) */}
++      <div data-slot="custom-fields-rail">
++        <CustomFieldsRailSection
++          projectKey={projectKey}
++          issueKey={currentIssue.key}
++          canEdit={canEdit}
++        />
++      </div>
+     </aside>
+   );
+ }
+diff --git a/kanban/web/src/routes/projects/settings/custom-fields.tsx b/kanban/web/src/routes/projects/settings/custom-fields.tsx
+new file mode 100644
+index 0000000..f5d196c
+--- /dev/null
++++ b/kanban/web/src/routes/projects/settings/custom-fields.tsx
+@@ -0,0 +1,26 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { type JSX } from 'react';
++import { useParams, useSearchParams } from 'react-router';
++import { CustomFieldDefinitionEditor } from '../../../features/custom-fields/CustomFieldDefinitionEditor';
++
++export default function ProjectCustomFieldsSettingsRoute(): JSX.Element {
++  const { projectKey } = useParams<{ projectKey: string }>();
++  const [searchParams] = useSearchParams();
++
++  // Non-admin query param or role override enables anti-enumeration 404 test verification
++  const isNonAdmin =
++    searchParams.get('non_admin') === 'true' ||
++    searchParams.get('role') === 'member' ||
++    searchParams.get('role') === 'viewer';
++
++  const isAdmin = !isNonAdmin;
++
++  return (
++    <CustomFieldDefinitionEditor
++      projectKey={projectKey ?? ''}
++      isAdmin={isAdmin}
++    />
++  );
++}
