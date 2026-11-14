@@ -164,8 +164,8 @@ describe('routes and AppShell integration', () => {
     const paths = [
       { path: '/', expected: 'route-placeholder' },
       { path: '/projects/KAN/overview', expected: 'project-overview-page' },
-      { path: '/projects/KAN/docs', expected: 'route-placeholder' },
-      { path: '/projects/KAN/docs/page-42', expected: 'route-placeholder' },
+      { path: '/projects/KAN/docs', expected: 'docs-workspace-view' },
+      { path: '/projects/KAN/docs/page-42', expected: 'docs-workspace-view' },
       { path: '/projects/KAN/issues/KAN-100', expected: 'full-screen-route-anchor' },
       { path: '/stickies', expected: 'workspace-stickies-page' },
       { path: '/login', expected: 'login-page' },

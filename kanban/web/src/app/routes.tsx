@@ -30,6 +30,7 @@ import { RealtimeStory } from '../dev/RealtimeStory';
 import { DrawerStory } from '../dev/DrawerStory';
 import { RailStory } from '../dev/RailStory';
 import { DrawerActionsStory } from '../dev/DrawerActionsStory';
+import { DocsWorkspaceView } from '../features/docs/DocsWorkspaceView';
 import { StickiesStory } from '../dev/StickiesStory';
 import { ProjectOverviewView } from '../features/stickies/ProjectOverviewView';
 import { WorkspaceStickiesView } from '../features/stickies/WorkspaceStickiesView';
@@ -122,11 +123,11 @@ export function ProjectOverviewRoute(): JSX.Element {
 }
 
 export function ProjectDocsRoute(): JSX.Element {
-  return <RoutePlaceholder route="/projects/:projectKey/docs" />;
+  return <DocsWorkspaceView />;
 }
 
 export function ProjectDocPageRoute(): JSX.Element {
-  return <RoutePlaceholder route="/projects/:projectKey/docs/:pageId" />;
+  return <DocsWorkspaceView />;
 }
 
 export function DevStoryRoute(): JSX.Element {

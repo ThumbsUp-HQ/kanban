@@ -1,0 +1,158 @@
+{
+  "contracts": [
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/KAN/docs/tree",
+      "description": "ltree hierarchical document tree retrieval with max_depth <= 10",
+      "status": 200,
+      "response_body": {
+        "project_key": "KAN",
+        "root_count": 2,
+        "nodes": [
+          {
+            "id": "page-arch-root",
+            "title": "Architecture",
+            "path": "Architecture",
+            "depth": 1,
+            "has_children": true,
+            "version_seq": 3,
+            "updated_at": "2026-11-13T12:00:00Z"
+          },
+          {
+            "id": "page-auth-studio",
+            "title": "Auth Studio",
+            "path": "Architecture.Auth_Studio",
+            "depth": 2,
+            "has_children": false,
+            "version_seq": 7,
+            "updated_at": "2026-11-13T14:30:00Z"
+          },
+          {
+            "id": "page-deep-tree",
+            "title": "Deep Tree",
+            "path": "Deep_Tree",
+            "depth": 1,
+            "has_children": true,
+            "version_seq": 1,
+            "updated_at": "2026-11-13T10:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/pages/page-auth-studio",
+      "description": "Document detail retrieval including body_markdown, SHA256 etag, and object links",
+      "status": 200,
+      "headers": {
+        "ETag": "\"167733efd1694f479d2dfabccde0df52be1bbbe500a89d3119f9bb484d00cf05\""
+      },
+      "response_body": {
+        "id": "page-auth-studio",
+        "project_key": "KAN",
+        "title": "Auth Studio",
+        "path": "Architecture.Auth_Studio",
+        "depth": 2,
+        "body_markdown": "# Overview\n\nAuth Studio specification.\n\n## PKCE S256\n\nEnforce S256 PKCE on all OAuth2 cards.\n\n```bash\n# comment inside code fence\ncurl -X POST https://auth.example.com/oauth/token\n```\n\n### State TTL\n\nState parameters expire in 300s.\n",
+        "body_sha256": "167733efd1694f479d2dfabccde0df52be1bbbe500a89d3119f9bb484d00cf05",
+        "version_seq": 7,
+        "is_archived": false,
+        "created_at": "2026-11-10T08:00:00Z",
+        "updated_at": "2026-11-13T14:30:00Z",
+        "object_links": [
+          {
+            "id": "link-142",
+            "source_id": "page-auth-studio",
+            "source_type": "page",
+            "target_id": "issue-kan-142",
+            "target_type": "issue",
+            "link_type": "references",
+            "target_key": "KAN-142",
+            "target_title": "Implement PKCE S256"
+          }
+        ]
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/pages/page-auth-studio",
+      "description": "Concurrency-controlled editorial update enforcing If-Match ETag check",
+      "headers": {
+        "If-Match": "\"167733efd1694f479d2dfabccde0df52be1bbbe500a89d3119f9bb484d00cf05\"",
+        "Content-Type": "application/json"
+      },
+      "request_body": {
+        "title": "Auth Studio Architecture",
+        "body_markdown": "# Overview\n\nUpdated editorial content.\n"
+      },
+      "status": 200,
+      "response_body": {
+        "id": "page-auth-studio",
+        "title": "Auth Studio Architecture",
+        "body_sha256": "9b7d59b2d3bf3089efef512f458648c666cbb4b9319808a287ee3b4e60e86b03",
+        "version_seq": 8,
+        "updated_at": "2026-11-13T15:00:00Z"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/pages/page-auth-studio/versions/5/restore",
+      "description": "Restore prior version v5 enforcing current ETag concurrency check",
+      "headers": {
+        "If-Match": "\"167733efd1694f479d2dfabccde0df52be1bbbe500a89d3119f9bb484d00cf05\""
+      },
+      "status": 200,
+      "response_body": {
+        "id": "page-auth-studio",
+        "project_key": "KAN",
+        "title": "Auth Studio",
+        "path": "Architecture.Auth_Studio",
+        "depth": 2,
+        "body_markdown": "# Overview\n\nAuth Studio specification restored from v5 snapshot.\n\n## PKCE S256\n\nEnforce S256 PKCE on all OAuth2 cards.\n",
+        "body_sha256": "a3b98c39e2467d0284dfa5e95679901efee7bf8e5c2cfca89e3a682ff77dfa81",
+        "version_seq": 8,
+        "updated_at": "2026-11-13T15:05:00Z",
+        "object_links": []
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/KAN/issues",
+      "description": "Create new issue linked from selected page prose",
+      "request_body": {
+        "summary": "Follow-up on PKCE flow",
+        "description": "> Enforce S256 PKCE on all OAuth2 cards.\n\nFrom [[Architecture.Auth_Studio]]:\nCreated from editorial selection.",
+        "issue_type": "task"
+      },
+      "status": 201,
+      "response_body": {
+        "id": "issue-kan-143",
+        "key": "KAN-143",
+        "summary": "Follow-up on PKCE flow",
+        "description": "> Enforce S256 PKCE on all OAuth2 cards.\n\nFrom [[Architecture.Auth_Studio]]:\nCreated from editorial selection.",
+        "status": "todo",
+        "created_at": "2026-11-13T15:10:00Z"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/links",
+      "description": "Persist bidirectional object link between doc page and new work item",
+      "request_body": {
+        "source_id": "page-auth-studio",
+        "target_id": "issue-kan-143",
+        "link_type": "references"
+      },
+      "status": 201,
+      "response_body": {
+        "id": "link-143",
+        "source_id": "page-auth-studio",
+        "source_type": "page",
+        "target_id": "issue-kan-143",
+        "target_type": "issue",
+        "link_type": "references",
+        "created_at": "2026-11-13T15:10:01Z"
+      }
+    }
+  ]
+}

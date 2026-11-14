@@ -24,6 +24,7 @@ from kanban.api.v1.schemas.docs import (
     PageVersionResponse,
 )
 from kanban.services import docs as svc
+from kanban.services.projects import get_project_or_404
 
 router = APIRouter(tags=["docs"])
 
@@ -68,6 +69,26 @@ async def get_doc_tree(
 ) -> list[PageTreeNode]:
     """Retrieve full hierarchical page tree with restricted ancestor masking."""
     return await svc.get_doc_tree(session, caller, doc_ref)
+
+
+@router.get(
+    "/projects/{project_ref}/docs/tree",
+    response_model=list[PageTreeNode],
+    summary="Get project page tree",
+)
+async def get_project_docs_tree(
+    project_ref: str,
+    caller: Caller,
+    session: Session,
+) -> list[PageTreeNode]:
+    """Retrieve full hierarchical page tree for a project."""
+    project = await get_project_or_404(session, caller, project_ref)
+    docs = await svc.list_docs(session, caller, project_id=project.id)
+    tree: list[PageTreeNode] = []
+    for d in docs:
+        sub = await svc.get_doc_tree(session, caller, str(d.id))
+        tree.extend(sub)
+    return tree
 
 
 @router.post(
