@@ -17,7 +17,16 @@ __all__ = [
 _MAX_FLOW_DICT_LEN: Final[int] = 4
 
 _SECRET_KEY_NAMES: Final[frozenset[str]] = frozenset(
-    {"secret", "client_secret", "bind_dn_password", "encrypted_secret_blob", "wrapped_dek"}
+    {
+        "secret",
+        "client_secret",
+        "bind_dn_password",
+        "encrypted_secret_blob",
+        "wrapped_dek",
+        "api_key",
+        "wrapped_api_key",
+        "api_key_nonce",
+    }
 )
 
 

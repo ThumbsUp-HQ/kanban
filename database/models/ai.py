@@ -77,9 +77,9 @@ class AIProviderConfig(Base):
     settings_json: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
-    wrapped_api_key: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    api_key_nonce: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    wrapped_dek: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    wrapped_api_key: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
+    api_key_nonce: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
+    wrapped_dek: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     dek_kid: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true"), default=True

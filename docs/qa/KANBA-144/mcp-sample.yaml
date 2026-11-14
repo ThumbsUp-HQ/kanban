@@ -1,0 +1,84 @@
+# Tool 9: manage_ai_and_agent_runners Sample Input/Output Transcripts
+# Ticket: KANBA-144 (KB-P5-05b)
+
+- action: upsert_provider
+  description: Create new AI provider configuration with write-only key custody
+  input:
+    action: upsert_provider
+    provider_kind: ollama
+    display_name: Local Llama3
+    model_allowlist:
+      - llama3:8b
+      - codellama:7b
+    base_url: http://127.0.0.1:11434
+    residency_tier: default
+    priority: 10
+    settings:
+      temperature: 0.2
+    is_enabled: true
+    lod: summary
+  output: |
+    id: 01932c56-789a-7bc0-81d2-abcdef012345
+    provider_kind: ollama
+    display_name: Local Llama3
+    is_enabled: true
+    api_key_set: false
+
+- action: list_providers
+  description: List configured AI providers omitting sensitive envelope keys
+  input:
+    action: list_providers
+    lod: summary
+  output: |
+    - id: 01932c56-789a-7bc0-81d2-abcdef012345
+      provider_kind: ollama
+      display_name: Local Llama3
+      is_enabled: true
+      api_key_set: false
+
+- action: set_budget
+  description: Configure periodic token budget cap for provider
+  input:
+    action: set_budget
+    provider_config_id: 01932c56-789a-7bc0-81d2-abcdef012345
+    period_kind: daily
+    token_cap: 100000
+    lod: summary
+  output: |
+    period_kind: daily
+    token_cap: 100000
+    tokens_used: 0
+    tokens_reserved: 0
+
+- action: get_budget_usage
+  description: Retrieve live token consumption metrics against periodic caps
+  input:
+    action: get_budget_usage
+    provider_config_id: 01932c56-789a-7bc0-81d2-abcdef012345
+    lod: summary
+  output: |
+    period_kind: daily
+    token_cap: 100000
+    tokens_used: 48
+    tokens_reserved: 0
+
+- action: disable_provider
+  description: Disable active provider configuration and halt future allocations
+  input:
+    action: disable_provider
+    id: 01932c56-789a-7bc0-81d2-abcdef012345
+    lod: summary
+  output: |
+    id: 01932c56-789a-7bc0-81d2-abcdef012345
+    provider_kind: ollama
+    display_name: Local Llama3
+    is_enabled: false
+    api_key_set: false
+
+- action: mint_runner_enrollment_token
+  description: Deferred action returning structured ACTION_NOT_AVAILABLE fault
+  input:
+    action: mint_runner_enrollment_token
+  output: |
+    error: ACTION_NOT_AVAILABLE
+    message: Action 'mint_runner_enrollment_token' is reserved for future implementation (KB-P5-16 / KB-P5-22).

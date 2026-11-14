@@ -179,6 +179,10 @@ class ActivityEventType(StrEnum):
     WORKSPACE_SETTINGS_CHANGED = "WORKSPACE_SETTINGS_CHANGED"
     AIR_GAP_MODE_CHANGED = "AIR_GAP_MODE_CHANGED"
     WORK_COMPLETED = "WORK_COMPLETED"
+    AI_PROVIDER_CONFIG_CREATED = "AI_PROVIDER_CONFIG_CREATED"
+    AI_PROVIDER_CONFIG_UPDATED = "AI_PROVIDER_CONFIG_UPDATED"
+    AI_PROVIDER_CONFIG_DISABLED = "AI_PROVIDER_CONFIG_DISABLED"
+    AI_BUDGET_SET = "AI_BUDGET_SET"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -303,6 +307,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.CUSTOM_FIELD_APPROVAL_REVOKED: ActivityCategory.HISTORY,
         ActivityEventType.WORKSPACE_SETTINGS_CHANGED: ActivityCategory.SYSTEM,
         ActivityEventType.AIR_GAP_MODE_CHANGED: ActivityCategory.SYSTEM,
+        ActivityEventType.AI_PROVIDER_CONFIG_CREATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AI_PROVIDER_CONFIG_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AI_PROVIDER_CONFIG_DISABLED: ActivityCategory.SYSTEM,
+        ActivityEventType.AI_BUDGET_SET: ActivityCategory.SYSTEM,
     }
 )
 
