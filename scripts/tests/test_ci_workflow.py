@@ -1,6 +1,6 @@
 """Structural and security tests for the CI workflow (KB-P0-06 / KANBA-28).
 
-The project CI runs on the Forgejo runner ``inferrence1`` as five jobs. These tests pin the
+The project CI runs on the Forgejo runner ``inferrence1`` as six jobs. These tests pin the
 invariants that keep failed runs diagnosable and the pipeline hardened: SHA-pinned actions,
 least-privilege permissions, bounded jobs, and always-run log upload as the final step.
 """
@@ -17,9 +17,17 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GITHUB_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 FORGEJO_WORKFLOW = REPO_ROOT / ".forgejo" / "workflows" / "ci.yml"
-JOB_IDS = ["lint-type", "python-tests", "web-tests", "license-gate", "docker-build"]
+JOB_IDS = [
+    "lint-type",
+    "python-tests",
+    "web-tests",
+    "license-gate",
+    "docker-build",
+    "docker-push",
+]
 USES_PATTERN = re.compile(r"^[^@]+@[0-9a-f]{40}$")
-ALLOWED_SECRETS = {"DASH_TOKEN"}
+ALLOWED_SECRETS = {"DASH_TOKEN", "DOCKERHUB_USERNAME", "DOCKERHUB_TOKEN"}
+DOCKERHUB_SECRETS = {"DOCKERHUB_USERNAME", "DOCKERHUB_TOKEN"}
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -48,8 +56,8 @@ def test_workflow_copies_are_identical() -> None:
     assert GITHUB_WORKFLOW.read_bytes() == FORGEJO_WORKFLOW.read_bytes()
 
 
-def test_five_jobs_exist_on_inferrence1(jobs: dict[str, dict[str, Any]]) -> None:
-    """Positive: exactly the five ticket jobs, all on the project runner."""
+def test_six_jobs_exist_on_inferrence1(jobs: dict[str, dict[str, Any]]) -> None:
+    """Positive: the five ticket jobs plus docker-push, all on the project runner."""
     assert list(jobs) == JOB_IDS
     for job in jobs.values():
         assert job["runs-on"] == ["inferrence1"]
@@ -97,15 +105,50 @@ def test_every_uses_is_pinned_to_a_full_commit_sha(jobs: dict[str, dict[str, Any
             assert re.search(r"@[0-9a-f]{40} # v\d+\.\d+\.\d+$", line.strip()), line
 
 
-def test_only_dash_secret_is_referenced() -> None:
-    """Security: the only secret is DASH_TOKEN, and only through a step env block."""
+def test_secrets_are_scoped_to_their_jobs(jobs: dict[str, dict[str, Any]]) -> None:
+    """Security: Docker Hub secrets exist only in docker-push; none appear in `run:` bodies."""
     text = FORGEJO_WORKFLOW.read_text(encoding="utf-8")
     refs = {part.split("}}")[0].strip() for part in text.split("secrets.")[1:]}
     assert refs == ALLOWED_SECRETS
-    workflow = _load(FORGEJO_WORKFLOW)
-    for job in workflow["jobs"].values():
+    for name, job in jobs.items():
+        job_text = yaml.safe_dump(job)
+        for secret in DOCKERHUB_SECRETS:
+            assert (secret in job_text) == (name == "docker-push"), (name, secret)
         for step in job["steps"]:
-            assert "secrets." not in str(step.get("run", ""))
+            assert "secrets." not in str(step.get("run", "")), (name, step["name"])
+
+
+def test_docker_push_gating_and_dependencies(jobs: dict[str, dict[str, Any]]) -> None:
+    """Security: docker-push runs only for main pushes, after all five other jobs succeed."""
+    job = jobs["docker-push"]
+    assert job["needs"] == [
+        "lint-type",
+        "python-tests",
+        "web-tests",
+        "license-gate",
+        "docker-build",
+    ]
+    assert job["if"] == "github.ref == 'refs/heads/main' && github.event_name == 'push'"
+    uses = [s["uses"].split("@")[0] for s in job["steps"] if "uses" in s]
+    assert uses == [
+        "actions/checkout",
+        "docker/setup-buildx-action",
+        "docker/login-action",
+        "docker/build-push-action",
+        "actions/upload-artifact",
+    ]
+    push = next(s for s in job["steps"] if s.get("name") == "Build and push Docker image")
+    assert push["with"]["push"] is True
+    assert push["with"]["tags"] == "${{ secrets.DOCKERHUB_USERNAME }}/thumbs-up-kanban:latest"
+
+
+def test_only_docker_push_may_push_images(jobs: dict[str, dict[str, Any]]) -> None:
+    """Security: no other job references push or the login/build-push actions."""
+    for name, job in jobs.items():
+        if name == "docker-push":
+            continue
+        assert "push" not in _run_text(job), name
+        assert not any("docker/login-action" in str(s.get("uses", "")) for s in job["steps"]), name
 
 
 def test_last_step_uploads_logs_artifact_always(jobs: dict[str, dict[str, Any]]) -> None:

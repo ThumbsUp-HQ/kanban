@@ -1,540 +1,1641 @@
 diff --git a/.forgejo/workflows/ci.yml b/.forgejo/workflows/ci.yml
-index 5f33235..39a5d65 100644
+index 39a5d65..d098ea8 100644
 --- a/.forgejo/workflows/ci.yml
 +++ b/.forgejo/workflows/ci.yml
-@@ -5,6 +5,9 @@ on:
-     branches: [main]
+@@ -2,26 +2,72 @@ name: build-test-push
+ 
+ on:
+   push:
+-    branches: [main]
    pull_request:
  
-+env:
-+  CI_JOB_NAME: build-test-push
+-env:
+-  CI_JOB_NAME: build-test-push
++concurrency:
++  group: ci-${{ github.ref }}
++  cancel-in-progress: true
 +
++permissions:
++  contents: read
+ 
  jobs:
-   build-test-push:
+-  build-test-push:
++  lint-type:
++    runs-on: [inferrence1]
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: lint-type
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
++
++      - name: Set up Python
++        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
++        with:
++          python-version: "3.12"
++
++      - name: Install uv
++        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
++
++      - name: Lint and type checks
++        shell: bash
++        run: |
++          scripts/ci/run_and_log.sh make-check -- \
++            bash -c 'uv sync --locked && make check'
++
++      - name: Upload logs to Dash
++        if: always()
++        shell: bash
++        env:
++          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
++        run: scripts/ci/upload_dash_log.sh lint-type
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
++
++  python-tests:
      runs-on: [inferrence1]
-@@ -32,29 +35,25 @@ jobs:
-       - name: Run lint and checks
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: python-tests
+     steps:
+       - name: Checkout repository
+-        uses: actions/checkout@v4
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+ 
+       - name: Set up Python
+-        uses: actions/setup-python@v5
++        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+         with:
+           python-version: "3.12"
+ 
+       - name: Install uv
+-        uses: astral-sh/setup-uv@v5
++        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+ 
+       - name: Install system dependencies
          shell: bash
-         run: |
--          set -o pipefail
--          echo "=== Lint, Type Checks, and License Gate ===" >> build.log
--          (uv sync --locked && make check && make license) 2>&1 | tee -a build.log
-+          scripts/ci/run_and_log.sh lint-type-license -- \
-+            bash -c 'uv sync --locked && make check && make license'
+@@ -32,66 +78,201 @@ jobs:
+             apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-client
+           fi
+ 
+-      - name: Run lint and checks
++      - name: Sync Python dependencies
+         shell: bash
+-        run: |
+-          scripts/ci/run_and_log.sh lint-type-license -- \
+-            bash -c 'uv sync --locked && make check && make license'
++        run: scripts/ci/run_and_log.sh uv-sync -- uv sync --locked
  
        - name: Start test database
          shell: bash
-         run: |
--          set -o pipefail
--          echo "=== Test Database Startup ===" >> build.log
--          make testdb-up 2>&1 | tee -a build.log
-+          scripts/ci/run_and_log.sh testdb-up -- make testdb-up
+-        run: |
+-          scripts/ci/run_and_log.sh testdb-up -- make testdb-up
++        run: scripts/ci/run_and_log.sh testdb-up -- make testdb-up
  
-       - name: Run tests
+-      - name: Run tests
++      - name: Run tests with coverage
          shell: bash
          run: |
--          set -o pipefail
--          echo "=== Unit Tests ===" >> build.log
--          (uv run pytest -q -m "not container") 2>&1 | tee -a build.log
-+          scripts/ci/run_and_log.sh unit-tests -- \
-+            uv run pytest -q -m "not container"
+-          scripts/ci/run_and_log.sh unit-tests -- \
+-            uv run pytest -q -m "not container"
++          mkdir -p reports
++          scripts/ci/run_and_log.sh pytest -- \
++            uv run pytest -n auto -m "not container" \
++              --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts \
++              --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml \
++              --cov-fail-under=95 --junitxml=reports/pytest.xml
  
        - name: Stop test database
          if: always()
++        shell: bash
++        run: scripts/ci/run_and_log.sh testdb-down -- make testdb-down || true
++
++      - name: Upload logs to Dash
++        if: always()
++        shell: bash
++        env:
++          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
++        run: scripts/ci/upload_dash_log.sh python-tests
++
++      - name: Upload test reports artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-reports-python-tests
++          path: reports/
++          retention-days: 14
++          if-no-files-found: warn
++        continue-on-error: true
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
++
++  web-tests:
++    runs-on: [inferrence1]
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: web-tests
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
++
++      - name: Set up pnpm
++        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
++
++      - name: Set up Node
++        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
++        with:
++          node-version: "22"
++
++      - name: Install web dependencies
          shell: bash
          run: |
--          make testdb-down 2>&1 | tee -a build.log || true
-+          scripts/ci/run_and_log.sh testdb-down -- make testdb-down || true
+-          scripts/ci/run_and_log.sh testdb-down -- make testdb-down || true
++          scripts/ci/run_and_log.sh pnpm-install -- \
++            pnpm install --frozen-lockfile --ignore-scripts
  
-       - name: Set up Docker Buildx
-         uses: docker/setup-buildx-action@v3
-@@ -75,17 +74,24 @@ jobs:
+-      - name: Set up Docker Buildx
+-        uses: docker/setup-buildx-action@v3
++      - name: Typecheck
++        shell: bash
++        run: scripts/ci/run_and_log.sh typecheck -- pnpm --dir kanban/web typecheck
++
++      - name: Lint
++        shell: bash
++        run: scripts/ci/run_and_log.sh lint -- pnpm --dir kanban/web lint
++
++      - name: Unit tests with coverage
++        shell: bash
++        run: scripts/ci/run_and_log.sh unit-tests -- pnpm --dir kanban/web test:unit --coverage
++
++      - name: Build
++        shell: bash
++        run: scripts/ci/run_and_log.sh build -- pnpm --dir kanban/web build
++
++      - name: Upload logs to Dash
++        if: always()
++        shell: bash
++        env:
++          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
++        run: scripts/ci/upload_dash_log.sh web-tests
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
++
++  license-gate:
++    runs-on: [inferrence1]
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: license-gate
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+ 
+-      - name: Log in to Docker Hub
+-        uses: docker/login-action@v3
++      - name: Set up Python
++        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+         with:
+-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+-          password: ${{ secrets.DOCKERHUB_TOKEN }}
++          python-version: "3.12"
++
++      - name: Install uv
++        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+ 
+-      - name: Build and push Docker image
+-        uses: docker/build-push-action@v5
++      - name: Set up pnpm
++        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
++
++      - name: Set up Node
++        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+         with:
+-          context: .
+-          push: true
+-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/thumbs-up-kanban:latest
++          node-version: "22"
++
++      - name: License gate
++        shell: bash
++        run: |
++          scripts/ci/run_and_log.sh license -- \
++            bash -c 'uv sync --locked && pnpm install --frozen-lockfile --ignore-scripts && make license'
+ 
        - name: Upload logs to Dash
          if: always()
          shell: bash
+         env:
+           DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
++        run: scripts/ci/upload_dash_log.sh license-gate
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
++
++  docker-build:
++    runs-on: [inferrence1]
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: docker-build
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
++
++      - name: Set up Docker Buildx
++        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
++
++      - name: Build runtime-slim image
++        shell: bash
+         run: |
+-          # Concatenate every per-step log into one body; never fail the job on upload problems.
+-          if [ -z "${DASH_TOKEN:-}" ]; then
+-            echo "Notice: DASH_TOKEN missing; skipping Dash upload"
+-            exit 0
+-          fi
+-          if ! ls ci-logs/*/*.log >/dev/null 2>&1; then
+-            echo "Notice: no ci-logs/*/*.log files to upload"
+-            exit 0
+-          fi
+-          for f in ci-logs/*/*.log; do
+-            printf '=== %s (exit %s) ===\n' "$f" "$(cat "${f%.log}.exit" 2>/dev/null || echo '?')"
+-            cat "$f"
+-          done > build.log
+-          echo "Uploading build.log to Dash..."
+-          curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
+-               -H "Authorization: Bearer ${DASH_TOKEN}" \
+-               -H "Content-Type: text/plain" \
+-               --data-binary @build.log || echo "Notice: Dash upload failed"
++          scripts/ci/run_and_log.sh build-runtime-slim -- \
++            docker buildx build --target runtime-slim -t kanban:runtime-slim --load .
++
++      - name: Build standalone image
++        shell: bash
++        run: |
++          scripts/ci/run_and_log.sh build-standalone -- \
++            docker buildx build --target standalone -t kanban:standalone --load .
++
++      - name: List built images
++        shell: bash
++        run: scripts/ci/run_and_log.sh image-list -- docker image ls kanban
++
++      - name: Upload logs to Dash
++        if: always()
++        shell: bash
 +        env:
 +          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
-         run: |
--          TOKEN="${{ secrets.DASH_TOKEN }}"
--          if [ -z "$TOKEN" ]; then
--            TOKEN="${DASH_TOKEN:-}"
-+          # Concatenate every per-step log into one body; never fail the job on upload problems.
-+          if [ -z "${DASH_TOKEN:-}" ]; then
-+            echo "Notice: DASH_TOKEN missing; skipping Dash upload"
-+            exit 0
-           fi
--          if [ -f build.log ] && [ -n "$TOKEN" ]; then
--            echo "Uploading build.log to Dash..."
--            curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
--                 -H "Authorization: Bearer ${TOKEN}" \
--                 -H "Content-Type: text/plain" \
--                 --data-binary @build.log
--          else
--            echo "Notice: build.log or DASH_TOKEN missing (TOKEN length: ${#TOKEN})"
-+          if ! ls ci-logs/*/*.log >/dev/null 2>&1; then
-+            echo "Notice: no ci-logs/*/*.log files to upload"
-+            exit 0
-           fi
-+          for f in ci-logs/*/*.log; do
-+            printf '=== %s (exit %s) ===\n' "$f" "$(cat "${f%.log}.exit" 2>/dev/null || echo '?')"
-+            cat "$f"
-+          done > build.log
-+          echo "Uploading build.log to Dash..."
-+          curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
-+               -H "Authorization: Bearer ${DASH_TOKEN}" \
-+               -H "Content-Type: text/plain" \
-+               --data-binary @build.log || echo "Notice: Dash upload failed"
-diff --git a/.github/actionlint.yaml b/.github/actionlint.yaml
-new file mode 100644
-index 0000000..342f80e
---- /dev/null
-+++ b/.github/actionlint.yaml
-@@ -0,0 +1,4 @@
-+# actionlint config: declare the project Forgejo self-hosted runner label (KB-P0-06).
-+self-hosted-runner:
-+  labels:
-+    - inferrence1
++        run: scripts/ci/upload_dash_log.sh docker-build
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
-index 5f33235..39a5d65 100644
+index 39a5d65..d098ea8 100644
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
-@@ -5,6 +5,9 @@ on:
-     branches: [main]
+@@ -2,26 +2,72 @@ name: build-test-push
+ 
+ on:
+   push:
+-    branches: [main]
    pull_request:
  
-+env:
-+  CI_JOB_NAME: build-test-push
+-env:
+-  CI_JOB_NAME: build-test-push
++concurrency:
++  group: ci-${{ github.ref }}
++  cancel-in-progress: true
 +
++permissions:
++  contents: read
+ 
  jobs:
-   build-test-push:
+-  build-test-push:
++  lint-type:
++    runs-on: [inferrence1]
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: lint-type
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
++
++      - name: Set up Python
++        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
++        with:
++          python-version: "3.12"
++
++      - name: Install uv
++        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
++
++      - name: Lint and type checks
++        shell: bash
++        run: |
++          scripts/ci/run_and_log.sh make-check -- \
++            bash -c 'uv sync --locked && make check'
++
++      - name: Upload logs to Dash
++        if: always()
++        shell: bash
++        env:
++          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
++        run: scripts/ci/upload_dash_log.sh lint-type
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
++
++  python-tests:
      runs-on: [inferrence1]
-@@ -32,29 +35,25 @@ jobs:
-       - name: Run lint and checks
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: python-tests
+     steps:
+       - name: Checkout repository
+-        uses: actions/checkout@v4
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+ 
+       - name: Set up Python
+-        uses: actions/setup-python@v5
++        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+         with:
+           python-version: "3.12"
+ 
+       - name: Install uv
+-        uses: astral-sh/setup-uv@v5
++        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+ 
+       - name: Install system dependencies
          shell: bash
-         run: |
--          set -o pipefail
--          echo "=== Lint, Type Checks, and License Gate ===" >> build.log
--          (uv sync --locked && make check && make license) 2>&1 | tee -a build.log
-+          scripts/ci/run_and_log.sh lint-type-license -- \
-+            bash -c 'uv sync --locked && make check && make license'
+@@ -32,66 +78,201 @@ jobs:
+             apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-client
+           fi
+ 
+-      - name: Run lint and checks
++      - name: Sync Python dependencies
+         shell: bash
+-        run: |
+-          scripts/ci/run_and_log.sh lint-type-license -- \
+-            bash -c 'uv sync --locked && make check && make license'
++        run: scripts/ci/run_and_log.sh uv-sync -- uv sync --locked
  
        - name: Start test database
          shell: bash
-         run: |
--          set -o pipefail
--          echo "=== Test Database Startup ===" >> build.log
--          make testdb-up 2>&1 | tee -a build.log
-+          scripts/ci/run_and_log.sh testdb-up -- make testdb-up
+-        run: |
+-          scripts/ci/run_and_log.sh testdb-up -- make testdb-up
++        run: scripts/ci/run_and_log.sh testdb-up -- make testdb-up
  
-       - name: Run tests
+-      - name: Run tests
++      - name: Run tests with coverage
          shell: bash
          run: |
--          set -o pipefail
--          echo "=== Unit Tests ===" >> build.log
--          (uv run pytest -q -m "not container") 2>&1 | tee -a build.log
-+          scripts/ci/run_and_log.sh unit-tests -- \
-+            uv run pytest -q -m "not container"
+-          scripts/ci/run_and_log.sh unit-tests -- \
+-            uv run pytest -q -m "not container"
++          mkdir -p reports
++          scripts/ci/run_and_log.sh pytest -- \
++            uv run pytest -n auto -m "not container" \
++              --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts \
++              --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml \
++              --cov-fail-under=95 --junitxml=reports/pytest.xml
  
        - name: Stop test database
          if: always()
++        shell: bash
++        run: scripts/ci/run_and_log.sh testdb-down -- make testdb-down || true
++
++      - name: Upload logs to Dash
++        if: always()
++        shell: bash
++        env:
++          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
++        run: scripts/ci/upload_dash_log.sh python-tests
++
++      - name: Upload test reports artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-reports-python-tests
++          path: reports/
++          retention-days: 14
++          if-no-files-found: warn
++        continue-on-error: true
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
++
++  web-tests:
++    runs-on: [inferrence1]
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: web-tests
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
++
++      - name: Set up pnpm
++        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
++
++      - name: Set up Node
++        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
++        with:
++          node-version: "22"
++
++      - name: Install web dependencies
          shell: bash
          run: |
--          make testdb-down 2>&1 | tee -a build.log || true
-+          scripts/ci/run_and_log.sh testdb-down -- make testdb-down || true
+-          scripts/ci/run_and_log.sh testdb-down -- make testdb-down || true
++          scripts/ci/run_and_log.sh pnpm-install -- \
++            pnpm install --frozen-lockfile --ignore-scripts
  
-       - name: Set up Docker Buildx
-         uses: docker/setup-buildx-action@v3
-@@ -75,17 +74,24 @@ jobs:
+-      - name: Set up Docker Buildx
+-        uses: docker/setup-buildx-action@v3
++      - name: Typecheck
++        shell: bash
++        run: scripts/ci/run_and_log.sh typecheck -- pnpm --dir kanban/web typecheck
++
++      - name: Lint
++        shell: bash
++        run: scripts/ci/run_and_log.sh lint -- pnpm --dir kanban/web lint
++
++      - name: Unit tests with coverage
++        shell: bash
++        run: scripts/ci/run_and_log.sh unit-tests -- pnpm --dir kanban/web test:unit --coverage
++
++      - name: Build
++        shell: bash
++        run: scripts/ci/run_and_log.sh build -- pnpm --dir kanban/web build
++
++      - name: Upload logs to Dash
++        if: always()
++        shell: bash
++        env:
++          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
++        run: scripts/ci/upload_dash_log.sh web-tests
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
++
++  license-gate:
++    runs-on: [inferrence1]
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: license-gate
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+ 
+-      - name: Log in to Docker Hub
+-        uses: docker/login-action@v3
++      - name: Set up Python
++        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+         with:
+-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+-          password: ${{ secrets.DOCKERHUB_TOKEN }}
++          python-version: "3.12"
++
++      - name: Install uv
++        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+ 
+-      - name: Build and push Docker image
+-        uses: docker/build-push-action@v5
++      - name: Set up pnpm
++        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
++
++      - name: Set up Node
++        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+         with:
+-          context: .
+-          push: true
+-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/thumbs-up-kanban:latest
++          node-version: "22"
++
++      - name: License gate
++        shell: bash
++        run: |
++          scripts/ci/run_and_log.sh license -- \
++            bash -c 'uv sync --locked && pnpm install --frozen-lockfile --ignore-scripts && make license'
+ 
        - name: Upload logs to Dash
          if: always()
          shell: bash
+         env:
+           DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
++        run: scripts/ci/upload_dash_log.sh license-gate
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
++
++  docker-build:
++    runs-on: [inferrence1]
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: docker-build
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
++
++      - name: Set up Docker Buildx
++        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
++
++      - name: Build runtime-slim image
++        shell: bash
+         run: |
+-          # Concatenate every per-step log into one body; never fail the job on upload problems.
+-          if [ -z "${DASH_TOKEN:-}" ]; then
+-            echo "Notice: DASH_TOKEN missing; skipping Dash upload"
+-            exit 0
+-          fi
+-          if ! ls ci-logs/*/*.log >/dev/null 2>&1; then
+-            echo "Notice: no ci-logs/*/*.log files to upload"
+-            exit 0
+-          fi
+-          for f in ci-logs/*/*.log; do
+-            printf '=== %s (exit %s) ===\n' "$f" "$(cat "${f%.log}.exit" 2>/dev/null || echo '?')"
+-            cat "$f"
+-          done > build.log
+-          echo "Uploading build.log to Dash..."
+-          curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
+-               -H "Authorization: Bearer ${DASH_TOKEN}" \
+-               -H "Content-Type: text/plain" \
+-               --data-binary @build.log || echo "Notice: Dash upload failed"
++          scripts/ci/run_and_log.sh build-runtime-slim -- \
++            docker buildx build --target runtime-slim -t kanban:runtime-slim --load .
++
++      - name: Build standalone image
++        shell: bash
++        run: |
++          scripts/ci/run_and_log.sh build-standalone -- \
++            docker buildx build --target standalone -t kanban:standalone --load .
++
++      - name: List built images
++        shell: bash
++        run: scripts/ci/run_and_log.sh image-list -- docker image ls kanban
++
++      - name: Upload logs to Dash
++        if: always()
++        shell: bash
 +        env:
 +          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
-         run: |
--          TOKEN="${{ secrets.DASH_TOKEN }}"
--          if [ -z "$TOKEN" ]; then
--            TOKEN="${DASH_TOKEN:-}"
-+          # Concatenate every per-step log into one body; never fail the job on upload problems.
-+          if [ -z "${DASH_TOKEN:-}" ]; then
-+            echo "Notice: DASH_TOKEN missing; skipping Dash upload"
-+            exit 0
-           fi
--          if [ -f build.log ] && [ -n "$TOKEN" ]; then
--            echo "Uploading build.log to Dash..."
--            curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
--                 -H "Authorization: Bearer ${TOKEN}" \
--                 -H "Content-Type: text/plain" \
--                 --data-binary @build.log
--          else
--            echo "Notice: build.log or DASH_TOKEN missing (TOKEN length: ${#TOKEN})"
-+          if ! ls ci-logs/*/*.log >/dev/null 2>&1; then
-+            echo "Notice: no ci-logs/*/*.log files to upload"
-+            exit 0
-           fi
-+          for f in ci-logs/*/*.log; do
-+            printf '=== %s (exit %s) ===\n' "$f" "$(cat "${f%.log}.exit" 2>/dev/null || echo '?')"
-+            cat "$f"
-+          done > build.log
-+          echo "Uploading build.log to Dash..."
-+          curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
-+               -H "Authorization: Bearer ${DASH_TOKEN}" \
-+               -H "Content-Type: text/plain" \
-+               --data-binary @build.log || echo "Notice: Dash upload failed"
++        run: scripts/ci/upload_dash_log.sh docker-build
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
+diff --git a/.gitignore b/.gitignore
+index d3df501..9b2373d 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -24,3 +24,6 @@ kanban/web/coverage/
+ *.tsbuildinfo
+ test-results/
+ kanban/web/test-results/
++
++# CI test reports (coverage.xml, pytest.xml)
++reports/
 diff --git a/docs/CI.md b/docs/CI.md
-new file mode 100644
-index 0000000..e2c5b41
---- /dev/null
+index e2c5b41..a56b21e 100644
+--- a/docs/CI.md
 +++ b/docs/CI.md
-@@ -0,0 +1,67 @@
-+# CI Pipeline (KB-P0-06)
+@@ -1,50 +1,62 @@
+ # CI Pipeline (KB-P0-06)
+ 
+-CI runs on the project Forgejo runner `inferrence1` (workflow
+-`.forgejo/workflows/ci.yml`, mirrored byte-for-byte at `.github/workflows/ci.yml`; a unit
+-test fails if the two drift). It is a single job, `build-test-push`.
++CI runs on the project Forgejo runner `inferrence1`. The workflow lives at
++`.forgejo/workflows/ci.yml` and is mirrored byte-for-byte at `.github/workflows/ci.yml`
++(a unit test fails if the two drift). Triggers: `push` (all branches) and `pull_request`
++(never `pull_request_target`). Concurrent runs on the same ref are cancelled. The token
++permissions are `contents: read` only, every job has `timeout-minutes: 20`, and every
++`uses:` is pinned to a full 40-character commit SHA with a trailing `# vX.Y.Z` comment.
+ 
+ ## Jobs
+ 
+-| Job id | Step | Command (wrapped by `scripts/ci/run_and_log.sh`) | Log name |
+-| :--- | :--- | :--- | :--- |
+-| `build-test-push` | Run lint and checks | `uv sync --locked && make check && make license` | `lint-type-license` |
+-| `build-test-push` | Start test database | `make testdb-up` | `testdb-up` |
+-| `build-test-push` | Run tests | `uv run pytest -q -m "not container"` | `unit-tests` |
+-| `build-test-push` | Stop test database (`if: always()`) | `make testdb-down` | `testdb-down` |
+-| `build-test-push` | Docker Buildx build and push | `docker/build-push-action` | (not captured) |
+-| `build-test-push` | Upload logs to Dash (`if: always()`, last step) | `curl` POST of all step logs | n/a |
++| Job id | Commands (each wrapped by `scripts/ci/run_and_log.sh`) |
++| :--- | :--- |
++| `lint-type` | `uv sync --locked && make check` |
++| `python-tests` | `make testdb-up`; `uv run pytest -n auto -m "not container" --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-fail-under=95 --junitxml=reports/pytest.xml`; `make testdb-down` (`if: always()`) |
++| `web-tests` | `pnpm install --frozen-lockfile --ignore-scripts`; `pnpm --dir kanban/web typecheck`; `lint`; `test:unit --coverage`; `build` |
++| `license-gate` | `uv sync --locked && pnpm install --frozen-lockfile --ignore-scripts && make license` |
++| `docker-build` | `docker buildx build --target runtime-slim -t kanban:runtime-slim --load .`; same for `--target standalone`; `docker image ls kanban` |
+ 
+-The workflow triggers on `push` to `main` and on `pull_request`. It never uses
+-`pull_request_target`. The only secrets referenced are `DOCKERHUB_USERNAME`,
+-`DOCKERHUB_TOKEN` and `DASH_TOKEN`; `DASH_TOKEN` is passed through `env:` and never
+-interpolated into the script body.
++Deviations from the original ticket text, kept deliberately because they are what works on
++the `inferrence1` act_runner:
 +
-+CI runs on the project Forgejo runner `inferrence1` (workflow
-+`.forgejo/workflows/ci.yml`, mirrored byte-for-byte at `.github/workflows/ci.yml`; a unit
-+test fails if the two drift). It is a single job, `build-test-push`.
-+
-+## Jobs
-+
-+| Job id | Step | Command (wrapped by `scripts/ci/run_and_log.sh`) | Log name |
-+| :--- | :--- | :--- | :--- |
-+| `build-test-push` | Run lint and checks | `uv sync --locked && make check && make license` | `lint-type-license` |
-+| `build-test-push` | Start test database | `make testdb-up` | `testdb-up` |
-+| `build-test-push` | Run tests | `uv run pytest -q -m "not container"` | `unit-tests` |
-+| `build-test-push` | Stop test database (`if: always()`) | `make testdb-down` | `testdb-down` |
-+| `build-test-push` | Docker Buildx build and push | `docker/build-push-action` | (not captured) |
-+| `build-test-push` | Upload logs to Dash (`if: always()`, last step) | `curl` POST of all step logs | n/a |
-+
-+The workflow triggers on `push` to `main` and on `pull_request`. It never uses
-+`pull_request_target`. The only secrets referenced are `DOCKERHUB_USERNAME`,
-+`DOCKERHUB_TOKEN` and `DASH_TOKEN`; `DASH_TOKEN` is passed through `env:` and never
-+interpolated into the script body.
-+
-+## Reading Logs
-+
-+`scripts/ci/run_and_log.sh <logname> -- <command...>` runs the command as an argv vector
-+(no `eval`), tees combined stdout and stderr, and exits with the command's exit code.
-+Log names must match `^[a-z0-9-]+$` (otherwise exit `64`, nothing written).
-+
-+For each wrapped step it writes, under `ci-logs/build-test-push/`:
-+
-+- `<logname>.log`: combined stdout and stderr
-+- `<logname>.exit`: the exit code
-+
-+The final `Upload logs to Dash` step concatenates every `ci-logs/*/*.log` (each prefixed
-+with a `=== <path> (exit <n>) ===` header) into `build.log` and POSTs it to
-+`https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban`.
-+A missing `DASH_TOKEN` or an upload error never fails the job. Retrieve the uploaded log
-+with the Dash `logs` tool (see below).
-+
-+## Dash Verification
-+
-+Follow the flow from <https://dash.hackedyour.info/llms.txt> with the Dash MCP tools:
-+
-+1. After `git push`, call Dash `status` for the repo to see the run for the pushed SHA.
-+2. Call Dash `wait` until the run completes. Never poll with manual `sleep` loops.
-+3. On failure, call Dash `logs` and read the uploaded `build.log` (look for the failing
-+   `=== ci-logs/... (exit N) ===` section) before changing code.
-+
-+A red `main` is an emergency: halt all other work and fix it before anything else
-+(AGENTS.md, Broken Build Taboo).
-+
-+## Local validation
-+
-+```bash
-+uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py -q
-+docker run --rm -v "$PWD:/repo" -w /repo \
-+  rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 \
-+  -no-color .github/workflows/ci.yml .forgejo/workflows/ci.yml
-+```
-+
-+The runner label `inferrence1` is declared in `.github/actionlint.yaml`.
-+
-+## Known gaps (follow-ups)
-+
-+- `uses:` references are tag-pinned (`@v4`), not 40-char SHA-pinned.
-+- The Dash upload uses `curl -k` (certificate verification off), inherited from the original workflow.
-+- The workflow is single-job; the multi-job split (web tests, docker build matrix) is not done.
-diff --git a/scripts/ci/run_and_log.sh b/scripts/ci/run_and_log.sh
++- `python-tests` starts the database with `make testdb-up` (sibling container sharing the
++  workspace volume) instead of `docker compose`, and runs `-m "not container"` because the
++  runner has no nested Docker for container-marked tests.
++- `docker-build` builds both image targets locally and does not push. The previous workflow
++  pushed `thumbs-up-kanban:latest` to Docker Hub; that publish step was removed with the
++  "no secrets except Dash" requirement. Re-adding a publish job is a separate decision.
+ 
+ ## Reading Logs
+ 
+ `scripts/ci/run_and_log.sh <logname> -- <command...>` runs the command as an argv vector
+ (no `eval`), tees combined stdout and stderr, and exits with the command's exit code.
+-Log names must match `^[a-z0-9-]+$` (otherwise exit `64`, nothing written).
++Log names must match `^[a-z0-9-]+$` (otherwise exit `64`, nothing written). Per wrapped step
++it writes under `ci-logs/<job-id>/`: `<logname>.log` (output) and `<logname>.exit` (exit code).
+ 
+-For each wrapped step it writes, under `ci-logs/build-test-push/`:
++Every job ends with two `if: always()` steps:
+ 
+-- `<logname>.log`: combined stdout and stderr
+-- `<logname>.exit`: the exit code
++1. `scripts/ci/upload_dash_log.sh <job-id>` POSTs the job's logs to Dash
++   (`/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban&sha=<sha>`), prefixing any log
++   already stored for that SHA because the five jobs share one Dash log slot. Certificate
++   verification is on. A missing `DASH_TOKEN` or a Dash outage never fails the job. The
++   token is passed through `env:` and never printed.
++2. `actions/upload-artifact` uploads `ci-logs/` as `ci-logs-<job-id>` (14 days). `python-tests`
++   also uploads `reports/` (`coverage.xml`, `pytest.xml`) as `ci-reports-python-tests`. Artifact
++   uploads use `continue-on-error: true` because upload-artifact v4 is not universally
++   supported by Forgejo runners; the Dash upload is the reliable channel.
+ 
+-The final `Upload logs to Dash` step concatenates every `ci-logs/*/*.log` (each prefixed
+-with a `=== <path> (exit <n>) ===` header) into `build.log` and POSTs it to
+-`https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban`.
+-A missing `DASH_TOKEN` or an upload error never fails the job. Retrieve the uploaded log
+-with the Dash `logs` tool (see below).
++Artifact names: `ci-logs-lint-type`, `ci-logs-python-tests`, `ci-logs-web-tests`,
++`ci-logs-license-gate`, `ci-logs-docker-build`, `ci-reports-python-tests`.
+ 
+ ## Dash Verification
+ 
+ Follow the flow from <https://dash.hackedyour.info/llms.txt> with the Dash MCP tools:
+ 
+-1. After `git push`, call Dash `status` for the repo to see the run for the pushed SHA.
++1. After `git push`, call Dash `status` for the repo (pin to the pushed SHA).
+ 2. Call Dash `wait` until the run completes. Never poll with manual `sleep` loops.
+-3. On failure, call Dash `logs` and read the uploaded `build.log` (look for the failing
+-   `=== ci-logs/... (exit N) ===` section) before changing code.
++3. On failure, call Dash `logs` and read the uploaded log (look for the failing
++   `=== ci-logs/<job>/<step>.log (exit N) ===` section) before changing code.
+ 
+ A red `main` is an emergency: halt all other work and fix it before anything else
+ (AGENTS.md, Broken Build Taboo).
+@@ -52,7 +64,8 @@ A red `main` is an emergency: halt all other work and fix it before anything els
+ ## Local validation
+ 
+ ```bash
+-uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py -q
++uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py \
++  scripts/tests/test_upload_dash_log.py -q
+ docker run --rm -v "$PWD:/repo" -w /repo \
+   rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 \
+   -no-color .github/workflows/ci.yml .forgejo/workflows/ci.yml
+@@ -60,8 +73,8 @@ docker run --rm -v "$PWD:/repo" -w /repo \
+ 
+ The runner label `inferrence1` is declared in `.github/actionlint.yaml`.
+ 
+-## Known gaps (follow-ups)
++## Updating pinned actions
+ 
+-- `uses:` references are tag-pinned (`@v4`), not 40-char SHA-pinned.
+-- The Dash upload uses `curl -k` (certificate verification off), inherited from the original workflow.
+-- The workflow is single-job; the multi-job split (web tests, docker build matrix) is not done.
++Resolve the new tag to a commit SHA (peel annotated tags: use the `^{}` line from
++`git ls-remote --tags https://github.com/<owner>/<repo>.git`), update every occurrence in
++both workflow files together, keep the `# vX.Y.Z` comment, and re-run the tests above.
+diff --git a/kanban/web/vitest.config.ts b/kanban/web/vitest.config.ts
+index 977b5a1..6e7ec4e 100644
+--- a/kanban/web/vitest.config.ts
++++ b/kanban/web/vitest.config.ts
+@@ -6,6 +6,9 @@ export default defineConfig({
+   test: {
+     environment: 'jsdom',
+     globals: true,
++    // Coverage instrumentation on a shared CI runner makes the heaviest jsdom route tests
++    // exceed the 5s default (observed 5.1s alone, 13s under load); 15s avoids flaky reds.
++    testTimeout: 15000,
+     include: [
+       'src/**/*.{test,spec}.{ts,tsx}',
+       'build/**/*.{test,spec}.ts',
+diff --git a/pyproject.toml b/pyproject.toml
+index 39e5730..ee6508d 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -32,6 +32,7 @@ dev = [
+     "pytest-asyncio==1.4.1.post1",
+     "pytest-xdist==3.8.0",
+     "pytest-socket==0.8.1",
++    "pyyaml==6.0.3",
+     "types-PyYAML==6.0.12.20261111",
+     "types-defusedxml==0.7.0.20260504",
+     "types-jsonschema==4.26.0.20261006",
+diff --git a/scripts/ci/upload_dash_log.sh b/scripts/ci/upload_dash_log.sh
 new file mode 100755
-index 0000000..65ca8c3
+index 0000000..3e1995b
 --- /dev/null
-+++ b/scripts/ci/run_and_log.sh
-@@ -0,0 +1,36 @@
++++ b/scripts/ci/upload_dash_log.sh
+@@ -0,0 +1,71 @@
 +#!/usr/bin/env bash
-+# Run a command, tee combined stdout/stderr to ci-logs/<job>/<logname>.log and
-+# record its exit code in ci-logs/<job>/<logname>.exit (KB-P0-06).
++# Upload this job's CI step logs to Dash (POST /api/logs), best effort (KB-P0-06).
 +#
-+# Usage: run_and_log.sh <logname> -- <command> [args...]
++# Usage: upload_dash_log.sh <job-name>
++#
++# Environment:
++#   DASH_TOKEN   API bearer token (never echoed). Missing token => skip, exit 0.
++#   DASH_URL     Base URL (default https://dash.hackedyour.info).
++#   GITHUB_SHA   Commit SHA used to pin the log to this build (Dash `sha` parameter).
++#   CI_LOG_DIR   Log dir to read (default ci-logs/<job-name>).
 +#
 +# Contract:
-+#   - <logname> must match ^[a-z0-9-]+$ (else exit 64, nothing written).
-+#   - Log directory is $CI_LOG_DIR (default: ci-logs/${CI_JOB_NAME:-default}).
-+#   - Exit status is the wrapped command's exit status (pipefail semantics).
-+#   - No eval, no shell re-parsing: the command is executed as an argv vector.
-+set -euo pipefail
++#   - Always exits 0: a Dash outage must never turn a green job red.
++#   - Jobs run in parallel and Dash keeps one log per (repo, sha), so the script reads the
++#     existing log for this SHA first and prepends it (best effort, last writer wins on a race).
++#   - Certificate verification stays ON (no curl -k).
++set -uo pipefail
 +
-+if [ "$#" -lt 3 ] || [ "$2" != "--" ]; then
-+  echo "usage: run_and_log.sh <logname> -- <command> [args...]" >&2
++job="${1:-}"
++if ! [[ "$job" =~ ^[a-z0-9-]+$ ]]; then
++  echo "upload_dash_log.sh: invalid job name (must match ^[a-z0-9-]+\$)" >&2
 +  exit 64
 +fi
 +
-+logname="$1"
-+shift 2
-+
-+if ! [[ "$logname" =~ ^[a-z0-9-]+$ ]]; then
-+  echo "run_and_log.sh: invalid log name (must match ^[a-z0-9-]+\$)" >&2
-+  exit 64
++if [ -z "${DASH_TOKEN:-}" ]; then
++  echo "Notice: DASH_TOKEN missing; skipping Dash upload"
++  exit 0
 +fi
 +
-+log_dir="${CI_LOG_DIR:-ci-logs/${CI_JOB_NAME:-default}}"
-+mkdir -p -- "$log_dir"
-+log_file="$log_dir/$logname.log"
-+exit_file="$log_dir/$logname.exit"
++log_dir="${CI_LOG_DIR:-ci-logs/$job}"
++shopt -s nullglob
++logs=("$log_dir"/*.log)
++if [ "${#logs[@]}" -eq 0 ]; then
++  echo "Notice: no $log_dir/*.log files to upload"
++  exit 0
++fi
 +
-+rc=0
-+"$@" 2>&1 | tee -- "$log_file" || rc=$?
-+# pipefail makes the pipeline status the command's status; tee failure also surfaces here.
-+printf '%s\n' "$rc" > "$exit_file"
-+exit "$rc"
++dash_url="${DASH_URL:-https://dash.hackedyour.info}"
++query="provider=forgejo&owner=AI&repo=thumbs-up-kanban"
++if [ -n "${GITHUB_SHA:-}" ]; then
++  query="$query&sha=${GITHUB_SHA}"
++fi
++
++body="$(mktemp)"
++trap 'rm -f -- "$body"' EXIT
++
++existing="$(curl -s --max-time 20 -H "Authorization: Bearer ${DASH_TOKEN}" \
++  "${dash_url}/api/logs?${query}" 2>/dev/null \
++  | python3 -c 'import json,sys
++try:
++    print(json.load(sys.stdin).get("log", ""), end="")
++except Exception:
++    pass' 2>/dev/null || true)"
++if [ -n "$existing" ]; then
++  printf '%s\n' "$existing" > "$body"
++fi
++
++{
++  printf '##### job: %s #####\n' "$job"
++  for f in "${logs[@]}"; do
++    printf '=== %s (exit %s) ===\n' "$f" "$(cat "${f%.log}.exit" 2>/dev/null || echo '?')"
++    cat -- "$f"
++  done
++} >> "$body"
++
++echo "Uploading $job logs to Dash..."
++curl -s --max-time 60 -X POST "${dash_url}/api/logs?${query}" \
++  -H "Authorization: Bearer ${DASH_TOKEN}" \
++  -H "Content-Type: text/plain" \
++  --data-binary @"$body" >/dev/null || echo "Notice: Dash upload failed"
++exit 0
 diff --git a/scripts/tests/test_ci_workflow.py b/scripts/tests/test_ci_workflow.py
-new file mode 100644
-index 0000000..eabfebc
---- /dev/null
+index eabfebc..f183e48 100644
+--- a/scripts/tests/test_ci_workflow.py
 +++ b/scripts/tests/test_ci_workflow.py
-@@ -0,0 +1,145 @@
-+"""Structural and security tests for the CI workflow (KB-P0-06 / KANBA-28).
+@@ -1,14 +1,13 @@
+ """Structural and security tests for the CI workflow (KB-P0-06 / KANBA-28).
+ 
+-The project CI runs on the Forgejo runner ``inferrence1`` as a single
+-``build-test-push`` job. These tests pin the invariants that keep failed runs
+-diagnosable: every verification command is wrapped by ``run_and_log.sh``, the
+-Dash log upload always runs last, and the workflow never widens its trigger or
+-permission surface.
++The project CI runs on the Forgejo runner ``inferrence1`` as five jobs. These tests pin the
++invariants that keep failed runs diagnosable and the pipeline hardened: SHA-pinned actions,
++least-privilege permissions, bounded jobs, and always-run log upload as the final step.
+ """
+ 
+ from __future__ import annotations
+ 
++import re
+ from pathlib import Path
+ from typing import Any, cast
+ 
+@@ -18,7 +17,9 @@ import yaml
+ REPO_ROOT = Path(__file__).resolve().parents[2]
+ GITHUB_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+ FORGEJO_WORKFLOW = REPO_ROOT / ".forgejo" / "workflows" / "ci.yml"
+-JOB_ID = "build-test-push"
++JOB_IDS = ["lint-type", "python-tests", "web-tests", "license-gate", "docker-build"]
++USES_PATTERN = re.compile(r"^[^@]+@[0-9a-f]{40}$")
++ALLOWED_SECRETS = {"DASH_TOKEN"}
+ 
+ 
+ def _load(path: Path) -> dict[str, Any]:
+@@ -33,28 +34,44 @@ def workflow() -> dict[str, Any]:
+ 
+ 
+ @pytest.fixture(scope="module")
+-def steps(workflow: dict[str, Any]) -> list[dict[str, Any]]:
+-    """Return the ordered steps of the single CI job."""
+-    return cast("list[dict[str, Any]]", workflow["jobs"][JOB_ID]["steps"])
++def jobs(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
++    """Return the job mapping."""
++    return cast("dict[str, dict[str, Any]]", workflow["jobs"])
+ 
+ 
+-def _step(steps: list[dict[str, Any]], name: str) -> dict[str, Any]:
+-    matches = [s for s in steps if s.get("name") == name]
+-    assert len(matches) == 1, f"expected exactly one step named {name!r}"
+-    return matches[0]
++def _run_text(job: dict[str, Any]) -> str:
++    return "\n".join(str(s.get("run", "")) for s in job["steps"])
+ 
+ 
+ def test_workflow_copies_are_identical() -> None:
+     """Positive: the GitHub and Forgejo workflow files must not drift."""
+-    assert GITHUB_WORKFLOW.read_text(encoding="utf-8") == FORGEJO_WORKFLOW.read_text(
+-        encoding="utf-8"
+-    )
++    assert GITHUB_WORKFLOW.read_bytes() == FORGEJO_WORKFLOW.read_bytes()
+ 
+ 
+-def test_job_runs_on_inferrence1(workflow: dict[str, Any]) -> None:
+-    """Positive: the single job targets the project Forgejo runner."""
+-    assert list(workflow["jobs"]) == [JOB_ID]
+-    assert workflow["jobs"][JOB_ID]["runs-on"] == ["inferrence1"]
++def test_five_jobs_exist_on_inferrence1(jobs: dict[str, dict[str, Any]]) -> None:
++    """Positive: exactly the five ticket jobs, all on the project runner."""
++    assert list(jobs) == JOB_IDS
++    for job in jobs.values():
++        assert job["runs-on"] == ["inferrence1"]
 +
-+The project CI runs on the Forgejo runner ``inferrence1`` as a single
-+``build-test-push`` job. These tests pin the invariants that keep failed runs
-+diagnosable: every verification command is wrapped by ``run_and_log.sh``, the
-+Dash log upload always runs last, and the workflow never widens its trigger or
-+permission surface.
-+"""
++
++def test_permissions_are_read_only(workflow: dict[str, Any]) -> None:
++    """Security: top-level token permissions are contents: read only."""
++    assert workflow["permissions"] == {"contents": "read"}
++
++
++def test_every_job_has_bounded_timeout(jobs: dict[str, dict[str, Any]]) -> None:
++    """Boundary: every job has timeout-minutes <= 20."""
++    for name, job in jobs.items():
++        assert 0 < job["timeout-minutes"] <= 20, name
++
++
++def test_concurrency_cancels_superseded_runs(workflow: dict[str, Any]) -> None:
++    """Positive: superseded runs on the same ref are cancelled."""
++    assert workflow["concurrency"] == {
++        "group": "ci-${{ github.ref }}",
++        "cancel-in-progress": True,
++    }
+ 
+ 
+ def test_triggers_exclude_pull_request_target(workflow: dict[str, Any]) -> None:
+@@ -68,73 +85,114 @@ def test_triggers_exclude_pull_request_target(workflow: dict[str, Any]) -> None:
+     assert "pull_request" in triggers
+ 
+ 
+-def test_verification_steps_use_run_and_log(steps: list[dict[str, Any]]) -> None:
+-    """Positive: lint, DB start/stop and tests are wrapped for log capture."""
+-    expected = {
+-        "Run lint and checks": "run_and_log.sh lint-type-license --",
+-        "Start test database": "run_and_log.sh testdb-up --",
+-        "Run tests": "run_and_log.sh unit-tests --",
+-        "Stop test database": "run_and_log.sh testdb-down --",
+-    }
+-    for name, needle in expected.items():
+-        assert needle in _step(steps, name)["run"]
+-
+-
+-def test_unit_test_command_excludes_container_marker(steps: list[dict[str, Any]]) -> None:
+-    """Boundary: the runner has no nested docker for container-marked tests."""
+-    assert 'pytest -q -m "not container"' in _step(steps, "Run tests")["run"]
+-
+-
+-def test_lint_step_runs_make_check_and_license(steps: list[dict[str, Any]]) -> None:
+-    """Positive: the Shift-Left gates stay in the pipeline."""
+-    run = _step(steps, "Run lint and checks")["run"]
+-    assert "make check" in run
+-    assert "make license" in run
+-    assert "uv sync --locked" in run
+-
+-
+-def test_testdb_teardown_always_runs(steps: list[dict[str, Any]]) -> None:
+-    """Positive: DB teardown runs on failure too."""
+-    assert _step(steps, "Stop test database")["if"] == "always()"
+-
+-
+-def test_dash_upload_is_last_and_always(steps: list[dict[str, Any]]) -> None:
+-    """Positive: logs are uploaded to Dash with if: always(), as the final step."""
+-    last = steps[-1]
+-    assert last["name"] == "Upload logs to Dash"
+-    assert last["if"] == "always()"
+-    assert "https://dash.hackedyour.info/api/logs" in last["run"]
+-    assert "ci-logs/*/*.log" in last["run"]
+-
+-
+-def test_dash_token_passed_via_env_not_inlined(steps: list[dict[str, Any]]) -> None:
+-    """Security: the Dash token is an env var, never interpolated into the script."""
+-    last = steps[-1]
+-    assert last["env"] == {"DASH_TOKEN": "${{ secrets.DASH_TOKEN }}"}
+-    assert "secrets." not in last["run"]
+-
+-
+-def test_dash_upload_tolerates_missing_token(steps: list[dict[str, Any]]) -> None:
+-    """Negative: a missing token skips the upload instead of failing the job."""
+-    run = steps[-1]["run"]
+-    assert 'if [ -z "${DASH_TOKEN:-}" ]' in run
+-    assert "exit 0" in run
+-
+-
+-def test_job_log_dir_env_is_set(workflow: dict[str, Any]) -> None:
+-    """Positive: CI_JOB_NAME places logs under ci-logs/build-test-push/."""
+-    assert workflow["env"] == {"CI_JOB_NAME": JOB_ID}
++def test_every_uses_is_pinned_to_a_full_commit_sha(jobs: dict[str, dict[str, Any]]) -> None:
++    """Security: every `uses:` is owner/repo@<40 hex> with a trailing version comment."""
++    text = FORGEJO_WORKFLOW.read_text(encoding="utf-8")
++    for job in jobs.values():
++        for step in job["steps"]:
++            if "uses" in step:
++                assert USES_PATTERN.match(step["uses"]), step["uses"]
++    for line in text.splitlines():
++        if "uses:" in line:
++            assert re.search(r"@[0-9a-f]{40} # v\d+\.\d+\.\d+$", line.strip()), line
+ 
+ 
+-def test_only_expected_secrets_referenced() -> None:
+-    """Security: only the registry and Dash secrets are ever referenced."""
++def test_only_dash_secret_is_referenced() -> None:
++    """Security: the only secret is DASH_TOKEN, and only through a step env block."""
+     text = FORGEJO_WORKFLOW.read_text(encoding="utf-8")
+     refs = {part.split("}}")[0].strip() for part in text.split("secrets.")[1:]}
+-    assert refs <= {
+-        "DOCKERHUB_USERNAME",
+-        "DOCKERHUB_TOKEN",
+-        "DASH_TOKEN",
+-    }
++    assert refs == ALLOWED_SECRETS
++    workflow = _load(FORGEJO_WORKFLOW)
++    for job in workflow["jobs"].values():
++        for step in job["steps"]:
++            assert "secrets." not in str(step.get("run", ""))
++
++
++def test_last_step_uploads_logs_artifact_always(jobs: dict[str, dict[str, Any]]) -> None:
++    """Positive: each job ends with an always() upload-artifact of ci-logs/."""
++    for name, job in jobs.items():
++        last = job["steps"][-1]
++        assert last["if"] == "always()", name
++        assert last["uses"].startswith("actions/upload-artifact@"), name
++        assert last["with"]["name"] == "ci-logs-${{ github.job }}", name
++        assert last["with"]["path"] == "ci-logs/", name
++        assert last["with"]["retention-days"] == 14, name
++        assert last["with"]["if-no-files-found"] == "error", name
++
++
++def test_dash_upload_runs_always_before_artifact(jobs: dict[str, dict[str, Any]]) -> None:
++    """Positive: each job uploads to Dash with always(), token via env, before the artifact."""
++    for name, job in jobs.items():
++        dash = next(s for s in job["steps"] if s.get("name") == "Upload logs to Dash")
++        assert dash["if"] == "always()", name
++        assert dash["env"] == {"DASH_TOKEN": "${{ secrets.DASH_TOKEN }}"}, name
++        assert dash["run"] == f"scripts/ci/upload_dash_log.sh {name}", name
++        assert job["steps"].index(dash) < len(job["steps"]) - 1
++
++
++def test_python_tests_reports_uploaded_always(jobs: dict[str, dict[str, Any]]) -> None:
++    """Positive: coverage.xml and pytest.xml are uploaded with always()."""
++    step = next(s for s in jobs["python-tests"]["steps"] if "reports/" in str(s.get("with", {})))
++    assert step["if"] == "always()"
++    assert step["with"]["path"] == "reports/"
++
++
++def test_job_log_dir_env_matches_job_id(jobs: dict[str, dict[str, Any]]) -> None:
++    """Positive: CI_JOB_NAME places logs under ci-logs/<job-id>/."""
++    for name, job in jobs.items():
++        assert job["env"] == {"CI_JOB_NAME": name}
++
++
++def test_python_tests_enforce_coverage_threshold(jobs: dict[str, dict[str, Any]]) -> None:
++    """Boundary: python-tests fails below 95% branch coverage."""
++    run = _run_text(jobs["python-tests"])
++    assert "--cov-fail-under=95" in run
++    assert "--cov-branch" in run
++    assert "make testdb-up" in run
++    assert "make testdb-down" in run
++
++
++def test_testdb_teardown_always_runs(jobs: dict[str, dict[str, Any]]) -> None:
++    """Positive: DB teardown runs on failure too."""
++    step = next(s for s in jobs["python-tests"]["steps"] if s.get("name") == "Stop test database")
++    assert step["if"] == "always()"
++
++
++def test_web_tests_commands(jobs: dict[str, dict[str, Any]]) -> None:
++    """Boundary: web-tests runs frozen install, typecheck, lint, coverage and build."""
++    run = _run_text(jobs["web-tests"])
++    assert "pnpm install --frozen-lockfile --ignore-scripts" in run
++    assert "typecheck" in run
++    assert "lint" in run
++    assert "test:unit --coverage" in run
++    assert "kanban/web build" in run
++
++
++def test_lint_type_and_license_commands(jobs: dict[str, dict[str, Any]]) -> None:
++    """Positive: Shift-Left gates stay in the pipeline."""
++    assert "uv sync --locked && make check" in _run_text(jobs["lint-type"])
++    license_run = _run_text(jobs["license-gate"])
++    assert "make license" in license_run
++    assert "uv sync --locked" in license_run
++    assert "pnpm install --frozen-lockfile --ignore-scripts" in license_run
++
++
++def test_docker_build_builds_both_targets(jobs: dict[str, dict[str, Any]]) -> None:
++    """Positive: both image targets are built locally (no push) and listed."""
++    run = _run_text(jobs["docker-build"])
++    assert "--target runtime-slim -t kanban:runtime-slim --load ." in run
++    assert "--target standalone -t kanban:standalone --load ." in run
++    assert "docker image ls kanban" in run
++    assert "push" not in run
++
++
++def test_every_command_step_runs_through_run_and_log(jobs: dict[str, dict[str, Any]]) -> None:
++    """Positive: only setup, apt and Dash/upload steps may bypass run_and_log.sh."""
++    exempt = {"Install system dependencies", "Upload logs to Dash"}
++    for job in jobs.values():
++        for step in job["steps"]:
++            if "run" in step and step["name"] not in exempt:
++                assert "scripts/ci/run_and_log.sh" in step["run"], step["name"]
+ 
+ 
+ def test_ci_doc_has_required_sections() -> None:
+diff --git a/scripts/tests/test_upload_dash_log.py b/scripts/tests/test_upload_dash_log.py
+new file mode 100644
+index 0000000..9e3c940
+--- /dev/null
++++ b/scripts/tests/test_upload_dash_log.py
+@@ -0,0 +1,144 @@
++"""Behavior tests for scripts/ci/upload_dash_log.sh against a local fake Dash server."""
 +
 +from __future__ import annotations
 +
++import json
++import subprocess
++import threading
++from http.server import BaseHTTPRequestHandler, HTTPServer
 +from pathlib import Path
-+from typing import Any, cast
++from typing import TYPE_CHECKING, Any
 +
 +import pytest
-+import yaml
++
++if TYPE_CHECKING:
++    from collections.abc import Iterator
 +
 +REPO_ROOT = Path(__file__).resolve().parents[2]
-+GITHUB_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
-+FORGEJO_WORKFLOW = REPO_ROOT / ".forgejo" / "workflows" / "ci.yml"
-+JOB_ID = "build-test-push"
++SCRIPT = REPO_ROOT / "scripts" / "ci" / "upload_dash_log.sh"
++TOKEN = "unit-test-token-value"
 +
 +
-+def _load(path: Path) -> dict[str, Any]:
-+    """Parse a workflow with ``safe_load`` only (never ``yaml.load``)."""
-+    return cast("dict[str, Any]", yaml.safe_load(path.read_text(encoding="utf-8")))
++class _State:
++    posts: list[dict[str, Any]]
++    get_log: str
++    url: str
 +
 +
-+@pytest.fixture(scope="module")
-+def workflow() -> dict[str, Any]:
-+    """Return the parsed Forgejo workflow."""
-+    return _load(FORGEJO_WORKFLOW)
++@pytest.fixture
++def dash(socket_enabled: None) -> Iterator[_State]:  # noqa: ARG001
++    """Run a loopback fake Dash that records POSTs and serves one existing log."""
++    state = _State()
++    state.posts = []
++    state.get_log = "previous-job-log"
++
++    class Handler(BaseHTTPRequestHandler):
++        def do_GET(self) -> None:
++            payload = json.dumps({"log": state.get_log}).encode()
++            self.send_response(200)
++            self.send_header("Content-Length", str(len(payload)))
++            self.end_headers()
++            self.wfile.write(payload)
++
++        def do_POST(self) -> None:
++            length = int(self.headers.get("Content-Length", "0"))
++            state.posts.append(
++                {
++                    "path": self.path,
++                    "auth": self.headers.get("Authorization"),
++                    "body": self.rfile.read(length).decode(),
++                }
++            )
++            self.send_response(200)
++            self.send_header("Content-Length", "0")
++            self.end_headers()
++
++        def log_message(self, *_args: object) -> None:
++            return
++
++    server = HTTPServer(("127.0.0.1", 0), Handler)
++    thread = threading.Thread(target=server.serve_forever, daemon=True)
++    thread.start()
++    state.url = f"http://127.0.0.1:{server.server_port}"
++    yield state
++    server.shutdown()
++    server.server_close()
 +
 +
-+@pytest.fixture(scope="module")
-+def steps(workflow: dict[str, Any]) -> list[dict[str, Any]]:
-+    """Return the ordered steps of the single CI job."""
-+    return cast("list[dict[str, Any]]", workflow["jobs"][JOB_ID]["steps"])
-+
-+
-+def _step(steps: list[dict[str, Any]], name: str) -> dict[str, Any]:
-+    matches = [s for s in steps if s.get("name") == name]
-+    assert len(matches) == 1, f"expected exactly one step named {name!r}"
-+    return matches[0]
-+
-+
-+def test_workflow_copies_are_identical() -> None:
-+    """Positive: the GitHub and Forgejo workflow files must not drift."""
-+    assert GITHUB_WORKFLOW.read_text(encoding="utf-8") == FORGEJO_WORKFLOW.read_text(
-+        encoding="utf-8"
-+    )
-+
-+
-+def test_job_runs_on_inferrence1(workflow: dict[str, Any]) -> None:
-+    """Positive: the single job targets the project Forgejo runner."""
-+    assert list(workflow["jobs"]) == [JOB_ID]
-+    assert workflow["jobs"][JOB_ID]["runs-on"] == ["inferrence1"]
-+
-+
-+def test_triggers_exclude_pull_request_target(workflow: dict[str, Any]) -> None:
-+    """Security: no pull_request_target (it would expose secrets to forks)."""
-+    # YAML 1.1 (PyYAML) parses the bare key `on` as boolean True.
-+    raw = cast("dict[Any, Any]", workflow)
-+    triggers = raw.get("on", raw.get(True))
-+    assert triggers is not None
-+    assert "pull_request_target" not in triggers
-+    assert "push" in triggers
-+    assert "pull_request" in triggers
-+
-+
-+def test_verification_steps_use_run_and_log(steps: list[dict[str, Any]]) -> None:
-+    """Positive: lint, DB start/stop and tests are wrapped for log capture."""
-+    expected = {
-+        "Run lint and checks": "run_and_log.sh lint-type-license --",
-+        "Start test database": "run_and_log.sh testdb-up --",
-+        "Run tests": "run_and_log.sh unit-tests --",
-+        "Stop test database": "run_and_log.sh testdb-down --",
++def _run(
++    tmp_path: Path, *args: str, token: str | None = TOKEN, url: str = "http://127.0.0.1:1"
++) -> subprocess.CompletedProcess[str]:
++    env = {
++        "PATH": "/usr/bin:/bin:/usr/local/bin",
++        "DASH_URL": url,
++        "GITHUB_SHA": "abc123",
++        "CI_LOG_DIR": str(tmp_path / "logs"),
 +    }
-+    for name, needle in expected.items():
-+        assert needle in _step(steps, name)["run"]
-+
-+
-+def test_unit_test_command_excludes_container_marker(steps: list[dict[str, Any]]) -> None:
-+    """Boundary: the runner has no nested docker for container-marked tests."""
-+    assert 'pytest -q -m "not container"' in _step(steps, "Run tests")["run"]
-+
-+
-+def test_lint_step_runs_make_check_and_license(steps: list[dict[str, Any]]) -> None:
-+    """Positive: the Shift-Left gates stay in the pipeline."""
-+    run = _step(steps, "Run lint and checks")["run"]
-+    assert "make check" in run
-+    assert "make license" in run
-+    assert "uv sync --locked" in run
-+
-+
-+def test_testdb_teardown_always_runs(steps: list[dict[str, Any]]) -> None:
-+    """Positive: DB teardown runs on failure too."""
-+    assert _step(steps, "Stop test database")["if"] == "always()"
-+
-+
-+def test_dash_upload_is_last_and_always(steps: list[dict[str, Any]]) -> None:
-+    """Positive: logs are uploaded to Dash with if: always(), as the final step."""
-+    last = steps[-1]
-+    assert last["name"] == "Upload logs to Dash"
-+    assert last["if"] == "always()"
-+    assert "https://dash.hackedyour.info/api/logs" in last["run"]
-+    assert "ci-logs/*/*.log" in last["run"]
-+
-+
-+def test_dash_token_passed_via_env_not_inlined(steps: list[dict[str, Any]]) -> None:
-+    """Security: the Dash token is an env var, never interpolated into the script."""
-+    last = steps[-1]
-+    assert last["env"] == {"DASH_TOKEN": "${{ secrets.DASH_TOKEN }}"}
-+    assert "secrets." not in last["run"]
-+
-+
-+def test_dash_upload_tolerates_missing_token(steps: list[dict[str, Any]]) -> None:
-+    """Negative: a missing token skips the upload instead of failing the job."""
-+    run = steps[-1]["run"]
-+    assert 'if [ -z "${DASH_TOKEN:-}" ]' in run
-+    assert "exit 0" in run
-+
-+
-+def test_job_log_dir_env_is_set(workflow: dict[str, Any]) -> None:
-+    """Positive: CI_JOB_NAME places logs under ci-logs/build-test-push/."""
-+    assert workflow["env"] == {"CI_JOB_NAME": JOB_ID}
-+
-+
-+def test_only_expected_secrets_referenced() -> None:
-+    """Security: only the registry and Dash secrets are ever referenced."""
-+    text = FORGEJO_WORKFLOW.read_text(encoding="utf-8")
-+    refs = {part.split("}}")[0].strip() for part in text.split("secrets.")[1:]}
-+    assert refs <= {
-+        "DOCKERHUB_USERNAME",
-+        "DOCKERHUB_TOKEN",
-+        "DASH_TOKEN",
-+    }
-+
-+
-+def test_ci_doc_has_required_sections() -> None:
-+    """Positive: docs/CI.md documents jobs, log reading and Dash verification."""
-+    text = (REPO_ROOT / "docs" / "CI.md").read_text(encoding="utf-8")
-+    for heading in ("## Jobs", "## Reading Logs", "## Dash Verification"):
-+        assert heading in text
-+    assert "https://dash.hackedyour.info/llms.txt" in text
-diff --git a/scripts/tests/test_run_and_log.py b/scripts/tests/test_run_and_log.py
-new file mode 100644
-index 0000000..29ef513
---- /dev/null
-+++ b/scripts/tests/test_run_and_log.py
-@@ -0,0 +1,86 @@
-+"""Behavior tests for scripts/ci/run_and_log.sh (KB-P0-06 / KANBA-28)."""
-+
-+from __future__ import annotations
-+
-+import subprocess
-+from pathlib import Path
-+
-+REPO_ROOT = Path(__file__).resolve().parents[2]
-+SCRIPT = REPO_ROOT / "scripts" / "ci" / "run_and_log.sh"
-+
-+
-+def _run(tmp_path: Path, *args: str, job: str | None = None) -> subprocess.CompletedProcess[str]:
-+    env = {"PATH": "/usr/bin:/bin", "CI_LOG_DIR": str(tmp_path / "logs")}
-+    if job is not None:
-+        env.pop("CI_LOG_DIR")
-+        env["CI_JOB_NAME"] = job
++    if token is not None:
++        env["DASH_TOKEN"] = token
 +    return subprocess.run(
-+        [str(SCRIPT), *args],
-+        capture_output=True,
-+        text=True,
-+        check=False,
-+        env=env,
-+        cwd=tmp_path,
++        [str(SCRIPT), *args], capture_output=True, text=True, check=False, env=env, cwd=tmp_path
 +    )
 +
 +
-+def test_success_writes_log_and_zero_exit(tmp_path: Path) -> None:
-+    """Positive: a passing command exits 0 and records exit code 0."""
-+    result = _run(tmp_path, "ok", "--", "true")
++def _write_log(tmp_path: Path, name: str, text: str, code: str) -> None:
++    logs = tmp_path / "logs"
++    logs.mkdir(exist_ok=True)
++    (logs / f"{name}.log").write_text(text)
++    (logs / f"{name}.exit").write_text(code)
++
++
++def test_uploads_job_log_with_auth_sha_and_existing_log(tmp_path: Path, dash: _State) -> None:
++    """Positive: POST carries bearer auth, sha, prior log, job header and exit code."""
++    _write_log(tmp_path, "unit-tests", "all green\n", "0\n")
++    result = _run(tmp_path, "python-tests", url=dash.url)
 +    assert result.returncode == 0
-+    assert (tmp_path / "logs" / "ok.exit").read_text() == "0\n"
-+    assert (tmp_path / "logs" / "ok.log").exists()
++    assert len(dash.posts) == 1
++    post = dash.posts[0]
++    assert post["auth"] == f"Bearer {TOKEN}"
++    assert "sha=abc123" in post["path"]
++    assert "provider=forgejo" in post["path"]
++    assert "previous-job-log" in post["body"]
++    assert "##### job: python-tests #####" in post["body"]
++    assert "unit-tests.log (exit 0)" in post["body"]
++    assert "all green" in post["body"]
 +
 +
-+def test_failure_propagates_exit_code(tmp_path: Path) -> None:
-+    """Positive: a failing command exits 1 and records exit code 1."""
-+    result = _run(tmp_path, "bad", "--", "false")
-+    assert result.returncode == 1
-+    assert (tmp_path / "logs" / "bad.exit").read_text() == "1\n"
++def test_token_never_printed(tmp_path: Path, dash: _State) -> None:
++    """Security: the bearer token never reaches stdout or stderr."""
++    _write_log(tmp_path, "x", "log\n", "0\n")
++    result = _run(tmp_path, "lint-type", url=dash.url)
++    assert TOKEN not in result.stdout
++    assert TOKEN not in result.stderr
 +
 +
-+def test_output_is_teed_to_stdout_and_log(tmp_path: Path) -> None:
-+    """Positive: combined stdout and stderr are captured and still echoed."""
-+    result = _run(tmp_path, "tee-check", "--", "bash", "-c", "echo out; echo err >&2; exit 3")
-+    assert result.returncode == 3
-+    log = (tmp_path / "logs" / "tee-check.log").read_text()
-+    assert "out" in log
-+    assert "err" in log
-+    assert "out" in result.stdout
-+    assert (tmp_path / "logs" / "tee-check.exit").read_text() == "3\n"
-+
-+
-+def test_path_traversal_log_name_rejected(tmp_path: Path) -> None:
-+    """Security: '../x' exits 64 and writes nothing outside the log dir."""
-+    result = _run(tmp_path, "../x", "--", "true")
-+    assert result.returncode == 64
-+    assert not (tmp_path / "x.log").exists()
-+    assert not (tmp_path / "x.exit").exists()
-+    assert not (tmp_path / "logs").exists()
-+
-+
-+def test_uppercase_and_slash_names_rejected(tmp_path: Path) -> None:
-+    """Boundary: only ^[a-z0-9-]+$ is accepted."""
-+    for bad in ("Bad", "a/b", "a b", "a_b", ""):
-+        assert _run(tmp_path, bad, "--", "true").returncode == 64
-+
-+
-+def test_missing_separator_is_usage_error(tmp_path: Path) -> None:
-+    """Negative: omitting '--' is a usage error (64)."""
-+    assert _run(tmp_path, "ok", "true", "x").returncode == 64
-+    assert _run(tmp_path, "ok").returncode == 64
-+
-+
-+def test_arguments_are_not_shell_expanded(tmp_path: Path) -> None:
-+    """Security: arguments are passed as an argv vector, never eval'd."""
-+    result = _run(tmp_path, "argv", "--", "printf", "%s", "$(touch pwned); `id`")
++def test_missing_token_skips_without_failing(tmp_path: Path, dash: _State) -> None:
++    """Negative: no token means no network call and exit 0."""
++    _write_log(tmp_path, "x", "log\n", "0\n")
++    result = _run(tmp_path, "lint-type", token=None, url=dash.url)
 +    assert result.returncode == 0
-+    assert not (tmp_path / "pwned").exists()
-+    assert "$(touch pwned)" in (tmp_path / "logs" / "argv.log").read_text()
++    assert "DASH_TOKEN missing" in result.stdout
++    assert dash.posts == []
 +
 +
-+def test_default_dir_uses_job_name(tmp_path: Path) -> None:
-+    """Positive: without CI_LOG_DIR logs land in ci-logs/<CI_JOB_NAME>/."""
-+    result = _run(tmp_path, "ok", "--", "true", job="my-job")
++def test_no_logs_skips_without_failing(tmp_path: Path, dash: _State) -> None:
++    """Boundary: an empty log dir uploads nothing and exits 0."""
++    result = _run(tmp_path, "lint-type", url=dash.url)
 +    assert result.returncode == 0
-+    assert (tmp_path / "ci-logs" / "my-job" / "ok.exit").read_text() == "0\n"
++    assert "no" in result.stdout
++    assert dash.posts == []
++
++
++def test_unreachable_dash_never_fails_job(tmp_path: Path) -> None:
++    """Negative: a Dash outage must not turn the job red."""
++    _write_log(tmp_path, "x", "log\n", "1\n")
++    result = _run(tmp_path, "lint-type")
++    assert result.returncode == 0
++
++
++def test_invalid_job_name_rejected(tmp_path: Path, dash: _State) -> None:
++    """Security: job names outside ^[a-z0-9-]+$ exit 64 and upload nothing."""
++    _write_log(tmp_path, "x", "log\n", "0\n")
++    for bad in ("../x", "Bad", "a b", ""):
++        assert _run(tmp_path, bad, url=dash.url).returncode == 64
++    assert dash.posts == []
+diff --git a/uv.lock b/uv.lock
+index 1df4e98..6d1d798 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -935,6 +935,7 @@ dev = [
+     { name = "pytest-cov" },
+     { name = "pytest-socket" },
+     { name = "pytest-xdist" },
++    { name = "pyyaml" },
+     { name = "ruff" },
+     { name = "types-defusedxml" },
+     { name = "types-jsonschema" },
+@@ -963,6 +964,7 @@ dev = [
+     { name = "pytest-cov", specifier = "==7.1.0" },
+     { name = "pytest-socket", specifier = "==0.8.1" },
+     { name = "pytest-xdist", specifier = "==3.8.0" },
++    { name = "pyyaml", specifier = "==6.0.3" },
+     { name = "ruff", specifier = "==0.17.4" },
+     { name = "types-defusedxml", specifier = "==0.7.0.20260504" },
+     { name = "types-jsonschema", specifier = "==4.26.0.20261006" },
+diff --git a/.forgejo/workflows/ci.yml b/.forgejo/workflows/ci.yml
+index d098ea8..69b7351 100644
+--- a/.forgejo/workflows/ci.yml
++++ b/.forgejo/workflows/ci.yml
+@@ -276,3 +276,52 @@ jobs:
+           retention-days: 14
+           if-no-files-found: error
+         continue-on-error: true
++
++  docker-push:
++    needs: [lint-type, python-tests, web-tests, license-gate, docker-build]
++    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
++    runs-on: [inferrence1]
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: docker-push
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
++
++      - name: Record push context
++        shell: bash
++        run: |
++          scripts/ci/run_and_log.sh push-context -- git log -1 --format=%H%n%s
++
++      - name: Set up Docker Buildx
++        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
++
++      - name: Log in to Docker Hub
++        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
++        with:
++          username: ${{ secrets.DOCKERHUB_USERNAME }}
++          password: ${{ secrets.DOCKERHUB_TOKEN }}
++
++      - name: Build and push Docker image
++        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
++        with:
++          context: .
++          push: true
++          tags: ${{ secrets.DOCKERHUB_USERNAME }}/thumbs-up-kanban:latest
++
++      - name: Upload logs to Dash
++        if: always()
++        shell: bash
++        env:
++          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
++        run: scripts/ci/upload_dash_log.sh docker-push
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index d098ea8..69b7351 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -276,3 +276,52 @@ jobs:
+           retention-days: 14
+           if-no-files-found: error
+         continue-on-error: true
++
++  docker-push:
++    needs: [lint-type, python-tests, web-tests, license-gate, docker-build]
++    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
++    runs-on: [inferrence1]
++    timeout-minutes: 20
++    env:
++      CI_JOB_NAME: docker-push
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
++
++      - name: Record push context
++        shell: bash
++        run: |
++          scripts/ci/run_and_log.sh push-context -- git log -1 --format=%H%n%s
++
++      - name: Set up Docker Buildx
++        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
++
++      - name: Log in to Docker Hub
++        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
++        with:
++          username: ${{ secrets.DOCKERHUB_USERNAME }}
++          password: ${{ secrets.DOCKERHUB_TOKEN }}
++
++      - name: Build and push Docker image
++        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
++        with:
++          context: .
++          push: true
++          tags: ${{ secrets.DOCKERHUB_USERNAME }}/thumbs-up-kanban:latest
++
++      - name: Upload logs to Dash
++        if: always()
++        shell: bash
++        env:
++          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
++        run: scripts/ci/upload_dash_log.sh docker-push
++
++      - name: Upload CI logs artifact
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: ci-logs-${{ github.job }}
++          path: ci-logs/
++          retention-days: 14
++          if-no-files-found: error
++        continue-on-error: true
+diff --git a/docs/CI.md b/docs/CI.md
+index a56b21e..ddefe6e 100644
+--- a/docs/CI.md
++++ b/docs/CI.md
+@@ -16,6 +16,7 @@ permissions are `contents: read` only, every job has `timeout-minutes: 20`, and
+ | `web-tests` | `pnpm install --frozen-lockfile --ignore-scripts`; `pnpm --dir kanban/web typecheck`; `lint`; `test:unit --coverage`; `build` |
+ | `license-gate` | `uv sync --locked && pnpm install --frozen-lockfile --ignore-scripts && make license` |
+ | `docker-build` | `docker buildx build --target runtime-slim -t kanban:runtime-slim --load .`; same for `--target standalone`; `docker image ls kanban` |
++| `docker-push` | `needs` all five jobs above; runs only for `push` to `refs/heads/main`; `docker/login-action` then `docker/build-push-action` push `<DOCKERHUB_USERNAME>/thumbs-up-kanban:latest` |
+ 
+ Deviations from the original ticket text, kept deliberately because they are what works on
+ the `inferrence1` act_runner:
+@@ -23,9 +24,12 @@ the `inferrence1` act_runner:
+ - `python-tests` starts the database with `make testdb-up` (sibling container sharing the
+   workspace volume) instead of `docker compose`, and runs `-m "not container"` because the
+   runner has no nested Docker for container-marked tests.
+-- `docker-build` builds both image targets locally and does not push. The previous workflow
+-  pushed `thumbs-up-kanban:latest` to Docker Hub; that publish step was removed with the
+-  "no secrets except Dash" requirement. Re-adding a publish job is a separate decision.
++- `docker-build` builds both image targets locally and never pushes. Publishing is isolated in
++  `docker-push`, which keeps the pre-existing Docker Hub publish behavior but only on main
++  pushes after every other job is green. `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are
++  referenced only inside `docker-push` (via the pinned login/build-push actions), never in a
++  `run:` body; `DASH_TOKEN` is referenced only in each job's Dash upload step `env:`. A test
++  enforces this scoping.
+ 
+ ## Reading Logs
+ 
+@@ -34,7 +38,7 @@ the `inferrence1` act_runner:
+ Log names must match `^[a-z0-9-]+$` (otherwise exit `64`, nothing written). Per wrapped step
+ it writes under `ci-logs/<job-id>/`: `<logname>.log` (output) and `<logname>.exit` (exit code).
+ 
+-Every job ends with two `if: always()` steps:
++Every job (including `docker-push`) ends with two `if: always()` steps:
+ 
+ 1. `scripts/ci/upload_dash_log.sh <job-id>` POSTs the job's logs to Dash
+    (`/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban&sha=<sha>`), prefixing any log
+@@ -47,7 +51,8 @@ Every job ends with two `if: always()` steps:
+    supported by Forgejo runners; the Dash upload is the reliable channel.
+ 
+ Artifact names: `ci-logs-lint-type`, `ci-logs-python-tests`, `ci-logs-web-tests`,
+-`ci-logs-license-gate`, `ci-logs-docker-build`, `ci-reports-python-tests`.
++`ci-logs-license-gate`, `ci-logs-docker-build`, `ci-logs-docker-push` (main pushes only),
++`ci-reports-python-tests`.
+ 
+ ## Dash Verification
+ 
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
+index b39d27d..1f281fa 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
+@@ -236,7 +236,9 @@ describe('StandaloneStatusPanel', () => {
+     });
+ 
+     // Verify blob URL was created and immediately revoked
+-    expect(createObjectURLMock).toHaveBeenCalled();
++    await waitFor(() => {
++      expect(createObjectURLMock).toHaveBeenCalled();
++    });
+     expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-url-1234');
+   });
+ 
+@@ -484,7 +486,9 @@ describe('StandaloneStatusPanel', () => {
+       await Promise.resolve();
+     });
+ 
+-    expect(createObjectURLMock).toHaveBeenCalled();
++    await waitFor(() => {
++      expect(createObjectURLMock).toHaveBeenCalled();
++    });
+   });
+ 
+   it('covers non-Error throw branches in backup and copy', async () => {
+@@ -709,7 +713,9 @@ describe('ComposeExportTab', () => {
+       fireEvent.click(downloadBtn);
+       await Promise.resolve();
+     });
+-    expect(createObjectURLMock).toHaveBeenCalled();
++    await waitFor(() => {
++      expect(createObjectURLMock).toHaveBeenCalled();
++    });
+ 
+     // 2. Download error with string throw
+     createObjectURLMock.mockImplementationOnce(() => {
+@@ -764,7 +770,9 @@ describe('ComposeExportTab', () => {
+       fireEvent.click(downloadBtn);
+     });
+ 
+-    expect(createObjectURLMock).toHaveBeenCalled();
++    await waitFor(() => {
++      expect(createObjectURLMock).toHaveBeenCalled();
++    });
+     expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-compose-url');
+ 
+     // Copy env button
+@@ -817,7 +825,9 @@ describe('ComposeExportTab', () => {
+       fireEvent.click(downloadBtn);
+       await Promise.resolve();
+     });
+-    expect(createObjectURLMock).toHaveBeenCalled();
++    await waitFor(() => {
++      expect(createObjectURLMock).toHaveBeenCalled();
++    });
+   });
+ 
+   it('handles copy early return when fetchExportData fails and returns null', async () => {
+diff --git a/scripts/tests/test_ci_workflow.py b/scripts/tests/test_ci_workflow.py
+index f183e48..24519d5 100644
+--- a/scripts/tests/test_ci_workflow.py
++++ b/scripts/tests/test_ci_workflow.py
+@@ -1,6 +1,6 @@
+ """Structural and security tests for the CI workflow (KB-P0-06 / KANBA-28).
+ 
+-The project CI runs on the Forgejo runner ``inferrence1`` as five jobs. These tests pin the
++The project CI runs on the Forgejo runner ``inferrence1`` as six jobs. These tests pin the
+ invariants that keep failed runs diagnosable and the pipeline hardened: SHA-pinned actions,
+ least-privilege permissions, bounded jobs, and always-run log upload as the final step.
+ """
+@@ -17,9 +17,17 @@ import yaml
+ REPO_ROOT = Path(__file__).resolve().parents[2]
+ GITHUB_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+ FORGEJO_WORKFLOW = REPO_ROOT / ".forgejo" / "workflows" / "ci.yml"
+-JOB_IDS = ["lint-type", "python-tests", "web-tests", "license-gate", "docker-build"]
++JOB_IDS = [
++    "lint-type",
++    "python-tests",
++    "web-tests",
++    "license-gate",
++    "docker-build",
++    "docker-push",
++]
+ USES_PATTERN = re.compile(r"^[^@]+@[0-9a-f]{40}$")
+-ALLOWED_SECRETS = {"DASH_TOKEN"}
++ALLOWED_SECRETS = {"DASH_TOKEN", "DOCKERHUB_USERNAME", "DOCKERHUB_TOKEN"}
++DOCKERHUB_SECRETS = {"DOCKERHUB_USERNAME", "DOCKERHUB_TOKEN"}
+ 
+ 
+ def _load(path: Path) -> dict[str, Any]:
+@@ -48,8 +56,8 @@ def test_workflow_copies_are_identical() -> None:
+     assert GITHUB_WORKFLOW.read_bytes() == FORGEJO_WORKFLOW.read_bytes()
+ 
+ 
+-def test_five_jobs_exist_on_inferrence1(jobs: dict[str, dict[str, Any]]) -> None:
+-    """Positive: exactly the five ticket jobs, all on the project runner."""
++def test_six_jobs_exist_on_inferrence1(jobs: dict[str, dict[str, Any]]) -> None:
++    """Positive: the five ticket jobs plus docker-push, all on the project runner."""
+     assert list(jobs) == JOB_IDS
+     for job in jobs.values():
+         assert job["runs-on"] == ["inferrence1"]
+@@ -97,15 +105,50 @@ def test_every_uses_is_pinned_to_a_full_commit_sha(jobs: dict[str, dict[str, Any
+             assert re.search(r"@[0-9a-f]{40} # v\d+\.\d+\.\d+$", line.strip()), line
+ 
+ 
+-def test_only_dash_secret_is_referenced() -> None:
+-    """Security: the only secret is DASH_TOKEN, and only through a step env block."""
++def test_secrets_are_scoped_to_their_jobs(jobs: dict[str, dict[str, Any]]) -> None:
++    """Security: Docker Hub secrets exist only in docker-push; none appear in `run:` bodies."""
+     text = FORGEJO_WORKFLOW.read_text(encoding="utf-8")
+     refs = {part.split("}}")[0].strip() for part in text.split("secrets.")[1:]}
+     assert refs == ALLOWED_SECRETS
+-    workflow = _load(FORGEJO_WORKFLOW)
+-    for job in workflow["jobs"].values():
++    for name, job in jobs.items():
++        job_text = yaml.safe_dump(job)
++        for secret in DOCKERHUB_SECRETS:
++            assert (secret in job_text) == (name == "docker-push"), (name, secret)
+         for step in job["steps"]:
+-            assert "secrets." not in str(step.get("run", ""))
++            assert "secrets." not in str(step.get("run", "")), (name, step["name"])
++
++
++def test_docker_push_gating_and_dependencies(jobs: dict[str, dict[str, Any]]) -> None:
++    """Security: docker-push runs only for main pushes, after all five other jobs succeed."""
++    job = jobs["docker-push"]
++    assert job["needs"] == [
++        "lint-type",
++        "python-tests",
++        "web-tests",
++        "license-gate",
++        "docker-build",
++    ]
++    assert job["if"] == "github.ref == 'refs/heads/main' && github.event_name == 'push'"
++    uses = [s["uses"].split("@")[0] for s in job["steps"] if "uses" in s]
++    assert uses == [
++        "actions/checkout",
++        "docker/setup-buildx-action",
++        "docker/login-action",
++        "docker/build-push-action",
++        "actions/upload-artifact",
++    ]
++    push = next(s for s in job["steps"] if s.get("name") == "Build and push Docker image")
++    assert push["with"]["push"] is True
++    assert push["with"]["tags"] == "${{ secrets.DOCKERHUB_USERNAME }}/thumbs-up-kanban:latest"
++
++
++def test_only_docker_push_may_push_images(jobs: dict[str, dict[str, Any]]) -> None:
++    """Security: no other job references push or the login/build-push actions."""
++    for name, job in jobs.items():
++        if name == "docker-push":
++            continue
++        assert "push" not in _run_text(job), name
++        assert not any("docker/login-action" in str(s.get("uses", "")) for s in job["steps"]), name
+ 
+ 
+ def test_last_step_uploads_logs_artifact_always(jobs: dict[str, dict[str, Any]]) -> None:

@@ -16,6 +16,7 @@ permissions are `contents: read` only, every job has `timeout-minutes: 20`, and 
 | `web-tests` | `pnpm install --frozen-lockfile --ignore-scripts`; `pnpm --dir kanban/web typecheck`; `lint`; `test:unit --coverage`; `build` |
 | `license-gate` | `uv sync --locked && pnpm install --frozen-lockfile --ignore-scripts && make license` |
 | `docker-build` | `docker buildx build --target runtime-slim -t kanban:runtime-slim --load .`; same for `--target standalone`; `docker image ls kanban` |
+| `docker-push` | `needs` all five jobs above; runs only for `push` to `refs/heads/main`; `docker/login-action` then `docker/build-push-action` push `<DOCKERHUB_USERNAME>/thumbs-up-kanban:latest` |
 
 Deviations from the original ticket text, kept deliberately because they are what works on
 the `inferrence1` act_runner:
@@ -23,9 +24,12 @@ the `inferrence1` act_runner:
 - `python-tests` starts the database with `make testdb-up` (sibling container sharing the
   workspace volume) instead of `docker compose`, and runs `-m "not container"` because the
   runner has no nested Docker for container-marked tests.
-- `docker-build` builds both image targets locally and does not push. The previous workflow
-  pushed `thumbs-up-kanban:latest` to Docker Hub; that publish step was removed with the
-  "no secrets except Dash" requirement. Re-adding a publish job is a separate decision.
+- `docker-build` builds both image targets locally and never pushes. Publishing is isolated in
+  `docker-push`, which keeps the pre-existing Docker Hub publish behavior but only on main
+  pushes after every other job is green. `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are
+  referenced only inside `docker-push` (via the pinned login/build-push actions), never in a
+  `run:` body; `DASH_TOKEN` is referenced only in each job's Dash upload step `env:`. A test
+  enforces this scoping.
 
 ## Reading Logs
 
@@ -34,7 +38,7 @@ the `inferrence1` act_runner:
 Log names must match `^[a-z0-9-]+$` (otherwise exit `64`, nothing written). Per wrapped step
 it writes under `ci-logs/<job-id>/`: `<logname>.log` (output) and `<logname>.exit` (exit code).
 
-Every job ends with two `if: always()` steps:
+Every job (including `docker-push`) ends with two `if: always()` steps:
 
 1. `scripts/ci/upload_dash_log.sh <job-id>` POSTs the job's logs to Dash
    (`/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban&sha=<sha>`), prefixing any log
@@ -47,7 +51,8 @@ Every job ends with two `if: always()` steps:
    supported by Forgejo runners; the Dash upload is the reliable channel.
 
 Artifact names: `ci-logs-lint-type`, `ci-logs-python-tests`, `ci-logs-web-tests`,
-`ci-logs-license-gate`, `ci-logs-docker-build`, `ci-reports-python-tests`.
+`ci-logs-license-gate`, `ci-logs-docker-build`, `ci-logs-docker-push` (main pushes only),
+`ci-reports-python-tests`.
 
 ## Dash Verification
 

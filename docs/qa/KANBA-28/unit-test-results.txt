@@ -1,17 +1,20 @@
 $ uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py scripts/tests/test_upload_dash_log.py -q
-.................................                                        [100%]
-33 passed in 2.74s
+...................................                                      [100%]
+35 passed in 2.73s
 exit: 0
 
-$ uv run pytest -q -n auto -m "not container" --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts --cov-branch --cov-fail-under=95   (full suite, run locally, under heavy shared-host load)
-TOTAL                                                                88409   1498  12920   1104    97%
-Required test coverage of 95% reached. Total coverage: 97.31%
-2 failed, 2468 passed, 37 warnings, 5 errors in 188.13s (0:03:08)
-NOTE: that run was made before test_upload_dash_log.py had its socket fixture (5 errors there, fixed since: 33/33 pass above). 2 failures (kanban/tests/sandbox/test_nsjail_runner.py::test_default_launcher_caps_stdout_and_kills_on_overflow, kanban/tests/realtime/test_sse_resume.py::test_sse_headers_and_anti_enumeration_filtering) occurred while the host load average was ~13 on 20 cores; both pass when rerun alone (22 passed).
+$ uv run pytest -q -n 6 -m "not container" --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts --cov-branch --cov-fail-under=95   (full suite, local)
+TOTAL                                                                88410   1445  12920   1105    97%
+Required test coverage of 95% reached. Total coverage: 97.36%
+2475 passed, 32 warnings in 177.72s (0:02:57)
+exit=0
+(Run before the docker-push job was added; the only later change is workflow YAML and scripts/tests/test_ci_workflow.py, re-run above.)
 
 $ pnpm --dir kanban/web test:unit --coverage
  Test Files  163 passed (163)
       Tests  1691 passed (1691)
 All files          |   97.99 |    95.32 |   97.03 |   98.44 |                   
 web_exit=0
-NOTE: kanban/web/vitest.config.ts testTimeout raised 5000 -> 15000: the heaviest jsdom route test measured 5.1s alone with coverage (13s under load) and timed out.
+NOTE: kanban/web/vitest.config.ts testTimeout raised 5000 -> 15000 (heaviest jsdom route test: 5.1s alone with coverage, 13s under load, timed out).
+
+NOTE: with -n auto on the shared 20-core host (load 9-13) two timing-sensitive pre-existing tests (test_nsjail_runner stdout-cap, test_local_login enumeration timing) failed in two earlier runs and pass alone; the clean -n 6 run above is the evidence of record. Not modified by KANBA-28.
