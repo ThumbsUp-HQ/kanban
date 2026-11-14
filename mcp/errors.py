@@ -32,6 +32,9 @@ class McpErrorCode(StrEnum):
     SECTION_NOT_FOUND = "SECTION_NOT_FOUND"
     ALREADY_PROMOTED = "ALREADY_PROMOTED"
     LINK_TYPE_NOT_ALLOWED = "LINK_TYPE_NOT_ALLOWED"
+    KEY_SCOPE_VIOLATION = "KEY_SCOPE_VIOLATION"
+    CONNECTION_SCOPE_VIOLATION = "CONNECTION_SCOPE_VIOLATION"
+    CONFLICTING_SCOPE_HEADERS = "CONFLICTING_SCOPE_HEADERS"
 
 
 class KbMcpError(Exception):
@@ -44,6 +47,7 @@ class KbMcpError(Exception):
         *,
         hint: str | None = None,
         candidates: list[dict[str, str]] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         """Initialize KbMcpError with code, human-readable message, optional hint and candidates."""
         enum_code = McpErrorCode(code)
@@ -52,6 +56,7 @@ class KbMcpError(Exception):
         self.message: Final[str] = message
         self.hint: Final[str | None] = hint
         self.candidates: Final[list[dict[str, str]] | None] = candidates
+        self.extra: Final[dict[str, Any] | None] = extra
 
     def to_yaml(self) -> str:
         """Serialize error payload containing code, message, optional hint and candidates."""
@@ -59,6 +64,8 @@ class KbMcpError(Exception):
             "code": self.code.value,
             "message": self.message,
         }
+        if self.extra:
+            payload.update(self.extra)
         if self.hint:
             payload["hint"] = self.hint
         if self.candidates:

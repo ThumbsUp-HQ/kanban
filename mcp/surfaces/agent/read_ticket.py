@@ -31,6 +31,10 @@ READ_TICKET_SCHEMA: Final[dict[str, Any]] = {
             "type": "string",
             "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
         },
+        "workspace": {
+            "type": "string",
+            "description": "Optional workspace slug for disambiguation in global mode",
+        },
         "lod": {
             "type": "string",
             "enum": ["summary", "standard", "full"],
@@ -216,10 +220,15 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
             mcp_session_id=ctx.session_id,
         )
 
+    req_params: dict[str, Any] = {}
+    if arguments.get("workspace"):
+        req_params["workspace"] = arguments["workspace"]
+
     try:
         issue_data = await ctx.client.request(
             "GET",
             f"/api/v1/issues/{identifier}",
+            params=req_params or None,
             subject_token=ctx.subject_token,
             mcp_session_id=ctx.session_id,
         )
@@ -261,6 +270,7 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
 
     normalized_issue: dict[str, Any] = {
         "key": issue_key,
+        "workspace": issue_data.get("workspace"),
         "summary": issue_data.get("summary", ""),
         "state": state_str,
         "priority": pri_str,

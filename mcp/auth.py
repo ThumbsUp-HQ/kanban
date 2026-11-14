@@ -102,6 +102,9 @@ class McpAuthContext:
     principal_id: str | None = None
     workspace_id: str | None = None
     token_kind: str | None = "api_key"  # noqa: S105
+    workspace_slug: str | None = None
+    scope_tier: str | None = None
+    allowed_projects: list[str] | None = None
 
 
 class IntrospectionCache:
@@ -234,6 +237,23 @@ class McpAuthMiddleware:
             return
 
         headers = Headers(raw=scope.get("headers", []))
+
+        # Parse connection scope early to validate path and header constraints
+        from mcp.scoping import (  # noqa: PLC0415
+            intersect_key_and_connection_scope,
+            parse_connection_scope,
+        )
+
+        try:
+            req_scope = parse_connection_scope(scope.get("path", ""), headers)
+        except KbMcpError as exc:
+            status_code = 400
+            err_resp: Response = JSONResponse(
+                {"error": exc.code.value, "message": exc.message}, status_code=status_code
+            )
+            await err_resp(scope, receive, send)
+            return
+
         auth_header = headers.get("authorization")
 
         if not auth_header or not auth_header.lower().startswith("bearer "):
@@ -334,6 +354,12 @@ class McpAuthMiddleware:
         scope["headers"] = filtered_headers
 
         scopes_list = intro_result.get("scopes") or []
+        allowed_projects_raw = intro_result.get("allowed_projects")
+        allowed_projects = (
+            [str(p) for p in allowed_projects_raw]
+            if isinstance(allowed_projects_raw, list)
+            else None
+        )
         auth_context = McpAuthContext(
             token=token,
             token_sha256=digest,
@@ -342,11 +368,28 @@ class McpAuthMiddleware:
             principal_id=intro_result.get("principal_id"),
             workspace_id=intro_result.get("workspace_id"),
             token_kind=intro_result.get("token_kind", "api_key"),
+            workspace_slug=intro_result.get("workspace_slug"),
+            scope_tier=intro_result.get("scope_tier"),
+            allowed_projects=allowed_projects,
         )
+
+        try:
+            effective_scope = intersect_key_and_connection_scope(auth_context, req_scope)
+        except KbMcpError as exc:
+            status_code = 403 if exc.code == McpErrorCode.KEY_SCOPE_VIOLATION else 400
+            payload: dict[str, Any] = {"error": exc.code.value, "message": exc.message}
+            if exc.extra:
+                payload.update(exc.extra)
+            if exc.hint:
+                payload["hint"] = exc.hint
+            resp = JSONResponse(payload, status_code=status_code)
+            await resp(scope, receive, send)
+            return
 
         state = scope.setdefault("state", {})
         state["mcp_auth"] = auth_context
         state["mcp_scopes"] = auth_context.scopes
         state["mcp_token_sha256"] = digest
+        state["connection_scope"] = effective_scope
 
         await self.app(scope, receive, send)

@@ -94,6 +94,8 @@ def _project_issue_summary(raw: dict[str, Any]) -> dict[str, Any]:
     for k in _SUMMARY_ISSUE_KEYS:
         if k in raw:
             result[k] = raw[k]
+    if raw.get("workspace"):
+        result["workspace"] = raw["workspace"]
     gate = raw.get("gate")
     if _is_gate_pending(gate):
         result["gate"] = gate
@@ -105,6 +107,8 @@ def _project_issue_standard(raw: dict[str, Any]) -> dict[str, Any]:
     for k in _STANDARD_ISSUE_KEYS:
         if k in raw:
             result[k] = raw[k]
+    if raw.get("workspace"):
+        result["workspace"] = raw["workspace"]
     gate = raw.get("gate")
     if _is_gate_pending(gate):
         result["gate"] = gate

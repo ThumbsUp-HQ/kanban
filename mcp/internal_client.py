@@ -148,7 +148,7 @@ class KanbanApiClient:
         if self._csrf_token:
             req_headers["X-CSRF-Token"] = self._csrf_token
 
-    async def request(  # noqa: PLR0913
+    async def request(  # noqa: C901, PLR0912, PLR0913
         self,
         method: str,
         path: str,
@@ -167,6 +167,23 @@ class KanbanApiClient:
             req_headers["X-KB-MCP-Session"] = mcp_session_id
 
         await self._ensure_csrf_token(req_headers, method)
+
+        # Forward resolved connection scope headers
+        from mcp.context import get_current_mcp_context  # noqa: PLC0415
+
+        ctx = get_current_mcp_context()
+        if ctx is not None and ctx.connection_scope is not None:
+            scope = ctx.connection_scope
+            if scope.workspace_slug or scope.workspace_id:
+                req_headers.setdefault(
+                    "X-KB-Scope-Workspace", str(scope.workspace_slug or scope.workspace_id)
+                )
+            if scope.project_key or scope.project_id:
+                req_headers.setdefault(
+                    "X-KB-Scope-Project", str(scope.project_key or scope.project_id)
+                )
+            if scope.is_global:
+                req_headers.setdefault("X-KB-Scope-Global", "true")
 
         try:
             req = self._client.build_request(
@@ -249,7 +266,14 @@ class KanbanApiClient:
     @staticmethod
     def _resolve_error_code(status_code: int, prob_type: str, prob_code: str = "") -> McpErrorCode:  # noqa: PLR0911
         """Determine McpErrorCode from HTTP status and problem type."""
-        if prob_code == "MODULES_DISABLED" or prob_type.endswith("modules-disabled"):
+        if prob_code in (
+            "KEY_SCOPE_VIOLATION",
+            "CONNECTION_SCOPE_VIOLATION",
+            "CONFLICTING_SCOPE_HEADERS",
+            "MODULES_DISABLED",
+        ):
+            return McpErrorCode(prob_code)
+        if prob_type.endswith("modules-disabled"):
             return McpErrorCode.MODULES_DISABLED
         if prob_code == "SECTION_NOT_FOUND" or prob_type.endswith("section-not-found"):
             return McpErrorCode.SECTION_NOT_FOUND

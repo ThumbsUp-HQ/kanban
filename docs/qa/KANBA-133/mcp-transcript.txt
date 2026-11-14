@@ -1,0 +1,269 @@
+================================================================================
+SCENARIO: 1. Global Mode initialize (meatloaf-bot)
+================================================================================
+POST /mcp/agent HTTP/1.1
+Authorization: Bearer kb_agt_global_key
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {},
+    "clientInfo": {
+      "name": "meatloaf-bot",
+      "version": "1.0"
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+mcp-session-id: PKDXAfa7lLCtJ-iBnUxNNHaHbivCuf0psShwztBwtkI
+content-length: 172
+content-type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "serverInfo": {
+      "name": "kanban-mcp-agent",
+      "version": "0.0.0"
+    }
+  }
+}
+
+
+================================================================================
+SCENARIO: 1. Global Mode tools/call read_ticket (unique cross-workspace)
+================================================================================
+POST /mcp/agent HTTP/1.1
+Authorization: Bearer kb_agt_global_key
+mcp-session-id: PKDXAfa7lLCtJ-iBnUxNNHaHbivCuf0psShwztBwtkI
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "read_ticket",
+    "arguments": {
+      "identifier": "NETALERTXN-12"
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+content-length: 178
+content-type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "key: NETALERTXN-12\nsummary: Net Alert\nstate: open\npriority: high\nworkspace: general\n"
+      }
+    ],
+    "isError": false
+  }
+}
+
+
+================================================================================
+SCENARIO: 2. Workspace-Scoped Mode initialize (/mcp/agent/w/kanban)
+================================================================================
+POST /mcp/agent/w/kanban HTTP/1.1
+Authorization: Bearer kb_agt_global_key
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {},
+    "clientInfo": {
+      "name": "ws-agent",
+      "version": "1.0"
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+mcp-session-id: -XKBVIs7Dt97EeFdXZzmfVDRPqz1r_OLCoA5OfuB_Gc
+content-length: 172
+content-type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "serverInfo": {
+      "name": "kanban-mcp-agent",
+      "version": "0.0.0"
+    }
+  }
+}
+
+
+================================================================================
+SCENARIO: 3. Project-Scoped Mode initialize (/mcp/agent/w/kanban/p/KANBA)
+================================================================================
+POST /mcp/agent/w/kanban/p/KANBA HTTP/1.1
+Authorization: Bearer kb_agt_global_key
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {},
+    "clientInfo": {
+      "name": "proj-agent",
+      "version": "1.0"
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+mcp-session-id: qrz77tLV__LcXo5KQAiHBf9HGkQBqVCmUGbyZzdrQ_I
+content-length: 172
+content-type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "serverInfo": {
+      "name": "kanban-mcp-agent",
+      "version": "0.0.0"
+    }
+  }
+}
+
+
+================================================================================
+SCENARIO: 3. Project-Scoped Mode tools/call create_ticket (auto-filled project=KANBA)
+================================================================================
+POST /mcp/agent/w/kanban/p/KANBA HTTP/1.1
+Authorization: Bearer kb_agt_global_key
+mcp-session-id: qrz77tLV__LcXo5KQAiHBf9HGkQBqVCmUGbyZzdrQ_I
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "create_ticket",
+    "arguments": {
+      "title": "Project Pinned Ticket"
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+content-length: 149
+content-type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "key: KANBA-1\ntitle: Project Pinned Ticket\nproject: KANBA\n"
+      }
+    ],
+    "isError": false
+  }
+}
+
+
+================================================================================
+SCENARIO: 4. Conflicting Scope Headers (Path: /w/kanban vs Header: X-Workspace-Slug: general)
+================================================================================
+POST /mcp/agent/w/kanban HTTP/1.1
+Authorization: Bearer kb_agt_global_key
+X-Workspace-Slug: general
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {},
+    "clientInfo": {
+      "name": "conflict-agent",
+      "version": "1.0"
+    }
+  }
+}
+
+HTTP/1.1 400 Bad Request
+content-length: 113
+content-type: application/json
+
+{
+  "error": "CONFLICTING_SCOPE_HEADERS",
+  "message": "Conflicting workspace in URL path 'kanban' and header 'general'"
+}
+
+
+================================================================================
+SCENARIO: 5. Key Scope Violation (project=KANBA key presented to /mcp/agent/w/general)
+================================================================================
+POST /mcp/agent/w/general HTTP/1.1
+Authorization: Bearer kb_agt_proj_kanba_key
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {},
+    "clientInfo": {
+      "name": "key-scope-violation-agent",
+      "version": "1.0"
+    }
+  }
+}
+
+HTTP/1.1 403 Forbidden
+content-length: 226
+content-type: application/json
+
+{
+  "error": "KEY_SCOPE_VIOLATION",
+  "message": "Requested workspace 'general' is outside the scope boundary of this API key.",
+  "allowed_workspaces": [
+    "kanban"
+  ],
+  "hint": "Use an API key with global or appropriate workspace permissions."
+}
+
