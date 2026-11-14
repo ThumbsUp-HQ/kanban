@@ -18,6 +18,7 @@ from kanban.cli.ops import (
     check_forbidden_secret_args,
     register_ops_subparsers,
 )
+from kanban.cli.verify_cutover import register_cutover_subparsers
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -40,6 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     register_jobs_subparsers(subparsers)
     register_auth_subparsers(subparsers)
     register_import_subparsers(subparsers)
+    register_cutover_subparsers(subparsers)
 
     try:
         args = parser.parse_args(raw_argv)
