@@ -40,6 +40,9 @@ class RLSContext:
     token_scopes: tuple[str, ...] = ()
     aal_level: Literal[1, 2] = 1
     user_access_hash: bytes | str | None = None
+    agent_principal_id: uuid.UUID | None = None
+    ephemeral_project_id: uuid.UUID | None = None
+    read_only: bool = False
 
     def __post_init__(self) -> None:
         """Validate aal_level and token scope formatting constraints."""
@@ -85,7 +88,9 @@ async def bind_rls_context(session: AsyncSession, ctx: RLSContext) -> None:
             "set_config('app.workspace_id', :workspace_id, true), "
             "set_config('app.token_scopes', :token_scopes, true), "
             "set_config('app.aal_level', :aal_level, true), "
-            "set_config('app.user_access_hash', :user_access_hash, true)"
+            "set_config('app.user_access_hash', :user_access_hash, true), "
+            "set_config('app.agent_principal_id', :agent_principal_id, true), "
+            "set_config('app.ephemeral_project_id', :ephemeral_project_id, true)"
         )
         params = {
             "principal_id": str(ctx.principal_id),
@@ -93,8 +98,16 @@ async def bind_rls_context(session: AsyncSession, ctx: RLSContext) -> None:
             "token_scopes": ",".join(ctx.token_scopes),
             "aal_level": str(ctx.aal_level),
             "user_access_hash": user_hash_val,
+            "agent_principal_id": (
+                str(ctx.agent_principal_id) if ctx.agent_principal_id is not None else ""
+            ),
+            "ephemeral_project_id": (
+                str(ctx.ephemeral_project_id) if ctx.ephemeral_project_id is not None else ""
+            ),
         }
         await session.execute(stmt, params)
+        if ctx.read_only:
+            await session.execute(text("SET LOCAL TRANSACTION READ ONLY"))
         session.info["rls_bound"] = True
         session.info["rls_context"] = ctx
     finally:

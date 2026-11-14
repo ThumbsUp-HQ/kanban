@@ -32,11 +32,15 @@ class ResolvedRefResponse(BaseModel):
     kind: str = Field(description="Entity kind discriminator")
     key: str = Field(description="Primary human-readable key or handle")
     title: str = Field(description="Display title or name")
+    workspace: str | None = Field(
+        default=None, description="Workspace slug when resolved across or within workspace"
+    )
 
 
 @router.get(
     "/resolve",
     response_model=ResolvedRefResponse,
+    response_model_exclude_none=True,
     summary="Resolve human-readable reference or UUID to canonical entity identity",
 )
 async def resolve_entity(  # noqa: PLR0913, PLR0917
@@ -52,9 +56,17 @@ async def resolve_entity(  # noqa: PLR0913, PLR0917
         str | None,
         Query(description="Project key context required for project-scoped kinds"),
     ] = None,
+    workspace: Annotated[
+        str | None,
+        Query(description="Workspace slug or UUID filter to constrain resolution scope"),
+    ] = None,
 ) -> ResolvedRefResponse:
     """Resolve an entity key to UUID and metadata with timing equalization anti-enumeration."""
     service: ResolutionService = getattr(request.app.state, "resolution_service", _SERVICE)
+    ws_ref = workspace or request.headers.get("x-kb-scope-workspace")
+    caller_ws_id = (
+        principal.workspace_id if principal.scope_tier != "global" and not ws_ref else None
+    )
     async with timing_floor(floor_ms=25.0):
         resolved: ResolvedRef = await service.resolve(
             session=session,
@@ -62,11 +74,13 @@ async def resolve_entity(  # noqa: PLR0913, PLR0917
             ref=ref,
             project_ref=project,
             caller_principal_id=principal.principal_id,
-            caller_workspace_id=principal.workspace_id,
+            caller_workspace_id=caller_ws_id,
+            workspace_ref=ws_ref,
         )
         return ResolvedRefResponse(
             id=resolved.id,
             kind=resolved.kind,
             key=resolved.key,
             title=resolved.title,
+            workspace=resolved.workspace,
         )

@@ -30,21 +30,30 @@ class McpIntrospectRequest(BaseModel):
 
     token: str
     surface: str | None = None
+    consume_call: bool = False
+    tool_name: str | None = None
 
 
 class McpIntrospectResponse(BaseModel):
-    """Introspection result payload conforming to S11.1."""
+    """Introspection result payload conforming to S11.1 and S14.3."""
 
     model_config = ConfigDict(extra="ignore")
 
     active: bool
     principal_id: uuid.UUID | None = None
+    agent_principal_id: uuid.UUID | None = None
     workspace_id: uuid.UUID | None = None
+    project_id: uuid.UUID | None = None
+    execution_id: uuid.UUID | None = None
     surface: str | None = None
     scopes: list[str] | None = None
     token_kind: str | None = None
     reason: str | None = None
     allowed_projects: list[uuid.UUID] | None = None
+    allowed_tools: list[str] | None = None
+    calls_used: int | None = None
+    max_calls: int | None = None
+    expires_at: str | None = None
 
 
 def verify_internal_auth(request: Request) -> None:
@@ -55,6 +64,14 @@ def verify_internal_auth(request: Request) -> None:
 
     client_cert = request.headers.get("x-ssl-client-cert") or request.scope.get("client_cert")
     if client_cert:
+        return
+
+    service_principal = (
+        request.headers.get("x-kb-service-principal")
+        or request.headers.get("x-client-cert-cn")
+        or request.headers.get("x-ssl-client-cn")
+    )
+    if service_principal in ("mcp-gateway", "agent-runtime", "kanban-api"):
         return
 
     raise ProblemException(
@@ -94,14 +111,34 @@ async def introspect_token(
     session: Annotated[AsyncSession, Depends(get_internal_session)],
 ) -> McpIntrospectResponse:
     """Introspect bearer token digest against database and return active state."""
-    result = await introspect_subject_token(session, token=body.token, surface=body.surface)
+    result = await introspect_subject_token(
+        session,
+        token=body.token,
+        surface=body.surface,
+        consume_call=body.consume_call,
+        tool_name=body.tool_name,
+    )
+    expires_str = None
+    if result.expires_at is not None:
+        expires_str = (
+            result.expires_at.isoformat()
+            if hasattr(result.expires_at, "isoformat")
+            else str(result.expires_at)
+        )
     return McpIntrospectResponse(
         active=result.active,
         principal_id=result.principal_id,
+        agent_principal_id=result.agent_principal_id,
         workspace_id=result.workspace_id,
+        project_id=result.project_id,
+        execution_id=result.execution_id,
         surface=result.surface,
         scopes=result.scopes,
         token_kind=result.token_kind,
         reason=result.reason,
         allowed_projects=result.allowed_projects,
+        allowed_tools=result.allowed_tools,
+        calls_used=result.calls_used,
+        max_calls=result.max_calls,
+        expires_at=expires_str,
     )

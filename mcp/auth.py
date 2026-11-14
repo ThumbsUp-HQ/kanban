@@ -60,13 +60,21 @@ SCOPE_REQUIREMENTS: Final[dict[str, frozenset[str]]] = {
     "update_ticket": frozenset({"agent:write"}),
     "begin_work": frozenset({"agent:write"}),
     "complete_work": frozenset({"agent:write"}),
+    "add_comment": frozenset({"agent:write"}),
+    "transition_ticket": frozenset({"agent:write"}),
+    "link_objects": frozenset({"agent:write"}),
     "test_agent_write": frozenset({"agent:write"}),
     # Docs surface tools
     "ping_docs": frozenset({"docs:read"}),
     "search_docs": frozenset({"docs:read"}),
+    "search_knowledge": frozenset({"docs:read"}),
     "read_doc": frozenset({"docs:read"}),
     "create_doc": frozenset({"docs:write"}),
     "update_doc": frozenset({"docs:write"}),
+    "upsert_doc": frozenset({"docs:write"}),
+    "manage_stickies": frozenset({"docs:write"}),
+    "promote_sticky_to_doc": frozenset({"docs:write"}),
+    "link_knowledge": frozenset({"docs:write"}),
     # Admin surface tools
     "ping_admin": frozenset({"admin:read"}),
     "audit_links": frozenset({"admin:read"}),
@@ -97,6 +105,15 @@ class McpAuthContext:
     principal_id: str | None = None
     workspace_id: str | None = None
     token_kind: str | None = "api_key"  # noqa: S105
+    agent_principal_id: str | None = None
+    project_id: str | None = None
+    execution_id: str | None = None
+    allowed_tools: frozenset[str] | None = None
+    calls_used: int | None = None
+    max_calls: int | None = None
+    workspace_slug: str | None = None
+    scope_tier: str | None = None
+    allowed_projects: list[str] | None = None
 
 
 class IntrospectionCache:
@@ -229,6 +246,23 @@ class McpAuthMiddleware:
             return
 
         headers = Headers(raw=scope.get("headers", []))
+
+        # Parse connection scope early to validate path and header constraints
+        from mcp.scoping import (  # noqa: PLC0415
+            intersect_key_and_connection_scope,
+            parse_connection_scope,
+        )
+
+        try:
+            req_scope = parse_connection_scope(scope.get("path", ""), headers)
+        except KbMcpError as exc:
+            status_code = 400
+            err_resp: Response = JSONResponse(
+                {"error": exc.code.value, "message": exc.message}, status_code=status_code
+            )
+            await err_resp(scope, receive, send)
+            return
+
         auth_header = headers.get("authorization")
 
         if not auth_header or not auth_header.lower().startswith("bearer "):
@@ -242,25 +276,31 @@ class McpAuthMiddleware:
             await resp(scope, receive, send)
             return
 
-        # Ephemeral agent key reservation check (rejected until KB-P4-13)
+        # Ephemeral agent key reservation and surface check (KB-P4-13)
         if token.startswith(RESERVED_EPHEMERAL_PREFIX):
-            resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
-            await resp(scope, receive, send)
-            return
-
-        # Local surface prefix pre-check before network call for kb_* API keys
-        is_jwt = token.startswith("eyJ")
-        if not is_jwt:
-            expected_prefix = SURFACE_PREFIXES[surface]
-            if not token.startswith(expected_prefix):
+            if surface == Surface.ADMIN:
                 resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
                 await resp(scope, receive, send)
                 return
+            # Allowed on agent and docs surfaces; bypass normal SURFACE_PREFIXES check
+        else:
+            # Local surface prefix pre-check before network call for kb_* API keys
+            is_jwt = token.startswith("eyJ")
+            if not is_jwt:
+                expected_prefix = SURFACE_PREFIXES[surface]
+                if not token.startswith(expected_prefix):
+                    resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
+                    await resp(scope, receive, send)
+                    return
 
         digest = hash_mcp_api_key(token)
 
-        # Check positive introspection cache
-        intro_result = self.cache.get(surface.value, digest)
+        # Check positive introspection cache (bypassed for ephemeral tokens)
+        intro_result = (
+            None
+            if token.startswith(RESERVED_EPHEMERAL_PREFIX)
+            else self.cache.get(surface.value, digest)
+        )
         if intro_result is None:
             # Perform introspection call via internal_client
             client = self.internal_client
@@ -312,13 +352,17 @@ class McpAuthMiddleware:
                     resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
                     await resp(scope, receive, send)
                     return
-                resp = self._unauthorized_response(surface)
-                await resp(scope, receive, send)
-                return
-
-            # Cache positive active result for 15 seconds
-            self.cache.set(surface.value, digest, res_data, ttl_s=DEFAULT_CACHE_TTL_S)
-            intro_result = res_data
+                if reason == "EPHEMERAL_CALL_BUDGET_EXCEEDED":
+                    intro_result = res_data
+                else:
+                    resp = self._unauthorized_response(surface)
+                    await resp(scope, receive, send)
+                    return
+            else:
+                # Cache positive active result for 15 seconds (NEVER cache ephemeral tokens)
+                if not token.startswith(RESERVED_EPHEMERAL_PREFIX):
+                    self.cache.set(surface.value, digest, res_data, ttl_s=DEFAULT_CACHE_TTL_S)
+                intro_result = res_data
 
         # Populate request state and forward validated token header
         raw_headers = list(scope.get("headers", []))
@@ -329,6 +373,22 @@ class McpAuthMiddleware:
         scope["headers"] = filtered_headers
 
         scopes_list = intro_result.get("scopes") or []
+        scopes_list = intro_result.get("scopes") or []
+        allowed_tools_list = intro_result.get("allowed_tools")
+        allowed_tools_set = (
+            frozenset(allowed_tools_list) if allowed_tools_list is not None else None
+        )
+        token_kind = (
+            "ephemeral"
+            if token.startswith(RESERVED_EPHEMERAL_PREFIX)
+            else intro_result.get("token_kind", "api_key")
+        )
+        allowed_projects_raw = intro_result.get("allowed_projects")
+        allowed_projects = (
+            [str(p) for p in allowed_projects_raw]
+            if isinstance(allowed_projects_raw, list)
+            else None
+        )
         auth_context = McpAuthContext(
             token=token,
             token_sha256=digest,
@@ -336,12 +396,35 @@ class McpAuthMiddleware:
             scopes=frozenset(str(s) for s in scopes_list),
             principal_id=intro_result.get("principal_id"),
             workspace_id=intro_result.get("workspace_id"),
-            token_kind=intro_result.get("token_kind", "api_key"),
+            token_kind=token_kind,
+            agent_principal_id=intro_result.get("agent_principal_id"),
+            project_id=intro_result.get("project_id"),
+            execution_id=intro_result.get("execution_id"),
+            allowed_tools=allowed_tools_set,
+            calls_used=intro_result.get("calls_used"),
+            max_calls=intro_result.get("max_calls"),
+            workspace_slug=intro_result.get("workspace_slug"),
+            scope_tier=intro_result.get("scope_tier"),
+            allowed_projects=allowed_projects,
         )
+
+        try:
+            effective_scope = intersect_key_and_connection_scope(auth_context, req_scope)
+        except KbMcpError as exc:
+            status_code = 403 if exc.code == McpErrorCode.KEY_SCOPE_VIOLATION else 400
+            payload: dict[str, Any] = {"error": exc.code.value, "message": exc.message}
+            if exc.extra:
+                payload.update(exc.extra)
+            if exc.hint:
+                payload["hint"] = exc.hint
+            resp = JSONResponse(payload, status_code=status_code)
+            await resp(scope, receive, send)
+            return
 
         state = scope.setdefault("state", {})
         state["mcp_auth"] = auth_context
         state["mcp_scopes"] = auth_context.scopes
         state["mcp_token_sha256"] = digest
+        state["connection_scope"] = effective_scope
 
         await self.app(scope, receive, send)

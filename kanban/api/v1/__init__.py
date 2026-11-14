@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
 from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
 from kanban.api.v1.activity import router as activity_router
 from kanban.api.v1.admin.auth_cards import router as admin_auth_cards_router
+from kanban.api.v1.admin.imports import router as admin_imports_router
 from kanban.api.v1.admin.mcp_keys import router as admin_mcp_keys_router
 from kanban.api.v1.agent_definitions import router as agent_definitions_router
 from kanban.api.v1.assignees import router as assignees_router
@@ -46,6 +48,10 @@ from kanban.api.v1.resolve import router as resolve_router
 from kanban.api.v1.search import router as search_router
 from kanban.api.v1.stickies import router as stickies_router
 from kanban.api.v1.subscriptions import router as subscriptions_router
+from kanban.api.v1.system_status import (
+    admin_standalone_router,
+    system_router,
+)
 from kanban.api.v1.views import router as views_router
 
 
@@ -86,11 +92,15 @@ def build_v1_router() -> APIRouter:
     v1.include_router(custom_fields_router)
     v1.include_router(auth_cards_public_router)
     v1.include_router(admin_auth_cards_router)
+    v1.include_router(admin_imports_router)
     v1.include_router(admin_mcp_keys_router)
     v1.include_router(oauth_v1_router)
     v1.include_router(mcp_introspect_router)
+    v1.include_router(mcp_ephemeral_router)
     v1.include_router(subscriptions_router)
     v1.include_router(notifications_router)
     v1.include_router(search_router)
     v1.include_router(custom_field_approvals_router)
+    v1.include_router(system_router)
+    v1.include_router(admin_standalone_router)
     return v1

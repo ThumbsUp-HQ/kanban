@@ -1,0 +1,329 @@
+/**
+ * Standalone Status Panel & Compose Export Styles (KB-P3-52, S2.2, S6.1).
+ * Breathable, accessible layout with strict CSP compliance (zero inline styles).
+ */
+
+.standalone-panel__backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+}
+
+.standalone-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(640px, 100vw - 32px);
+  max-height: min(720px, 90vh);
+  background-color: var(--bg-surface-raised, #ffffff);
+  color: var(--fg-primary, #111827);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.05);
+  padding: var(--space-6, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6, 24px);
+  overflow-y: auto;
+  z-index: 1001;
+  box-sizing: border-box;
+}
+
+/* Header & Close */
+.standalone-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+  padding-bottom: var(--space-4, 16px);
+}
+
+.standalone-panel__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--fg-primary, #111827);
+}
+
+.standalone-panel__close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--fg-muted, #525866);
+  cursor: pointer;
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  border-radius: var(--radius-sm, 4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.standalone-panel__close:hover,
+.standalone-panel__close:focus-visible {
+  background-color: var(--bg-hover, #f1f3f5);
+  color: var(--fg-primary, #111827);
+  outline: 2px solid var(--focus-ring, #2563eb);
+}
+
+/* Section 1: Warning Banner & Storage Health */
+.standalone-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.standalone-panel__warn-banner {
+  background-color: var(--warn-bg, #fef3c7);
+  color: var(--warn-fg, #78350f);
+  border: 1px solid rgba(120, 53, 15, 0.2);
+  border-radius: var(--radius-md, 6px);
+  padding: var(--space-4, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  font-size: var(--text-body, 0.9375rem);
+  line-height: var(--leading-prose, 1.73);
+}
+
+.standalone-panel__warn-text {
+  font-weight: 500;
+}
+
+.standalone-panel__code-block {
+  background-color: rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+  overflow-x: auto;
+}
+
+.standalone-panel__code-block code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8125rem;
+  color: inherit;
+  word-break: break-all;
+}
+
+.standalone-panel__persistent-badge {
+  background-color: var(--bg-hover, #f1f3f5);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-md, 6px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+}
+
+.standalone-panel__badge-icon {
+  color: var(--ok-fg, #059669);
+  font-weight: bold;
+}
+
+.standalone-panel__badge-title {
+  font-weight: 600;
+  color: var(--fg-primary, #111827);
+}
+
+.standalone-panel__badge-detail {
+  color: var(--fg-secondary, #4b5563);
+  font-size: 0.875rem;
+  font-family: var(--font-mono, monospace);
+}
+
+.standalone-panel__sandbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4, 16px);
+  font-size: 0.8125rem;
+  color: var(--fg-muted, #525866);
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+}
+
+.standalone-panel__sandbox-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+}
+
+/* Section 2: Encrypted Database Backup */
+.standalone-panel__section-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg-primary, #111827);
+}
+
+.standalone-panel__backup-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.standalone-panel__label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fg-primary, #111827);
+}
+
+.standalone-panel__input {
+  width: 100%;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  font-size: 0.875rem;
+  font-family: var(--font-mono, monospace);
+  background-color: var(--bg-surface, #ffffff);
+  color: var(--fg-primary, #111827);
+  border: 1px solid var(--border-strong, #d1d5db);
+  border-radius: var(--radius-sm, 4px);
+  box-sizing: border-box;
+}
+
+.standalone-panel__input:focus {
+  outline: 2px solid var(--focus-ring, #2563eb);
+  border-color: var(--focus-ring, #2563eb);
+}
+
+.standalone-panel__hint {
+  font-size: 0.75rem;
+  color: var(--fg-muted, #525866);
+}
+
+.standalone-panel__error {
+  background-color: var(--danger-bg, #ffe4e6);
+  color: var(--danger-fg, #881337);
+  border: 1px solid rgba(136, 19, 55, 0.2);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  font-size: 0.8125rem;
+}
+
+.standalone-panel__member-notice {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--fg-secondary, #4b5563);
+  background-color: var(--bg-hover, #f1f3f5);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+}
+
+/* Section 3: Compose Export & Buttons */
+.standalone-panel__compose-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.standalone-panel__btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3, 12px);
+}
+
+.standalone-panel__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.standalone-panel__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.standalone-panel__btn--primary {
+  background-color: var(--accent-primary, #1d4ed8);
+  color: var(--accent-primary-fg, #ffffff);
+}
+
+.standalone-panel__btn--primary:hover:not(:disabled) {
+  background-color: #1e40af;
+}
+
+.standalone-panel__btn--secondary {
+  background-color: var(--bg-hover, #f1f3f5);
+  color: var(--fg-primary, #111827);
+  border-color: var(--border-subtle, #e5e7eb);
+}
+
+.standalone-panel__btn--secondary:hover:not(:disabled) {
+  background-color: var(--border-subtle, #e5e7eb);
+}
+
+.standalone-panel__copy-btn {
+  background-color: var(--bg-surface, #ffffff);
+  color: var(--fg-primary, #111827);
+  border: 1px solid var(--border-strong, #d1d5db);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-1, 4px) var(--space-3, 12px);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.standalone-panel__copy-btn:hover {
+  background-color: var(--bg-hover, #f1f3f5);
+}
+
+/* Monospace Promotion Runbook */
+.standalone-panel__checklist-card {
+  background-color: var(--bg-canvas, #f7f8fa);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.standalone-panel__checklist-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--fg-secondary, #4b5563);
+}
+
+.standalone-panel__checklist-pre {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--fg-primary, #111827);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Mobile Responsiveness (<= 767px) */
+@media (max-width: 767px) {
+  .standalone-panel {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    transform: none;
+    width: 100vw;
+    max-height: 90dvh;
+    border-radius: 16px 16px 0 0;
+    border-bottom: none;
+    padding: var(--space-4, 16px);
+    gap: var(--space-4, 16px);
+  }
+
+  .standalone-panel__btn,
+  .standalone-panel__copy-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

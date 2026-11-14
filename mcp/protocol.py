@@ -15,6 +15,11 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 from starlette.responses import JSONResponse, Response
 
 from mcp.auth import SCOPE_REQUIREMENTS, hash_mcp_api_key
+from mcp.context import (
+    McpRequestContext,
+    reset_current_mcp_context,
+    set_current_mcp_context,
+)
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
 from mcp.yaml_out import dump_yaml
@@ -24,8 +29,10 @@ if TYPE_CHECKING:
 
     from starlette.requests import Request
 
+    from mcp.auth import McpAuthContext
     from mcp.internal_client import KanbanApiClient
     from mcp.registry import Surface, ToolRegistry
+    from mcp.scoping import ConnectionScope
     from mcp.settings import McpSettings
 
 __all__ = [
@@ -50,13 +57,20 @@ class Session:
     created_at_s: float
     last_seen_s: float
     token_sha256: bytes | None = None
+    scope_fingerprint: bytes | None = None
 
 
 @runtime_checkable
 class SessionStore(Protocol):
     """Protocol for MCP session lifecycle management."""
 
-    def create_session(self, surface: Surface, *, token_sha256: bytes | None = None) -> Session:
+    def create_session(
+        self,
+        surface: Surface,
+        *,
+        token_sha256: bytes | None = None,
+        scope_fingerprint: bytes | None = None,
+    ) -> Session:
         """Create and store a newly initialized session."""
         ...
 
@@ -93,7 +107,13 @@ class InMemorySessionStore:
         )
         self._sessions: OrderedDict[str, Session] = OrderedDict()
 
-    def create_session(self, surface: Surface, *, token_sha256: bytes | None = None) -> Session:
+    def create_session(
+        self,
+        surface: Surface,
+        *,
+        token_sha256: bytes | None = None,
+        scope_fingerprint: bytes | None = None,
+    ) -> Session:
         """Create and store a new session with URL-safe random ID, evicting oldest if full."""
         now = self._time_provider()
         session_id = secrets.token_urlsafe(32)
@@ -103,6 +123,7 @@ class InMemorySessionStore:
             created_at_s=now,
             last_seen_s=now,
             token_sha256=token_sha256,
+            scope_fingerprint=scope_fingerprint,
         )
 
         # LRU eviction: if full, evict oldest session (first in OrderedDict)
@@ -138,6 +159,8 @@ class InMemorySessionStore:
                 surface=session.surface,
                 created_at_s=session.created_at_s,
                 last_seen_s=now,
+                token_sha256=session.token_sha256,
+                scope_fingerprint=session.scope_fingerprint,
             )
             self._sessions[session_id] = refreshed
             self._sessions.move_to_end(session_id)
@@ -245,7 +268,7 @@ class McpProtocolHandler:
 
         return await self._process_valid_payload(payload, request)
 
-    async def _process_valid_payload(
+    async def _process_valid_payload(  # noqa: PLR0911
         self,
         payload: dict[str, Any],
         request: Request,
@@ -287,6 +310,30 @@ class McpProtocolHandler:
         if current_token_sha256 is None and subject_token:
             current_token_sha256 = hash_mcp_api_key(subject_token)
 
+        conn_scope = getattr(request.state, "connection_scope", None)
+        if conn_scope is None:
+            from mcp.scoping import parse_connection_scope  # noqa: PLC0415
+
+            try:
+                conn_scope = parse_connection_scope(request.url.path, request.headers)
+            except KbMcpError as exc:
+                return JSONResponse(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "error": {"code": -32602, "message": exc.message},
+                    },
+                    status_code=400,
+                )
+
+        from mcp.scoping import compute_session_fingerprint  # noqa: PLC0415
+
+        current_fingerprint = compute_session_fingerprint(
+            current_token_sha256 or b"",
+            conn_scope.workspace_id or conn_scope.workspace_slug,
+            conn_scope.project_id or conn_scope.project_key,
+        )
+
         # Enforce session token binding: if session was bound to a token, token must match
         if (
             session.token_sha256 is not None
@@ -295,7 +342,14 @@ class McpProtocolHandler:
         ):
             return Response("Session bound to different token", status_code=404)
 
+        if (
+            session.scope_fingerprint is not None
+            and session.scope_fingerprint != current_fingerprint
+        ):
+            return Response("Session bound to different scope or expired", status_code=404)
+
         caller_scopes = getattr(request.state, "mcp_scopes", None)
+        auth_context = getattr(request.state, "mcp_auth", None)
 
         return await self._dispatch_method(
             method,
@@ -304,6 +358,8 @@ class McpProtocolHandler:
             session_id=session_id,
             subject_token=subject_token,
             caller_scopes=caller_scopes,
+            auth_context=auth_context,
+            connection_scope=conn_scope,
         )
 
     def _handle_delete_session(self, request: Request) -> Response:
@@ -316,6 +372,7 @@ class McpProtocolHandler:
         self, req_id: object, *, request: Request | None = None
     ) -> Response:
         token_sha256: bytes | None = None
+        conn_scope = None
         if request is not None:
             token_sha256 = getattr(request.state, "mcp_token_sha256", None)
             if token_sha256 is None:
@@ -330,7 +387,37 @@ class McpProtocolHandler:
                 if subject_token:
                     token_sha256 = hash_mcp_api_key(subject_token)
 
-        session = self.session_store.create_session(self.surface, token_sha256=token_sha256)
+            conn_scope = getattr(request.state, "connection_scope", None)
+            if conn_scope is None:
+                from mcp.scoping import parse_connection_scope  # noqa: PLC0415
+
+                try:
+                    conn_scope = parse_connection_scope(request.url.path, request.headers)
+                except KbMcpError as exc:
+                    return JSONResponse(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "error": {"code": -32602, "message": exc.message},
+                        },
+                        status_code=400,
+                    )
+
+        scope_fingerprint: bytes | None = None
+        if token_sha256 is not None and conn_scope is not None:
+            from mcp.scoping import compute_session_fingerprint  # noqa: PLC0415
+
+            scope_fingerprint = compute_session_fingerprint(
+                token_sha256,
+                conn_scope.workspace_id or conn_scope.workspace_slug,
+                conn_scope.project_id or conn_scope.project_key,
+            )
+
+        session = self.session_store.create_session(
+            self.surface,
+            token_sha256=token_sha256,
+            scope_fingerprint=scope_fingerprint,
+        )
         result: dict[str, Any] = {
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {
@@ -357,6 +444,8 @@ class McpProtocolHandler:
         session_id: str | None = None,
         subject_token: str | None = None,
         caller_scopes: frozenset[str] | None = None,
+        auth_context: McpAuthContext | None = None,
+        connection_scope: ConnectionScope | None = None,
     ) -> Response:
         # Notifications (no id)
         if req_id is None:
@@ -366,7 +455,9 @@ class McpProtocolHandler:
             return JSONResponse({"jsonrpc": "2.0", "id": req_id, "result": {}})
 
         if method == "tools/list":
-            return self._handle_tools_list(req_id, caller_scopes=caller_scopes)
+            return self._handle_tools_list(
+                req_id, caller_scopes=caller_scopes, auth_context=auth_context
+            )
 
         if method == "tools/call":
             return await self._handle_tools_call(
@@ -375,6 +466,8 @@ class McpProtocolHandler:
                 session_id=session_id,
                 subject_token=subject_token,
                 caller_scopes=caller_scopes,
+                auth_context=auth_context,
+                connection_scope=connection_scope,
             )
 
         # Unknown method
@@ -388,7 +481,11 @@ class McpProtocolHandler:
         )
 
     def _handle_tools_list(
-        self, req_id: object, *, caller_scopes: frozenset[str] | None = None
+        self,
+        req_id: object,
+        *,
+        caller_scopes: frozenset[str] | None = None,
+        auth_context: McpAuthContext | None = None,
     ) -> JSONResponse:
         specs = self.registry.list_specs()
         if caller_scopes is not None:
@@ -400,6 +497,9 @@ class McpProtocolHandler:
                     or SCOPE_REQUIREMENTS[s.name].issubset(caller_scopes)
                 )
             ]
+        if auth_context is not None and auth_context.token_kind == "ephemeral":  # noqa: S105
+            allowed = auth_context.allowed_tools or frozenset()
+            specs = [s for s in specs if s.name in allowed]
 
         tools_list: list[dict[str, Any]] = [
             {
@@ -447,7 +547,7 @@ class McpProtocolHandler:
             )
         return str(params["name"]), arguments
 
-    async def _handle_tools_call(  # noqa: C901, PLR0911
+    async def _handle_tools_call(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0915
         self,
         req_id: object,
         params: object,
@@ -455,6 +555,8 @@ class McpProtocolHandler:
         session_id: str | None = None,
         subject_token: str | None = None,
         caller_scopes: frozenset[str] | None = None,
+        auth_context: McpAuthContext | None = None,
+        connection_scope: ConnectionScope | None = None,
     ) -> JSONResponse:
         validated = self._validate_tools_call_params(req_id, params)
         if isinstance(validated, JSONResponse):
@@ -462,9 +564,27 @@ class McpProtocolHandler:
 
         tool_name, arguments = validated
 
+        # Enforce connection scope boundary constraints & auto-population
+        if connection_scope is not None:
+            from mcp.scoping import enforce_connection_scope_on_tool_call  # noqa: PLC0415
+
+            try:
+                enforce_connection_scope_on_tool_call(tool_name, arguments, connection_scope)
+            except KbMcpError as scope_violation_err:
+                return JSONResponse(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "result": {
+                            "content": [{"type": "text", "text": scope_violation_err.to_yaml()}],
+                            "isError": True,
+                        },
+                    }
+                )
+
         spec = self.registry.get(tool_name)
         if spec is None:
-            err = KbMcpError(
+            not_found_err = KbMcpError(
                 code=McpErrorCode.NOT_FOUND,
                 message=f"Tool '{tool_name}' not found on surface '{self.surface.value}'",
                 hint="Verify tool name or switch to appropriate MCP surface endpoint",
@@ -474,27 +594,139 @@ class McpProtocolHandler:
                     "jsonrpc": "2.0",
                     "id": req_id,
                     "result": {
-                        "content": [{"type": "text", "text": err.to_yaml()}],
+                        "content": [{"type": "text", "text": not_found_err.to_yaml()}],
                         "isError": True,
                     },
                 }
             )
 
-        # Check required scopes
         req_scopes = SCOPE_REQUIREMENTS.get(tool_name)
-        if (
+
+        # Ephemeral token allowlist and atomic call budget consumption
+        if auth_context is not None and auth_context.token_kind == "ephemeral":  # noqa: S105
+            allowed_tools = sorted(auth_context.allowed_tools or [])
+            if tool_name not in (auth_context.allowed_tools or frozenset()):
+                err = KbMcpError(
+                    code=McpErrorCode.EPHEMERAL_TOOL_FORBIDDEN,
+                    message=f"Tool '{tool_name}' is forbidden on ephemeral token",
+                    hint=(
+                        "Ephemeral tokens are strictly read-only and allow at most: "
+                        "search_tickets, read_ticket, search_knowledge, read_doc."
+                    ),
+                    allowed_tools=allowed_tools,
+                )
+                return JSONResponse(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "result": {
+                            "content": [{"type": "text", "text": err.to_yaml()}],
+                            "isError": True,
+                        },
+                    }
+                )
+
+            if self.internal_client is not None:
+                try:
+                    res_data = await self.internal_client.request(
+                        "POST",
+                        "/internal/v1/mcp/introspect",
+                        json_data={
+                            "token": auth_context.token,
+                            "surface": self.surface.value,
+                            "consume_call": True,
+                            "tool_name": tool_name,
+                        },
+                    )
+                except Exception:  # noqa: BLE001
+                    err = KbMcpError(
+                        code=McpErrorCode.UPSTREAM_UNAVAILABLE,
+                        message="Internal token consumption service unavailable",
+                    )
+                    return JSONResponse(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "result": {
+                                "content": [{"type": "text", "text": err.to_yaml()}],
+                                "isError": True,
+                            },
+                        }
+                    )
+
+                if not isinstance(res_data, dict) or not res_data.get("active"):
+                    reason = (
+                        res_data.get("reason")
+                        if isinstance(res_data, dict)
+                        else "TOKEN_EXPIRED_OR_REVOKED"
+                    )
+                    if reason == "EPHEMERAL_TOOL_FORBIDDEN":
+                        err = KbMcpError(
+                            code=McpErrorCode.EPHEMERAL_TOOL_FORBIDDEN,
+                            message=f"Tool '{tool_name}' is forbidden on ephemeral token",
+                            hint=(
+                                "Ephemeral tokens are strictly read-only and allow at most: "
+                                "search_tickets, read_ticket, search_knowledge, read_doc."
+                            ),
+                            allowed_tools=allowed_tools,
+                        )
+                    elif reason == "EPHEMERAL_CALL_BUDGET_EXCEEDED":
+                        max_c = (
+                            (res_data.get("max_calls") if isinstance(res_data, dict) else None)
+                            or auth_context.max_calls
+                            or 25
+                        )
+                        used_c = (
+                            res_data.get("calls_used") if isinstance(res_data, dict) else None
+                        ) or max_c
+                        err = KbMcpError(
+                            code=McpErrorCode.EPHEMERAL_CALL_BUDGET_EXCEEDED,
+                            message=f"Ephemeral call budget exceeded ({used_c}/{max_c} calls used)",
+                            hint=(
+                                "Gate execution reached max allowed calls. "
+                                "Transition gates must summarize inspection in <= 25 calls."
+                            ),
+                            budget={"max_calls": max_c, "calls_used": used_c},
+                        )
+                    elif reason == "TOKEN_EXPIRED_OR_REVOKED":
+                        err = KbMcpError(
+                            code=McpErrorCode.TOKEN_EXPIRED_OR_REVOKED,
+                            message=(
+                                "Ephemeral token has expired (TTL <= 120s) or execution was revoked"
+                            ),
+                            hint=(
+                                "Gate execution timed out or was canceled. "
+                                "Transition checks must complete within 120 seconds."
+                            ),
+                        )
+                    else:
+                        err = KbMcpError(
+                            code=McpErrorCode.UNAUTHENTICATED,
+                            message="Ephemeral token is invalid or inactive",
+                        )
+                    return JSONResponse(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "result": {
+                                "content": [{"type": "text", "text": err.to_yaml()}],
+                                "isError": True,
+                            },
+                        }
+                    )
+        elif (
             caller_scopes is not None
             and req_scopes is not None
             and not req_scopes.issubset(caller_scopes)
         ):
             msg = f"Caller lacks required scope(s) {sorted(req_scopes)} for tool '{tool_name}'"
-            err = KbMcpError(code=McpErrorCode.INSUFFICIENT_SCOPE, message=msg)
+            scope_err = KbMcpError(code=McpErrorCode.INSUFFICIENT_SCOPE, message=msg)
             return JSONResponse(
                 {
                     "jsonrpc": "2.0",
                     "id": req_id,
                     "result": {
-                        "content": [{"type": "text", "text": err.to_yaml()}],
+                        "content": [{"type": "text", "text": scope_err.to_yaml()}],
                         "isError": True,
                     },
                 }
@@ -510,15 +742,27 @@ class McpProtocolHandler:
                 subject_token=subject_token,
             )
 
+        ctx = McpRequestContext(
+            client=self.internal_client,
+            surface=self.registry.surface,
+            subject_token=subject_token,
+            session_id=session_id,
+            caller_scopes=caller_scopes,
+            connection_scope=connection_scope,
+        )
+        ctx_token = set_current_mcp_context(ctx)
         try:
-            # Invoke handler
-            handler = spec.handler
-            if inspect.iscoroutinefunction(handler):
-                res = await handler(arguments)
-            else:
-                res = handler(arguments)
-                if inspect.isawaitable(res):
-                    res = await res
+            try:
+                # Invoke handler
+                handler = spec.handler
+                if inspect.iscoroutinefunction(handler):
+                    res = await handler(arguments)
+                else:
+                    res = handler(arguments)
+                    if inspect.isawaitable(res):
+                        res = await res
+            finally:
+                reset_current_mcp_context(ctx_token)
 
             # Format result text as YAML
             if isinstance(res, str):

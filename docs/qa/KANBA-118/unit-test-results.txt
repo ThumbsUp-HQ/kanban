@@ -1,0 +1,24 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 21 items
+
+database/tests/migrations/test_p5_12_migration.py .                      [  4%]
+database/tests/test_custom_field_approvals_trigger.py ...                [ 19%]
+kanban/tests/custom_fields/test_approvals_matrix.py .........            [ 61%]
+kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/api/v1/custom_field_approvals.py      24      0      0      0   100%
+kanban/custom_fields/approvals.py           201      4     72      6    96%   329, 374->377, 386->388, 413->416, 437-438, 566
+-------------------------------------------------------------------------------------
+TOTAL                                       225      4     72      6    97%
+============================== 21 passed in 7.78s ==============================
+EXIT_CODE=0

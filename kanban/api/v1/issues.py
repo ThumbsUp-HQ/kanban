@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Query, Response
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession  # Required by FastAPI at runtime
 
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
@@ -45,16 +45,19 @@ async def create_issue(
     response_model=IssueResponse,
     summary="Get an issue by key or UUID",
 )
-async def get_issue(
+async def get_issue(  # noqa: PLR0913, PLR0917
     issue_key: str,
     caller: Caller,
     session: Session,
     response: Response,
+    request: Request,
+    workspace: Annotated[str | None, Query(description="Optional workspace slug or UUID")] = None,
     if_none_match: Annotated[str | None, Header()] = None,
 ) -> IssueResponse | Response:
     """Return an issue, or 304 when If-None-Match matches current description ETag."""
+    workspace_ref = workspace or request.headers.get("x-kb-scope-workspace")
     async with timing_floor(floor_ms=25.0):
-        issue = await svc.get_issue_or_404(session, caller, issue_key)
+        issue = await svc.get_issue_or_404(session, caller, issue_key, workspace_ref=workspace_ref)
         sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
         etag = f'"{sha256_hex}"'
 

@@ -15,7 +15,7 @@ import { Outlet } from 'react-router';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { CommandPalette, type CachedIssue } from './CommandPalette';
-import { ShellPanelsProvider } from './shellPanels';
+import { registerShellPanel, ShellPanelsProvider } from './shellPanels';
 import { registerShortcut } from './shortcuts';
 import { RealtimeStatus } from '../api/RealtimeStatus';
 import { type AccessManifestData } from './HeaderPills';
@@ -23,7 +23,11 @@ import { type SystemStatus } from './useSystemStatus';
 import { IssueSurface } from '../features/drawer/IssueSurface';
 import { IssueSurfaceSlotsContext } from '../features/drawer/slots';
 import { issueSurfaceSlots } from '../features/drawer/slotRegistry';
+import { AccessInspectorHost } from '../features/access/useAccessInspector';
+import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
 import './AppShell.css';
+
+registerShellPanel('standalone', StandaloneStatusPanel);
 
 export interface AppShellProps {
   children?: ReactNode;
@@ -128,6 +132,9 @@ export function AppShell({
 
         {/* Stable Semantic Emoji Hint Portal Anchor for KB-P3-31 */}
         <div id="kb-hint-root" />
+
+        {/* Global Effective Access Inspector Popover Host (KB-P3-49) */}
+        <AccessInspectorHost />
 
         {/* Non-blocking Realtime Network & SSE Status Chip */}
         <RealtimeStatus />

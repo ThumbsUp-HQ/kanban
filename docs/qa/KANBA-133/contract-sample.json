@@ -1,0 +1,109 @@
+{
+  "scenarios": [
+    {
+      "description": "Global unconstrained resolution of globally unique issue key across workspaces",
+      "request": {
+        "method": "GET",
+        "url": "/api/v1/resolve?kind=issue&ref=NETALERTXN-12",
+        "headers": {
+          "Authorization": "Bearer kb_agt_global_key"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "019323ef-0000-7000-8000-000000000012",
+          "kind": "issue",
+          "key": "NETALERTXN-12",
+          "title": "Network Interface Flap Detected",
+          "workspace": "ws-stage"
+        }
+      }
+    },
+    {
+      "description": "Global resolution of colliding key across workspaces returns HTTP 409 AMBIGUOUS_IDENTIFIER",
+      "request": {
+        "method": "GET",
+        "url": "/api/v1/resolve?kind=issue&ref=API-1",
+        "headers": {
+          "Authorization": "Bearer kb_agt_global_key"
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "content-type": "application/problem+json"
+        },
+        "body": {
+          "type": "https://errors.kanban.dev/ambiguous_identifier",
+          "title": "Ambiguous Identifier",
+          "status": 409,
+          "code": "AMBIGUOUS_IDENTIFIER",
+          "detail": "Reference 'API-1' matched multiple candidates for kind 'issue'",
+          "candidates": [
+            {
+              "key": "API-1",
+              "title": "Prod Database Connection Pool",
+              "workspace": "ws-prod"
+            },
+            {
+              "key": "API-1",
+              "title": "Staging Database Connection Pool",
+              "workspace": "ws-stage"
+            }
+          ],
+          "hint": "pass workspace=<slug> or connect via /mcp/agent/w/<slug>"
+        }
+      }
+    },
+    {
+      "description": "Disambiguated resolution using workspace query parameter returns single exact entity",
+      "request": {
+        "method": "GET",
+        "url": "/api/v1/resolve?kind=issue&ref=API-1&workspace=ws-prod",
+        "headers": {
+          "Authorization": "Bearer kb_agt_global_key"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "019323ef-0000-7000-8000-000000000001",
+          "kind": "issue",
+          "key": "API-1",
+          "title": "Prod Database Connection Pool",
+          "workspace": "ws-prod"
+        }
+      }
+    },
+    {
+      "description": "Workspace-scoped API key hard ceiling prevents cross-workspace resolution",
+      "request": {
+        "method": "GET",
+        "url": "/api/v1/resolve?kind=issue&ref=NETALERTXN-12",
+        "headers": {
+          "Authorization": "Bearer kb_agt_ws_prod_key"
+        }
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/problem+json"
+        },
+        "body": {
+          "type": "https://errors.kanban.dev/not_found",
+          "title": "Not Found",
+          "status": 404,
+          "code": "NOT_FOUND",
+          "detail": "Resource not found"
+        }
+      }
+    }
+  ]
+}

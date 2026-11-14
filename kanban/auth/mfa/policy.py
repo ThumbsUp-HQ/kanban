@@ -111,6 +111,15 @@ async def require_admin_aal2(
             ),
             {"p_id": principal.principal_id},
         )
+        admin_res = await db_session.execute(
+            text(
+                "SELECT 1 FROM role_bindings "
+                "WHERE principal_id = :p_id "
+                "  AND role IN ('SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN') "
+                "LIMIT 1"
+            ),
+            {"p_id": principal.principal_id},
+        )
         is_admin = admin_res.scalar_one_or_none() is not None
         if not is_admin:
             raise ProblemException(

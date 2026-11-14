@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import uuid  # noqa: TC003  # Required at runtime for dataclass field validation
+import uuid  # Required at runtime for dataclass field validation
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Literal, Protocol, cast
 
@@ -32,8 +32,12 @@ class PrincipalContext:
     aal_level: int = 1
     session_id: uuid.UUID | None = None
     agent_principal_id: uuid.UUID | None = None
+    ephemeral_project_id: uuid.UUID | None = None
+    read_only: bool = False
     mfa_pending: bool = False
     aal2_verified_at: datetime | None = None
+    scope_tier: str | None = None
+    scoped_project_id: uuid.UUID | None = None
 
     def __post_init__(self) -> None:
         """Enforce AAL level bounds."""
@@ -104,11 +108,22 @@ async def get_rls_session(
         msg = "RLS session factory is not configured on app.state.session_factory"
         raise RuntimeError(msg)
 
+    target_ws_id = principal.workspace_id
+    scope_ws = request.headers.get("x-kb-scope-workspace")
+    if scope_ws:
+        import contextlib  # noqa: PLC0415
+
+        with contextlib.suppress(ValueError):
+            target_ws_id = uuid.UUID(scope_ws)
+
     rls_ctx = RLSContext(
         principal_id=principal.principal_id,
-        workspace_id=principal.workspace_id,
+        workspace_id=target_ws_id,
         token_scopes=principal.token_scopes,
         aal_level=cast("Literal[1, 2]", principal.aal_level),
+        agent_principal_id=principal.agent_principal_id,
+        ephemeral_project_id=principal.ephemeral_project_id,
+        read_only=principal.read_only or (principal.ephemeral_project_id is not None),
     )
 
     async with session_factory.session(rls_ctx) as session:

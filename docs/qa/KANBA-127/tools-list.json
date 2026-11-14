@@ -1,0 +1,248 @@
+{
+  "tools": [
+    {
+      "name": "search_knowledge",
+      "description": "Permission-filtered hybrid search across Docs, Pages, and Stickies with heading-anchored snippets.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Lexical or semantic search query (1..500 chars)"
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "doc",
+                "page",
+                "sticky"
+              ]
+            },
+            "description": "Entity kinds to search (default: [doc, page, sticky])"
+          },
+          "project": {
+            "type": "string",
+            "description": "Optional project identifier or UUID scope filter"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "Max search hits to return (1..50, default 20)"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Opaque pagination cursor from previous search"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "read_doc",
+      "description": "Read a Doc, Page, or Sticky in canonical Markdown with progressive LOD disclosure.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "description": "Page path, doc key, doc/page/sticky UUID, or 'help'"
+          },
+          "lod": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "standard",
+              "full"
+            ],
+            "default": "standard",
+            "description": "Level of detail: summary, standard, or full"
+          }
+        },
+        "required": [
+          "identifier"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "upsert_doc",
+      "description": "Create or update hierarchical Docs/Pages in canonical Markdown with section patching.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "description": "Existing doc/page canonical key, path, or UUID to update; omit to create"
+          },
+          "parent": {
+            "type": "string",
+            "description": "Parent doc key or page path when creating a child page"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Document or page display title (1..200 characters)"
+          },
+          "body_markdown": {
+            "type": "string",
+            "description": "Canonical Markdown body content (<= 1,048,576 bytes)"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "replace",
+              "append",
+              "section_patch"
+            ],
+            "default": "replace",
+            "description": "Content update mode: replace, append, or section_patch"
+          },
+          "section_heading": {
+            "type": "string",
+            "description": "Case-sensitive target ATX heading required when mode=section_patch"
+          },
+          "if_match": {
+            "type": "string",
+            "description": "64-character hex SHA-256 ETag required for concurrency control on update"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "manage_stickies",
+      "description": "Manage Project Stickies: list, create, edit, recolor, and inspect promotion recommendation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "create",
+              "edit",
+              "recolor",
+              "help"
+            ],
+            "description": "Lifecycle action to perform"
+          },
+          "project": {
+            "type": "string",
+            "description": "Project key or UUID (required except for action='help')"
+          },
+          "sticky": {
+            "type": "string",
+            "description": "Sticky UUID for edit or recolor"
+          },
+          "body_markdown": {
+            "type": "string",
+            "description": "Markdown body content (<= 65,536 bytes)"
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "amber",
+              "mint",
+              "sky",
+              "lavender",
+              "coral",
+              "slate"
+            ],
+            "description": "Palette color token"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "promote_sticky_to_doc",
+      "description": "Atomically promote a complex Sticky into a permanent Doc, preserving ACLs and creating PROMOTED_TO_DOC link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sticky": {
+            "type": "string",
+            "description": "UUID of the sticky note to promote"
+          },
+          "parent": {
+            "type": "string",
+            "description": "Optional parent doc key, page path, or UUID to promote into as a page"
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional display title for the promoted document"
+          }
+        },
+        "required": [
+          "sticky"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "link_knowledge",
+      "description": "Connect Docs, Pages, or Stickies to Issues, Cycles, Modules, or Projects with typed object links.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Source doc key, page path, or sticky UUID"
+          },
+          "target": {
+            "type": "string",
+            "description": "Target issue key, cycle ref, module ref, or project key"
+          },
+          "target_kind": {
+            "type": "string",
+            "enum": [
+              "issue",
+              "cycle",
+              "module",
+              "project"
+            ],
+            "description": "Target entity kind"
+          },
+          "link_type": {
+            "type": "string",
+            "enum": [
+              "RELATES_TO",
+              "VERIFIED_BY_DOC",
+              "DERIVED_FROM_STICKY"
+            ],
+            "default": "RELATES_TO",
+            "description": "Typed link relationship kind"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove"
+            ],
+            "default": "add",
+            "description": "Action: add or remove the link"
+          }
+        },
+        "required": [
+          "source",
+          "target",
+          "target_kind"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

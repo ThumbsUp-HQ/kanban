@@ -11,12 +11,14 @@ import sys
 from typing import TYPE_CHECKING
 
 from kanban.cli.auth import register_auth_subparsers
+from kanban.cli.import_plane import register_import_subparsers
 from kanban.cli.jobs import register_jobs_subparsers
 from kanban.cli.ops import (
     FORBIDDEN_ARGV_MSG,
     check_forbidden_secret_args,
     register_ops_subparsers,
 )
+from kanban.cli.verify_cutover import register_cutover_subparsers
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -38,6 +40,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     register_ops_subparsers(subparsers)
     register_jobs_subparsers(subparsers)
     register_auth_subparsers(subparsers)
+    register_import_subparsers(subparsers)
+    register_cutover_subparsers(subparsers)
 
     try:
         args = parser.parse_args(raw_argv)

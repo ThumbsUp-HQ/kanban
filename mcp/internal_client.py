@@ -75,6 +75,7 @@ class KanbanApiClient:
             self._client = httpx.AsyncClient(
                 transport=active_transport,
                 base_url="http://kanban.local",
+                headers={"X-KB-Service-Principal": "mcp-gateway"},
                 timeout=timeout,
             )
         else:
@@ -101,6 +102,7 @@ class KanbanApiClient:
                     base_url=settings.kanban_api_base_url,
                     timeout=timeout,
                 )
+
             else:
                 self._client = httpx.AsyncClient(
                     http2=True,
@@ -109,6 +111,8 @@ class KanbanApiClient:
                     base_url=settings.kanban_api_base_url,
                     timeout=timeout,
                 )
+
+        self._csrf_token: str | None = None
 
     async def aclose(self) -> None:
         """Close the underlying HTTP client session and connections."""
@@ -128,7 +132,30 @@ class KanbanApiClient:
         """Async context manager exit."""
         await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
-    async def request(  # noqa: PLR0913
+    async def _ensure_csrf_token(
+        self, req_headers: dict[str, str], method: str, path: str = ""
+    ) -> None:
+        unsafe_methods = ("POST", "PUT", "PATCH", "DELETE")
+        if (
+            method.upper() not in unsafe_methods
+            or path.startswith("/internal/")
+            or "X-CSRF-Token" in req_headers
+        ):
+            return
+        if self._csrf_token is None:
+            try:
+                csrf_resp = await self._client.get("/api/v1/auth/session")
+                if csrf_resp.status_code == httpx.codes.OK:
+                    data = csrf_resp.json()
+                    if isinstance(data, dict) and "csrf_token" in data:
+                        self._csrf_token = str(data["csrf_token"])
+                        self._client.cookies.set("__Host-kb_csrf", self._csrf_token)
+            except (httpx.HTTPError, ValueError):
+                pass
+        if self._csrf_token:
+            req_headers["X-CSRF-Token"] = self._csrf_token
+
+    async def request(  # noqa: C901, PLR0912, PLR0913
         self,
         method: str,
         path: str,
@@ -145,6 +172,25 @@ class KanbanApiClient:
             req_headers["X-KB-Subject-Token"] = subject_token
         if mcp_session_id:
             req_headers["X-KB-MCP-Session"] = mcp_session_id
+
+        await self._ensure_csrf_token(req_headers, method, path)
+
+        # Forward resolved connection scope headers
+        from mcp.context import get_current_mcp_context  # noqa: PLC0415
+
+        ctx = get_current_mcp_context()
+        if ctx is not None and ctx.connection_scope is not None:
+            scope = ctx.connection_scope
+            if scope.workspace_slug or scope.workspace_id:
+                req_headers.setdefault(
+                    "X-KB-Scope-Workspace", str(scope.workspace_slug or scope.workspace_id)
+                )
+            if scope.project_key or scope.project_id:
+                req_headers.setdefault(
+                    "X-KB-Scope-Project", str(scope.project_key or scope.project_id)
+                )
+            if scope.is_global:
+                req_headers.setdefault("X-KB-Scope-Global", "true")
 
         try:
             req = self._client.build_request(
@@ -218,13 +264,30 @@ class KanbanApiClient:
             return McpErrorCode.CONFLICT_ETAG
         if prob_type.endswith("ambiguous-identifier") or prob_code == "AMBIGUOUS_IDENTIFIER":
             return McpErrorCode.AMBIGUOUS_IDENTIFIER
+        if prob_type.endswith("already-promoted") or prob_code == "ALREADY_PROMOTED":
+            return McpErrorCode.ALREADY_PROMOTED
+        if prob_type.endswith("link-type-not-allowed") or prob_code == "LINK_TYPE_NOT_ALLOWED":
+            return McpErrorCode.LINK_TYPE_NOT_ALLOWED
         return McpErrorCode.VALIDATION_FAILED
 
     @staticmethod
-    def _resolve_error_code(status_code: int, prob_type: str, prob_code: str = "") -> McpErrorCode:
+    def _resolve_error_code(status_code: int, prob_type: str, prob_code: str = "") -> McpErrorCode:  # noqa: PLR0911
         """Determine McpErrorCode from HTTP status and problem type."""
-        if prob_code == "MODULES_DISABLED" or prob_type.endswith("modules-disabled"):
+        if prob_code in (
+            "KEY_SCOPE_VIOLATION",
+            "CONNECTION_SCOPE_VIOLATION",
+            "CONFLICTING_SCOPE_HEADERS",
+            "MODULES_DISABLED",
+        ):
+            return McpErrorCode(prob_code)
+        if prob_type.endswith("modules-disabled"):
             return McpErrorCode.MODULES_DISABLED
+        if prob_code == "SECTION_NOT_FOUND" or prob_type.endswith("section-not-found"):
+            return McpErrorCode.SECTION_NOT_FOUND
+        if prob_code == "ALREADY_PROMOTED" or prob_type.endswith("already-promoted"):
+            return McpErrorCode.ALREADY_PROMOTED
+        if prob_code == "LINK_TYPE_NOT_ALLOWED" or prob_type.endswith("link-type-not-allowed"):
+            return McpErrorCode.LINK_TYPE_NOT_ALLOWED
 
         direct_map = {
             _HTTP_NOT_FOUND: McpErrorCode.NOT_FOUND,

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
@@ -64,13 +64,18 @@ async def search_issues(
     body: IssueSearchRequest,
     caller: Caller,
     session: Session,
+    request: Request,
 ) -> IssueSearchResponse:
     """Execute issue-scoped search composed with FilterSpec DSL predicates."""
+    ws_scope = body.workspace or request.headers.get("x-kb-scope-workspace")
+    effective_body = body
+    if ws_scope and not body.workspace:
+        effective_body = body.model_copy(update={"workspace": ws_scope})
     async with timing_floor(floor_ms=25.0):
         return await svc.search_issues(
             session=session,
             caller=caller,
-            request=body,
+            request=effective_body,
         )
 
 
