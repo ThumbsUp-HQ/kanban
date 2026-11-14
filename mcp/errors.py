@@ -41,6 +41,12 @@ class McpErrorCode(StrEnum):
     LOCKOUT_PREVENTED = "LOCKOUT_PREVENTED"
     CONFIRM_PHRASE_MISMATCH = "CONFIRM_PHRASE_MISMATCH"
     AAL2_REQUIRED = "AAL2_REQUIRED"
+    CONFIRMATION_TOKEN_INVALID_OR_EXPIRED = "CONFIRMATION_TOKEN_INVALID_OR_EXPIRED"
+    TOKEN_CALLER_MISMATCH = "TOKEN_CALLER_MISMATCH"
+    TOKEN_TARGET_MISMATCH = "TOKEN_TARGET_MISMATCH"
+    BLAST_RADIUS_CHANGED = "BLAST_RADIUS_CHANGED"
+    SOFT_TRASH_REQUIRED_FIRST = "SOFT_TRASH_REQUIRED_FIRST"
+    SERVER_ADMIN_REQUIRED = "SERVER_ADMIN_REQUIRED"
 
 
 class KbMcpError(Exception):
@@ -84,4 +90,6 @@ class KbMcpError(Exception):
             payload["hint"] = self.hint
         if self.candidates:
             payload["candidates"] = self.candidates
-        return dump_yaml({"error": payload}, strip_nulls=True)
+        if self.extra:
+            payload.update(self.extra)
+        return dump_yaml(payload)

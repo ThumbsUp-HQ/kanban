@@ -79,6 +79,7 @@ SCOPE_REQUIREMENTS: Final[dict[str, frozenset[str]]] = {
     "audit_links": frozenset({"admin:read"}),
     "override_ticket_provenance": frozenset({"admin:write"}),
     "audit_and_purge_object_links": frozenset({"admin:destructive"}),
+    "destructive_lifecycle": frozenset({"admin:destructive"}),
     "test_admin_destructive": frozenset({"admin:destructive"}),
 }
 
