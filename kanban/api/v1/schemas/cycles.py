@@ -64,6 +64,25 @@ class CycleComplete(BaseModel):
     rollover_to_cycle_id: uuid.UUID | None = None
 
 
+class CycleRolloverRequest(BaseModel):
+    """Payload to rollover unfinished issues to a target cycle without completing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_cycle_id: uuid.UUID
+
+
+class CycleRolloverResponse(BaseModel):
+    """Response returned upon successful issue rollover."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = "rolled_over"
+    from_cycle: str
+    to_cycle: str
+    moved: int
+
+
 class CycleResponse(BaseModel):
     """Public representation of a cycle with real-time aggregate issue counts."""
 

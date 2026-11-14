@@ -277,6 +277,11 @@ class KanbanApiClient:
             "CREATOR_UNCHANGED": McpErrorCode.CREATOR_UNCHANGED,
             "NOT_ARCHIVED": McpErrorCode.NOT_ARCHIVED,
             "LOCKOUT_PREVENTED": McpErrorCode.LOCKOUT_PREVENTED,
+            "PLAN_STALE": McpErrorCode.PLAN_STALE,
+            "STATE_IN_USE": McpErrorCode.STATE_IN_USE,
+            "PRIORITY_IN_USE": McpErrorCode.PRIORITY_IN_USE,
+            "INVALID_TRANSITION": McpErrorCode.INVALID_TRANSITION,
+            "INVALID_CYCLE_TRANSITION": McpErrorCode.INVALID_TRANSITION,
         }
         if prob_code in conflict_map:
             return conflict_map[prob_code]

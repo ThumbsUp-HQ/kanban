@@ -1,0 +1,196 @@
+{
+  "plan": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/admin/projects/blueprint:plan",
+      "body": {
+        "blueprint": {
+          "identifier": "ENG",
+          "name": "Engineering Operations",
+          "description_markdown": "Primary project for software development workflows.",
+          "states": [
+            {"name": "Backlog", "group": "backlog", "color": "#94A3B8"},
+            {"name": "Todo", "group": "unstarted", "color": "#64748B"},
+            {"name": "In Progress", "group": "started", "color": "#3B82F6", "wip_soft_limit": 5, "wip_hard_limit": 8},
+            {"name": "In Review", "group": "started", "color": "#8B5CF6", "wip_soft_limit": 3, "wip_hard_limit": 5},
+            {"name": "Done", "group": "completed", "color": "#10B981"},
+            {"name": "Cancelled", "group": "cancelled", "color": "#EF4444"}
+          ],
+          "priorities": [
+            {"name": "Urgent", "emoji": "🔥", "color": "#DC2626"},
+            {"name": "High", "emoji": "⚡", "color": "#F97316"},
+            {"name": "Medium", "emoji": "🔹", "color": "#EAB308"},
+            {"name": "Low", "emoji": "💤", "color": "#22C55E"}
+          ],
+          "labels": [
+            {"name": "frontend", "color": "#3B82F6", "exclusive_group": "tier"},
+            {"name": "backend", "color": "#10B981", "exclusive_group": "tier"},
+            {"name": "infra", "color": "#F59E0B", "exclusive_group": "tier"}
+          ],
+          "modules_enabled": true,
+          "modules": [
+            {"name": "Core"},
+            {"name": "Billing"},
+            {"name": "Auth"}
+          ],
+          "default_modules": ["Core"],
+          "auto_archive_days": 30,
+          "wip_limits": {
+            "In Progress": {"soft": 5, "hard": 8},
+            "In Review": {"soft": 3, "hard": 5}
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "project": "ENG",
+        "plan_sha256": "8a09f872166de84d142ceec1a6b0cfa319806a147cebe8bb7578ec09be4d36eb",
+        "changes": {
+          "project": {
+            "create": true,
+            "identifier": "ENG",
+            "name": "Engineering Operations"
+          },
+          "states": {
+            "create": ["Backlog", "Todo", "In Progress", "In Review", "Done", "Cancelled"]
+          },
+          "priorities": {
+            "create": ["Urgent", "High", "Medium", "Low"]
+          },
+          "labels": {
+            "create": ["frontend", "backend", "infra"]
+          },
+          "modules_enabled": {
+            "from": false,
+            "to": true
+          },
+          "modules": {
+            "create": ["Core", "Billing", "Auth"]
+          },
+          "default_modules": {
+            "create": ["Core"]
+          },
+          "auto_archive_days": {
+            "from": null,
+            "to": 30
+          },
+          "wip_limits": {
+            "create": {
+              "In Progress": {"soft": 5, "hard": 8},
+              "In Review": {"soft": 3, "hard": 5}
+            }
+          }
+        }
+      }
+    }
+  },
+  "apply": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/admin/projects/blueprint:apply",
+      "body": {
+        "blueprint": {
+          "identifier": "ENG",
+          "name": "Engineering Operations",
+          "description_markdown": "Primary project for software development workflows.",
+          "states": [
+            {"name": "Backlog", "group": "backlog", "color": "#94A3B8"},
+            {"name": "Todo", "group": "unstarted", "color": "#64748B"},
+            {"name": "In Progress", "group": "started", "color": "#3B82F6", "wip_soft_limit": 5, "wip_hard_limit": 8},
+            {"name": "In Review", "group": "started", "color": "#8B5CF6", "wip_soft_limit": 3, "wip_hard_limit": 5},
+            {"name": "Done", "group": "completed", "color": "#10B981"},
+            {"name": "Cancelled", "group": "cancelled", "color": "#EF4444"}
+          ],
+          "priorities": [
+            {"name": "Urgent", "emoji": "🔥", "color": "#DC2626"},
+            {"name": "High", "emoji": "⚡", "color": "#F97316"},
+            {"name": "Medium", "emoji": "🔹", "color": "#EAB308"},
+            {"name": "Low", "emoji": "💤", "color": "#22C55E"}
+          ],
+          "labels": [
+            {"name": "frontend", "color": "#3B82F6", "exclusive_group": "tier"},
+            {"name": "backend", "color": "#10B981", "exclusive_group": "tier"},
+            {"name": "infra", "color": "#F59E0B", "exclusive_group": "tier"}
+          ],
+          "modules_enabled": true,
+          "modules": [
+            {"name": "Core"},
+            {"name": "Billing"},
+            {"name": "Auth"}
+          ],
+          "default_modules": ["Core"],
+          "auto_archive_days": 30,
+          "wip_limits": {
+            "In Progress": {"soft": 5, "hard": 8},
+            "In Review": {"soft": 3, "hard": 5}
+          }
+        },
+        "plan_sha256": "8a09f872166de84d142ceec1a6b0cfa319806a147cebe8bb7578ec09be4d36eb"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "status": "applied",
+        "project": "ENG",
+        "plan_sha256": "8a09f872166de84d142ceec1a6b0cfa319806a147cebe8bb7578ec09be4d36eb",
+        "applied_changes": {
+          "project": {
+            "create": true,
+            "identifier": "ENG",
+            "name": "Engineering Operations"
+          },
+          "states": {
+            "create": ["Backlog", "Todo", "In Progress", "In Review", "Done", "Cancelled"]
+          },
+          "priorities": {
+            "create": ["Urgent", "High", "Medium", "Low"]
+          },
+          "labels": {
+            "create": ["frontend", "backend", "infra"]
+          },
+          "modules_enabled": {
+            "from": false,
+            "to": true
+          },
+          "modules": {
+            "create": ["Core", "Billing", "Auth"]
+          },
+          "default_modules": {
+            "create": ["Core"]
+          },
+          "auto_archive_days": {
+            "from": null,
+            "to": 30
+          },
+          "wip_limits": {
+            "create": {
+              "In Progress": {"soft": 5, "hard": 8},
+              "In Review": {"soft": 3, "hard": 5}
+            }
+          }
+        }
+      }
+    }
+  },
+  "rollover": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/cycles/01932371-d41c-7e61-a8bb-e2b250325d7b/rollover",
+      "body": {
+        "target_cycle_id": "01932371-e56d-7521-bcf3-a7a2a4b8686f"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "status": "rolled_over",
+        "from_cycle": "Cycle 1",
+        "to_cycle": "Cycle 2",
+        "moved_issues_count": 4
+      }
+    }
+  }
+}

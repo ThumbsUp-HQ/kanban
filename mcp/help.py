@@ -37,6 +37,20 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
         ),
         "card": "slug | uuid",
     },
+    "architect_project": {
+        "action": "get | plan | apply | help",
+        "project": "str",
+        "blueprint": "object",
+        "plan_sha256": "str",
+    },
+    "manage_cycles_and_modules": {
+        "action": (
+            "list_cycles | create_cycle | update_cycle | start_cycle | "
+            "complete_cycle | rollover | list_modules | create_module | "
+            "update_module | list_views | create_view | update_view | help"
+        ),
+        "project": "str",
+    },
 }
 
 
