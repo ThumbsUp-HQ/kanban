@@ -373,4 +373,6 @@ async def move_issue(
         board_rank=new_rank,
         rebalance_scheduled=rebalance_scheduled,
         wip_warning=wip_warning,
+        hard_limit=target_state.wip_hard_limit if wip_overridden else None,
+        resulting_count=resulting_count if (wip_overridden or wip_warning) else None,
     )

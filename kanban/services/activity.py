@@ -175,6 +175,8 @@ class ActivityEventType(StrEnum):
     CUSTOM_FIELD_APPROVAL_REVOKED = "CUSTOM_FIELD_APPROVAL_REVOKED"
     STANDALONE_BACKUP_EXPORTED = "STANDALONE_BACKUP_EXPORTED"
     PLANE_IMPORT_COMPLETED = "PLANE_IMPORT_COMPLETED"
+    WORKSPACE_SETTINGS_CHANGED = "WORKSPACE_SETTINGS_CHANGED"
+    AIR_GAP_MODE_CHANGED = "AIR_GAP_MODE_CHANGED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -295,6 +297,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.CUSTOM_FIELD_APPROVED_PRIMARY: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVAL_REVOKED: ActivityCategory.HISTORY,
+        ActivityEventType.WORKSPACE_SETTINGS_CHANGED: ActivityCategory.SYSTEM,
+        ActivityEventType.AIR_GAP_MODE_CHANGED: ActivityCategory.SYSTEM,
     }
 )
 

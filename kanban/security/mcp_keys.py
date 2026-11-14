@@ -257,12 +257,19 @@ async def mint_mcp_api_key(  # noqa: PLR0913
             expires_at if expires_at.tzinfo is not None else expires_at.replace(tzinfo=UTC)
         )
 
-    if effective_expires <= now or effective_expires > (now + timedelta(days=MAX_KEY_TTL_DAYS)):
+    stmt_ttl = text(
+        "SELECT mcp_key_max_ttl_days FROM workspace_settings WHERE workspace_id = :ws_id"
+    )
+    max_ttl_days = (
+        await session.execute(stmt_ttl, {"ws_id": workspace_id})
+    ).scalar_one_or_none() or MAX_KEY_TTL_DAYS
+
+    if effective_expires <= now or effective_expires > (now + timedelta(days=max_ttl_days)):
         raise ProblemException(
             code="INVALID_EXPIRATION",
             status=422,
             title="Invalid Expiration",
-            detail=f"Key expiration must be in the future and within {MAX_KEY_TTL_DAYS} days.",
+            detail=f"Key expiration must be in the future and within {max_ttl_days} days.",
         )
 
     # Validate target principal

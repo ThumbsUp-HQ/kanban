@@ -1,0 +1,312 @@
+{
+  "ticket": "KANBA-138",
+  "exchanges": [
+    {
+      "name": "admin_link_auditor_aal2_required_403",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/object-links:audit",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "x-request-id": "09db1452b662436b85c0558f466f6607",
+          "content-length": "243",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:AAL2_REQUIRED",
+          "title": "AAL2 Authentication Required",
+          "status": 403,
+          "code": "AAL2_REQUIRED",
+          "detail": "Administrative routes require multi-factor authentication (AAL2).",
+          "request_id": "09db1452b662436b85c0558f466f6607"
+        }
+      }
+    },
+    {
+      "name": "admin_link_auditor_insufficient_capability_403",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/object-links:audit",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "x-request-id": "d627a0025a584c0eb39fec8aae681e6f",
+          "content-length": "249",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:INSUFFICIENT_CAPABILITY",
+          "title": "Insufficient Capability",
+          "status": 403,
+          "code": "INSUFFICIENT_CAPABILITY",
+          "detail": "Operation requires WORKSPACE_ADMIN or SERVER_ADMIN role.",
+          "request_id": "d627a0025a584c0eb39fec8aae681e6f"
+        }
+      }
+    },
+    {
+      "name": "admin_link_auditor_scan_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/object-links:audit",
+        "headers": {
+          "host": "test",
+          "content-length": "0",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "63",
+          "content-type": "application/json",
+          "x-request-id": "d64f49aabbbd4a499f4c15a5bff7e7de",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "flagged_total": 1,
+          "by_reason": {
+            "ARCHIVED_POLICY_VIOLATION": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "admin_link_auditor_list_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/admin/object-links/audits?limit=10",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1681",
+          "content-type": "application/json",
+          "x-request-id": "87dc27429d384b2bb3fd54b604e1628c",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "items": [
+            {
+              "id": "01a1d83c-8a1d-7bc9-ac86-94cc5bb9eb34",
+              "workspace_id": "01a1d83c-8a06-7df0-8b99-c11847e582e2",
+              "link_id": "01a1d83c-8a1a-7c0c-a533-ac4333c85bf6",
+              "reason": "ARCHIVED_POLICY_VIOLATION",
+              "detected_at": "2026-11-14T04:06:48.605074Z",
+              "purged_at": null,
+              "resolved_at": null,
+              "link_snapshot": {
+                "id": "01a1d83c-8a1a-7c0c-a533-ac4333c85bf6",
+                "link_type": "BLOCKS",
+                "source_id": "01a1d83c-8a16-7b1b-aee5-8d2a5ef34f42",
+                "target_id": "01a1d83c-8a19-7828-9c2c-052da80c218c",
+                "created_at": "2026-11-14T04:06:48.603+00:00",
+                "link_state": "ACTIVE",
+                "source_type": "issue",
+                "target_type": "issue",
+                "workspace_id": "01a1d83c-8a06-7df0-8b99-c11847e582e2",
+                "created_by_id": "01a1d83c-8a0b-7679-8b24-039db4c16f45",
+                "source_key_snapshot": "PRJ-1",
+                "target_key_snapshot": "PRJ-2"
+              },
+              "source_snapshot": {
+                "id": "01a1d83c-8a16-7b1b-aee5-8d2a5ef34f42",
+                "created_at": "2026-11-14T04:06:48.598747+00:00",
+                "deleted_at": null,
+                "project_id": "01a1d83c-8a13-7e70-a177-100edc93b89f",
+                "updated_at": "2026-11-14T04:06:48.604913+00:00",
+                "archived_at": "2026-11-14T04:06:48.604778+00:00",
+                "object_type": "issue",
+                "workspace_id": "01a1d83c-8a06-7df0-8b99-c11847e582e2",
+                "canonical_key": "PRJ-1",
+                "created_by_id": "01a1d83c-8a0b-7679-8b24-039db4c16f45",
+                "display_title": "Issue 1"
+              },
+              "target_snapshot": {
+                "id": "01a1d83c-8a19-7828-9c2c-052da80c218c",
+                "created_at": "2026-11-14T04:06:48.601534+00:00",
+                "deleted_at": null,
+                "project_id": "01a1d83c-8a13-7e70-a177-100edc93b89f",
+                "updated_at": "2026-11-14T04:06:48.601534+00:00",
+                "archived_at": null,
+                "object_type": "issue",
+                "workspace_id": "01a1d83c-8a06-7df0-8b99-c11847e582e2",
+                "canonical_key": "PRJ-2",
+                "created_by_id": "01a1d83c-8a0b-7679-8b24-039db4c16f45",
+                "display_title": "Issue 2"
+              }
+            }
+          ],
+          "next_cursor": null,
+          "has_more": false,
+          "total": null
+        }
+      }
+    },
+    {
+      "name": "admin_link_auditor_conflict_409",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/object-links:purge",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "102",
+          "content-type": "application/json"
+        },
+        "body": {
+          "audit_ids": [
+            "c87ea1be-b97f-495c-821c-410a2d9030e8"
+          ],
+          "reason": "Purge non-existent link audit record"
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "x-request-id": "2cad61bcbb3a44b5afbe07f1ec58d323",
+          "content-length": "243",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:LINK_NOT_FLAGGED",
+          "title": "Link Not Flagged",
+          "status": 409,
+          "code": "LINK_NOT_FLAGGED",
+          "detail": "One or more audit IDs are not flagged as invalid or are already purged.",
+          "request_id": "2cad61bcbb3a44b5afbe07f1ec58d323"
+        }
+      }
+    },
+    {
+      "name": "admin_link_auditor_purge_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/object-links:purge",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "121",
+          "content-type": "application/json"
+        },
+        "body": {
+          "audit_ids": [
+            "01a1d83c-8d0b-791a-a70c-e7b252fe69c0"
+          ],
+          "reason": "Administrative remediation of archived policy violation"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "74",
+          "content-type": "application/json",
+          "x-request-id": "b3fd2bfec3fb4744b5254d51da077a2c",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "purged_count": 1,
+          "activity_ids": [
+            "01a1d83c-8e29-75dc-8fd4-9bb5faabf563"
+          ]
+        }
+      }
+    }
+  ]
+}

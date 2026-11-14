@@ -76,10 +76,9 @@ SCOPE_REQUIREMENTS: Final[dict[str, frozenset[str]]] = {
     "promote_sticky_to_doc": frozenset({"docs:write"}),
     "link_knowledge": frozenset({"docs:write"}),
     # Admin surface tools
-    "ping_admin": frozenset({"admin:read"}),
     "audit_links": frozenset({"admin:read"}),
     "override_ticket_provenance": frozenset({"admin:write"}),
-    "audit_and_purge_object_links": frozenset({"admin:destructive"}),
+    "audit_and_purge_object_links": frozenset({"admin:read"}),
     "test_admin_destructive": frozenset({"admin:destructive"}),
 }
 
@@ -114,6 +113,7 @@ class McpAuthContext:
     workspace_slug: str | None = None
     scope_tier: str | None = None
     allowed_projects: list[str] | None = None
+    aal_level: int = 2
 
 
 class IntrospectionCache:
@@ -389,6 +389,7 @@ class McpAuthMiddleware:
             if isinstance(allowed_projects_raw, list)
             else None
         )
+        aal = int(intro_result.get("aal_level", 2))
         auth_context = McpAuthContext(
             token=token,
             token_sha256=digest,
@@ -406,6 +407,7 @@ class McpAuthMiddleware:
             workspace_slug=intro_result.get("workspace_slug"),
             scope_tier=intro_result.get("scope_tier"),
             allowed_projects=allowed_projects,
+            aal_level=aal,
         )
 
         try:

@@ -1,0 +1,38 @@
+{
+  "id": "page-auth-studio",
+  "canonical_key": "docs/architecture/auth-studio",
+  "doc_id": "01a1ceb1-0000-0000-0000-000000000001",
+  "parent_page_id": "page-arch-root",
+  "workspace_id": "01a1ceb1-0000-0000-0000-000000000002",
+  "title": "Auth Studio",
+  "body_markdown": "# Overview\n\nAuth Studio specification.\n\n## PKCE S256\n\nEnforce S256 PKCE on all OAuth2 cards.\n\n```bash\n# comment inside code fence\ncurl -X POST https://auth.example.com/oauth/token\n```\n\n### State TTL\n\nState parameters expire in 300s.\n",
+  "body_sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0",
+  "hierarchy_path": "docs.architecture.auth_studio",
+  "version_seq": 7,
+  "sort_rank": "0|hzzzzz:0|hzzzzz:",
+  "breadcrumbs": [
+    { "id": "doc-root", "title": "Docs", "slug": "docs", "canonical_key": "docs", "restricted": false },
+    { "id": "page-arch-root", "title": "Architecture", "slug": "architecture", "canonical_key": "docs/architecture", "restricted": false },
+    { "id": "page-auth-studio", "title": "Auth Studio", "slug": "auth-studio", "canonical_key": "docs/architecture/auth-studio", "restricted": false }
+  ],
+  "outline": [
+    { "level": 1, "text": "Overview", "anchor": "overview", "start_line": 1 },
+    { "level": 2, "text": "PKCE S256", "anchor": "pkce-s256", "start_line": 5 },
+    { "level": 3, "text": "State TTL", "anchor": "state-ttl", "start_line": 13 }
+  ],
+  "access_manifest": {
+    "users": ["adam"],
+    "roles": ["ADMIN"],
+    "inherited": true
+  },
+  "capabilities": ["VIEW", "EDIT", "DELETE"],
+  "object_links": [
+    {
+      "source_id": "issue-kan-142",
+      "target_id": "page-auth-studio",
+      "link_type": "RELATES_TO",
+      "target_key": "KAN-142",
+      "target_title": "Implement PKCE S256"
+    }
+  ]
+}

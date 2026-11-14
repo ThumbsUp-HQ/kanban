@@ -274,5 +274,38 @@ uv run kanban-agent validate-sparkle \
    - `1`: Infrastructure runtime error (`DATABASE_UNREACHABLE`, `PROVIDER_UNAVAILABLE`).
    - `2`: Schema/policy refusal (`CURSOR_MARKER_INVALID`, `RLS_BYPASS_ROLE_REFUSED`, `PRINCIPAL_NOT_FOUND`, `PROJECT_NOT_FOUND`, `SECRET_SCRUBBED`, `TTFT_TIMEOUT`, `LATENCY_SLA_BREACH`, output filter drops).
 
+## Token Budget Enforcer (`agent.budget`, KB-P5-05a, S10.2)
+
+The `BudgetEnforcer` provides atomic LLM token allocation and settlement protocols across daily and monthly period caps stored in `ai_token_ledgers`:
+
+- Atomic Reserve/Settle Protocol:
+  - `reserve(workspace_id, project_id, provider_config_id, estimate_tokens)` executes atomic single-statement updates against active period windows (`daily` and `monthly`). If any active cap is exhausted, the reservation rolls back immediately and raises `BudgetExceeded(code="AI_BUDGET_EXCEEDED", period="daily"|"monthly")`.
+  - Missing ledger rows for a period explicitly indicate unconstrained budget for that period.
+  - `settle(reservation, actual_tokens)` moves `min(actual, estimate)` tokens from reserved to used and clears remaining reservations. Post-hoc overages (`actual > estimate`) record full token usage without blocking and log `AI_BUDGET_OVERAGE`.
+  - `release(reservation)` restores all reserved tokens to zero on upstream provider failures or timeouts.
+- Concurrency Invariant:
+  - Atomic single-statement updates serialized at the PostgreSQL row level guarantee that under high concurrent contention (e.g. 50 parallel requests), no burst of agent calls can exceed a configured cap.
+- Time Boundaries:
+  - Period starts are computed strictly in UTC (`daily` at `YYYY-MM-DD`, `monthly` at `YYYY-MM-01`).
+
+## Sticky to Doc AI Structuring (`agent.sticky_promo`, KB-P5-26, S8.2)
+
+The `agent.sticky_promo` module implements read-only AI proposal generation and preview contracts for promoting rough scratchpad stickies into structured specification documents:
+
+- Structured Proposal Schema (`agent.sticky_promo.schemas`):
+  - `StickyDocProposal`: Strict schema adhering to `kb-sticky-doc-proposal/v1` with `proposed_title` (1..140 single-line chars), `summary_markdown` (1..4096 chars), `sections` (1..20 `DocSection` objects with heading, level 2..3, body_markdown), and optional single-line `extracted_action_items` (each 1..280 chars).
+  - `render_canonical_doc_markdown`: Assembles `# Title`, summary blockquote, `##`/`###` sections, and `## Open Action Items` checklist, normalized via KB-P2-13 canonical markdown normalizer.
+- 4-Step Pipeline (`agent.sticky_promo.structurer`):
+  1. Size and format guard: Rejects inputs exceeding 131,072 bytes with `StickyTooLargeError` (`STICKY_TOO_LARGE`).
+  2. Secret scrubbing first: Redacts credential patterns using `scrub_text` before prompt assembly.
+  3. Spotlight boundary isolation: Wraps untrusted sticky markdown within cryptographically random delimiter tokens (`<<<UNTRUSTED_STICKY_DATA_<token>>>>`) with system instructions to ignore prompt-injection payloads.
+  4. Routing and budget reservation: Reserves tokens via `BudgetEnforcer`, enforces `--air-gap` egress checks, and dispatches structured generation request.
+  5. Lossless fenced block verification: Extracts all fenced code/diagram blocks (Mermaid, code snippets) from input. If omitted or modified by LLM, appends verbatim fallback blocks and records `FENCED_BLOCK_MODIFIED` warning (or raises `FencedBlockModifiedError` if strict).
+- CLI Verification Subcommand (`kanban-agent validate-sticky-promo`):
+  - Emits standard 4-section report with deterministic exit codes (`0` ok, `1` runtime error, `2` policy/schema violation).
+  - Audits optional `--acl-fixture` for verbatim ACL preservation.
+
+
+
 
 

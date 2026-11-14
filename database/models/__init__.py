@@ -2,6 +2,7 @@
 
 from database.models.activity import ActivityChainHead, ActivityRecord
 from database.models.agent_definition import AgentDefinition
+from database.models.ai import AIProviderConfig, AITokenLedger
 from database.models.attachments import Attachment
 from database.models.auth import (
     AuthProviderCard,
@@ -79,8 +80,11 @@ from database.models.spine import (
     ObjectRecord,
     Workspace,
 )
+from database.models.workspace_settings import WorkspaceSettings
 
 __all__ = [
+    "AIProviderConfig",
+    "AITokenLedger",
     "ActivityChainHead",
     "ActivityRecord",
     "AgentDefinition",
@@ -151,4 +155,5 @@ __all__ = [
     "WebauthnCredential",
     "WorkflowState",
     "Workspace",
+    "WorkspaceSettings",
 ]

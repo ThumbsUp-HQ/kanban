@@ -13,6 +13,7 @@ export const qk = {
     ['activity', issueKey, tab] as const,
   access: (objectId: string) => ['access', objectId] as const,
   authCards: () => ['auth', 'cards'] as const,
+  adminAuthCards: () => ['admin', 'auth', 'cards'] as const,
   docsTree: (projectKey: string) => ['docs', 'tree', projectKey] as const,
   page: (pageId: string) => ['docs', 'page', pageId] as const,
   stickies: (projectKey: string) => ['stickies', projectKey] as const,

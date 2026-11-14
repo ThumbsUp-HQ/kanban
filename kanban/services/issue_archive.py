@@ -12,7 +12,7 @@ from database.models import Issue as IssueModel
 from database.models import ObjectRecord, Project, WorkflowState
 from kanban.api.problems import ProblemException, not_found
 from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
-from kanban.services.activity import ActivityEventType, record_activity
+from kanban.services.activity import ActivityEventType, JSONValue, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
 from kanban.services.issues import serialize_issue
 
@@ -123,6 +123,9 @@ async def unarchive_issue(
     session: AsyncSession,
     caller: PrincipalContext,
     issue_ref: str,
+    *,
+    reason: str | None = None,
+    admin_override: bool = False,
 ) -> IssueResponse:
     """Unarchive an issue.
 
@@ -148,13 +151,19 @@ async def unarchive_issue(
     obj.archived_at = None
     await session.flush()
 
+    payload: dict[str, JSONValue] = {}
+    if reason is not None:
+        payload["reason"] = reason
+    if admin_override:
+        payload["admin_override"] = True
+
     await record_activity(
         session=session,
         workspace_id=issue.workspace_id,
         object_id=issue.id,
         actor_principal_id=caller.principal_id,
         event_type=ActivityEventType.ISSUE_UNARCHIVED,
-        payload={},
+        payload=payload,
     )
 
     return await serialize_issue(session, caller, issue)
