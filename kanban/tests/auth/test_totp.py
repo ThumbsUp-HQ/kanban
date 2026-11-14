@@ -146,6 +146,19 @@ async def _setup_test_admin(
     ctx = RLSContext(principal_id=p_id, workspace_id=ws_id, aal_level=2)
 
     async with factory.session(ctx) as session:
+        # Clean up any leftover LOCAL_ADMIN cards from previous test cases:
+        await session.execute(
+            text(
+                "UPDATE principals SET status = 'DISABLED' WHERE id IN ("
+                "  SELECT principal_id FROM role_bindings WHERE role = 'SERVER_ADMIN'"
+                ")"
+            )
+        )
+        await session.execute(
+            text("DELETE FROM auth_provider_cards WHERE provider_kind = 'LOCAL_ADMIN'")
+        )
+        await session.execute(text("DELETE FROM local_admin_credentials"))
+
         await session.execute(
             text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
             {"id": ws_id, "slug": f"ws-{ws_id.hex[:10]}", "name": "TOTP Admin WS"},
@@ -178,9 +191,6 @@ async def _setup_test_admin(
                 "VALUES (:id, :ws_id, :p_id, 'SERVER_ADMIN', 'server', NULL)"
             ),
             {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": p_id},
-        )
-        await session.execute(
-            text("DELETE FROM auth_provider_cards WHERE provider_kind = 'LOCAL_ADMIN'")
         )
         await admin_upsert(
             session,

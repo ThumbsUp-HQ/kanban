@@ -29,6 +29,7 @@ from kanban.api.sse import handle_sse_endpoint
 from kanban.api.v1 import build_v1_router
 from kanban.api.v1.oauth import OAuth2Error, oauth_root_router
 from kanban.api.ws import handle_ws_connection
+from kanban.auth.identity_service import DatabaseIdentityResolver
 from kanban.auth.sessions.csrf import CsrfMiddleware
 from kanban.auth.setup import mint_setup_token_if_uninitialized
 from kanban.jobs import JobScheduler
@@ -101,6 +102,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Initialize default state dependencies
     app.state.settings = settings
     app.state.principal_resolver = DenyAllResolver()
+    app.state.identity_resolver = DatabaseIdentityResolver()
     app.state.session_factory = None
     app.state.session_service = None
     app.state.broker = None

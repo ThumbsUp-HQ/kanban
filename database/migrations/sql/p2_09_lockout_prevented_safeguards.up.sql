@@ -3,13 +3,17 @@
 -- 1. Ensure user_identities exists (dependency KB-P2-08)
 CREATE TABLE IF NOT EXISTS user_identities (
     id                      UUID PRIMARY KEY DEFAULT uuidv7(),
+    workspace_id            UUID REFERENCES workspaces(id) ON DELETE CASCADE,
     principal_id            UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
     auth_card_id            UUID NOT NULL REFERENCES auth_provider_cards(id) ON DELETE CASCADE,
     immutable_subject_id    TEXT NOT NULL,
-    email_at_link           TEXT NOT NULL,
+    email_at_link           TEXT,
+    subject_email_at_link   TEXT,
     display_name_at_link    TEXT,
     linked_at               TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     last_used_at            TIMESTAMPTZ,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    last_login_at           TIMESTAMPTZ,
     UNIQUE (auth_card_id, immutable_subject_id)
 );
 

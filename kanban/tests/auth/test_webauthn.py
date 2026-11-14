@@ -879,7 +879,7 @@ async def test_case_8_security_type_confusion(
     factory = RLSSessionFactory(pg_worker_db)
     rate_limiter = PgRateLimiter(pg_worker_db)
     _, p_id, _ = await _setup_test_admin(
-        factory, key_material, username="grace", password="Password123!"
+        factory, key_material, username="grace_tc8", password="Password123!"
     )
     app, _ = _create_app(factory, key_material, rate_limiter, webauthn_settings)
     transport = httpx.ASGITransport(app=app)
@@ -890,7 +890,7 @@ async def test_case_8_security_type_confusion(
         login = await client.post(
             "/api/v1/auth/local/login",
             headers={CSRF_HEADER_NAME: pre},
-            json={"username": "grace", "password": "Password123!"},
+            json={"username": "grace_tc8", "password": "Password123!"},
         )
         _sync_cookies(client, login)
         csrf = login.json()["csrf_token"]

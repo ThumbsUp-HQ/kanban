@@ -41,6 +41,18 @@ def kek_provider() -> StaticKekProvider:
 
 async def _setup_admin_session(session: AsyncSession) -> tuple[uuid.UUID, uuid.UUID]:
     """Provision workspace and SERVER_ADMIN principal with AAL2 session context."""
+    # Clean up any leftover test cards from previous test runs
+    await session.execute(
+        text(
+            "UPDATE principals SET status = 'DISABLED' WHERE id IN ("
+            "  SELECT principal_id FROM role_bindings WHERE role = 'SERVER_ADMIN'"
+            ")"
+        )
+    )
+    await session.execute(
+        text("DELETE FROM auth_provider_cards WHERE slug IN ('local-admin', 'google-sso')")
+    )
+
     ws_id = uuid.uuid4()
     await session.execute(
         text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
@@ -146,7 +158,7 @@ def test_09_serializer_and_repr_invariants() -> None:
 
 
 @pytest.mark.asyncio
-async def test_card_repository_lifecycle(
+async def test_card_repository_lifecycle(  # noqa: PLR0915
     db_session: AsyncSession,
     kek_provider: StaticKekProvider,
 ) -> None:
@@ -191,6 +203,17 @@ async def test_card_repository_lifecycle(
         dek_kid=sealed.dek_kid,
     )
     assert upserted_id2 == c2_id
+
+    # Link admin to enabled OIDC card so database lockout guard is satisfied on subsequent updates
+    await db_session.execute(
+        text(
+            "INSERT INTO user_identities ("
+            "  workspace_id, auth_card_id, principal_id, "
+            "  immutable_subject_id, subject_email_at_link"
+            ") VALUES (:ws_id, :cid, :pid, 'google-sub-admin', 'repo-admin@example.com')"
+        ),
+        {"ws_id": ws_id, "cid": c2_id, "pid": _admin_id},
+    )
 
     # 3. Public list returns only enabled cards
     public_cards = await list_enabled_public(db_session)
@@ -253,6 +276,7 @@ async def test_card_repository_lifecycle(
         provider_kind="OIDC",
         slug="google-sso",
         display_name="Google Workspace",
+        is_enabled=True,
         sort_rank="0|h11111:",
         encrypted_secret_blob=sealed_v1.encrypted_secret_blob,
         wrapped_dek=sealed_v1.wrapped_dek,

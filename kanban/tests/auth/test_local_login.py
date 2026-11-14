@@ -87,6 +87,20 @@ async def _create_test_admin_and_card(  # noqa: PLR0913
 
     ctx = RLSContext(principal_id=p_id, workspace_id=ws_id, aal_level=2)
     async with factory.session(ctx) as db_session:
+        # Clean up any leftover LOCAL_ADMIN cards from previous test cases:
+        # First deactivate existing server admins so lockout guard permits cleanup
+        await db_session.execute(
+            text(
+                "UPDATE principals SET status = 'DISABLED' WHERE id IN ("
+                "  SELECT principal_id FROM role_bindings WHERE role = 'SERVER_ADMIN'"
+                ")"
+            )
+        )
+        await db_session.execute(
+            text("DELETE FROM auth_provider_cards WHERE provider_kind = 'LOCAL_ADMIN'")
+        )
+        await db_session.execute(text("DELETE FROM local_admin_credentials"))
+
         # Create workspace
         await db_session.execute(
             text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
@@ -124,10 +138,6 @@ async def _create_test_admin_and_card(  # noqa: PLR0913
                 "VALUES (:id, :ws_id, :p_id, 'SERVER_ADMIN', 'server', NULL)"
             ),
             {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": p_id},
-        )
-        # Clean up any leftover LOCAL_ADMIN cards to ensure single active card in worker DB
-        await db_session.execute(
-            text("DELETE FROM auth_provider_cards WHERE provider_kind = 'LOCAL_ADMIN'")
         )
         # Upsert LOCAL_ADMIN card with unique slug to prevent test collision
         await admin_upsert(
@@ -365,11 +375,21 @@ async def test_case_4_and_5_enumeration_body_and_work_equality(
 
         # Test disabled card scenario
         async with factory.session(ctx) as db_session:
+            # Temporarily deactivate principal so lockout trigger allows disabling the card
+            await db_session.execute(
+                text("UPDATE principals SET status = 'DISABLED' WHERE id = :p_id"),
+                {"p_id": p_id},
+            )
             await db_session.execute(
                 text(
                     "UPDATE auth_provider_cards SET is_enabled = FALSE "
                     "WHERE provider_kind = 'LOCAL_ADMIN'"
                 )
+            )
+            # Re-activate principal so we test login with disabled card (not disabled principal)
+            await db_session.execute(
+                text("UPDATE principals SET status = 'ACTIVE' WHERE id = :p_id"),
+                {"p_id": p_id},
             )
 
         verify_calls.clear()

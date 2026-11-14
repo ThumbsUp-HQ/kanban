@@ -5,6 +5,7 @@ from database.models.agent_definition import AgentDefinition
 from database.models.attachments import Attachment
 from database.models.auth import (
     AuthProviderCard,
+    IdentityLinkIntent,
     LdapGroupMapping,
     LocalAdminCredential,
     OidcAuthRequest,
@@ -90,6 +91,7 @@ __all__ = [
     "Doc",
     "EffectiveResourceAccess",
     "Group",
+    "IdentityLinkIntent",
     "InvalidLinkReason",
     "InvalidObjectLinkAudit",
     "Issue",

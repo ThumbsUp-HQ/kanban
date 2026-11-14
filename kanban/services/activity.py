@@ -157,6 +157,11 @@ class ActivityEventType(StrEnum):
     FIRST_BOOT_SETUP_CLAIMED = "FIRST_BOOT_SETUP_CLAIMED"
     MCP_OAUTH_GRANT_REVOKED = "MCP_OAUTH_GRANT_REVOKED"
     OAUTH_REFRESH_REUSE_DETECTED = "OAUTH_REFRESH_REUSE_DETECTED"
+    EXTERNAL_LOGIN_SUCCEEDED = "EXTERNAL_LOGIN_SUCCEEDED"
+    EXTERNAL_LOGIN_UNPROVISIONED = "EXTERNAL_LOGIN_UNPROVISIONED"
+    IDENTITY_AUTO_MERGE_BLOCKED = "IDENTITY_AUTO_MERGE_BLOCKED"
+    IDENTITY_LINKED = "IDENTITY_LINKED"
+    IDENTITY_UNLINKED = "IDENTITY_UNLINKED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -198,6 +203,11 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_MODULE_REMOVED: ActivityCategory.HISTORY,
         ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.EXTERNAL_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
+        ActivityEventType.EXTERNAL_LOGIN_UNPROVISIONED: ActivityCategory.SYSTEM,
+        ActivityEventType.IDENTITY_AUTO_MERGE_BLOCKED: ActivityCategory.SYSTEM,
+        ActivityEventType.IDENTITY_LINKED: ActivityCategory.SYSTEM,
+        ActivityEventType.IDENTITY_UNLINKED: ActivityCategory.SYSTEM,
         ActivityEventType.ASSIGNEE_ADDED: ActivityCategory.HISTORY,
         ActivityEventType.ASSIGNEE_REMOVED: ActivityCategory.HISTORY,
         ActivityEventType.COMMENT_CREATED: ActivityCategory.COMMENT,
@@ -259,6 +269,11 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.FIRST_BOOT_SETUP_CLAIMED: ActivityCategory.SYSTEM,
         ActivityEventType.MCP_OAUTH_GRANT_REVOKED: ActivityCategory.SYSTEM,
         ActivityEventType.OAUTH_REFRESH_REUSE_DETECTED: ActivityCategory.SYSTEM,
+        ActivityEventType.EXTERNAL_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
+        ActivityEventType.EXTERNAL_LOGIN_UNPROVISIONED: ActivityCategory.SYSTEM,
+        ActivityEventType.IDENTITY_AUTO_MERGE_BLOCKED: ActivityCategory.SYSTEM,
+        ActivityEventType.IDENTITY_LINKED: ActivityCategory.SYSTEM,
+        ActivityEventType.IDENTITY_UNLINKED: ActivityCategory.SYSTEM,
     }
 )
 

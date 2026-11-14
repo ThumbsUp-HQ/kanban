@@ -34,6 +34,7 @@ from database.models.oauth import (
 from database.models.projects import Project
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException, not_found
+from kanban.auth.mfa.policy import require_admin_aal2
 from kanban.oauth.jwt import (
     ACCESS_TOKEN_TTL_SECONDS,
     get_jwks,
@@ -868,6 +869,7 @@ async def revoke_user_oauth_grant(
     "/admin/oauth-grants/{grant_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Admin revoke connected OAuth grant (AAL2)",
+    dependencies=[Depends(require_admin_aal2)],
 )
 async def admin_revoke_oauth_grant(
     grant_id: uuid.UUID,
@@ -898,6 +900,7 @@ async def admin_revoke_oauth_grant(
 @oauth_v1_router.patch(
     "/admin/oauth-clients/{client_id}",
     summary="Admin approve or disable OAuth client (AAL2)",
+    dependencies=[Depends(require_admin_aal2)],
 )
 async def admin_patch_oauth_client(
     client_id: str,
