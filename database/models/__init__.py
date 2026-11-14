@@ -79,6 +79,7 @@ from database.models.spine import (
     ObjectRecord,
     Workspace,
 )
+from database.models.workspace_settings import WorkspaceSettings
 
 __all__ = [
     "ActivityChainHead",
@@ -151,4 +152,5 @@ __all__ = [
     "WebauthnCredential",
     "WorkflowState",
     "Workspace",
+    "WorkspaceSettings",
 ]

@@ -10,10 +10,32 @@ import yaml
 __all__ = [
     "InlineSafeDumper",
     "dump_yaml",
+    "redact_secrets",
     "strip_empty",
 ]
 
 _MAX_FLOW_DICT_LEN: Final[int] = 4
+
+_SECRET_KEY_NAMES: Final[frozenset[str]] = frozenset(
+    {"secret", "client_secret", "bind_dn_password", "encrypted_secret_blob", "wrapped_dek"}
+)
+
+
+def redact_secrets(val: object) -> object:
+    """Recursively replace secret fields with '***'."""
+    if isinstance(val, dict):
+        cleaned_dict: dict[object, object] = {}
+        for k, v in val.items():
+            if isinstance(k, str) and k.lower() in _SECRET_KEY_NAMES:
+                cleaned_dict[k] = "***"
+            else:
+                cleaned_dict[k] = redact_secrets(v)
+        return cleaned_dict
+
+    if isinstance(val, list):
+        return [redact_secrets(item) for item in val]
+
+    return val
 
 
 def strip_empty(val: object) -> object:
@@ -101,11 +123,13 @@ def dump_yaml(data: object, *, strip_nulls: bool = True) -> str:
     """Serialize data into canonical YAML using InlineSafeDumper.
 
     Optionally strips empty fields (None, '', [], {}) while preserving 0 and False.
+    Secret fields (secret, client_secret, bind_dn_password) are redacted with '***'.
     """
     if data is None:
         return ""
 
-    to_dump = strip_empty(data) if strip_nulls else data
+    sanitized = redact_secrets(data)
+    to_dump = strip_empty(sanitized) if strip_nulls else sanitized
     if to_dump is None:
         if isinstance(data, dict):
             return "{}\n"

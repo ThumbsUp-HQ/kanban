@@ -8,11 +8,11 @@ import re
 import uuid
 from typing import TYPE_CHECKING, Final, Literal
 
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from database.models.auth import AuthProviderCard
 from kanban.api.problems import ProblemException
+from kanban.auth.cards.repository import admin_get, admin_list
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,7 +129,7 @@ async def record_external_admin_handshake(
 _UNSET: Final[object] = object()
 
 
-async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912
+async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     card_id_or_workspace: uuid.UUID | None,
     workspace_id: uuid.UUID | object | None = _UNSET,
@@ -144,7 +144,7 @@ async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912
         target_ws_id = workspace_id if isinstance(workspace_id, uuid.UUID) else None
     elif card_id_or_workspace is not None:
         # Check if card_id_or_workspace matches a card in DB
-        maybe_card = await session.get(AuthProviderCard, card_id_or_workspace)
+        maybe_card = await admin_get(session, card_id_or_workspace)
         if maybe_card is not None:
             card_id = card_id_or_workspace
             target_ws_id = maybe_card.workspace_id
@@ -156,7 +156,7 @@ async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912
         target_ws_id = None
 
     if card_id is not None:
-        card = await session.get(AuthProviderCard, card_id)
+        card = await admin_get(session, card_id)
         if card is None:
             return
 
@@ -184,27 +184,37 @@ async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912
 
         # 2. Layer 2: If disabling LOCAL_ADMIN, verify live 15-minute external handshake
         if card.provider_kind == "LOCAL_ADMIN" and card.is_enabled:
-            has_valid_external = (
-                await session.execute(
-                    text(
-                        "SELECT EXISTS ("
-                        "  SELECT 1 FROM auth_provider_cards c "
-                        "  WHERE (CAST(:ws_id AS uuid) IS NULL OR "
-                        "         c.workspace_id = CAST(:ws_id AS uuid)) "
-                        "    AND c.id <> :card_id "
-                        "    AND c.provider_kind IN ('OIDC', 'OAUTH2', 'LDAP') "
-                        "    AND c.is_enabled = TRUE "
-                        "    AND kb_auth.card_can_authenticate_active_server_admin("
-                        "          c.id, c.provider_kind, c.workspace_id"
-                        "        ) "
-                        "    AND c.last_admin_handshake_at IS NOT NULL "
-                        "    AND c.last_admin_handshake_at >= "
-                        "          clock_timestamp() - interval '15 minutes'"
-                        ")"
-                    ),
-                    {"ws_id": ws_id, "card_id": card_id},
-                )
-            ).scalar_one()
+            all_cards = await admin_list(session)
+            has_valid_external = False
+            for c in all_cards:
+                if c.id == card_id:
+                    continue
+                if ws_id is not None and c.workspace_id is not None and c.workspace_id != ws_id:
+                    continue
+                if c.provider_kind not in ("OIDC", "OAUTH2", "LDAP") or not c.is_enabled:
+                    continue
+                if c.last_admin_handshake_at is None:
+                    continue
+                can_auth = (
+                    await session.execute(
+                        text(
+                            "SELECT kb_auth.card_can_authenticate_active_server_admin("
+                            ":cid, :kind, :ws)"
+                        ),
+                        {"cid": c.id, "kind": c.provider_kind, "ws": c.workspace_id},
+                    )
+                ).scalar_one()
+                if not can_auth:
+                    continue
+                is_recent = (
+                    await session.execute(
+                        text("SELECT :ts >= clock_timestamp() - interval '15 minutes'"),
+                        {"ts": c.last_admin_handshake_at},
+                    )
+                ).scalar_one()
+                if is_recent:
+                    has_valid_external = True
+                    break
 
             if not has_valid_external:
                 raise LockoutPreventedError(
@@ -216,20 +226,12 @@ async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912
                 )
 
         # 3. Layer 1: Check remaining enabled admin-capable cards
-        enabled_cards = (
-            (
-                await session.execute(
-                    select(AuthProviderCard).where(
-                        AuthProviderCard.is_enabled.is_(True),
-                        (AuthProviderCard.workspace_id == ws_id)
-                        if ws_id is not None
-                        else (AuthProviderCard.workspace_id.is_(None)),
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
+        all_cards = await admin_list(session)
+        enabled_cards = [
+            c
+            for c in all_cards
+            if c.is_enabled and (ws_id is None or c.workspace_id is None or c.workspace_id == ws_id)
+        ]
 
         remaining_admin_cards = 0
         for c in enabled_cards:
@@ -253,18 +255,29 @@ async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912
             )
     else:
         # Workspace-level check when card_id is not provided
-        stmt = text(
-            "SELECT EXISTS ("
-            "  SELECT 1 FROM auth_provider_cards "
-            "  WHERE (workspace_id IS NOT DISTINCT FROM :ws_id) "
-            "    AND provider_kind IN ('OIDC', 'OAUTH2', 'LDAP') "
-            "    AND is_enabled = TRUE "
-            "    AND last_admin_handshake_at IS NOT NULL "
-            "    AND last_admin_handshake_at >= clock_timestamp() - INTERVAL '15 minutes'"
-            ")"
-        )
-        result = await session.execute(stmt, {"ws_id": target_ws_id})
-        has_recent_handshake = bool(result.scalar_one())
+        all_cards = await admin_list(session)
+        has_recent_handshake = False
+        for c in all_cards:
+            if (
+                target_ws_id is not None
+                and c.workspace_id is not None
+                and c.workspace_id != target_ws_id
+            ):
+                continue
+            if c.provider_kind not in ("OIDC", "OAUTH2", "LDAP") or not c.is_enabled:
+                continue
+            if c.last_admin_handshake_at is None:
+                continue
+            is_recent = (
+                await session.execute(
+                    text("SELECT :ts >= clock_timestamp() - interval '15 minutes'"),
+                    {"ts": c.last_admin_handshake_at},
+                )
+            ).scalar_one()
+            if is_recent:
+                has_recent_handshake = True
+                break
+
         if not has_recent_handshake:
             msg = (
                 "Disabling LOCAL_ADMIN requires a verified login on an external "

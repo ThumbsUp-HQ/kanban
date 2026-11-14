@@ -29,6 +29,14 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
     "begin_work": {"identifier": "KAN-142 | uuid"},
     "transition_ticket": {"identifier": "KAN-142 | uuid", "state": "str"},
     "ping_agent": {"action": "ping | help | echo", "message": "str"},
+    "configure_workspace": {"action": "get | update | help", "settings": "object"},
+    "manage_auth_cards": {
+        "action": (
+            "list | get | create | update | enable | disable | reorder | "
+            "test_handshake | delete | help"
+        ),
+        "card": "slug | uuid",
+    },
 }
 
 

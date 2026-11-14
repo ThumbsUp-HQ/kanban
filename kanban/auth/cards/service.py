@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Final
 
 from sqlalchemy import text
 
-from database.models.auth import AuthProviderCard
 from kanban.api.problems import ProblemException
 from kanban.auth.cards.handshake import probe_auth_card_handshake
 from kanban.auth.cards.lockout import (
@@ -30,6 +29,7 @@ if TYPE_CHECKING:
     import httpx
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from database.models.auth import AuthProviderCard
     from kanban.auth.cards.schemas import (
         AuthCardAdmin,
         AuthCardCreate,
@@ -102,11 +102,10 @@ class AuthCardAdminService:
             if card is not None:
                 return card
 
-        stmt = text("SELECT * FROM auth_provider_cards WHERE slug = :slug")
-        result = await session.execute(stmt, {"slug": ref_str})
-        row = result.mappings().first()
-        if row is not None:
-            return AuthProviderCard(**dict(row))
+        cards = await admin_list(session)
+        for c in cards:
+            if c.slug == ref_str:
+                return c
         return None
 
     async def create_card(  # noqa: C901, PLR0912, PLR0915
@@ -121,12 +120,15 @@ class AuthCardAdminService:
 
         # Enforce max 1 LOCAL_ADMIN card per workspace
         if kind == "LOCAL_ADMIN":
-            stmt = text(
-                "SELECT 1 FROM auth_provider_cards "
-                "WHERE (workspace_id IS NOT DISTINCT FROM :ws_id) "
-                "  AND provider_kind = 'LOCAL_ADMIN'"
+            cards = await admin_list(session)
+            exists = any(
+                c.provider_kind == "LOCAL_ADMIN"
+                and (
+                    c.workspace_id == workspace_id
+                    or (c.workspace_id is None and workspace_id is None)
+                )
+                for c in cards
             )
-            exists = (await session.execute(stmt, {"ws_id": workspace_id})).scalar_one_or_none()
             if exists:
                 raise ProblemException(
                     code="LOCAL_ADMIN_CARD_EXISTS",
