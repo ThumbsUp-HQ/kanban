@@ -115,7 +115,9 @@ def mcp_app() -> Starlette:
     settings = McpSettings(mode="standalone_inprocess", auth_enabled=False)
     docs_reg = ToolRegistry(Surface.DOCS)
     docs_reg.register(create_placeholder_tool(Surface.DOCS))
-    return create_mcp_app(settings, docs_registry=docs_reg)
+    admin_reg = ToolRegistry(Surface.ADMIN)
+    admin_reg.register(create_placeholder_tool(Surface.ADMIN))
+    return create_mcp_app(settings, docs_registry=docs_reg, admin_registry=admin_reg)
 
 
 @pytest.fixture

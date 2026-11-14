@@ -1,5 +1,7 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Admin endpoints package."""
+"""Admin REST API router package."""
 
-from __future__ import annotations
+from kanban.api.v1.admin.link_auditor import router as link_auditor_router
+
+__all__ = ["link_auditor_router"]
