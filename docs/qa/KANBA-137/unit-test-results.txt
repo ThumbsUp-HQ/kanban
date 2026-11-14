@@ -1,0 +1,43 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-137/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-137
+configfile: pyproject.toml
+plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 22 items
+
+kanban/tests/api/test_project_blueprint.py::test_case_1_positive_blueprint_plan_apply_and_roundtrip PASSED [  4%]
+kanban/tests/api/test_project_blueprint.py::test_case_1_cycles_and_rollover PASSED [  9%]
+kanban/tests/api/test_project_blueprint.py::test_case_2_atomicity_stale_plan_and_security PASSED [ 13%]
+kanban/tests/api/test_project_blueprint.py::test_case_3_in_use_protection_and_migration PASSED [ 18%]
+kanban/tests/api/test_project_blueprint.py::test_case_4_boundaries_and_error_handling PASSED [ 22%]
+kanban/tests/api/test_project_blueprint.py::test_case_5_updates_and_blueprint_validation PASSED [ 27%]
+mcp/tests/admin/test_architect_project.py::test_architect_project_help PASSED [ 31%]
+mcp/tests/admin/test_architect_project.py::test_architect_project_unknown_param PASSED [ 36%]
+mcp/tests/admin/test_architect_project.py::test_architect_project_scope_enforcement PASSED [ 40%]
+mcp/tests/admin/test_architect_project.py::test_architect_project_plan_apply_and_roundtrip PASSED [ 45%]
+mcp/tests/admin/test_architect_project.py::test_architect_project_stale_plan PASSED [ 50%]
+mcp/tests/admin/test_architect_project.py::test_architect_project_state_and_priority_in_use PASSED [ 54%]
+mcp/tests/admin/test_architect_project.py::test_architect_project_direct_unit_branches PASSED [ 59%]
+mcp/tests/admin/test_manage_cycles_and_modules.py::test_manage_cycles_and_modules_help PASSED [ 63%]
+mcp/tests/admin/test_manage_cycles_and_modules.py::test_manage_cycles_and_modules_unknown_param PASSED [ 68%]
+mcp/tests/admin/test_manage_cycles_and_modules.py::test_manage_cycles_and_modules_scope_enforcement PASSED [ 72%]
+mcp/tests/admin/test_manage_cycles_and_modules.py::test_manage_cycles_lifecycle_and_monotonicity PASSED [ 77%]
+mcp/tests/admin/test_manage_cycles_and_modules.py::test_manage_cycles_rollover PASSED [ 81%]
+mcp/tests/admin/test_manage_cycles_and_modules.py::test_manage_modules_lifecycle_and_disabled_guard PASSED [ 86%]
+mcp/tests/admin/test_manage_cycles_and_modules.py::test_manage_views_lifecycle PASSED [ 90%]
+mcp/tests/admin/test_manage_cycles_and_modules.py::test_contract_no_bind_or_delete_actions PASSED [ 95%]
+mcp/tests/admin/test_manage_cycles_and_modules.py::test_manage_cycles_and_modules_direct_unit_branches PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                              Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------------
+kanban/api/v1/admin/project_blueprint.py             43      0      0      0   100%
+kanban/projects/blueprint_service.py                375      4    158     20    95%   153, 157->169, 226->229, 267, 297->286, 348->350, 378->366, 397->399, 399->401, 402, 425->427, 427->429, 429->431, 451->453, 453->455, 594->593, 635, 744->743, 808->810, 810->794
+mcp/surfaces/admin/architect_project.py              97      3     48      3    96%   73, 90-99, 107->118
+mcp/surfaces/admin/manage_cycles_and_modules.py     279      4    146      9    97%   149->153, 171->175, 173->172, 196->199, 200->199, 251->262, 332->334, 419-420, 445-446, 493->496, 581->583
+---------------------------------------------------------------------------------------------
+TOTAL                                               794     11    352     32    96%
+============================= 22 passed in 14.09s ==============================

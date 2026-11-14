@@ -18,6 +18,8 @@ from kanban.api.v1.schemas.cycles import (
     CycleCreate,
     CyclePatch,
     CycleResponse,
+    CycleRolloverRequest,
+    CycleRolloverResponse,
 )
 from kanban.security.permissions import Capability, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
@@ -493,6 +495,105 @@ async def complete_cycle(
         cycle=cycle_resp,
         rolled_over=len(unfinished_issues),
         rollover_to_cycle_id=target_id_val,
+    )
+
+
+async def rollover_cycle(
+    session: AsyncSession,
+    caller: PrincipalContext,
+    cycle_id: uuid.UUID,
+    body: CycleRolloverRequest,
+) -> CycleRolloverResponse:
+    """Rollover unfinished issues from cycle to target_cycle without completing."""
+    cycle = await session.get(Cycle, cycle_id)
+    if cycle is None:
+        not_found()
+
+    await require_capability(session, caller, cycle.project_id, Capability.ADMIN)
+    project = await session.get(Project, cycle.project_id)
+    if project is not None:
+        _check_cycles_enabled(project)
+
+    if body.target_cycle_id == cycle.id:
+        raise ProblemException(
+            code="ROLLOVER_TARGET_INVALID",
+            status=422,
+            title="Invalid Rollover Target",
+            detail="Cannot rollover to the cycle being rolled over from",
+        )
+    target_cycle = await session.get(Cycle, body.target_cycle_id)
+    if target_cycle is None or target_cycle.project_id != cycle.project_id:
+        raise ProblemException(
+            code="ROLLOVER_TARGET_INVALID",
+            status=422,
+            title="Invalid Rollover Target",
+            detail="Target cycle not found in the same project",
+        )
+    if target_cycle.status not in ("upcoming", "active"):
+        raise ProblemException(
+            code="INVALID_TRANSITION",
+            status=422,
+            title="Invalid Rollover Target",
+            detail="Target cycle must be in upcoming or active status",
+        )
+
+    unfinished_stmt = (
+        select(Issue)
+        .join(WorkflowState, Issue.state_id == WorkflowState.id)
+        .where(
+            Issue.cycle_id == cycle.id,
+            WorkflowState.state_group.not_in(["completed", "cancelled"]),
+        )
+    )
+    unfinished_issues = list((await session.execute(unfinished_stmt)).scalars().all())
+
+    if len(unfinished_issues) > MAX_ROLLOVER_ISSUES:
+        raise ProblemException(
+            code="ROLLOVER_TOO_LARGE",
+            status=409,
+            title="Rollover Too Large",
+            detail=f"Cannot rollover more than {MAX_ROLLOVER_ISSUES} unfinished issues",
+        )
+
+    target_id_val = target_cycle.id
+    target_id_str = str(target_id_val)
+    cycle_id_str = str(cycle.id)
+
+    for issue in unfinished_issues:
+        issue.cycle_id = target_id_val
+        await record_activity(
+            session,
+            workspace_id=caller.workspace_id,
+            object_id=issue.id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.ISSUE_FIELD_CHANGED,
+            payload={
+                "field": "cycle_id",
+                "old": cycle_id_str,
+                "new": target_id_str,
+                "reason": "rollover",
+            },
+        )
+        await record_activity(
+            session,
+            workspace_id=caller.workspace_id,
+            object_id=issue.id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.ISSUE_CYCLE_CHANGED,
+            payload={
+                "from_cycle_id": cycle_id_str,
+                "to_cycle_id": target_id_str,
+                "reason": "rollover",
+            },
+        )
+
+    await session.flush()
+
+    return CycleRolloverResponse(
+        status="rolled_over",
+        from_cycle=cycle.name,
+        to_cycle=target_cycle.name,
+        moved=len(unfinished_issues),
     )
 
 

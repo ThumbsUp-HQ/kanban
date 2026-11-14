@@ -1,0 +1,31 @@
+=== 1. Ruff Linter ===
+All checks passed!
+=== 2. Ruff Formatter ===
+1120 files already formatted
+=== 3. Mypy Strict Typecheck ===
+Success: no issues found in 13 source files
+=== 4. Layering Contracts (lint-imports) ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 640 files, 2026 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT (21 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+=== 5. Typographic Invariant (no dashes) ===
+ALL STATIC CHECKS PASSED

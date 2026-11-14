@@ -19,6 +19,8 @@ from kanban.api.v1.schemas.cycles import (
     CycleCreate,
     CyclePatch,
     CycleResponse,
+    CycleRolloverRequest,
+    CycleRolloverResponse,
 )
 from kanban.services import burndown as burndown_svc
 from kanban.services import cycles as svc
@@ -143,6 +145,22 @@ async def complete_cycle(
     """Complete an active cycle and optionally roll over unfinished issues."""
     async with timing_floor(floor_ms=25.0):
         return await svc.complete_cycle(session, caller, cycle_id, body)
+
+
+@router.post(
+    "/cycles/{cycle_id}/rollover",
+    response_model=CycleRolloverResponse,
+    summary="Rollover unfinished issues to a target cycle without completing",
+)
+async def rollover_cycle(
+    cycle_id: uuid.UUID,
+    body: CycleRolloverRequest,
+    caller: Caller,
+    session: Session,
+) -> CycleRolloverResponse:
+    """Rollover unfinished issues from cycle to target_cycle."""
+    async with timing_floor(floor_ms=25.0):
+        return await svc.rollover_cycle(session, caller, cycle_id, body)
 
 
 @router.delete(

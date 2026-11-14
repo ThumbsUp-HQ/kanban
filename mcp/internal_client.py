@@ -220,13 +220,24 @@ class KanbanApiClient:
         raise KbMcpError(mapped_code, error_message, hint=hint_str, candidates=candidates_list)
 
     @staticmethod
-    def _resolve_conflict_code(prob_type: str, prob_code: str) -> McpErrorCode:
+    def _resolve_conflict_code(prob_type: str, prob_code: str) -> McpErrorCode:  # noqa: PLR0911
         if prob_type.endswith("etag-mismatch"):
             return McpErrorCode.CONFLICT_ETAG
         if prob_type.endswith("ambiguous-identifier") or prob_code == "AMBIGUOUS_IDENTIFIER":
             return McpErrorCode.AMBIGUOUS_IDENTIFIER
         if prob_type.endswith("lockout-prevented") or prob_code == "LOCKOUT_PREVENTED":
             return McpErrorCode.LOCKOUT_PREVENTED
+        if prob_type.endswith("plan-stale") or prob_code == "PLAN_STALE":
+            return McpErrorCode.PLAN_STALE
+        if prob_type.endswith("state-in-use") or prob_code == "STATE_IN_USE":
+            return McpErrorCode.STATE_IN_USE
+        if prob_type.endswith("priority-in-use") or prob_code == "PRIORITY_IN_USE":
+            return McpErrorCode.PRIORITY_IN_USE
+        if prob_type.endswith("invalid-transition") or prob_code in (
+            "INVALID_TRANSITION",
+            "INVALID_CYCLE_TRANSITION",
+        ):
+            return McpErrorCode.INVALID_TRANSITION
         return McpErrorCode.VALIDATION_FAILED
 
     @staticmethod
