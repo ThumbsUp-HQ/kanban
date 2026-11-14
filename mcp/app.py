@@ -14,6 +14,7 @@ from mcp.metadata import protected_resource_metadata_endpoint
 from mcp.protocol import InMemorySessionStore, McpProtocolHandler
 from mcp.registry import Surface, ToolRegistry, create_placeholder_tool
 from mcp.settings import McpSettings
+from mcp.surfaces.agent import create_agent_registry
 from mcp.surfaces.docs import build_docs_registry
 
 if TYPE_CHECKING:
@@ -78,8 +79,7 @@ def create_mcp_app(  # noqa: PLR0913
     # Construct 3 independent registries
     active_agent_reg = agent_registry
     if active_agent_reg is None:
-        active_agent_reg = ToolRegistry(Surface.AGENT)
-        active_agent_reg.register(create_placeholder_tool(Surface.AGENT))
+        active_agent_reg = create_agent_registry()
     if not active_agent_reg.is_frozen:
         active_agent_reg.freeze()
 

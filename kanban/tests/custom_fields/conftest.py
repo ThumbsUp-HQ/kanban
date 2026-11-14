@@ -6,8 +6,6 @@ import base64
 
 import pytest
 
-pytest_plugins = ["kanban.tests.api.conftest"]
-
 
 @pytest.fixture(autouse=True)
 def _setup_test_keys(monkeypatch: pytest.MonkeyPatch) -> None:

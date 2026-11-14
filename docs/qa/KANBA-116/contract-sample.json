@@ -1,0 +1,33 @@
+{
+  "patch_snooze": {
+    "endpoint": "PATCH /api/v1/stickies/01918a22-0005-7000-8000-000000000005",
+    "request_body": {
+      "promotion_snoozed_at_length": 740
+    },
+    "response_status": 200
+  },
+  "post_promote": {
+    "endpoint": "POST /api/v1/stickies/01918a22-0005-7000-8000-000000000005/promote-to-doc",
+    "request_body": {},
+    "response_status": 200,
+    "response_body": {
+      "id": "01918a22-0005-7000-8000-000000000005",
+      "promoted_to_doc_id": "doc-page-sec-arch",
+      "is_promoted_stub": true,
+      "promoted_to_doc": {
+        "id": "doc-page-sec-arch",
+        "title": "System Security Architecture"
+      }
+    }
+  },
+  "post_unarchive": {
+    "endpoint": "POST /api/v1/stickies/01918a22-0005-7000-8000-000000000005/unarchive-copy",
+    "response_status": 200,
+    "response_body": {
+      "id": "01918a22-0007-7000-8000-000000000007",
+      "body_markdown": "Unarchived copy of spec",
+      "color_token": "slate",
+      "is_promoted_stub": false
+    }
+  }
+}

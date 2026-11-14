@@ -214,6 +214,10 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
             return await call_next(request)
 
+        # Internal service or token-authenticated requests bypass ambient cookie CSRF
+        if request.headers.get("x-kb-subject-token") or request.headers.get("x-kb-internal-auth"):
+            return await call_next(request)
+
         # Non-API paths and exempt paths are out of scope
         path = request.url.path
         if not path.startswith("/api/") or path in CSRF_EXEMPT_PATHS:

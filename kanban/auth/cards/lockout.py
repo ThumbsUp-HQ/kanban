@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Literal
+import uuid
+from typing import TYPE_CHECKING, Final, Literal
 
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
@@ -14,8 +15,6 @@ from database.models.auth import AuthProviderCard
 from kanban.api.problems import ProblemException
 
 if TYPE_CHECKING:
-    import uuid
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
@@ -127,19 +126,22 @@ async def record_external_admin_handshake(
     return bool(result.scalar_one_or_none())
 
 
+_UNSET: Final[object] = object()
+
+
 async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912
     session: AsyncSession,
     card_id_or_workspace: uuid.UUID | None,
-    workspace_id: uuid.UUID | None = None,
+    workspace_id: uuid.UUID | object | None = _UNSET,
 ) -> None:
     """Validate that disabling or deleting a card satisfies anti-lockout safeguards.
 
     Supports both (session, card_id, workspace_id) and (session, workspace_id) calling patterns.
     """
     target_ws_id: uuid.UUID | None
-    if workspace_id is not None:
+    if workspace_id is not _UNSET:
         card_id = card_id_or_workspace
-        target_ws_id = workspace_id
+        target_ws_id = workspace_id if isinstance(workspace_id, uuid.UUID) else None
     elif card_id_or_workspace is not None:
         # Check if card_id_or_workspace matches a card in DB
         maybe_card = await session.get(AuthProviderCard, card_id_or_workspace)

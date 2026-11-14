@@ -1,0 +1,63 @@
+
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-116/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/stickies/stickyHeuristic.test.ts (25 tests) 19ms
+ ✓ src/features/stickies/stickiesApi.test.ts (9 tests) 25ms
+ ✓ src/features/stickies/StickyPromotionBanner.test.tsx (3 tests) 317ms
+ ✓ src/features/stickies/PromotedStickyStub.test.tsx (4 tests) 465ms
+   ✓ PromotedStickyStub (4)
+     ✓ renders promoted badge, title, stripped preview, and open link 380ms
+ ✓ src/features/stickies/StickiesGrid.test.tsx (6 tests) 449ms
+stderr | src/features/stickies/StickyCard.test.tsx > StickyCard > clicking Promote to Doc invokes onPromote callback
+An update to StickyCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/stickies/StickyCard.test.tsx > StickyCard > ⋯ menu allows Convert to Doc and Delete Sticky actions
+An update to StickyCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/stickies/StickyCard.test.tsx (9 tests) 668ms
+   ✓ StickyCard (9)
+     ✓ renders 6-swatch radiogroup without any inline styles 327ms
+ ✓ src/features/stickies/StickiesViews.test.tsx (2 tests) 795ms
+   ✓ Stickies Views (2)
+     ✓ ProjectOverviewView (1)
+       ✓ handles query, creation, update, deletion, promote, and unarchive 600ms
+
+ Test Files  7 passed (7)
+      Tests  58 passed (58)
+   Start at  21:47:49
+   Duration  3.13s (environment 58%, tests 21%, import 15%, worker 3%, transform 3%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    96.15 |     100 |     100 |                   
+ ...erviewView.tsx |     100 |      100 |     100 |     100 |                   
+ ...StickyStub.tsx |     100 |    92.85 |     100 |     100 | 34                
+ StickiesGrid.tsx  |     100 |      100 |     100 |     100 |                   
+ StickyCard.tsx    |     100 |    96.66 |     100 |     100 | 142               
+ ...tionBanner.tsx |     100 |      100 |     100 |     100 |                   
+ ...ickiesView.tsx |     100 |      100 |     100 |     100 |                   
+ stickiesApi.ts    |     100 |    86.66 |     100 |     100 | 45,150,182        
+ ...kyHeuristic.ts |     100 |    98.33 |     100 |     100 | 99                
+-------------------|---------|----------|---------|---------|-------------------
+EXIT CODE: 0
