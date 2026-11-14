@@ -274,5 +274,20 @@ uv run kanban-agent validate-sparkle \
    - `1`: Infrastructure runtime error (`DATABASE_UNREACHABLE`, `PROVIDER_UNAVAILABLE`).
    - `2`: Schema/policy refusal (`CURSOR_MARKER_INVALID`, `RLS_BYPASS_ROLE_REFUSED`, `PRINCIPAL_NOT_FOUND`, `PROJECT_NOT_FOUND`, `SECRET_SCRUBBED`, `TTFT_TIMEOUT`, `LATENCY_SLA_BREACH`, output filter drops).
 
+## Token Budget Enforcer (`agent.budget`, KB-P5-05a, S10.2)
+
+The `BudgetEnforcer` provides atomic LLM token allocation and settlement protocols across daily and monthly period caps stored in `ai_token_ledgers`:
+
+- Atomic Reserve/Settle Protocol:
+  - `reserve(workspace_id, project_id, provider_config_id, estimate_tokens)` executes atomic single-statement updates against active period windows (`daily` and `monthly`). If any active cap is exhausted, the reservation rolls back immediately and raises `BudgetExceeded(code="AI_BUDGET_EXCEEDED", period="daily"|"monthly")`.
+  - Missing ledger rows for a period explicitly indicate unconstrained budget for that period.
+  - `settle(reservation, actual_tokens)` moves `min(actual, estimate)` tokens from reserved to used and clears remaining reservations. Post-hoc overages (`actual > estimate`) record full token usage without blocking and log `AI_BUDGET_OVERAGE`.
+  - `release(reservation)` restores all reserved tokens to zero on upstream provider failures or timeouts.
+- Concurrency Invariant:
+  - Atomic single-statement updates serialized at the PostgreSQL row level guarantee that under high concurrent contention (e.g. 50 parallel requests), no burst of agent calls can exceed a configured cap.
+- Time Boundaries:
+  - Period starts are computed strictly in UTC (`daily` at `YYYY-MM-DD`, `monthly` at `YYYY-MM-01`).
+
+
 
 

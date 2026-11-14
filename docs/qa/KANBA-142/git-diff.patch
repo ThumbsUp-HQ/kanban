@@ -1,0 +1,3133 @@
+diff --git a/agent/GEMINI.md b/agent/GEMINI.md
+index 68db9a7..ba1c79f 100644
+--- a/agent/GEMINI.md
++++ b/agent/GEMINI.md
+@@ -274,5 +274,20 @@ uv run kanban-agent validate-sparkle \
+    - `1`: Infrastructure runtime error (`DATABASE_UNREACHABLE`, `PROVIDER_UNAVAILABLE`).
+    - `2`: Schema/policy refusal (`CURSOR_MARKER_INVALID`, `RLS_BYPASS_ROLE_REFUSED`, `PRINCIPAL_NOT_FOUND`, `PROJECT_NOT_FOUND`, `SECRET_SCRUBBED`, `TTFT_TIMEOUT`, `LATENCY_SLA_BREACH`, output filter drops).
+ 
++## Token Budget Enforcer (`agent.budget`, KB-P5-05a, S10.2)
++
++The `BudgetEnforcer` provides atomic LLM token allocation and settlement protocols across daily and monthly period caps stored in `ai_token_ledgers`:
++
++- Atomic Reserve/Settle Protocol:
++  - `reserve(workspace_id, project_id, provider_config_id, estimate_tokens)` executes atomic single-statement updates against active period windows (`daily` and `monthly`). If any active cap is exhausted, the reservation rolls back immediately and raises `BudgetExceeded(code="AI_BUDGET_EXCEEDED", period="daily"|"monthly")`.
++  - Missing ledger rows for a period explicitly indicate unconstrained budget for that period.
++  - `settle(reservation, actual_tokens)` moves `min(actual, estimate)` tokens from reserved to used and clears remaining reservations. Post-hoc overages (`actual > estimate`) record full token usage without blocking and log `AI_BUDGET_OVERAGE`.
++  - `release(reservation)` restores all reserved tokens to zero on upstream provider failures or timeouts.
++- Concurrency Invariant:
++  - Atomic single-statement updates serialized at the PostgreSQL row level guarantee that under high concurrent contention (e.g. 50 parallel requests), no burst of agent calls can exceed a configured cap.
++- Time Boundaries:
++  - Period starts are computed strictly in UTC (`daily` at `YYYY-MM-DD`, `monthly` at `YYYY-MM-01`).
++
++
+ 
+ 
+diff --git a/agent/budget.py b/agent/budget.py
+new file mode 100644
+index 0000000..1e389f8
+--- /dev/null
++++ b/agent/budget.py
+@@ -0,0 +1,254 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""AI token budget enforcer: atomic reservation, settlement, and overage tracking (KB-P5-05a)."""
++
++from __future__ import annotations
++
++import logging
++import uuid
++from dataclasses import dataclass
++from datetime import UTC, date, datetime
++from typing import TYPE_CHECKING, Final
++
++from sqlalchemy import text
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++logger = logging.getLogger("agent.budget")
++
++CODE_BUDGET_EXCEEDED: Final[str] = "AI_BUDGET_EXCEEDED"
++LOG_BUDGET_OVERAGE: Final[str] = "AI_BUDGET_OVERAGE"
++
++
++class BudgetExceeded(Exception):  # noqa: N818
++    """Raised when an active token budget cap is exhausted for daily or monthly periods."""
++
++    def __init__(
++        self,
++        period: str,
++        message: str | None = None,
++        code: str = CODE_BUDGET_EXCEEDED,
++    ) -> None:
++        """Initialize BudgetExceeded with exhausted period and standardized error code."""
++        default_msg = f"Token budget cap exceeded for period '{period}'"
++        super().__init__(message or default_msg)
++        self.code = code
++        self.period = period
++        self.message = message or default_msg
++
++
++@dataclass(frozen=True)
++class Reservation:
++    """Immutable reservation receipt tracking token allocations across active ledger rows."""
++
++    id: uuid.UUID
++    workspace_id: uuid.UUID
++    project_id: uuid.UUID | None
++    provider_config_id: uuid.UUID
++    estimate_tokens: int
++    reserved_ledger_ids: tuple[uuid.UUID, ...]
++
++
++def get_current_period_dates(now_dt: datetime | None = None) -> tuple[date, date]:
++    """Compute (daily_period_start, monthly_period_start) in UTC."""
++    current_utc = (
++        now_dt.astimezone(UTC)
++        if now_dt is not None
++        else datetime.now(UTC)
++    )
++    daily_start = current_utc.date()
++    monthly_start = date(current_utc.year, current_utc.month, 1)
++    return daily_start, monthly_start
++
++
++class BudgetEnforcer:
++    """Atomic token budget enforcer implementing the single-statement reserve/settle protocol."""
++
++    def __init__(
++        self,
++        session: AsyncSession | None = None,
++        *,
++        session_factory: object | None = None,
++    ) -> None:
++        """Initialize enforcer with an optional session or session factory."""
++        self._session = session
++        self._session_factory = session_factory
++
++    def _resolve_session(self, session: AsyncSession | None) -> AsyncSession:
++        """Resolve database session from arguments, instance attribute, or raise error."""
++        if session is not None:
++            return session
++        if self._session is not None:
++            return self._session
++        msg = "BudgetEnforcer requires an active AsyncSession to execute database operations"
++        raise ValueError(msg)
++
++    async def reserve(  # noqa: PLR0913
++        self,
++        workspace_id: uuid.UUID,
++        project_id: uuid.UUID | None,
++        provider_config_id: uuid.UUID,
++        estimate_tokens: int,
++        *,
++        session: AsyncSession | None = None,
++        now_dt: datetime | None = None,
++    ) -> Reservation:
++        """Atomically reserve tokens against daily and monthly ledger caps."""
++        if estimate_tokens <= 0:
++            msg = f"estimate_tokens must be greater than zero (got {estimate_tokens})"
++            raise ValueError(msg)
++
++        sess = self._resolve_session(session)
++        daily_start, monthly_start = get_current_period_dates(now_dt)
++
++        # Query active ledger rows matching the provider and period windows
++        query_sql = text(
++            "SELECT id, period_kind, token_cap, tokens_reserved, tokens_used "
++            "FROM ai_token_ledgers "
++            "WHERE workspace_id = :ws_id "
++            "  AND (project_id IS NOT DISTINCT FROM :proj_id) "
++            "  AND provider_config_id = :cfg_id "
++            "  AND ( "
++            "      (period_kind = 'daily' AND period_start = :daily_start) "
++            "      OR "
++            "      (period_kind = 'monthly' AND period_start = :monthly_start) "
++            "  ) "
++            "ORDER BY period_kind ASC"
++        )
++        params = {
++            "ws_id": workspace_id,
++            "proj_id": project_id,
++            "cfg_id": provider_config_id,
++            "daily_start": daily_start,
++            "monthly_start": monthly_start,
++        }
++
++        res = await sess.execute(query_sql, params)
++        rows = res.mappings().all()
++
++        if not rows:
++            # Missing ledger rows for both periods explicitly indicate no caps configured
++            return Reservation(
++                id=uuid.uuid4(),
++                workspace_id=workspace_id,
++                project_id=project_id,
++                provider_config_id=provider_config_id,
++                estimate_tokens=estimate_tokens,
++                reserved_ledger_ids=(),
++            )
++
++        # Execute atomic updates within a savepoint/transaction to ensure all-or-nothing rollback
++        reserved_ids: list[uuid.UUID] = []
++
++        async with sess.begin_nested() if sess.in_transaction() else sess.begin():
++            for row in rows:
++                ledger_id = row["id"]
++                p_kind = row["period_kind"]
++
++                # Atomic single-statement reservation update
++                update_sql = text(
++                    "UPDATE ai_token_ledgers "
++                    "SET tokens_reserved = tokens_reserved + :tokens "
++                    "WHERE id = :lid "
++                    "  AND tokens_used + tokens_reserved + :tokens <= token_cap "
++                    "RETURNING id"
++                )
++                up_res = await sess.execute(
++                    update_sql,
++                    {"lid": ledger_id, "tokens": estimate_tokens},
++                )
++                matched = up_res.first()
++
++                if matched is None:
++                    # Cap exceeded for this period -> rolls back savepoint/transaction
++                    msg = (
++                        f"AI token budget exceeded for period '{p_kind}': "
++                        f"estimate={estimate_tokens} tokens cannot be reserved under cap"
++                    )
++                    raise BudgetExceeded(period=p_kind, message=msg)
++
++                reserved_ids.append(ledger_id)
++
++        return Reservation(
++            id=uuid.uuid4(),
++            workspace_id=workspace_id,
++            project_id=project_id,
++            provider_config_id=provider_config_id,
++            estimate_tokens=estimate_tokens,
++            reserved_ledger_ids=tuple(reserved_ids),
++        )
++
++    async def settle(
++        self,
++        reservation: Reservation,
++        actual_tokens: int,
++        *,
++        session: AsyncSession | None = None,
++    ) -> None:
++        """Settle a reservation, moving tokens from reserved to used and handling overages."""
++        if actual_tokens < 0:
++            msg = f"actual_tokens must be non-negative (got {actual_tokens})"
++            raise ValueError(msg)
++
++        if not reservation.reserved_ledger_ids:
++            return
++
++        sess = self._resolve_session(session)
++        estimate = reservation.estimate_tokens
++
++        if actual_tokens > estimate:
++            overage = actual_tokens - estimate
++            logger.warning(
++                "%s: reservation=%s estimate=%d actual=%d overage=%d",
++                LOG_BUDGET_OVERAGE,
++                reservation.id,
++                estimate,
++                actual_tokens,
++                overage,
++            )
++
++        async with sess.begin_nested() if sess.in_transaction() else sess.begin():
++            for ledger_id in reservation.reserved_ledger_ids:
++                # Deduct estimate from reserved and add actual to used.
++                # Expand token_cap if overage exceeds old cap so accounting is never blocked.
++                settle_sql = text(
++                    "UPDATE ai_token_ledgers "
++                    "SET tokens_reserved = GREATEST(0, tokens_reserved - :estimate), "
++                    "    tokens_used = tokens_used + :actual, "
++                    "    token_cap = GREATEST(token_cap, tokens_used + :actual) "
++                    "WHERE id = :lid"
++                )
++                await sess.execute(
++                    settle_sql,
++                    {
++                        "lid": ledger_id,
++                        "estimate": estimate,
++                        "actual": actual_tokens,
++                    },
++                )
++
++    async def release(
++        self,
++        reservation: Reservation,
++        *,
++        session: AsyncSession | None = None,
++    ) -> None:
++        """Release a reservation on provider failure, restoring tokens_reserved to 0."""
++        if not reservation.reserved_ledger_ids:
++            return
++
++        sess = self._resolve_session(session)
++        estimate = reservation.estimate_tokens
++
++        async with sess.begin_nested() if sess.in_transaction() else sess.begin():
++            for ledger_id in reservation.reserved_ledger_ids:
++                release_sql = text(
++                    "UPDATE ai_token_ledgers "
++                    "SET tokens_reserved = GREATEST(0, tokens_reserved - :estimate) "
++                    "WHERE id = :lid"
++                )
++                await sess.execute(
++                    release_sql,
++                    {"lid": ledger_id, "estimate": estimate},
++                )
+diff --git a/agent/tests/test_budget.py b/agent/tests/test_budget.py
+new file mode 100644
+index 0000000..bb33dca
+--- /dev/null
++++ b/agent/tests/test_budget.py
+@@ -0,0 +1,435 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit and concurrency tests for BudgetEnforcer (KB-P5-05a, S10.2)."""
++
++from __future__ import annotations
++
++import asyncio
++import logging
++import uuid
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import TYPE_CHECKING
++
++import pytest
++import yaml
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from agent.budget import (
++    CODE_BUDGET_EXCEEDED,
++    LOG_BUDGET_OVERAGE,
++    BudgetEnforcer,
++    BudgetExceeded,
++    Reservation,
++    get_current_period_dates,
++)
++from database.models.ai import AITokenLedger
++from database.tests.conftest import bootstrap_workspace_admin
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncEngine
++
++
++def _load_cassette_usage(cassette_filename: str) -> int:
++    """Load total_tokens count from fixture cassette YAML."""
++    fixture_path = (
++        Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "ai" / cassette_filename
++    )
++    raw = yaml.safe_load(fixture_path.read_text(encoding="utf-8"))
++    return int(raw["usage"]["total_tokens"])
++
++
++async def _setup_provider_and_ledgers(  # noqa: PLR0913
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    *,
++    daily_cap: int = 500,
++    monthly_cap: int = 2000,
++    daily_used: int = 0,
++    monthly_used: int = 0,
++    now_dt: datetime | None = None,
++) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
++    """Create an AIProviderConfig and active daily/monthly AITokenLedger rows."""
++    cfg_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO ai_provider_configs ("
++            "  id, workspace_id, provider_kind, display_name, model_allowlist, residency_tier"
++            ") VALUES ("
++            "  :id, :ws_id, 'fixture', 'Test Provider', ARRAY['m1'], 'default'"
++            ")"
++        ),
++        {"id": cfg_id, "ws_id": ws_id},
++    )
++
++    daily_date, monthly_date = get_current_period_dates(now_dt)
++
++    daily_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO ai_token_ledgers ("
++            "  id, workspace_id, project_id, provider_config_id, period_kind, period_start, "
++            "  token_cap, tokens_reserved, tokens_used"
++            ") VALUES ("
++            "  :id, :ws_id, NULL, :cfg_id, 'daily', :p_start, :cap, 0, :used"
++            ")"
++        ),
++        {
++            "id": daily_id,
++            "ws_id": ws_id,
++            "cfg_id": cfg_id,
++            "p_start": daily_date,
++            "cap": daily_cap,
++            "used": daily_used,
++        },
++    )
++
++    monthly_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO ai_token_ledgers ("
++            "  id, workspace_id, project_id, provider_config_id, period_kind, period_start, "
++            "  token_cap, tokens_reserved, tokens_used"
++            ") VALUES ("
++            "  :id, :ws_id, NULL, :cfg_id, 'monthly', :p_start, :cap, 0, :used"
++            ")"
++        ),
++        {
++            "id": monthly_id,
++            "ws_id": ws_id,
++            "cfg_id": cfg_id,
++            "p_start": monthly_date,
++            "cap": monthly_cap,
++            "used": monthly_used,
++        },
++    )
++
++    return cfg_id, daily_id, monthly_id
++
++
++@pytest.mark.asyncio
++async def test_06_budget_positive_reserve_and_settle(db_session: AsyncSession) -> None:
++    """Test Case 6: Reserve 64, settle 48 -> tokens_used=48, tokens_reserved=0."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    actual_tokens = _load_cassette_usage("budget_usage_48_tokens.yaml")
++    assert actual_tokens == 48
++
++    cfg_id, daily_id, monthly_id = await _setup_provider_and_ledgers(
++        db_session,
++        ws_id,
++        daily_cap=1000,
++        monthly_cap=5000,
++    )
++
++    enforcer = BudgetEnforcer(db_session)
++
++    # 1. Reserve 64 tokens
++    reservation = await enforcer.reserve(
++        workspace_id=ws_id,
++        project_id=None,
++        provider_config_id=cfg_id,
++        estimate_tokens=64,
++    )
++    assert reservation.estimate_tokens == 64
++    assert len(reservation.reserved_ledger_ids) == 2
++
++    # Verify reservation state
++    res_daily = await db_session.get(AITokenLedger, daily_id)
++    assert res_daily is not None
++    assert res_daily.tokens_reserved == 64
++    assert res_daily.tokens_used == 0
++
++    # 2. Settle 48 tokens from cassette
++    await enforcer.settle(reservation, actual_tokens)
++
++    # Verify final state: used=48, reserved=0 on both ledgers
++    await db_session.refresh(res_daily)
++    assert res_daily.tokens_used == 48
++    assert res_daily.tokens_reserved == 0
++
++    res_monthly = await db_session.get(AITokenLedger, monthly_id)
++    assert res_monthly is not None
++    assert res_monthly.tokens_used == 48
++    assert res_monthly.tokens_reserved == 0
++
++
++@pytest.mark.asyncio
++async def test_07_budget_negative_rollback_on_monthly_exhaustion(db_session: AsyncSession) -> None:
++    """Test Case 7: Reserve 11 against remaining 10 raises BudgetExceeded; daily unchanged."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++
++    # Daily cap 500 (plenty), Monthly cap 100 with used=90 (remaining: 10)
++    cfg_id, daily_id, monthly_id = await _setup_provider_and_ledgers(
++        db_session,
++        ws_id,
++        daily_cap=500,
++        monthly_cap=100,
++        monthly_used=90,
++    )
++
++    enforcer = BudgetEnforcer(db_session)
++
++    # Attempting to reserve 11 exceeds monthly cap (90 + 11 = 101 > 100)
++    with pytest.raises(BudgetExceeded) as exc_info:
++        await enforcer.reserve(
++            workspace_id=ws_id,
++            project_id=None,
++            provider_config_id=cfg_id,
++            estimate_tokens=11,
++        )
++
++    assert exc_info.value.code == CODE_BUDGET_EXCEEDED
++    assert exc_info.value.period == "monthly"
++
++    # Transaction rolled back: daily ledger tokens_reserved remains strictly 0
++    daily_row = await db_session.get(AITokenLedger, daily_id)
++    assert daily_row is not None
++    assert daily_row.tokens_reserved == 0
++    assert daily_row.tokens_used == 0
++
++    monthly_row = await db_session.get(AITokenLedger, monthly_id)
++    assert monthly_row is not None
++    assert monthly_row.tokens_reserved == 0
++    assert monthly_row.tokens_used == 90
++
++
++@pytest.mark.committed_db
++@pytest.mark.asyncio
++async def test_08_concurrency_fifty_workers_twenty_succeed(
++    committed_db_session: AsyncSession,
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Test Case 8: Concurrency: 50 concurrent reserve(10) against cap 200 -> exactly 20 succeed."""
++    ws_id, _ = await bootstrap_workspace_admin(committed_db_session)
++    cfg_id, daily_id, _ = await _setup_provider_and_ledgers(
++        committed_db_session,
++        ws_id,
++        daily_cap=200,
++        monthly_cap=2000,
++    )
++    await committed_db_session.commit()
++
++    enforcer = BudgetEnforcer()
++    success_count = 0
++    failure_count = 0
++    results_lock = asyncio.Lock()
++
++    async def worker(_worker_idx: int) -> None:
++        nonlocal success_count, failure_count
++        async with AsyncSession(pg_worker_db, expire_on_commit=False) as session:
++            try:
++                await enforcer.reserve(
++                    workspace_id=ws_id,
++                    project_id=None,
++                    provider_config_id=cfg_id,
++                    estimate_tokens=10,
++                    session=session,
++                )
++                await session.commit()
++                async with results_lock:
++                    success_count += 1
++            except BudgetExceeded:
++                await session.rollback()
++                async with results_lock:
++                    failure_count += 1
++
++    tasks = [worker(i) for i in range(50)]
++    await asyncio.gather(*tasks)
++
++    # Read final ledger totals under committed session
++    await committed_db_session.commit()
++    final_ledger = await committed_db_session.get(AITokenLedger, daily_id)
++    assert final_ledger is not None
++
++    total_allocated = final_ledger.tokens_used + final_ledger.tokens_reserved
++
++    # Print results for concurrency-proof.txt capture
++    print(  # noqa: T201
++        f"\n[CONCURRENCY PROOF] workers=50 successes={success_count} "
++        f"failures={failure_count} total_reserved={final_ledger.tokens_reserved} "
++        f"total_used={final_ledger.tokens_used} total_allocated={total_allocated}"
++    )
++
++    assert success_count == 20
++    assert failure_count == 30
++    assert total_allocated == 200
++    assert final_ledger.tokens_reserved == 200
++
++
++@pytest.mark.asyncio
++async def test_09_fault_release_and_overage_logging(
++    db_session: AsyncSession,
++    caplog: pytest.LogCaptureFixture,
++) -> None:
++    """Test Case 9: Release resets reserved to 0; overage logs AI_BUDGET_OVERAGE."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    cfg_id, daily_id, _ = await _setup_provider_and_ledgers(
++        db_session,
++        ws_id,
++        daily_cap=500,
++        monthly_cap=2000,
++    )
++
++    enforcer = BudgetEnforcer(db_session)
++
++    # 1. Fault release: provider error resets reserved to 0
++    res1 = await enforcer.reserve(
++        workspace_id=ws_id,
++        project_id=None,
++        provider_config_id=cfg_id,
++        estimate_tokens=64,
++    )
++    daily_row = await db_session.get(AITokenLedger, daily_id)
++    assert daily_row is not None
++    assert daily_row.tokens_reserved == 64
++
++    await enforcer.release(res1)
++    await db_session.refresh(daily_row)
++    assert daily_row.tokens_reserved == 0
++    assert daily_row.tokens_used == 0
++
++    # 2. Overage cassette: actual 120 exceeds estimate 64
++    overage_tokens = _load_cassette_usage("budget_usage_overage.yaml")
++    assert overage_tokens == 120
++
++    res2 = await enforcer.reserve(
++        workspace_id=ws_id,
++        project_id=None,
++        provider_config_id=cfg_id,
++        estimate_tokens=64,
++    )
++
++    with caplog.at_level(logging.WARNING, logger="agent.budget"):
++        await enforcer.settle(res2, overage_tokens)
++
++    # Verify AI_BUDGET_OVERAGE log presence
++    assert any(LOG_BUDGET_OVERAGE in record.message for record in caplog.records)
++
++    # Verify final totals: reserved=0, used=120
++    await db_session.refresh(daily_row)
++    assert daily_row.tokens_reserved == 0
++    assert daily_row.tokens_used == 120
++
++
++@pytest.mark.asyncio
++async def test_10_boundary_exact_cap_and_midnight_rollover(db_session: AsyncSession) -> None:
++    """Test Case 10: Exact cap succeeds; cap+1 fails; midnight rollover uses new daily row."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    dt_day1 = datetime(2026, 11, 12, 23, 59, 59, tzinfo=UTC)
++    dt_day2 = datetime(2026, 11, 13, 0, 0, 0, tzinfo=UTC)
++
++    # Setup day 1 ledgers with cap=100
++    cfg_id, day1_daily_id, _ = await _setup_provider_and_ledgers(
++        db_session,
++        ws_id,
++        daily_cap=100,
++        monthly_cap=500,
++        now_dt=dt_day1,
++    )
++
++    enforcer = BudgetEnforcer(db_session)
++
++    # 1. Reserving exactly to cap (100) succeeds
++    res_exact = await enforcer.reserve(
++        workspace_id=ws_id,
++        project_id=None,
++        provider_config_id=cfg_id,
++        estimate_tokens=100,
++        now_dt=dt_day1,
++    )
++    assert res_exact.estimate_tokens == 100
++
++    day1_row = await db_session.get(AITokenLedger, day1_daily_id)
++    assert day1_row is not None
++    assert day1_row.tokens_reserved == 100
++
++    # 2. Reserving cap+1 (even 1 more token) fails with BudgetExceeded
++    with pytest.raises(BudgetExceeded) as exc_info:
++        await enforcer.reserve(
++            workspace_id=ws_id,
++            project_id=None,
++            provider_config_id=cfg_id,
++            estimate_tokens=1,
++            now_dt=dt_day1,
++        )
++    assert exc_info.value.period == "daily"
++
++    # 3. Settle exact reservation
++    await enforcer.settle(res_exact, 100)
++    await db_session.refresh(day1_row)
++    assert day1_row.tokens_used == 100
++    assert day1_row.tokens_reserved == 0
++
++    # 4. Period rollover at 00:00:00Z uses a new daily row
++    # Provision day 2 daily ledger row
++    day2_daily_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO ai_token_ledgers ("
++            "  id, workspace_id, project_id, provider_config_id, period_kind, period_start, "
++            "  token_cap, tokens_reserved, tokens_used"
++            ") VALUES ("
++            "  :id, :ws_id, NULL, :cfg_id, 'daily', :p_start, 100, 0, 0"
++            ")"
++        ),
++        {
++            "id": day2_daily_id,
++            "ws_id": ws_id,
++            "cfg_id": cfg_id,
++            "p_start": dt_day2.date(),
++        },
++    )
++
++    # Day 2 reservation succeeds because day 2 has a fresh 100-token cap
++    res_day2 = await enforcer.reserve(
++        workspace_id=ws_id,
++        project_id=None,
++        provider_config_id=cfg_id,
++        estimate_tokens=50,
++        now_dt=dt_day2,
++    )
++    assert res_day2.estimate_tokens == 50
++
++    day2_row = await db_session.get(AITokenLedger, day2_daily_id)
++    assert day2_row is not None
++    assert day2_row.tokens_reserved == 50
++    assert day2_row.tokens_used == 0
++
++
++@pytest.mark.asyncio
++async def test_budget_enforcer_validation_and_no_cap(db_session: AsyncSession) -> None:
++    """Verify input validation and behavior when no ledger caps are configured."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    enforcer = BudgetEnforcer(db_session)
++    cfg_id = uuid.uuid4()
++
++    # 1. estimate_tokens <= 0 rejected
++    with pytest.raises(ValueError, match="estimate_tokens must be greater than zero"):
++        await enforcer.reserve(ws_id, None, cfg_id, 0)
++    with pytest.raises(ValueError, match="estimate_tokens must be greater than zero"):
++        await enforcer.reserve(ws_id, None, cfg_id, -10)
++
++    # 2. actual_tokens < 0 rejected
++    dummy_res = Reservation(
++        id=uuid.uuid4(),
++        workspace_id=ws_id,
++        project_id=None,
++        provider_config_id=cfg_id,
++        estimate_tokens=50,
++        reserved_ledger_ids=(),
++    )
++    with pytest.raises(ValueError, match="actual_tokens must be non-negative"):
++        await enforcer.settle(dummy_res, -5)
++
++    # 3. Missing session raises ValueError
++    unbound_enforcer = BudgetEnforcer()
++    with pytest.raises(ValueError, match="BudgetEnforcer requires an active AsyncSession"):
++        await unbound_enforcer.reserve(ws_id, None, cfg_id, 10)
++
++    # 4. No ledgers configured -> returns Reservation with empty reserved_ledger_ids
++    no_cap_res = await enforcer.reserve(ws_id, None, cfg_id, 100)
++    assert no_cap_res.reserved_ledger_ids == ()
++    # settle and release on empty reservation are safe no-ops
++    await enforcer.settle(no_cap_res, 100)
++    await enforcer.release(no_cap_res)
+diff --git a/database/GEMINI.md b/database/GEMINI.md
+index 7faedd2..ebea8f2 100644
+--- a/database/GEMINI.md
++++ b/database/GEMINI.md
+@@ -17,8 +17,8 @@ None. This is the foundational leaf module in the workspace dependency hierarchy
+ - Test harness execution isolates probe entities within kb_harness schema, which must be ignored by production RLS catalog assertions.
+ 
+ ## Outbound Contracts
+-- database.models: 62 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions, agent_definitions, attachments, local_admin_credentials, oidc_auth_requests, comment_reactions, totp_factors, recovery_codes, mcp_api_keys, ldap_group_mappings, notifications, webauthn_credentials, webauthn_challenges, custom_field_definitions, custom_field_values, custom_field_approvals, user_identities, identity_link_intents, setup_claim_tokens, oauth_clients, oauth_grants, oauth_authorization_codes, oauth_refresh_tokens, oauth_revoked_jtis, import_entity_mappings), custom LtreeType, and 5 PostgreSQL StrEnums.
+-- database.migrations: Alembic migrations including p5_12_custom_field_approvals with FORCE ROW LEVEL SECURITY and custom_field_manifest_tamper_revoke trigger on custom_field_definitions.
++- database.models: 64 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions, agent_definitions, attachments, local_admin_credentials, oidc_auth_requests, comment_reactions, totp_factors, recovery_codes, mcp_api_keys, ldap_group_mappings, notifications, webauthn_credentials, webauthn_challenges, custom_field_definitions, custom_field_values, custom_field_approvals, user_identities, identity_link_intents, setup_claim_tokens, oauth_clients, oauth_grants, oauth_authorization_codes, oauth_refresh_tokens, oauth_revoked_jtis, import_entity_mappings, ai_provider_configs, ai_token_ledgers), custom LtreeType, and 5 PostgreSQL StrEnums.
++- database.migrations: Alembic migrations including p5_12_custom_field_approvals with FORCE ROW LEVEL SECURITY and custom_field_manifest_tamper_revoke trigger on custom_field_definitions, and p5_05a_ai_providers_and_ledgers with envelope-encrypted ai_provider_configs and atomic ai_token_ledgers.
+ - database.session: RLSContext, bind_rls_context, RLSSessionFactory, create_rls_engine, and fail-closed security exceptions (RLSContextError, UnboundRLSSessionError, RLSRoleViolationError).
+ - database.repositories: BaseRepository generic base providing type-safe CRUD operations, bounded pagination (1..500), and mandatory RLS session verification.
+ - database.outbox: OutboxEnvelope, enqueue_outbox_event, topic_matches, RealtimeBroker, PgNotifyBroker, ValkeyBroker, and OutboxRelay (run via `python -m database.outbox.relay`).
+diff --git a/database/migrations/sql/p5_05a_ai_providers_and_ledgers.down.sql b/database/migrations/sql/p5_05a_ai_providers_and_ledgers.down.sql
+new file mode 100644
+index 0000000..4c8bada
+--- /dev/null
++++ b/database/migrations/sql/p5_05a_ai_providers_and_ledgers.down.sql
+@@ -0,0 +1,17 @@
++-- Revert Phase 5 / Database + Agent: ai_provider_configs and ai_token_ledgers (KB-P5-05a)
++
++DROP POLICY IF EXISTS ai_token_ledgers_delete_rls ON ai_token_ledgers;
++DROP POLICY IF EXISTS ai_token_ledgers_update_rls ON ai_token_ledgers;
++DROP POLICY IF EXISTS ai_token_ledgers_insert_rls ON ai_token_ledgers;
++DROP POLICY IF EXISTS ai_token_ledgers_select_rls ON ai_token_ledgers;
++
++DROP POLICY IF EXISTS ai_provider_configs_delete_rls ON ai_provider_configs;
++DROP POLICY IF EXISTS ai_provider_configs_update_rls ON ai_provider_configs;
++DROP POLICY IF EXISTS ai_provider_configs_insert_rls ON ai_provider_configs;
++DROP POLICY IF EXISTS ai_provider_configs_select_rls ON ai_provider_configs;
++
++DROP TABLE IF EXISTS ai_token_ledgers CASCADE;
++DROP TABLE IF EXISTS ai_provider_configs CASCADE;
++
++DROP FUNCTION IF EXISTS ai_provider_secret(UUID);
++DROP FUNCTION IF EXISTS app_agent_runtime_principal();
+diff --git a/database/migrations/sql/p5_05a_ai_providers_and_ledgers.up.sql b/database/migrations/sql/p5_05a_ai_providers_and_ledgers.up.sql
+new file mode 100644
+index 0000000..50eb8cb
+--- /dev/null
++++ b/database/migrations/sql/p5_05a_ai_providers_and_ledgers.up.sql
+@@ -0,0 +1,246 @@
++-- Phase 5 / Database + Agent: ai_provider_configs and ai_token_ledgers (KB-P5-05a, S10.1, S10.2)
++
++-- 1. Create agent-runtime role for secret unwrap boundary
++DO $$
++BEGIN
++    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agent-runtime') THEN
++        CREATE ROLE "agent-runtime" WITH NOLOGIN NOINHERIT NOBYPASSRLS;
++    END IF;
++    EXECUTE format('GRANT "agent-runtime" TO %I WITH SET TRUE, INHERIT TRUE', CURRENT_USER);
++END $$;
++GRANT "agent-runtime" TO kanban_app;
++
++-- 2. DDL: ai_provider_configs
++CREATE TABLE ai_provider_configs (
++    id               UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id     UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    project_id       UUID REFERENCES projects(id) ON DELETE CASCADE,  -- NULL = workspace default
++    provider_kind    TEXT NOT NULL CHECK (provider_kind IN ('openai','ollama','gemini','fixture')),
++    display_name     TEXT NOT NULL CHECK (char_length(display_name) BETWEEN 1 AND 80),
++    base_url         TEXT,
++    model_allowlist  TEXT[] NOT NULL CHECK (cardinality(model_allowlist) BETWEEN 1 AND 32),
++    residency_tier   TEXT NOT NULL CHECK (residency_tier ~ '^[a-z0-9:._-]{1,64}$'),
++    priority         SMALLINT NOT NULL DEFAULT 100,
++    settings_json    JSONB NOT NULL DEFAULT '{}'::jsonb,  -- non-secret settings only (CIDRs, region, timeouts)
++    wrapped_api_key  BYTEA,          -- AES-256-GCM ciphertext||tag
++    api_key_nonce    BYTEA,
++    wrapped_dek      BYTEA,          -- DEK wrapped by KMS / MASTER_KEK
++    dek_kid          TEXT,
++    is_enabled       BOOLEAN NOT NULL DEFAULT TRUE,
++    created_at       TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    updated_at       TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    CHECK ((wrapped_api_key IS NULL) = (wrapped_dek IS NULL))
++);
++
++CREATE INDEX idx_ai_provider_configs_ws_proj ON ai_provider_configs (workspace_id, project_id);
++CREATE INDEX idx_ai_provider_configs_ws_prio ON ai_provider_configs (workspace_id, priority);
++
++-- 3. DDL: ai_token_ledgers
++CREATE TABLE ai_token_ledgers (
++    id                 UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id       UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    project_id         UUID REFERENCES projects(id) ON DELETE CASCADE,
++    provider_config_id UUID NOT NULL REFERENCES ai_provider_configs(id) ON DELETE CASCADE,
++    period_kind        TEXT NOT NULL CHECK (period_kind IN ('daily','monthly')),
++    period_start       DATE NOT NULL,
++    token_cap          BIGINT NOT NULL CHECK (token_cap >= 0),
++    tokens_reserved    BIGINT NOT NULL DEFAULT 0 CHECK (tokens_reserved >= 0),
++    tokens_used        BIGINT NOT NULL DEFAULT 0 CHECK (tokens_used >= 0),
++    CHECK (tokens_used + tokens_reserved <= token_cap),
++    UNIQUE NULLS NOT DISTINCT (workspace_id, project_id, provider_config_id, period_kind, period_start)
++);
++
++CREATE INDEX idx_ai_token_ledgers_lookup ON ai_token_ledgers (workspace_id, provider_config_id, period_kind, period_start);
++
++-- 4. Grants and Privileges
++GRANT INSERT, UPDATE, DELETE ON ai_provider_configs TO kanban_app;
++GRANT SELECT, INSERT, UPDATE, DELETE ON ai_token_ledgers TO kanban_app;
++GRANT SELECT ON ai_token_ledgers TO app_rls_reader;
++
++REVOKE SELECT ON ai_provider_configs FROM kanban_app;
++REVOKE SELECT ON ai_provider_configs FROM app_rls_reader;
++
++GRANT SELECT (
++    id, workspace_id, project_id, provider_kind, display_name,
++    base_url, model_allowlist, residency_tier, priority,
++    settings_json, is_enabled, created_at, updated_at
++) ON ai_provider_configs TO kanban_app;
++
++GRANT SELECT (
++    id, workspace_id, project_id, provider_kind, display_name,
++    base_url, model_allowlist, residency_tier, priority,
++    settings_json, is_enabled, created_at, updated_at
++) ON ai_provider_configs TO app_rls_reader;
++
++-- Column-level privilege: REVOKE SELECT (wrapped_api_key, api_key_nonce, wrapped_dek) ON ai_provider_configs FROM kanban_app
++REVOKE SELECT (wrapped_api_key, api_key_nonce, wrapped_dek) ON ai_provider_configs FROM kanban_app;
++REVOKE SELECT (wrapped_api_key, api_key_nonce, wrapped_dek) ON ai_provider_configs FROM app_rls_reader;
++
++-- 5. Security Definer function ai_provider_secret
++CREATE OR REPLACE FUNCTION ai_provider_secret(p_config_id UUID)
++RETURNS TABLE (
++    wrapped_api_key BYTEA,
++    api_key_nonce BYTEA,
++    wrapped_dek BYTEA,
++    dek_kid TEXT
++)
++LANGUAGE plpgsql
++STABLE SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_caller_ws UUID;
++BEGIN
++    v_caller_ws := NULLIF(current_setting('app.workspace_id', true), '')::UUID;
++    IF v_caller_ws IS NULL THEN
++        RETURN;
++    END IF;
++
++    RETURN QUERY
++    SELECT c.wrapped_api_key, c.api_key_nonce, c.wrapped_dek, c.dek_kid
++    FROM ai_provider_configs c
++    WHERE c.id = p_config_id
++      AND c.workspace_id = v_caller_ws
++      AND c.is_enabled = TRUE
++      AND c.wrapped_api_key IS NOT NULL;
++END;
++$$;
++
++REVOKE ALL ON FUNCTION ai_provider_secret(UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION ai_provider_secret(UUID) TO "agent-runtime";
++
++-- Helper function to identify svc-agent-runtime principal
++CREATE OR REPLACE FUNCTION app_agent_runtime_principal()
++RETURNS uuid
++LANGUAGE plpgsql
++STABLE
++AS $$
++DECLARE
++    v_id uuid;
++BEGIN
++    SELECT id INTO v_id
++    FROM principals
++    WHERE principal_type = 'SERVICE_PRINCIPAL'
++      AND display_name = 'svc-agent-runtime'
++      AND workspace_id = app_current_workspace_id()
++    ORDER BY created_at ASC
++    LIMIT 1;
++
++    IF v_id IS NOT NULL THEN
++        RETURN v_id;
++    END IF;
++
++    RETURN NULLIF(current_setting('app.agent_runtime_principal_id', true), '')::uuid;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION app_agent_runtime_principal() TO kanban_app, app_rls_reader, kanban_migrator;
++
++-- 6. Enable and Force Row-Level Security
++ALTER TABLE ai_provider_configs ENABLE ROW LEVEL SECURITY;
++ALTER TABLE ai_provider_configs FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE ai_token_ledgers ENABLE ROW LEVEL SECURITY;
++ALTER TABLE ai_token_ledgers FORCE ROW LEVEL SECURITY;
++
++-- 7. RLS Policies on ai_provider_configs
++CREATE POLICY ai_provider_configs_select_rls ON ai_provider_configs
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (project_id IS NULL AND (app_has_object_capability(workspace_id, 64) OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])))
++            OR
++            (project_id IS NOT NULL AND (app_has_object_capability(project_id, 64) OR app_has_object_capability(workspace_id, 64) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])))
++        )
++    );
++
++CREATE POLICY ai_provider_configs_insert_rls ON ai_provider_configs
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (project_id IS NULL AND (app_has_object_capability(workspace_id, 64) OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])))
++            OR
++            (project_id IS NOT NULL AND (app_has_object_capability(project_id, 64) OR app_has_object_capability(workspace_id, 64) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])))
++        )
++    );
++
++CREATE POLICY ai_provider_configs_update_rls ON ai_provider_configs
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (project_id IS NULL AND (app_has_object_capability(workspace_id, 64) OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])))
++            OR
++            (project_id IS NOT NULL AND (app_has_object_capability(project_id, 64) OR app_has_object_capability(workspace_id, 64) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])))
++        )
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (project_id IS NULL AND (app_has_object_capability(workspace_id, 64) OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])))
++            OR
++            (project_id IS NOT NULL AND (app_has_object_capability(project_id, 64) OR app_has_object_capability(workspace_id, 64) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])))
++        )
++    );
++
++CREATE POLICY ai_provider_configs_delete_rls ON ai_provider_configs
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (project_id IS NULL AND (app_has_object_capability(workspace_id, 64) OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])))
++            OR
++            (project_id IS NOT NULL AND (app_has_object_capability(project_id, 64) OR app_has_object_capability(workspace_id, 64) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])))
++        )
++    );
++
++-- 8. RLS Policies on ai_token_ledgers
++CREATE POLICY ai_token_ledgers_select_rls ON ai_token_ledgers
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (project_id IS NULL AND (app_has_object_capability(workspace_id, 64) OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])))
++            OR
++            (project_id IS NOT NULL AND (app_has_object_capability(project_id, 64) OR app_has_object_capability(workspace_id, 64) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])))
++            OR
++            (app_current_principal_id() IS NOT NULL AND app_current_principal_id() = app_agent_runtime_principal())
++        )
++    );
++
++CREATE POLICY ai_token_ledgers_insert_rls ON ai_token_ledgers
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (project_id IS NULL AND (app_has_object_capability(workspace_id, 64) OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])))
++            OR
++            (project_id IS NOT NULL AND (app_has_object_capability(project_id, 64) OR app_has_object_capability(workspace_id, 64) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])))
++        )
++    );
++
++CREATE POLICY ai_token_ledgers_update_rls ON ai_token_ledgers
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (project_id IS NULL AND (app_has_object_capability(workspace_id, 64) OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])))
++            OR
++            (project_id IS NOT NULL AND (app_has_object_capability(project_id, 64) OR app_has_object_capability(workspace_id, 64) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])))
++            OR
++            (app_current_principal_id() IS NOT NULL AND app_current_principal_id() = app_agent_runtime_principal())
++        )
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (project_id IS NULL AND (app_has_object_capability(workspace_id, 64) OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])))
++            OR
++            (project_id IS NOT NULL AND (app_has_object_capability(project_id, 64) OR app_has_object_capability(workspace_id, 64) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])))
++            OR
++            (app_current_principal_id() IS NOT NULL AND app_current_principal_id() = app_agent_runtime_principal())
++        )
++    );
++
++CREATE POLICY ai_token_ledgers_delete_rls ON ai_token_ledgers
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND (
++            (project_id IS NULL AND (app_has_object_capability(workspace_id, 64) OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])))
++            OR
++            (project_id IS NOT NULL AND (app_has_object_capability(project_id, 64) OR app_has_object_capability(workspace_id, 64) OR app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])))
++        )
++    );
+diff --git a/database/migrations/versions/p5_05a_ai_providers_and_ledgers.py b/database/migrations/versions/p5_05a_ai_providers_and_ledgers.py
+new file mode 100644
+index 0000000..239427c
+--- /dev/null
++++ b/database/migrations/versions/p5_05a_ai_providers_and_ledgers.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
++
++Revision ID: p5_05a_ai_providers_and_ledgers
++Revises: p6_01_import_entity_mappings
++Create Date: 2026-11-13 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p5_05a_ai_providers_and_ledgers"
++down_revision: str | None = "p6_01_import_entity_mappings"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply ai_provider_configs and ai_token_ledgers DDL, RLS policies, and secret function."""
++    execute_sql_file("p5_05a_ai_providers_and_ledgers.up.sql")
++
++
++def downgrade() -> None:
++    """Revert ai_provider_configs and ai_token_ledgers DDL and RLS policies."""
++    execute_sql_file("p5_05a_ai_providers_and_ledgers.down.sql")
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index 4f5aac8..ef81f1c 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -2,6 +2,7 @@
+ 
+ from database.models.activity import ActivityChainHead, ActivityRecord
+ from database.models.agent_definition import AgentDefinition
++from database.models.ai import AIProviderConfig, AITokenLedger
+ from database.models.attachments import Attachment
+ from database.models.auth import (
+     AuthProviderCard,
+@@ -80,6 +81,8 @@ from database.models.spine import (
+ )
+ 
+ __all__ = [
++    "AIProviderConfig",
++    "AITokenLedger",
+     "ActivityChainHead",
+     "ActivityRecord",
+     "AgentDefinition",
+diff --git a/database/models/ai.py b/database/models/ai.py
+new file mode 100644
+index 0000000..561cf7c
+--- /dev/null
++++ b/database/models/ai.py
+@@ -0,0 +1,149 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""SQLAlchemy 2.0 ORM models for ai_provider_configs and ai_token_ledgers (KB-P5-05a)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003
++from datetime import date, datetime  # noqa: TC003
++from typing import Any
++
++from sqlalchemy import (
++    ARRAY,
++    BigInteger,
++    Boolean,
++    CheckConstraint,
++    Date,
++    DateTime,
++    ForeignKey,
++    Index,
++    LargeBinary,
++    SmallInteger,
++    String,
++    Text,
++    UniqueConstraint,
++    text,
++)
++from sqlalchemy.dialects.postgresql import JSONB
++from sqlalchemy.orm import Mapped, mapped_column
++
++from database.models.base import Base
++
++
++class AIProviderConfig(Base):
++    """Configuration row for an LLM provider with envelope-encrypted API keys."""
++
++    __tablename__ = "ai_provider_configs"
++    __table_args__ = (
++        CheckConstraint(
++            "provider_kind IN ('openai','ollama','gemini','fixture')",
++            name="ck_ai_provider_configs_provider_kind",
++        ),
++        CheckConstraint(
++            "char_length(display_name) BETWEEN 1 AND 80",
++            name="ck_ai_provider_configs_display_name_len",
++        ),
++        CheckConstraint(
++            "cardinality(model_allowlist) BETWEEN 1 AND 32",
++            name="ck_ai_provider_configs_model_allowlist_card",
++        ),
++        CheckConstraint(
++            "residency_tier ~ '^[a-z0-9:._-]{1,64}$'",
++            name="ck_ai_provider_configs_residency_tier",
++        ),
++        CheckConstraint(
++            "(wrapped_api_key IS NULL) = (wrapped_dek IS NULL)",
++            name="ck_ai_provider_configs_key_envelope",
++        ),
++        Index("idx_ai_provider_configs_ws_proj", "workspace_id", "project_id"),
++        Index("idx_ai_provider_configs_ws_prio", "workspace_id", "priority"),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
++    )
++    project_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True
++    )
++    provider_kind: Mapped[str] = mapped_column(Text, nullable=False)
++    display_name: Mapped[str] = mapped_column(String(80), nullable=False)
++    base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
++    model_allowlist: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
++    residency_tier: Mapped[str] = mapped_column(String(64), nullable=False)
++    priority: Mapped[int] = mapped_column(
++        SmallInteger, nullable=False, server_default=text("100"), default=100
++    )
++    settings_json: Mapped[dict[str, Any]] = mapped_column(
++        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
++    )
++    wrapped_api_key: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
++    api_key_nonce: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
++    wrapped_dek: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
++    dek_kid: Mapped[str | None] = mapped_column(Text, nullable=True)
++    is_enabled: Mapped[bool] = mapped_column(
++        Boolean, nullable=False, server_default=text("true"), default=True
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
++    updated_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
++
++
++class AITokenLedger(Base):
++    """Daily or monthly token consumption and reservation ledger for an AI provider."""
++
++    __tablename__ = "ai_token_ledgers"
++    __table_args__ = (
++        CheckConstraint(
++            "period_kind IN ('daily','monthly')",
++            name="ck_ai_token_ledgers_period_kind",
++        ),
++        CheckConstraint("token_cap >= 0", name="ck_ai_token_ledgers_token_cap_positive"),
++        CheckConstraint(
++            "tokens_reserved >= 0", name="ck_ai_token_ledgers_tokens_reserved_positive"
++        ),
++        CheckConstraint("tokens_used >= 0", name="ck_ai_token_ledgers_tokens_used_positive"),
++        CheckConstraint(
++            "tokens_used + tokens_reserved <= token_cap",
++            name="ck_ai_token_ledgers_cap_bound",
++        ),
++        UniqueConstraint(
++            "workspace_id",
++            "project_id",
++            "provider_config_id",
++            "period_kind",
++            "period_start",
++            name="uq_ai_token_ledgers_period",
++            postgresql_nulls_not_distinct=True,
++        ),
++        Index(
++            "idx_ai_token_ledgers_lookup",
++            "workspace_id",
++            "provider_config_id",
++            "period_kind",
++            "period_start",
++        ),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
++    )
++    project_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True
++    )
++    provider_config_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("ai_provider_configs.id", ondelete="CASCADE"), nullable=False
++    )
++    period_kind: Mapped[str] = mapped_column(Text, nullable=False)
++    period_start: Mapped[date] = mapped_column(Date, nullable=False)
++    token_cap: Mapped[int] = mapped_column(BigInteger, nullable=False)
++    tokens_reserved: Mapped[int] = mapped_column(
++        BigInteger, nullable=False, server_default=text("0"), default=0
++    )
++    tokens_used: Mapped[int] = mapped_column(
++        BigInteger, nullable=False, server_default=text("0"), default=0
++    )
+diff --git a/database/tests/test_ai_tables.py b/database/tests/test_ai_tables.py
+new file mode 100644
+index 0000000..67bd159
+--- /dev/null
++++ b/database/tests/test_ai_tables.py
+@@ -0,0 +1,227 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Database-tier tests for ai_provider_configs and ai_token_ledgers (KB-P5-05a, S10.1, S10.2)."""
++
++from __future__ import annotations
++
++import uuid
++from datetime import UTC, datetime
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError
++
++from database.models.ai import AITokenLedger
++from database.tests.conftest import bind_ctx, bootstrap_workspace_admin
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++@pytest.mark.asyncio
++async def test_01_ai_provider_secret_security_definer(
++    db_session: AsyncSession,
++) -> None:
++    """Test Case 1 (DB tier): ai_provider_secret returns secret columns under workspace scope."""
++    ws_id, admin_id = await bootstrap_workspace_admin(db_session)
++    cfg_id = uuid.uuid4()
++
++    fake_ciphertext = b"\x01\x02\x03\x04encrypted-api-key"
++    fake_nonce = b"123456789012"
++    fake_wrapped_dek = b"\x01dek-wrapped-data"
++    fake_kid = "kek-v1"
++
++    await db_session.execute(
++        text(
++            "INSERT INTO ai_provider_configs ("
++            "  id, workspace_id, provider_kind, display_name, model_allowlist, residency_tier,"
++            "  wrapped_api_key, api_key_nonce, wrapped_dek, dek_kid, is_enabled"
++            ") VALUES ("
++            "  :id, :ws_id, 'openai', 'DB Test OpenAI', ARRAY['gpt-4o'], 'default',"
++            "  :key, :nonce, :dek, :kid, TRUE"
++            ")"
++        ),
++        {
++            "id": cfg_id,
++            "ws_id": ws_id,
++            "key": fake_ciphertext,
++            "nonce": fake_nonce,
++            "dek": fake_wrapped_dek,
++            "kid": fake_kid,
++        },
++    )
++
++    # 1. Bind caller to workspace and invoke security definer function
++    await bind_ctx(db_session, principal_id=admin_id, workspace_id=ws_id)
++    fn_res = await db_session.execute(
++        text(
++            "SELECT wrapped_api_key, api_key_nonce, wrapped_dek, dek_kid "
++            "FROM ai_provider_secret(:cid)"
++        ),
++        {"cid": cfg_id},
++    )
++    row = fn_res.mappings().first()
++    assert row is not None
++    assert bytes(row["wrapped_api_key"]) == fake_ciphertext
++    assert bytes(row["api_key_nonce"]) == fake_nonce
++    assert bytes(row["wrapped_dek"]) == fake_wrapped_dek
++    assert row["dek_kid"] == fake_kid
++
++    # 2. Cross-workspace caller sees 0 rows from ai_provider_secret
++    other_ws_id = uuid.uuid4()
++    await bind_ctx(db_session, principal_id=admin_id, workspace_id=other_ws_id)
++    other_res = await db_session.execute(
++        text("SELECT * FROM ai_provider_secret(:cid)"),
++        {"cid": cfg_id},
++    )
++    assert other_res.mappings().first() is None
++
++
++@pytest.mark.asyncio
++async def test_02_column_level_revoke_and_non_admin_rls(
++    db_session: AsyncSession,
++) -> None:
++    """Test Case 2: kanban_app SELECT wrapped_api_key fails closed; non-admin sees 0 rows."""
++    ws_id, admin_id = await bootstrap_workspace_admin(db_session)
++    cfg_id = uuid.uuid4()
++
++    await db_session.execute(
++        text(
++            "INSERT INTO ai_provider_configs ("
++            "  id, workspace_id, provider_kind, display_name, model_allowlist, residency_tier,"
++            "  wrapped_api_key, api_key_nonce, wrapped_dek, dek_kid, is_enabled"
++            ") VALUES ("
++            "  :id, :ws_id, 'ollama', 'Local Ollama DDL', ARRAY['llama3.1:8b'], 'on-prem',"
++            "  :key, :nonce, :dek, 'kek-v1', TRUE"
++            ")"
++        ),
++        {
++            "id": cfg_id,
++            "ws_id": ws_id,
++            "key": b"ciphertext",
++            "nonce": b"nonce12bytes",
++            "dek": b"dekbytes",
++        },
++    )
++
++    # Provision a non-admin regular user with no role bindings
++    regular_user_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO principals (id, workspace_id, principal_type, display_name) "
++            "VALUES (:id, :ws_id, 'USER', 'Regular User')"
++        ),
++        {"id": regular_user_id, "ws_id": ws_id},
++    )
++
++    # Switch session authorization to least-privilege kanban_app
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++
++    # Part A: kanban_app attempting SELECT wrapped_api_key directly triggers permission denied
++    await bind_ctx(db_session, principal_id=admin_id, workspace_id=ws_id)
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("SELECT wrapped_api_key FROM ai_provider_configs WHERE id = :id"),
++                {"id": cfg_id},
++            )
++    assert "permission denied" in str(exc_info.value).lower()
++
++    # Part B: Non-admin principal sees 0 rows due to RLS admin predicate
++    await bind_ctx(db_session, principal_id=regular_user_id, workspace_id=ws_id)
++    res = await db_session.execute(
++        text("SELECT id FROM ai_provider_configs WHERE workspace_id = :ws"),
++        {"ws": ws_id},
++    )
++    rows = res.scalars().all()
++    assert len(rows) == 0
++
++    # Part C: Admin principal sees the config row (excluding revoked secret columns)
++    await bind_ctx(db_session, principal_id=admin_id, workspace_id=ws_id)
++    admin_res = await db_session.execute(
++        text("SELECT id, display_name FROM ai_provider_configs WHERE workspace_id = :ws"),
++        {"ws": ws_id},
++    )
++    admin_rows = admin_res.all()
++    assert len(admin_rows) == 1
++    assert admin_rows[0][0] == cfg_id
++
++
++@pytest.mark.asyncio
++async def test_03_ai_token_ledgers_ddl_and_constraints(
++    db_session: AsyncSession,
++) -> None:
++    """Test Case 3 (DB tier): ai_token_ledgers check constraints and unique constraints."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    cfg_id = uuid.uuid4()
++
++    await db_session.execute(
++        text(
++            "INSERT INTO ai_provider_configs ("
++            "  id, workspace_id, provider_kind, display_name, model_allowlist, residency_tier"
++            ") VALUES ("
++            "  :id, :ws_id, 'fixture', 'Ledger Provider', ARRAY['m1'], 'default'"
++            ")"
++        ),
++        {"id": cfg_id, "ws_id": ws_id},
++    )
++
++    today = datetime.now(UTC).date()
++    ledger_id = uuid.uuid4()
++
++    # 1. Valid insert with cap 100
++    await db_session.execute(
++        text(
++            "INSERT INTO ai_token_ledgers ("
++            "  id, workspace_id, project_id, provider_config_id, period_kind, period_start, "
++            "  token_cap, tokens_reserved, tokens_used"
++            ") VALUES ("
++            "  :id, :ws_id, NULL, :cfg_id, 'daily', :p_start, 100, 20, 30"
++            ")"
++        ),
++        {"id": ledger_id, "ws_id": ws_id, "cfg_id": cfg_id, "p_start": today},
++    )
++
++    ledger_row = await db_session.get(AITokenLedger, ledger_id)
++    assert ledger_row is not None
++    assert ledger_row.token_cap == 100
++    assert ledger_row.tokens_reserved == 20
++    assert ledger_row.tokens_used == 30
++
++    # 2. Check constraint: tokens_used + tokens_reserved <= token_cap
++    with pytest.raises(DBAPIError) as exc_cap:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "UPDATE ai_token_ledgers "
++                    "SET tokens_reserved = 80 WHERE id = :id"
++                ),
++                {"id": ledger_id},
++            )
++    assert "check constraint" in str(exc_cap.value).lower()
++
++    # 3. Check constraint: negative tokens_reserved rejected
++    with pytest.raises(DBAPIError) as exc_neg:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE ai_token_ledgers SET tokens_reserved = -1 WHERE id = :id"),
++                {"id": ledger_id},
++            )
++    assert "check constraint" in str(exc_neg.value).lower()
++
++    # 4. Duplicate period row for same key rejected by UNIQUE constraint
++    with pytest.raises(DBAPIError) as exc_dup:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO ai_token_ledgers ("
++                    "  id, workspace_id, project_id, provider_config_id, "
++                    "  period_kind, period_start, token_cap"
++                    ") VALUES ("
++                    "  :id, :ws_id, NULL, :cfg_id, 'daily', :p_start, 200"
++                    ")"
++                ),
++                {"id": uuid.uuid4(), "ws_id": ws_id, "cfg_id": cfg_id, "p_start": today},
++            )
++    assert "unique" in str(exc_dup.value).lower()
+diff --git a/database/tests/test_p1_17_models.py b/database/tests/test_p1_17_models.py
+index 0093081..f4b7692 100644
+--- a/database/tests/test_p1_17_models.py
++++ b/database/tests/test_p1_17_models.py
+@@ -52,9 +52,9 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
+     pg_tables = {row[0] for row in result.all()}
+     orm_tables = set(Base.metadata.tables.keys())
+ 
+-    # Exact set equality across all tables (62 tables incl. import_entity_mappings)
++    # Exact set equality across all tables (64 tables incl. ai_provider_configs, ai_token_ledgers)
+     assert orm_tables == pg_tables
+-    assert len(orm_tables) == 62
++    assert len(orm_tables) == 64
+ 
+ 
+ async def _setup_test_project_spine(
+diff --git a/docs/qa/KANBA-142/build-check.txt b/docs/qa/KANBA-142/build-check.txt
+new file mode 100644
+index 0000000..818a8bc
+--- /dev/null
++++ b/docs/qa/KANBA-142/build-check.txt
+@@ -0,0 +1,32 @@
++=== MYPY --STRICT ===
++Success: no issues found in 8 source files
++EXIT_CODE: 0
++
++=== RUFF CHECK ===
++All checks passed!
++EXIT_CODE: 0
++
++=== LINT-IMPORTS ===
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 661 files, 2083 dependencies.
++--------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT
++mcp forbidden from importing database KEPT (15 ignored imports)
++
++Contracts: 2 kept, 0 broken.
++EXIT_CODE: 0
+diff --git a/docs/qa/KANBA-142/concurrency-proof.txt b/docs/qa/KANBA-142/concurrency-proof.txt
+new file mode 100644
+index 0000000..80a9ec8
+--- /dev/null
++++ b/docs/qa/KANBA-142/concurrency-proof.txt
+@@ -0,0 +1,14 @@
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
++rootdir: /tmp/kb-wt-KANBA-142
++configfile: pyproject.toml
++plugins: anyio-4.16.0, socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, platformdirs-4.14.5, xdist-3.8.0
++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
++collected 6 items / 5 deselected / 1 selected
++
++agent/tests/test_budget.py 
++[CONCURRENCY PROOF] workers=50 successes=20 failures=30 total_reserved=200 total_used=0 total_allocated=200
++.
++
++======================= 1 passed, 5 deselected in 0.41s ========================
++EXIT_CODE: 0
+diff --git a/docs/qa/KANBA-142/message-to-reality-checker.md b/docs/qa/KANBA-142/message-to-reality-checker.md
+new file mode 100644
+index 0000000..d1f4293
+--- /dev/null
++++ b/docs/qa/KANBA-142/message-to-reality-checker.md
+@@ -0,0 +1,86 @@
++# Forensic QA Handoff: KANBA-142 (KB-P5-05a)
++
++## Ticket Overview
++- **Ticket ID:** `KANBA-142` (`KB-P5-05a`)
++- **Title:** `[Phase 5 / Database + Agent] ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer`
++- **Spec Sections:** S10.1 (per-project KMS-wrapped API keys), S10.2 (BudgetEnforcer, ai_token_ledgers daily/monthly caps)
++- **Gates:** `reality-checker`
++- **Target Branch:** `feat/KANBA-142`
++
++---
++
++## Implemented Components
++
++### 1. Database Migrations & Schemas
++- `database/migrations/versions/p5_05a_ai_providers_and_ledgers.py`: Alembic revision linked to down revision `p6_01_import_entity_mappings`.
++- `database/migrations/sql/p5_05a_ai_providers_and_ledgers.up.sql`:
++  - `ai_provider_configs`: Stores LLM provider configurations with envelope-encrypted API keys (`wrapped_api_key`, `api_key_nonce`, `wrapped_dek`, `dek_kid`). Column privileges explicitly revoked from `kanban_app` and `app_rls_reader`.
++  - `ai_token_ledgers`: Tracks daily and monthly token allocations with `CHECK (tokens_used + tokens_reserved <= token_cap)` and `UNIQUE NULLS NOT DISTINCT (workspace_id, project_id, provider_config_id, period_kind, period_start)`.
++  - `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` on both tables with admin-only policies and service principal access for ledger updates.
++  - `ai_provider_secret(p_config_id UUID)`: Security Definer unwrap function granted strictly to `"agent-runtime"` with tenant workspace isolation.
++  - `app_agent_runtime_principal()`: Resolves `svc-agent-runtime` service principal.
++- `database/migrations/sql/p5_05a_ai_providers_and_ledgers.down.sql`: Fully reversible teardown.
++
++### 2. SQLAlchemy ORM Models
++- `database/models/ai.py`: Implements `AIProviderConfig` and `AITokenLedger`.
++- `database/models/__init__.py`: Exports both models.
++- `database/tests/test_p1_17_models.py`: Model table parity count updated from 62 to 64.
++
++### 3. AI Provider Configuration Service
++- `kanban/ai_config/service.py`:
++  - `AIProviderConfigService`: create, update, disable, delete, get, list.
++  - Envelope encryption via `kanban/security/envelope.py` using fresh DEK per row, AAD = `config_id || workspace_id || provider_kind`.
++  - Plaintext key accepted as `bytearray`, zeroed in-place (`for idx in range(len(api_key)): api_key[idx] = 0`).
++  - Air-gap enforcement: saving `openai` or `gemini` under `air_gap_mode=True` raises `AirGapViolation(code="AIR_GAP_EGRESS_DENIED")`.
++  - `to_public_dict()`: returns `api_key_set: bool`, zero secret leakage.
++  - `base_url` validation: scheme, no userinfo/query/fragment, HTTPS required for non-loopback.
++
++### 4. Token Budget Enforcer
++- `agent/budget.py`:
++  - `BudgetEnforcer`: implements atomic reserve, settle, and release protocol.
++  - Single-statement atomic update with fail-closed rollback raising `BudgetExceeded(code="AI_BUDGET_EXCEEDED", period="daily"|"monthly")`.
++  - `settle()`: moves tokens from reserved to used; overages recorded and log `AI_BUDGET_OVERAGE`.
++  - `release()`: restores reserved tokens to zero on provider failure.
++  - UTC period boundaries (`daily` at `YYYY-MM-DD`, `monthly` at `YYYY-MM-01`).
++
++### 5. Documentation Manifests
++- `database/GEMINI.md`: Updated model count (64) and migration manifest.
++- `agent/GEMINI.md`: Added Token Budget Enforcer section.
++
++---
++
++## Mandatory Feature Test Verification
++
++All 10 required test cases are implemented and passing across 3 test files:
++
++| Test Case | Description | File | Result |
++| :--- | :--- | :--- | :--- |
++| Case 1 | Positive: create config with key, ciphertext present, to_public_dict has api_key_set: true, unwrap yields key | `kanban/tests/ai_config/test_service.py` & `database/tests/test_ai_tables.py` | PASSED |
++| Case 2 | Security: kanban_app SELECT wrapped_api_key fails closed; non-admin sees 0 rows | `database/tests/test_ai_tables.py` | PASSED |
++| Case 3 | Security: GCM tag tamper (flip 1 byte) raises EnvelopeIntegrityError | `kanban/tests/ai_config/test_service.py` | PASSED |
++| Case 4 | Security: save gemini/openai with air_gap_mode=TRUE raises AirGapViolation | `kanban/tests/ai_config/test_service.py` | PASSED |
++| Case 5 | Security: plaintext bytearray is all zero bytes after create() returns | `kanban/tests/ai_config/test_service.py` | PASSED |
++| Case 6 | Budget positive: reserve 64, settle 48 (cassette) -> tokens_used=48, tokens_reserved=0 | `agent/tests/test_budget.py` | PASSED |
++| Case 7 | Budget negative: cap 100, used 90, reserve 11 -> AI_BUDGET_EXCEEDED; daily unchanged | `agent/tests/test_budget.py` | PASSED |
++| Case 8 | Concurrency (@pytest.mark.committed_db): 50 concurrent reserve(10) against cap 200 -> exactly 20 succeed | `agent/tests/test_budget.py` | PASSED |
++| Case 9 | Fault: release() restores reserved to 0; overage cassette logs AI_BUDGET_OVERAGE | `agent/tests/test_budget.py` | PASSED |
++| Case 10 | Boundary: reserve exactly to cap succeeds; cap+1 fails; 00:00:00Z uses new daily row | `agent/tests/test_budget.py` | PASSED |
++
++### Coverage Gate
++- Required: `>= 95%` line + branch
++- Achieved:
++  - `agent/budget.py`: 100% coverage
++  - `database/models/ai.py`: 100% coverage
++  - `kanban/ai_config/service.py`: 99% coverage
++  - Total Target Coverage: 99.10% (347 statements, 2 missed, 98 branches, 2 partial)
++
++---
++
++## Forensic Audit Artifacts in `docs/qa/KANBA-142/`
++1. `git-diff.patch`: Unified diff of all changes against base commit.
++2. `unit-test-results.txt`: Raw output and exit code 0 of DoD pytest command.
++3. `build-check.txt`: Raw output of mypy --strict, ruff check, and lint-imports (all exit code 0).
++4. `schema-dump.sql`: pg_dump of ai_provider_configs and ai_token_ledgers plus \df+ ai_provider_secret.
++5. `migration-roundtrip.txt`: Full output of upgrade head / downgrade -1 / upgrade head.
++6. `concurrency-proof.txt`: Raw output of pytest -s for test_08 printing workers=50 successes=20 failures=30 total_allocated=200.
++7. Screenshots: N/A (Non-UI ticket).
+diff --git a/docs/qa/KANBA-142/migration-roundtrip.txt b/docs/qa/KANBA-142/migration-roundtrip.txt
+new file mode 100644
+index 0000000..d2b736b
+--- /dev/null
++++ b/docs/qa/KANBA-142/migration-roundtrip.txt
+@@ -0,0 +1,62 @@
++=== 1. ALEMBIC UPGRADE HEAD ===
++INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
++INFO  [alembic.runtime.migration] Will assume transactional DDL.
++INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
++INFO  [alembic.runtime.migration] Running upgrade p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
++INFO  [alembic.runtime.migration] Running upgrade p1_02_objects_spine -> p1_03_principals, Principals, users, groups, and cycle-safe principal_group_closure.
++INFO  [alembic.runtime.migration] Running upgrade p1_03_principals -> p1_04_projects, Projects, workflow_states, project_priorities, and project_labels.
++INFO  [alembic.runtime.migration] Running upgrade p1_04_projects -> p1_11_object_links, Object links, link_kind enum, and link_type_matrix allowlist.
++INFO  [alembic.runtime.migration] Running upgrade p1_11_object_links -> p1_10_views, Views table, view_layout enum, and filter/WIP JSON validators.
++INFO  [alembic.runtime.migration] Running upgrade p1_10_views -> p1_05_issues, Issues table, atomic sequence allocation, and build_markdown_tsvector.
++INFO  [alembic.runtime.migration] Running upgrade p1_05_issues -> p1_12_activity_ledger, Partitioned SHA-256 hash-chained activity_records, append_activity & verify_activity_chain.
++INFO  [alembic.runtime.migration] Running upgrade p1_12_activity_ledger -> p1_13_access_control, Role bindings, resource ACL entries, and effective_resource_access.
++INFO  [alembic.runtime.migration] Running upgrade p1_13_access_control -> p1_08_planning_joins, Cycles, modules, assignees, labels, and subscriptions join tables.
++INFO  [alembic.runtime.migration] Running upgrade p1_08_planning_joins -> p1_06_parent_dag, Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry.
++INFO  [alembic.runtime.migration] Running upgrade p1_06_parent_dag -> p1_09_prose_tables, Prose tables: issue_comments, docs, pages, page_versions, and stickies.
++INFO  [alembic.runtime.migration] Running upgrade p1_09_prose_tables -> p1_07_creator_provenance, Created-by provenance trigger with admin-only override and CREATOR_OVERRIDDEN ledger entry.
++INFO  [alembic.runtime.migration] Running upgrade p1_07_creator_provenance -> p1_14_force_rls, FORCE ROW LEVEL SECURITY policies, session context helpers, and schema-wide RLS catalog gate.
++INFO  [alembic.runtime.migration] Running upgrade p1_14_force_rls -> p1_15_link_auditor, audit_object_links() 6-reason detector, invalid_object_link_audits & incremental triggers.
++INFO  [alembic.runtime.migration] Running upgrade p1_15_link_auditor -> p1_16_link_purger, purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger.
++INFO  [alembic.runtime.migration] Running upgrade p1_16_link_purger -> p1_18_outbox, Transactional outbox_events, OutboxRelay (SKIP LOCKED) and RealtimeBroker.
++INFO  [alembic.runtime.migration] Running upgrade p1_18_outbox -> p5_06_object_embeddings, object_embeddings (pgvector HNSW + FORCE RLS).
++INFO  [alembic.runtime.migration] Running upgrade p5_06_object_embeddings -> p2_03_auth_provider_cards, auth_provider_cards DDL, kb_auth data boundary and envelope encryption (KB-P2-03).
++INFO  [alembic.runtime.migration] Running upgrade p2_03_auth_provider_cards -> p2_18_rate_limit_buckets, Rate limit buckets (PG-backed + Valkey-backed sliding window).
++INFO  [alembic.runtime.migration] Running upgrade p2_18_rate_limit_buckets -> p2_02_sessions, Server-side sessions, HMAC-signed __Host- cookies, rotation, timeouts and CSRF (KB-P2-02).
++INFO  [alembic.runtime.migration] Running upgrade p2_02_sessions -> p5_16_agent_definitions, agent_definitions registry (KB-P5-16).
++INFO  [alembic.runtime.migration] Running upgrade p5_16_agent_definitions -> p3_01b_workflow_state_wip_limits, Workflow states WIP limits (KB-P3-01b).
++INFO  [alembic.runtime.migration] Running upgrade p3_01b_workflow_state_wip_limits -> p2_15_attachments, attachments (FORCE RLS, metadata guards, content-addressed storage keys).
++INFO  [alembic.runtime.migration] Running upgrade p2_15_attachments -> p2_04_local_admin_credentials, Local Admin credentials and kb_auth functions (KB-P2-04).
++INFO  [alembic.runtime.migration] Running upgrade p2_04_local_admin_credentials -> p2_06_oidc_auth_requests, OIDC and OAuth2 authentication requests and state tracking (KB-P2-06).
++INFO  [alembic.runtime.migration] Running upgrade p2_06_oidc_auth_requests -> p3_05_comment_threads_reactions, Threaded comments, reactions, permalinks and access-checked mentions (KB-P3-05).
++INFO  [alembic.runtime.migration] Running upgrade p3_05_comment_threads_reactions -> p2_05a_mfa_totp_recovery, RFC 6238 TOTP, recovery codes, and kb_auth functions (KB-P2-05a).
++INFO  [alembic.runtime.migration] Running upgrade p2_05a_mfa_totp_recovery -> p3_10b_modules, Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
++INFO  [alembic.runtime.migration] Running upgrade p3_10b_modules -> p3_04_creator_override_reason, Add reason and old/new creator IDs to CREATOR_OVERRIDDEN activity payload (KB-P3-04).
++INFO  [alembic.runtime.migration] Running upgrade p3_04_creator_override_reason -> p4_02a_mcp_api_keys, Scoped kb_* API keys, surface binding, scopes & token introspection (KB-P4-02a).
++INFO  [alembic.runtime.migration] Running upgrade p4_02a_mcp_api_keys -> p2_07_ldap_group_mappings, LDAP group mappings table with FORCE RLS (KB-P2-07).
++INFO  [alembic.runtime.migration] Running upgrade p2_07_ldap_group_mappings -> p3_06_notifications, Issue subscriptions, auto-subscribe rules, per-event mute & notifications (KB-P3-06).
++INFO  [alembic.runtime.migration] Running upgrade p3_06_notifications -> p2_05b_webauthn_credentials, WebAuthn and Passkeys registration, assertion, credentials, and challenges (KB-P2-05b).
++INFO  [alembic.runtime.migration] Running upgrade p2_05b_webauthn_credentials -> p3_08_issue_copy, Make a copy issue subtree collector function (KB-P3-08).
++INFO  [alembic.runtime.migration] Running upgrade p3_08_issue_copy -> p3_09b_issue_delete_blast_radius, Security Definer helpers for issue blast radius calculation.
++INFO  [alembic.runtime.migration] Running upgrade p3_09b_issue_delete_blast_radius -> p5_11_custom_fields, Custom field definitions, Admin-only RBAC/RLS WITH CHECK gate & 7-format schema (KB-P5-11).
++INFO  [alembic.runtime.migration] Running upgrade p5_11_custom_fields -> p2_09_lockout_prevented, Add LOCKOUT_PREVENTED 3-layer safeguards and emergency unlock (KB-P2-09).
++INFO  [alembic.runtime.migration] Running upgrade p2_09_lockout_prevented -> p2_12_setup_claim_tokens, First-boot setup claim tokens and kb_auth functions (KB-P2-12).
++INFO  [alembic.runtime.migration] Running upgrade p2_12_setup_claim_tokens -> p3_17_search_indexes, Add search_tsv generated columns and GIN indexes for search (KB-P3-17).
++INFO  [alembic.runtime.migration] Running upgrade p3_17_search_indexes -> p4_02b_oauth_clients_codes, OAuth 2.1 authorization server, clients, codes, grants & tokens (KB-P4-02b).
++INFO  [alembic.runtime.migration] Running upgrade p4_02b_oauth_clients_codes -> p2_08_user_identities, Identity linking without email auto-merge: user_identities and identity_link_intents (KB-P2-08).
++INFO  [alembic.runtime.migration] Running upgrade p2_08_user_identities -> p2_10_auth_card_admin_ops, Auth card admin ops and public enabled projection (KB-P2-10).
++INFO  [alembic.runtime.migration] Running upgrade p2_10_auth_card_admin_ops -> p5_12_custom_field_approvals, Cryptographic manifest_sha256 escalation approvals (KB-P5-12, S13.2, S4.2, S3.2).
++INFO  [alembic.runtime.migration] Running upgrade p5_12_custom_field_approvals -> p6_01_import_entity_mappings, Lossless Plane importer entity mappings table (KB-P6-01, S1.3, S15.5).
++INFO  [alembic.runtime.migration] Running upgrade p6_01_import_entity_mappings -> p5_05a_ai_providers_and_ledgers, ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
++EXIT_CODE: 0
++
++=== 2. ALEMBIC DOWNGRADE -1 ===
++INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
++INFO  [alembic.runtime.migration] Will assume transactional DDL.
++INFO  [alembic.runtime.migration] Running downgrade p5_05a_ai_providers_and_ledgers -> p6_01_import_entity_mappings, ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
++EXIT_CODE: 0
++
++=== 3. ALEMBIC UPGRADE HEAD ===
++INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
++INFO  [alembic.runtime.migration] Will assume transactional DDL.
++INFO  [alembic.runtime.migration] Running upgrade p6_01_import_entity_mappings -> p5_05a_ai_providers_and_ledgers, ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
++EXIT_CODE: 0
+diff --git a/docs/qa/KANBA-142/schema-dump.sql b/docs/qa/KANBA-142/schema-dump.sql
+new file mode 100644
+index 0000000..0af06bb
+--- /dev/null
++++ b/docs/qa/KANBA-142/schema-dump.sql
+@@ -0,0 +1,371 @@
++--
++-- PostgreSQL database dump
++--
++
++\restrict N9qHZbywB5Y8Sk1M3whQCatoZrVfBZYX4hE3oLthEZdIo92WOcPADChuKgBV32g
++
++-- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
++-- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
++
++SET statement_timeout = 0;
++SET lock_timeout = 0;
++SET idle_in_transaction_session_timeout = 0;
++SET client_encoding = 'UTF8';
++SET standard_conforming_strings = on;
++SELECT pg_catalog.set_config('search_path', '', false);
++SET check_function_bodies = false;
++SET xmloption = content;
++SET client_min_messages = warning;
++SET row_security = off;
++
++SET default_tablespace = '';
++
++SET default_table_access_method = heap;
++
++--
++-- Name: ai_provider_configs; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.ai_provider_configs (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    workspace_id uuid NOT NULL,
++    project_id uuid,
++    provider_kind text NOT NULL,
++    display_name text NOT NULL,
++    base_url text,
++    model_allowlist text[] NOT NULL,
++    residency_tier text NOT NULL,
++    priority smallint DEFAULT 100 NOT NULL,
++    settings_json jsonb DEFAULT '{}'::jsonb NOT NULL,
++    wrapped_api_key bytea,
++    api_key_nonce bytea,
++    wrapped_dek bytea,
++    dek_kid text,
++    is_enabled boolean DEFAULT true NOT NULL,
++    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    updated_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
++    CONSTRAINT ai_provider_configs_check CHECK (((wrapped_api_key IS NULL) = (wrapped_dek IS NULL))),
++    CONSTRAINT ai_provider_configs_display_name_check CHECK (((char_length(display_name) >= 1) AND (char_length(display_name) <= 80))),
++    CONSTRAINT ai_provider_configs_model_allowlist_check CHECK (((cardinality(model_allowlist) >= 1) AND (cardinality(model_allowlist) <= 32))),
++    CONSTRAINT ai_provider_configs_provider_kind_check CHECK ((provider_kind = ANY (ARRAY['openai'::text, 'ollama'::text, 'gemini'::text, 'fixture'::text]))),
++    CONSTRAINT ai_provider_configs_residency_tier_check CHECK ((residency_tier ~ '^[a-z0-9:._-]{1,64}$'::text))
++);
++
++ALTER TABLE ONLY public.ai_provider_configs FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.ai_provider_configs OWNER TO kanban_migrator;
++
++--
++-- Name: ai_token_ledgers; Type: TABLE; Schema: public; Owner: kanban_migrator
++--
++
++CREATE TABLE public.ai_token_ledgers (
++    id uuid DEFAULT public.uuidv7() NOT NULL,
++    workspace_id uuid NOT NULL,
++    project_id uuid,
++    provider_config_id uuid NOT NULL,
++    period_kind text NOT NULL,
++    period_start date NOT NULL,
++    token_cap bigint NOT NULL,
++    tokens_reserved bigint DEFAULT 0 NOT NULL,
++    tokens_used bigint DEFAULT 0 NOT NULL,
++    CONSTRAINT ai_token_ledgers_check CHECK (((tokens_used + tokens_reserved) <= token_cap)),
++    CONSTRAINT ai_token_ledgers_period_kind_check CHECK ((period_kind = ANY (ARRAY['daily'::text, 'monthly'::text]))),
++    CONSTRAINT ai_token_ledgers_token_cap_check CHECK ((token_cap >= 0)),
++    CONSTRAINT ai_token_ledgers_tokens_reserved_check CHECK ((tokens_reserved >= 0)),
++    CONSTRAINT ai_token_ledgers_tokens_used_check CHECK ((tokens_used >= 0))
++);
++
++ALTER TABLE ONLY public.ai_token_ledgers FORCE ROW LEVEL SECURITY;
++
++
++ALTER TABLE public.ai_token_ledgers OWNER TO kanban_migrator;
++
++--
++-- Name: ai_provider_configs ai_provider_configs_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.ai_provider_configs
++    ADD CONSTRAINT ai_provider_configs_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: ai_token_ledgers ai_token_ledgers_pkey; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.ai_token_ledgers
++    ADD CONSTRAINT ai_token_ledgers_pkey PRIMARY KEY (id);
++
++
++--
++-- Name: ai_token_ledgers ai_token_ledgers_workspace_id_project_id_provider_config_id_key; Type: CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.ai_token_ledgers
++    ADD CONSTRAINT ai_token_ledgers_workspace_id_project_id_provider_config_id_key UNIQUE NULLS NOT DISTINCT (workspace_id, project_id, provider_config_id, period_kind, period_start);
++
++
++--
++-- Name: idx_ai_provider_configs_ws_prio; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX idx_ai_provider_configs_ws_prio ON public.ai_provider_configs USING btree (workspace_id, priority);
++
++
++--
++-- Name: idx_ai_provider_configs_ws_proj; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX idx_ai_provider_configs_ws_proj ON public.ai_provider_configs USING btree (workspace_id, project_id);
++
++
++--
++-- Name: idx_ai_token_ledgers_lookup; Type: INDEX; Schema: public; Owner: kanban_migrator
++--
++
++CREATE INDEX idx_ai_token_ledgers_lookup ON public.ai_token_ledgers USING btree (workspace_id, provider_config_id, period_kind, period_start);
++
++
++--
++-- Name: ai_provider_configs ai_provider_configs_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.ai_provider_configs
++    ADD CONSTRAINT ai_provider_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
++
++
++--
++-- Name: ai_provider_configs ai_provider_configs_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.ai_provider_configs
++    ADD CONSTRAINT ai_provider_configs_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
++
++
++--
++-- Name: ai_token_ledgers ai_token_ledgers_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.ai_token_ledgers
++    ADD CONSTRAINT ai_token_ledgers_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
++
++
++--
++-- Name: ai_token_ledgers ai_token_ledgers_provider_config_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.ai_token_ledgers
++    ADD CONSTRAINT ai_token_ledgers_provider_config_id_fkey FOREIGN KEY (provider_config_id) REFERENCES public.ai_provider_configs(id) ON DELETE CASCADE;
++
++
++--
++-- Name: ai_token_ledgers ai_token_ledgers_workspace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE ONLY public.ai_token_ledgers
++    ADD CONSTRAINT ai_token_ledgers_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
++
++
++--
++-- Name: ai_provider_configs; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.ai_provider_configs ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: ai_provider_configs ai_provider_configs_delete_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY ai_provider_configs_delete_rls ON public.ai_provider_configs FOR DELETE USING (((workspace_id = public.app_current_workspace_id()) AND (((project_id IS NULL) AND (public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))) OR ((project_id IS NOT NULL) AND (public.app_has_object_capability(project_id, 64) OR public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))));
++
++
++--
++-- Name: ai_provider_configs ai_provider_configs_insert_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY ai_provider_configs_insert_rls ON public.ai_provider_configs FOR INSERT WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND (((project_id IS NULL) AND (public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))) OR ((project_id IS NOT NULL) AND (public.app_has_object_capability(project_id, 64) OR public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))));
++
++
++--
++-- Name: ai_provider_configs ai_provider_configs_select_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY ai_provider_configs_select_rls ON public.ai_provider_configs FOR SELECT USING (((workspace_id = public.app_current_workspace_id()) AND (((project_id IS NULL) AND (public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))) OR ((project_id IS NOT NULL) AND (public.app_has_object_capability(project_id, 64) OR public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))));
++
++
++--
++-- Name: ai_provider_configs ai_provider_configs_update_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY ai_provider_configs_update_rls ON public.ai_provider_configs FOR UPDATE USING (((workspace_id = public.app_current_workspace_id()) AND (((project_id IS NULL) AND (public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))) OR ((project_id IS NOT NULL) AND (public.app_has_object_capability(project_id, 64) OR public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text])))))) WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND (((project_id IS NULL) AND (public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))) OR ((project_id IS NOT NULL) AND (public.app_has_object_capability(project_id, 64) OR public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))));
++
++
++--
++-- Name: ai_token_ledgers; Type: ROW SECURITY; Schema: public; Owner: kanban_migrator
++--
++
++ALTER TABLE public.ai_token_ledgers ENABLE ROW LEVEL SECURITY;
++
++--
++-- Name: ai_token_ledgers ai_token_ledgers_delete_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY ai_token_ledgers_delete_rls ON public.ai_token_ledgers FOR DELETE USING (((workspace_id = public.app_current_workspace_id()) AND (((project_id IS NULL) AND (public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))) OR ((project_id IS NOT NULL) AND (public.app_has_object_capability(project_id, 64) OR public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))));
++
++
++--
++-- Name: ai_token_ledgers ai_token_ledgers_insert_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY ai_token_ledgers_insert_rls ON public.ai_token_ledgers FOR INSERT WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND (((project_id IS NULL) AND (public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))) OR ((project_id IS NOT NULL) AND (public.app_has_object_capability(project_id, 64) OR public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))))));
++
++
++--
++-- Name: ai_token_ledgers ai_token_ledgers_select_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY ai_token_ledgers_select_rls ON public.ai_token_ledgers FOR SELECT USING (((workspace_id = public.app_current_workspace_id()) AND (((project_id IS NULL) AND (public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))) OR ((project_id IS NOT NULL) AND (public.app_has_object_capability(project_id, 64) OR public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))) OR ((public.app_current_principal_id() IS NOT NULL) AND (public.app_current_principal_id() = public.app_agent_runtime_principal())))));
++
++
++--
++-- Name: ai_token_ledgers ai_token_ledgers_update_rls; Type: POLICY; Schema: public; Owner: kanban_migrator
++--
++
++CREATE POLICY ai_token_ledgers_update_rls ON public.ai_token_ledgers FOR UPDATE USING (((workspace_id = public.app_current_workspace_id()) AND (((project_id IS NULL) AND (public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))) OR ((project_id IS NOT NULL) AND (public.app_has_object_capability(project_id, 64) OR public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))) OR ((public.app_current_principal_id() IS NOT NULL) AND (public.app_current_principal_id() = public.app_agent_runtime_principal()))))) WITH CHECK (((workspace_id = public.app_current_workspace_id()) AND (((project_id IS NULL) AND (public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(NULL::uuid, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text]))) OR ((project_id IS NOT NULL) AND (public.app_has_object_capability(project_id, 64) OR public.app_has_object_capability(workspace_id, 64) OR public.app_principal_has_role(project_id, ARRAY['SERVER_ADMIN'::text, 'WORKSPACE_ADMIN'::text, 'PROJECT_ADMIN'::text]))) OR ((public.app_current_principal_id() IS NOT NULL) AND (public.app_current_principal_id() = public.app_agent_runtime_principal())))));
++
++
++--
++-- Name: TABLE ai_provider_configs; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT INSERT,DELETE,UPDATE ON TABLE public.ai_provider_configs TO kanban_app;
++
++
++--
++-- Name: COLUMN ai_provider_configs.id; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(id) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(id) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.workspace_id; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(workspace_id) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(workspace_id) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.project_id; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(project_id) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(project_id) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.provider_kind; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(provider_kind) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(provider_kind) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.display_name; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(display_name) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(display_name) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.base_url; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(base_url) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(base_url) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.model_allowlist; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(model_allowlist) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(model_allowlist) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.residency_tier; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(residency_tier) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(residency_tier) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.priority; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(priority) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(priority) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.settings_json; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(settings_json) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(settings_json) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.is_enabled; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(is_enabled) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(is_enabled) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.created_at; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(created_at) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(created_at) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: COLUMN ai_provider_configs.updated_at; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT(updated_at) ON TABLE public.ai_provider_configs TO kanban_app;
++GRANT SELECT(updated_at) ON TABLE public.ai_provider_configs TO app_rls_reader;
++
++
++--
++-- Name: TABLE ai_token_ledgers; Type: ACL; Schema: public; Owner: kanban_migrator
++--
++
++GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ai_token_ledgers TO kanban_app;
++GRANT SELECT ON TABLE public.ai_token_ledgers TO app_rls_reader;
++
++
++--
++-- PostgreSQL database dump complete
++--
++
++\unrestrict N9qHZbywB5Y8Sk1M3whQCatoZrVfBZYX4hE3oLthEZdIo92WOcPADChuKgBV32g
++
++
++-- Function ai_provider_secret definition:
++                                                                                                                                List of functions
++ Schema |        Name        |                                  Result data type                                  | Argument data types | Type | Volatility | Parallel |      Owner      | Security |         Access privileges         | Language | Internal name | Description 
++--------+--------------------+------------------------------------------------------------------------------------+---------------------+------+------------+----------+-----------------+----------+-----------------------------------+----------+---------------+-------------
++ public | ai_provider_secret | TABLE(wrapped_api_key bytea, api_key_nonce bytea, wrapped_dek bytea, dek_kid text) | p_config_id uuid    | func | stable     | unsafe   | kanban_migrator | definer  | kanban_migrator=X/kanban_migrator+| plpgsql  |               | 
++        |                    |                                                                                    |                     |      |            |          |                 |          | "agent-runtime"=X/kanban_migrator |          |               | 
++(1 row)
++
+diff --git a/docs/qa/KANBA-142/unit-test-results.txt b/docs/qa/KANBA-142/unit-test-results.txt
+new file mode 100644
+index 0000000..e788a15
+--- /dev/null
++++ b/docs/qa/KANBA-142/unit-test-results.txt
+@@ -0,0 +1,14 @@
++.................                                                        [100%]
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                          Stmts   Miss Branch BrPart  Cover   Missing
++-------------------------------------------------------------------------
++agent/budget.py                  90      0     24      0   100%
++database/models/ai.py            40      0      0      0   100%
++kanban/ai_config/service.py     217      2     74      2    99%   368->371, 476-477
++-------------------------------------------------------------------------
++TOTAL                           347      2     98      2    99%
++Required test coverage of 95% reached. Total coverage: 99.10%
++17 passed in 1.25s
++EXIT_CODE: 0
+diff --git a/kanban/ai_config/__init__.py b/kanban/ai_config/__init__.py
+new file mode 100644
+index 0000000..82b37aa
+--- /dev/null
++++ b/kanban/ai_config/__init__.py
+@@ -0,0 +1,23 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""AI provider configuration package."""
++
++from kanban.ai_config.service import (
++    AIConfigNotFoundError,
++    AIConfigValidationError,
++    AIProviderConfigService,
++    AirGapViolation,
++    EnvelopeIntegrityError,
++    build_ai_provider_aad,
++    validate_base_url,
++)
++
++__all__ = [
++    "AIConfigNotFoundError",
++    "AIConfigValidationError",
++    "AIProviderConfigService",
++    "AirGapViolation",
++    "EnvelopeIntegrityError",
++    "build_ai_provider_aad",
++    "validate_base_url",
++]
+diff --git a/kanban/ai_config/service.py b/kanban/ai_config/service.py
+new file mode 100644
+index 0000000..3c68229
+--- /dev/null
++++ b/kanban/ai_config/service.py
+@@ -0,0 +1,490 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""AI provider configuration service: key custody and air-gap enforcement (KB-P5-05a)."""
++
++from __future__ import annotations
++
++import re
++import urllib.parse
++import uuid
++from typing import TYPE_CHECKING, Any, Final
++
++from sqlalchemy import delete, select, text
++
++from database.models.ai import AIProviderConfig
++from kanban.security.envelope import (
++    BLOB_VERSION,
++    CODE_TAG_MISMATCH,
++    NONCE_LENGTH_BYTES,
++    EnvelopeDecryptError,
++    KekProvider,
++    SealedSecret,
++    StaticKekProvider,
++    open_bound,
++    seal_bound,
++)
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++_ALLOWED_PROVIDER_KINDS: Final[frozenset[str]] = frozenset(
++    {"openai", "ollama", "gemini", "fixture"}
++)
++_CLOUD_PROVIDER_KINDS: Final[frozenset[str]] = frozenset({"openai", "gemini"})
++_RESIDENCY_REGEX: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9:._-]{1,64}$")
++_LOOPBACK_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "::1", "localhost"})
++
++_MAX_DISPLAY_NAME_LEN: Final[int] = 80
++_MAX_MODELS_LEN: Final[int] = 32
++
++_DEFAULT_KEK_FALLBACK = StaticKekProvider(
++    keys={"kek-v1": b"k" * 32},
++    current="kek-v1",
++)
++
++
++class AirGapViolation(Exception):  # noqa: N818
++    """Raised when external cloud provider egress is attempted under active air-gap mode."""
++
++    def __init__(
++        self,
++        message: str = "Outbound cloud egress is denied under air-gap mode",
++        code: str = "AIR_GAP_EGRESS_DENIED",
++    ) -> None:
++        """Initialize AirGapViolation with diagnostic code and message."""
++        super().__init__(message)
++        self.code = code
++        self.message = message
++
++
++class EnvelopeIntegrityError(EnvelopeDecryptError):
++    """Raised when GCM authentication tag verification fails (e.g., bit flipped or tampered)."""
++
++    def __init__(
++        self,
++        code: str = CODE_TAG_MISMATCH,
++        message: str = "Envelope integrity check failed (authentication tag mismatch)",
++    ) -> None:
++        """Initialize EnvelopeIntegrityError with diagnostic code and message."""
++        super().__init__(code)
++        self.message = message
++
++
++class AIConfigValidationError(ValueError):
++    """Raised when an AI provider configuration fails validation constraints."""
++
++
++class AIConfigNotFoundError(KeyError):
++    """Raised when the requested AI provider configuration is not found."""
++
++
++def build_ai_provider_aad(
++    config_id: uuid.UUID | str,
++    workspace_id: uuid.UUID | str,
++    provider_kind: str,
++) -> bytes:
++    """Construct canonical Additional Authenticated Data (AAD) for provider row binding."""
++    return f"{config_id}|{workspace_id}|{provider_kind}".encode()
++
++
++def validate_base_url(base_url: str | None) -> str | None:
++    """Validate base URL scheme, absence of userinfo/query/fragment, and loopback rules."""
++    if base_url is None:
++        return None
++    trimmed = base_url.strip()
++    if not trimmed:
++        return None
++
++    parsed = urllib.parse.urlsplit(trimmed)
++    if parsed.scheme not in ("http", "https"):
++        msg = f"base_url scheme must be 'http' or 'https' (got {parsed.scheme!r})"
++        raise AIConfigValidationError(msg)
++
++    if parsed.username or parsed.password:
++        msg = "base_url must not contain userinfo"
++        raise AIConfigValidationError(msg)
++
++    if parsed.query:
++        msg = "base_url must not contain query parameters"
++        raise AIConfigValidationError(msg)
++
++    if parsed.fragment:
++        msg = "base_url must not contain fragment"
++        raise AIConfigValidationError(msg)
++
++    host = (parsed.hostname or "").strip("[]").lower()
++    if parsed.scheme != "https" and host not in _LOOPBACK_HOSTS:
++        msg = "base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost)"
++        raise AIConfigValidationError(msg)
++
++    return trimmed
++
++
++def _validate_fields(
++    provider_kind: str,
++    display_name: str,
++    model_allowlist: list[str],
++    residency_tier: str,
++    base_url: str | None,
++) -> None:
++    """Validate provider configuration field constraints against schema invariants."""
++    norm_kind = provider_kind.strip().lower()
++    if norm_kind not in _ALLOWED_PROVIDER_KINDS:
++        msg = f"provider_kind must be one of {sorted(_ALLOWED_PROVIDER_KINDS)}"
++        raise AIConfigValidationError(msg)
++
++    name = display_name.strip()
++    if not (1 <= len(name) <= _MAX_DISPLAY_NAME_LEN):
++        msg = f"display_name length must be between 1 and {_MAX_DISPLAY_NAME_LEN} (got {len(name)})"
++        raise AIConfigValidationError(msg)
++
++    if not (1 <= len(model_allowlist) <= _MAX_MODELS_LEN):
++        msg = f"model_allowlist cardinality must be between 1 and {_MAX_MODELS_LEN}"
++        raise AIConfigValidationError(msg)
++
++    for idx, model in enumerate(model_allowlist):
++        if not model.strip():
++            msg = f"model_allowlist entry at index {idx} must be a non-empty string"
++            raise AIConfigValidationError(msg)
++
++    tier = residency_tier.strip()
++    if not _RESIDENCY_REGEX.match(tier):
++        msg = f"residency_tier must match '^[a-z0-9:._-]{{1,64}}$' (got {residency_tier!r})"
++        raise AIConfigValidationError(msg)
++
++    validate_base_url(base_url)
++
++
++def _check_air_gap(provider_kind: str, *, air_gap_mode: bool | None) -> None:
++    """Enforce air-gap policy: cloud providers are forbidden when air_gap_mode is active."""
++    norm_kind = provider_kind.strip().lower()
++    if air_gap_mode is True and norm_kind in _CLOUD_PROVIDER_KINDS:
++        msg = (
++            f"Air-gap mode is active: outbound cloud egress to provider '{provider_kind}' "
++            f"is strictly prohibited"
++        )
++        raise AirGapViolation(msg, code="AIR_GAP_EGRESS_DENIED")
++
++
++class AIProviderConfigService:
++    """Service managing envelope-encrypted AI provider configurations and air-gap policy."""
++
++    def __init__(
++        self,
++        session: AsyncSession,
++        kek_provider: KekProvider | None = None,
++    ) -> None:
++        """Initialize service with active database session and KEK provider."""
++        self._session = session
++        self._kek = kek_provider if kek_provider is not None else _DEFAULT_KEK_FALLBACK
++
++    @staticmethod
++    def _seal_key_material(
++        config_id: uuid.UUID,
++        workspace_id: uuid.UUID,
++        provider_kind: str,
++        api_key: bytearray | bytes | str,
++        kek_provider: KekProvider,
++    ) -> tuple[bytes, bytes, bytes, str]:
++        """Wrap plaintext API key using AES-256-GCM envelope encryption and zero source bytes."""
++        if isinstance(api_key, str):
++            raw_key = bytearray(api_key.encode("utf-8"))
++        elif isinstance(api_key, bytes):
++            raw_key = bytearray(api_key)
++        else:
++            raw_key = api_key
++
++        try:
++            aad = build_ai_provider_aad(config_id, workspace_id, provider_kind)
++            sealed = seal_bound(bytes(raw_key), aad, kek_provider)
++
++            blob = sealed.encrypted_secret_blob
++            nonce = blob[1 : 1 + NONCE_LENGTH_BYTES]
++            wrapped_key = blob[1 + NONCE_LENGTH_BYTES :]
++            wrapped_dek = sealed.wrapped_dek
++            dek_kid = sealed.dek_kid
++
++            return wrapped_key, nonce, wrapped_dek, dek_kid
++        finally:
++            if isinstance(api_key, bytearray):
++                for idx in range(len(api_key)):
++                    api_key[idx] = 0
++            if raw_key is not api_key:
++                for idx in range(len(raw_key)):
++                    raw_key[idx] = 0
++
++    @staticmethod
++    def _unwrap_key_material(  # noqa: PLR0913, PLR0917
++        config_id: uuid.UUID,
++        workspace_id: uuid.UUID,
++        provider_kind: str,
++        wrapped_api_key: bytes,
++        api_key_nonce: bytes,
++        wrapped_dek: bytes,
++        dek_kid: str,
++        kek_provider: KekProvider,
++    ) -> bytearray:
++        """Unwrap and authenticate encrypted API key returning a mutable bytearray."""
++        aad = build_ai_provider_aad(config_id, workspace_id, provider_kind)
++        encrypted_blob = bytes([BLOB_VERSION]) + api_key_nonce + wrapped_api_key
++        sealed = SealedSecret(
++            encrypted_secret_blob=encrypted_blob,
++            wrapped_dek=wrapped_dek,
++            dek_kid=dek_kid,
++        )
++
++        try:
++            return open_bound(sealed, aad, kek_provider)
++        except EnvelopeDecryptError as exc:
++            raise EnvelopeIntegrityError(
++                code=exc.code,
++                message=f"Envelope integrity check failed: {exc.code}",
++            ) from exc
++
++    async def create_config(  # noqa: PLR0913
++        self,
++        workspace_id: uuid.UUID,
++        provider_kind: str,
++        display_name: str,
++        model_allowlist: list[str],
++        *,
++        residency_tier: str = "default",
++        project_id: uuid.UUID | None = None,
++        base_url: str | None = None,
++        priority: int = 100,
++        settings_json: dict[str, Any] | None = None,
++        api_key: bytearray | bytes | str | None = None,
++        is_enabled: bool = True,
++        air_gap_mode: bool | None = None,
++        config_id: uuid.UUID | None = None,
++    ) -> AIProviderConfig:
++        """Create and persist a new AI provider configuration."""
++        _validate_fields(
++            provider_kind=provider_kind,
++            display_name=display_name,
++            model_allowlist=model_allowlist,
++            residency_tier=residency_tier,
++            base_url=base_url,
++        )
++        _check_air_gap(provider_kind, air_gap_mode=air_gap_mode)
++
++        assigned_id = config_id if config_id is not None else uuid.uuid4()
++        norm_kind = provider_kind.strip().lower()
++
++        wrapped_key: bytes | None = None
++        nonce: bytes | None = None
++        wrapped_dek: bytes | None = None
++        dek_kid: str | None = None
++
++        if api_key is not None:
++            wrapped_key, nonce, wrapped_dek, dek_kid = self._seal_key_material(
++                config_id=assigned_id,
++                workspace_id=workspace_id,
++                provider_kind=norm_kind,
++                api_key=api_key,
++                kek_provider=self._kek,
++            )
++
++        config = AIProviderConfig(
++            id=assigned_id,
++            workspace_id=workspace_id,
++            project_id=project_id,
++            provider_kind=norm_kind,
++            display_name=display_name.strip(),
++            base_url=base_url.strip() if base_url else None,
++            model_allowlist=[m.strip() for m in model_allowlist],
++            residency_tier=residency_tier.strip(),
++            priority=priority,
++            settings_json=settings_json if settings_json is not None else {},
++            wrapped_api_key=wrapped_key,
++            api_key_nonce=nonce,
++            wrapped_dek=wrapped_dek,
++            dek_kid=dek_kid,
++            is_enabled=is_enabled,
++        )
++
++        self._session.add(config)
++        await self._session.flush()
++        return config
++
++    async def update_config(  # noqa: C901, PLR0912, PLR0913
++        self,
++        config_id: uuid.UUID,
++        *,
++        display_name: str | None = None,
++        model_allowlist: list[str] | None = None,
++        residency_tier: str | None = None,
++        base_url: str | None = None,
++        priority: int | None = None,
++        settings_json: dict[str, Any] | None = None,
++        api_key: bytearray | bytes | str | None = None,
++        is_enabled: bool | None = None,
++        air_gap_mode: bool | None = None,
++    ) -> AIProviderConfig:
++        """Update an existing AI provider configuration."""
++        config = await self.get_config(config_id)
++        if config is None:
++            msg = f"AIProviderConfig {config_id} not found"
++            raise AIConfigNotFoundError(msg)
++
++        if air_gap_mode is not None:
++            _check_air_gap(config.provider_kind, air_gap_mode=air_gap_mode)
++
++        if display_name is not None:
++            name = display_name.strip()
++            if not (1 <= len(name) <= _MAX_DISPLAY_NAME_LEN):
++                msg = (
++                    f"display_name length must be between 1 and {_MAX_DISPLAY_NAME_LEN} "
++                    f"(got {len(name)})"
++                )
++                raise AIConfigValidationError(msg)
++            config.display_name = name
++
++        if model_allowlist is not None:
++            if not (1 <= len(model_allowlist) <= _MAX_MODELS_LEN):
++                msg = (
++                    f"model_allowlist cardinality must be between 1 and {_MAX_MODELS_LEN} "
++                    f"(got {len(model_allowlist)})"
++                )
++                raise AIConfigValidationError(msg)
++            config.model_allowlist = [m.strip() for m in model_allowlist]
++
++        if residency_tier is not None:
++            tier = residency_tier.strip()
++            if not _RESIDENCY_REGEX.match(tier):
++                msg = f"residency_tier must match '^[a-z0-9:._-]{{1,64}}$' (got {tier!r})"
++                raise AIConfigValidationError(msg)
++            config.residency_tier = tier
++
++        if base_url is not None:
++            config.base_url = validate_base_url(base_url)
++
++        if priority is not None:
++            config.priority = priority
++
++        if settings_json is not None:
++            config.settings_json = settings_json
++
++        if is_enabled is not None:
++            config.is_enabled = is_enabled
++
++        if api_key is not None:
++            wrapped_key, nonce, wrapped_dek, dek_kid = self._seal_key_material(
++                config_id=config.id,
++                workspace_id=config.workspace_id,
++                provider_kind=config.provider_kind,
++                api_key=api_key,
++                kek_provider=self._kek,
++            )
++            config.wrapped_api_key = wrapped_key
++            config.api_key_nonce = nonce
++            config.wrapped_dek = wrapped_dek
++            config.dek_kid = dek_kid
++
++        await self._session.flush()
++        return config
++
++    async def disable_config(self, config_id: uuid.UUID) -> AIProviderConfig:
++        """Mark configuration row as disabled without deleting records."""
++        return await self.update_config(config_id, is_enabled=False)
++
++    async def delete_config(self, config_id: uuid.UUID) -> None:
++        """Delete an AI provider configuration row and cascaded ledgers."""
++        stmt = delete(AIProviderConfig).where(AIProviderConfig.id == config_id)
++        await self._session.execute(stmt)
++        await self._session.flush()
++
++    async def get_config(self, config_id: uuid.UUID) -> AIProviderConfig | None:
++        """Retrieve configuration row by primary key."""
++        stmt = select(AIProviderConfig).where(AIProviderConfig.id == config_id)
++        result = await self._session.execute(stmt)
++        return result.scalars().first()
++
++    async def list_configs(
++        self,
++        workspace_id: uuid.UUID,
++        project_id: uuid.UUID | None = None,
++    ) -> list[AIProviderConfig]:
++        """List provider configurations for workspace, optionally filtered by project."""
++        stmt = select(AIProviderConfig).where(AIProviderConfig.workspace_id == workspace_id)
++        if project_id is not None:
++            stmt = stmt.where(AIProviderConfig.project_id == project_id)
++        stmt = stmt.order_by(AIProviderConfig.priority.asc(), AIProviderConfig.created_at.asc())
++        result = await self._session.execute(stmt)
++        return list(result.scalars().all())
++
++    def to_public_dict(self, config: AIProviderConfig) -> dict[str, Any]:
++        """Convert configuration to public dictionary with zero secret leakage."""
++        return {
++            "id": str(config.id),
++            "workspace_id": str(config.workspace_id),
++            "project_id": str(config.project_id) if config.project_id is not None else None,
++            "provider_kind": config.provider_kind,
++            "display_name": config.display_name,
++            "base_url": config.base_url,
++            "model_allowlist": list(config.model_allowlist),
++            "residency_tier": config.residency_tier,
++            "priority": config.priority,
++            "settings_json": dict(config.settings_json or {}),
++            "is_enabled": config.is_enabled,
++            "api_key_set": bool(config.wrapped_api_key is not None),
++            "created_at": config.created_at.isoformat(),
++            "updated_at": config.updated_at.isoformat(),
++        }
++
++    async def unwrap_api_key(
++        self,
++        config_id: uuid.UUID,
++        *,
++        secret_override: tuple[bytes, bytes, bytes, str] | None = None,
++    ) -> bytearray:
++        """Unwrap envelope-encrypted API key via security definer function."""
++        if secret_override is not None:
++            wrapped_key, nonce, wrapped_dek, dek_kid = secret_override
++            cfg_stmt = text(
++                "SELECT workspace_id, provider_kind FROM ai_provider_configs WHERE id = :cid"
++            )
++            cfg_res = await self._session.execute(cfg_stmt, {"cid": config_id})
++            cfg_row = cfg_res.mappings().first()
++            if cfg_row is None:
++                msg = f"AI provider config {config_id} not found"
++                raise AIConfigNotFoundError(msg)
++            ws_id = cfg_row["workspace_id"]
++            kind = cfg_row["provider_kind"]
++        else:
++            fn_stmt = text(
++                "SELECT wrapped_api_key, api_key_nonce, wrapped_dek, dek_kid "
++                "FROM ai_provider_secret(:cid)"
++            )
++            res = await self._session.execute(fn_stmt, {"cid": config_id})
++            row = res.mappings().first()
++            if row is None or row["wrapped_api_key"] is None:
++                msg = f"No secret or configuration found for config {config_id}"
++                raise AIConfigNotFoundError(msg)
++
++            wrapped_key = bytes(row["wrapped_api_key"])
++            nonce = bytes(row["api_key_nonce"])
++            wrapped_dek = bytes(row["wrapped_dek"])
++            dek_kid = str(row["dek_kid"])
++
++            cfg_stmt = text(
++                "SELECT workspace_id, provider_kind FROM ai_provider_configs WHERE id = :cid"
++            )
++            cfg_res = await self._session.execute(cfg_stmt, {"cid": config_id})
++            cfg_row = cfg_res.mappings().first()
++            if cfg_row is None:
++                msg = f"AI provider config {config_id} not found"
++                raise AIConfigNotFoundError(msg)
++            ws_id = cfg_row["workspace_id"]
++            kind = cfg_row["provider_kind"]
++
++        return self._unwrap_key_material(
++            config_id=config_id,
++            workspace_id=ws_id,
++            provider_kind=kind,
++            wrapped_api_key=wrapped_key,
++            api_key_nonce=nonce,
++            wrapped_dek=wrapped_dek,
++            dek_kid=dek_kid,
++            kek_provider=self._kek,
++        )
+diff --git a/kanban/tests/ai_config/__init__.py b/kanban/tests/ai_config/__init__.py
+new file mode 100644
+index 0000000..238eeb1
+--- /dev/null
++++ b/kanban/tests/ai_config/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""AI provider configuration tests."""
+diff --git a/kanban/tests/ai_config/test_service.py b/kanban/tests/ai_config/test_service.py
+new file mode 100644
+index 0000000..41285de
+--- /dev/null
++++ b/kanban/tests/ai_config/test_service.py
+@@ -0,0 +1,457 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for AIProviderConfigService, key custody, and air-gap enforcement (KB-P5-05a)."""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++
++from database.tests.conftest import bootstrap_workspace_admin
++from kanban.ai_config.service import (
++    AIConfigNotFoundError,
++    AIConfigValidationError,
++    AIProviderConfigService,
++    AirGapViolation,
++    EnvelopeIntegrityError,
++    validate_base_url,
++)
++from kanban.security.envelope import StaticKekProvider
++from kanban.tests.security.helpers import create_project
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++@pytest.fixture
++def kek_provider() -> StaticKekProvider:
++    """Fixture providing static KEK provider."""
++    return StaticKekProvider(
++        keys={"kek-v1": b"k" * 32, "kek-v2": b"m" * 32},
++        current="kek-v1",
++    )
++
++
++@pytest.mark.asyncio
++async def test_01_positive_create_and_unwrap_secret(
++    db_session: AsyncSession,
++    kek_provider: StaticKekProvider,
++) -> None:
++    """Test Case 1: Positive create config with key, verify public dict and unwrap roundtrip."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    service = AIProviderConfigService(db_session, kek_provider)
++
++    original_key = bytearray(b"test-openai-super-secret-key-12345")
++    config = await service.create_config(
++        workspace_id=ws_id,
++        provider_kind="openai",
++        display_name="Production OpenAI",
++        model_allowlist=["gpt-4o", "gpt-4o-mini"],
++        residency_tier="us-east-1",
++        base_url="https://api.openai.com/v1",
++        api_key=original_key,
++    )
++
++    # 1. Row has ciphertext, nonce, wrapped_dek, dek_kid
++    assert config.wrapped_api_key is not None
++    assert len(config.wrapped_api_key) > 0
++    assert config.api_key_nonce is not None
++    assert len(config.api_key_nonce) == 12
++    assert config.wrapped_dek is not None
++    assert len(config.wrapped_dek) > 0
++    assert config.dek_kid == "kek-v1"
++
++    # 2. to_public_dict() has api_key_set: true and no secret key material
++    public_dict = service.to_public_dict(config)
++    assert public_dict["api_key_set"] is True
++    assert "wrapped_api_key" not in public_dict
++    assert "api_key_nonce" not in public_dict
++    assert "wrapped_dek" not in public_dict
++    assert "dek_kid" not in public_dict
++    assert public_dict["display_name"] == "Production OpenAI"
++    assert public_dict["provider_kind"] == "openai"
++
++    # 3. Unwrap through ai_provider_secret yields original plaintext key
++    unwrapped = await service.unwrap_api_key(config.id)
++    assert unwrapped == bytearray(b"test-openai-super-secret-key-12345")
++
++
++@pytest.mark.asyncio
++async def test_03_gcm_tag_tamper_fails_closed(
++    db_session: AsyncSession,
++    kek_provider: StaticKekProvider,
++) -> None:
++    """Test Case 3: GCM tag tamper (flip 1 byte) raises EnvelopeIntegrityError."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    service = AIProviderConfigService(db_session, kek_provider)
++
++    config = await service.create_config(
++        workspace_id=ws_id,
++        provider_kind="fixture",
++        display_name="Fixture LLM",
++        model_allowlist=["fixture-fast"],
++        residency_tier="test-tier",
++        api_key=bytearray(b"fixture-secret-token"),
++    )
++
++    assert config.wrapped_api_key is not None
++    assert config.api_key_nonce is not None
++    assert config.wrapped_dek is not None
++    assert config.dek_kid is not None
++
++    # Flip 1 byte in the wrapped API key ciphertext/tag
++    tampered_bytes = bytearray(config.wrapped_api_key)
++    tampered_bytes[-1] ^= 0x01
++
++    tampered_secret = (
++        bytes(tampered_bytes),
++        config.api_key_nonce,
++        config.wrapped_dek,
++        config.dek_kid,
++    )
++
++    with pytest.raises(EnvelopeIntegrityError) as exc_info:
++        await service.unwrap_api_key(config.id, secret_override=tampered_secret)
++
++    assert exc_info.value.code == "TAG_MISMATCH"
++
++
++@pytest.mark.asyncio
++async def test_04_save_gemini_air_gap_violation(
++    db_session: AsyncSession,
++    kek_provider: StaticKekProvider,
++) -> None:
++    """Test Case 4: Security: save gemini/openai with air_gap_mode=TRUE raises AirGapViolation."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    service = AIProviderConfigService(db_session, kek_provider)
++
++    # 1. Saving gemini under air_gap_mode=True raises AirGapViolation
++    with pytest.raises(AirGapViolation) as exc_gemini:
++        await service.create_config(
++            workspace_id=ws_id,
++            provider_kind="gemini",
++            display_name="Cloud Gemini",
++            model_allowlist=["gemini-1.5-pro"],
++            air_gap_mode=True,
++        )
++    assert exc_gemini.value.code == "AIR_GAP_EGRESS_DENIED"
++
++    # 2. Saving openai under air_gap_mode=True raises AirGapViolation
++    with pytest.raises(AirGapViolation) as exc_openai:
++        await service.create_config(
++            workspace_id=ws_id,
++            provider_kind="openai",
++            display_name="Cloud OpenAI",
++            model_allowlist=["gpt-4o"],
++            air_gap_mode=True,
++        )
++    assert exc_openai.value.code == "AIR_GAP_EGRESS_DENIED"
++
++    # 3. Saving ollama and fixture under air_gap_mode=True is permitted
++    ollama_cfg = await service.create_config(
++        workspace_id=ws_id,
++        provider_kind="ollama",
++        display_name="Local Ollama",
++        model_allowlist=["llama3.1:8b"],
++        air_gap_mode=True,
++    )
++    assert ollama_cfg.provider_kind == "ollama"
++
++    fixture_cfg = await service.create_config(
++        workspace_id=ws_id,
++        provider_kind="fixture",
++        display_name="Fixture LLM",
++        model_allowlist=["fixture-model"],
++        air_gap_mode=True,
++    )
++    assert fixture_cfg.provider_kind == "fixture"
++
++    # 4. Saving gemini under air_gap_mode=False succeeds
++    cloud_ok = await service.create_config(
++        workspace_id=ws_id,
++        provider_kind="gemini",
++        display_name="Permitted Cloud Gemini",
++        model_allowlist=["gemini-1.5-pro"],
++        air_gap_mode=False,
++    )
++    assert cloud_ok.provider_kind == "gemini"
++
++
++@pytest.mark.asyncio
++async def test_05_plaintext_bytearray_zeroized_after_create(
++    db_session: AsyncSession,
++    kek_provider: StaticKekProvider,
++) -> None:
++    """Test Case 5: Security: plaintext bytearray is all zero bytes after create() returns."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    service = AIProviderConfigService(db_session, kek_provider)
++
++    secret_payload = b"test-sensitive-api-token-must-be-scrubbed"
++    key_buf = bytearray(secret_payload)
++    assert any(b != 0 for b in key_buf)
++
++    config = await service.create_config(
++        workspace_id=ws_id,
++        provider_kind="openai",
++        display_name="Zeroize Test Provider",
++        model_allowlist=["gpt-4o"],
++        api_key=key_buf,
++    )
++
++    # In-place zeroization verified: every single byte in the caller's bytearray is 0x00
++    assert len(key_buf) == len(secret_payload)
++    assert all(b == 0 for b in key_buf)
++
++    # Key was sealed properly and can still be unwrapped
++    unwrapped = await service.unwrap_api_key(config.id)
++    assert unwrapped == bytearray(secret_payload)
++
++
++def test_base_url_validation_matrix() -> None:
++    """Verify base_url constraints: schemes, userinfo, queries, fragments, and loopback rules."""
++    # Valid configurations
++    assert validate_base_url(None) is None
++    assert validate_base_url("   ") is None
++    assert validate_base_url("https://api.openai.com/v1") == "https://api.openai.com/v1"
++    assert validate_base_url("http://127.0.0.1:11434") == "http://127.0.0.1:11434"
++    assert validate_base_url("http://localhost:8000") == "http://localhost:8000"
++    assert validate_base_url("http://[::1]:8080") == "http://[::1]:8080"
++
++    # Invalid schemes
++    with pytest.raises(AIConfigValidationError, match="scheme must be 'http' or 'https'"):
++        validate_base_url("ftp://127.0.0.1:11434")
++
++    # Userinfo rejected
++    with pytest.raises(AIConfigValidationError, match="userinfo"):
++        validate_base_url("https://user:pass@api.openai.com/v1")
++
++    # Query parameters rejected
++    with pytest.raises(AIConfigValidationError, match="query parameters"):
++        validate_base_url("https://api.openai.com/v1?token=123")
++
++    # Fragment rejected
++    with pytest.raises(AIConfigValidationError, match="fragment"):
++        validate_base_url("https://api.openai.com/v1#heading")
++
++    # Insecure HTTP on non-loopback rejected
++    with pytest.raises(AIConfigValidationError, match="must use HTTPS unless targeting loopback"):
++        validate_base_url("http://api.openai.com/v1")
++
++
++@pytest.mark.asyncio
++async def test_field_validation_errors(
++    db_session: AsyncSession,
++    kek_provider: StaticKekProvider,
++) -> None:
++    """Verify validation errors for provider_kind, display_name, models, and residency_tier."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    service = AIProviderConfigService(db_session, kek_provider)
++
++    # 1. Invalid provider kind
++    with pytest.raises(AIConfigValidationError, match="provider_kind must be one of"):
++        await service.create_config(
++            workspace_id=ws_id,
++            provider_kind="unknown-kind",
++            display_name="Invalid Provider",
++            model_allowlist=["model-1"],
++        )
++
++    # 2. Display name too short or too long
++    with pytest.raises(AIConfigValidationError, match="display_name length"):
++        await service.create_config(
++            workspace_id=ws_id,
++            provider_kind="fixture",
++            display_name="",
++            model_allowlist=["model-1"],
++        )
++    with pytest.raises(AIConfigValidationError, match="display_name length"):
++        await service.create_config(
++            workspace_id=ws_id,
++            provider_kind="fixture",
++            display_name="A" * 81,
++            model_allowlist=["model-1"],
++        )
++
++    # 3. Model allowlist empty or too large or containing empty items
++    with pytest.raises(AIConfigValidationError, match="model_allowlist cardinality"):
++        await service.create_config(
++            workspace_id=ws_id,
++            provider_kind="fixture",
++            display_name="Empty Models",
++            model_allowlist=[],
++        )
++    with pytest.raises(AIConfigValidationError, match="model_allowlist cardinality"):
++        await service.create_config(
++            workspace_id=ws_id,
++            provider_kind="fixture",
++            display_name="Too Many Models",
++            model_allowlist=[f"m-{i}" for i in range(33)],
++        )
++    with pytest.raises(AIConfigValidationError, match="non-empty string"):
++        await service.create_config(
++            workspace_id=ws_id,
++            provider_kind="fixture",
++            display_name="Blank Model Entry",
++            model_allowlist=["valid", "  "],
++        )
++
++    # 4. Residency tier regex violation
++    with pytest.raises(AIConfigValidationError, match="residency_tier must match"):
++        await service.create_config(
++            workspace_id=ws_id,
++            provider_kind="fixture",
++            display_name="Bad Residency",
++            model_allowlist=["model-1"],
++            residency_tier="INVALID TIER WITH SPACES",
++        )
++
++
++@pytest.mark.asyncio
++async def test_crud_and_lifecycle_operations(
++    db_session: AsyncSession,
++    kek_provider: StaticKekProvider,
++) -> None:
++    """Verify create, get, list, update, disable, delete, and string/bytes API key support."""
++    ws_id, admin_id = await bootstrap_workspace_admin(db_session)
++    proj_id = await create_project(db_session, ws_id, identifier="PRJ", created_by_id=admin_id)
++
++    service = AIProviderConfigService(db_session, kek_provider)
++
++    # 1. Create with str key and project_id
++    cfg1 = await service.create_config(
++        workspace_id=ws_id,
++        project_id=proj_id,
++        provider_kind="fixture",
++        display_name="Provider 1",
++        model_allowlist=["model-a"],
++        priority=10,
++        api_key="str-api-key-test",
++    )
++    assert cfg1.project_id == proj_id
++
++    # 2. Create with bytes key (no project_id -> workspace default)
++    cfg2 = await service.create_config(
++        workspace_id=ws_id,
++        project_id=None,
++        provider_kind="ollama",
++        display_name="Provider 2",
++        model_allowlist=["model-b"],
++        priority=20,
++        api_key=b"bytes-api-key-test",
++    )
++
++    # 3. Create without key
++    cfg3 = await service.create_config(
++        workspace_id=ws_id,
++        provider_kind="fixture",
++        display_name="Provider 3",
++        model_allowlist=["model-c"],
++        priority=5,
++    )
++    assert cfg3.wrapped_api_key is None
++    pub3 = service.to_public_dict(cfg3)
++    assert pub3["api_key_set"] is False
++
++    # 4. List configs
++    all_ws = await service.list_configs(ws_id)
++    assert len(all_ws) == 3
++    # Ordered by priority: cfg3 (5), cfg1 (10), cfg2 (20)
++    assert [c.id for c in all_ws] == [cfg3.id, cfg1.id, cfg2.id]
++
++    proj_only = await service.list_configs(ws_id, project_id=proj_id)
++    assert len(proj_only) == 1
++    assert proj_only[0].id == cfg1.id
++
++    # 5. Get config
++    fetched = await service.get_config(cfg1.id)
++    assert fetched is not None
++    assert fetched.display_name == "Provider 1"
++    assert await service.get_config(uuid.uuid4()) is None
++
++    # 6. Update config fields
++    new_key = bytearray(b"rotated-secret-key")
++    updated = await service.update_config(
++        cfg1.id,
++        display_name="Updated Provider 1",
++        model_allowlist=["model-a-new", "model-a-v2"],
++        residency_tier="eu-west-1",
++        base_url="http://127.0.0.1:9000",
++        priority=50,
++        settings_json={"timeout": 30},
++        api_key=new_key,
++        is_enabled=True,
++    )
++    assert updated.display_name == "Updated Provider 1"
++    assert updated.model_allowlist == ["model-a-new", "model-a-v2"]
++    assert updated.residency_tier == "eu-west-1"
++    assert updated.base_url == "http://127.0.0.1:9000"
++    assert updated.priority == 50
++    assert updated.settings_json == {"timeout": 30}
++    assert all(b == 0 for b in new_key)  # zeroized
++
++    # Verify unwrapped key is updated key
++    unwrapped_new = await service.unwrap_api_key(cfg1.id)
++    assert unwrapped_new == bytearray(b"rotated-secret-key")
++
++    # 7. Update air-gap check
++    cloud_cfg = await service.create_config(
++        workspace_id=ws_id,
++        provider_kind="openai",
++        display_name="Cloud For Update",
++        model_allowlist=["gpt-4o"],
++        air_gap_mode=False,
++    )
++    with pytest.raises(AirGapViolation):
++        await service.update_config(cloud_cfg.id, air_gap_mode=True)
++
++    # 8. Update validation error checks
++    with pytest.raises(AIConfigNotFoundError):
++        await service.update_config(uuid.uuid4(), display_name="Ghost")
++    with pytest.raises(AIConfigValidationError):
++        await service.update_config(cfg1.id, display_name="")
++    with pytest.raises(AIConfigValidationError):
++        await service.update_config(cfg1.id, model_allowlist=[])
++    with pytest.raises(AIConfigValidationError):
++        await service.update_config(cfg1.id, residency_tier="BAD TIER")
++
++    # 9. Disable config
++    disabled = await service.disable_config(cfg2.id)
++    assert disabled.is_enabled is False
++
++    # 10. Delete config
++    await service.delete_config(cfg2.id)
++    assert await service.get_config(cfg2.id) is None
++
++
++@pytest.mark.asyncio
++async def test_unwrap_edge_cases(
++    db_session: AsyncSession,
++    kek_provider: StaticKekProvider,
++) -> None:
++    """Verify unwrap_api_key edge cases: missing config and missing secret."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    service = AIProviderConfigService(db_session, kek_provider)
++
++    cfg = await service.create_config(
++        workspace_id=ws_id,
++        provider_kind="fixture",
++        display_name="No Key Provider",
++        model_allowlist=["m1"],
++    )
++
++    # 1. Row has no secret -> AIConfigNotFoundError
++    with pytest.raises(AIConfigNotFoundError, match="No secret or configuration found"):
++        await service.unwrap_api_key(cfg.id)
++
++    # 2. Non-existent ID -> AIConfigNotFoundError
++    with pytest.raises(AIConfigNotFoundError, match="No secret or configuration found"):
++        await service.unwrap_api_key(uuid.uuid4())
++
++    # 3. Secret override with non-existent ID -> AIConfigNotFoundError
++    with pytest.raises(AIConfigNotFoundError, match="not found"):
++        await service.unwrap_api_key(
++            uuid.uuid4(),
++            secret_override=(b"k", b"n" * 12, b"d", "kek-v1"),
++        )
+diff --git a/tests/fixtures/ai/budget_usage_48_tokens.yaml b/tests/fixtures/ai/budget_usage_48_tokens.yaml
+new file mode 100644
+index 0000000..3cef52e
+--- /dev/null
++++ b/tests/fixtures/ai/budget_usage_48_tokens.yaml
+@@ -0,0 +1,17 @@
++cassette_version: 1
++matcher: {}
++simulated_ttft_ms: 2.0
++usage:
++  prompt_tokens: 32
++  completion_tokens: 16
++  total_tokens: 48
++stream_chunks:
++  - "Budget"
++  - " reserve"
++  - " and"
++  - " settle"
++  - " 48"
++  - " tokens"
++structured_output:
++  tokens: 48
++  status: "settled"
+diff --git a/tests/fixtures/ai/budget_usage_overage.yaml b/tests/fixtures/ai/budget_usage_overage.yaml
+new file mode 100644
+index 0000000..f6b2149
+--- /dev/null
++++ b/tests/fixtures/ai/budget_usage_overage.yaml
+@@ -0,0 +1,17 @@
++cassette_version: 1
++matcher: {}
++simulated_ttft_ms: 2.0
++usage:
++  prompt_tokens: 80
++  completion_tokens: 40
++  total_tokens: 120
++stream_chunks:
++  - "Budget"
++  - " overage"
++  - " response"
++  - " emitting"
++  - " 120"
++  - " tokens"
++structured_output:
++  tokens: 120
++  status: "overage"
