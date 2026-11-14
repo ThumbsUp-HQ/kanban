@@ -1,0 +1,39 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 19 items
+
+database/tests/test_lockout_safeguards.py::test_case_1_layer_1_sole_admin_card_disable_or_delete_prevented PASSED [  5%]
+database/tests/test_lockout_safeguards.py::test_case_2_layer_1_card_without_admin_identity_does_not_count PASSED [ 10%]
+database/tests/test_lockout_safeguards.py::test_case_3_layer_1_concurrency_dual_disable_serializes PASSED [ 15%]
+database/tests/test_lockout_safeguards.py::test_case_4_layer_2_handshake_probe_15m PASSED [ 21%]
+database/tests/test_lockout_safeguards.py::test_case_5_layer_2_member_login_does_not_satisfy_handshake_gate PASSED [ 26%]
+database/tests/test_lockout_safeguards.py::test_case_6_credentials_and_identity_delete_prevented PASSED [ 31%]
+database/tests/test_lockout_safeguards.py::test_case_7_bootstrap_allowance_when_zero_admins_exist PASSED [ 36%]
+kanban/tests/auth/test_lockout_mapping.py::test_lockout_prevented_error_problem_mapping PASSED [ 42%]
+kanban/tests/auth/test_lockout_mapping.py::test_map_sqlstate_to_lockout_error_parsing PASSED [ 47%]
+kanban/tests/auth/test_lockout_mapping.py::test_record_external_admin_handshake_integration PASSED [ 52%]
+kanban/tests/auth/test_lockout_mapping.py::test_assert_local_admin_disable_allowed_integration PASSED [ 57%]
+kanban/tests/cli/test_emergency_unlock.py::test_case_7_layer_3_privilege_wall_kanban_app PASSED [ 63%]
+kanban/tests/cli/test_emergency_unlock.py::test_case_9_cli_negative_validations PASSED [ 68%]
+kanban/tests/cli/test_emergency_unlock.py::test_case_8_cli_positive_emergency_unlock_and_hash_chain PASSED [ 73%]
+kanban/tests/cli/test_emergency_unlock.py::test_cli_end_to_end_subcommand_dispatch PASSED [ 78%]
+kanban/tests/cli/test_emergency_unlock.py::test_get_admin_dsn_resolution PASSED [ 84%]
+kanban/tests/cli/test_emergency_unlock.py::test_cli_workspace_resolution_paths PASSED [ 89%]
+kanban/tests/cli/test_emergency_unlock.py::test_cli_permission_and_general_error_handling PASSED [ 94%]
+kanban/tests/cli/test_emergency_unlock.py::test_handle_emergency_unlock_outside_event_loop PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                           Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------
+kanban/auth/cards/lockout.py      58      0     24      1    99%   63->66
+kanban/cli/auth.py                91      2     22      1    97%   189-190
+--------------------------------------------------------------------------
+TOTAL                            149      2     46      2    98%
+Required test coverage of 95% reached. Total coverage: 97.95%
+============================== 19 passed in 0.85s ==============================

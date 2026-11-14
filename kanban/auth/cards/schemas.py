@@ -45,6 +45,7 @@ class AuthCardAdmin(BaseModel):
     public_config: dict[str, Any] = Field(default_factory=dict)
     dek_kid: str = "kek-v1"
     last_health_status: str = "UNVERIFIED"
+    last_admin_handshake_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     has_secret: bool = False
