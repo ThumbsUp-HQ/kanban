@@ -34,10 +34,14 @@ from sqlalchemy import (
 from database.models import (
     Doc,
     Issue,
+    IssueAssignee,
     ObjectRecord,
     Page,
+    Principal,
     Project,
+    ProjectPriority,
     Sticky,
+    WorkflowState,
 )
 from kanban.api.problems import ProblemException
 from kanban.api.v1.schemas.search import (
@@ -60,6 +64,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from kanban.api.deps import PrincipalContext
+    from kanban.api.v1.schemas.views import FilterSpec
 
 __all__ = [
     "decode_search_cursor",
@@ -224,49 +229,72 @@ def _build_issue_query(
     project_id: uuid.UUID | None,
     key_match: tuple[str, int] | None,
     extra_predicates: list[Any] | None = None,
+    *,
+    include_metadata: bool = False,
 ) -> Select[Any]:
     """Build issue search query expression."""
-    tsq = func.websearch_to_tsquery("english", clean_query)
-    ts_rank = func.ts_rank_cd(Issue.search_tsv, tsq, _RANK_NORMALIZATION)
-    w_sim = func.greatest(func.word_similarity(clean_query, Issue.summary), 0.0)
-    raw_score = cast(_TEXT_RANK_WEIGHT * ts_rank + _SIM_WEIGHT * w_sim, Float)
+    match_conditions: list[ColumnElement[bool]] = []
+    if clean_query:
+        tsq = func.websearch_to_tsquery("english", clean_query)
+        ts_rank = func.ts_rank_cd(Issue.search_tsv, tsq, _RANK_NORMALIZATION)
+        w_sim = func.greatest(func.word_similarity(clean_query, Issue.summary), 0.0)
+        raw_score = cast(_TEXT_RANK_WEIGHT * ts_rank + _SIM_WEIGHT * w_sim, Float)
 
-    key_proj, key_seq = key_match or ("", -1)
-    is_key_match = and_(
-        func.upper(Project.identifier) == key_proj,
-        Issue.sequence_id == key_seq,
-    )
+        key_proj, key_seq = key_match or ("", -1)
+        is_key_match = and_(
+            func.upper(Project.identifier) == key_proj,
+            Issue.sequence_id == key_seq,
+        )
 
-    score_expr = case(
-        (is_key_match, literal(_EXACT_KEY_BOOST, type_=Float)),
-        else_=raw_score,
-    ).label("score")
+        score_expr = case(
+            (is_key_match, literal(_EXACT_KEY_BOOST, type_=Float)),
+            else_=raw_score,
+        ).label("score")
 
-    match_conditions: list[ColumnElement[bool]] = [Issue.search_tsv.op("@@")(tsq)]
-    if len(clean_query) >= _MIN_TRIGRAM_CHARS:
-        match_conditions.append(func.word_similarity(clean_query, Issue.summary) >= _SIM_THRESHOLD)
-    if key_match:
-        match_conditions.append(is_key_match)
+        match_conditions.append(Issue.search_tsv.op("@@")(tsq))
+        if len(clean_query) >= _MIN_TRIGRAM_CHARS:
+            match_conditions.append(
+                func.word_similarity(clean_query, Issue.summary) >= _SIM_THRESHOLD
+            )
+        if key_match:
+            match_conditions.append(is_key_match)
+    else:
+        score_expr = literal(1.0, type_=Float).label("score")
+
+    select_cols: list[Any] = [
+        literal("issue").label("kind"),
+        Issue.id.label("id"),
+        (Project.identifier + "-" + cast(Issue.sequence_id, String)).label("key"),
+        Issue.summary.label("title"),
+        Issue.summary.label("summary"),
+        Issue.description_markdown.label("body_markdown"),
+        Project.identifier.label("project_identifier"),
+        score_expr,
+    ]
+    if include_metadata:
+        select_cols.extend(
+            [
+                WorkflowState.name.label("state_name"),
+                ProjectPriority.slug.label("priority_slug"),
+            ]
+        )
 
     stmt = (
-        select(
-            literal("issue").label("kind"),
-            Issue.id.label("id"),
-            (Project.identifier + "-" + cast(Issue.sequence_id, String)).label("key"),
-            Issue.summary.label("title"),
-            Issue.summary.label("summary"),
-            Issue.description_markdown.label("body_markdown"),
-            Project.identifier.label("project_identifier"),
-            score_expr,
-        )
+        select(*select_cols)
         .join(Project, Issue.project_id == Project.id)
         .join(ObjectRecord, Issue.id == ObjectRecord.id)
-        .where(
-            ObjectRecord.deleted_at.is_(None),
-            ObjectRecord.archived_at.is_(None),
-            or_(*match_conditions),
-        )
     )
+    if include_metadata:
+        stmt = stmt.outerjoin(WorkflowState, Issue.state_id == WorkflowState.id).outerjoin(
+            ProjectPriority, Issue.priority_id == ProjectPriority.id
+        )
+
+    stmt = stmt.where(
+        ObjectRecord.deleted_at.is_(None),
+        ObjectRecord.archived_at.is_(None),
+    )
+    if match_conditions:
+        stmt = stmt.where(or_(*match_conditions))
 
     if project_id is not None:
         stmt = stmt.where(Issue.project_id == project_id)
@@ -531,24 +559,51 @@ async def search_unified(  # noqa: PLR0913, PLR0917
     )
 
 
+async def _resolve_issue_search_scope(
+    session: AsyncSession,
+    caller: PrincipalContext,
+    project_ref: str | None,
+    filters: FilterSpec | None,
+) -> tuple[uuid.UUID | None, list[Any]]:
+    """Resolve project ID and optional filter DSL predicates for issue search."""
+    project_id: uuid.UUID | None = None
+    proj: Project | None = None
+    if project_ref:
+        proj = await get_project_or_404(session, caller, project_ref)
+        project_id = proj.id
+
+    extra_predicates: list[Any] = []
+    if filters:
+        extra_predicates = compile_issue_filter_predicates(
+            session, proj, filters, caller.principal_id
+        )
+    return project_id, extra_predicates
+
+
+def _extract_key_match_tuple(clean_query: str) -> tuple[str, int] | None:
+    """Extract project key and sequence integer if query is exact issue key."""
+    if not clean_query:
+        return None
+    key_match = _ISSUE_KEY_RE.match(clean_query)
+    if key_match:
+        return (key_match.group(1).upper(), int(key_match.group(2)))
+    return None
+
+
 async def search_issues(
     session: AsyncSession,
     caller: PrincipalContext,
     request: IssueSearchRequest,
 ) -> IssueSearchResponse:
     """Execute issue-scoped lexical search composed with FilterSpec DSL predicates."""
-    clean_query = validate_query(request.query)
+    clean_query = ""
+    if request.query and request.query.strip():
+        clean_query = validate_query(request.query)
     valid_limit = validate_limit(request.limit)
 
-    project_id: uuid.UUID | None = None
-    extra_predicates: list[Any] = []
-    if request.project:
-        proj = await get_project_or_404(session, caller, request.project)
-        project_id = proj.id
-        if request.filters:
-            extra_predicates = compile_issue_filter_predicates(
-                session, proj, request.filters, caller.principal_id
-            )
+    project_id, extra_predicates = await _resolve_issue_search_scope(
+        session, caller, request.project, request.filters
+    )
 
     q_hash = _compute_query_hash(clean_query, ["issue"], request.project)
     cursor_score: float | None = None
@@ -556,13 +611,14 @@ async def search_issues(
     if request.cursor:
         cursor_score, cursor_id = decode_search_cursor(request.cursor, q_hash)
 
-    key_match_tuple: tuple[str, int] | None = None
-    key_match = _ISSUE_KEY_RE.match(clean_query)
-    if key_match:
-        key_match_tuple = (key_match.group(1).upper(), int(key_match.group(2)))
+    key_match_tuple = _extract_key_match_tuple(clean_query)
 
     issue_query = _build_issue_query(
-        clean_query, project_id, key_match_tuple, extra_predicates
+        clean_query,
+        project_id,
+        key_match_tuple,
+        extra_predicates,
+        include_metadata=True,
     ).subquery("issue_search_results")
 
     count_stmt = select(func.count()).select_from(issue_query)
@@ -587,10 +643,29 @@ async def search_issues(
     has_more = len(rows) > valid_limit
     page_rows = rows[:valid_limit] if has_more else rows
 
+    # Batch fetch assignees for page_rows
+    assignees_by_id: dict[uuid.UUID, list[str]] = {}
+    if page_rows:
+        p_ids = [r.id for r in page_rows]
+        a_stmt = (
+            select(IssueAssignee.issue_id, IssueAssignee.free_text_assignee, Principal.display_name)
+            .outerjoin(Principal, IssueAssignee.principal_id == Principal.id)
+            .where(IssueAssignee.issue_id.in_(p_ids))
+        )
+        for a_row in (await session.execute(a_stmt)).all():
+            iss_id, free_text, disp_name = a_row
+            val = free_text or (f"@{disp_name.lower().replace(' ', '')}" if disp_name else None)
+            if val:
+                assignees_by_id.setdefault(iss_id, []).append(val)
+
     items: list[IssueSearchItem] = []
     for r in page_rows:
         body = r.body_markdown or ""
-        snippet_result = build_anchored_snippet(body, clean_query)
+        snippet_result = (
+            build_anchored_snippet(body, clean_query)
+            if clean_query
+            else build_anchored_snippet(body, r.title)
+        )
         items.append(
             IssueSearchItem(
                 kind="issue",
@@ -603,6 +678,10 @@ async def search_issues(
                 snippet=snippet_result.snippet,
                 match_spans=snippet_result.match_spans,
                 score=float(r.score),
+                state=getattr(r, "state_name", None),
+                priority=getattr(r, "priority_slug", None),
+                assignees=assignees_by_id.get(r.id, []),
+                description_markdown=body,
             )
         )
 

@@ -15,6 +15,11 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 from starlette.responses import JSONResponse, Response
 
 from mcp.auth import SCOPE_REQUIREMENTS, hash_mcp_api_key
+from mcp.context import (
+    McpRequestContext,
+    reset_current_mcp_context,
+    set_current_mcp_context,
+)
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
 from mcp.yaml_out import dump_yaml
@@ -447,7 +452,7 @@ class McpProtocolHandler:
             )
         return str(params["name"]), arguments
 
-    async def _handle_tools_call(  # noqa: C901, PLR0911
+    async def _handle_tools_call(  # noqa: C901, PLR0911, PLR0912
         self,
         req_id: object,
         params: object,
@@ -510,15 +515,26 @@ class McpProtocolHandler:
                 subject_token=subject_token,
             )
 
+        ctx = McpRequestContext(
+            client=self.internal_client,
+            surface=self.registry.surface,
+            subject_token=subject_token,
+            session_id=session_id,
+            caller_scopes=caller_scopes,
+        )
+        ctx_token = set_current_mcp_context(ctx)
         try:
-            # Invoke handler
-            handler = spec.handler
-            if inspect.iscoroutinefunction(handler):
-                res = await handler(arguments)
-            else:
-                res = handler(arguments)
-                if inspect.isawaitable(res):
-                    res = await res
+            try:
+                # Invoke handler
+                handler = spec.handler
+                if inspect.iscoroutinefunction(handler):
+                    res = await handler(arguments)
+                else:
+                    res = handler(arguments)
+                    if inspect.isawaitable(res):
+                        res = await res
+            finally:
+                reset_current_mcp_context(ctx_token)
 
             # Format result text as YAML
             if isinstance(res, str):

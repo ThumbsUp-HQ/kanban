@@ -1,0 +1,298 @@
+# Copyright 2026 Kanban Platform Contributors
+# Apache-2.0 License. See LICENSE for details.
+"""Feature unit tests for /mcp/agent tool: read_ticket (KB-P4-04)."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, cast
+
+import pytest
+import yaml
+
+from mcp.errors import KbMcpError, McpErrorCode
+from mcp.surfaces.agent.read_ticket import (
+    _format_assignees,
+    _format_parent,
+    _validate_read_arguments,
+    read_ticket,
+)
+
+if TYPE_CHECKING:
+    from mcp.tests.agent.conftest import AgentTestEnv
+
+pytestmark = pytest.mark.committed_db
+
+
+async def _call_read_ticket(
+    env: AgentTestEnv,
+    arguments: dict[str, Any],
+    *,
+    subject_token: str | None = None,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    """Invoke read_ticket via JSON-RPC 2.0 tools/call."""
+    active_session_id = session_id
+    if active_session_id is None:
+        init_resp = await env.mcp_client.post(
+            "/mcp/agent",
+            json={
+                "jsonrpc": "2.0",
+                "id": 999,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test-agent", "version": "1.0"},
+                },
+            },
+            headers={"X-KB-Subject-Token": subject_token} if subject_token else {},
+        )
+        assert init_resp.status_code == 200
+        active_session_id = init_resp.headers["mcp-session-id"]
+
+    headers: dict[str, str] = {"mcp-session-id": active_session_id}
+    if subject_token is not None:
+        headers["X-KB-Subject-Token"] = subject_token
+
+    req_payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "read_ticket",
+            "arguments": arguments,
+        },
+    }
+    resp = await env.mcp_client.post("/mcp/agent", json=req_payload, headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["jsonrpc"] == "2.0"
+    assert data["id"] == 1
+    return cast("dict[str, Any]", data["result"])
+
+
+@pytest.mark.asyncio
+async def test_case_1_positive_read_ticket_all_lods(agent_test_env: AgentTestEnv) -> None:
+    """Case 1: read_ticket('KAN-142', lod='full') contains all detailed fields."""
+    env = agent_test_env
+
+    # 1. Full LOD
+    res_full = await _call_read_ticket(env, {"identifier": "KAN-142", "lod": "full"})
+    assert res_full["isError"] is False
+    content_full = res_full["content"][0]["text"]
+    parsed_full = yaml.safe_load(content_full)
+
+    assert parsed_full["key"] == "KAN-142"
+    assert parsed_full["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
+    assert parsed_full["state"] == "In Progress"
+    assert parsed_full["priority"] == "urgent"
+    assert parsed_full["assignees"] == ["@adam"]
+    assert "# OIDC Architecture" in parsed_full["description_markdown"]
+    assert "access_manifest" in parsed_full
+    assert "links" in parsed_full
+    assert "comments" in parsed_full
+    assert len(parsed_full["comments"]) == 1
+    assert parsed_full["comments"][0]["body_markdown"] == "Initial security audit comment for OIDC."
+    assert "activity" in parsed_full
+    assert "etag" in parsed_full
+    assert len(parsed_full["etag"]) == 64
+
+    # 2. Standard LOD
+    res_std = await _call_read_ticket(env, {"identifier": "KAN-142", "lod": "standard"})
+    assert res_std["isError"] is False
+    content_std = res_std["content"][0]["text"]
+    parsed_std = yaml.safe_load(content_std)
+
+    assert parsed_std["key"] == "KAN-142"
+    assert parsed_std["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
+    assert parsed_std["state"] == "In Progress"
+    assert parsed_std["priority"] == "urgent"
+    assert parsed_std["assignees"] == ["@adam"]
+    assert "# OIDC Architecture" in parsed_std["description_markdown"]
+    assert "links" in parsed_std
+    assert "etag" in parsed_std
+    # Standard omits comments, activity, and access_manifest
+    assert "access_manifest" not in parsed_std
+    assert "comments" not in parsed_std
+    assert "activity" not in parsed_std
+
+    # 3. Summary LOD
+    res_sum = await _call_read_ticket(env, {"identifier": "KAN-142", "lod": "summary"})
+    assert res_sum["isError"] is False
+    content_sum = res_sum["content"][0]["text"]
+    parsed_sum = yaml.safe_load(content_sum)
+
+    assert parsed_sum["key"] == "KAN-142"
+    assert parsed_sum["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
+    assert parsed_sum["state"] == "In Progress"
+    assert parsed_sum["priority"] == "urgent"
+    assert parsed_sum["assignees"] == ["@adam"]
+    # Summary omits description, access_manifest, links, comments, activity
+    assert "description_markdown" not in parsed_sum
+    assert "access_manifest" not in parsed_sum
+    assert "links" not in parsed_sum
+
+
+@pytest.mark.asyncio
+async def test_case_2_rls_security_identical_404(agent_test_env: AgentTestEnv) -> None:
+    """Case 2: RLS security: caller without access gets byte-identical 404."""
+    env = agent_test_env
+
+    # 1. Call unreadable SEC-1 under Adam
+    res_sec = await _call_read_ticket(
+        env,
+        {"identifier": "SEC-1"},
+        subject_token=env.token_adam,
+    )
+    assert res_sec["isError"] is True
+    text_sec = res_sec["content"][0]["text"]
+
+    # 2. Call non-existent KAN-99999 under Adam
+    res_missing = await _call_read_ticket(
+        env,
+        {"identifier": "KAN-99999"},
+        subject_token=env.token_adam,
+    )
+    assert res_missing["isError"] is True
+    text_missing = res_missing["content"][0]["text"]
+
+    # Byte-identical assertion
+    assert text_sec == text_missing
+    parsed = yaml.safe_load(text_sec)
+    assert parsed["error"]["code"] == "NOT_FOUND"
+    assert parsed["error"]["message"] == "ticket not found"
+
+
+@pytest.mark.asyncio
+async def test_case_3_boundary_validation_read_ticket(agent_test_env: AgentTestEnv) -> None:
+    """Case 3: Boundary and input schema validation for read_ticket."""
+    env = agent_test_env
+
+    # 1. Missing identifier
+    res_no_id = await _call_read_ticket(env, {})
+    assert res_no_id["isError"] is True
+    err1 = yaml.safe_load(res_no_id["content"][0]["text"])
+    assert err1["error"]["code"] == "VALIDATION_FAILED"
+
+    # 2. Unknown key
+    res_unknown = await _call_read_ticket(env, {"identifier": "KAN-142", "extra": "invalid"})
+    assert res_unknown["isError"] is True
+    err2 = yaml.safe_load(res_unknown["content"][0]["text"])
+    assert err2["error"]["code"] == "VALIDATION_FAILED"
+    assert "Unknown parameter 'extra'" in err2["error"]["message"]
+
+    # 3. Invalid lod
+    res_bad_lod = await _call_read_ticket(env, {"identifier": "KAN-142", "lod": "super_full"})
+    assert res_bad_lod["isError"] is True
+    err3 = yaml.safe_load(res_bad_lod["content"][0]["text"])
+    assert err3["error"]["code"] == "VALIDATION_FAILED"
+
+    # 4. comments_limit out of bounds
+    res_bad_limit = await _call_read_ticket(env, {"identifier": "KAN-142", "comments_limit": 51})
+    assert res_bad_limit["isError"] is True
+    err4 = yaml.safe_load(res_bad_limit["content"][0]["text"])
+    assert err4["error"]["code"] == "VALIDATION_FAILED"
+    assert "comments_limit must be an integer between 0 and 50" in err4["error"]["message"]
+
+    res_neg_limit = await _call_read_ticket(env, {"identifier": "KAN-142", "comments_limit": -1})
+    assert res_neg_limit["isError"] is True
+    err5 = yaml.safe_load(res_neg_limit["content"][0]["text"])
+    assert err5["error"]["code"] == "VALIDATION_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_case_5_read_ticket_help(agent_test_env: AgentTestEnv) -> None:
+    """Case 5: read_ticket(identifier='help') returns JIT progressive disclosure help block."""
+    env = agent_test_env
+
+    res_help = await _call_read_ticket(env, {"identifier": "help"})
+    assert res_help["isError"] is False
+    text_help = res_help["content"][0]["text"]
+    parsed_help = yaml.safe_load(text_help)
+
+    assert parsed_help["tool"] == "read_ticket"
+    assert "params" in parsed_help
+    assert "identifier" in parsed_help["params"]
+    assert "lod" in parsed_help["params"]
+
+
+def test_read_ticket_formatting_helpers() -> None:
+    """Verify assignee and parent formatting helpers."""
+    # Assignees
+    raw_assignees = [
+        "@alice",
+        {"kind": "free_text", "free_text": "External Contributor"},
+        {"kind": "principal", "principal": {"handle": "bob"}},
+        {"kind": "principal", "principal": {"handle": "@charlie"}},
+        {"kind": "principal", "principal": {"display_name": "Dave Smith"}},
+        {"kind": "principal", "principal": {"id": "11111111-1111-1111-1111-111111111111"}},
+        {"handle": "eve"},
+        {"handle": "@frank"},
+    ]
+    formatted = _format_assignees(raw_assignees)
+    assert "@alice" in formatted
+    assert "External Contributor" in formatted
+    assert "@bob" in formatted
+    assert "@charlie" in formatted
+    assert "@davesmith" in formatted
+    assert "11111111-1111-1111-1111-111111111111" in formatted
+    assert "@eve" in formatted
+    assert "@frank" in formatted
+
+    # Parent
+    assert _format_parent(None) is None
+    assert _format_parent("PAR-1") == "PAR-1"
+    assert _format_parent({"restricted": True}) == {
+        "restricted": True,
+        "label": "🔒 Restricted Parent Issue",
+    }
+    assert _format_parent({"key": "PAR-2", "summary": "Parent Issue"}) == "PAR-2"
+    assert _format_parent({"summary": "Only Summary"}) == "Only Summary"
+
+
+@pytest.mark.asyncio
+async def test_read_ticket_additional_validations() -> None:
+    """Verify extra boundary validation paths in read_ticket."""
+    # Context None
+    with pytest.raises(KbMcpError) as exc_ctx:
+        await read_ticket({"identifier": "KAN-142"})
+    assert exc_ctx.value.code == McpErrorCode.INTERNAL
+
+    # Non-string identifier
+    with pytest.raises(KbMcpError) as exc_non_str:
+        _validate_read_arguments({"identifier": 12345})
+    assert exc_non_str.value.code == McpErrorCode.VALIDATION_FAILED
+
+    # Whitespace identifier
+    with pytest.raises(KbMcpError) as exc_ws:
+        _validate_read_arguments({"identifier": "   "})
+    assert exc_ws.value.code == McpErrorCode.VALIDATION_FAILED
+
+    # Overly long identifier
+    with pytest.raises(KbMcpError) as exc_long:
+        _validate_read_arguments({"identifier": "K" * 201})
+    assert exc_long.value.code == McpErrorCode.VALIDATION_FAILED
+
+    # Boolean comments_limit
+    with pytest.raises(KbMcpError) as exc_bool:
+        _validate_read_arguments({"identifier": "KAN-1", "comments_limit": True})
+    assert exc_bool.value.code == McpErrorCode.VALIDATION_FAILED
+
+    # String comments_limit
+    with pytest.raises(KbMcpError) as exc_str_limit:
+        _validate_read_arguments({"identifier": "KAN-1", "comments_limit": "10"})
+    assert exc_str_limit.value.code == McpErrorCode.VALIDATION_FAILED
+
+
+@pytest.mark.asyncio
+async def test_read_ticket_comments_limit_zero(agent_test_env: AgentTestEnv) -> None:
+    """Verify read_ticket with comments_limit=0 returns empty comments without query."""
+    env = agent_test_env
+    res = await _call_read_ticket(
+        env,
+        {"identifier": "KAN-142", "lod": "full", "comments_limit": 0},
+    )
+    assert res["isError"] is False
+    parsed = yaml.safe_load(res["content"][0]["text"])
+    assert parsed["key"] == "KAN-142"
+    assert parsed.get("comments", []) == []

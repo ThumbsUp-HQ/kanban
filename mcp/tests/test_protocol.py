@@ -27,12 +27,40 @@ async def test_case_1_positive_initialize_and_tools_list(
 ) -> None:
     """Test Case 1: Positive initialize and tools/list on all 3 mounts."""
     surfaces = [
-        ("/mcp/agent", "kanban-mcp-agent", "ping_agent"),
-        ("/mcp/docs", "kanban-mcp-docs", "ping_docs"),
-        ("/mcp/admin", "kanban-mcp-admin", "ping_admin"),
+        (
+            "/mcp/agent",
+            "kanban-mcp-agent",
+            ["search_tickets", "read_ticket"],
+            "search_tickets",
+            {"gate_status": "approved"},
+            "gate history available",
+        ),
+        (
+            "/mcp/docs",
+            "kanban-mcp-docs",
+            ["ping_docs"],
+            "ping_docs",
+            {},
+            "ok: true",
+        ),
+        (
+            "/mcp/admin",
+            "kanban-mcp-admin",
+            ["ping_admin"],
+            "ping_admin",
+            {},
+            "ok: true",
+        ),
     ]
 
-    for mount, expected_server_name, expected_tool in surfaces:
+    for (
+        mount,
+        expected_server_name,
+        expected_tools,
+        call_tool,
+        call_args,
+        expected_substr,
+    ) in surfaces:
         # 1. Initialize
         init_req = {
             "jsonrpc": "2.0",
@@ -86,16 +114,16 @@ async def test_case_1_positive_initialize_and_tools_list(
         assert tools_resp.status_code == 200
         tools_data = tools_resp.json()["result"]["tools"]
         tool_names = [t["name"] for t in tools_data]
-        assert tool_names == [expected_tool]
+        assert tool_names == expected_tools
 
-        # 5. Tools call placeholder
+        # 5. Tools call
         call_resp = await mcp_client.post(
             mount,
             json={
                 "jsonrpc": "2.0",
                 "id": 4,
                 "method": "tools/call",
-                "params": {"name": expected_tool, "arguments": {}},
+                "params": {"name": call_tool, "arguments": call_args},
             },
             headers=headers,
         )
@@ -103,7 +131,7 @@ async def test_case_1_positive_initialize_and_tools_list(
         call_data = call_resp.json()["result"]
         assert call_data["isError"] is False
         assert len(call_data["content"]) == 1
-        assert "ok: true" in call_data["content"][0]["text"]
+        assert expected_substr in call_data["content"][0]["text"]
 
     # 6. Cross-surface tool call in test_protocol: call ping_admin on /mcp/agent -> NOT_FOUND
     # Also pass bearer and subject tokens with kb_ prefix to record verified transcript redaction
