@@ -14,8 +14,10 @@ from mcp.metadata import protected_resource_metadata_endpoint
 from mcp.protocol import InMemorySessionStore, McpProtocolHandler
 from mcp.registry import Surface, ToolRegistry, create_placeholder_tool
 from mcp.settings import McpSettings
+from mcp.surfaces.docs import build_docs_registry
 
 if TYPE_CHECKING:
+    import httpx
     from starlette.types import ASGIApp
 
 __all__ = [
@@ -34,10 +36,12 @@ def _build_surface_sub_app(
     )
 
 
-def create_mcp_app(
+def create_mcp_app(  # noqa: PLR0913
     settings: McpSettings | None = None,
     *,
     kanban_app: ASGIApp | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+    internal_client: KanbanApiClient | None = None,
     agent_registry: ToolRegistry | None = None,
     docs_registry: ToolRegistry | None = None,
     admin_registry: ToolRegistry | None = None,
@@ -51,6 +55,26 @@ def create_mcp_app(
     """
     active_settings: Final[McpSettings] = settings or McpSettings()
 
+    # Shared session store across mounts
+    session_store: Final[InMemorySessionStore] = InMemorySessionStore(
+        ttl_s=active_settings.session_ttl_s,
+        max_sessions=active_settings.max_sessions,
+    )
+
+    # Internal API client
+    active_kanban_app = kanban_app
+    in_process = active_settings.mode == "standalone_inprocess"
+    if active_kanban_app is None and in_process and transport is None:
+        active_kanban_app = Starlette()
+
+    active_internal_client = internal_client
+    if active_internal_client is None:
+        active_internal_client = KanbanApiClient(
+            active_settings,
+            kanban_app=active_kanban_app,
+            transport=transport,
+        )
+
     # Construct 3 independent registries
     active_agent_reg = agent_registry
     if active_agent_reg is None:
@@ -61,9 +85,8 @@ def create_mcp_app(
 
     active_docs_reg = docs_registry
     if active_docs_reg is None:
-        active_docs_reg = ToolRegistry(Surface.DOCS)
-        active_docs_reg.register(create_placeholder_tool(Surface.DOCS))
-    if not active_docs_reg.is_frozen:
+        active_docs_reg = build_docs_registry(active_internal_client)
+    elif not active_docs_reg.is_frozen:
         active_docs_reg.freeze()
 
     active_admin_reg = admin_registry
@@ -73,43 +96,27 @@ def create_mcp_app(
     if not active_admin_reg.is_frozen:
         active_admin_reg.freeze()
 
-    # Shared session store across mounts
-    session_store: Final[InMemorySessionStore] = InMemorySessionStore(
-        ttl_s=active_settings.session_ttl_s,
-        max_sessions=active_settings.max_sessions,
-    )
-
-    # Internal API client
-    active_kanban_app = kanban_app
-    if active_kanban_app is None and active_settings.mode == "standalone_inprocess":
-        active_kanban_app = Starlette()
-
-    internal_client: Final[KanbanApiClient] = KanbanApiClient(
-        active_settings,
-        kanban_app=active_kanban_app,
-    )
-
     # Protocol handlers
     agent_handler: Final[McpProtocolHandler] = McpProtocolHandler(
         Surface.AGENT,
         active_agent_reg,
         session_store,
         active_settings,
-        internal_client=internal_client,
+        internal_client=active_internal_client,
     )
     docs_handler: Final[McpProtocolHandler] = McpProtocolHandler(
         Surface.DOCS,
         active_docs_reg,
         session_store,
         active_settings,
-        internal_client=internal_client,
+        internal_client=active_internal_client,
     )
     admin_handler: Final[McpProtocolHandler] = McpProtocolHandler(
         Surface.ADMIN,
         active_admin_reg,
         session_store,
         active_settings,
-        internal_client=internal_client,
+        internal_client=active_internal_client,
     )
 
     # Sub-apps
@@ -139,15 +146,15 @@ def create_mcp_app(
     # Attach references to app state
     app.state.settings = active_settings
     app.state.session_store = session_store
-    app.state.internal_client = internal_client
-    app.state.agent_registry = agent_registry
-    app.state.docs_registry = docs_registry
-    app.state.admin_registry = admin_registry
+    app.state.internal_client = active_internal_client
+    app.state.agent_registry = active_agent_reg
+    app.state.docs_registry = active_docs_reg
+    app.state.admin_registry = active_admin_reg
 
     if active_settings.auth_enabled:
         app.add_middleware(
             McpAuthMiddleware,
-            internal_client=internal_client,
+            internal_client=active_internal_client,
             settings=active_settings,
         )
 
