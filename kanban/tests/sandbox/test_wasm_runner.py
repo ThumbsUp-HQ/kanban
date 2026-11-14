@@ -396,3 +396,46 @@ def test_traps_unreachable_and_out_of_bounds() -> None:
     with pytest.raises(WasmRunError) as oob_err:
         runner.run_sync(wasm_oob, b"{}")
     assert oob_err.value.code == "SCRIPT_MEMORY_LIMIT"
+
+
+def test_multiple_kb_output_calls_trap() -> None:
+    """Guest calling kb_output multiple times is trapped with SCRIPT_TRAP."""
+    runner = TierAWasmRunner.get_instance()
+    wat_loop_output = """
+    (module
+      (import "env" "kb_output" (func $kb_output (param i32 i32)))
+      (memory (export "memory") 1)
+      (func (export "kb_alloc") (param i32) (result i32) i32.const 0)
+      (func (export "kb_run") (param i32 i32) (result i32)
+        (call $kb_output (i32.const 0) (i32.const 5))
+        (call $kb_output (i32.const 0) (i32.const 5))
+        i32.const 0
+      )
+    )
+    """
+    wasm_bytes = wasmtime.wat2wasm(wat_loop_output)
+    with pytest.raises(WasmRunError) as exc_info:
+        runner.run_sync(wasm_bytes, b"{}")
+    assert exc_info.value.code == "SCRIPT_TRAP"
+    assert "multiple times" in exc_info.value.message
+
+
+def test_invalid_kb_output_pointers_trap() -> None:
+    """Guest passing pointer or length beyond linear memory traps with SCRIPT_TRAP."""
+    runner = TierAWasmRunner.get_instance()
+    wat_bad_ptr = """
+    (module
+      (import "env" "kb_output" (func $kb_output (param i32 i32)))
+      (memory (export "memory") 1)
+      (func (export "kb_alloc") (param i32) (result i32) i32.const 0)
+      (func (export "kb_run") (param i32 i32) (result i32)
+        (call $kb_output (i32.const 65530) (i32.const 100))
+        i32.const 0
+      )
+    )
+    """
+    wasm_bytes = wasmtime.wat2wasm(wat_bad_ptr)
+    with pytest.raises(WasmRunError) as exc_info:
+        runner.run_sync(wasm_bytes, b"{}")
+    assert exc_info.value.code == "SCRIPT_TRAP"
+    assert "out-of-bounds pointer or length" in exc_info.value.message

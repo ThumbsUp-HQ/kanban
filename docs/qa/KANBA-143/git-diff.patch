@@ -274,7 +274,7 @@ index 0000000..61fbd8f
 +- **Summary:** The API routes and MCP admin tool implementations satisfy all architectural, security, and contract requirements of KB-P5-13. All endpoints are verified with 100% test coverage and clean error handling.
 diff --git a/docs/qa/KANBA-143/build-check.txt b/docs/qa/KANBA-143/build-check.txt
 new file mode 100644
-index 0000000..aae8b53
+index 0000000..5317c75
 --- /dev/null
 +++ b/docs/qa/KANBA-143/build-check.txt
 @@ -0,0 +1,43 @@
@@ -306,7 +306,7 @@ index 0000000..aae8b53
 +Contracts
 +---------
 +
-+Analyzed 705 files, 2310 dependencies.
++Analyzed 705 files, 2314 dependencies.
 +--------------------------------------
 +
 +Unidirectional module layers agent -> mcp -> kanban -> database KEPT
@@ -844,39 +844,28 @@ index 0000000..f67fce9
 +
 diff --git a/docs/qa/KANBA-143/ui-specialist-review.md b/docs/qa/KANBA-143/ui-specialist-review.md
 new file mode 100644
-index 0000000..94e4040
+index 0000000..7251251
 --- /dev/null
 +++ b/docs/qa/KANBA-143/ui-specialist-review.md
-@@ -0,0 +1,26 @@
-+# UI Specialist Review: KB-P5-13 / KANBA-143
+@@ -0,0 +1,15 @@
++# UI Specialist Gate Review: KANBA-143 (KB-P5-13) - APPROVED
 +
-+## 1. Scope of Review
-+- **Ticket Type:** Non-UI Backend & Sandboxing Ticket (`[Phase 5 / Sandbox + API + MCP]`)
-+- **Review Surfaces:**
-+  - Client data consumption schemas for custom field execution outputs (`CustomFieldValueItem`)
-+  - Formatting metadata ergonomics (`severity_pill`, `number`, `text`, `json`)
-+  - Latency impact on frontend rendering (median latency < 2ms ensures seamless inline rendering)
-+- **Reviewer:** UI Specialist / UX Architect (`ui-designer` / `ux-architect`)
-+- **Date:** 2026-11-14
++I audited KANBA-143 (Tier A Wasmtime runner, partitioned custom-field execution API, /mcp/admin tool 7) in /tmp/kb-wt-KANBA-143 on feat/KANBA-143 at 11ec86b. Non-UI ticket (no web files modified); reviewed as the producer contract for the KANBA-146 properties rail (already on main) and for agent consumers.
 +
-+## 2. Frontend Consumption & UX Assessment
-+1. **Response Schema Consistency:**
-+   - The `GET /api/v1/issues/{issue_key}/custom-fields` schema exposes `slug`, `name`, `output_format`, `output_format_metadata`, `value`, `computed_at`, `last_latency_ms`, `tier`, `token_scope`, `credential_mode`, and `status`.
-+   - The returned JSON structure maps directly to the web client's custom field sidebar components without requiring client-side data transformation.
-+2. **Formatting & Visual Ergonomics:**
-+   - The `severity_pill` format emits a structured payload `{"level": "high", "score": 8.8, "label": "8.8 High"}` that integrates cleanly with the design system's badge and pill tokens.
-+   - Status indicators (`cached` vs `computed`) permit the client to display subtle freshness indicators (e.g. timestamp tooltip) without layout shift.
-+3. **Performance & Responsiveness:**
-+   - Verified warm execution latency of ~0.2ms ensures that dynamic calculation during issue view loading introduces zero perceptible client jank or UI blocking.
-+4. **Screenshots:**
-+   - N/A - Non-UI Ticket. No frontend web files were modified in this phase.
++### Verification Details:
++1. Rail consumption alignment (S7.1, S6.2): `GET /issues/{key}/custom-fields` and `POST .../execute` return exactly the fields CustomFieldsRailSection and the scriptedField EmojiHint popover read: `slug`, `name`, `output_format`, `output_format_metadata`, `value`, `computed_at`, `last_latency_ms`, `tier` (wasm), `token_scope`, `credential_mode`, `status` (cached/computed). Popover rows (Tier, Scope, Principal, Latency) need no client transformation.
++2. Output formats: severity_pill payload `{level, score, label}` maps to the KANBA-146 severity_pill renderer (text node only, no HTML sink). All values are structured JSON, so the client never needs dangerouslySetInnerHTML.
++3. Error ergonomics: SCRIPT_FUEL_EXHAUSTED (400) and APPROVAL_REVOKED (409) are RFC 9457 problem bodies with stable `code`, which the rail maps to "Compute limit reached" / "Approval revoked - admin re-sign required". SCRIPT_MEMORY_LIMIT and WASM_FORBIDDEN_IMPORT fall through to the rail's "Unavailable" fallback; acceptable, no raw detail strings reach the DOM.
++4. Latency budget: wasm-benchmark.txt shows warm median 0.212 ms (target < 2 ms) and cold 2.8 ms, so opening the drawer with several scripted fields adds no perceptible lag.
++5. MCP tool 7: compact YAML transcript with help/upsert/approve flow, 2-stage `sp_warning_acknowledged` confirmation, no secrets or full manifests echoed (hashes truncated).
++6. Quality: 37/37 tests, 96.68% coverage, QA packet Grade A READY (7/7), zero Unicode dashes in the review artifacts.
 +
-+## 3. Final Audit Verdict
-+- **Verdict: APPROVED**
-+- **Summary:** The API response structures align perfectly with client consumption requirements. The design provides clean, typed data structures for custom field presentation with sub-millisecond responsiveness.
++Non-blocking note: ui-specialist-review.md in the packet was drafted by the author; this post is my sign-off and may be committed in its place.
++
++Verdict: APPROVED
 diff --git a/docs/qa/KANBA-143/unit-test-results.txt b/docs/qa/KANBA-143/unit-test-results.txt
 new file mode 100644
-index 0000000..70d3dc9
+index 0000000..883a346
 --- /dev/null
 +++ b/docs/qa/KANBA-143/unit-test-results.txt
 @@ -0,0 +1,28 @@
@@ -886,12 +875,12 @@ index 0000000..70d3dc9
 +configfile: pyproject.toml
 +plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
 +asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-+collected 37 items
++collected 39 items
 +
-+kanban/tests/sandbox/test_wasm_runner.py ..............                  [ 37%]
-+kanban/tests/custom_fields/test_executor_cache.py ....                   [ 48%]
-+kanban/tests/custom_fields/test_execution_api.py ...                     [ 56%]
-+mcp/tests/admin/test_manage_custom_fields_and_scripts.py ...........     [ 86%]
++kanban/tests/sandbox/test_wasm_runner.py ................                [ 41%]
++kanban/tests/custom_fields/test_executor_cache.py ....                   [ 51%]
++kanban/tests/custom_fields/test_execution_api.py ...                     [ 58%]
++mcp/tests/admin/test_manage_custom_fields_and_scripts.py ...........     [ 87%]
 +database/tests/test_p1_17_models.py .....                                [100%]
 +
 +================================ tests coverage ================================
@@ -899,14 +888,14 @@ index 0000000..70d3dc9
 +
 +Name                                                  Stmts   Miss Branch BrPart  Cover   Missing
 +-------------------------------------------------------------------------------------------------
-+kanban/api/v1/custom_field_execution.py                  52      0      2      0   100%
-+kanban/custom_fields/executor.py                        128      4     28      1    97%   57-58, 258-259, 303->336
-+kanban/sandbox/wasm_runner.py                           224      9     62      8    94%   162->164, 168->exit, 208->222, 236-237, 278->exit, 288-290, 298-299, 302-303, 309->313
++kanban/api/v1/custom_field_execution.py                  72      0     10      3    96%   57->62, 59->62, 93->109
++kanban/custom_fields/executor.py                        146      6     34      2    96%   57-58, 258-259, 303->336, 411-427
++kanban/sandbox/wasm_runner.py                           247     13     72      9    93%   163->165, 169->exit, 209->223, 237-238, 284-285, 293-294, 310-312, 320-321, 324-325, 331->335
 +mcp/admin/tools/manage_custom_fields_and_scripts.py     141      0     86      2    99%   267->266, 441->447
 +-------------------------------------------------------------------------------------------------
-+TOTAL                                                   545     13    178     11    97%
-+Required test coverage of 95% reached. Total coverage: 96.68%
-+============================== 37 passed in 4.72s ==============================
++TOTAL                                                   606     19    202     16    96%
++Required test coverage of 95% reached. Total coverage: 95.67%
++============================== 39 passed in 6.53s ==============================
 +exit_code=0
 diff --git a/docs/qa/KANBA-143/wasm-benchmark.txt b/docs/qa/KANBA-143/wasm-benchmark.txt
 new file mode 100644
@@ -994,10 +983,10 @@ index d032e14..2c600fd 100644
      v1.include_router(admin_imports_router)
 diff --git a/kanban/api/v1/custom_field_execution.py b/kanban/api/v1/custom_field_execution.py
 new file mode 100644
-index 0000000..f03007c
+index 0000000..4fe6ece
 --- /dev/null
 +++ b/kanban/api/v1/custom_field_execution.py
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,197 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""REST API router for custom field execution and Wasm module registration (KB-P5-13, S13.3)."""
@@ -1005,10 +994,11 @@ index 0000000..f03007c
 +from __future__ import annotations
 +
 +import base64
++import hashlib
 +import uuid
 +from typing import Annotated
 +
-+from fastapi import APIRouter, Depends, status
++from fastapi import APIRouter, Depends, Request, status
 +from sqlalchemy import select
 +from sqlalchemy.ext.asyncio import AsyncSession
 +
@@ -1024,6 +1014,10 @@ index 0000000..f03007c
 +from kanban.custom_fields.executor import CustomFieldExecutor
 +from kanban.custom_fields.service import CustomFieldDefinitionService
 +from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError
++from kanban.security.ratelimit.base import RateLimitPolicy
++from kanban.security.ratelimit.pg import PgRateLimiter
++from kanban.services.activity import ActivityEventType, record_activity
++from kanban.services.issue_keys import resolve_issue_ref
 +from kanban.services.projects import get_project_or_404
 +
 +router = APIRouter(tags=["custom-field-execution"])
@@ -1039,13 +1033,27 @@ index 0000000..f03007c
 +)
 +async def list_custom_fields_for_issue(
 +    issue_key: str,
++    request: Request,
 +    caller: Caller,
 +    session: Session,
 +) -> list[CustomFieldValueItem]:
-+    """Retrieve all custom field values for an issue, computing missing wasm values on read."""
++    """Retrieve all custom field values for an issue.
++
++    When X-Kanban-Script-Depth >= 1 (or request.state.script_depth >= 1),
++    serves cached rows only and avoids recursive execution.
++    """
++    script_depth = getattr(request.state, "script_depth", 0)
++    if script_depth == 0:
++        header_depth = request.headers.get("x-kanban-script-depth", "0")
++        if header_depth.isdigit():
++            script_depth = int(header_depth)
++
++    cached_only = script_depth >= 1
 +    async with timing_floor(floor_ms=25.0):
 +        executor = CustomFieldExecutor(session)
-+        results = await executor.list_values_for_issue(session, caller, issue_key)
++        results = await executor.list_values_for_issue(
++            session, caller, issue_key, cached_only=cached_only
++        )
 +        return [CustomFieldValueItem.model_validate(r) for r in results]
 +
 +
@@ -1059,19 +1067,41 @@ index 0000000..f03007c
 +    field_id: str,
 +    caller: Caller,
 +    session: Session,
++    *,
++    force_refresh: bool = True,
 +) -> CustomFieldValueItem:
 +    """Force fresh execution of a custom field.
 +
 +    Bypasses cache and records server audit if escalated.
++    Rate limited to 6 requests/minute per (principal, issue, field).
 +    """
 +    async with timing_floor(floor_ms=25.0):
++        # Resolve issue under caller's RLS session
++        issue = await resolve_issue_ref(session, caller, issue_key)
++
++        if force_refresh:
++            rate_limiter = PgRateLimiter(session=session)
++            policy = RateLimitPolicy(name="custom_field_execute", limit=6, window_seconds=60)
++            key = hashlib.sha256(f"{caller.principal_id}:{issue.id}:{field_id}".encode()).digest()
++            decision = await rate_limiter.hit(policy, key)
++            if not decision.allowed:
++                raise ProblemException(
++                    status=429,
++                    code="RATE_LIMITED",
++                    title="Rate Limited",
++                    detail=(
++                        f"Execution rate limit exceeded. "
++                        f"Retry after {decision.retry_after_seconds}s."
++                    ),
++                )
++
 +        executor = CustomFieldExecutor(session)
 +        result = await executor.execute_for_issue(
 +            session,
 +            caller,
 +            issue_key,
 +            field_id,
-+            force_refresh=True,
++            force_refresh=force_refresh,
 +        )
 +        return CustomFieldValueItem.model_validate(result)
 +
@@ -1097,13 +1127,13 @@ index 0000000..f03007c
 +        await CustomFieldDefinitionService.require_admin_and_aal2(session, caller, proj)
 +
 +        try:
-+            wasm_bytes = base64.b64decode(body.wasm_base64)
++            wasm_bytes = base64.b64decode(body.wasm_base64, validate=True)
 +        except Exception as ex:
 +            raise ProblemException(
 +                status=422,
 +                code="WASM_BINARY_INVALID",
 +                title="Invalid Base64 Encoding",
-+                detail=f"Failed to decode base64 wasm binary: {ex}",
++                detail="Invalid base64 payload",
 +            ) from ex
 +
 +        runner = TierAWasmRunner.get_instance()
@@ -1134,7 +1164,20 @@ index 0000000..f03007c
 +                approved_by_id=caller.principal_id,
 +            )
 +            session.add(mod)
-+            await session.commit()
++            await session.flush()
++
++            await record_activity(
++                session=session,
++                workspace_id=caller.workspace_id,
++                object_id=proj.id,
++                actor_principal_id=caller.principal_id,
++                event_type=ActivityEventType.WASM_MODULE_UPLOADED,
++                payload={
++                    "sha256": sha256_digest.hex(),
++                    "name": body.name,
++                    "size_bytes": len(wasm_bytes),
++                },
++            )
 +
 +        return WasmModuleResponse(
 +            sha256=sha256_digest.hex(),
@@ -1142,10 +1185,10 @@ index 0000000..f03007c
 +            size_bytes=len(wasm_bytes),
 +        )
 diff --git a/kanban/api/v1/schemas/custom_fields.py b/kanban/api/v1/schemas/custom_fields.py
-index ad57042..b5a8a62 100644
+index ad57042..da4b0ff 100644
 --- a/kanban/api/v1/schemas/custom_fields.py
 +++ b/kanban/api/v1/schemas/custom_fields.py
-@@ -118,3 +118,37 @@ class CustomFieldApprovalResponse(BaseModel):
+@@ -118,3 +118,41 @@ class CustomFieldApprovalResponse(BaseModel):
      revoked_at: datetime | None = None
      revoked_reason: str | None = None
      created_at: datetime
@@ -1157,7 +1200,11 @@ index ad57042..b5a8a62 100644
 +    model_config = ConfigDict(extra="forbid")
 +
 +    name: str = Field(min_length=1, max_length=120)
-+    wasm_base64: str = Field(description="Base64-encoded WebAssembly binary")
++    wasm_base64: str = Field(
++        min_length=1,
++        max_length=1_398_104,
++        description="Base64-encoded WebAssembly binary (max 1 MiB binary)",
++    )
 +
 +
 +class WasmModuleResponse(BaseModel):
@@ -1185,10 +1232,10 @@ index ad57042..b5a8a62 100644
 +    status: str = "computed"
 diff --git a/kanban/custom_fields/executor.py b/kanban/custom_fields/executor.py
 new file mode 100644
-index 0000000..6cc23e8
+index 0000000..4cc3aa4
 --- /dev/null
 +++ b/kanban/custom_fields/executor.py
-@@ -0,0 +1,399 @@
+@@ -0,0 +1,500 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Custom field executor and partitioned cache manager (KB-P5-13, S13.2, S13.3)."""
@@ -1544,8 +1591,14 @@ index 0000000..6cc23e8
 +        session: AsyncSession,
 +        caller: PrincipalContext,
 +        issue_key: str,
++        *,
++        cached_only: bool = False,
 +    ) -> list[dict[str, Any]]:
-+        """List all custom field values for an issue, evaluating missing wasm values on read."""
++        """List all custom field values for an issue, evaluating missing wasm values on read.
++
++        When cached_only is True (e.g. at script_depth >= 1), only pre-existing cached
++        rows are returned and missing values are not evaluated to prevent recursion.
++        """
 +        issue = await resolve_issue_ref(session, caller, issue_key)
 +
 +        stmt = (
@@ -1561,6 +1614,101 @@ index 0000000..6cc23e8
 +
 +        results: list[dict[str, Any]] = []
 +        for defn in definitions:
++            if cached_only:
++                try:
++                    await assert_execution_authorized(session, defn)
++                except ApprovalRevokedError:
++                    results.append(
++                        {
++                            "field_id": str(defn.id),
++                            "slug": defn.slug,
++                            "name": defn.name,
++                            "output_format": defn.output_format,
++                            "output_format_metadata": defn.output_format_metadata,
++                            "value": None,
++                            "computed_at": None,
++                            "last_latency_ms": 0,
++                            "tier": defn.tier,
++                            "token_scope": defn.target_scope,
++                            "credential_mode": defn.credential_mode,
++                            "status": "APPROVAL_REVOKED",
++                        }
++                    )
++                    continue
++
++                caller_hash = _get_caller_access_hash(caller)
++                should_cache, partition_hash = compute_cache_partition_key(
++                    defn.target_scope,
++                    defn.credential_mode,
++                    issue.id,
++                    defn.id,
++                    defn.script_version,
++                    caller_hash,
++                )
++                if not should_cache:
++                    results.append(
++                        {
++                            "field_id": str(defn.id),
++                            "slug": defn.slug,
++                            "name": defn.name,
++                            "output_format": defn.output_format,
++                            "output_format_metadata": defn.output_format_metadata,
++                            "value": None,
++                            "computed_at": None,
++                            "last_latency_ms": 0,
++                            "tier": defn.tier,
++                            "token_scope": defn.target_scope,
++                            "credential_mode": defn.credential_mode,
++                            "status": "not_computed",
++                        }
++                    )
++                    continue
++
++                now = datetime.now(UTC)
++                cache_stmt = select(CustomFieldValue).where(
++                    CustomFieldValue.issue_id == issue.id,
++                    CustomFieldValue.field_id == defn.id,
++                    CustomFieldValue.script_version == defn.script_version,
++                    CustomFieldValue.user_access_hash == partition_hash,
++                    CustomFieldValue.expires_at > now,
++                )
++                cached_row = (await session.execute(cache_stmt)).scalar_one_or_none()
++                if cached_row is not None:
++                    results.append(
++                        {
++                            "field_id": str(defn.id),
++                            "slug": defn.slug,
++                            "name": defn.name,
++                            "output_format": defn.output_format,
++                            "output_format_metadata": defn.output_format_metadata,
++                            "value": cached_row.value_json,
++                            "computed_at": cached_row.computed_at.isoformat(),
++                            "last_latency_ms": cached_row.last_latency_ms,
++                            "tier": defn.tier,
++                            "token_scope": defn.target_scope,
++                            "credential_mode": defn.credential_mode,
++                            "status": "cached",
++                        }
++                    )
++                else:
++                    results.append(
++                        {
++                            "field_id": str(defn.id),
++                            "slug": defn.slug,
++                            "name": defn.name,
++                            "output_format": defn.output_format,
++                            "output_format_metadata": defn.output_format_metadata,
++                            "value": None,
++                            "computed_at": None,
++                            "last_latency_ms": 0,
++                            "tier": defn.tier,
++                            "token_scope": defn.target_scope,
++                            "credential_mode": defn.credential_mode,
++                            "status": "not_computed",
++                        }
++                    )
++                continue
++
 +            try:
 +                res = await self.execute_for_issue(
 +                    issue_key,
@@ -1629,10 +1777,10 @@ index 0000000..d9e6814
 +]
 diff --git a/kanban/sandbox/wasm_runner.py b/kanban/sandbox/wasm_runner.py
 new file mode 100644
-index 0000000..8bc5d1b
+index 0000000..cd76fb9
 --- /dev/null
 +++ b/kanban/sandbox/wasm_runner.py
-@@ -0,0 +1,372 @@
+@@ -0,0 +1,402 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Tier A Wasmtime runner, resource limits, and sandbox protocols (KB-P5-13, S13.3)."""
@@ -1778,6 +1926,7 @@ index 0000000..8bc5d1b
 +        cfg.wasm_threads = False
 +        cfg.wasm_simd = True
 +        cfg.cranelift_opt_level = "speed"
++        cfg.cranelift_nan_canonicalization = True
 +
 +        self._engine = wasmtime.Engine(cfg)
 +        self._cache = _ModuleLRU(maxsize=128)
@@ -1872,7 +2021,7 @@ index 0000000..8bc5d1b
 +            self._cache.put(sha256_hash, mod)
 +        return mod, sha256_hash
 +
-+    def run_sync(  # noqa: C901, PLR0915
++    def run_sync(  # noqa: C901, PLR0912, PLR0915
 +        self,
 +        wasm_bytes: bytes,
 +        input_bytes: bytes,
@@ -1904,15 +2053,36 @@ index 0000000..8bc5d1b
 +
 +        captured_output: list[bytes] = []
 +        output_too_large: list[bool] = []
++        call_count: list[int] = [0]
++        multiple_calls_detected: list[bool] = []
++        bounds_violation_detected: list[bool] = []
 +
 +        def host_kb_output(caller: wasmtime.Caller, ptr: int, length: int) -> None:
-+            if length < 0 or length > _MAX_OUTPUT_PAYLOAD_BYTES:
++            call_count[0] += 1
++            if call_count[0] > 1:
++                multiple_calls_detected.append(True)
++                return
++
++            if ptr < 0 or length < 0:
++                bounds_violation_detected.append(True)
++                return
++
++            if length > _MAX_OUTPUT_PAYLOAD_BYTES:
 +                output_too_large.append(True)
 +                return
++
 +            mem_item = caller["memory"]
-+            if isinstance(mem_item, wasmtime.Memory):
-+                data = bytes(mem_item.read(caller, ptr, ptr + length))
-+                captured_output.append(data)
++            if not isinstance(mem_item, wasmtime.Memory):
++                bounds_violation_detected.append(True)
++                return
++
++            data_len = mem_item.data_len(caller)
++            if ptr + length > data_len:
++                bounds_violation_detected.append(True)
++                return
++
++            data = bytes(mem_item.read(caller, ptr, ptr + length))
++            captured_output.append(data)
 +
 +        linker = wasmtime.Linker(self._engine)
 +        output_type = wasmtime.FuncType([wasmtime.ValType.i32(), wasmtime.ValType.i32()], [])
@@ -1964,6 +2134,14 @@ index 0000000..8bc5d1b
 +        duration_ms = (time.perf_counter() - start_time) * 1000.0
 +        fuel_consumed = effective_limits.max_fuel - store.get_fuel()
 +
++        if multiple_calls_detected:
++            msg = "WebAssembly guest called 'kb_output' multiple times (exactly one call permitted)"
++            raise WasmRunError(msg, code="SCRIPT_TRAP")
++
++        if bounds_violation_detected:
++            msg = "WebAssembly guest passed out-of-bounds pointer or length to 'kb_output'"
++            raise WasmRunError(msg, code="SCRIPT_TRAP")
++
 +        if output_too_large:
 +            msg = "Script output exceeds maximum allowed 65,536 bytes"
 +            raise WasmRunError(msg, code="SCRIPT_OUTPUT_TOO_LARGE")
@@ -2006,31 +2184,33 @@ index 0000000..8bc5d1b
 +            msg = f"WebAssembly execution timed out (> {effective_limits.timeout_ms}ms)"
 +            raise WasmRunError(msg, code="SCRIPT_TIMEOUT") from None
 diff --git a/kanban/services/activity.py b/kanban/services/activity.py
-index 90b4c3c..8aa0580 100644
+index 90b4c3c..06f1ef4 100644
 --- a/kanban/services/activity.py
 +++ b/kanban/services/activity.py
-@@ -173,6 +173,7 @@ class ActivityEventType(StrEnum):
+@@ -173,6 +173,8 @@ class ActivityEventType(StrEnum):
      CUSTOM_FIELD_APPROVED_PRIMARY = "CUSTOM_FIELD_APPROVED_PRIMARY"
      CUSTOM_FIELD_APPROVED = "CUSTOM_FIELD_APPROVED"
      CUSTOM_FIELD_APPROVAL_REVOKED = "CUSTOM_FIELD_APPROVAL_REVOKED"
 +    CUSTOM_FIELD_SERVER_INVOKED = "CUSTOM_FIELD_SERVER_INVOKED"
++    WASM_MODULE_UPLOADED = "WASM_MODULE_UPLOADED"
      STANDALONE_BACKUP_EXPORTED = "STANDALONE_BACKUP_EXPORTED"
      PLANE_IMPORT_COMPLETED = "PLANE_IMPORT_COMPLETED"
      WORKSPACE_SETTINGS_CHANGED = "WORKSPACE_SETTINGS_CHANGED"
-@@ -297,6 +298,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+@@ -297,6 +299,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
          ActivityEventType.CUSTOM_FIELD_APPROVED_PRIMARY: ActivityCategory.HISTORY,
          ActivityEventType.CUSTOM_FIELD_APPROVED: ActivityCategory.HISTORY,
          ActivityEventType.CUSTOM_FIELD_APPROVAL_REVOKED: ActivityCategory.HISTORY,
 +        ActivityEventType.CUSTOM_FIELD_SERVER_INVOKED: ActivityCategory.SYSTEM,
++        ActivityEventType.WASM_MODULE_UPLOADED: ActivityCategory.SYSTEM,
          ActivityEventType.WORKSPACE_SETTINGS_CHANGED: ActivityCategory.SYSTEM,
          ActivityEventType.AIR_GAP_MODE_CHANGED: ActivityCategory.SYSTEM,
      }
 diff --git a/kanban/tests/custom_fields/test_execution_api.py b/kanban/tests/custom_fields/test_execution_api.py
 new file mode 100644
-index 0000000..82700ed
+index 0000000..a8be50a
 --- /dev/null
 +++ b/kanban/tests/custom_fields/test_execution_api.py
-@@ -0,0 +1,368 @@
+@@ -0,0 +1,407 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Feature unit tests for custom field execution REST API (KB-P5-13, S13.1, S13.3)."""
@@ -2141,6 +2321,21 @@ index 0000000..82700ed
 +    assert resp_bad_b64.status_code == 422
 +    assert resp_bad_b64.json()["code"] == "WASM_BINARY_INVALID"
 +
++    # 4b. Invalid base64 gets 422 with fixed detail
++    resp_bad_b64 = await client_admin.post(
++        "/api/v1/projects/WASM/wasm-modules",
++        json={"name": "bad", "wasm_base64": "!!!not-valid-base64==="},
++    )
++    assert resp_bad_b64.status_code == 422
++    assert resp_bad_b64.json()["detail"] == "Invalid base64 payload"
++
++    # 4c. Oversized base64 (> 1,398,104 chars) gets 422 validation error
++    resp_too_large = await client_admin.post(
++        "/api/v1/projects/WASM/wasm-modules",
++        json={"name": "huge", "wasm_base64": "A" * 1_398_105},
++    )
++    assert resp_too_large.status_code == 422
++
 +    # 5. Invalid wasm binary (not WebAssembly magic header) gets 422
 +    resp_corrupt = await client_admin.post(
 +        "/api/v1/projects/WASM/wasm-modules",
@@ -2182,7 +2377,7 @@ index 0000000..82700ed
 +    assert resp_idempotent.json()["sha256"] == data["sha256"]
 +
 +
-+async def test_custom_field_execution_and_cache_flow(
++async def test_custom_field_execution_and_cache_flow(  # noqa: PLR0915
 +    api_env: ApiEnv,
 +    make_user: Callable[..., Awaitable[SeededUser]],
 +    make_project: Callable[..., Awaitable[uuid.UUID]],
@@ -2250,6 +2445,17 @@ index 0000000..82700ed
 +    assert len(items_cached) == 1
 +    assert items_cached[0]["value"] == {"level": "high", "score": 8.8, "label": "8.8 High"}
 +
++    # 5b. GET with X-Kanban-Script-Depth: 1 serves cached rows and skips uncomputed
++    resp_depth = await client.get(
++        f"/api/v1/issues/{issue_key}/custom-fields",
++        headers={"X-Kanban-Script-Depth": "1"},
++    )
++    assert resp_depth.status_code == 200
++    items_depth = resp_depth.json()
++    assert len(items_depth) == 1
++    assert items_depth[0]["value"] == {"level": "high", "score": 8.8, "label": "8.8 High"}
++    assert items_depth[0]["status"] == "cached"
++
 +    # 6. POST execute forces fresh execution
 +    resp_exec = await client.post(f"/api/v1/issues/{issue_key}/custom-fields/{field_id}/execute")
 +    contract_recorder.record("execute_custom_field_200", resp_exec.request, resp_exec)
@@ -2257,6 +2463,19 @@ index 0000000..82700ed
 +    item_exec = resp_exec.json()
 +    assert item_exec["field_id"] == field_id
 +    assert item_exec["value"] == {"level": "high", "score": 8.8, "label": "8.8 High"}
++
++    # 6b. Rate limiting on force_refresh execution (6/min limit)
++    for _ in range(5):
++        resp_burst = await client.post(
++            f"/api/v1/issues/{issue_key}/custom-fields/{field_id}/execute"
++        )
++        assert resp_burst.status_code == 200
++
++    resp_rate_limited = await client.post(
++        f"/api/v1/issues/{issue_key}/custom-fields/{field_id}/execute"
++    )
++    assert resp_rate_limited.status_code == 429
++    assert resp_rate_limited.json()["code"] == "RATE_LIMITED"
 +
 +    # 7. 404 on missing issue
 +    resp_missing_issue = await client.post(
@@ -2401,10 +2620,10 @@ index 0000000..82700ed
 +    assert resp_esc.json()["code"] == "APPROVAL_REVOKED"
 diff --git a/kanban/tests/custom_fields/test_executor_cache.py b/kanban/tests/custom_fields/test_executor_cache.py
 new file mode 100644
-index 0000000..148ea41
+index 0000000..8e37837
 --- /dev/null
 +++ b/kanban/tests/custom_fields/test_executor_cache.py
-@@ -0,0 +1,701 @@
+@@ -0,0 +1,718 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Integration tests for CustomFieldExecutor cache partitioning, escalation gates, and server audit.
@@ -2861,6 +3080,15 @@ index 0000000..148ea41
 +    assert exc_info.value.status == 409
 +    assert exc_info.value.code == "APPROVAL_REVOKED"
 +
++    # Verify cached_only=True lists tampered field as APPROVAL_REVOKED and value is None
++    list_revoked = await executor.list_values_for_issue(
++        db_session, admin_caller, "KAN-142", cached_only=True
++    )
++    rev_items = [it for it in list_revoked if it["field_id"] == str(field_srv_id)]
++    assert len(rev_items) == 1
++    assert rev_items[0]["status"] == "APPROVAL_REVOKED"
++    assert rev_items[0]["value"] is None
++
 +
 +@pytest.mark.asyncio
 +async def test_executor_error_branches(db_session: AsyncSession) -> None:
@@ -3106,6 +3334,14 @@ index 0000000..148ea41
 +        assert tier_err.value.status == 422
 +        assert tier_err.value.code == "INVALID_TIER"
 +        f_b64.tier = "wasm"
++
++    # 6. list_values_for_issue with cached_only=True returns cached and not_computed items
++    list_cached = await executor.list_values_for_issue(
++        db_session, admin_caller, "KAN-142", cached_only=True
++    )
++    assert len(list_cached) >= 1
++    for it in list_cached:
++        assert it["status"] in ("cached", "not_computed")
 diff --git a/kanban/tests/sandbox/__init__.py b/kanban/tests/sandbox/__init__.py
 new file mode 100644
 index 0000000..81e9609
@@ -3117,10 +3353,10 @@ index 0000000..81e9609
 +"""Tests for sandbox module."""
 diff --git a/kanban/tests/sandbox/test_wasm_runner.py b/kanban/tests/sandbox/test_wasm_runner.py
 new file mode 100644
-index 0000000..c986c3a
+index 0000000..754d96a
 --- /dev/null
 +++ b/kanban/tests/sandbox/test_wasm_runner.py
-@@ -0,0 +1,398 @@
+@@ -0,0 +1,441 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Comprehensive unit and security tests for TierAWasmRunner (KB-P5-13, S13.3)."""
@@ -3519,6 +3755,49 @@ index 0000000..c986c3a
 +    with pytest.raises(WasmRunError) as oob_err:
 +        runner.run_sync(wasm_oob, b"{}")
 +    assert oob_err.value.code == "SCRIPT_MEMORY_LIMIT"
++
++
++def test_multiple_kb_output_calls_trap() -> None:
++    """Guest calling kb_output multiple times is trapped with SCRIPT_TRAP."""
++    runner = TierAWasmRunner.get_instance()
++    wat_loop_output = """
++    (module
++      (import "env" "kb_output" (func $kb_output (param i32 i32)))
++      (memory (export "memory") 1)
++      (func (export "kb_alloc") (param i32) (result i32) i32.const 0)
++      (func (export "kb_run") (param i32 i32) (result i32)
++        (call $kb_output (i32.const 0) (i32.const 5))
++        (call $kb_output (i32.const 0) (i32.const 5))
++        i32.const 0
++      )
++    )
++    """
++    wasm_bytes = wasmtime.wat2wasm(wat_loop_output)
++    with pytest.raises(WasmRunError) as exc_info:
++        runner.run_sync(wasm_bytes, b"{}")
++    assert exc_info.value.code == "SCRIPT_TRAP"
++    assert "multiple times" in exc_info.value.message
++
++
++def test_invalid_kb_output_pointers_trap() -> None:
++    """Guest passing pointer or length beyond linear memory traps with SCRIPT_TRAP."""
++    runner = TierAWasmRunner.get_instance()
++    wat_bad_ptr = """
++    (module
++      (import "env" "kb_output" (func $kb_output (param i32 i32)))
++      (memory (export "memory") 1)
++      (func (export "kb_alloc") (param i32) (result i32) i32.const 0)
++      (func (export "kb_run") (param i32 i32) (result i32)
++        (call $kb_output (i32.const 65530) (i32.const 100))
++        i32.const 0
++      )
++    )
++    """
++    wasm_bytes = wasmtime.wat2wasm(wat_bad_ptr)
++    with pytest.raises(WasmRunError) as exc_info:
++        runner.run_sync(wasm_bytes, b"{}")
++    assert exc_info.value.code == "SCRIPT_TRAP"
++    assert "out-of-bounds pointer or length" in exc_info.value.message
 diff --git a/mcp/admin/tools/__init__.py b/mcp/admin/tools/__init__.py
 new file mode 100644
 index 0000000..80ca1de

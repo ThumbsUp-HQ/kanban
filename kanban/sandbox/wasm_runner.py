@@ -143,6 +143,7 @@ class TierAWasmRunner:
         cfg.wasm_threads = False
         cfg.wasm_simd = True
         cfg.cranelift_opt_level = "speed"
+        cfg.cranelift_nan_canonicalization = True
 
         self._engine = wasmtime.Engine(cfg)
         self._cache = _ModuleLRU(maxsize=128)
@@ -237,7 +238,7 @@ class TierAWasmRunner:
             self._cache.put(sha256_hash, mod)
         return mod, sha256_hash
 
-    def run_sync(  # noqa: C901, PLR0915
+    def run_sync(  # noqa: C901, PLR0912, PLR0915
         self,
         wasm_bytes: bytes,
         input_bytes: bytes,
@@ -269,15 +270,36 @@ class TierAWasmRunner:
 
         captured_output: list[bytes] = []
         output_too_large: list[bool] = []
+        call_count: list[int] = [0]
+        multiple_calls_detected: list[bool] = []
+        bounds_violation_detected: list[bool] = []
 
         def host_kb_output(caller: wasmtime.Caller, ptr: int, length: int) -> None:
-            if length < 0 or length > _MAX_OUTPUT_PAYLOAD_BYTES:
+            call_count[0] += 1
+            if call_count[0] > 1:
+                multiple_calls_detected.append(True)
+                return
+
+            if ptr < 0 or length < 0:
+                bounds_violation_detected.append(True)
+                return
+
+            if length > _MAX_OUTPUT_PAYLOAD_BYTES:
                 output_too_large.append(True)
                 return
+
             mem_item = caller["memory"]
-            if isinstance(mem_item, wasmtime.Memory):
-                data = bytes(mem_item.read(caller, ptr, ptr + length))
-                captured_output.append(data)
+            if not isinstance(mem_item, wasmtime.Memory):
+                bounds_violation_detected.append(True)
+                return
+
+            data_len = mem_item.data_len(caller)
+            if ptr + length > data_len:
+                bounds_violation_detected.append(True)
+                return
+
+            data = bytes(mem_item.read(caller, ptr, ptr + length))
+            captured_output.append(data)
 
         linker = wasmtime.Linker(self._engine)
         output_type = wasmtime.FuncType([wasmtime.ValType.i32(), wasmtime.ValType.i32()], [])
@@ -328,6 +350,14 @@ class TierAWasmRunner:
 
         duration_ms = (time.perf_counter() - start_time) * 1000.0
         fuel_consumed = effective_limits.max_fuel - store.get_fuel()
+
+        if multiple_calls_detected:
+            msg = "WebAssembly guest called 'kb_output' multiple times (exactly one call permitted)"
+            raise WasmRunError(msg, code="SCRIPT_TRAP")
+
+        if bounds_violation_detected:
+            msg = "WebAssembly guest passed out-of-bounds pointer or length to 'kb_output'"
+            raise WasmRunError(msg, code="SCRIPT_TRAP")
 
         if output_too_large:
             msg = "Script output exceeds maximum allowed 65,536 bytes"

@@ -353,8 +353,14 @@ class CustomFieldExecutor:
         session: AsyncSession,
         caller: PrincipalContext,
         issue_key: str,
+        *,
+        cached_only: bool = False,
     ) -> list[dict[str, Any]]:
-        """List all custom field values for an issue, evaluating missing wasm values on read."""
+        """List all custom field values for an issue, evaluating missing wasm values on read.
+
+        When cached_only is True (e.g. at script_depth >= 1), only pre-existing cached
+        rows are returned and missing values are not evaluated to prevent recursion.
+        """
         issue = await resolve_issue_ref(session, caller, issue_key)
 
         stmt = (
@@ -370,6 +376,101 @@ class CustomFieldExecutor:
 
         results: list[dict[str, Any]] = []
         for defn in definitions:
+            if cached_only:
+                try:
+                    await assert_execution_authorized(session, defn)
+                except ApprovalRevokedError:
+                    results.append(
+                        {
+                            "field_id": str(defn.id),
+                            "slug": defn.slug,
+                            "name": defn.name,
+                            "output_format": defn.output_format,
+                            "output_format_metadata": defn.output_format_metadata,
+                            "value": None,
+                            "computed_at": None,
+                            "last_latency_ms": 0,
+                            "tier": defn.tier,
+                            "token_scope": defn.target_scope,
+                            "credential_mode": defn.credential_mode,
+                            "status": "APPROVAL_REVOKED",
+                        }
+                    )
+                    continue
+
+                caller_hash = _get_caller_access_hash(caller)
+                should_cache, partition_hash = compute_cache_partition_key(
+                    defn.target_scope,
+                    defn.credential_mode,
+                    issue.id,
+                    defn.id,
+                    defn.script_version,
+                    caller_hash,
+                )
+                if not should_cache:
+                    results.append(
+                        {
+                            "field_id": str(defn.id),
+                            "slug": defn.slug,
+                            "name": defn.name,
+                            "output_format": defn.output_format,
+                            "output_format_metadata": defn.output_format_metadata,
+                            "value": None,
+                            "computed_at": None,
+                            "last_latency_ms": 0,
+                            "tier": defn.tier,
+                            "token_scope": defn.target_scope,
+                            "credential_mode": defn.credential_mode,
+                            "status": "not_computed",
+                        }
+                    )
+                    continue
+
+                now = datetime.now(UTC)
+                cache_stmt = select(CustomFieldValue).where(
+                    CustomFieldValue.issue_id == issue.id,
+                    CustomFieldValue.field_id == defn.id,
+                    CustomFieldValue.script_version == defn.script_version,
+                    CustomFieldValue.user_access_hash == partition_hash,
+                    CustomFieldValue.expires_at > now,
+                )
+                cached_row = (await session.execute(cache_stmt)).scalar_one_or_none()
+                if cached_row is not None:
+                    results.append(
+                        {
+                            "field_id": str(defn.id),
+                            "slug": defn.slug,
+                            "name": defn.name,
+                            "output_format": defn.output_format,
+                            "output_format_metadata": defn.output_format_metadata,
+                            "value": cached_row.value_json,
+                            "computed_at": cached_row.computed_at.isoformat(),
+                            "last_latency_ms": cached_row.last_latency_ms,
+                            "tier": defn.tier,
+                            "token_scope": defn.target_scope,
+                            "credential_mode": defn.credential_mode,
+                            "status": "cached",
+                        }
+                    )
+                else:
+                    results.append(
+                        {
+                            "field_id": str(defn.id),
+                            "slug": defn.slug,
+                            "name": defn.name,
+                            "output_format": defn.output_format,
+                            "output_format_metadata": defn.output_format_metadata,
+                            "value": None,
+                            "computed_at": None,
+                            "last_latency_ms": 0,
+                            "tier": defn.tier,
+                            "token_scope": defn.target_scope,
+                            "credential_mode": defn.credential_mode,
+                            "status": "not_computed",
+                        }
+                    )
+                continue
+
             try:
                 res = await self.execute_for_issue(
                     issue_key,

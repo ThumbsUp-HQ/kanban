@@ -108,6 +108,21 @@ async def test_upload_wasm_module_lifecycle_and_security(
     assert resp_bad_b64.status_code == 422
     assert resp_bad_b64.json()["code"] == "WASM_BINARY_INVALID"
 
+    # 4b. Invalid base64 gets 422 with fixed detail
+    resp_bad_b64 = await client_admin.post(
+        "/api/v1/projects/WASM/wasm-modules",
+        json={"name": "bad", "wasm_base64": "!!!not-valid-base64==="},
+    )
+    assert resp_bad_b64.status_code == 422
+    assert resp_bad_b64.json()["detail"] == "Invalid base64 payload"
+
+    # 4c. Oversized base64 (> 1,398,104 chars) gets 422 validation error
+    resp_too_large = await client_admin.post(
+        "/api/v1/projects/WASM/wasm-modules",
+        json={"name": "huge", "wasm_base64": "A" * 1_398_105},
+    )
+    assert resp_too_large.status_code == 422
+
     # 5. Invalid wasm binary (not WebAssembly magic header) gets 422
     resp_corrupt = await client_admin.post(
         "/api/v1/projects/WASM/wasm-modules",
@@ -149,7 +164,7 @@ async def test_upload_wasm_module_lifecycle_and_security(
     assert resp_idempotent.json()["sha256"] == data["sha256"]
 
 
-async def test_custom_field_execution_and_cache_flow(
+async def test_custom_field_execution_and_cache_flow(  # noqa: PLR0915
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
@@ -217,6 +232,17 @@ async def test_custom_field_execution_and_cache_flow(
     assert len(items_cached) == 1
     assert items_cached[0]["value"] == {"level": "high", "score": 8.8, "label": "8.8 High"}
 
+    # 5b. GET with X-Kanban-Script-Depth: 1 serves cached rows and skips uncomputed
+    resp_depth = await client.get(
+        f"/api/v1/issues/{issue_key}/custom-fields",
+        headers={"X-Kanban-Script-Depth": "1"},
+    )
+    assert resp_depth.status_code == 200
+    items_depth = resp_depth.json()
+    assert len(items_depth) == 1
+    assert items_depth[0]["value"] == {"level": "high", "score": 8.8, "label": "8.8 High"}
+    assert items_depth[0]["status"] == "cached"
+
     # 6. POST execute forces fresh execution
     resp_exec = await client.post(f"/api/v1/issues/{issue_key}/custom-fields/{field_id}/execute")
     contract_recorder.record("execute_custom_field_200", resp_exec.request, resp_exec)
@@ -224,6 +250,19 @@ async def test_custom_field_execution_and_cache_flow(
     item_exec = resp_exec.json()
     assert item_exec["field_id"] == field_id
     assert item_exec["value"] == {"level": "high", "score": 8.8, "label": "8.8 High"}
+
+    # 6b. Rate limiting on force_refresh execution (6/min limit)
+    for _ in range(5):
+        resp_burst = await client.post(
+            f"/api/v1/issues/{issue_key}/custom-fields/{field_id}/execute"
+        )
+        assert resp_burst.status_code == 200
+
+    resp_rate_limited = await client.post(
+        f"/api/v1/issues/{issue_key}/custom-fields/{field_id}/execute"
+    )
+    assert resp_rate_limited.status_code == 429
+    assert resp_rate_limited.json()["code"] == "RATE_LIMITED"
 
     # 7. 404 on missing issue
     resp_missing_issue = await client.post(

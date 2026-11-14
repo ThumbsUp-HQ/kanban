@@ -454,6 +454,15 @@ async def test_revoked_approval_and_server_audit(db_session: AsyncSession) -> No
     assert exc_info.value.status == 409
     assert exc_info.value.code == "APPROVAL_REVOKED"
 
+    # Verify cached_only=True lists tampered field as APPROVAL_REVOKED and value is None
+    list_revoked = await executor.list_values_for_issue(
+        db_session, admin_caller, "KAN-142", cached_only=True
+    )
+    rev_items = [it for it in list_revoked if it["field_id"] == str(field_srv_id)]
+    assert len(rev_items) == 1
+    assert rev_items[0]["status"] == "APPROVAL_REVOKED"
+    assert rev_items[0]["value"] is None
+
 
 @pytest.mark.asyncio
 async def test_executor_error_branches(db_session: AsyncSession) -> None:
@@ -699,3 +708,11 @@ async def test_executor_edge_branches(db_session: AsyncSession) -> None:
         assert tier_err.value.status == 422
         assert tier_err.value.code == "INVALID_TIER"
         f_b64.tier = "wasm"
+
+    # 6. list_values_for_issue with cached_only=True returns cached and not_computed items
+    list_cached = await executor.list_values_for_issue(
+        db_session, admin_caller, "KAN-142", cached_only=True
+    )
+    assert len(list_cached) >= 1
+    for it in list_cached:
+        assert it["status"] in ("cached", "not_computed")

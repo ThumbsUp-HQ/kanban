@@ -126,7 +126,11 @@ class WasmModuleUploadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=120)
-    wasm_base64: str = Field(description="Base64-encoded WebAssembly binary")
+    wasm_base64: str = Field(
+        min_length=1,
+        max_length=1_398_104,
+        description="Base64-encoded WebAssembly binary (max 1 MiB binary)",
+    )
 
 
 class WasmModuleResponse(BaseModel):
