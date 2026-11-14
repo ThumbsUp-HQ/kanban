@@ -1,0 +1,52 @@
+
+> @kanban/web@0.1.0 test:unit /tmp/kb-wt-KANBA-146/kanban/web
+> vitest run src/features/custom-fields --coverage '--coverage.include=src/features/custom-fields/**'
+
+
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-146/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 274ms
+stderr | src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx > EscalationApprovalPanel > displays Submitting... while request approval mutation is in flight
+An update to EscalationApprovalPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EscalationApprovalPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (8 tests) 437ms
+ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (19 tests) 420ms
+ ✓ src/features/custom-fields/__tests__/api.test.ts (28 tests) 35ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (19 tests) 875ms
+
+ Test Files  5 passed (5)
+      Tests  106 passed (106)
+   Start at  23:59:42
+   Duration  2.86s (environment 48%, tests 24%, import 20%, transform 5%, worker 3%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.84 |    96.68 |     100 |   99.52 |                   
+ ...tionEditor.tsx |     100 |    94.64 |     100 |     100 | 133,218,320       
+ ...FieldValue.tsx |   99.14 |    98.16 |     100 |     100 | 36,283            
+ ...ailSection.tsx |   96.22 |    95.23 |     100 |   98.03 | 103               
+ ...rovalPanel.tsx |   97.33 |    95.06 |     100 |   98.64 | 38                
+ api.ts            |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

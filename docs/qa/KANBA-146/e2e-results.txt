@@ -1,0 +1,29 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 18 tests using 10 workers
+
+  -   5 [tablet] › e2e/custom-fields.spec.ts:391:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 04-approval-sp-warning: renders PROJECT_ADMIN_SP explicit warning banner
+  -  10 [tablet] › e2e/custom-fields.spec.ts:306:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 02-rail-refresh-error: renders literal error mapping on execution failure
+  -  11 [tablet] › e2e/custom-fields.spec.ts:426:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 05-approval-manifest-mismatch: disables Approve on 409 conflict with literal message
+  -  12 [tablet] › e2e/custom-fields.spec.ts:479:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 06-non-admin-404: renders uniform 404 page for non-admin callers (anti-enumeration)
+  ✓   8 [desktop] › e2e/custom-fields.spec.ts:479:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 06-non-admin-404: renders uniform 404 page for non-admin callers (anti-enumeration) (1.8s)
+  ✓   2 [desktop] › e2e/custom-fields.spec.ts:391:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 04-approval-sp-warning: renders PROJECT_ADMIN_SP explicit warning banner (2.1s)
+  ✓   1 [desktop] › e2e/custom-fields.spec.ts:306:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 02-rail-refresh-error: renders literal error mapping on execution failure (2.2s)
+  ✓   4 [desktop] › e2e/custom-fields.spec.ts:356:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 03-admin-editor: displays definition editor with manifest_sha256 chip (2.2s)
+  ✓   6 [tablet] › e2e/custom-fields.spec.ts:356:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 03-admin-editor: displays definition editor with manifest_sha256 chip (2.1s)
+  ✓   7 [desktop] › e2e/custom-fields.spec.ts:258:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 01-rail-custom-fields: renders 7 formats and emoji hint popover metrics (2.2s)
+  ✓   3 [desktop] › e2e/custom-fields.spec.ts:426:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 05-approval-manifest-mismatch: disables Approve on 409 conflict with literal message (2.4s)
+  -  14 [mobile] › e2e/custom-fields.spec.ts:306:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 02-rail-refresh-error: renders literal error mapping on execution failure
+  ✓   9 [tablet] › e2e/custom-fields.spec.ts:258:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 01-rail-custom-fields: renders 7 formats and emoji hint popover metrics (2.3s)
+  -  16 [mobile] › e2e/custom-fields.spec.ts:391:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 04-approval-sp-warning: renders PROJECT_ADMIN_SP explicit warning banner
+  -  17 [mobile] › e2e/custom-fields.spec.ts:426:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 05-approval-manifest-mismatch: disables Approve on 409 conflict with literal message
+  -  18 [mobile] › e2e/custom-fields.spec.ts:479:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 06-non-admin-404: renders uniform 404 page for non-admin callers (anti-enumeration)
+  ✓  13 [mobile] › e2e/custom-fields.spec.ts:258:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 01-rail-custom-fields: renders 7 formats and emoji hint popover metrics (1.6s)
+  ✓  15 [mobile] › e2e/custom-fields.spec.ts:356:3 › Custom Fields UI E2E (KB-P5-15, KANBA-146) › 03-admin-editor: displays definition editor with manifest_sha256 chip (1.3s)
+
+  8 skipped
+  10 passed (21.0s)
