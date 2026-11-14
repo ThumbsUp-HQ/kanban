@@ -16,6 +16,10 @@ describe('qk', () => {
     expect(qk.docsTree('KAN')).toEqual(['docs', 'tree', 'KAN']);
     expect(qk.page('p1')).toEqual(['docs', 'page', 'p1']);
     expect(qk.stickies('KAN')).toEqual(['stickies', 'KAN']);
+    expect(qk.subscription('KAN-1')).toEqual(['subscription', 'KAN-1']);
+    expect(qk.objectLinks('KAN-1')).toEqual(['objectLinks', 'KAN-1']);
+    expect(qk.canonicalUrl('KAN-1')).toEqual(['canonicalUrl', 'KAN-1']);
+    expect(qk.deletePreview('KAN-1')).toEqual(['deletePreview', 'KAN-1']);
   });
 });
 
