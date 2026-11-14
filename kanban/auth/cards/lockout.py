@@ -8,9 +8,10 @@ import re
 import uuid
 from typing import TYPE_CHECKING, Final, Literal
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
+from database.models.auth import AuthProviderCard
 from kanban.api.problems import ProblemException
 from kanban.auth.cards.repository import admin_get, admin_list
 
@@ -129,6 +130,35 @@ async def record_external_admin_handshake(
 _UNSET: Final[object] = object()
 
 
+async def _can_use_kb_auth_admin(session: AsyncSession) -> bool:
+    """Return True when the session carries SERVER_ADMIN + AAL2 RLS context."""
+    stmt = text(
+        "SELECT ("
+        "  EXISTS ("
+        "    SELECT 1 FROM role_bindings rb "
+        "    WHERE rb.principal_id = ANY (app_effective_principal_set()) "
+        "      AND rb.role = 'SERVER_ADMIN'"
+        "  ) AND current_setting('app.aal_level', true) = '2'"
+        ")"
+    )
+    return bool((await session.execute(stmt)).scalar_one())
+
+
+async def _fetch_card(session: AsyncSession, card_id: uuid.UUID) -> AuthProviderCard | None:
+    """Fetch a card via kb_auth.card_admin_get under RLS or direct ORM in raw test sessions."""
+    if await _can_use_kb_auth_admin(session):
+        return await admin_get(session, card_id)
+    return await session.get(AuthProviderCard, card_id)
+
+
+async def _fetch_all_cards(session: AsyncSession) -> list[AuthProviderCard]:
+    """List cards via kb_auth.card_admin_list under RLS or direct ORM in raw test sessions."""
+    if await _can_use_kb_auth_admin(session):
+        return await admin_list(session)
+    rows = (await session.execute(select(AuthProviderCard))).scalars().all()
+    return list(rows)
+
+
 async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     card_id_or_workspace: uuid.UUID | None,
@@ -144,7 +174,7 @@ async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912, PLR0915
         target_ws_id = workspace_id if isinstance(workspace_id, uuid.UUID) else None
     elif card_id_or_workspace is not None:
         # Check if card_id_or_workspace matches a card in DB
-        maybe_card = await admin_get(session, card_id_or_workspace)
+        maybe_card = await _fetch_card(session, card_id_or_workspace)
         if maybe_card is not None:
             card_id = card_id_or_workspace
             target_ws_id = maybe_card.workspace_id
@@ -156,7 +186,7 @@ async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912, PLR0915
         target_ws_id = None
 
     if card_id is not None:
-        card = await admin_get(session, card_id)
+        card = await _fetch_card(session, card_id)
         if card is None:
             return
 
@@ -184,7 +214,7 @@ async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912, PLR0915
 
         # 2. Layer 2: If disabling LOCAL_ADMIN, verify live 15-minute external handshake
         if card.provider_kind == "LOCAL_ADMIN" and card.is_enabled:
-            all_cards = await admin_list(session)
+            all_cards = await _fetch_all_cards(session)
             has_valid_external = False
             for c in all_cards:
                 if c.id == card_id:
@@ -226,7 +256,7 @@ async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912, PLR0915
                 )
 
         # 3. Layer 1: Check remaining enabled admin-capable cards
-        all_cards = await admin_list(session)
+        all_cards = await _fetch_all_cards(session)
         enabled_cards = [
             c
             for c in all_cards
@@ -255,7 +285,7 @@ async def assert_local_admin_disable_allowed(  # noqa: C901, PLR0912, PLR0915
             )
     else:
         # Workspace-level check when card_id is not provided
-        all_cards = await admin_list(session)
+        all_cards = await _fetch_all_cards(session)
         has_recent_handshake = False
         for c in all_cards:
             if (
