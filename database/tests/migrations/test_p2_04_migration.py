@@ -11,8 +11,8 @@ from database.tests.migration_harness import MigrationHarness
 async def test_24_local_admin_credentials_migration_lifecycle() -> None:
     """Verify upgrade to p2_04_local_admin_credentials, downgrade -1, and re-upgrade."""
     async with MigrationHarness() as harness:
-        # 1. Upgrade to head (p2_04_local_admin_credentials)
-        await harness.upgrade("head")
+        # 1. Upgrade to p2_04_local_admin_credentials
+        await harness.upgrade("p2_04_local_admin_credentials")
 
         # Verify table exists and is owned by kb_auth_owner with RLS forced
         tables = await harness.fetch(
@@ -54,8 +54,8 @@ async def test_24_local_admin_credentials_migration_lifecycle() -> None:
         )
         assert len(funcs_down) == 0
 
-        # 3. Re-upgrade to head
-        await harness.upgrade("head")
+        # 3. Re-upgrade to p2_04_local_admin_credentials
+        await harness.upgrade("p2_04_local_admin_credentials")
 
         # Verify table restored
         tables_re = await harness.fetch(

@@ -1,0 +1,329 @@
+{
+  "dual_control_primary_approved_200": {
+    "request": {
+      "method": "POST",
+      "url": "http://test/api/v1/custom-field-approvals/a62f5af7-1a71-4ab1-829c-5ada00b09f7b/approve",
+      "headers": {
+        "host": "test",
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate",
+        "connection": "keep-alive",
+        "user-agent": "python-httpx/0.28.1",
+        "x-csrf-token": "5Wjwc7q-5T4hA4_G2lpBtg.3ahPbg2DRfen-OnXn9p_3hKqGoaB6EBkkzHozlv8AuQ",
+        "cookie": "__Host-kb_csrf=5Wjwc7q-5T4hA4_G2lpBtg.3ahPbg2DRfen-OnXn9p_3hKqGoaB6EBkkzHozlv8AuQ",
+        "content-length": "117",
+        "content-type": "application/json"
+      },
+      "body": {
+        "manifest_sha256": "aeea937935d468eaad71fbf62dac0f8889858f99b1b0828aced456e9addd2187",
+        "sp_warning_acknowledged": true
+      }
+    },
+    "response": {
+      "status_code": 200,
+      "headers": {
+        "content-length": "880",
+        "content-type": "application/json",
+        "x-request-id": "f104d9deefda4406b84da8a0bea97248",
+        "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "x-frame-options": "DENY",
+        "cross-origin-opener-policy": "same-origin",
+        "cross-origin-resource-policy": "same-origin",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()",
+        "strict-transport-security": "max-age=63072000; includeSubDomains"
+      },
+      "body": {
+        "id": "a62f5af7-1a71-4ab1-829c-5ada00b09f7b",
+        "workspace_id": "01a1cff7-ea0b-7302-b753-c5269248c291",
+        "project_id": "01a1cff7-ea21-7b20-a3da-b05e986433ad",
+        "field_id": "01a1cff7-eb20-7d6a-a2cf-fbea96f05801",
+        "manifest_sha256": "aeea937935d468eaad71fbf62dac0f8889858f99b1b0828aced456e9addd2187",
+        "target_scope": "SERVER",
+        "credential_mode": "SERVER_ADMIN_SP",
+        "required_tier": "SERVER_ADMIN_DUAL",
+        "status": "PENDING_SECOND_APPROVER",
+        "requested_by_id": "01a1cff7-ea15-7850-a8ae-e029d347dc1f",
+        "justification": "Requires server-wide infrastructure inspection.",
+        "primary_approver_id": "01a1cff7-ea1b-799c-b4e5-3bc5274f1278",
+        "primary_approver_aal": 2,
+        "primary_approved_at": "2026-11-12T13:34:53.798674Z",
+        "secondary_approver_id": null,
+        "secondary_approver_aal": null,
+        "secondary_approved_at": null,
+        "sp_warning_acknowledged": true,
+        "revoked_at": null,
+        "revoked_reason": null,
+        "created_at": "2026-11-12T13:34:53.759143Z"
+      }
+    }
+  },
+  "dual_control_secondary_approved_200": {
+    "request": {
+      "method": "POST",
+      "url": "http://test/api/v1/custom-field-approvals/a62f5af7-1a71-4ab1-829c-5ada00b09f7b/approve",
+      "headers": {
+        "host": "test",
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate",
+        "connection": "keep-alive",
+        "user-agent": "python-httpx/0.28.1",
+        "x-csrf-token": "5Wjwc7q-5T4hA4_G2lpBtg.3ahPbg2DRfen-OnXn9p_3hKqGoaB6EBkkzHozlv8AuQ",
+        "cookie": "__Host-kb_csrf=5Wjwc7q-5T4hA4_G2lpBtg.3ahPbg2DRfen-OnXn9p_3hKqGoaB6EBkkzHozlv8AuQ",
+        "content-length": "117",
+        "content-type": "application/json"
+      },
+      "body": {
+        "manifest_sha256": "aeea937935d468eaad71fbf62dac0f8889858f99b1b0828aced456e9addd2187",
+        "sp_warning_acknowledged": true
+      }
+    },
+    "response": {
+      "status_code": 200,
+      "headers": {
+        "content-length": "921",
+        "content-type": "application/json",
+        "x-request-id": "bd3e185d45fc4422aa35b63f27e98061",
+        "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "x-frame-options": "DENY",
+        "cross-origin-opener-policy": "same-origin",
+        "cross-origin-resource-policy": "same-origin",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()",
+        "strict-transport-security": "max-age=63072000; includeSubDomains"
+      },
+      "body": {
+        "id": "a62f5af7-1a71-4ab1-829c-5ada00b09f7b",
+        "workspace_id": "01a1cff7-ea0b-7302-b753-c5269248c291",
+        "project_id": "01a1cff7-ea21-7b20-a3da-b05e986433ad",
+        "field_id": "01a1cff7-eb20-7d6a-a2cf-fbea96f05801",
+        "manifest_sha256": "aeea937935d468eaad71fbf62dac0f8889858f99b1b0828aced456e9addd2187",
+        "target_scope": "SERVER",
+        "credential_mode": "SERVER_ADMIN_SP",
+        "required_tier": "SERVER_ADMIN_DUAL",
+        "status": "APPROVED",
+        "requested_by_id": "01a1cff7-ea15-7850-a8ae-e029d347dc1f",
+        "justification": "Requires server-wide infrastructure inspection.",
+        "primary_approver_id": "01a1cff7-ea1b-799c-b4e5-3bc5274f1278",
+        "primary_approver_aal": 2,
+        "primary_approved_at": "2026-11-12T13:34:53.798674Z",
+        "secondary_approver_id": "01a1cff7-ea1e-7f05-a2b0-73ee4d304007",
+        "secondary_approver_aal": 2,
+        "secondary_approved_at": "2026-11-12T13:34:53.859102Z",
+        "sp_warning_acknowledged": true,
+        "revoked_at": null,
+        "revoked_reason": null,
+        "created_at": "2026-11-12T13:34:53.759143Z"
+      }
+    }
+  },
+  "403_aal2_required": {
+    "request": {
+      "method": "POST",
+      "url": "http://test/api/v1/custom-field-approvals/b9473429-7638-450b-8663-b93e1887219a/approve",
+      "headers": {
+        "host": "test",
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate",
+        "connection": "keep-alive",
+        "user-agent": "python-httpx/0.28.1",
+        "x-csrf-token": "14xyOpE3faGgN-bCopfPmQ.-DyBTMoGBqdSIqBc2EcyvVYn9wddlcEi0KjQid9Pv6Q",
+        "cookie": "__Host-kb_csrf=14xyOpE3faGgN-bCopfPmQ.-DyBTMoGBqdSIqBc2EcyvVYn9wddlcEi0KjQid9Pv6Q",
+        "content-length": "117",
+        "content-type": "application/json"
+      },
+      "body": {
+        "manifest_sha256": "40fc5c0e28a2e692bcade3f32f59000d1c1a40e28eab8205e5fc06b59598f82e",
+        "sp_warning_acknowledged": true
+      }
+    },
+    "response": {
+      "status_code": 403,
+      "headers": {
+        "x-request-id": "640d7da85c8747a0823b21f641c0688f",
+        "content-length": "227",
+        "content-type": "application/problem+json",
+        "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "x-frame-options": "DENY",
+        "cross-origin-opener-policy": "same-origin",
+        "cross-origin-resource-policy": "same-origin",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()",
+        "strict-transport-security": "max-age=63072000; includeSubDomains"
+      },
+      "body": {
+        "type": "urn:kanban:problem:AAL2_REQUIRED",
+        "title": "AAL2 Authentication Required",
+        "status": 403,
+        "code": "AAL2_REQUIRED",
+        "detail": "Approving escalation requires AAL2 authentication",
+        "request_id": "640d7da85c8747a0823b21f641c0688f"
+      }
+    }
+  },
+  "409_manifest_mismatch": {
+    "request": {
+      "method": "POST",
+      "url": "http://test/api/v1/custom-field-approvals/117fd024-e2fe-4d96-ad10-2513c937b52f/approve",
+      "headers": {
+        "host": "test",
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate",
+        "connection": "keep-alive",
+        "user-agent": "python-httpx/0.28.1",
+        "x-csrf-token": "y7Sy5vTWUvkByWc2KNT0ug.AbN_sXBCNHUusWaDhfxrBUwutPz2bDg03VvaahmXVKA",
+        "cookie": "__Host-kb_csrf=y7Sy5vTWUvkByWc2KNT0ug.AbN_sXBCNHUusWaDhfxrBUwutPz2bDg03VvaahmXVKA",
+        "content-length": "117",
+        "content-type": "application/json"
+      },
+      "body": {
+        "manifest_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "sp_warning_acknowledged": true
+      }
+    },
+    "response": {
+      "status_code": 409,
+      "headers": {
+        "x-request-id": "f21b31168d984f529c3f0d33bac697d7",
+        "content-length": "260",
+        "content-type": "application/problem+json",
+        "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "x-frame-options": "DENY",
+        "cross-origin-opener-policy": "same-origin",
+        "cross-origin-resource-policy": "same-origin",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()",
+        "strict-transport-security": "max-age=63072000; includeSubDomains"
+      },
+      "body": {
+        "type": "urn:kanban:problem:MANIFEST_MISMATCH",
+        "title": "Manifest Mismatch",
+        "status": 409,
+        "code": "MANIFEST_MISMATCH",
+        "detail": "Approval request manifest differs from active definition manifest or has been revoked",
+        "request_id": "f21b31168d984f529c3f0d33bac697d7"
+      }
+    }
+  },
+  "post_edit_revoked_state": {
+    "request": {
+      "method": "GET",
+      "url": "http://test/api/v1/custom-fields/01a1cff7-ef87-7202-a5e2-23f09eb2aa19/approvals",
+      "headers": {
+        "host": "test",
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate",
+        "connection": "keep-alive",
+        "user-agent": "python-httpx/0.28.1",
+        "x-csrf-token": "y7Sy5vTWUvkByWc2KNT0ug.AbN_sXBCNHUusWaDhfxrBUwutPz2bDg03VvaahmXVKA",
+        "cookie": "__Host-kb_csrf=y7Sy5vTWUvkByWc2KNT0ug.AbN_sXBCNHUusWaDhfxrBUwutPz2bDg03VvaahmXVKA"
+      },
+      "body": null
+    },
+    "response": {
+      "status_code": 200,
+      "headers": {
+        "content-length": "887",
+        "content-type": "application/json",
+        "x-request-id": "ef2a401fb49b4d1f8cbfea33b8883d12",
+        "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "x-frame-options": "DENY",
+        "cross-origin-opener-policy": "same-origin",
+        "cross-origin-resource-policy": "same-origin",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()",
+        "strict-transport-security": "max-age=63072000; includeSubDomains"
+      },
+      "body": [
+        {
+          "id": "117fd024-e2fe-4d96-ad10-2513c937b52f",
+          "workspace_id": "01a1cff7-edef-76d8-acfa-981dc024bd9d",
+          "project_id": "01a1cff7-ee0c-7faa-b775-39905f1419a7",
+          "field_id": "01a1cff7-ef87-7202-a5e2-23f09eb2aa19",
+          "manifest_sha256": "b6e2c47291c16838886af663b8d98ec482dd4de1634d90ec7141c83e3d99c104",
+          "target_scope": "PROJECT",
+          "credential_mode": "PROJECT_ADMIN_SP",
+          "required_tier": "PROJECT_ADMIN",
+          "status": "REVOKED",
+          "requested_by_id": "01a1cff7-ee03-7f01-aec1-f8f8e7316eb6",
+          "justification": "Valid justification text",
+          "primary_approver_id": "01a1cff7-ee03-7f01-aec1-f8f8e7316eb6",
+          "primary_approver_aal": 2,
+          "primary_approved_at": "2026-11-12T13:34:54.953499Z",
+          "secondary_approver_id": null,
+          "secondary_approver_aal": null,
+          "secondary_approved_at": null,
+          "sp_warning_acknowledged": true,
+          "revoked_at": "2026-11-12T13:34:54.992606Z",
+          "revoked_reason": "MANIFEST_SHA256_CHANGED",
+          "created_at": "2026-11-12T13:34:54.888097Z"
+        }
+      ]
+    }
+  },
+  "create_approval_request_201": {
+    "request": {
+      "method": "POST",
+      "url": "http://test/api/v1/custom-fields/01a1cff7-e58c-79d0-a942-d531d776a9a0/approval-requests",
+      "headers": {
+        "host": "test",
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate",
+        "connection": "keep-alive",
+        "user-agent": "python-httpx/0.28.1",
+        "x-csrf-token": "jn38NX7YVtE3IJfSDlm42Q.nvjA8qHP887tmcKT5XEz9L6MaqxlgBHJoDxmheaTetw",
+        "cookie": "__Host-kb_csrf=jn38NX7YVtE3IJfSDlm42Q.nvjA8qHP887tmcKT5XEz9L6MaqxlgBHJoDxmheaTetw",
+        "content-length": "166",
+        "content-type": "application/json"
+      },
+      "body": {
+        "manifest_sha256": "b9dbcb17c4582f137bb8ad8134aadd0c19f57ba2f5a0a49914466b5964fa301a",
+        "justification": "Requires elevated Project Admin privileges to compute metric."
+      }
+    },
+    "response": {
+      "status_code": 201,
+      "headers": {
+        "content-length": "821",
+        "content-type": "application/json",
+        "x-request-id": "1018d1c541a1429c9d87722bad3a6c48",
+        "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "x-frame-options": "DENY",
+        "cross-origin-opener-policy": "same-origin",
+        "cross-origin-resource-policy": "same-origin",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()",
+        "strict-transport-security": "max-age=63072000; includeSubDomains"
+      },
+      "body": {
+        "id": "9e1b3a1a-8a55-499b-9555-d355628209d4",
+        "workspace_id": "01a1cff7-e3ef-7112-957e-a470df63be40",
+        "project_id": "01a1cff7-e405-7be1-9ea5-95010a35db38",
+        "field_id": "01a1cff7-e58c-79d0-a942-d531d776a9a0",
+        "manifest_sha256": "b9dbcb17c4582f137bb8ad8134aadd0c19f57ba2f5a0a49914466b5964fa301a",
+        "target_scope": "PROJECT",
+        "credential_mode": "PROJECT_ADMIN_SP",
+        "required_tier": "PROJECT_ADMIN",
+        "status": "PENDING",
+        "requested_by_id": "01a1cff7-e3fc-787b-98f5-eff4a9269334",
+        "justification": "Requires elevated Project Admin privileges to compute metric.",
+        "primary_approver_id": null,
+        "primary_approver_aal": null,
+        "primary_approved_at": null,
+        "secondary_approver_id": null,
+        "secondary_approver_aal": null,
+        "secondary_approved_at": null,
+        "sp_warning_acknowledged": false,
+        "revoked_at": null,
+        "revoked_reason": null,
+        "created_at": "2026-11-12T13:34:52.439226Z"
+      }
+    }
+  }
+}

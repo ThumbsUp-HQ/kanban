@@ -332,7 +332,7 @@ async def _run_pass_with_session(
     )
 
 
-async def run_trash_purge(
+async def run_trash_purge(  # noqa: PLR0912
     target_or_now: (
         AsyncEngine
         | RLSSessionFactory
@@ -361,6 +361,7 @@ async def run_trash_purge(
     elif now.tzinfo is None:
         now = now.replace(tzinfo=UTC)
 
+    created_engine = False
     if target is None:
         dsn = (
             os.environ.get("KANBAN_DATABASE_URL")
@@ -371,6 +372,7 @@ async def run_trash_purge(
             msg = "Target engine or KANBAN_DATABASE_URL must be provided"
             raise ValueError(msg)
         target = create_rls_engine(str(dsn))
+        created_engine = True
 
     if isinstance(target, AsyncSession):
         locked = bool(
@@ -402,31 +404,39 @@ async def run_trash_purge(
 
     engine = _extract_engine(target)
     should_commit = commit_batches if commit_batches is not None else True
-    async with AsyncSession(engine) as session:
-        locked = bool(
-            (
-                await session.execute(
-                    text("SELECT pg_try_advisory_lock(hashtext(:k))"),
-                    {"k": TRASH_PURGE_ADVISORY_LOCK_KEY},
-                )
-            ).scalar()
-        )
-        if not locked:
-            logger.info("Trash purge advisory lock held by another worker; skipping run.")
-            return PurgeReport(issues_purged=0, links_purged=0, batches=0)
-        try:
-            return await _run_pass_with_session(
-                session,
-                now,
-                batch_size=batch_size,
-                commit_batches=should_commit,
+    try:
+        async with (
+            engine.connect() as conn,
+            AsyncSession(bind=conn, expire_on_commit=False) as session,
+        ):
+            locked = bool(
+                (
+                    await session.execute(
+                        text("SELECT pg_try_advisory_lock(hashtext(:k))"),
+                        {"k": TRASH_PURGE_ADVISORY_LOCK_KEY},
+                    )
+                ).scalar()
             )
-        finally:
-            with contextlib.suppress(Exception):
-                await session.execute(
-                    text("SELECT pg_advisory_unlock(hashtext(:k))"),
-                    {"k": TRASH_PURGE_ADVISORY_LOCK_KEY},
+            if not locked:
+                logger.info("Trash purge advisory lock held by another worker; skipping run.")
+                return PurgeReport(issues_purged=0, links_purged=0, batches=0)
+            try:
+                return await _run_pass_with_session(
+                    session,
+                    now,
+                    batch_size=batch_size,
+                    commit_batches=should_commit,
                 )
+            finally:
+                with contextlib.suppress(Exception):
+                    await conn.execute(
+                        text("SELECT pg_advisory_unlock(hashtext(:k))"),
+                        {"k": TRASH_PURGE_ADVISORY_LOCK_KEY},
+                    )
+                    await conn.commit()
+    finally:
+        if created_engine:
+            await engine.dispose()
 
 
 async def run_trash_purge_pass(

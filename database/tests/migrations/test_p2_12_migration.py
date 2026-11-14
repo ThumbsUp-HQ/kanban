@@ -13,8 +13,8 @@ from database.tests.migration_harness import MigrationHarness
 async def test_212_setup_claim_tokens_migration_lifecycle() -> None:
     """Verify upgrade to p2_12_setup_claim_tokens, downgrade -1, and re-upgrade."""
     async with MigrationHarness() as harness:
-        # 1. Upgrade to head
-        await harness.upgrade("head")
+        # 1. Upgrade to p2_12_setup_claim_tokens
+        await harness.upgrade("p2_12_setup_claim_tokens")
 
         # Verify table exists, owned by kb_auth_owner, has row security
         tables = await harness.fetch(
@@ -64,8 +64,8 @@ async def test_212_setup_claim_tokens_migration_lifecycle() -> None:
         )
         assert len(funcs_down) == 0
 
-        # 3. Re-upgrade to head
-        await harness.upgrade("head")
+        # 3. Re-upgrade to p2_12_setup_claim_tokens
+        await harness.upgrade("p2_12_setup_claim_tokens")
 
         # Verify table restored
         tbl_restored = await harness.fetch(
