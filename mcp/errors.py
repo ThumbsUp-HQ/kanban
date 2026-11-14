@@ -29,6 +29,12 @@ class McpErrorCode(StrEnum):
     UPSTREAM_ERROR = "UPSTREAM_ERROR"
     INTERNAL = "INTERNAL"
     MODULES_DISABLED = "MODULES_DISABLED"
+    NO_STARTED_STATE = "NO_STARTED_STATE"
+    USE_COMPLETE_WORK = "USE_COMPLETE_WORK"
+    OPEN_CHILD_BLOCKERS = "OPEN_CHILD_BLOCKERS"
+    QA_VERDICT_NOT_READY = "QA_VERDICT_NOT_READY"
+    INVALID_TRANSITION = "INVALID_TRANSITION"
+    TRANSITION_HELD = "TRANSITION_HELD"
 
 
 class KbMcpError(Exception):
@@ -41,17 +47,19 @@ class KbMcpError(Exception):
         *,
         hint: str | None = None,
         candidates: list[dict[str, str]] | None = None,
+        blockers: list[str] | None = None,
     ) -> None:
-        """Initialize KbMcpError with code, human-readable message, optional hint and candidates."""
+        """Initialize KbMcpError with code, message, optional hint, candidates, blockers."""
         enum_code = McpErrorCode(code)
         super().__init__(f"[{enum_code.value}] {message}")
         self.code: Final[McpErrorCode] = enum_code
         self.message: Final[str] = message
         self.hint: Final[str | None] = hint
         self.candidates: Final[list[dict[str, str]] | None] = candidates
+        self.blockers: Final[list[str] | None] = blockers
 
     def to_yaml(self) -> str:
-        """Serialize error payload containing code, message, optional hint and candidates."""
+        """Serialize error payload containing code, message, optional hint, candidates, blockers."""
         payload: dict[str, Any] = {
             "code": self.code.value,
             "message": self.message,
@@ -60,4 +68,6 @@ class KbMcpError(Exception):
             payload["hint"] = self.hint
         if self.candidates:
             payload["candidates"] = self.candidates
+        if self.blockers:
+            payload["blockers"] = self.blockers
         return dump_yaml({"error": payload}, strip_nulls=True)

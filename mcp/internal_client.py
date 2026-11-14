@@ -210,7 +210,15 @@ class KanbanApiClient:
         candidates_list = (
             [dict(c) for c in prob_candidates] if isinstance(prob_candidates, list) else None
         )
-        raise KbMcpError(mapped_code, error_message, hint=hint_str, candidates=candidates_list)
+        prob_blockers = problem.get("blockers")
+        blockers_list = [str(b) for b in prob_blockers] if isinstance(prob_blockers, list) else None
+        raise KbMcpError(
+            mapped_code,
+            error_message,
+            hint=hint_str,
+            candidates=candidates_list,
+            blockers=blockers_list,
+        )
 
     @staticmethod
     def _resolve_conflict_code(prob_type: str, prob_code: str) -> McpErrorCode:
@@ -218,13 +226,33 @@ class KanbanApiClient:
             return McpErrorCode.CONFLICT_ETAG
         if prob_type.endswith("ambiguous-identifier") or prob_code == "AMBIGUOUS_IDENTIFIER":
             return McpErrorCode.AMBIGUOUS_IDENTIFIER
+        if prob_type.endswith("open-child-blockers") or prob_code == "OPEN_CHILD_BLOCKERS":
+            return McpErrorCode.OPEN_CHILD_BLOCKERS
+        if prob_type.endswith("transition-held") or prob_code == "TRANSITION_HELD":
+            return McpErrorCode.TRANSITION_HELD
         return McpErrorCode.VALIDATION_FAILED
 
     @staticmethod
-    def _resolve_error_code(status_code: int, prob_type: str, prob_code: str = "") -> McpErrorCode:
+    def _resolve_error_code(  # noqa: C901, PLR0911
+        status_code: int,
+        prob_type: str,
+        prob_code: str = "",
+    ) -> McpErrorCode:
         """Determine McpErrorCode from HTTP status and problem type."""
         if prob_code == "MODULES_DISABLED" or prob_type.endswith("modules-disabled"):
             return McpErrorCode.MODULES_DISABLED
+        if prob_code == "NO_STARTED_STATE" or prob_type.endswith("no-started-state"):
+            return McpErrorCode.NO_STARTED_STATE
+        if prob_code == "USE_COMPLETE_WORK" or prob_type.endswith("use-complete-work"):
+            return McpErrorCode.USE_COMPLETE_WORK
+        if prob_code == "OPEN_CHILD_BLOCKERS" or prob_type.endswith("open-child-blockers"):
+            return McpErrorCode.OPEN_CHILD_BLOCKERS
+        if prob_code == "QA_VERDICT_NOT_READY" or prob_type.endswith("qa-verdict-not-ready"):
+            return McpErrorCode.QA_VERDICT_NOT_READY
+        if prob_code == "INVALID_TRANSITION" or prob_type.endswith("invalid-transition"):
+            return McpErrorCode.INVALID_TRANSITION
+        if prob_code == "TRANSITION_HELD" or prob_type.endswith("transition-held"):
+            return McpErrorCode.TRANSITION_HELD
 
         direct_map = {
             _HTTP_NOT_FOUND: McpErrorCode.NOT_FOUND,
