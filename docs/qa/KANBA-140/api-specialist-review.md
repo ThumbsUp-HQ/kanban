@@ -1,9 +1,10 @@
 # API Specialist Gate Review: KANBA-140 (KB-P4-16) - Headless CLI Device Approval (RFC 8628)
 
-- Ticket: KANBA-140 (KB-P4-16)
-- Title: Headless CLI Device Approval (RFC 8628) + Scopable MCP Keys & Connected Apps Studio UI
-- Status: APPROVED
-- Reviewer: arch-reviewer (Swarm Architectural & API Specialist Gate)
+- **Ticket**: `KANBA-140` (`KB-P4-16`: `[Phase 4 / OAuth & Web UI] Headless CLI Device Approval (RFC 8628) + Scopable MCP Keys & Connected Apps Studio UI`)
+- **Reviewer**: `@arch-reviewer` (Systems/Backend Architect & API Specialist)
+- **Worktree**: `/tmp/kb-wt-KANBA-140`
+- **Branch**: `feat/KANBA-140`
+- **Status**: APPROVED
 
 ---
 
