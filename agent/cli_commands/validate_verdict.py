@@ -206,7 +206,7 @@ def _handle_render_context(  # noqa: C901, PLR0912, PLR0915
             agent_def=agent_def,
             repo_context=repo_context,
             mcp_urls=mcp_urls,
-            ephemeral_token="kb_agt_eph_" + "sample_token_for_cli_demo",  # noqa: S106
+            ephemeral_token="kb_agt_eph_" + "sample_token_for_cli_demo",
         )
 
         rendered_yaml = ctx.yaml_bytes.decode("utf-8")
