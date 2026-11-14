@@ -1,0 +1,43 @@
+=== RUFF CHECK ===
+All checks passed!
+
+=== MYPY STRICT ===
+Success: no issues found in 550 source files
+
+=== CHECK NO DASHES ===
+
+=== LICENSE GATE ===
+SUMMARY python=115 node=1 violations=0
+
+=== FRONTEND TYPECHECK ===
+
+> @kanban/web@0.1.0 typecheck /tmp/kb-wt-KANBA-140/kanban/web
+> tsc -b --noEmit
+
+
+=== FRONTEND LINT ===
+
+> @kanban/web@0.1.0 lint /tmp/kb-wt-KANBA-140/kanban/web
+> eslint . --max-warnings 0
+
+
+=== PLAYWRIGHT E2E ===
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 9 tests using 9 workers
+
+  ✓  1 [tablet] › e2e/mcp-access-studio.spec.ts:259:3 › MCP Access Studio & Device Flow E2E Proofs (KB-P4-16) › 03: Device flow /activate consent screen with scope narrowing and approval (1.5s)
+  ✓  9 [desktop] › e2e/mcp-access-studio.spec.ts:259:3 › MCP Access Studio & Device Flow E2E Proofs (KB-P4-16) › 03: Device flow /activate consent screen with scope narrowing and approval (1.2s)
+  ✓  6 [mobile] › e2e/mcp-access-studio.spec.ts:259:3 › MCP Access Studio & Device Flow E2E Proofs (KB-P4-16) › 03: Device flow /activate consent screen with scope narrowing and approval (1.4s)
+  ✓  3 [desktop] › e2e/mcp-access-studio.spec.ts:122:3 › MCP Access Studio & Device Flow E2E Proofs (KB-P4-16) › 01: MCP Studio tiers and connected apps table with 2-step revocation proof (1.8s)
+  ✓  7 [mobile] › e2e/mcp-access-studio.spec.ts:122:3 › MCP Access Studio & Device Flow E2E Proofs (KB-P4-16) › 01: MCP Studio tiers and connected apps table with 2-step revocation proof (1.7s)
+  ✓  4 [tablet] › e2e/mcp-access-studio.spec.ts:122:3 › MCP Access Studio & Device Flow E2E Proofs (KB-P4-16) › 01: MCP Studio tiers and connected apps table with 2-step revocation proof (1.9s)
+  ✓  5 [mobile] › e2e/mcp-access-studio.spec.ts:188:3 › MCP Access Studio & Device Flow E2E Proofs (KB-P4-16) › 02: Mint key modal and snippet modal with ephemeral plaintext secret (1.9s)
+  ✓  2 [desktop] › e2e/mcp-access-studio.spec.ts:188:3 › MCP Access Studio & Device Flow E2E Proofs (KB-P4-16) › 02: Mint key modal and snippet modal with ephemeral plaintext secret (2.1s)
+  ✓  8 [tablet] › e2e/mcp-access-studio.spec.ts:188:3 › MCP Access Studio & Device Flow E2E Proofs (KB-P4-16) › 02: Mint key modal and snippet modal with ephemeral plaintext secret (2.2s)
+
+  9 passed (18.6s)

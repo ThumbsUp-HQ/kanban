@@ -1,0 +1,120 @@
+{
+  "device_authorization_request": {
+    "method": "POST",
+    "path": "/oauth/device/authorize",
+    "headers": {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    "body": {
+      "client_id": "kanban-cli",
+      "scope": "agent:read agent:write",
+      "resource": "https://kanban.hackedyour.info/mcp/agent"
+    }
+  },
+  "device_authorization_response": {
+    "status": 200,
+    "body": {
+      "device_code": "kb_dvc_REDACTED_DEVICE_CODE_FOR_POLLING",
+      "user_code": "WDJB-MJHT",
+      "verification_uri": "https://kanban.hackedyour.info/activate",
+      "verification_uri_complete": "https://kanban.hackedyour.info/activate?user_code=WDJB-MJHT",
+      "expires_in": 600,
+      "interval": 5
+    }
+  },
+  "token_polling_authorization_pending": {
+    "request": {
+      "method": "POST",
+      "path": "/oauth/token",
+      "body": {
+        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+        "client_id": "kanban-cli",
+        "device_code": "kb_dvc_REDACTED_DEVICE_CODE_FOR_POLLING"
+      }
+    },
+    "response": {
+      "status": 400,
+      "body": {
+        "error": "authorization_pending",
+        "error_description": "User has not yet approved or denied the device code"
+      }
+    }
+  },
+  "token_polling_slow_down": {
+    "request": {
+      "method": "POST",
+      "path": "/oauth/token",
+      "body": {
+        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+        "client_id": "kanban-cli",
+        "device_code": "kb_dvc_REDACTED_DEVICE_CODE_FOR_POLLING"
+      }
+    },
+    "response": {
+      "status": 400,
+      "body": {
+        "error": "slow_down",
+        "error_description": "Polling too quickly; interval increased by 5 seconds",
+        "interval": 10
+      }
+    }
+  },
+  "device_activation_approval": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/oauth/device/activate",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": "kb_csrf_REDACTED"
+      },
+      "body": {
+        "user_code": "WDJB-MJHT",
+        "decision": "approve",
+        "approved_scopes": ["agent:read"],
+        "approved_projects": ["KANBA"]
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "status": "approved",
+        "grant_id": "kb_grt_REDACTED_GRANT_UUID"
+      }
+    }
+  },
+  "token_polling_success": {
+    "request": {
+      "method": "POST",
+      "path": "/oauth/token",
+      "body": {
+        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+        "client_id": "kanban-cli",
+        "device_code": "kb_dvc_REDACTED_DEVICE_CODE_FOR_POLLING"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "access_token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.REDACTED_PAYLOAD.REDACTED_SIGNATURE",
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "refresh_token": "kb_rfr_REDACTED_REFRESH_TOKEN",
+        "scope": "agent:read",
+        "aud": "https://kanban.hackedyour.info/mcp/agent",
+        "allowed_projects": ["KANBA"]
+      }
+    }
+  },
+  "personal_mcp_api_key_sample": {
+    "id": "e4b3c2a1-0000-0000-0000-000000000001",
+    "display_hint": "9d4a",
+    "name": "Local Gemini CLI (Linux)",
+    "scope_tier": "personal_user",
+    "workspace_id": "11111111-1111-1111-1111-111111111111",
+    "project_id": null,
+    "allowed_scopes": ["agent:read", "agent:write"],
+    "created_at": "2026-11-13T22:00:00Z",
+    "revoked_at": null,
+    "last_used_at": "2026-11-13T23:15:00Z"
+  }
+}

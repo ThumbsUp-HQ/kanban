@@ -1,0 +1,83 @@
+=== PYTEST BACKEND RESULTS ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-140/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-140
+configfile: pyproject.toml
+plugins: anyio-4.16.0, asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 12 items
+
+kanban/tests/oauth/test_device_flow.py::test_user_code_generator_and_normalizer PASSED [  8%]
+kanban/tests/oauth/test_device_flow.py::test_rate_limiting_helpers PASSED [ 16%]
+kanban/tests/oauth/test_device_flow.py::test_case_1_positive_device_flow PASSED [ 25%]
+kanban/tests/oauth/test_device_flow.py::test_case_2_device_flow_abuse_and_security PASSED [ 33%]
+kanban/tests/oauth/test_device_flow.py::test_case_3_personal_mcp_keys_lifecycle PASSED [ 41%]
+kanban/tests/oauth/test_device_flow.py::test_device_flow_edge_cases PASSED [ 50%]
+database/tests/migrations/test_p4_16_migration.py::test_p4_16_oauth_device_codes_migration_lifecycle PASSED [ 58%]
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 66%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 75%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 83%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 91%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                     Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------
+kanban/oauth/device.py     237      8     70      6    95%   164->170, 168, 288-290, 340->343, 387-388, 427-428
+--------------------------------------------------------------------
+TOTAL                      237      8     70      6    95%
+============================== 12 passed in 4.21s ==============================
+
+=== VITEST FRONTEND RESULTS ===
+
+> @kanban/web@0.1.0 test:unit /tmp/kb-wt-KANBA-140/kanban/web
+> vitest run --coverage src/features/oauth src/features/settings
+
+
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-140/kanban/web
+      Coverage enabled with v8
+
+stderr | src/features/settings/__tests__/McpConfigSnippetModal.test.tsx > McpConfigSnippetModal direct unit tests > handles clipboard copy and tabs/url scopes cleanly
+An update to McpConfigSnippetModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpConfigSnippetModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/settings/__tests__/McpConfigSnippetModal.test.tsx (3 tests) 100ms
+ ✓ src/features/oauth/__tests__/DeviceActivatePage.test.tsx (10 tests) 294ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (6 tests) 437ms
+
+ Test Files  3 passed (3)
+      Tests  19 passed (19)
+   Start at  23:54:52
+   Duration  1.71s (environment 59%, tests 23%, import 12%, worker 4%, transform 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    95.42 |     100 |     100 |                   
+ oauth             |     100 |    97.14 |     100 |     100 |                   
+  ...ivatePage.tsx |     100 |    97.14 |     100 |     100 | 70-89             
+ settings          |     100 |    93.97 |     100 |     100 |                   
+  ...essStudio.tsx |     100 |       96 |     100 |     100 | 53-59             
+  ...ppetModal.tsx |     100 |     90.9 |     100 |     100 | 42,167,247        
+-------------------|---------|----------|---------|---------|-------------------
