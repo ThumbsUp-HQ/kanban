@@ -173,6 +173,8 @@ class ActivityEventType(StrEnum):
     CUSTOM_FIELD_APPROVED_PRIMARY = "CUSTOM_FIELD_APPROVED_PRIMARY"
     CUSTOM_FIELD_APPROVED = "CUSTOM_FIELD_APPROVED"
     CUSTOM_FIELD_APPROVAL_REVOKED = "CUSTOM_FIELD_APPROVAL_REVOKED"
+    STANDALONE_BACKUP_EXPORTED = "STANDALONE_BACKUP_EXPORTED"
+    PLANE_IMPORT_COMPLETED = "PLANE_IMPORT_COMPLETED"
     WORKSPACE_SETTINGS_CHANGED = "WORKSPACE_SETTINGS_CHANGED"
     AIR_GAP_MODE_CHANGED = "AIR_GAP_MODE_CHANGED"
 
@@ -216,6 +218,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_MODULE_REMOVED: ActivityCategory.HISTORY,
         ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.PLANE_IMPORT_COMPLETED: ActivityCategory.SYSTEM,
         ActivityEventType.EXTERNAL_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.EXTERNAL_LOGIN_UNPROVISIONED: ActivityCategory.SYSTEM,
         ActivityEventType.IDENTITY_AUTO_MERGE_BLOCKED: ActivityCategory.SYSTEM,
@@ -289,6 +292,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.AUTH_CARD_REORDERED: ActivityCategory.SYSTEM,
         ActivityEventType.AUTH_CARD_DELETED: ActivityCategory.SYSTEM,
         ActivityEventType.AUTH_CARD_HANDSHAKE_TESTED: ActivityCategory.SYSTEM,
+        ActivityEventType.STANDALONE_BACKUP_EXPORTED: ActivityCategory.SYSTEM,
         ActivityEventType.CUSTOM_FIELD_APPROVAL_REQUESTED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVED_PRIMARY: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVED: ActivityCategory.HISTORY,

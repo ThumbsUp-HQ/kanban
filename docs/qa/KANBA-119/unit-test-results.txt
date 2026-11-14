@@ -1,0 +1,63 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-119/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-119
+configfile: pyproject.toml
+plugins: socket-0.8.1, asyncio-1.4.1.post1, cov-7.1.0, platformdirs-4.14.5, anyio-4.16.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 33 items
+
+kanban/tests/importer/test_plane_importer.py::test_case_01_positive_lossless_import_and_idempotency PASSED [  3%]
+kanban/tests/importer/test_plane_importer.py::test_case_02_dry_run_isolation PASSED [  6%]
+kanban/tests/importer/test_plane_importer.py::test_case_03_hostile_payload_sanitization PASSED [  9%]
+kanban/tests/importer/test_plane_importer.py::test_case_05_integrity_rollback_on_tree_depth_violation PASSED [ 12%]
+kanban/tests/importer/test_plane_importer.py::test_plane_mapper_topological_sort_and_cycle PASSED [ 15%]
+kanban/tests/importer/test_plane_importer.py::test_plane_mapper_user_handle_resolution PASSED [ 18%]
+kanban/tests/importer/test_plane_importer.py::test_import_empty_bundle_fallback_to_existing_project PASSED [ 21%]
+kanban/tests/importer/test_plane_importer.py::test_import_empty_bundle_no_projects_raises_integrity_error PASSED [ 24%]
+kanban/tests/importer/test_plane_importer.py::test_import_with_custom_state_dates_and_relations PASSED [ 27%]
+kanban/tests/importer/test_plane_importer.py::test_import_entity_updates_and_invalid_links_gate PASSED [ 30%]
+kanban/tests/importer/test_plane_client.py::test_ssrf_rejects_http_and_private_ips PASSED [ 33%]
+kanban/tests/importer/test_plane_client.py::test_load_bundle_from_fixture_directory PASSED [ 36%]
+kanban/tests/importer/test_plane_client.py::test_load_bundle_nonexistent_dir PASSED [ 39%]
+kanban/tests/importer/test_plane_client.py::test_load_bundle_oversized_file PASSED [ 42%]
+kanban/tests/importer/test_plane_client.py::test_fetch_snapshot_redirect_rejection PASSED [ 45%]
+kanban/tests/importer/test_plane_client.py::test_fetch_snapshot_rate_limit_backoff PASSED [ 48%]
+kanban/tests/importer/test_plane_client.py::test_dns_resolution_failure PASSED [ 51%]
+kanban/tests/importer/test_plane_client.py::test_load_bundle_with_subdirectories_and_links_file PASSED [ 54%]
+kanban/tests/importer/test_plane_client.py::test_fetch_snapshot_http_error PASSED [ 57%]
+kanban/tests/importer/test_plane_client.py::test_fetch_snapshot_oversized_response PASSED [ 60%]
+kanban/tests/importer/test_plane_client.py::test_fetch_snapshot_max_retries_exceeded PASSED [ 63%]
+kanban/tests/api/test_admin_imports.py::test_admin_imports_security_and_execution PASSED [ 66%]
+kanban/tests/api/test_admin_imports.py::test_resolve_bundle_path_escape PASSED [ 69%]
+kanban/tests/cli/test_import_plane_cli.py::test_ctl_help_and_subparsers PASSED [ 72%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_success PASSED [ 75%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_security_error PASSED [ 78%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_unexpected_error PASSED [ 81%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_validation_errors PASSED [ 84%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_delegates_to_asyncio PASSED [ 87%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_db_execution PASSED [ 90%]
+kanban/tests/cli/test_import_plane_cli.py::test_get_admin_dsn_fallback PASSED [ 93%]
+kanban/tests/cli/test_import_plane_cli.py::test_cli_fallback_principal_resolution PASSED [ 96%]
+database/tests/migrations/test_p6_01_migration.py::test_p6_01_import_entity_mappings_migration_lifecycle PASSED [100%]
+
+=============================== warnings summary ===============================
+kanban/tests/api/test_admin_imports.py::test_admin_imports_security_and_execution
+  /tmp/kb-wt-KANBA-119/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------
+kanban/api/v1/admin/imports.py         76      2     18      2    96%   128-135, 136->139
+kanban/cli/import_plane.py            138      1     26      3    98%   176->191, 184->191, 245
+kanban/importer/__init__.py             4      0      0      0   100%
+kanban/importer/plane_client.py       282      7     52      6    96%   216->exit, 253, 262->258, 305->310, 318->317, 320-321, 372-373, 423-424
+kanban/importer/plane_importer.py     341     11    104     11    95%   151-152, 265-266, 336-337, 403, 608->606, 623, 722->720, 745->743, 774, 781, 817
+kanban/importer/plane_mapper.py        97      3     34      1    95%   91->87, 137-139
+-------------------------------------------------------------------------------
+TOTAL                                 938     24    234     23    96%
+Required test coverage of 95% reached. Total coverage: 95.82%
+======================== 33 passed, 1 warning in 6.15s =========================

@@ -1,0 +1,45 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-132/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-132
+configfile: pyproject.toml
+plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, platformdirs-4.14.5, anyio-4.16.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 24 items
+
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_1_positive_mint_and_token_format PASSED [  4%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_2_validation_and_db_checks PASSED [  8%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_3_surface_isolation_and_revocation PASSED [ 12%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_4_triple_intersection_and_project_pin PASSED [ 16%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_5_internal_endpoints_and_mtls_boundary PASSED [ 20%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_6_concurrent_budget_exhaustion PASSED [ 25%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_7_edge_cases_and_branch_coverage PASSED [ 29%]
+mcp/tests/test_ephemeral_auth.py::test_401_challenge_missing_and_blank_bearer PASSED [ 33%]
+mcp/tests/test_ephemeral_auth.py::test_prefix_precheck_local_rejection_zero_network_call PASSED [ 37%]
+mcp/tests/test_ephemeral_auth.py::test_introspection_cache_positive_only_and_ttl PASSED [ 41%]
+mcp/tests/test_ephemeral_auth.py::test_tools_list_filtering_and_tools_call_insufficient_scope PASSED [ 45%]
+mcp/tests/test_ephemeral_auth.py::test_session_token_binding_mismatch_returns_404 PASSED [ 50%]
+mcp/tests/test_ephemeral_auth.py::test_transcript_generation PASSED      [ 54%]
+mcp/tests/test_ephemeral_auth.py::test_introspection_cache_methods PASSED [ 58%]
+mcp/tests/test_ephemeral_auth.py::test_tool_scope_requirements_registration PASSED [ 62%]
+mcp/tests/test_ephemeral_auth.py::test_auth_disabled_and_non_http_scope PASSED [ 66%]
+mcp/tests/test_ephemeral_auth.py::test_surface_resolution_from_path PASSED [ 70%]
+mcp/tests/test_ephemeral_auth.py::test_upstream_client_unavailable_503 PASSED [ 75%]
+mcp/tests/test_ephemeral_auth.py::test_upstream_introspection_error_paths PASSED [ 79%]
+mcp/tests/test_ephemeral_auth.py::test_case_1_positive_read_only_lookup_and_tools_list_filtering PASSED [ 83%]
+mcp/tests/test_ephemeral_auth.py::test_case_2_call_budget_exceeded_and_concurrency PASSED [ 87%]
+mcp/tests/test_ephemeral_auth.py::test_case_3_write_tools_and_surface_isolation PASSED [ 91%]
+mcp/tests/test_ephemeral_auth.py::test_case_4_triple_intersection_and_project_pin_confinement PASSED [ 95%]
+mcp/tests/test_ephemeral_auth.py::test_case_5_mtls_mint_boundary PASSED  [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/api/internal/mcp_ephemeral.py         60      0     12      0   100%
+kanban/security/ephemeral_mcp_tokens.py     109      3     44      3    96%   351, 383, 392
+mcp/auth.py                                 190      3     52      2    98%   266->273, 312-314
+-------------------------------------------------------------------------------------
+TOTAL                                       359      6    108      5    98%
+Required test coverage of 95% reached. Total coverage: 97.64%
+============================== 24 passed in 3.72s ==============================

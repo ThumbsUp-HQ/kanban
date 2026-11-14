@@ -1,0 +1,2525 @@
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer ***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: ***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":3,"method":"tools/list"}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_adm_***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+
+HTTP/1.1 403 Forbidden
+content-length: 32
+content-type: application/json
+
+{"error":"SURFACE_KEY_MISMATCH"}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":3,"method":"tools/list"}
+
+HTTP/1.1 403 Forbidden
+content-length: 32
+content-type: application/json
+
+{"error":"SURFACE_KEY_MISMATCH"}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":4,"method":"tools/list"}
+
+HTTP/1.1 403 Forbidden
+content-length: 32
+content-type: application/json
+
+{"error":"SURFACE_KEY_MISMATCH"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 80
+Content-Type: application/json
+
+{"token":"kb_agt_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+Content-Length: 111
+Content-Type: application/json
+
+{"active":true,"principal_id":"018f-0000","workspace_id":"018f-0001","surface":"agent","scopes":["agent:read"]}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 158
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: WEXxPMR6gNxLQYVbWND4GgnJxWoxu8Q2LdD-0bpqZ6w
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Mcp-Session-Id: WEXxPMR6gNxLQYVbWND4GgnJxWoxu8Q2LdD-0bpqZ6w
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+
+HTTP/1.1 200 OK
+content-length: 212
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"ping_agent","description":"Diagnostic ping health check for the agent surface.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}]}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Mcp-Session-Id: WEXxPMR6gNxLQYVbWND4GgnJxWoxu8Q2LdD-0bpqZ6w
+Content-Length: 98
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"test_agent_write","arguments":{}}}
+
+HTTP/1.1 200 OK
+content-length: 214
+content-type: application/json
+
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"error: {code: INSUFFICIENT_SCOPE, message: 'Caller lacks required scope(s) [''agent:write''] for tool ''test_agent_write'''}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 80
+Content-Type: application/json
+
+{"token":"kb_agt_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+Content-Length: 125
+Content-Type: application/json
+
+{"active":true,"principal_id":"018f-0000","workspace_id":"018f-0001","surface":"agent","scopes":["agent:read","agent:write"]}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize"}
+
+HTTP/1.1 200 OK
+mcp-session-id: rwyyi83CUwumTDJSTZDWlFjTpJ7cMU90T_pQTdcxlGI
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Mcp-Session-Id: rwyyi83CUwumTDJSTZDWlFjTpJ7cMU90T_pQTdcxlGI
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+
+HTTP/1.1 200 OK
+content-length: 321
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"ping_agent","description":"Diagnostic ping health check for the agent surface.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},{"name":"test_agent_write","description":"Tool requiring agent:write scope","inputSchema":{"type":"object"}}]}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 80
+Content-Type: application/json
+
+{"token":"kb_agt_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+Content-Length: 125
+Content-Type: application/json
+
+{"active":true,"principal_id":"018f-0000","workspace_id":"018f-0001","surface":"agent","scopes":["agent:read","agent:write"]}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Mcp-Session-Id: rwyyi83CUwumTDJSTZDWlFjTpJ7cMU90T_pQTdcxlGI
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":3,"method":"tools/list"}
+
+HTTP/1.1 404 Not Found
+content-length: 32
+
+Session bound to different token
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_adm_***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+
+HTTP/1.1 403 Forbidden
+content-length: 32
+content-type: application/json
+
+{"error":"SURFACE_KEY_MISMATCH"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 80
+Content-Type: application/json
+
+{"token":"kb_agt_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+Content-Length: 111
+Content-Type: application/json
+
+{"active":true,"principal_id":"018f-0000","workspace_id":"018f-0001","surface":"agent","scopes":["agent:read"]}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":3,"method":"initialize"}
+
+HTTP/1.1 200 OK
+mcp-session-id: eb8t619GnZ6FxdW3ovXnW0EJnPeuz-CK2juyGPCJuSs
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":3,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Mcp-Session-Id: eb8t619GnZ6FxdW3ovXnW0EJnPeuz-CK2juyGPCJuSs
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":4,"method":"tools/list"}
+
+HTTP/1.1 200 OK
+content-length: 212
+content-type: application/json
+
+{"jsonrpc":"2.0","id":4,"result":{"tools":[{"name":"ping_agent","description":"Diagnostic ping health check for the agent surface.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}]}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Mcp-Session-Id: eb8t619GnZ6FxdW3ovXnW0EJnPeuz-CK2juyGPCJuSs
+Content-Length: 98
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"test_agent_write","arguments":{}}}
+
+HTTP/1.1 200 OK
+content-length: 214
+content-type: application/json
+
+{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"error: {code: INSUFFICIENT_SCOPE, message: 'Caller lacks required scope(s) [''agent:write''] for tool ''test_agent_write'''}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize"}
+
+HTTP/1.1 200 OK
+mcp-session-id: baNHqUyuo7BWBeZ1lirP52xe0jWEddfw7xh4Xb7X6q4
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Content-Length: 2
+Content-Type: application/json
+
+{}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /mcp/docs HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Content-Length: 2
+Content-Type: application/json
+
+{}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/docs"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Content-Length: 2
+Content-Type: application/json
+
+{}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/admin"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 2
+Content-Type: application/json
+
+{}
+
+HTTP/1.1 503 Service Unavailable
+content-length: 77
+content-type: application/json
+
+{"error":"UPSTREAM_UNAVAILABLE","message":"Introspection client unavailable"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 2
+Content-Type: application/json
+
+{}
+
+HTTP/1.1 403 Forbidden
+content-length: 32
+content-type: application/json
+
+{"error":"SURFACE_KEY_MISMATCH"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 2
+Content-Type: application/json
+
+{}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 80
+Content-Type: application/json
+
+{"token":"kb_agt_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+Content-Length: 21
+Content-Type: application/json
+
+["unexpected","list"]
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 2
+Content-Type: application/json
+
+{}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 80
+Content-Type: application/json
+
+{"token":"kb_agt_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+Content-Length: 48
+Content-Type: application/json
+
+{"active":false,"reason":"SURFACE_KEY_MISMATCH"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 2
+Content-Type: application/json
+
+{}
+
+HTTP/1.1 403 Forbidden
+content-length: 32
+content-type: application/json
+
+{"error":"SURFACE_KEY_MISMATCH"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 80
+Content-Type: application/json
+
+{"token":"kb_agt_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+Content-Length: 35
+Content-Type: application/json
+
+{"active":false,"reason":"EXPIRED"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 2
+Content-Type: application/json
+
+{}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"eee03c6e-2e51-4d0d-b49c-b7c98d7f74e0","agent_principal_id":"f16c1dfd-c82a-4fd6-a559-e70cf9b35ded","workspace_id":"c1a53d21-ef9d-433b-939d-24beba97ea20","project_id":"1a28ca9d-3c67-436b-abbc-345f96f912b2","execution_id":"4413ce62-1f9b-4ef5-a613-a45fade9aa16","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+Content-Length: 160
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: FrSoe-oiqK60_OwmCS97ImmCKTArq9CH6PX8lthOeNE
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"10d787f2-00e5-4192-bd25-b48d296dfc28","agent_principal_id":"14f11464-f867-4492-9a6a-397cf03f582f","workspace_id":"3e673f26-9b09-4722-98e5-5ad4c076d5e3","project_id":"5c3cdfef-5bdb-42c9-ae09-e34bc9c88014","execution_id":"96dba101-ce29-4f8b-bf83-f4e7b17d1afe","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: FrSoe-oiqK60_OwmCS97ImmCKTArq9CH6PX8lthOeNE
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+
+HTTP/1.1 200 OK
+content-length: 217
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search_tickets","description":"Search tickets","inputSchema":{"type":"object"}},{"name":"read_ticket","description":"Read ticket","inputSchema":{"type":"object"}}]}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 83
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"docs"}
+
+HTTP/1.1 200 OK
+content-length: 444
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"docs","scopes":["agent:read","docs:read"],"principal_id":"f2b232a2-c00e-4232-9890-02ed57baf533","agent_principal_id":"9690667f-6193-4449-a8dd-f07903da0ad8","workspace_id":"30924480-305b-499b-b17b-cb6da538921e","project_id":"ab4b23de-81ce-4afc-b8cd-fd449356c673","execution_id":"46ad0d8b-9f36-4036-a5b1-20148edd32fa","allowed_tools":["search_knowledge","read_doc"],"calls_used":0,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/docs HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+Content-Length: 160
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: m_-P1N9iqQ9o4k5cnr5n_gZD0zFqOcHny9CSqMaSDcs
+content-length: 173
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-docs","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 83
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"docs"}
+
+HTTP/1.1 200 OK
+content-length: 444
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"docs","scopes":["agent:read","docs:read"],"principal_id":"e41a3c24-ea6d-45ee-9315-3756411e0d6f","agent_principal_id":"16af1f93-c2ca-4269-af48-78e18c2fdf85","workspace_id":"454ee248-b6b6-4754-82a1-80740d107ce7","project_id":"8b8e3f9b-29cd-447c-af43-aeaf58325e85","execution_id":"50d8c05c-cd4b-46c7-b8da-e45a455ab78f","allowed_tools":["search_knowledge","read_doc"],"calls_used":0,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/docs HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m_-P1N9iqQ9o4k5cnr5n_gZD0zFqOcHny9CSqMaSDcs
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":4,"method":"tools/list"}
+
+HTTP/1.1 200 OK
+content-length: 215
+content-type: application/json
+
+{"jsonrpc":"2.0","id":4,"result":{"tools":[{"name":"search_knowledge","description":"Search knowledge","inputSchema":{"type":"object"}},{"name":"read_doc","description":"Read doc","inputSchema":{"type":"object"}}]}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"e3b712b1-63de-4bee-b8d7-64f4e98f31b1","agent_principal_id":"f884af39-9629-4125-982c-79f9dfbb9e8b","workspace_id":"0d5f0fcd-7e70-4473-a8f9-8d6303587f89","project_id":"654bbe8f-c511-4b73-b96f-824c25ce37c0","execution_id":"26f44946-fe01-481f-97e1-f7c312765314","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 133
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"search_tickets"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":1,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: FrSoe-oiqK60_OwmCS97ImmCKTArq9CH6PX8lthOeNE
+Content-Length: 107
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"search_tickets","arguments":{"query":"*"}}}
+
+HTTP/1.1 200 OK
+content-length: 134
+content-type: application/json
+
+{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"items: [{key: KAN-1, title: Test Ticket 1}]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"9ac39a90-df57-4cfb-8227-895788c3d2d6","agent_principal_id":"c7c28e92-2bad-4ad8-ae7c-e1f953c8eba6","workspace_id":"97c10f86-f571-4c1f-ac17-f2869163a39a","project_id":"1e13bcbb-9be9-4096-9535-1805fe8f0004","execution_id":"1ef1bd85-3840-442c-9a06-2794f63661dc","allowed_tools":["search_tickets","read_ticket"],"calls_used":1,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":2,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: FrSoe-oiqK60_OwmCS97ImmCKTArq9CH6PX8lthOeNE
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 142
+content-type: application/json
+
+{"jsonrpc":"2.0","id":6,"result":{"content":[{"type":"text","text":"key: KAN-1\ntitle: Ticket KAN-1\nstate: In Progress\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 83
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"docs"}
+
+HTTP/1.1 200 OK
+content-length: 444
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"docs","scopes":["agent:read","docs:read"],"principal_id":"0f30e5ec-33c2-4a6b-b06b-b5197a70ed99","agent_principal_id":"96db56e5-9300-42d8-bf2f-029621378160","workspace_id":"4eebf4e1-dd32-422b-9fee-46be044f9150","project_id":"97d6877d-1d61-4f6f-9024-6c2a02504808","execution_id":"f4598d40-0240-4ce9-bc46-848e4492e5a0","allowed_tools":["search_knowledge","read_doc"],"calls_used":2,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 126
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"docs","consume_call":true,"tool_name":"read_doc"}
+
+HTTP/1.1 200 OK
+content-length: 122
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"docs","scopes":["agent:read","docs:read"],"calls_used":3,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/docs HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m_-P1N9iqQ9o4k5cnr5n_gZD0zFqOcHny9CSqMaSDcs
+Content-Length: 112
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"read_doc","arguments":{"slug":"docs/kan-spec"}}}
+
+HTTP/1.1 200 OK
+content-length: 146
+content-type: application/json
+
+{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"slug: docs/kan-spec\ntitle: KAN Spec\ncontent: '# Spec'\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"e7938aa5-1089-4840-85a4-7259e08da9cd","agent_principal_id":"1a0c1a29-3e99-4619-b3b9-b960e40ed822","workspace_id":"841f7c8c-26a8-4057-9329-bf1607f93c63","project_id":"d89dce02-f436-4d00-ba6e-e69475841d8d","execution_id":"3a97f071-b8dd-4fba-bda9-b3c87d937e16","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+Content-Length: 160
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: WywqbRq57QHrYpP2yb-E2ldRUK0CeX_A5Fb3IfAVLEA
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"0ea9a0ed-5de4-4b29-a040-9e02a7b6ed7e","agent_principal_id":"2bfdb171-f884-4401-b3a8-a2cb8d5ee887","workspace_id":"3fee2d36-ac49-4e66-b168-d6d52afb4712","project_id":"70a39242-e9ae-49cb-be6d-d0d34efcb08a","execution_id":"15caa356-89ab-4b6b-ab3f-1c4e5e6e9d52","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":1,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: WywqbRq57QHrYpP2yb-E2ldRUK0CeX_A5Fb3IfAVLEA
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 142
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"key: KAN-1\ntitle: Ticket KAN-1\nstate: In Progress\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"10712134-641c-4127-9183-c207bd90c506","agent_principal_id":"d52b0292-4435-467f-ba94-2e5ef29d6b6f","workspace_id":"78cc8dca-4667-4064-8c3c-4337ba55f033","project_id":"15efef01-8b7a-4134-b87b-c780b1caa5f9","execution_id":"5ba0b58d-5f89-4f88-8bfa-39a9004bb061","allowed_tools":["search_tickets","read_ticket"],"calls_used":1,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":2,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: WywqbRq57QHrYpP2yb-E2ldRUK0CeX_A5Fb3IfAVLEA
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-2"}}}
+
+HTTP/1.1 200 OK
+content-length: 142
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"key: KAN-2\ntitle: Ticket KAN-2\nstate: In Progress\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"c205e8f4-af1a-46a0-b21a-41aaa3c75620","agent_principal_id":"487fdb89-8066-48aa-ba07-3648a2aa844b","workspace_id":"16f4cc3f-91a6-4daa-9cd6-b651a8ed47ec","project_id":"275b89e7-8a30-4577-ac4e-605a97a2cf63","execution_id":"470346e8-da96-48dd-882e-0482af8ece57","allowed_tools":["search_tickets","read_ticket"],"calls_used":2,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":3,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: WywqbRq57QHrYpP2yb-E2ldRUK0CeX_A5Fb3IfAVLEA
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-3"}}}
+
+HTTP/1.1 200 OK
+content-length: 142
+content-type: application/json
+
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"key: KAN-3\ntitle: Ticket KAN-3\nstate: In Progress\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 215
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"allowed_tools":["search_tickets","read_ticket"],"calls_used":3,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 87
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","calls_used":3,"max_calls":3}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: WywqbRq57QHrYpP2yb-E2ldRUK0CeX_A5Fb3IfAVLEA
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-4"}}}
+
+HTTP/1.1 200 OK
+content-length: 347
+content-type: application/json
+
+{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"error:\n  code: EPHEMERAL_CALL_BUDGET_EXCEEDED\n  message: Ephemeral call budget exceeded (3/3 calls used)\n  budget: {max_calls: 3, calls_used: 3}\n  hint: Gate execution reached max allowed calls. Transition gates must summarize inspection in <= 25 calls.\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"5e5c8404-0c94-430b-911f-f22980f44e9c","agent_principal_id":"fd57e7ae-d556-42d6-80aa-f72330fbac0a","workspace_id":"33f8d063-f48a-4c96-acc2-37299dc05e5d","project_id":"8d192d6e-f817-4a5f-bf1a-606f4f956b6c","execution_id":"a33ff2e5-b503-4a52-92b2-f442cd8f6f93","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+Content-Length: 160
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: u_9sUWfhODhUNq9hzeGFAMa4EtfnGOlsF0fQ0KZentM
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"4928b069-5c91-43c6-96b8-d6fde83e338c","agent_principal_id":"9a1a11bf-e8c8-462e-94c8-3957639918b1","workspace_id":"da0a2902-169f-45da-81a5-3a2bf8bda73a","project_id":"5118729e-cdeb-4630-bdea-50b2d3369ffc","execution_id":"da077a22-96ba-4f2e-8822-690a7b3ecca2","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":1,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: u_9sUWfhODhUNq9hzeGFAMa4EtfnGOlsF0fQ0KZentM
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 142
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"key: KAN-1\ntitle: Ticket KAN-1\nstate: In Progress\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 52
+content-type: application/json
+
+{"active":false,"reason":"TOKEN_EXPIRED_OR_REVOKED"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: u_9sUWfhODhUNq9hzeGFAMa4EtfnGOlsF0fQ0KZentM
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 401 Unauthorized
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"6a7ad758-5156-4066-8922-f30253b8e2c0","agent_principal_id":"d1cb2ac4-decb-4b75-928b-73af0adbe25b","workspace_id":"b0f0465c-7ccd-48e8-92fb-9df04fc8fd6c","project_id":"a5b97370-ba80-4ac3-9914-de06b7bb7913","execution_id":"20472d0b-b11a-410f-8e68-5d5e8f12a7b3","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+Content-Length: 160
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"3e458298-dfa2-4061-933e-2fdc4df5b953","agent_principal_id":"33728ef7-7f40-4d27-913b-af6c91cd0dd3","workspace_id":"2b59b057-7acf-467d-910e-522919b56fe4","project_id":"de53fb1f-5b22-433b-b279-b315e228a252","execution_id":"0fb4f64c-83d1-46fd-8846-1747846041bd","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":1,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 142
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"key: KAN-1\ntitle: Ticket KAN-1\nstate: In Progress\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"5b7fb6c6-83e2-4f6f-9fa8-6d1f27bb45b5","agent_principal_id":"93d700c1-51d9-41b7-8127-5b0f94d9f4f8","workspace_id":"fd68e5f5-57ab-4faf-a6bd-c167470d5d7d","project_id":"e1fc5969-c688-4f19-9cb4-778d2478a12a","execution_id":"44a0a563-dfbd-4d46-a50f-d99b1ce4c295","allowed_tools":["search_tickets","read_ticket"],"calls_used":1,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":2,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 142
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"key: KAN-1\ntitle: Ticket KAN-1\nstate: In Progress\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"11fb06d8-986b-45c5-9b3a-143fde4d0be7","agent_principal_id":"10a54ef5-de55-48d3-866d-7adf46b5cf68","workspace_id":"2d092a57-4836-4e41-9de5-293b52c7affa","project_id":"84c9d9a0-5b11-4d4a-920a-124d6b4a4bee","execution_id":"3f401d54-a73e-4028-8c24-64b15f20764d","allowed_tools":["search_tickets","read_ticket"],"calls_used":2,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":3,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 142
+content-type: application/json
+
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"key: KAN-1\ntitle: Ticket KAN-1\nstate: In Progress\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"d660c190-d12f-408f-8886-0a81222986d1","agent_principal_id":"7d50c235-3bb7-4f44-8310-64912417419d","workspace_id":"8db5e12a-8dd3-42f8-8e31-df9eaf0d8d2a","project_id":"cb9a501d-1240-4abc-a048-b69c0aeaf069","execution_id":"bc9875d7-25fd-400b-92ad-7d305d778623","allowed_tools":["search_tickets","read_ticket"],"calls_used":3,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":4,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 142
+content-type: application/json
+
+{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"key: KAN-1\ntitle: Ticket KAN-1\nstate: In Progress\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 446
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"916b4b14-5159-439b-b22a-c2a23a73bed8","agent_principal_id":"6d2f5fff-78ad-40a1-b639-2d4c38a0780f","workspace_id":"def70630-8cd7-48ca-bd81-d97f1eccf0f5","project_id":"f3f826fd-13f3-4808-b79a-955925c7241e","execution_id":"c2c907b5-f012-4548-bddc-94a8f6c0dc3d","allowed_tools":["search_tickets","read_ticket"],"calls_used":4,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 123
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 142
+content-type: application/json
+
+{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"key: KAN-1\ntitle: Ticket KAN-1\nstate: In Progress\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 215
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"allowed_tools":["search_tickets","read_ticket"],"calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 87
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 347
+content-type: application/json
+
+{"jsonrpc":"2.0","id":6,"result":{"content":[{"type":"text","text":"error:\n  code: EPHEMERAL_CALL_BUDGET_EXCEEDED\n  message: Ephemeral call budget exceeded (5/5 calls used)\n  budget: {max_calls: 5, calls_used: 5}\n  hint: Gate execution reached max allowed calls. Transition gates must summarize inspection in <= 25 calls.\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 215
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"allowed_tools":["search_tickets","read_ticket"],"calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 87
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 347
+content-type: application/json
+
+{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"error:\n  code: EPHEMERAL_CALL_BUDGET_EXCEEDED\n  message: Ephemeral call budget exceeded (5/5 calls used)\n  budget: {max_calls: 5, calls_used: 5}\n  hint: Gate execution reached max allowed calls. Transition gates must summarize inspection in <= 25 calls.\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 215
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"allowed_tools":["search_tickets","read_ticket"],"calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 87
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 347
+content-type: application/json
+
+{"jsonrpc":"2.0","id":8,"result":{"content":[{"type":"text","text":"error:\n  code: EPHEMERAL_CALL_BUDGET_EXCEEDED\n  message: Ephemeral call budget exceeded (5/5 calls used)\n  budget: {max_calls: 5, calls_used: 5}\n  hint: Gate execution reached max allowed calls. Transition gates must summarize inspection in <= 25 calls.\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 215
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"allowed_tools":["search_tickets","read_ticket"],"calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 87
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 347
+content-type: application/json
+
+{"jsonrpc":"2.0","id":9,"result":{"content":[{"type":"text","text":"error:\n  code: EPHEMERAL_CALL_BUDGET_EXCEEDED\n  message: Ephemeral call budget exceeded (5/5 calls used)\n  budget: {max_calls: 5, calls_used: 5}\n  hint: Gate execution reached max allowed calls. Transition gates must summarize inspection in <= 25 calls.\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 215
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"allowed_tools":["search_tickets","read_ticket"],"calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 87
+content-type: application/json
+
+{"active":false,"reason":"EPHEMERAL_CALL_BUDGET_EXCEEDED","calls_used":5,"max_calls":5}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: m8lIlWH5u9e3fW5VGrjOMH5FtKP5Y35Zio4JSTPy_6I
+Content-Length: 114
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 348
+content-type: application/json
+
+{"jsonrpc":"2.0","id":10,"result":{"content":[{"type":"text","text":"error:\n  code: EPHEMERAL_CALL_BUDGET_EXCEEDED\n  message: Ephemeral call budget exceeded (5/5 calls used)\n  budget: {max_calls: 5, calls_used: 5}\n  hint: Gate execution reached max allowed calls. Transition gates must summarize inspection in <= 25 calls.\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 447
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"9cec2a53-2eca-4803-b1f2-c3f8c2a56d2c","agent_principal_id":"682f306c-b621-43d1-aa1f-b4bf39f19d51","workspace_id":"26988da9-e226-4d45-aa08-0c4e819f6867","project_id":"e9dd11dd-e279-4fa4-a2cd-8611c38068ef","execution_id":"f14f309c-493d-4f38-96fa-be121cdae71f","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":10}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+Content-Length: 160
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: GJtCZEfXooT9Ii9xvOGoZGXY5z7cFu1Bauu-RsvG0hE
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 83
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"docs"}
+
+HTTP/1.1 200 OK
+content-length: 445
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"docs","scopes":["agent:read","docs:read"],"principal_id":"24123241-aca2-400e-89ad-d4605cacb3e5","agent_principal_id":"e420a99e-e088-4cf6-82ea-ee4246784349","workspace_id":"d1c27a4b-2268-4ad9-9c0e-efe00322b512","project_id":"fb66b004-e24f-4543-b6c6-0ee5af3b4679","execution_id":"8bbe3679-a617-405a-9f67-23c8d61e9fb1","allowed_tools":["search_knowledge","read_doc"],"calls_used":0,"max_calls":10}
+
+--------------------------------------------------------------------------------
+POST /mcp/docs HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+Content-Length: 160
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: iyvL8TFbRVAcZLhyB-Zzgy0Ra99_Malpa5bMx3rKyIQ
+content-length: 173
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-docs","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 447
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"c70f225d-2572-4f25-bc3a-998758092928","agent_principal_id":"0a9cb907-d9b5-4697-9eb2-8c4232813e6c","workspace_id":"0d102d60-1ba0-4dfa-b72f-2f2d7db5a5a8","project_id":"d17095be-afe7-4da8-b3c5-d000f1e18373","execution_id":"40d7031f-7bb3-4f50-bfb3-f2a2b0e19b6a","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":10}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: GJtCZEfXooT9Ii9xvOGoZGXY5z7cFu1Bauu-RsvG0hE
+Content-Length: 114
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_ticket","arguments":{"title":"Forbidden"}}}
+
+HTTP/1.1 200 OK
+content-length: 370
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error:\n  code: EPHEMERAL_TOOL_FORBIDDEN\n  message: Tool 'create_ticket' is forbidden on ephemeral token\n  allowed_tools: [read_ticket, search_tickets]\n  hint: 'Ephemeral tokens are strictly read-only and allow at most: search_tickets, read_ticket, search_knowledge, read_doc.'\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 447
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"22922a2f-944c-4c01-bf9f-12d6176c3989","agent_principal_id":"961e3d6d-8fb3-4919-9422-7cda029e6c6d","workspace_id":"24819815-fb3e-4296-9ff4-0e3e78ecb995","project_id":"36869613-3ec2-4b13-be41-66e6c0d31eca","execution_id":"4917f5c8-2160-455d-b23b-15d40050cf2b","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":10}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: GJtCZEfXooT9Ii9xvOGoZGXY5z7cFu1Bauu-RsvG0hE
+Content-Length: 119
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"add_comment","arguments":{"body":"Forbidden comment"}}}
+
+HTTP/1.1 200 OK
+content-length: 368
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"error:\n  code: EPHEMERAL_TOOL_FORBIDDEN\n  message: Tool 'add_comment' is forbidden on ephemeral token\n  allowed_tools: [read_ticket, search_tickets]\n  hint: 'Ephemeral tokens are strictly read-only and allow at most: search_tickets, read_ticket, search_knowledge, read_doc.'\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 447
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"agent","scopes":["agent:read","docs:read"],"principal_id":"8922ceb5-8ace-4ca5-82a7-2d6728156ce8","agent_principal_id":"54bb45fb-2045-4088-baa1-d10287f6d02a","workspace_id":"fa28c4ee-04ac-47b7-91c6-02fb31cfe744","project_id":"2988745f-054b-4940-8854-a862f5e209d3","execution_id":"7df9a8dc-2020-48fc-8e40-cf014b729bbe","allowed_tools":["search_tickets","read_ticket"],"calls_used":0,"max_calls":10}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: GJtCZEfXooT9Ii9xvOGoZGXY5z7cFu1Bauu-RsvG0hE
+Content-Length: 116
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"transition_ticket","arguments":{"to_state":"Done"}}}
+
+HTTP/1.1 200 OK
+content-length: 374
+content-type: application/json
+
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"error:\n  code: EPHEMERAL_TOOL_FORBIDDEN\n  message: Tool 'transition_ticket' is forbidden on ephemeral token\n  allowed_tools: [read_ticket, search_tickets]\n  hint: 'Ephemeral tokens are strictly read-only and allow at most: search_tickets, read_ticket, search_knowledge, read_doc.'\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 83
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"docs"}
+
+HTTP/1.1 200 OK
+content-length: 445
+content-type: application/json
+
+{"active":true,"token_kind":"ephemeral","surface":"docs","scopes":["agent:read","docs:read"],"principal_id":"934d1283-a147-482a-a9b3-1ed60f31f79d","agent_principal_id":"ae334206-758a-40e0-b27c-fdcfd11d8a13","workspace_id":"3add81d7-64bb-4273-96af-f5aa4155c32c","project_id":"7e2c86bf-8e34-4559-9f6a-2e9477059e2d","execution_id":"fac80254-e2f5-4759-adf4-2fb0caae9328","allowed_tools":["search_knowledge","read_doc"],"calls_used":0,"max_calls":10}
+
+--------------------------------------------------------------------------------
+POST /mcp/docs HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: iyvL8TFbRVAcZLhyB-Zzgy0Ra99_Malpa5bMx3rKyIQ
+Content-Length: 110
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"upsert_doc","arguments":{"slug":"forbidden"}}}
+
+HTTP/1.1 200 OK
+content-length: 366
+content-type: application/json
+
+{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"error:\n  code: EPHEMERAL_TOOL_FORBIDDEN\n  message: Tool 'upsert_doc' is forbidden on ephemeral token\n  allowed_tools: [read_doc, search_knowledge]\n  hint: 'Ephemeral tokens are strictly read-only and allow at most: search_tickets, read_ticket, search_knowledge, read_doc.'\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+Content-Length: 46
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":5,"method":"tools/list"}
+
+HTTP/1.1 403 Forbidden
+content-length: 32
+content-type: application/json
+
+{"error":"SURFACE_KEY_MISMATCH"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 533
+content-type: application/json
+x-request-id: 3c4c9455f94e449f9b5bb7691278abb4
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+strict-transport-security: max-age=63072000; includeSubDomains
+
+{"active":true,"principal_id":"01a1d820-5613-75e3-ae79-1392fd682657","agent_principal_id":"01a1d820-561d-7fe0-a671-95e8a95a54c7","workspace_id":"01a1d820-5612-7b00-aa4e-6e6d75597f65","project_id":"01a1d820-561d-7034-8e6f-9fa237daa821","execution_id":"ce57a950-81f5-467d-983d-883c0e652556","surface":"agent","scopes":["agent:read","docs:read"],"token_kind":"ephemeral","reason":null,"allowed_projects":null,"allowed_tools":["read_ticket","search_tickets"],"calls_used":0,"max_calls":10,"expires_at":"2026-11-14T03:37:00.372767+00:00"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+Content-Length: 160
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: TWzPUVmlZlbBtpIdav_TPPshAKSmMOIkTXQNKvG5Isw
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 533
+content-type: application/json
+x-request-id: a11a39ca832b44deaf11b3bbb6380b26
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+strict-transport-security: max-age=63072000; includeSubDomains
+
+{"active":true,"principal_id":"01a1d820-5613-75e3-ae79-1392fd682657","agent_principal_id":"01a1d820-561d-7fe0-a671-95e8a95a54c7","workspace_id":"01a1d820-5612-7b00-aa4e-6e6d75597f65","project_id":"01a1d820-561d-7034-8e6f-9fa237daa821","execution_id":"ce57a950-81f5-467d-983d-883c0e652556","surface":"agent","scopes":["agent:read","docs:read"],"token_kind":"ephemeral","reason":null,"allowed_projects":null,"allowed_tools":["read_ticket","search_tickets"],"calls_used":0,"max_calls":10,"expires_at":"2026-11-14T03:37:00.372767+00:00"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 533
+content-type: application/json
+x-request-id: d57d6d1807c341378be3d3ff58c9b61c
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+strict-transport-security: max-age=63072000; includeSubDomains
+
+{"active":true,"principal_id":"01a1d820-5613-75e3-ae79-1392fd682657","agent_principal_id":"01a1d820-561d-7fe0-a671-95e8a95a54c7","workspace_id":"01a1d820-5612-7b00-aa4e-6e6d75597f65","project_id":"01a1d820-561d-7034-8e6f-9fa237daa821","execution_id":"ce57a950-81f5-467d-983d-883c0e652556","surface":"agent","scopes":["agent:read","docs:read"],"token_kind":"ephemeral","reason":null,"allowed_projects":null,"allowed_tools":["read_ticket","search_tickets"],"calls_used":1,"max_calls":10,"expires_at":"2026-11-14T03:37:00.372767+00:00"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: TWzPUVmlZlbBtpIdav_TPPshAKSmMOIkTXQNKvG5Isw
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"SEC-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 141
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: NOT_FOUND, message: ticket not found}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 84
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent"}
+
+HTTP/1.1 200 OK
+content-length: 533
+content-type: application/json
+x-request-id: 7115849d0f4d4b61b0e012c6a49a188a
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+strict-transport-security: max-age=63072000; includeSubDomains
+
+{"active":true,"principal_id":"01a1d820-5613-75e3-ae79-1392fd682657","agent_principal_id":"01a1d820-561d-7fe0-a671-95e8a95a54c7","workspace_id":"01a1d820-5612-7b00-aa4e-6e6d75597f65","project_id":"01a1d820-561d-7034-8e6f-9fa237daa821","execution_id":"ce57a950-81f5-467d-983d-883c0e652556","surface":"agent","scopes":["agent:read","docs:read"],"token_kind":"ephemeral","reason":null,"allowed_projects":null,"allowed_tools":["read_ticket","search_tickets"],"calls_used":0,"max_calls":10,"expires_at":"2026-11-14T03:37:00.372767+00:00"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 130
+Content-Type: application/json
+
+{"token":"kb_agt_eph_***REDACTED***","surface":"agent","consume_call":true,"tool_name":"read_ticket"}
+
+HTTP/1.1 200 OK
+content-length: 533
+content-type: application/json
+x-request-id: ee5943372c3d42fb90100dc32e07d3af
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+strict-transport-security: max-age=63072000; includeSubDomains
+
+{"active":true,"principal_id":"01a1d820-5613-75e3-ae79-1392fd682657","agent_principal_id":"01a1d820-561d-7fe0-a671-95e8a95a54c7","workspace_id":"01a1d820-5612-7b00-aa4e-6e6d75597f65","project_id":"01a1d820-561d-7034-8e6f-9fa237daa821","execution_id":"ce57a950-81f5-467d-983d-883c0e652556","surface":"agent","scopes":["agent:read","docs:read"],"token_kind":"ephemeral","reason":null,"allowed_projects":null,"allowed_tools":["read_ticket","search_tickets"],"calls_used":1,"max_calls":10,"expires_at":"2026-11-14T03:37:00.372767+00:00"}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_eph_***REDACTED***
+mcp-session-id: TWzPUVmlZlbBtpIdav_TPPshAKSmMOIkTXQNKvG5Isw
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 291
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"key: KAN-1\nsummary: KAN-1 Ticket\nstate: Backlog\npriority: high\ndescription_markdown: Spec for KAN\nlinks: {truncated: false}\netag: 2e1bd21914d2694a9228c12a1312762d2464d9088010bc2ffa8ea56746506540\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/ephemeral-tokens HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: mcp-gateway
+Content-Length: 315
+Content-Type: application/json
+
+{"workspace_id":"01a1d820-5871-7d9e-8c54-b24f7d1b0313","execution_id":"efda1d38-939f-4cdb-bb41-d6ab450d1e80","invoking_principal_id":"01a1d820-5872-7857-baec-3097ccd76108","agent_principal_id":"01a1d820-5877-7a21-9d5e-7d799d1a4bf9","project_id":"01a1d820-5877-79e8-858b-74e7e54db46f","ttl_seconds":60,"max_calls":5}
+
+HTTP/1.1 403 Forbidden
+x-request-id: f191ec305032491fb32bbad822d1231e
+content-length: 224
+content-type: application/problem+json
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+strict-transport-security: max-age=63072000; includeSubDomains
+
+{"type":"urn:kanban:problem:FORBIDDEN","title":"Forbidden","status":403,"code":"FORBIDDEN","detail":"mcp-gateway service principal is forbidden from minting ephemeral tokens.","request_id":"f191ec305032491fb32bbad822d1231e"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/ephemeral-tokens HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-KB-Service-Principal: agent-runtime
+Content-Length: 315
+Content-Type: application/json
+
+{"workspace_id":"01a1d820-5871-7d9e-8c54-b24f7d1b0313","execution_id":"efda1d38-939f-4cdb-bb41-d6ab450d1e80","invoking_principal_id":"01a1d820-5872-7857-baec-3097ccd76108","agent_principal_id":"01a1d820-5877-7a21-9d5e-7d799d1a4bf9","project_id":"01a1d820-5877-79e8-858b-74e7e54db46f","ttl_seconds":60,"max_calls":5}
+
+HTTP/1.1 201 Created
+content-length: 207
+content-type: application/json
+x-request-id: dda31d1dd2fd4ee1a794b73ed044ee06
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+strict-transport-security: max-age=63072000; includeSubDomains
+
+{"token":"kb_agt_eph_***REDACTED***","expires_at":"2026-11-14T03:37:01.099989+00:00","max_calls":5,"allowed_tools":["read_doc","read_ticket","search_knowledge","search_tickets"]}
+
+--------------------------------------------------------------------------------

@@ -75,6 +75,7 @@ class KanbanApiClient:
             self._client = httpx.AsyncClient(
                 transport=active_transport,
                 base_url="http://kanban.local",
+                headers={"X-KB-Service-Principal": "mcp-gateway"},
                 timeout=timeout,
             )
         else:
@@ -101,6 +102,7 @@ class KanbanApiClient:
                     base_url=settings.kanban_api_base_url,
                     timeout=timeout,
                 )
+
             else:
                 self._client = httpx.AsyncClient(
                     http2=True,
@@ -109,6 +111,8 @@ class KanbanApiClient:
                     base_url=settings.kanban_api_base_url,
                     timeout=timeout,
                 )
+
+        self._csrf_token: str | None = None
 
     async def aclose(self) -> None:
         """Close the underlying HTTP client session and connections."""
@@ -128,6 +132,29 @@ class KanbanApiClient:
         """Async context manager exit."""
         await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
+    async def _ensure_csrf_token(
+        self, req_headers: dict[str, str], method: str, path: str = ""
+    ) -> None:
+        unsafe_methods = ("POST", "PUT", "PATCH", "DELETE")
+        if (
+            method.upper() not in unsafe_methods
+            or path.startswith("/internal/")
+            or "X-CSRF-Token" in req_headers
+        ):
+            return
+        if self._csrf_token is None:
+            try:
+                csrf_resp = await self._client.get("/api/v1/auth/session")
+                if csrf_resp.status_code == httpx.codes.OK:
+                    data = csrf_resp.json()
+                    if isinstance(data, dict) and "csrf_token" in data:
+                        self._csrf_token = str(data["csrf_token"])
+                        self._client.cookies.set("__Host-kb_csrf", self._csrf_token)
+            except (httpx.HTTPError, ValueError):
+                pass
+        if self._csrf_token:
+            req_headers["X-CSRF-Token"] = self._csrf_token
+
     async def request(  # noqa: PLR0913
         self,
         method: str,
@@ -145,6 +172,8 @@ class KanbanApiClient:
             req_headers["X-KB-Subject-Token"] = subject_token
         if mcp_session_id:
             req_headers["X-KB-MCP-Session"] = mcp_session_id
+
+        await self._ensure_csrf_token(req_headers, method, path)
 
         try:
             req = self._client.build_request(
@@ -227,6 +256,12 @@ class KanbanApiClient:
             return McpErrorCode.AMBIGUOUS_IDENTIFIER
         if prob_type.endswith("lockout-prevented") or prob_code == "LOCKOUT_PREVENTED":
             return McpErrorCode.LOCKOUT_PREVENTED
+        if prob_type.endswith("already-promoted") or prob_code == "ALREADY_PROMOTED":
+            return McpErrorCode.ALREADY_PROMOTED
+        if prob_type.endswith("link-type-not-allowed") or prob_code == "LINK_TYPE_NOT_ALLOWED":
+            return McpErrorCode.LINK_TYPE_NOT_ALLOWED
+        if prob_type.endswith("group-cycle-rejected") or prob_code == "GROUP_CYCLE_REJECTED":
+            return McpErrorCode.GROUP_CYCLE_REJECTED
         return McpErrorCode.VALIDATION_FAILED
 
     @staticmethod
@@ -244,6 +279,18 @@ class KanbanApiClient:
             return McpErrorCode.AAL2_REQUIRED
         if prob_code == "LOCKOUT_PREVENTED" or prob_type.endswith("lockout-prevented"):
             return McpErrorCode.LOCKOUT_PREVENTED
+        if prob_code == "SECTION_NOT_FOUND" or prob_type.endswith("section-not-found"):
+            return McpErrorCode.SECTION_NOT_FOUND
+        if prob_code == "ALREADY_PROMOTED" or prob_type.endswith("already-promoted"):
+            return McpErrorCode.ALREADY_PROMOTED
+        if prob_code == "LINK_TYPE_NOT_ALLOWED" or prob_type.endswith("link-type-not-allowed"):
+            return McpErrorCode.LINK_TYPE_NOT_ALLOWED
+        if prob_code == "GROUP_CYCLE_REJECTED" or prob_type.endswith("group-cycle-rejected"):
+            return McpErrorCode.GROUP_CYCLE_REJECTED
+        if prob_code == "GROUP_DEPTH_EXCEEDED" or prob_type.endswith("group-depth-exceeded"):
+            return McpErrorCode.GROUP_DEPTH_EXCEEDED
+        if prob_code == "INSUFFICIENT_PERMISSION" or prob_type.endswith("insufficient-permission"):
+            return McpErrorCode.INSUFFICIENT_PERMISSION
 
         direct_map = {
             _HTTP_NOT_FOUND: McpErrorCode.NOT_FOUND,

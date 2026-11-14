@@ -1,0 +1,43 @@
+================================================================================
+1. PASSING CUTOVER VERIFICATION RUN (exit 0)
+================================================================================
+$ kanban-ctl cutover verify --bundle-dir tests/fixtures/plane_export_kanba --workspace kanban --project KANBA --qa-root /tmp/kb_cutover_qa --pre-cutover-exempt-keys KANBA-1,KANBA-2,KANBA-3,KANBA-5 --json-out docs/qa/KANBA-128/cutover-report.json
+
+=== Cutover Verification Audit Report ===
+Workspace: kanban | Project: KANBA
+Overall Status: PASSED (6/6 checks passed)
+----------------------------------------------------------------------------------------
+Check Name                         Status   Details / Error
+----------------------------------------------------------------------------------------
+entity_count_and_key_parity        PASS     Verified 1:1 entity parity across 6 issues, 6 states, 2 cycles, 1 modules, 1 comments. Sequence counter at 19 >= max sequence 19.
+zero_invalid_object_links          PASS     Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+activity_hash_chain_intact         PASS     Activity ledger hash chain is intact across 1 rows.
+canonical_markdown_purity          PASS     Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 6 issues and 1 comments.
+qa_proof_bundle_continuity         PASS     QA proof bundles verified for 1 issues (4 exempted). All required files present and non-empty.
+rls_enforcement_active             PASS     Row-Level Security active across all 69 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+----------------------------------------------------------------------------------------
+
+Wrote full JSON report to docs/qa/KANBA-128/cutover-report.json
+Exit Code: 0
+
+================================================================================
+2. SIMULATED FAILURE RUN: INVALID_OBJECT_LINKS_DETECTED (exit 2)
+================================================================================
+Injecting soft-deleted endpoint past trash retention into object_links...
+$ kanban-ctl cutover verify --bundle-dir tests/fixtures/plane_export_kanba --workspace kanban --project KANBA --qa-root /tmp/kb_cutover_qa --pre-cutover-exempt-keys KANBA-1,KANBA-2,KANBA-3,KANBA-5
+
+=== Cutover Verification Audit Report ===
+Workspace: kanban | Project: KANBA
+Overall Status: FAILED (5/6 checks passed)
+----------------------------------------------------------------------------------------
+Check Name                         Status   Details / Error
+----------------------------------------------------------------------------------------
+entity_count_and_key_parity        PASS     Verified 1:1 entity parity across 6 issues, 6 states, 2 cycles, 1 modules, 1 comments. Sequence counter at 19 >= max sequence 19.
+zero_invalid_object_links          FAIL     [INVALID_OBJECT_LINKS_DETECTED] Detected invalid object links: audit_object_links findings = 2, FLAGGED_INVALID rows = 2.
+activity_hash_chain_intact         PASS     Activity ledger hash chain is intact across 1 rows.
+canonical_markdown_purity          PASS     Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 6 issues and 1 comments.
+qa_proof_bundle_continuity         PASS     QA proof bundles verified for 1 issues (4 exempted). All required files present and non-empty.
+rls_enforcement_active             PASS     Row-Level Security active across all 69 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+----------------------------------------------------------------------------------------
+
+Exit Code: 2

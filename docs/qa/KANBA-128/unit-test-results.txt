@@ -1,0 +1,37 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-128/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-128
+configfile: pyproject.toml
+plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 14 items
+
+kanban/tests/importer/test_cutover_verifier.py::test_case_01_positive_cutover_verification PASSED [  7%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_02_parity_failure_detection PASSED [ 14%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_03_invalid_link_detection PASSED [ 21%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_04_qa_proof_bundle_check PASSED [ 28%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_05_markdown_purity_check PASSED [ 35%]
+kanban/tests/importer/test_cutover_verifier.py::test_edge_cases_workspace_and_project_not_found PASSED [ 42%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_sequence_counter_lower_than_max PASSED [ 50%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_forbidden_html_columns_in_catalog PASSED [ 57%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_corrupted_bundle_dir PASSED [ 64%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_cli_execute_verify PASSED [ 71%]
+kanban/tests/importer/test_cutover_verifier.py::test_verifier_branch_coverage PASSED [ 78%]
+kanban/tests/importer/test_cutover_verifier.py::test_cli_subparsers_registration PASSED [ 85%]
+kanban/tests/importer/test_cutover_verifier.py::test_cli_runner_success PASSED [ 92%]
+kanban/tests/importer/test_cutover_verifier.py::test_cli_runner_exception_handling PASSED [100%]/tmp/kb-wt-KANBA-128/.venv/lib/python3.12/site-packages/coverage/sqldata.py:631: RuntimeWarning: coroutine '_execute_verify' was never awaited
+  data = [(file_id, self._current_context_id, fromno, tono) for fromno, tono in arcs]
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                  Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------
+kanban/cli/verify_cutover.py             79      2     10      1    97%   92-93
+kanban/importer/cutover_verifier.py     249      7     74      8    95%   259, 319, 368, 416, 469, 508->507, 524, 628
+---------------------------------------------------------------------------------
+TOTAL                                   328      9     84      9    96%
+Required test coverage of 95% reached. Total coverage: 95.63%
+============================== 14 passed in 2.69s ==============================

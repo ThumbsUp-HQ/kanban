@@ -1,0 +1,93 @@
+{
+  "overall_passed": true,
+  "workspace_slug": "kanban",
+  "project_identifier": "KANBA",
+  "checks": [
+    {
+      "name": "entity_count_and_key_parity",
+      "passed": true,
+      "error_code": null,
+      "detail": "Verified 1:1 entity parity across 6 issues, 6 states, 2 cycles, 1 modules, 1 comments. Sequence counter at 19 >= max sequence 19.",
+      "metadata": {
+        "plane_issues": 12,
+        "db_issues": 6,
+        "missing_keys_count": 0,
+        "extra_keys_count": 0,
+        "issue_seq_counter": 19,
+        "max_imported_seq": 19,
+        "states_count": 6,
+        "cycles_count": 2,
+        "modules_count": 1,
+        "comments_count": 1
+      }
+    },
+    {
+      "name": "zero_invalid_object_links",
+      "passed": true,
+      "error_code": null,
+      "detail": "Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.",
+      "metadata": {
+        "audit_invalid_count": 0,
+        "flagged_invalid_count": 0
+      }
+    },
+    {
+      "name": "activity_hash_chain_intact",
+      "passed": true,
+      "error_code": null,
+      "detail": "Activity ledger hash chain is intact across 1 rows.",
+      "metadata": {
+        "checked_rows": 1,
+        "is_valid": true,
+        "failure_reason": null
+      }
+    },
+    {
+      "name": "canonical_markdown_purity",
+      "passed": true,
+      "error_code": null,
+      "detail": "Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 6 issues and 1 comments.",
+      "metadata": {
+        "bad_columns_count": 0,
+        "scanned_issues": 6,
+        "scanned_comments": 1,
+        "residue_findings_count": 0
+      }
+    },
+    {
+      "name": "qa_proof_bundle_continuity",
+      "passed": true,
+      "error_code": null,
+      "detail": "QA proof bundles verified for 1 issues (4 exempted). All required files present and non-empty.",
+      "metadata": {
+        "target_keys_count": 5,
+        "verified_bundles": 1,
+        "exempted_keys": [
+          "KANBA-1",
+          "KANBA-2",
+          "KANBA-3",
+          "KANBA-5"
+        ],
+        "missing_bundle_files": []
+      }
+    },
+    {
+      "name": "rls_enforcement_active",
+      "passed": true,
+      "error_code": null,
+      "detail": "Row-Level Security active across all 69 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).",
+      "metadata": {
+        "tables_checked": 69,
+        "unprotected_tables": [],
+        "role_checked": true,
+        "role_ok": true
+      }
+    }
+  ],
+  "summary": {
+    "total_checks": 6,
+    "passed_checks": 6,
+    "failed_checks": 0,
+    "overall_status": "PASSED"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "cards": [
+    {
+      "id": "card-hostile-xss",
+      "slug": "hostile-xss-provider",
+      "provider_kind": "OIDC",
+      "display_name": "<img src=x onerror=alert(1)>",
+      "button_subtext": "<script>alert('pwned')</script>",
+      "icon_preset": "javascript:alert(1)"
+    },
+    {
+      "id": "card-hostile-long",
+      "slug": "hostile-long-provider",
+      "provider_kind": "OAUTH2",
+      "display_name": "Ultra Long Identity Provider Name Designed Specifically To Test Character Clamping Boundaries And Overflow Mechanics Across The Kanban Front-End System In All Responsive Breakpoints And Viewports 1234567890",
+      "button_subtext": "Ultra Long Subtext Providing Excessive Descriptive Information Far Beyond The Normal One Hundred And Twenty Character Threshold Mandated By The Technical Specifications Of Ticket KB-P3-35",
+      "icon_preset": "unknown_preset_fallback"
+    },
+    {
+      "id": "card-local-admin",
+      "slug": "local-admin",
+      "provider_kind": "LOCAL_ADMIN",
+      "display_name": "Local Administrator",
+      "button_subtext": null,
+      "icon_preset": "key"
+    }
+  ]
+}

@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from mcp.app import create_mcp_app
+from mcp.registry import Surface, ToolRegistry, create_placeholder_tool
 from mcp.settings import McpSettings
 
 if TYPE_CHECKING:
@@ -118,7 +119,9 @@ def transcript_recorder(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 def mcp_app() -> Starlette:
     """Default Starlette application mounting the 3 MCP surfaces."""
     settings = McpSettings(mode="standalone_inprocess", auth_enabled=False)
-    return create_mcp_app(settings)
+    docs_reg = ToolRegistry(Surface.DOCS)
+    docs_reg.register(create_placeholder_tool(Surface.DOCS))
+    return create_mcp_app(settings, docs_registry=docs_reg)
 
 
 @pytest.fixture

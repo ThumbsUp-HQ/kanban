@@ -1,0 +1,92 @@
+{
+  "admin_imports_plane_dry_run_200": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "to_create": 27,
+      "to_update": 0,
+      "unchanged": 5,
+      "sequence_high_water_mark": 19,
+      "unmapped_members": [],
+      "rewritten_attachments": 1,
+      "invalid_link_count": 0,
+      "warnings": []
+    }
+  },
+  "admin_imports_plane_live_apply_200": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "to_create": 27,
+      "to_update": 0,
+      "unchanged": 5,
+      "sequence_high_water_mark": 19,
+      "unmapped_members": [],
+      "rewritten_attachments": 1,
+      "invalid_link_count": 0,
+      "warnings": []
+    }
+  },
+  "admin_imports_plane_idempotent_rerun_200": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "to_create": 0,
+      "to_update": 0,
+      "unchanged": 32,
+      "sequence_high_water_mark": 19,
+      "unmapped_members": [],
+      "rewritten_attachments": 0,
+      "invalid_link_count": 0,
+      "warnings": []
+    }
+  },
+  "admin_imports_plane_aal2_required_403": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/problem+json"
+    },
+    "body": {
+      "type": "https://kanban.local/problems/AAL2_REQUIRED",
+      "title": "AAL2 Authentication Required",
+      "status": 403,
+      "detail": "Admin route requires active AAL2 factor verification (AAL level 2 required)",
+      "instance": "/api/v1/admin/imports/plane",
+      "code": "AAL2_REQUIRED"
+    }
+  },
+  "admin_imports_plane_insufficient_capability_403": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/problem+json"
+    },
+    "body": {
+      "type": "https://kanban.local/problems/INSUFFICIENT_CAPABILITY",
+      "title": "Insufficient Capability",
+      "status": 403,
+      "detail": "Caller lacks SERVER_ADMIN role required for system imports administration",
+      "instance": "/api/v1/admin/imports/plane",
+      "code": "INSUFFICIENT_CAPABILITY"
+    }
+  },
+  "admin_imports_plane_path_traversal_422": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/problem+json"
+    },
+    "body": {
+      "type": "https://kanban.local/problems/PATH_TRAVERSAL_DETECTED",
+      "title": "Path Traversal Detected",
+      "status": 422,
+      "detail": "Bundle name must be a simple alphanumeric token without path separators.",
+      "instance": "/api/v1/admin/imports/plane",
+      "code": "PATH_TRAVERSAL_DETECTED"
+    }
+  }
+}

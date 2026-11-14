@@ -1,0 +1,102 @@
+[
+  {
+    "id": "plane-issue-1",
+    "sequence_id": 1,
+    "name": "Baseline architecture",
+    "project": "plane-proj-kanba",
+    "state_id": "plane-state-done",
+    "priority": "high"
+  },
+  {
+    "id": "plane-issue-2",
+    "sequence_id": 2,
+    "name": "Postgres spine and RLS",
+    "project": "plane-proj-kanba",
+    "state_id": "plane-state-done",
+    "priority": "urgent"
+  },
+  {
+    "id": "plane-issue-3",
+    "sequence_id": 3,
+    "name": "Principals and closure",
+    "project": "plane-proj-kanba",
+    "state_id": "plane-state-done",
+    "priority": "medium"
+  },
+  {
+    "id": "plane-issue-4",
+    "sequence_id": 4,
+    "name": "Nested parent child sub-task",
+    "project": "plane-proj-kanba",
+    "parent": "plane-issue-3",
+    "state_id": "plane-state-started",
+    "priority": "low"
+  },
+  {
+    "id": "plane-issue-5",
+    "sequence_id": 5,
+    "name": "Workflow states and limits",
+    "project": "plane-proj-kanba",
+    "state_id": "plane-state-done",
+    "priority": "none"
+  },
+  {
+    "id": "plane-issue-19",
+    "sequence_id": 19,
+    "name": "Plane importer cutover feature",
+    "project": "plane-proj-kanba",
+    "description_html": "<p>Verification proof: <a href=\"docs/qa/KANBA-19/unit-test-results.txt\">docs/qa/KANBA-19/unit-test-results.txt</a></p><p><img src=\"/api/assets/v1/workspace/asset-png.png\" alt=\"proof\"></p>",
+    "state_id": "plane-state-done",
+    "priority": "urgent",
+    "labels": [
+      "plane-label-feat"
+    ],
+    "cycle_id": "plane-cycle-2",
+    "module_id": "plane-mod-auth",
+    "assignees": [
+      "plane-user-alice"
+    ]
+  },
+  {
+    "id": "plane-issue-sec-1",
+    "sequence_id": 1,
+    "name": "Threat model wire",
+    "project": "plane-proj-sec",
+    "state_id": "plane-state-done"
+  },
+  {
+    "id": "plane-issue-sec-2",
+    "sequence_id": 2,
+    "name": "SSRF perimeter check",
+    "project": "plane-proj-sec",
+    "state_id": "plane-state-done"
+  },
+  {
+    "id": "plane-issue-sec-3",
+    "sequence_id": 3,
+    "name": "AAL2 policy enforcement",
+    "project": "plane-proj-sec",
+    "state_id": "plane-state-done"
+  },
+  {
+    "id": "plane-issue-sec-4",
+    "sequence_id": 4,
+    "name": "Rate limit buckets",
+    "project": "plane-proj-sec",
+    "state_id": "plane-state-done"
+  },
+  {
+    "id": "plane-issue-sec-5",
+    "sequence_id": 5,
+    "name": "CSP headers",
+    "project": "plane-proj-sec",
+    "state_id": "plane-state-done"
+  },
+  {
+    "id": "plane-issue-sec-6",
+    "sequence_id": 6,
+    "name": "Audit ledger continuity",
+    "project": "plane-proj-sec",
+    "state_id": "plane-state-done"
+  }
+]

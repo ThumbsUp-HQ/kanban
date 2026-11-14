@@ -77,19 +77,30 @@ class McpIntrospectionResult:
 
     active: bool
     principal_id: uuid.UUID | None = None
+    agent_principal_id: uuid.UUID | None = None
     workspace_id: uuid.UUID | None = None
+    project_id: uuid.UUID | None = None
+    execution_id: uuid.UUID | None = None
     surface: str | None = None
     scopes: list[str] | None = None
     token_kind: str | None = "api_key"  # noqa: S105
     reason: str | None = None
     allowed_projects: list[uuid.UUID] | None = None
+    allowed_tools: list[str] | None = None
+    calls_used: int | None = None
+    max_calls: int | None = None
+    expires_at: datetime | str | None = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:  # noqa: C901
         """Convert introspection result to API JSON payload."""
         if not self.active:
             res: dict[str, Any] = {"active": False}
             if self.reason:
                 res["reason"] = self.reason
+            if self.calls_used is not None:
+                res["calls_used"] = self.calls_used
+            if self.max_calls is not None:
+                res["max_calls"] = self.max_calls
             return res
         payload: dict[str, Any] = {
             "active": True,
@@ -99,8 +110,26 @@ class McpIntrospectionResult:
             "scopes": self.scopes or [],
             "token_kind": self.token_kind,
         }
+        if self.agent_principal_id is not None:
+            payload["agent_principal_id"] = str(self.agent_principal_id)
+        if self.project_id is not None:
+            payload["project_id"] = str(self.project_id)
+        if self.execution_id is not None:
+            payload["execution_id"] = str(self.execution_id)
         if self.allowed_projects is not None:
             payload["allowed_projects"] = [str(p) for p in self.allowed_projects]
+        if self.allowed_tools is not None:
+            payload["allowed_tools"] = self.allowed_tools
+        if self.calls_used is not None:
+            payload["calls_used"] = self.calls_used
+        if self.max_calls is not None:
+            payload["max_calls"] = self.max_calls
+        if self.expires_at is not None:
+            payload["expires_at"] = (
+                self.expires_at.isoformat()
+                if isinstance(self.expires_at, datetime)
+                else str(self.expires_at)
+            )
         return payload
 
 
@@ -328,8 +357,23 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
     session: AsyncSession,
     token: str,
     surface: str | None = None,
+    consume_call: bool = False,  # noqa: FBT001, FBT002
+    tool_name: str | None = None,
 ) -> McpIntrospectionResult:
     """Introspect bearer token digest against database and verify active state."""
+    if token.startswith("kb_agt_eph_"):
+        from kanban.security.ephemeral_mcp_tokens import (  # noqa: PLC0415
+            introspect_and_consume_ephemeral_token,
+        )
+
+        return await introspect_and_consume_ephemeral_token(
+            session=session,
+            token=token,
+            surface=surface,
+            consume_call=consume_call,
+            tool_name=tool_name,
+        )
+
     if token.startswith("eyJ"):
         # JWT OAuth 2.1 access token path
         from kanban.oauth.jwt import OAuthTokenError, verify_access_token  # noqa: PLC0415

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
     from starlette.requests import Request
 
+    from mcp.auth import McpAuthContext
     from mcp.internal_client import KanbanApiClient
     from mcp.registry import Surface, ToolRegistry
     from mcp.settings import McpSettings
@@ -307,12 +308,21 @@ class McpProtocolHandler:
                 s.strip() for s in request.headers["x-kb-scopes"].split(",") if s.strip()
             )
 
-        mcp_auth = getattr(request.state, "mcp_auth", None)
-        aal_level = getattr(mcp_auth, "aal_level", 2) if mcp_auth else 2
-        if "x-kb-aal-level" in request.headers:
+        auth_context = getattr(request.state, "mcp_auth", None)
+        if auth_context is None:
+            aal_level = 2
+            if "x-kb-aal-level" in request.headers:
+                with contextlib.suppress(ValueError):
+                    aal_level = int(request.headers["x-kb-aal-level"])
+            token_kind = "api_key"
+            auth_context = McpAuthContext(
+                scopes=caller_scopes or frozenset(),
+                aal_level=aal_level,
+                token_kind=token_kind,
+            )
+        elif "x-kb-aal-level" in request.headers:
             with contextlib.suppress(ValueError):
-                aal_level = int(request.headers["x-kb-aal-level"])
-        token_kind = getattr(mcp_auth, "token_kind", "api_key") if mcp_auth else "api_key"
+                auth_context.aal_level = int(request.headers["x-kb-aal-level"])
 
         return await self._dispatch_method(
             method,
@@ -321,8 +331,7 @@ class McpProtocolHandler:
             session_id=session_id,
             subject_token=subject_token,
             caller_scopes=caller_scopes,
-            aal_level=aal_level,
-            token_kind=token_kind,
+            auth_context=auth_context,
         )
 
     def _handle_delete_session(self, request: Request) -> Response:
@@ -376,8 +385,7 @@ class McpProtocolHandler:
         session_id: str | None = None,
         subject_token: str | None = None,
         caller_scopes: frozenset[str] | None = None,
-        aal_level: int = 2,
-        token_kind: str | None = "api_key",  # noqa: S107
+        auth_context: McpAuthContext | None = None,
     ) -> Response:
         # Notifications (no id)
         if req_id is None:
@@ -387,7 +395,9 @@ class McpProtocolHandler:
             return JSONResponse({"jsonrpc": "2.0", "id": req_id, "result": {}})
 
         if method == "tools/list":
-            return self._handle_tools_list(req_id, caller_scopes=caller_scopes)
+            return self._handle_tools_list(
+                req_id, caller_scopes=caller_scopes, auth_context=auth_context
+            )
 
         if method == "tools/call":
             return await self._handle_tools_call(
@@ -396,8 +406,7 @@ class McpProtocolHandler:
                 session_id=session_id,
                 subject_token=subject_token,
                 caller_scopes=caller_scopes,
-                aal_level=aal_level,
-                token_kind=token_kind,
+                auth_context=auth_context,
             )
 
         # Unknown method
@@ -411,7 +420,11 @@ class McpProtocolHandler:
         )
 
     def _handle_tools_list(
-        self, req_id: object, *, caller_scopes: frozenset[str] | None = None
+        self,
+        req_id: object,
+        *,
+        caller_scopes: frozenset[str] | None = None,
+        auth_context: McpAuthContext | None = None,
     ) -> JSONResponse:
         specs = self.registry.list_specs()
         if caller_scopes is not None:
@@ -423,6 +436,9 @@ class McpProtocolHandler:
                     or SCOPE_REQUIREMENTS[s.name].issubset(caller_scopes)
                 )
             ]
+        if auth_context is not None and auth_context.token_kind == "ephemeral":  # noqa: S105
+            allowed = auth_context.allowed_tools or frozenset()
+            specs = [s for s in specs if s.name in allowed]
 
         tools_list: list[dict[str, Any]] = [
             {
@@ -470,7 +486,7 @@ class McpProtocolHandler:
             )
         return str(params["name"]), arguments
 
-    async def _handle_tools_call(  # noqa: C901, PLR0911, PLR0912, PLR0913
+    async def _handle_tools_call(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0915
         self,
         req_id: object,
         params: object,
@@ -478,8 +494,8 @@ class McpProtocolHandler:
         session_id: str | None = None,
         subject_token: str | None = None,
         caller_scopes: frozenset[str] | None = None,
-        aal_level: int = 2,
-        token_kind: str | None = "api_key",  # noqa: S107
+        auth_context: McpAuthContext | None = None,
+    ) -> JSONResponse:
     ) -> JSONResponse:
         validated = self._validate_tools_call_params(req_id, params)
         if isinstance(validated, JSONResponse):
@@ -505,9 +521,121 @@ class McpProtocolHandler:
                 }
             )
 
-        # Check required scopes
         req_scopes = SCOPE_REQUIREMENTS.get(tool_name)
-        if (
+
+        # Ephemeral token allowlist and atomic call budget consumption
+        if auth_context is not None and auth_context.token_kind == "ephemeral":  # noqa: S105
+            allowed_tools = sorted(auth_context.allowed_tools or [])
+            if tool_name not in (auth_context.allowed_tools or frozenset()):
+                err = KbMcpError(
+                    code=McpErrorCode.EPHEMERAL_TOOL_FORBIDDEN,
+                    message=f"Tool '{tool_name}' is forbidden on ephemeral token",
+                    hint=(
+                        "Ephemeral tokens are strictly read-only and allow at most: "
+                        "search_tickets, read_ticket, search_knowledge, read_doc."
+                    ),
+                    allowed_tools=allowed_tools,
+                )
+                return JSONResponse(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "result": {
+                            "content": [{"type": "text", "text": err.to_yaml()}],
+                            "isError": True,
+                        },
+                    }
+                )
+
+            if self.internal_client is not None:
+                try:
+                    res_data = await self.internal_client.request(
+                        "POST",
+                        "/internal/v1/mcp/introspect",
+                        json_data={
+                            "token": auth_context.token,
+                            "surface": self.surface.value,
+                            "consume_call": True,
+                            "tool_name": tool_name,
+                        },
+                    )
+                except Exception:  # noqa: BLE001
+                    err = KbMcpError(
+                        code=McpErrorCode.UPSTREAM_UNAVAILABLE,
+                        message="Internal token consumption service unavailable",
+                    )
+                    return JSONResponse(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "result": {
+                                "content": [{"type": "text", "text": err.to_yaml()}],
+                                "isError": True,
+                            },
+                        }
+                    )
+
+                if not isinstance(res_data, dict) or not res_data.get("active"):
+                    reason = (
+                        res_data.get("reason")
+                        if isinstance(res_data, dict)
+                        else "TOKEN_EXPIRED_OR_REVOKED"
+                    )
+                    if reason == "EPHEMERAL_TOOL_FORBIDDEN":
+                        err = KbMcpError(
+                            code=McpErrorCode.EPHEMERAL_TOOL_FORBIDDEN,
+                            message=f"Tool '{tool_name}' is forbidden on ephemeral token",
+                            hint=(
+                                "Ephemeral tokens are strictly read-only and allow at most: "
+                                "search_tickets, read_ticket, search_knowledge, read_doc."
+                            ),
+                            allowed_tools=allowed_tools,
+                        )
+                    elif reason == "EPHEMERAL_CALL_BUDGET_EXCEEDED":
+                        max_c = (
+                            (res_data.get("max_calls") if isinstance(res_data, dict) else None)
+                            or auth_context.max_calls
+                            or 25
+                        )
+                        used_c = (
+                            res_data.get("calls_used") if isinstance(res_data, dict) else None
+                        ) or max_c
+                        err = KbMcpError(
+                            code=McpErrorCode.EPHEMERAL_CALL_BUDGET_EXCEEDED,
+                            message=f"Ephemeral call budget exceeded ({used_c}/{max_c} calls used)",
+                            hint=(
+                                "Gate execution reached max allowed calls. "
+                                "Transition gates must summarize inspection in <= 25 calls."
+                            ),
+                            budget={"max_calls": max_c, "calls_used": used_c},
+                        )
+                    elif reason == "TOKEN_EXPIRED_OR_REVOKED":
+                        err = KbMcpError(
+                            code=McpErrorCode.TOKEN_EXPIRED_OR_REVOKED,
+                            message=(
+                                "Ephemeral token has expired (TTL <= 120s) or execution was revoked"
+                            ),
+                            hint=(
+                                "Gate execution timed out or was canceled. "
+                                "Transition checks must complete within 120 seconds."
+                            ),
+                        )
+                    else:
+                        err = KbMcpError(
+                            code=McpErrorCode.UNAUTHENTICATED,
+                            message="Ephemeral token is invalid or inactive",
+                        )
+                    return JSONResponse(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "result": {
+                                "content": [{"type": "text", "text": err.to_yaml()}],
+                                "isError": True,
+                            },
+                        }
+                    )
+        elif (
             caller_scopes is not None
             and req_scopes is not None
             and not req_scopes.issubset(caller_scopes)
@@ -535,6 +663,8 @@ class McpProtocolHandler:
                 subject_token=subject_token,
             )
 
+        aal_level = auth_context.aal_level if auth_context is not None else 2
+        token_kind = auth_context.token_kind if auth_context is not None else "api_key"
         ctx = McpRequestContext(
             client=self.internal_client,
             surface=self.registry.surface,

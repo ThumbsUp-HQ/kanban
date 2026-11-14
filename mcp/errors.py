@@ -32,33 +32,50 @@ class McpErrorCode(StrEnum):
     LOCKOUT_PREVENTED = "LOCKOUT_PREVENTED"
     CONFIRM_PHRASE_MISMATCH = "CONFIRM_PHRASE_MISMATCH"
     AAL2_REQUIRED = "AAL2_REQUIRED"
+    SECTION_NOT_FOUND = "SECTION_NOT_FOUND"
+    ALREADY_PROMOTED = "ALREADY_PROMOTED"
+    LINK_TYPE_NOT_ALLOWED = "LINK_TYPE_NOT_ALLOWED"
+    EPHEMERAL_TOOL_FORBIDDEN = "EPHEMERAL_TOOL_FORBIDDEN"
+    EPHEMERAL_CALL_BUDGET_EXCEEDED = "EPHEMERAL_CALL_BUDGET_EXCEEDED"
+    TOKEN_EXPIRED_OR_REVOKED = "TOKEN_EXPIRED_OR_REVOKED"  # noqa: S105
+    INSUFFICIENT_PERMISSION = "INSUFFICIENT_PERMISSION"
+    GROUP_CYCLE_REJECTED = "GROUP_CYCLE_REJECTED"
+    GROUP_DEPTH_EXCEEDED = "GROUP_DEPTH_EXCEEDED"
 
 
 class KbMcpError(Exception):
     """Structured MCP application error serializable to canonical YAML."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         code: McpErrorCode | str,
         message: str,
         *,
         hint: str | None = None,
         candidates: list[dict[str, str]] | None = None,
+        allowed_tools: list[str] | None = None,
+        budget: dict[str, int] | None = None,
     ) -> None:
-        """Initialize KbMcpError with code, human-readable message, optional hint and candidates."""
+        """Initialize KbMcpError with code, message, optional hint, candidates, budget."""
         enum_code = McpErrorCode(code)
         super().__init__(f"[{enum_code.value}] {message}")
         self.code: Final[McpErrorCode] = enum_code
         self.message: Final[str] = message
         self.hint: Final[str | None] = hint
         self.candidates: Final[list[dict[str, str]] | None] = candidates
+        self.allowed_tools: Final[list[str] | None] = allowed_tools
+        self.budget: Final[dict[str, int] | None] = budget
 
     def to_yaml(self) -> str:
-        """Serialize error payload containing code, message, optional hint and candidates."""
+        """Serialize error payload containing code, message, optional hint and extra details."""
         payload: dict[str, Any] = {
             "code": self.code.value,
             "message": self.message,
         }
+        if self.allowed_tools is not None:
+            payload["allowed_tools"] = self.allowed_tools
+        if self.budget is not None:
+            payload["budget"] = self.budget
         if self.hint:
             payload["hint"] = self.hint
         if self.candidates:
