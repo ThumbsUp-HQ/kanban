@@ -50,13 +50,14 @@ def to_admin_schema(card: AuthProviderCard) -> AuthCardAdmin:
 async def list_enabled_public(session: AsyncSession) -> list[AuthCardPublic]:
     """Retrieve enabled cards for display on the public login view."""
     stmt = text(
-        "SELECT slug, display_name, button_subtext, icon_preset, provider_kind, sort_rank "
+        "SELECT id, slug, display_name, button_subtext, icon_preset, provider_kind "
         "FROM kb_auth.card_list_enabled_public()"
     )
     result = await session.execute(stmt)
     rows = result.mappings().all()
     return [
         AuthCardPublic(
+            id=r["id"],
             slug=r["slug"],
             display_name=r["display_name"],
             button_subtext=r["button_subtext"],

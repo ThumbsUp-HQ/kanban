@@ -162,6 +162,13 @@ class ActivityEventType(StrEnum):
     IDENTITY_AUTO_MERGE_BLOCKED = "IDENTITY_AUTO_MERGE_BLOCKED"
     IDENTITY_LINKED = "IDENTITY_LINKED"
     IDENTITY_UNLINKED = "IDENTITY_UNLINKED"
+    AUTH_CARD_CREATED = "AUTH_CARD_CREATED"
+    AUTH_CARD_UPDATED = "AUTH_CARD_UPDATED"
+    AUTH_CARD_ENABLED = "AUTH_CARD_ENABLED"
+    AUTH_CARD_DISABLED = "AUTH_CARD_DISABLED"
+    AUTH_CARD_REORDERED = "AUTH_CARD_REORDERED"
+    AUTH_CARD_DELETED = "AUTH_CARD_DELETED"
+    AUTH_CARD_HANDSHAKE_TESTED = "AUTH_CARD_HANDSHAKE_TESTED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -269,11 +276,13 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.FIRST_BOOT_SETUP_CLAIMED: ActivityCategory.SYSTEM,
         ActivityEventType.MCP_OAUTH_GRANT_REVOKED: ActivityCategory.SYSTEM,
         ActivityEventType.OAUTH_REFRESH_REUSE_DETECTED: ActivityCategory.SYSTEM,
-        ActivityEventType.EXTERNAL_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
-        ActivityEventType.EXTERNAL_LOGIN_UNPROVISIONED: ActivityCategory.SYSTEM,
-        ActivityEventType.IDENTITY_AUTO_MERGE_BLOCKED: ActivityCategory.SYSTEM,
-        ActivityEventType.IDENTITY_LINKED: ActivityCategory.SYSTEM,
-        ActivityEventType.IDENTITY_UNLINKED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_CREATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_ENABLED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_DISABLED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_REORDERED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_DELETED: ActivityCategory.SYSTEM,
+        ActivityEventType.AUTH_CARD_HANDSHAKE_TESTED: ActivityCategory.SYSTEM,
     }
 )
 

@@ -1,0 +1,32 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 40 items
+
+kanban/tests/util/test_fractional_rank.py .....                          [ 12%]
+kanban/tests/auth/test_auth_cards_admin_api.py .......                   [ 30%]
+kanban/tests/auth/test_auth_cards_public_api.py ....                     [ 40%]
+kanban/tests/auth/test_auth_cards_handshake_unit.py ............         [ 70%]
+kanban/tests/auth/test_auth_cards_service_unit.py ..........             [ 95%]
+kanban/tests/auth/test_card_repository.py ..                             [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+kanban/api/v1/admin/auth_cards.py       73      0      4      0   100%
+kanban/api/v1/auth_cards_public.py      35      0      4      0   100%
+kanban/auth/cards/__init__.py            6      0      0      0   100%
+kanban/auth/cards/handshake.py          94      2     28      3    96%   100->122, 183, 185
+kanban/auth/cards/lockout.py            96      6     40      7    90%   102, 147-148, 153-154, 184->217, 244->233, 248, 266->exit
+kanban/auth/cards/repository.py         58      0     12      1    99%   199->182
+kanban/auth/cards/schemas.py            83      0      2      0   100%
+kanban/auth/cards/service.py           269     16    104     12    92%   141->143, 196, 253, 309->311, 320->334, 378-385, 422, 460, 482, 574, 591, 661
+kanban/util/fractional_rank.py          94      2     48      2    97%   112, 131
+--------------------------------------------------------------------------------
+TOTAL                                  808     26    242     25    95%
+============================= 40 passed in 11.36s ==============================
