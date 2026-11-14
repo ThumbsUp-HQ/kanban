@@ -76,6 +76,10 @@ SCOPE_REQUIREMENTS: Final[dict[str, frozenset[str]]] = {
     "promote_sticky_to_doc": frozenset({"docs:write"}),
     "link_knowledge": frozenset({"docs:write"}),
     # Admin surface tools
+    "configure_workspace": frozenset({"admin:read"}),
+    "manage_auth_cards": frozenset({"admin:read"}),
+    "manage_principals_and_groups": frozenset({"admin:read"}),
+    "manage_access_policies": frozenset({"admin:read"}),
     "audit_links": frozenset({"admin:read"}),
     "override_ticket_provenance": frozenset({"admin:write"}),
     "audit_and_purge_object_links": frozenset({"admin:read"}),
@@ -399,6 +403,7 @@ class McpAuthMiddleware:
             principal_id=intro_result.get("principal_id"),
             workspace_id=intro_result.get("workspace_id"),
             token_kind=token_kind,
+            aal_level=aal,
             agent_principal_id=intro_result.get("agent_principal_id"),
             project_id=intro_result.get("project_id"),
             execution_id=intro_result.get("execution_id"),
@@ -408,7 +413,6 @@ class McpAuthMiddleware:
             workspace_slug=intro_result.get("workspace_slug"),
             scope_tier=intro_result.get("scope_tier"),
             allowed_projects=allowed_projects,
-            aal_level=aal,
         )
 
         try:

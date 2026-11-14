@@ -10,12 +10,12 @@ import logging
 import secrets
 import time
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 from starlette.responses import JSONResponse, Response
 
-from mcp.auth import SCOPE_REQUIREMENTS, hash_mcp_api_key
+from mcp.auth import SCOPE_REQUIREMENTS, McpAuthContext, hash_mcp_api_key
 from mcp.context import (
     McpRequestContext,
     reset_current_mcp_context,
@@ -30,7 +30,6 @@ if TYPE_CHECKING:
 
     from starlette.requests import Request
 
-    from mcp.auth import McpAuthContext
     from mcp.internal_client import KanbanApiClient
     from mcp.registry import Surface, ToolRegistry
     from mcp.scoping import ConnectionScope
@@ -269,7 +268,7 @@ class McpProtocolHandler:
 
         return await self._process_valid_payload(payload, request)
 
-    async def _process_valid_payload(  # noqa: C901, PLR0911
+    async def _process_valid_payload(  # noqa: C901, PLR0911, PLR0912
         self,
         payload: dict[str, Any],
         request: Request,
@@ -362,6 +361,19 @@ class McpProtocolHandler:
             with contextlib.suppress(ValueError):
                 aal_level = int(request.headers["x-kb-aal-level"])
         token_kind = getattr(mcp_auth, "token_kind", "api_key") if mcp_auth else "api_key"
+        if auth_context is None:
+            auth_context = McpAuthContext(
+                token=subject_token or "",
+                token_sha256=current_token_sha256 or b"",
+                surface=self.surface,
+                scopes=caller_scopes or frozenset(),
+                aal_level=aal_level,
+                token_kind=token_kind,
+            )
+        elif "x-kb-aal-level" in request.headers:
+            with contextlib.suppress(ValueError):
+                header_aal = int(request.headers["x-kb-aal-level"])
+                auth_context = replace(auth_context, aal_level=header_aal)
 
         return await self._dispatch_method(
             method,
@@ -762,6 +774,8 @@ class McpProtocolHandler:
                 subject_token=subject_token,
             )
 
+        aal_level = auth_context.aal_level if auth_context is not None else 2
+        token_kind = auth_context.token_kind if auth_context is not None else "api_key"
         ctx = McpRequestContext(
             client=self.internal_client,
             surface=self.registry.surface,

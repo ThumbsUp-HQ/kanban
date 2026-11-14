@@ -51,6 +51,21 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
         ),
         "project": "str",
     },
+    "manage_principals_and_groups": {
+        "action": (
+            "list | get | provision_user | provision_group | provision_agent | "
+            "deactivate | reactivate | add_member | remove_member | bind_role | "
+            "unbind_role | help"
+        ),
+        "principal": "@handle | group | agent | uuid",
+    },
+    "manage_access_policies": {
+        "action": "inspect | grant | revoke | help",
+        "object": "KAN-142 | uuid | path",
+        "principal": "@handle | group | agent | uuid",
+        "effect": "ALLOW | DENY",
+        "capabilities": "[VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]",
+    },
 }
 
 
