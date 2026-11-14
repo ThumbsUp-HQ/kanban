@@ -217,6 +217,11 @@ class _MockStatefulIntrospectService:
         self.expires_at = self.created_at + ttl_seconds
         self.revoked = False
         self.introspect_calls = 0
+        self.principal_id = str(uuid.uuid4())
+        self.agent_principal_id = str(uuid.uuid4())
+        self.workspace_id = str(uuid.uuid4())
+        self.project_id = str(uuid.uuid4())
+        self.execution_id = str(uuid.uuid4())
 
     def handle_data(self, data: dict[str, Any]) -> dict[str, Any]:
         self.introspect_calls += 1
@@ -246,6 +251,11 @@ class _MockStatefulIntrospectService:
                     "token_kind": "ephemeral",
                     "surface": surface,
                     "scopes": ["agent:read", "docs:read"],
+                    "principal_id": self.principal_id,
+                    "agent_principal_id": self.agent_principal_id,
+                    "workspace_id": self.workspace_id,
+                    "project_id": self.project_id,
+                    "execution_id": self.execution_id,
                     "allowed_tools": [t for t in self.allowed_tools if t in surface_tools],
                     "calls_used": self.calls_used,
                     "max_calls": self.max_calls,
@@ -255,11 +265,11 @@ class _MockStatefulIntrospectService:
                 "token_kind": "ephemeral",
                 "surface": surface,
                 "scopes": ["agent:read", "docs:read"],
-                "principal_id": str(uuid.uuid4()),
-                "agent_principal_id": str(uuid.uuid4()),
-                "workspace_id": str(uuid.uuid4()),
-                "project_id": str(uuid.uuid4()),
-                "execution_id": str(uuid.uuid4()),
+                "principal_id": self.principal_id,
+                "agent_principal_id": self.agent_principal_id,
+                "workspace_id": self.workspace_id,
+                "project_id": self.project_id,
+                "execution_id": self.execution_id,
                 "allowed_tools": [t for t in self.allowed_tools if t in surface_tools],
                 "calls_used": self.calls_used,
                 "max_calls": self.max_calls,
@@ -279,6 +289,8 @@ class _MockStatefulIntrospectService:
                 "reason": "EPHEMERAL_CALL_BUDGET_EXCEEDED",
                 "calls_used": self.calls_used,
                 "max_calls": self.max_calls,
+                "workspace_id": self.workspace_id,
+                "project_id": self.project_id,
             }
 
         self.calls_used += 1

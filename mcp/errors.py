@@ -35,6 +35,9 @@ class McpErrorCode(StrEnum):
     EPHEMERAL_TOOL_FORBIDDEN = "EPHEMERAL_TOOL_FORBIDDEN"
     EPHEMERAL_CALL_BUDGET_EXCEEDED = "EPHEMERAL_CALL_BUDGET_EXCEEDED"
     TOKEN_EXPIRED_OR_REVOKED = "TOKEN_EXPIRED_OR_REVOKED"  # noqa: S105
+    KEY_SCOPE_VIOLATION = "KEY_SCOPE_VIOLATION"
+    CONNECTION_SCOPE_VIOLATION = "CONNECTION_SCOPE_VIOLATION"
+    CONFLICTING_SCOPE_HEADERS = "CONFLICTING_SCOPE_HEADERS"
 
 
 class KbMcpError(Exception):
@@ -49,6 +52,7 @@ class KbMcpError(Exception):
         candidates: list[dict[str, str]] | None = None,
         allowed_tools: list[str] | None = None,
         budget: dict[str, int] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         """Initialize KbMcpError with code, message, optional hint, candidates, budget."""
         enum_code = McpErrorCode(code)
@@ -59,6 +63,7 @@ class KbMcpError(Exception):
         self.candidates: Final[list[dict[str, str]] | None] = candidates
         self.allowed_tools: Final[list[str] | None] = allowed_tools
         self.budget: Final[dict[str, int] | None] = budget
+        self.extra: Final[dict[str, Any] | None] = extra
 
     def to_yaml(self) -> str:
         """Serialize error payload containing code, message, optional hint and extra details."""
@@ -70,6 +75,8 @@ class KbMcpError(Exception):
             payload["allowed_tools"] = self.allowed_tools
         if self.budget is not None:
             payload["budget"] = self.budget
+        if self.extra:
+            payload.update(self.extra)
         if self.hint:
             payload["hint"] = self.hint
         if self.candidates:

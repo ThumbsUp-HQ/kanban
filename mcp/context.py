@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Final
 if TYPE_CHECKING:
     from mcp.internal_client import KanbanApiClient
     from mcp.registry import Surface
+    from mcp.scoping import ConnectionScope
 
 __all__ = [
     "McpRequestContext",
@@ -32,6 +33,7 @@ class McpRequestContext:
     subject_token: str | None = None
     session_id: str | None = None
     caller_scopes: frozenset[str] | None = None
+    connection_scope: ConnectionScope | None = None
 
 
 _CURRENT_CONTEXT: Final[ContextVar[McpRequestContext | None]] = ContextVar(

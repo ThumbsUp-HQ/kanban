@@ -33,6 +33,10 @@ SEARCH_TICKETS_SCHEMA: Final[dict[str, Any]] = {
             "maxLength": 500,
             "description": "Optional lexical query string",
         },
+        "workspace": {
+            "type": "string",
+            "description": "Optional workspace slug for disambiguation in global mode",
+        },
         "project": {
             "type": "string",
             "description": "Project key or UUID",
@@ -352,6 +356,8 @@ async def search_tickets(arguments: dict[str, Any]) -> dict[str, Any]:
         "limit": limit,
         "mode": mode,
     }
+    if arguments.get("workspace"):
+        payload["workspace"] = arguments["workspace"]
     if project_key:
         payload["project"] = project_key
     if filters:
