@@ -540,3 +540,28 @@ async def test_default_subprocess_launcher_timeout_kills_pg() -> None:
             ["/bin/sleep", "5"],
             timeout_seconds=0.1,
         )
+
+
+@pytest.mark.asyncio
+async def test_default_launcher_caps_stdout_and_kills_on_overflow() -> None:
+    """Host never buffers more than cap+1 bytes of child output."""
+    launcher = DefaultSubprocessLauncher()
+    ret, stdout, _ = await launcher.run_async(
+        ["/bin/sh", "-c", "yes AAAAAAAAAAAAAAAA"],
+        timeout_seconds=3.0,
+    )
+    assert len(stdout) == 65537
+    assert ret != 0
+
+
+@pytest.mark.asyncio
+async def test_default_launcher_feeds_stdin_and_reads_stderr() -> None:
+    launcher = DefaultSubprocessLauncher()
+    ret, stdout, stderr = await launcher.run_async(
+        ["/bin/sh", "-c", "cat; echo err >&2"],
+        stdin_bytes=b"hello",
+        timeout_seconds=3.0,
+    )
+    assert ret == 0
+    assert stdout == b"hello"
+    assert stderr.strip() == b"err"

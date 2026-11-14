@@ -23,7 +23,7 @@ This ticket (`KANBA-145` / `KB-P5-14`: `[Phase 5 / Sandbox + Deploy] Tier B nsja
    - **Test Case 7 (`test_userns_probe.py`)**: `StandaloneStatus` model includes `tier_b_sandbox_available` and `tier_b_unavailable_reason`. Probe integrates into standalone health check and reports accurate state.
 
 3. **Verification & Quality Metrics**:
-   - **Unit Tests**: 46/46 pytest passed in 3.87s with **98.80%** branch+line coverage (`kanban.sandbox` + `kanban.api.middleware.script_depth`), exceeding the 95% threshold.
+   - **Unit Tests**: 65/65 pytest passed in 5.03s with **98.64%** branch+line coverage (`kanban.sandbox` + `kanban.api.middleware.script_depth`), exceeding the 95% threshold.
    - **Static Checks**: Ruff check clean, Ruff format clean (1249 files), Mypy strict clean (425 source files), Lint-imports clean (2 kept, 0 broken), zero Unicode dashes repo-wide.
    - **Argv Trace**: `nsjail-argv-trace.txt` captures verified `nsjail` execution arguments and environment array demonstrating zero token leakage and `134217728` memory limit.
    - **Proxy Trace**: `proxy-exchange-trace.json` captures all 6 required HTTP wire exchanges (`200 OK`, `405 Method Denied`, `403 Path Denied`, `409 Recursion Blocked`, `429 Rate Cap`, `401 Expired`) with bearer tokens cleanly redacted.

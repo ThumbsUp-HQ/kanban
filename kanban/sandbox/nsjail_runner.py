@@ -134,11 +134,42 @@ class DefaultSubprocessLauncher:
             env=env,
             start_new_session=True,
         )
+        cap = MAX_STDOUT_BYTES + 1
+
+        async def _read_capped(stream: asyncio.StreamReader | None) -> bytes:
+            """Read incrementally; stop and kill the group once cap+1 bytes arrive."""
+            if stream is None:
+                return b""
+            buf = bytearray()
+            while len(buf) < cap:
+                chunk = await stream.read(min(8192, cap - len(buf)))
+                if not chunk:
+                    break
+                buf.extend(chunk)
+            if len(buf) >= cap:
+                with contextlib.suppress(OSError):
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            return bytes(buf)
+
+        async def _feed_stdin() -> None:
+            if stdin_bytes is None or proc.stdin is None:
+                return
+            with contextlib.suppress(OSError):
+                proc.stdin.write(stdin_bytes)
+                await proc.stdin.drain()
+            with contextlib.suppress(OSError):
+                proc.stdin.close()
+
         try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(input=stdin_bytes),
+            _, stdout, stderr = await asyncio.wait_for(
+                asyncio.gather(
+                    _feed_stdin(),
+                    _read_capped(proc.stdout),
+                    _read_capped(proc.stderr),
+                ),
                 timeout=timeout_seconds,
             )
+            await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
         except TimeoutError as err:
             with contextlib.suppress(OSError):
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)

@@ -40,8 +40,8 @@
 
 ### 2. Verification & Test Metrics
 
-- **Unit Tests**: 46/46 passed in 3.87s (`kanban/tests/sandbox/`).
-- **Coverage**: 98.80% total branch+line coverage across all touched modules:
+- **Unit Tests**: 65/65 passed in 5.03s (`kanban/tests/sandbox/`).
+- **Coverage**: 98.64% total branch+line coverage across all touched modules:
   - `kanban/api/middleware/script_depth.py`: 100%
   - `kanban/sandbox/__init__.py`: 100%
   - `kanban/sandbox/egress_proxy.py`: 98%

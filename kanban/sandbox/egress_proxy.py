@@ -28,6 +28,10 @@ if TYPE_CHECKING:
 _MAX_BODY_BYTES: Final[int] = 524288  # 512 KiB
 _MAX_REQUEST_LINE_LENGTH: Final[int] = 4096
 _MIN_REQUEST_LINE_PARTS: Final[int] = 2
+_MAX_HEADER_LINES: Final[int] = 64
+_MAX_HEADER_BYTES: Final[int] = 16384
+_FORBIDDEN_ENCODED: Final[tuple[str, ...]] = ("%2f", "%5c", "%00", "%2e", "%25")
+_FORBIDDEN_CHARS: Final[tuple[str, ...]] = ("\0", "\\", "\r", "\n")
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,25 +193,35 @@ class TokenInjectingEgressProxy:
         ]
         return "\r\n".join(headers).encode("ascii") + body
 
+    @staticmethod
+    def _segments_match(path: str, pattern: str) -> bool:
+        """Segment-aware glob match: equal segment count so '*' never spans '/'."""
+        p_parts = path.split("/")
+        g_parts = pattern.split("/")
+        if len(p_parts) != len(g_parts):
+            return False
+        return all(fnmatch.fnmatchcase(seg, pat) for seg, pat in zip(p_parts, g_parts, strict=True))
+
     def _validate_path(self, raw_path: str) -> tuple[bool, str, str]:  # noqa: PLR0911
         """Validate, decode, and match raw request path against policy allowlist."""
-        # Check invalid characters
-        if "\0" in raw_path or "\\" in raw_path or "\r" in raw_path or "\n" in raw_path:
+        lowered = raw_path.lower()
+        if any(ch in raw_path for ch in _FORBIDDEN_CHARS):
             return False, "403", "Invalid characters in request path"
+        if any(enc in lowered for enc in _FORBIDDEN_ENCODED):
+            return False, "403", "Encoded separators, dots, NUL or double-encoding forbidden"
 
         # Check authority-form URLs
         if raw_path.startswith(("http://", "https://", "//")):
             return False, "403", "Authority-form URLs forbidden on sandbox proxy"
 
-        # Parse url component
         parsed = urllib.parse.urlsplit(raw_path)
-        path_only = parsed.path
+        unquoted = urllib.parse.unquote(parsed.path)
 
-        # Unquote path
-        unquoted = urllib.parse.unquote(path_only)
+        # Re-check the decoded path for characters that must never reach the app
+        if any(ch in unquoted for ch in _FORBIDDEN_CHARS):
+            return False, "403", "Invalid characters in decoded request path"
 
-        # Check for path traversal attempts
-        if ".." in unquoted.split("/") or "%2e" in raw_path.lower():
+        if ".." in unquoted.split("/"):
             return False, "403", "Path traversal forbidden"
 
         norm = posixpath.normpath(unquoted)
@@ -217,13 +231,10 @@ class TokenInjectingEgressProxy:
         if not norm.startswith("/api/v1/"):
             return False, "403", "Only routes under /api/v1/... are permissible"
 
-        # Match against policy allowlist
-        matched = False
-        for pattern in self.policy.egress_allowlist:
-            if pattern == norm or fnmatch.fnmatch(norm, pattern):
-                matched = True
-                break
-
+        matched = any(
+            pattern == norm or self._segments_match(norm, pattern)
+            for pattern in self.policy.egress_allowlist
+        )
         if not matched:
             return False, "403", f"Route '{norm}' not matched by egress allowlist"
 
@@ -233,7 +244,30 @@ class TokenInjectingEgressProxy:
 
         return True, "", reconstructed
 
-    async def _handle_client(  # noqa: C901, PLR0911, PLR0912, PLR0915
+    async def _handle_client(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """Run one connection bounded by the remaining token lifetime."""
+        remaining = max(self._token_expires_at - time.monotonic(), 0.0) + 1.0  # grace for 401 reply
+        try:
+            async with asyncio.timeout(remaining):
+                await self._handle_client_impl(reader, writer)
+        except TimeoutError:
+            with contextlib.suppress(Exception):
+                writer.write(
+                    self._build_problem_response(
+                        408, "PROXY_TIMEOUT", "Request Timeout", "Proxy connection timed out"
+                    )
+                )
+                await writer.drain()
+        finally:
+            with contextlib.suppress(Exception):
+                writer.close()
+                await writer.wait_closed()
+
+    async def _handle_client_impl(  # noqa: C901, PLR0911, PLR0912, PLR0915
         self,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
@@ -244,6 +278,15 @@ class TokenInjectingEgressProxy:
             if not line_bytes:
                 writer.close()
                 await writer.wait_closed()
+                return
+
+            if len(line_bytes) > _MAX_REQUEST_LINE_LENGTH:
+                writer.write(
+                    self._build_problem_response(
+                        414, "URI_TOO_LONG", "URI Too Long", "Request line exceeds 4096 bytes"
+                    )
+                )
+                await writer.drain()
                 return
 
             request_line = line_bytes.decode("ascii", errors="replace").strip()
@@ -320,10 +363,25 @@ class TokenInjectingEgressProxy:
                 return
 
             # 5. Read and scrub client headers
+            header_lines = 0
+            header_bytes = 0
             while True:
                 h_line = await reader.readline()
                 if not h_line or h_line in (b"\r\n", b"\n"):
                     break
+                header_lines += 1
+                header_bytes += len(h_line)
+                if header_lines > _MAX_HEADER_LINES or header_bytes > _MAX_HEADER_BYTES:
+                    writer.write(
+                        self._build_problem_response(
+                            431,
+                            "HEADERS_TOO_LARGE",
+                            "Request Header Fields Too Large",
+                            "Request headers exceed proxy limits",
+                        )
+                    )
+                    await writer.drain()
+                    return
 
             # 6. Inject authorized headers
             injected_headers = {
@@ -347,13 +405,18 @@ class TokenInjectingEgressProxy:
                 await writer.wait_closed()
                 return
 
-            up_resp = await self._http_client.get(
-                norm_target,
-                headers=injected_headers,
-            )
-
-            # Cap body at 512 KiB
-            content = up_resp.content[:_MAX_BODY_BYTES]
+            chunks: list[bytes] = []
+            received = 0
+            async with self._http_client.stream(
+                "GET", norm_target, headers=injected_headers
+            ) as up_resp:
+                async for chunk in up_resp.aiter_bytes():
+                    room = _MAX_BODY_BYTES - received
+                    chunks.append(chunk[:room])
+                    received += len(chunks[-1])
+                    if received >= _MAX_BODY_BYTES:
+                        break
+            content = b"".join(chunks)
             status_line = f"HTTP/1.1 {up_resp.status_code} {up_resp.reason_phrase}\r\n"
             out_headers = [status_line]
             for hk, hv in up_resp.headers.items():
@@ -365,17 +428,13 @@ class TokenInjectingEgressProxy:
             writer.write("".join(out_headers).encode("ascii"))
             writer.write(content)
             await writer.drain()
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             with contextlib.suppress(Exception):
                 resp = self._build_problem_response(
                     500,
                     "PROXY_INTERNAL_ERROR",
                     "Internal Server Error",
-                    f"Egress proxy error: {exc}",
+                    "Egress proxy internal error",
                 )
                 writer.write(resp)
                 await writer.drain()
-        finally:
-            with contextlib.suppress(Exception):
-                writer.close()
-                await writer.wait_closed()

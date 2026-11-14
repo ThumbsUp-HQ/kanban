@@ -451,3 +451,124 @@ async def test_proxy_coverage_branches(short_tmp_dir: Path) -> None:
     ) as proxy_norm:
         st, _, _ = await _raw_unix_request(proxy_norm.socket_path, "GET", "/api/v1/issues//KAN-10")
         assert st == 403
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "/api/v1/issues/a%2Fadmin",
+        "/api/v1/issues/a%2fadmin",
+        "/api/v1/issues/a%00b",
+        "/api/v1/issues/a%5cb",
+        "/api/v1/issues/a%5Cb",
+        "/api/v1/issues/%2e%2e/admin",
+        "/api/v1/issues/a%252Fb",
+        "/api/v1/issues/a\\b",
+        "/api/v1/issues/a/b/c",
+        "/api/v1/issues/",
+    ],
+)
+def test_validate_path_rejects_encoded_and_spanning(target: str) -> None:
+    proxy = TokenInjectingEgressProxy(
+        token="t" * 24,
+        policy=EgressProxyPolicy(egress_allowlist=["/api/v1/issues/*"]),
+    )
+    ok, _, _ = proxy._validate_path(target)
+    assert ok is False
+    proxy.zero_token()
+
+
+def test_validate_path_segment_aware_allows_single_segment() -> None:
+    proxy = TokenInjectingEgressProxy(
+        token="t" * 24,
+        policy=EgressProxyPolicy(egress_allowlist=["/api/v1/issues/*"]),
+    )
+    ok, _, target = proxy._validate_path("/api/v1/issues/KAN-10?x=1")
+    assert ok is True
+    assert target == "/api/v1/issues/KAN-10?x=1"
+    proxy.zero_token()
+
+
+def test_validate_path_rejects_decoded_control_chars() -> None:
+    proxy = TokenInjectingEgressProxy(
+        token="t" * 24,
+        policy=EgressProxyPolicy(egress_allowlist=["/api/v1/issues/*"]),
+    )
+    ok, _, _ = proxy._validate_path("/api/v1/issues/a%0Ab")
+    assert ok is False
+    proxy.zero_token()
+
+
+async def _send_raw(socket_path: Path, data: bytes) -> bytes:
+    reader, writer = await asyncio.open_unix_connection(str(socket_path))
+    writer.write(data)
+    await writer.drain()
+    out = await reader.read(65536)
+    writer.close()
+    await writer.wait_closed()
+    return out
+
+
+@pytest.mark.asyncio
+async def test_proxy_rejects_oversized_request_line(short_tmp_dir: Path) -> None:
+    backend_app, _ = _create_backend_app()
+    policy = EgressProxyPolicy(egress_allowlist=["/api/v1/issues/KAN-10"], timeout_ms=10000)
+    async with TokenInjectingEgressProxy(
+        token="kb_sec_tok_1234567890abcdef", policy=policy, app=backend_app, base_dir=short_tmp_dir
+    ) as proxy:
+        out = await _send_raw(proxy.socket_path, b"GET /" + b"a" * 5000 + b" HTTP/1.1\r\n\r\n")
+    assert b" 414 " in out.split(b"\r\n", 1)[0]
+
+
+@pytest.mark.asyncio
+async def test_proxy_rejects_too_many_headers(short_tmp_dir: Path) -> None:
+    backend_app, _ = _create_backend_app()
+    policy = EgressProxyPolicy(egress_allowlist=["/api/v1/issues/KAN-10"], timeout_ms=10000)
+    headers = b"".join(b"X-H%d: v\r\n" % i for i in range(100))
+    async with TokenInjectingEgressProxy(
+        token="kb_sec_tok_1234567890abcdef", policy=policy, app=backend_app, base_dir=short_tmp_dir
+    ) as proxy:
+        out = await _send_raw(
+            proxy.socket_path, b"GET /api/v1/issues/KAN-10 HTTP/1.1\r\n" + headers + b"\r\n"
+        )
+    assert b" 431 " in out.split(b"\r\n", 1)[0]
+
+
+@pytest.mark.asyncio
+async def test_proxy_rejects_oversized_header_bytes(short_tmp_dir: Path) -> None:
+    backend_app, _ = _create_backend_app()
+    policy = EgressProxyPolicy(egress_allowlist=["/api/v1/issues/KAN-10"], timeout_ms=10000)
+    headers = b"".join(b"X-H%d: %s\r\n" % (i, b"v" * 3000) for i in range(8))
+    async with TokenInjectingEgressProxy(
+        token="kb_sec_tok_1234567890abcdef", policy=policy, app=backend_app, base_dir=short_tmp_dir
+    ) as proxy:
+        out = await _send_raw(
+            proxy.socket_path, b"GET /api/v1/issues/KAN-10 HTTP/1.1\r\n" + headers + b"\r\n"
+        )
+    assert b" 431 " in out.split(b"\r\n", 1)[0]
+
+
+@pytest.mark.asyncio
+async def test_proxy_stalled_client_times_out(short_tmp_dir: Path) -> None:
+    backend_app, _ = _create_backend_app()
+    policy = EgressProxyPolicy(egress_allowlist=["/api/v1/issues/KAN-10"], timeout_ms=100)
+    async with TokenInjectingEgressProxy(
+        token="kb_sec_tok_1234567890abcdef", policy=policy, app=backend_app, base_dir=short_tmp_dir
+    ) as proxy:
+        # Send request line and never finish headers: handler must be cut off.
+        out = await _send_raw(proxy.socket_path, b"GET /api/v1/issues/KAN-10 HTTP/1.1\r\n")
+    assert b" 408 " in out.split(b"\r\n", 1)[0]
+
+
+@pytest.mark.asyncio
+async def test_proxy_500_does_not_echo_exception(short_tmp_dir: Path) -> None:
+    async def boom(*_args: Any) -> None:
+        raise RuntimeError("SECRET_INTERNAL_DETAIL")
+
+    policy = EgressProxyPolicy(egress_allowlist=["/api/v1/issues/KAN-10"], timeout_ms=10000)
+    async with TokenInjectingEgressProxy(
+        token="kb_sec_tok_1234567890abcdef", policy=policy, app=boom, base_dir=short_tmp_dir
+    ) as proxy:
+        status, _, body = await _raw_unix_request(proxy.socket_path, "GET", "/api/v1/issues/KAN-10")
+    assert status == 500
+    assert b"SECRET_INTERNAL_DETAIL" not in body

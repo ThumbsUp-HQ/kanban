@@ -157,7 +157,7 @@ index 55f4774..cfcdaaa 100644
      target_path: Path = DEFAULT_STATUS_PATH,
 diff --git a/docs/qa/KANBA-145/api-specialist-review.md b/docs/qa/KANBA-145/api-specialist-review.md
 new file mode 100644
-index 0000000..2bbe32a
+index 0000000..2a9585b
 --- /dev/null
 +++ b/docs/qa/KANBA-145/api-specialist-review.md
 @@ -0,0 +1,59 @@
@@ -203,8 +203,8 @@ index 0000000..2bbe32a
 +
 +### 2. Verification & Test Metrics
 +
-+- **Unit Tests**: 46/46 passed in 3.87s (`kanban/tests/sandbox/`).
-+- **Coverage**: 98.80% total branch+line coverage across all touched modules:
++- **Unit Tests**: 65/65 passed in 5.03s (`kanban/tests/sandbox/`).
++- **Coverage**: 98.64% total branch+line coverage across all touched modules:
 +  - `kanban/api/middleware/script_depth.py`: 100%
 +  - `kanban/sandbox/__init__.py`: 100%
 +  - `kanban/sandbox/egress_proxy.py`: 98%
@@ -258,7 +258,7 @@ index 0000000..9979af4
 +=== NO DASHES CHECK ===
 diff --git a/docs/qa/KANBA-145/message-to-reality-checker.md b/docs/qa/KANBA-145/message-to-reality-checker.md
 new file mode 100644
-index 0000000..e4e1320
+index 0000000..7195a12
 --- /dev/null
 +++ b/docs/qa/KANBA-145/message-to-reality-checker.md
 @@ -0,0 +1,29 @@
@@ -287,7 +287,7 @@ index 0000000..e4e1320
 +   - **Test Case 7 (`test_userns_probe.py`)**: `StandaloneStatus` model includes `tier_b_sandbox_available` and `tier_b_unavailable_reason`. Probe integrates into standalone health check and reports accurate state.
 +
 +3. **Verification & Quality Metrics**:
-+   - **Unit Tests**: 46/46 pytest passed in 3.87s with **98.80%** branch+line coverage (`kanban.sandbox` + `kanban.api.middleware.script_depth`), exceeding the 95% threshold.
++   - **Unit Tests**: 65/65 pytest passed in 5.03s with **98.64%** branch+line coverage (`kanban.sandbox` + `kanban.api.middleware.script_depth`), exceeding the 95% threshold.
 +   - **Static Checks**: Ruff check clean, Ruff format clean (1249 files), Mypy strict clean (425 source files), Lint-imports clean (2 kept, 0 broken), zero Unicode dashes repo-wide.
 +   - **Argv Trace**: `nsjail-argv-trace.txt` captures verified `nsjail` execution arguments and environment array demonstrating zero token leakage and `134217728` memory limit.
 +   - **Proxy Trace**: `proxy-exchange-trace.json` captures all 6 required HTTP wire exchanges (`200 OK`, `405 Method Denied`, `403 Path Denied`, `409 Recursion Blocked`, `429 Rate Cap`, `401 Expired`) with bearer tokens cleanly redacted.
@@ -602,11 +602,11 @@ index 0000000..66a2c2a
 +Verdict: APPROVED
 diff --git a/docs/qa/KANBA-145/unit-test-results.txt b/docs/qa/KANBA-145/unit-test-results.txt
 new file mode 100644
-index 0000000..973678d
+index 0000000..cbf5f11
 --- /dev/null
 +++ b/docs/qa/KANBA-145/unit-test-results.txt
 @@ -0,0 +1,16 @@
-+..............................................                           [100%]
++.................................................................        [100%]
 +================================ tests coverage ================================
 +_______________ coverage: platform linux, python 3.12.7-final-0 ________________
 +
@@ -614,13 +614,13 @@ index 0000000..973678d
 +-----------------------------------------------------------------------------------
 +kanban/api/middleware/script_depth.py      47      0     20      0   100%
 +kanban/sandbox/__init__.py                  5      0      0      0   100%
-+kanban/sandbox/egress_proxy.py            202      1     60      4    98%   83, 140->145, 151->155, 155->exit
-+kanban/sandbox/nsjail_runner.py           152      1     26      1    99%   353
++kanban/sandbox/egress_proxy.py            242      1     70      4    98%   87, 144->149, 155->159, 159->exit
++kanban/sandbox/nsjail_runner.py           175      2     36      2    98%   142, 384
 +kanban/sandbox/probe.py                    53      0     16      0   100%
 +-----------------------------------------------------------------------------------
-+TOTAL                                     459      2    122      5    99%
-+Required test coverage of 95% reached. Total coverage: 98.80%
-+46 passed in 4.15s
++TOTAL                                     522      3    142      6    99%
++Required test coverage of 95% reached. Total coverage: 98.64%
++65 passed in 5.03s
 +EXIT_CODE=0
 diff --git a/kanban/GEMINI.md b/kanban/GEMINI.md
 index 000774e..d4784b9 100644
@@ -863,10 +863,10 @@ index 0000000..c2594f5
 +]
 diff --git a/kanban/sandbox/egress_proxy.py b/kanban/sandbox/egress_proxy.py
 new file mode 100644
-index 0000000..3c4b887
+index 0000000..b8a6e72
 --- /dev/null
 +++ b/kanban/sandbox/egress_proxy.py
-@@ -0,0 +1,381 @@
+@@ -0,0 +1,440 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Out-of-sandbox Unix-socket token-injecting egress proxy (KB-P5-14, S13.3)."""
@@ -897,6 +897,10 @@ index 0000000..3c4b887
 +_MAX_BODY_BYTES: Final[int] = 524288  # 512 KiB
 +_MAX_REQUEST_LINE_LENGTH: Final[int] = 4096
 +_MIN_REQUEST_LINE_PARTS: Final[int] = 2
++_MAX_HEADER_LINES: Final[int] = 64
++_MAX_HEADER_BYTES: Final[int] = 16384
++_FORBIDDEN_ENCODED: Final[tuple[str, ...]] = ("%2f", "%5c", "%00", "%2e", "%25")
++_FORBIDDEN_CHARS: Final[tuple[str, ...]] = ("\0", "\\", "\r", "\n")
 +
 +
 +@dataclass(frozen=True, slots=True)
@@ -1058,25 +1062,35 @@ index 0000000..3c4b887
 +        ]
 +        return "\r\n".join(headers).encode("ascii") + body
 +
++    @staticmethod
++    def _segments_match(path: str, pattern: str) -> bool:
++        """Segment-aware glob match: equal segment count so '*' never spans '/'."""
++        p_parts = path.split("/")
++        g_parts = pattern.split("/")
++        if len(p_parts) != len(g_parts):
++            return False
++        return all(fnmatch.fnmatchcase(seg, pat) for seg, pat in zip(p_parts, g_parts, strict=True))
++
 +    def _validate_path(self, raw_path: str) -> tuple[bool, str, str]:  # noqa: PLR0911
 +        """Validate, decode, and match raw request path against policy allowlist."""
-+        # Check invalid characters
-+        if "\0" in raw_path or "\\" in raw_path or "\r" in raw_path or "\n" in raw_path:
++        lowered = raw_path.lower()
++        if any(ch in raw_path for ch in _FORBIDDEN_CHARS):
 +            return False, "403", "Invalid characters in request path"
++        if any(enc in lowered for enc in _FORBIDDEN_ENCODED):
++            return False, "403", "Encoded separators, dots, NUL or double-encoding forbidden"
 +
 +        # Check authority-form URLs
 +        if raw_path.startswith(("http://", "https://", "//")):
 +            return False, "403", "Authority-form URLs forbidden on sandbox proxy"
 +
-+        # Parse url component
 +        parsed = urllib.parse.urlsplit(raw_path)
-+        path_only = parsed.path
++        unquoted = urllib.parse.unquote(parsed.path)
 +
-+        # Unquote path
-+        unquoted = urllib.parse.unquote(path_only)
++        # Re-check the decoded path for characters that must never reach the app
++        if any(ch in unquoted for ch in _FORBIDDEN_CHARS):
++            return False, "403", "Invalid characters in decoded request path"
 +
-+        # Check for path traversal attempts
-+        if ".." in unquoted.split("/") or "%2e" in raw_path.lower():
++        if ".." in unquoted.split("/"):
 +            return False, "403", "Path traversal forbidden"
 +
 +        norm = posixpath.normpath(unquoted)
@@ -1086,13 +1100,10 @@ index 0000000..3c4b887
 +        if not norm.startswith("/api/v1/"):
 +            return False, "403", "Only routes under /api/v1/... are permissible"
 +
-+        # Match against policy allowlist
-+        matched = False
-+        for pattern in self.policy.egress_allowlist:
-+            if pattern == norm or fnmatch.fnmatch(norm, pattern):
-+                matched = True
-+                break
-+
++        matched = any(
++            pattern == norm or self._segments_match(norm, pattern)
++            for pattern in self.policy.egress_allowlist
++        )
 +        if not matched:
 +            return False, "403", f"Route '{norm}' not matched by egress allowlist"
 +
@@ -1102,7 +1113,30 @@ index 0000000..3c4b887
 +
 +        return True, "", reconstructed
 +
-+    async def _handle_client(  # noqa: C901, PLR0911, PLR0912, PLR0915
++    async def _handle_client(
++        self,
++        reader: asyncio.StreamReader,
++        writer: asyncio.StreamWriter,
++    ) -> None:
++        """Run one connection bounded by the remaining token lifetime."""
++        remaining = max(self._token_expires_at - time.monotonic(), 0.0) + 1.0  # grace for 401 reply
++        try:
++            async with asyncio.timeout(remaining):
++                await self._handle_client_impl(reader, writer)
++        except TimeoutError:
++            with contextlib.suppress(Exception):
++                writer.write(
++                    self._build_problem_response(
++                        408, "PROXY_TIMEOUT", "Request Timeout", "Proxy connection timed out"
++                    )
++                )
++                await writer.drain()
++        finally:
++            with contextlib.suppress(Exception):
++                writer.close()
++                await writer.wait_closed()
++
++    async def _handle_client_impl(  # noqa: C901, PLR0911, PLR0912, PLR0915
 +        self,
 +        reader: asyncio.StreamReader,
 +        writer: asyncio.StreamWriter,
@@ -1113,6 +1147,15 @@ index 0000000..3c4b887
 +            if not line_bytes:
 +                writer.close()
 +                await writer.wait_closed()
++                return
++
++            if len(line_bytes) > _MAX_REQUEST_LINE_LENGTH:
++                writer.write(
++                    self._build_problem_response(
++                        414, "URI_TOO_LONG", "URI Too Long", "Request line exceeds 4096 bytes"
++                    )
++                )
++                await writer.drain()
 +                return
 +
 +            request_line = line_bytes.decode("ascii", errors="replace").strip()
@@ -1189,10 +1232,25 @@ index 0000000..3c4b887
 +                return
 +
 +            # 5. Read and scrub client headers
++            header_lines = 0
++            header_bytes = 0
 +            while True:
 +                h_line = await reader.readline()
 +                if not h_line or h_line in (b"\r\n", b"\n"):
 +                    break
++                header_lines += 1
++                header_bytes += len(h_line)
++                if header_lines > _MAX_HEADER_LINES or header_bytes > _MAX_HEADER_BYTES:
++                    writer.write(
++                        self._build_problem_response(
++                            431,
++                            "HEADERS_TOO_LARGE",
++                            "Request Header Fields Too Large",
++                            "Request headers exceed proxy limits",
++                        )
++                    )
++                    await writer.drain()
++                    return
 +
 +            # 6. Inject authorized headers
 +            injected_headers = {
@@ -1216,13 +1274,18 @@ index 0000000..3c4b887
 +                await writer.wait_closed()
 +                return
 +
-+            up_resp = await self._http_client.get(
-+                norm_target,
-+                headers=injected_headers,
-+            )
-+
-+            # Cap body at 512 KiB
-+            content = up_resp.content[:_MAX_BODY_BYTES]
++            chunks: list[bytes] = []
++            received = 0
++            async with self._http_client.stream(
++                "GET", norm_target, headers=injected_headers
++            ) as up_resp:
++                async for chunk in up_resp.aiter_bytes():
++                    room = _MAX_BODY_BYTES - received
++                    chunks.append(chunk[:room])
++                    received += len(chunks[-1])
++                    if received >= _MAX_BODY_BYTES:
++                        break
++            content = b"".join(chunks)
 +            status_line = f"HTTP/1.1 {up_resp.status_code} {up_resp.reason_phrase}\r\n"
 +            out_headers = [status_line]
 +            for hk, hv in up_resp.headers.items():
@@ -1234,26 +1297,22 @@ index 0000000..3c4b887
 +            writer.write("".join(out_headers).encode("ascii"))
 +            writer.write(content)
 +            await writer.drain()
-+        except Exception as exc:  # noqa: BLE001
++        except Exception:  # noqa: BLE001
 +            with contextlib.suppress(Exception):
 +                resp = self._build_problem_response(
 +                    500,
 +                    "PROXY_INTERNAL_ERROR",
 +                    "Internal Server Error",
-+                    f"Egress proxy error: {exc}",
++                    "Egress proxy internal error",
 +                )
 +                writer.write(resp)
 +                await writer.drain()
-+        finally:
-+            with contextlib.suppress(Exception):
-+                writer.close()
-+                await writer.wait_closed()
 diff --git a/kanban/sandbox/nsjail_runner.py b/kanban/sandbox/nsjail_runner.py
 new file mode 100644
-index 0000000..f2986f1
+index 0000000..ef2bf96
 --- /dev/null
 +++ b/kanban/sandbox/nsjail_runner.py
-@@ -0,0 +1,430 @@
+@@ -0,0 +1,461 @@
 +"""Tier B nsjail sandboxed runner for untrusted custom field scripts and CLI pipes.
 +
 +Enforces strict isolation via unprivileged Linux namespaces, seccomp-BPF syscall filters,
@@ -1390,11 +1449,42 @@ index 0000000..f2986f1
 +            env=env,
 +            start_new_session=True,
 +        )
++        cap = MAX_STDOUT_BYTES + 1
++
++        async def _read_capped(stream: asyncio.StreamReader | None) -> bytes:
++            """Read incrementally; stop and kill the group once cap+1 bytes arrive."""
++            if stream is None:
++                return b""
++            buf = bytearray()
++            while len(buf) < cap:
++                chunk = await stream.read(min(8192, cap - len(buf)))
++                if not chunk:
++                    break
++                buf.extend(chunk)
++            if len(buf) >= cap:
++                with contextlib.suppress(OSError):
++                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
++            return bytes(buf)
++
++        async def _feed_stdin() -> None:
++            if stdin_bytes is None or proc.stdin is None:
++                return
++            with contextlib.suppress(OSError):
++                proc.stdin.write(stdin_bytes)
++                await proc.stdin.drain()
++            with contextlib.suppress(OSError):
++                proc.stdin.close()
++
 +        try:
-+            stdout, stderr = await asyncio.wait_for(
-+                proc.communicate(input=stdin_bytes),
++            _, stdout, stderr = await asyncio.wait_for(
++                asyncio.gather(
++                    _feed_stdin(),
++                    _read_capped(proc.stdout),
++                    _read_capped(proc.stderr),
++                ),
 +                timeout=timeout_seconds,
 +            )
++            await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
 +        except TimeoutError as err:
 +            with contextlib.suppress(OSError):
 +                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
@@ -1878,10 +1968,10 @@ index 0000000..c2fdadc
 +"""Tests for kanban.sandbox subsystem."""
 diff --git a/kanban/tests/sandbox/test_egress_proxy.py b/kanban/tests/sandbox/test_egress_proxy.py
 new file mode 100644
-index 0000000..73642ba
+index 0000000..474222b
 --- /dev/null
 +++ b/kanban/tests/sandbox/test_egress_proxy.py
-@@ -0,0 +1,453 @@
+@@ -0,0 +1,574 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +# ruff: noqa: E501, TC002, ANN401, D103, SLF001, S106, B007, RUF059, TRY003, EM101
@@ -2335,12 +2425,133 @@ index 0000000..73642ba
 +    ) as proxy_norm:
 +        st, _, _ = await _raw_unix_request(proxy_norm.socket_path, "GET", "/api/v1/issues//KAN-10")
 +        assert st == 403
++
++
++@pytest.mark.parametrize(
++    "target",
++    [
++        "/api/v1/issues/a%2Fadmin",
++        "/api/v1/issues/a%2fadmin",
++        "/api/v1/issues/a%00b",
++        "/api/v1/issues/a%5cb",
++        "/api/v1/issues/a%5Cb",
++        "/api/v1/issues/%2e%2e/admin",
++        "/api/v1/issues/a%252Fb",
++        "/api/v1/issues/a\\b",
++        "/api/v1/issues/a/b/c",
++        "/api/v1/issues/",
++    ],
++)
++def test_validate_path_rejects_encoded_and_spanning(target: str) -> None:
++    proxy = TokenInjectingEgressProxy(
++        token="t" * 24,
++        policy=EgressProxyPolicy(egress_allowlist=["/api/v1/issues/*"]),
++    )
++    ok, _, _ = proxy._validate_path(target)
++    assert ok is False
++    proxy.zero_token()
++
++
++def test_validate_path_segment_aware_allows_single_segment() -> None:
++    proxy = TokenInjectingEgressProxy(
++        token="t" * 24,
++        policy=EgressProxyPolicy(egress_allowlist=["/api/v1/issues/*"]),
++    )
++    ok, _, target = proxy._validate_path("/api/v1/issues/KAN-10?x=1")
++    assert ok is True
++    assert target == "/api/v1/issues/KAN-10?x=1"
++    proxy.zero_token()
++
++
++def test_validate_path_rejects_decoded_control_chars() -> None:
++    proxy = TokenInjectingEgressProxy(
++        token="t" * 24,
++        policy=EgressProxyPolicy(egress_allowlist=["/api/v1/issues/*"]),
++    )
++    ok, _, _ = proxy._validate_path("/api/v1/issues/a%0Ab")
++    assert ok is False
++    proxy.zero_token()
++
++
++async def _send_raw(socket_path: Path, data: bytes) -> bytes:
++    reader, writer = await asyncio.open_unix_connection(str(socket_path))
++    writer.write(data)
++    await writer.drain()
++    out = await reader.read(65536)
++    writer.close()
++    await writer.wait_closed()
++    return out
++
++
++@pytest.mark.asyncio
++async def test_proxy_rejects_oversized_request_line(short_tmp_dir: Path) -> None:
++    backend_app, _ = _create_backend_app()
++    policy = EgressProxyPolicy(egress_allowlist=["/api/v1/issues/KAN-10"], timeout_ms=10000)
++    async with TokenInjectingEgressProxy(
++        token="kb_sec_tok_1234567890abcdef", policy=policy, app=backend_app, base_dir=short_tmp_dir
++    ) as proxy:
++        out = await _send_raw(proxy.socket_path, b"GET /" + b"a" * 5000 + b" HTTP/1.1\r\n\r\n")
++    assert b" 414 " in out.split(b"\r\n", 1)[0]
++
++
++@pytest.mark.asyncio
++async def test_proxy_rejects_too_many_headers(short_tmp_dir: Path) -> None:
++    backend_app, _ = _create_backend_app()
++    policy = EgressProxyPolicy(egress_allowlist=["/api/v1/issues/KAN-10"], timeout_ms=10000)
++    headers = b"".join(b"X-H%d: v\r\n" % i for i in range(100))
++    async with TokenInjectingEgressProxy(
++        token="kb_sec_tok_1234567890abcdef", policy=policy, app=backend_app, base_dir=short_tmp_dir
++    ) as proxy:
++        out = await _send_raw(
++            proxy.socket_path, b"GET /api/v1/issues/KAN-10 HTTP/1.1\r\n" + headers + b"\r\n"
++        )
++    assert b" 431 " in out.split(b"\r\n", 1)[0]
++
++
++@pytest.mark.asyncio
++async def test_proxy_rejects_oversized_header_bytes(short_tmp_dir: Path) -> None:
++    backend_app, _ = _create_backend_app()
++    policy = EgressProxyPolicy(egress_allowlist=["/api/v1/issues/KAN-10"], timeout_ms=10000)
++    headers = b"".join(b"X-H%d: %s\r\n" % (i, b"v" * 3000) for i in range(8))
++    async with TokenInjectingEgressProxy(
++        token="kb_sec_tok_1234567890abcdef", policy=policy, app=backend_app, base_dir=short_tmp_dir
++    ) as proxy:
++        out = await _send_raw(
++            proxy.socket_path, b"GET /api/v1/issues/KAN-10 HTTP/1.1\r\n" + headers + b"\r\n"
++        )
++    assert b" 431 " in out.split(b"\r\n", 1)[0]
++
++
++@pytest.mark.asyncio
++async def test_proxy_stalled_client_times_out(short_tmp_dir: Path) -> None:
++    backend_app, _ = _create_backend_app()
++    policy = EgressProxyPolicy(egress_allowlist=["/api/v1/issues/KAN-10"], timeout_ms=100)
++    async with TokenInjectingEgressProxy(
++        token="kb_sec_tok_1234567890abcdef", policy=policy, app=backend_app, base_dir=short_tmp_dir
++    ) as proxy:
++        # Send request line and never finish headers: handler must be cut off.
++        out = await _send_raw(proxy.socket_path, b"GET /api/v1/issues/KAN-10 HTTP/1.1\r\n")
++    assert b" 408 " in out.split(b"\r\n", 1)[0]
++
++
++@pytest.mark.asyncio
++async def test_proxy_500_does_not_echo_exception(short_tmp_dir: Path) -> None:
++    async def boom(*_args: Any) -> None:
++        raise RuntimeError("SECRET_INTERNAL_DETAIL")
++
++    policy = EgressProxyPolicy(egress_allowlist=["/api/v1/issues/KAN-10"], timeout_ms=10000)
++    async with TokenInjectingEgressProxy(
++        token="kb_sec_tok_1234567890abcdef", policy=policy, app=boom, base_dir=short_tmp_dir
++    ) as proxy:
++        status, _, body = await _raw_unix_request(proxy.socket_path, "GET", "/api/v1/issues/KAN-10")
++    assert status == 500
++    assert b"SECRET_INTERNAL_DETAIL" not in body
 diff --git a/kanban/tests/sandbox/test_nsjail_runner.py b/kanban/tests/sandbox/test_nsjail_runner.py
 new file mode 100644
-index 0000000..c13bbda
+index 0000000..3bcd00d
 --- /dev/null
 +++ b/kanban/tests/sandbox/test_nsjail_runner.py
-@@ -0,0 +1,542 @@
+@@ -0,0 +1,567 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +# ruff: noqa: E501, TC002, ANN401, D102, D103, D107, ARG005, TRY003, EM101, PLR0913, PLC0415, RUF059
@@ -2883,6 +3094,31 @@ index 0000000..c13bbda
 +            ["/bin/sleep", "5"],
 +            timeout_seconds=0.1,
 +        )
++
++
++@pytest.mark.asyncio
++async def test_default_launcher_caps_stdout_and_kills_on_overflow() -> None:
++    """Host never buffers more than cap+1 bytes of child output."""
++    launcher = DefaultSubprocessLauncher()
++    ret, stdout, _ = await launcher.run_async(
++        ["/bin/sh", "-c", "yes AAAAAAAAAAAAAAAA"],
++        timeout_seconds=3.0,
++    )
++    assert len(stdout) == 65537
++    assert ret != 0
++
++
++@pytest.mark.asyncio
++async def test_default_launcher_feeds_stdin_and_reads_stderr() -> None:
++    launcher = DefaultSubprocessLauncher()
++    ret, stdout, stderr = await launcher.run_async(
++        ["/bin/sh", "-c", "cat; echo err >&2"],
++        stdin_bytes=b"hello",
++        timeout_seconds=3.0,
++    )
++    assert ret == 0
++    assert stdout == b"hello"
++    assert stderr.strip() == b"err"
 diff --git a/kanban/tests/sandbox/test_script_depth_middleware.py b/kanban/tests/sandbox/test_script_depth_middleware.py
 new file mode 100644
 index 0000000..5033de3
