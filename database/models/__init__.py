@@ -23,6 +23,7 @@ from database.models.base import (
     RbacRole,
     ViewLayout,
 )
+from database.models.custom_field import CustomFieldDefinition, CustomFieldValue
 from database.models.embeddings import ObjectEmbedding
 from database.models.issues import (
     CommentReaction,
@@ -74,6 +75,8 @@ __all__ = [
     "AuthProviderCard",
     "Base",
     "CommentReaction",
+    "CustomFieldDefinition",
+    "CustomFieldValue",
     "Cycle",
     "Doc",
     "EffectiveResourceAccess",

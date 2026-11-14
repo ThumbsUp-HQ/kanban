@@ -11,13 +11,13 @@ None. This is the foundational leaf module in the workspace dependency hierarchy
 
 ## Inbound Contracts
 - Transactional database connections and async connection pools managed via SQLAlchemy 2.0 and asyncpg.
-- Parameterized session configuration via SET LOCAL (app.principal_id, app.workspace_id, app.token_scopes, app.aal_level) bound via RLSContext and bind_rls_context.
+- Parameterized session configuration via SET LOCAL (app.principal_id, app.workspace_id, app.token_scopes, app.aal_level, app.user_access_hash) bound via RLSContext and bind_rls_context.
 - RLSSessionFactory managing fail-closed RLSAsyncSession instances with verify_non_bypass_role startup validation.
 - Schema migrations managed via Alembic under dedicated migration role.
 - Test harness execution isolates probe entities within kb_harness schema, which must be ignored by production RLS catalog assertions.
 
 ## Outbound Contracts
-- database.models: 50 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions, agent_definitions, attachments, local_admin_credentials, oidc_auth_requests, comment_reactions, totp_factors, recovery_codes, mcp_api_keys, ldap_group_mappings, notifications, webauthn_credentials, webauthn_challenges), custom LtreeType, and 5 PostgreSQL StrEnums.
+- database.models: 52 typed SQLAlchemy 2.0 DeclarativeBase models matching the Universal Object Graph (spine, principals, projects, issues, knowledge, activity, outbox, embeddings, auth, ratelimit, sessions, agent_definitions, attachments, local_admin_credentials, oidc_auth_requests, comment_reactions, totp_factors, recovery_codes, mcp_api_keys, ldap_group_mappings, notifications, webauthn_credentials, webauthn_challenges, custom_field_definitions, custom_field_values), custom LtreeType, and 5 PostgreSQL StrEnums.
 - database.session: RLSContext, bind_rls_context, RLSSessionFactory, create_rls_engine, and fail-closed security exceptions (RLSContextError, UnboundRLSSessionError, RLSRoleViolationError).
 - database.repositories: BaseRepository generic base providing type-safe CRUD operations, bounded pagination (1..500), and mandatory RLS session verification.
 - database.outbox: OutboxEnvelope, enqueue_outbox_event, topic_matches, RealtimeBroker, PgNotifyBroker, ValkeyBroker, and OutboxRelay (run via `python -m database.outbox.relay`).

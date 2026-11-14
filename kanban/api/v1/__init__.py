@@ -17,6 +17,7 @@ from kanban.api.v1.auth_oidc import router as auth_oidc_router
 from kanban.api.v1.auth_session import router as auth_session_router
 from kanban.api.v1.auth_webauthn import router as auth_webauthn_router
 from kanban.api.v1.comments import router as comments_router
+from kanban.api.v1.custom_fields import router as custom_fields_router
 from kanban.api.v1.cycles import router as cycles_router
 from kanban.api.v1.docs import router as docs_router
 from kanban.api.v1.health import router as health_router
@@ -71,6 +72,7 @@ def build_v1_router() -> APIRouter:
     v1.include_router(views_router)
     v1.include_router(archive_router)
     v1.include_router(issue_delete_router)
+    v1.include_router(custom_fields_router)
     v1.include_router(admin_mcp_keys_router)
     v1.include_router(mcp_introspect_router)
     v1.include_router(subscriptions_router)

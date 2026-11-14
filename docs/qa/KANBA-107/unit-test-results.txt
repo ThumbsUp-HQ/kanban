@@ -1,0 +1,40 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 16 items
+
+database/tests/migrations/test_p5_11_migration.py::test_p5_11_custom_fields_migration_lifecycle PASSED [  6%]
+database/tests/test_custom_fields_rls.py::test_01_project_admin_creates_definitions_all_7_formats PASSED [ 12%]
+database/tests/test_custom_fields_rls.py::test_02_rls_with_check_admin_only_gate PASSED [ 18%]
+database/tests/test_custom_fields_rls.py::test_03_cache_isolation_rls PASSED [ 25%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_01_admin_crud_lifecycle_all_7_formats PASSED [ 31%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_02_member_redacted_view_and_mutation_denial PASSED [ 37%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_03_aal2_required_gate PASSED [ 43%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_04_schema_and_integrity_errors PASSED [ 50%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_05_anti_enumeration_discipline PASSED [ 56%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_06_service_branches_and_edge_cases PASSED [ 62%]
+kanban/tests/custom_fields/test_output_formats.py::test_01_all_7_output_formats_valid_parsing PASSED [ 68%]
+kanban/tests/custom_fields/test_output_formats.py::test_02_rejection_of_raw_html_and_forbidden_formats PASSED [ 75%]
+kanban/tests/custom_fields/test_output_formats.py::test_03_boundary_checks PASSED [ 81%]
+kanban/tests/custom_fields/test_output_formats.py::test_04_schema_parity PASSED [ 87%]
+kanban/tests/custom_fields/test_output_formats.py::test_05_format_and_cell_validators PASSED [ 93%]
+kanban/tests/custom_fields/test_output_formats.py::test_06_severity_and_manifest_validators PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                     Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------------
+database/models/custom_field.py             43      0      0      0   100%
+kanban/api/v1/custom_fields.py              30      0      0      0   100%
+kanban/custom_fields/__init__.py             3      0      0      0   100%
+kanban/custom_fields/manifest.py            38      0     16      0   100%
+kanban/custom_fields/output_formats.py     232      0     86      3    99%   102->110, 261->273, 349->351
+kanban/custom_fields/service.py            137      0     30      1    99%   294->298
+------------------------------------------------------------------------------------
+TOTAL                                      483      0    132      4    99%
+Required test coverage of 95% reached. Total coverage: 99.35%
+============================== 16 passed in 5.21s ==============================

@@ -39,6 +39,7 @@ class RLSContext:
     workspace_id: uuid.UUID
     token_scopes: tuple[str, ...] = ()
     aal_level: Literal[1, 2] = 1
+    user_access_hash: bytes | str | None = None
 
     def __post_init__(self) -> None:
         """Validate aal_level and token scope formatting constraints."""
@@ -72,17 +73,26 @@ async def bind_rls_context(session: AsyncSession, ctx: RLSContext) -> None:
 
     session.info["_binding_in_progress"] = True
     try:
+        user_hash_val = ""
+        if ctx.user_access_hash is not None:
+            if isinstance(ctx.user_access_hash, bytes):
+                user_hash_val = ctx.user_access_hash.hex()
+            else:
+                user_hash_val = str(ctx.user_access_hash)
+
         stmt = text(
             "SELECT set_config('app.principal_id', :principal_id, true), "
             "set_config('app.workspace_id', :workspace_id, true), "
             "set_config('app.token_scopes', :token_scopes, true), "
-            "set_config('app.aal_level', :aal_level, true)"
+            "set_config('app.aal_level', :aal_level, true), "
+            "set_config('app.user_access_hash', :user_access_hash, true)"
         )
         params = {
             "principal_id": str(ctx.principal_id),
             "workspace_id": str(ctx.workspace_id),
             "token_scopes": ",".join(ctx.token_scopes),
             "aal_level": str(ctx.aal_level),
+            "user_access_hash": user_hash_val,
         }
         await session.execute(stmt, params)
         session.info["rls_bound"] = True

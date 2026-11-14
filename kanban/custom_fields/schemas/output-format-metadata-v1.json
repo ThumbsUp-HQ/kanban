@@ -1,0 +1,317 @@
+{
+  "$defs": {
+    "BadgeFormatMetadata": {
+      "additionalProperties": false,
+      "description": "Configuration for colored badge custom field output.",
+      "properties": {
+        "allowed_labels": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 32,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Labels"
+        },
+        "color_token": {
+          "enum": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger",
+            "accent"
+          ],
+          "title": "Color Token",
+          "type": "string"
+        },
+        "format": {
+          "const": "badge",
+          "default": "badge",
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "required": [
+        "color_token"
+      ],
+      "title": "BadgeFormatMetadata",
+      "type": "object"
+    },
+    "JsonTableFormatMetadata": {
+      "additionalProperties": false,
+      "description": "Configuration for tabular JSON custom field output.",
+      "properties": {
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/TableColumn"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "format": {
+          "const": "json_table",
+          "default": "json_table",
+          "title": "Format",
+          "type": "string"
+        },
+        "max_rows": {
+          "default": 50,
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Max Rows",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "columns"
+      ],
+      "title": "JsonTableFormatMetadata",
+      "type": "object"
+    },
+    "MarkdownSnippetFormatMetadata": {
+      "additionalProperties": false,
+      "description": "Configuration for sanitized markdown snippet output.",
+      "properties": {
+        "format": {
+          "const": "markdown_snippet",
+          "default": "markdown_snippet",
+          "title": "Format",
+          "type": "string"
+        },
+        "max_chars": {
+          "default": 2000,
+          "maximum": 2000,
+          "minimum": 1,
+          "title": "Max Chars",
+          "type": "integer"
+        }
+      },
+      "title": "MarkdownSnippetFormatMetadata",
+      "type": "object"
+    },
+    "NumberFormatMetadata": {
+      "additionalProperties": false,
+      "description": "Configuration for numeric custom field output.",
+      "properties": {
+        "format": {
+          "const": "number",
+          "default": "number",
+          "title": "Format",
+          "type": "string"
+        },
+        "max_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Value"
+        },
+        "maximum_fraction_digits": {
+          "default": 2,
+          "maximum": 6,
+          "minimum": 0,
+          "title": "Maximum Fraction Digits",
+          "type": "integer"
+        },
+        "min_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Value"
+        },
+        "unit_suffix": {
+          "anyOf": [
+            {
+              "maxLength": 12,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit Suffix"
+        }
+      },
+      "title": "NumberFormatMetadata",
+      "type": "object"
+    },
+    "SeverityPillFormatMetadata": {
+      "additionalProperties": false,
+      "description": "Configuration for vulnerability/incident severity pill output.",
+      "properties": {
+        "format": {
+          "const": "severity_pill",
+          "default": "severity_pill",
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "title": "SeverityPillFormatMetadata",
+      "type": "object"
+    },
+    "TableColumn": {
+      "additionalProperties": false,
+      "description": "Specification for a single column in json_table format.",
+      "properties": {
+        "key": {
+          "maxLength": 32,
+          "minLength": 1,
+          "pattern": "^[a-z0-9_]{1,32}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "title": "TableColumn",
+      "type": "object"
+    },
+    "TextFormatMetadata": {
+      "additionalProperties": false,
+      "description": "Configuration for text custom field output.",
+      "properties": {
+        "format": {
+          "const": "text",
+          "default": "text",
+          "title": "Format",
+          "type": "string"
+        },
+        "max_length": {
+          "default": 280,
+          "maximum": 280,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "monospace": {
+          "default": false,
+          "title": "Monospace",
+          "type": "boolean"
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "maxLength": 16,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefix"
+        }
+      },
+      "title": "TextFormatMetadata",
+      "type": "object"
+    },
+    "UrlFormatMetadata": {
+      "additionalProperties": false,
+      "description": "Configuration for URL custom field output.",
+      "properties": {
+        "allowed_host_suffixes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Host Suffixes"
+        },
+        "allowed_schemes": {
+          "default": [
+            "https"
+          ],
+          "items": {
+            "enum": [
+              "https",
+              "http"
+            ],
+            "type": "string"
+          },
+          "title": "Allowed Schemes",
+          "type": "array"
+        },
+        "format": {
+          "const": "url",
+          "default": "url",
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "title": "UrlFormatMetadata",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "badge": "#/$defs/BadgeFormatMetadata",
+      "json_table": "#/$defs/JsonTableFormatMetadata",
+      "markdown_snippet": "#/$defs/MarkdownSnippetFormatMetadata",
+      "number": "#/$defs/NumberFormatMetadata",
+      "severity_pill": "#/$defs/SeverityPillFormatMetadata",
+      "text": "#/$defs/TextFormatMetadata",
+      "url": "#/$defs/UrlFormatMetadata"
+    },
+    "propertyName": "format"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/TextFormatMetadata"
+    },
+    {
+      "$ref": "#/$defs/NumberFormatMetadata"
+    },
+    {
+      "$ref": "#/$defs/BadgeFormatMetadata"
+    },
+    {
+      "$ref": "#/$defs/MarkdownSnippetFormatMetadata"
+    },
+    {
+      "$ref": "#/$defs/UrlFormatMetadata"
+    },
+    {
+      "$ref": "#/$defs/JsonTableFormatMetadata"
+    },
+    {
+      "$ref": "#/$defs/SeverityPillFormatMetadata"
+    }
+  ]
+}
