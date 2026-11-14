@@ -118,3 +118,37 @@ class CustomFieldApprovalResponse(BaseModel):
     revoked_at: datetime | None = None
     revoked_reason: str | None = None
     created_at: datetime
+
+
+class WasmModuleUploadRequest(BaseModel):
+    """Payload to upload and validate a WebAssembly module."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    wasm_base64: str = Field(description="Base64-encoded WebAssembly binary")
+
+
+class WasmModuleResponse(BaseModel):
+    """Projection of an approved WebAssembly module."""
+
+    sha256: str
+    name: str
+    size_bytes: int
+
+
+class CustomFieldValueItem(BaseModel):
+    """Single custom field evaluation result or cached value."""
+
+    field_id: str
+    slug: str
+    name: str
+    output_format: str
+    output_format_metadata: dict[str, Any] = Field(default_factory=dict)
+    value: Any = None
+    computed_at: str | None = None
+    last_latency_ms: int = 0
+    tier: str = "wasm"
+    token_scope: str = "PROJECT"  # noqa: S105
+    credential_mode: str = "INVOKING_USER"
+    status: str = "computed"

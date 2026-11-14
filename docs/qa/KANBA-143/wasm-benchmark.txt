@@ -1,0 +1,15 @@
+=== Tier A WebAssembly Benchmark (KB-P5-13 / S13.3) ===
+Module: echo_cvss.wasm (size: 213 bytes)
+Cold Start (Validation + Compilation + Instantiation + Run): 2.808 ms
+Warm Invocations: 100 runs
+  Min Latency:    0.205 ms
+  Median Latency: 0.212 ms (Target: < 2.0 ms -> PASS)
+  P95 Latency:    0.250 ms
+  Max Latency:    0.397 ms
+  Output Sample:  {"level": "high", "score": 8.8, "label": "8.8 High"}
+  Fuel Consumed:  7 (Budget: 50,000,000)
+
+--- Trap Bounds Verification ---
+Fuel trap: SUCCESS (Code: SCRIPT_FUEL_EXHAUSTED, Message: WebAssembly execution exhausted instruction fuel (<= 50M))
+Memory grow trap: SUCCESS (Code: SCRIPT_MEMORY_LIMIT, Message: Script exceeded linear memory limit during execution)
+Import restriction: SUCCESS (Code: WASM_FORBIDDEN_IMPORT, Message: Forbidden host import detected: 'wasi_snapshot_preview1.fd_read')

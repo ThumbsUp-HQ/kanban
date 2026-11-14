@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid  # Required at runtime for dataclass field validation
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Literal, Protocol, cast
@@ -38,6 +39,7 @@ class PrincipalContext:
     aal2_verified_at: datetime | None = None
     scope_tier: str | None = None
     scoped_project_id: uuid.UUID | None = None
+    user_access_hash: bytes | None = None
 
     def __post_init__(self) -> None:
         """Enforce AAL level bounds."""
@@ -116,6 +118,12 @@ async def get_rls_session(
         with contextlib.suppress(ValueError):
             target_ws_id = uuid.UUID(scope_ws)
 
+    user_access_hash = principal.user_access_hash
+    if user_access_hash is None:
+        scopes_str = ",".join(sorted(principal.token_scopes))
+        raw = f"{principal.workspace_id}:{principal.principal_id}:{scopes_str}".encode()
+        user_access_hash = hashlib.sha256(raw).digest()
+
     rls_ctx = RLSContext(
         principal_id=principal.principal_id,
         workspace_id=target_ws_id,
@@ -124,6 +132,7 @@ async def get_rls_session(
         agent_principal_id=principal.agent_principal_id,
         ephemeral_project_id=principal.ephemeral_project_id,
         read_only=principal.read_only or (principal.ephemeral_project_id is not None),
+        user_access_hash=user_access_hash,
     )
 
     async with session_factory.session(rls_ctx) as session:

@@ -1,0 +1,106 @@
+{
+  "ticket": "KANBA-143",
+  "phase": "Phase 5 / Sandbox + API + MCP",
+  "samples": {
+    "get_custom_fields_200": {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/issues/KAN-142/custom-fields",
+        "headers": {
+          "Authorization": "Bearer kb_usr_..."
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": [
+          {
+            "field_id": "01932e6a-72cb-77b3-8cb9-7c130386d38e",
+            "slug": "cvss-calculator",
+            "name": "CVSS Calculator",
+            "output_format": "severity_pill",
+            "output_format_metadata": {},
+            "value": {
+              "level": "high",
+              "score": 8.8,
+              "label": "8.8 High"
+            },
+            "computed_at": "2026-11-14T05:30:00.123456+00:00",
+            "last_latency_ms": 1,
+            "tier": "wasm",
+            "token_scope": "PROJECT",
+            "credential_mode": "INVOKING_USER",
+            "status": "cached"
+          }
+        ]
+      }
+    },
+    "post_execute_field_200": {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/KAN-142/custom-fields/01932e6a-72cb-77b3-8cb9-7c130386d38e/execute",
+        "headers": {
+          "Authorization": "Bearer kb_usr_..."
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "field_id": "01932e6a-72cb-77b3-8cb9-7c130386d38e",
+          "slug": "cvss-calculator",
+          "name": "CVSS Calculator",
+          "output_format": "severity_pill",
+          "output_format_metadata": {},
+          "value": {
+            "level": "high",
+            "score": 8.8,
+            "label": "8.8 High"
+          },
+          "computed_at": "2026-11-14T05:30:01.654321+00:00",
+          "last_latency_ms": 1,
+          "tier": "wasm",
+          "token_scope": "PROJECT",
+          "credential_mode": "INVOKING_USER",
+          "status": "computed"
+        }
+      }
+    },
+    "post_execute_fuel_exhausted_400": {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/KAN-142/custom-fields/01932e6a-72cb-77b3-8cb9-7c130386d38e/execute?force_refresh=true",
+        "headers": {
+          "Authorization": "Bearer kb_usr_..."
+        }
+      },
+      "response": {
+        "status": 400,
+        "body": {
+          "type": "https://kanban.hackedyour.info/errors/SCRIPT_FUEL_EXHAUSTED",
+          "title": "Script Fuel Exhausted",
+          "status": 400,
+          "detail": "WebAssembly execution exhausted instruction fuel (<= 50M)",
+          "code": "SCRIPT_FUEL_EXHAUSTED"
+        }
+      }
+    },
+    "post_execute_approval_revoked_409": {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/KAN-142/custom-fields/01932e6a-72cb-77b3-8cb9-7c130386d38e/execute",
+        "headers": {
+          "Authorization": "Bearer kb_usr_..."
+        }
+      },
+      "response": {
+        "status": 409,
+        "body": {
+          "type": "https://kanban.hackedyour.info/errors/APPROVAL_REVOKED",
+          "title": "Approval Revoked",
+          "status": 409,
+          "detail": "Field script has been modified since approval (manifest mismatch)",
+          "code": "APPROVAL_REVOKED"
+        }
+      }
+    }
+  }
+}

@@ -15,13 +15,20 @@ from mcp.surfaces.admin.manage_auth_cards import (
     create_manage_auth_cards_tool,
     manage_auth_cards,
 )
+from mcp.surfaces.admin.manage_custom_fields_and_scripts import (
+    MANAGE_CUSTOM_FIELDS_AND_SCRIPTS_SCHEMA,
+    create_manage_custom_fields_and_scripts_tool,
+    manage_custom_fields_and_scripts,
+)
 
 __all__ = [
     "CONFIGURE_WORKSPACE_SCHEMA",
     "MANAGE_AUTH_CARDS_SCHEMA",
+    "MANAGE_CUSTOM_FIELDS_AND_SCRIPTS_SCHEMA",
     "configure_workspace",
     "create_admin_registry",
     "manage_auth_cards",
+    "manage_custom_fields_and_scripts",
 ]
 
 
@@ -30,4 +37,5 @@ def create_admin_registry() -> ToolRegistry:
     registry = ToolRegistry(Surface.ADMIN)
     registry.register(create_configure_workspace_tool())
     registry.register(create_manage_auth_cards_tool())
+    registry.register(create_manage_custom_fields_and_scripts_tool())
     return registry

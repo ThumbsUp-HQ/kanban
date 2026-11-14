@@ -80,6 +80,7 @@ from database.models.spine import (
     ObjectRecord,
     Workspace,
 )
+from database.models.wasm_module import ApprovedWasmModule
 from database.models.workspace_settings import WorkspaceSettings
 
 __all__ = [
@@ -88,6 +89,7 @@ __all__ = [
     "ActivityChainHead",
     "ActivityRecord",
     "AgentDefinition",
+    "ApprovedWasmModule",
     "Attachment",
     "AuthProviderCard",
     "Base",

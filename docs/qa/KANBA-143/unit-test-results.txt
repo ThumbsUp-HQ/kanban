@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /tmp/kb-wt-KANBA-143
+configfile: pyproject.toml
+plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 37 items
+
+kanban/tests/sandbox/test_wasm_runner.py ..............                  [ 37%]
+kanban/tests/custom_fields/test_executor_cache.py ....                   [ 48%]
+kanban/tests/custom_fields/test_execution_api.py ...                     [ 56%]
+mcp/tests/admin/test_manage_custom_fields_and_scripts.py ...........     [ 86%]
+database/tests/test_p1_17_models.py .....                                [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                                  Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------------------
+kanban/api/v1/custom_field_execution.py                  52      0      2      0   100%
+kanban/custom_fields/executor.py                        128      4     28      1    97%   57-58, 258-259, 303->336
+kanban/sandbox/wasm_runner.py                           224      9     62      8    94%   162->164, 168->exit, 208->222, 236-237, 278->exit, 288-290, 298-299, 302-303, 309->313
+mcp/admin/tools/manage_custom_fields_and_scripts.py     141      0     86      2    99%   267->266, 441->447
+-------------------------------------------------------------------------------------------------
+TOTAL                                                   545     13    178     11    97%
+Required test coverage of 95% reached. Total coverage: 96.68%
+============================== 37 passed in 4.72s ==============================
+exit_code=0
