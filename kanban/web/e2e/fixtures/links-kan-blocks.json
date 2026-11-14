@@ -1,0 +1,80 @@
+[
+  {
+    "id": "018f3a50-0001-7000-8000-000000000001",
+    "source_key": "KAN-100",
+    "target_key": "KAN-142",
+    "link_type": "BLOCKS",
+    "link_state": "ACTIVE",
+    "restricted": false,
+    "source": {
+      "id": "018f3a50-0000-7000-8000-000000000100",
+      "type": "issue",
+      "key": "KAN-100",
+      "title": "Security Architecture Epic"
+    },
+    "target": {
+      "id": "018f3a50-0000-7000-8000-000000000142",
+      "type": "issue",
+      "key": "KAN-142",
+      "title": "Harden Multi-Card OIDC & LDAPS Auth Studio"
+    }
+  },
+  {
+    "id": "018f3a50-0002-7000-8000-000000000002",
+    "source_key": "KAN-142",
+    "target_key": "KAN-143",
+    "link_type": "BLOCKS",
+    "link_state": "ACTIVE",
+    "restricted": false,
+    "source": {
+      "id": "018f3a50-0000-7000-8000-000000000142",
+      "type": "issue",
+      "key": "KAN-142",
+      "title": "Harden Multi-Card OIDC & LDAPS Auth Studio"
+    },
+    "target": {
+      "id": "018f3a50-0000-7000-8000-000000000143",
+      "type": "issue",
+      "key": "KAN-143",
+      "title": "Verify LDAPS certificate pinning"
+    }
+  },
+  {
+    "id": "018f3a50-0003-7000-8000-000000000003",
+    "source_key": "KAN-142",
+    "target_key": "KAN-101",
+    "link_type": "BLOCKS",
+    "link_state": "FLAGGED_INVALID",
+    "restricted": false,
+    "source": {
+      "id": "018f3a50-0000-7000-8000-000000000142",
+      "type": "issue",
+      "key": "KAN-142",
+      "title": "Harden Multi-Card OIDC & LDAPS Auth Studio"
+    },
+    "target": {
+      "id": "018f3a50-0000-7000-8000-000000000101",
+      "type": "issue",
+      "key": "KAN-101",
+      "title": "Design token review for dark mode"
+    }
+  },
+  {
+    "id": "018f3a50-0004-7000-8000-000000000004",
+    "source_key": "KAN-143",
+    "target_key": null,
+    "link_type": "BLOCKS",
+    "link_state": "ACTIVE",
+    "restricted": true,
+    "source": {
+      "id": "018f3a50-0000-7000-8000-000000000143",
+      "type": "issue",
+      "key": "KAN-143",
+      "title": "Verify LDAPS certificate pinning"
+    },
+    "target": {
+      "restricted": true,
+      "label": "🔒 Restricted Object"
+    }
+  }
+]

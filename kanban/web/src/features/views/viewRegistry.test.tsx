@@ -30,11 +30,13 @@ describe('viewRegistry and IssuesWorkspaceRoute', () => {
     });
   });
 
-  it('contains entries for board, list, grid, and calendar', () => {
+  it('contains entries for board, list, table, grid, calendar, and timeline', () => {
     expect(viewRegistry.board).toBeDefined();
     expect(viewRegistry.list).toBeDefined();
+    expect(viewRegistry.table).toBeDefined();
     expect(viewRegistry.grid).toBeDefined();
     expect(viewRegistry.calendar).toBeDefined();
+    expect(viewRegistry.timeline).toBeDefined();
     expect(viewRegistry.board.id).toBe('board');
   });
 
@@ -96,13 +98,15 @@ describe('viewRegistry and IssuesWorkspaceRoute', () => {
 });
 
 describe('VIEW_REGISTRY and ViewHost', () => {
-  it('registers list and table views', () => {
+  it('registers list, table, calendar, and timeline views', () => {
     expect(VIEW_REGISTRY.list).toBeDefined();
     expect(VIEW_REGISTRY.table).toBeDefined();
+    expect(VIEW_REGISTRY.calendar).toBeDefined();
+    expect(VIEW_REGISTRY.timeline).toBeDefined();
   });
 
   it('renders ListView when layout is list or unspecified', () => {
-    render(
+    renderWithClient(
       <ViewHost
         layout="list"
         issues={FIXTURE_12_ISSUES}
@@ -113,10 +117,11 @@ describe('VIEW_REGISTRY and ViewHost', () => {
 
     // List section header
     expect(screen.getByText('Backlog')).toBeDefined();
+    expect(screen.getByText('Todo')).toBeDefined();
   });
 
   it('renders TableView when layout is table', () => {
-    render(
+    renderWithClient(
       <ViewHost
         layout="table"
         issues={FIXTURE_12_ISSUES}
@@ -129,10 +134,36 @@ describe('VIEW_REGISTRY and ViewHost', () => {
     expect(screen.getByRole('columnheader', { name: /Key/i })).toBeDefined();
   });
 
-  it('falls back to ListView on unknown layout', () => {
-    render(
+  it('renders CalendarView when layout is calendar', () => {
+    renderWithClient(
       <ViewHost
-        layout="unknown_layout"
+        layout="calendar"
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        modulesEnabled={true}
+      />,
+    );
+
+    expect(screen.getByTestId('calendar-view')).toBeDefined();
+  });
+
+  it('renders TimelineView when layout is timeline', () => {
+    renderWithClient(
+      <ViewHost
+        layout="timeline"
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        modulesEnabled={true}
+      />,
+    );
+
+    expect(screen.getByTestId('timeline-view')).toBeDefined();
+  });
+
+  it('falls back to ListView on unknown layout', () => {
+    renderWithClient(
+      <ViewHost
+        layout="nonexistent_view"
         issues={FIXTURE_12_ISSUES}
         projectKey="KAN"
         modulesEnabled={true}

@@ -4,9 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
 import { ListView } from '../list/ListView';
 import { TableView } from '../table/TableView';
+import { CalendarView } from '../calendar/CalendarView';
+import { TimelineView } from '../timeline/TimelineView';
 import type { IssueItem } from './viewsApi';
 
-export type ViewLayout = 'board' | 'list' | 'table' | 'grid' | 'calendar';
+export type ViewLayout = 'board' | 'list' | 'table' | 'calendar' | 'timeline' | 'grid';
 
 export interface ViewRegistryEntry {
   id: ViewLayout;
@@ -30,14 +32,19 @@ export const viewRegistry: Record<ViewLayout, ViewRegistryEntry> = {
     name: 'Table',
     component: TableView,
   },
-  grid: {
-    id: 'grid',
-    name: 'Grid',
-    component: BoardView,
-  },
   calendar: {
     id: 'calendar',
     name: 'Calendar',
+    component: CalendarView,
+  },
+  timeline: {
+    id: 'timeline',
+    name: 'Timeline',
+    component: TimelineView as unknown as ComponentType<ViewComponentProps>,
+  },
+  grid: {
+    id: 'grid',
+    name: 'Grid',
     component: BoardView,
   },
 };
@@ -60,6 +67,8 @@ export type ViewComponent = ComponentType<ViewComponentProps>;
 export const VIEW_REGISTRY: Record<string, ViewComponent> = {
   list: ListView as ViewComponent,
   table: TableView as ViewComponent,
+  calendar: CalendarView as ViewComponent,
+  timeline: TimelineView as ViewComponent,
 };
 
 export interface ViewHostProps extends ViewComponentProps {
