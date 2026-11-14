@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select, text
 
-from database.models import EffectiveResourceAccess, Principal, PrincipalGroupClosure
+from database.models import (
+    EffectiveResourceAccess,
+    ObjectRecord,
+    Principal,
+    PrincipalGroupClosure,
+)
 from kanban.api.problems import ProblemException, not_found
 
 if TYPE_CHECKING:
@@ -90,6 +95,31 @@ def capabilities_to_names(caps: Capability) -> list[str]:
     return [name for cap, name in _ORDERED_CAPABILITIES if cap in caps]
 
 
+async def _check_ephemeral_confinement(
+    session: AsyncSession,
+    ephemeral_project_id: uuid.UUID,
+    object_id: uuid.UUID,
+) -> bool:
+    """Verify that the object is confined to the ephemeral project."""
+    obj_stmt = select(ObjectRecord.project_id, ObjectRecord.object_type).where(
+        ObjectRecord.id == object_id
+    )
+    obj_row = (await session.execute(obj_stmt)).first()
+    if obj_row is None:
+        return False
+    proj_id, obj_type = obj_row[0], obj_row[1]
+    if str(obj_type) == "project":
+        return bool(object_id == ephemeral_project_id)
+    return bool(proj_id == ephemeral_project_id)
+
+
+async def _is_principal_active(session: AsyncSession, principal_id: uuid.UUID) -> bool:
+    """Check whether a principal exists and has ACTIVE status."""
+    stmt = select(Principal.status).where(Principal.id == principal_id)
+    status = (await session.execute(stmt)).scalar_one_or_none()
+    return status == "ACTIVE"
+
+
 async def evaluate_capabilities(
     session: AsyncSession,
     principal_ctx: PrincipalContext,
@@ -105,20 +135,21 @@ async def evaluate_capabilities(
             _principal_mask(u, r) & _principal_mask(a, r) & parse_token_scope_mask(t)
         )
     """
+    # 0. Enforce ephemeral project confinement if ephemeral_project_id is set
+    if principal_ctx.ephemeral_project_id is not None and not await _check_ephemeral_confinement(
+        session, principal_ctx.ephemeral_project_id, object_id
+    ):
+        return Capability.NONE
+
     # 1. Verify human principal exists and is ACTIVE
-    human_stmt = select(Principal.status).where(Principal.id == principal_ctx.principal_id)
-    human_status = (await session.execute(human_stmt)).scalar_one_or_none()
-    if human_status != "ACTIVE":
+    if not await _is_principal_active(session, principal_ctx.principal_id):
         return Capability.NONE
 
     # 2. If OBO delegated agent, verify agent principal exists and is ACTIVE
-    if principal_ctx.agent_principal_id is not None:
-        agent_stmt = select(Principal.status).where(
-            Principal.id == principal_ctx.agent_principal_id
-        )
-        agent_status = (await session.execute(agent_stmt)).scalar_one_or_none()
-        if agent_status != "ACTIVE":
-            return Capability.NONE
+    if principal_ctx.agent_principal_id is not None and not await _is_principal_active(
+        session, principal_ctx.agent_principal_id
+    ):
+        return Capability.NONE
 
     # 3. Helper to aggregate effective perms across principal + group closure
     async def _principal_mask(p_id: uuid.UUID) -> Capability:

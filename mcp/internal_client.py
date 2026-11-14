@@ -75,6 +75,7 @@ class KanbanApiClient:
             self._client = httpx.AsyncClient(
                 transport=active_transport,
                 base_url="http://kanban.local",
+                headers={"X-KB-Service-Principal": "mcp-gateway"},
                 timeout=timeout,
             )
         else:

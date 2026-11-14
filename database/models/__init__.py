@@ -40,6 +40,7 @@ from database.models.issues import (
 )
 from database.models.knowledge import Doc, Page, PageVersion, Sticky
 from database.models.mcp_api_key import McpApiKey
+from database.models.mcp_ephemeral_token import McpEphemeralToken
 from database.models.notifications import Notification
 from database.models.oauth import (
     OAuthAuthorizationCode,
@@ -108,6 +109,7 @@ __all__ = [
     "LocalAdminCredential",
     "LtreeType",
     "McpApiKey",
+    "McpEphemeralToken",
     "Module",
     "Notification",
     "OAuthAuthorizationCode",

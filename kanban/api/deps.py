@@ -32,6 +32,8 @@ class PrincipalContext:
     aal_level: int = 1
     session_id: uuid.UUID | None = None
     agent_principal_id: uuid.UUID | None = None
+    ephemeral_project_id: uuid.UUID | None = None
+    read_only: bool = False
     mfa_pending: bool = False
     aal2_verified_at: datetime | None = None
 
@@ -109,6 +111,9 @@ async def get_rls_session(
         workspace_id=principal.workspace_id,
         token_scopes=principal.token_scopes,
         aal_level=cast("Literal[1, 2]", principal.aal_level),
+        agent_principal_id=principal.agent_principal_id,
+        ephemeral_project_id=principal.ephemeral_project_id,
+        read_only=principal.read_only or (principal.ephemeral_project_id is not None),
     )
 
     async with session_factory.session(rls_ctx) as session:
