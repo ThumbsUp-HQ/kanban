@@ -1,0 +1,58 @@
+================================================================================
+NSJAIL COMMAND ARGV AND ENVIRONMENT TRACE (Test Case 1 Positive Execution)
+================================================================================
+Generated At: 2026-11-14T00:00:00Z
+Cgroup Memory Cap: 134217728 bytes (128 MiB)
+Keep Env Flag: --keep_env=false
+Token Substring Occurrences in Argv: 0
+Token Substring in Argv String: False
+--------------------------------------------------------------------------------
+COMMAND ARGV ARRAY:
+--------------------------------------------------------------------------------
+  [00] /usr/bin/nsjail
+  [01] --mode
+  [02] o
+  [03] --time_limit
+  [04] 3
+  [05] --rlimit_as
+  [06] 256
+  [07] --rlimit_fsize
+  [08] 4
+  [09] --rlimit_nofile
+  [10] 64
+  [11] --rlimit_nproc
+  [12] 32
+  [13] --cgroup_mem_max
+  [14] 134217728
+  [15] --cgroup_pids_max
+  [16] 32
+  [17] --cgroup_cpu_ms_per_sec
+  [18] 500
+  [19] --disable_clone_newnet=false
+  [20] --chroot
+  [21] /var/empty
+  [22] --mount
+  [23] none:/tmp:tmpfs:size=16777216,mode=1777,noexec,nosuid,nodev
+  [24] --bindmount
+  [25] /tmp/kanban_run/sandbox/inv-1234/proxy.sock:/run/sandbox/proxy.sock
+  [26] --seccomp_policy
+  [27] deploy/seccomp/sandbox-profile.json
+  [28] --keep_env=false
+  [29] --env
+  [30] KANBAN_EGRESS_SOCK=/run/sandbox/proxy.sock
+  [31] --env
+  [32] PATH=/usr/bin:/bin
+  [33] --
+  [34] /usr/bin/python3
+  [35] -c
+  [36] import os, sys, json; print('script executed')
+--------------------------------------------------------------------------------
+ENVIRONMENT VARIABLES PASSED VIA --env FLAGS:
+--------------------------------------------------------------------------------
+  PATH=/usr/bin:/bin
+  KANBAN_EGRESS_SOCK=/run/sandbox/proxy.sock
+--------------------------------------------------------------------------------
+STDIN STREAM (kb-field-input/v1):
+--------------------------------------------------------------------------------
+  {"schema": "kb-field-input/v1", "issue": {"key": "KAN-10"}, "scope": "PROJECT"}
+================================================================================

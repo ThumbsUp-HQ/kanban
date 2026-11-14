@@ -18,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from kanban.api.deps import DenyAllResolver
 from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
 from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
+from kanban.api.middleware.script_depth import ScriptDepthGuardMiddleware
 from kanban.api.problems import (
     ProblemException,
     problem_exception_handler,
@@ -35,6 +36,7 @@ from kanban.auth.sessions.csrf import CsrfMiddleware
 from kanban.auth.setup import mint_setup_token_if_uninitialized
 from kanban.jobs import JobScheduler
 from kanban.jobs import registry as jobs_registry
+from kanban.sandbox.nsjail_runner import TierBNsjailRunner
 from kanban.security.headers import SecurityHeadersMiddleware
 from kanban.services.notifications import register_notifications_listener
 from kanban.settings import Settings
@@ -108,6 +110,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_service = None
     app.state.broker = None
     app.state.realtime_hub = None
+    app.state.tier_b_runner = TierBNsjailRunner()
 
     # Register RFC 7807 problem exception handlers
     app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
@@ -191,6 +194,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Add RequestIdMiddleware so request-id is available inside all routes and middleware
     app.add_middleware(RequestIdMiddleware)
+
+    # Add script recursion depth guard middleware
+    app.add_middleware(ScriptDepthGuardMiddleware)
 
     # Add security headers and host protection middleware
     app.add_middleware(SecurityHeadersMiddleware, settings=settings)
