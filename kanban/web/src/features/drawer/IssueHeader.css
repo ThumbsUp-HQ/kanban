@@ -1,0 +1,57 @@
+.surface__header {
+  min-height: 56px;
+  padding: var(--space-3) var(--space-6);
+  display: flex;
+  align-items: center;
+  column-gap: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.issue-header__btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  padding: var(--space-1);
+  min-width: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 150ms ease, background-color 150ms ease;
+  flex: 0 0 auto;
+}
+
+.issue-header__btn:hover,
+.issue-header__btn:focus-visible {
+  color: var(--fg-primary);
+  background: var(--bg-hover);
+}
+
+.issue-header__glyph {
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+.issue-header__key {
+  font-weight: 600;
+  color: var(--fg-primary);
+  font-size: 0.9375rem;
+}
+
+.issue-header__slots {
+  display: flex;
+  align-items: center;
+  column-gap: var(--space-2);
+  margin-left: auto;
+}
+
+@media (max-width: 767px) {
+  .issue-header__btn {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+}

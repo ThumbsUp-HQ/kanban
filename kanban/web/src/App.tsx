@@ -59,6 +59,16 @@ export function App(): JSX.Element {
         />
       );
     }
+    if (window.location.pathname.startsWith('/__dev/drawer')) {
+      const router = createAppRouter(['/__dev/drawer']);
+      return (
+        <QueryClientProvider client={appQueryClient}>
+          <ShellPanelsProvider>
+            <RouterProvider router={router} />
+          </ShellPanelsProvider>
+        </QueryClientProvider>
+      );
+    }
   }
 
   // Preserve legacy test expectation at root path in unit test runner

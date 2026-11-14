@@ -166,7 +166,7 @@ describe('routes and AppShell integration', () => {
       { path: '/projects/KAN/overview', expected: 'route-placeholder' },
       { path: '/projects/KAN/docs', expected: 'route-placeholder' },
       { path: '/projects/KAN/docs/page-42', expected: 'route-placeholder' },
-      { path: '/projects/KAN/issues/KAN-100', expected: 'route-placeholder' },
+      { path: '/projects/KAN/issues/KAN-100', expected: 'full-screen-route-anchor' },
       { path: '/stickies', expected: 'route-placeholder' },
       { path: '/login', expected: 'route-placeholder' },
       { path: '/setup', expected: 'route-placeholder' },
@@ -176,6 +176,7 @@ describe('routes and AppShell integration', () => {
       { path: '/__dev/editor', expected: 'editor-story' },
       { path: '/__dev/media', expected: 'media-story' },
       { path: '/__dev/realtime', expected: 'realtime-story' },
+      { path: '/__dev/drawer', expected: 'drawer-story' },
       { path: '/__dev/unknown', expected: 'not-found-view' },
       { path: '/unknown-route', expected: 'not-found-view' },
     ];

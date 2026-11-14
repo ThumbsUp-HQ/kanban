@@ -20,6 +20,9 @@ import { registerShortcut } from './shortcuts';
 import { RealtimeStatus } from '../api/RealtimeStatus';
 import { type AccessManifestData } from './HeaderPills';
 import { type SystemStatus } from './useSystemStatus';
+import { IssueSurface } from '../features/drawer/IssueSurface';
+import { IssueSurfaceSlotsContext } from '../features/drawer/slots';
+import { issueSurfaceSlots } from '../features/drawer/slotRegistry';
 import './AppShell.css';
 
 export interface AppShellProps {
@@ -68,7 +71,7 @@ export function AppShell({
 
   const handleSkipClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
     e.preventDefault();
-    const mainEl = document.getElementById('main');
+    const mainEl = document.getElementById('main') ?? document.getElementById('kb-main');
     if (mainEl) {
       mainEl.focus();
     }
@@ -115,7 +118,13 @@ export function AppShell({
         </main>
 
         {/* Stable Surface Host Anchor for KB-P3-41 Drawer */}
-        <div id="kb-surface-host" />
+        <div id="kb-surface-host">
+          <div id="kb-issue-surface-host">
+            <IssueSurfaceSlotsContext.Provider value={issueSurfaceSlots}>
+              <IssueSurface />
+            </IssueSurfaceSlotsContext.Provider>
+          </div>
+        </div>
 
         {/* Stable Semantic Emoji Hint Portal Anchor for KB-P3-31 */}
         <div id="kb-hint-root" />

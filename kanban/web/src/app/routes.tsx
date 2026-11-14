@@ -1,6 +1,7 @@
 /**
- * Application Routes & Router Table (KB-P3-34, S6.3).
- * react-router v7 data router with layout parameter normalization, regex key validation, and S3.4 uniform error view.
+ * Application Routes & Router Table (KB-P3-34, S6.3, KB-P3-41).
+ * react-router v7 data router with layout parameter normalization, regex key validation, S3.4 uniform error view,
+ * and zero-remount ticket drawer & full-screen surface routing.
  */
 
 import React, { useEffect, type JSX } from 'react';
@@ -26,6 +27,9 @@ import { EmojiStory } from '../dev/EmojiStory';
 import { EditorStory } from '../dev/EditorStory';
 import { MediaStory } from '../dev/MediaStory';
 import { RealtimeStory } from '../dev/RealtimeStory';
+import { DrawerStory } from '../dev/DrawerStory';
+import { apiClient } from '../api/client';
+import type { IssueDetail } from '../features/drawer/slots';
 
 export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
 
@@ -79,8 +83,30 @@ export function ProjectIssuesRoute(): JSX.Element {
   return <RoutePlaceholder route="/projects/:projectKey/issues" />;
 }
 
+export function FullScreenIssueRoute(): JSX.Element {
+  const { issueKey } = useParams<{ issueKey: string }>();
+  const { data: issue } = useQuery<IssueDetail>({
+    queryKey: qk.issue(issueKey ?? ''),
+    queryFn: async () => {
+      return (await apiClient.get(
+        '/api/v1/issues/{issue_key}',
+        { params: { issue_key: issueKey ?? '' } },
+      )) as unknown as IssueDetail;
+    },
+    enabled: Boolean(issueKey),
+  });
+
+  useEffect(() => {
+    if (issueKey) {
+      document.title = issue?.summary ? `${issueKey} - ${issue.summary}` : issueKey;
+    }
+  }, [issueKey, issue?.summary]);
+
+  return <div data-testid="full-screen-route-anchor" />;
+}
+
 export function ProjectIssueDetailRoute(): JSX.Element {
-  return <RoutePlaceholder route="/projects/:projectKey/issues/:issueKey" />;
+  return <FullScreenIssueRoute />;
 }
 
 export function ProjectOverviewRoute(): JSX.Element {
@@ -102,6 +128,7 @@ export function DevStoryRoute(): JSX.Element {
   if (loc.pathname === '/__dev/editor') return <EditorStory />;
   if (loc.pathname === '/__dev/media') return <MediaStory />;
   if (loc.pathname === '/__dev/realtime') return <RealtimeStory />;
+  if (loc.pathname === '/__dev/drawer') return <DrawerStory />;
   return <NotFoundView />;
 }
 
@@ -235,6 +262,13 @@ export function createAppRouter(
  */
 export function AppRoutes(): JSX.Element | null {
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+
+  // If opening ticket drawer (?peek=), let AppShell with IssueSurface handle it
+  if (search.includes('peek=')) {
+    return null;
+  }
+
   const match = /^\/projects\/([^/]+)\/issues\/?$/.exec(pathname);
 
   if (match?.[1]) {

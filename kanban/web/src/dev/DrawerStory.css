@@ -1,0 +1,35 @@
+.drawer-story {
+  padding: var(--space-8);
+  max-width: 800px;
+}
+
+.drawer-story__list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+}
+
+.drawer-story__item {
+  font-size: 1.125rem;
+}
+
+.drawer-story__link {
+  color: var(--accent-primary);
+  text-decoration: none;
+  font-weight: 500;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+.drawer-story__link:hover {
+  text-decoration: underline;
+}
+
+.drawer-story__link:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}

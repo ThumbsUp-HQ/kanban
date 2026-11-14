@@ -1,0 +1,16 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 6 tests using 6 workers
+
+  ✓  3 [mobile] › e2e/drawer/issue-surface.spec.ts:76:3 › IssueSurface E2E Verification & Design Proofs (KB-P3-41) › 01: Zero-remount invariant across 5 round trips & 0 additional GET calls (1.6s)
+  ✓  4 [desktop] › e2e/drawer/issue-surface.spec.ts:76:3 › IssueSurface E2E Verification & Design Proofs (KB-P3-41) › 01: Zero-remount invariant across 5 round trips & 0 additional GET calls (1.6s)
+  ✓  6 [tablet] › e2e/drawer/issue-surface.spec.ts:76:3 › IssueSurface E2E Verification & Design Proofs (KB-P3-41) › 01: Zero-remount invariant across 5 round trips & 0 additional GET calls (1.6s)
+  ✓  1 [desktop] › e2e/drawer/issue-surface.spec.ts:127:3 › IssueSurface E2E Verification & Design Proofs (KB-P3-41) › 02: Visual proofs across viewports, annotations, style probes, and validation (2.9s)
+  ✓  5 [mobile] › e2e/drawer/issue-surface.spec.ts:127:3 › IssueSurface E2E Verification & Design Proofs (KB-P3-41) › 02: Visual proofs across viewports, annotations, style probes, and validation (3.0s)
+  ✓  2 [tablet] › e2e/drawer/issue-surface.spec.ts:127:3 › IssueSurface E2E Verification & Design Proofs (KB-P3-41) › 02: Visual proofs across viewports, annotations, style probes, and validation (3.1s)
+
+  6 passed (16.1s)
