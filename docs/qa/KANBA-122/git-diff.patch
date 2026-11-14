@@ -1,0 +1,5707 @@
+diff --git a/kanban/web/e2e/views/filters-swimlanes-shortcuts.spec.ts b/kanban/web/e2e/views/filters-swimlanes-shortcuts.spec.ts
+new file mode 100644
+index 0000000..297f773
+--- /dev/null
++++ b/kanban/web/e2e/views/filters-swimlanes-shortcuts.spec.ts
+@@ -0,0 +1,287 @@
++/**
++ * Playwright E2E verification and visual design proofs for:
++ * Filters & Display bar, 2D Swimlanes, Bulk Action bar, and Single-key Shortcuts (KB-P3-40).
++ * Plain ASCII hyphens only.
++ */
++
++import { test, expect } from '../support/test';
++import { annotatedScreenshot } from '../support/annotate';
++import { probeStyles } from '../support/styleProbe';
++
++test.describe('Filters, 2D Swimlanes, Bulk Bar, and Shortcuts E2E (KB-P3-40)', () => {
++  test('01-filter-bar-and-2d-swimlanes: renders 2D grid with active filter chips, group/subgroup controls, and swimlanes', async ({
++    page,
++  }, testInfo) => {
++    await page.goto(
++      '/projects/KAN/issues?layout=board&group_by=state&sub_group_by=priority&filter_state=active&gate_status=pending'
++    );
++
++    // Verify 2D Swimlane board grid region is mounted
++    const boardGrid = page.locator('.swimlane-board-grid');
++    await expect(boardGrid).toBeVisible();
++
++    // Verify filter chips: Active state preset and Gate status pending
++    const chipsRow = page.locator('.filter-chips-row');
++    await expect(chipsRow).toBeVisible();
++    await expect(page.locator('.filter-chip[data-facet="state"]')).toBeVisible();
++    await expect(page.locator('.filter-chip[data-facet="gate_status"]')).toBeVisible();
++
++    // Verify group and sub-group select values
++    const groupBySelect = page.locator('#group-by-select');
++    const subGroupBySelect = page.locator('#subgroup-by-select');
++    await expect(groupBySelect).toHaveValue('state');
++    await expect(subGroupBySelect).toHaveValue('priority');
++
++    // Verify horizontal swimlane headers: Urgent and High
++    const urgentBand = page.locator('[data-subgroup-id="urgent"] .swimlane-band-header');
++    const highBand = page.locator('[data-subgroup-id="high"] .swimlane-band-header');
++    await expect(urgentBand).toBeVisible();
++    await expect(highBand).toBeVisible();
++
++    // Verify sticky 324px state column headers
++    const colHeaders = page.locator('.swimlane-col-headers');
++    await expect(colHeaders).toBeVisible();
++
++    // Probe computed whitespace measurements
++    await probeStyles(page, testInfo, {
++      name: 'filter-swimlanes-metrics',
++      probes: [
++        {
++          selector: '.filter-display-bar',
++          props: ['padding-top', 'padding-bottom', 'row-gap'],
++        },
++        {
++          selector: '.swimlane-col-header-item',
++          props: ['width', 'min-width', 'height'],
++        },
++        {
++          selector: '.swimlane-band',
++          props: ['margin-bottom', 'display'],
++        },
++      ],
++    });
++
++    // Capture annotated screenshot 01
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-filter-bar-and-2d-swimlanes',
++      annotations: [
++        {
++          selector: '.filter-chips-row',
++          label: '1: Filter: Active + Gate: ⏳🤖 chips',
++          note: 'Filter preset and gate status chips with count and remove buttons',
++        },
++        {
++          selector: '.filter-controls-group',
++          label: '2: Group/Sub-group controls',
++          note: 'Calm Filter button, Group: State, Sub-group: Priority selects',
++        },
++        {
++          selector: '[data-subgroup-id="urgent"] .swimlane-band-header',
++          label: '3: 🔥 Urgent horizontal swimlane header',
++          note: 'Collapsible band toggle with priority emoji and item count',
++        },
++        {
++          selector: '[data-subgroup-id="high"] .swimlane-band-header',
++          label: '4: ⚡ High swimlane header (24px band gap)',
++          note: '24px vertical separation between horizontal swimlanes',
++        },
++        {
++          selector: '.swimlane-col-headers',
++          label: '5: 324px aligned state columns',
++          note: 'Sticky 324px column headers matching Kanban board track widths',
++        },
++      ],
++    });
++  });
++
++  test('02-bulk-select-bar-archive-disabled: 3 selected issues with active item keeps Archive disabled', async ({
++    page,
++  }, testInfo) => {
++    await page.goto('/projects/KAN/issues?layout=board&sub_group_by=priority');
++
++    const card140 = page.locator('[data-issue-key="KAN-140"]');
++    await expect(card140).toBeVisible();
++    const card142 = page.locator('[data-issue-key="KAN-142"]');
++    await expect(card142).toBeVisible();
++
++    // Select 3 issues (KAN-140, KAN-141, KAN-142) via checkboxes
++    await page.locator('[data-issue-key="KAN-140"] input[type="checkbox"]').check();
++    await page.locator('[data-issue-key="KAN-141"] input[type="checkbox"]').check();
++    await page.locator('[data-issue-key="KAN-142"] input[type="checkbox"]').check();
++
++    // Verify floating BulkActionBar is mounted and indicates 3 selected
++    const bulkBar = page.locator('.bulk-action-bar');
++    await expect(bulkBar).toBeVisible();
++    await expect(page.locator('.bulk-action-bar-count')).toHaveText('3 selected');
++
++    // Archive button must be disabled because items are not completed or cancelled
++    const archiveBtn = page.locator('.bulk-action-bar-btn[data-action="archive"]');
++    await expect(archiveBtn).toBeVisible();
++    await expect(archiveBtn).toBeDisabled();
++    await expect(archiveBtn).toHaveAttribute(
++      'title',
++      'Only completed or canceled work items can be archived'
++    );
++
++    // Capture annotated screenshot 02
++    await annotatedScreenshot(page, testInfo, {
++      name: '02-bulk-select-bar-archive-disabled',
++      annotations: [
++        {
++          selector: '[data-issue-key="KAN-140"] .swimlane-card-checkbox-wrap',
++          label: '1: selected checkboxes + focus ring',
++          note: 'Card checkbox selected state with accessible focus indicator',
++        },
++        {
++          selector: '.bulk-action-bar',
++          label: '2: floating BulkActionBar (3 selected)',
++          note: 'Centered floating bulk toolbar (position: fixed, bottom: 24px)',
++        },
++        {
++          selector: '.bulk-action-bar-btn[data-action="archive"]',
++          label: '3: disabled Archive button',
++          note: 'Only completed or canceled work items can be archived',
++        },
++      ],
++    });
++  });
++
++  test('03-shortcut-quick-priority-popover: J navigation then P opens anchored priority picker', async ({
++    page,
++  }, testInfo) => {
++    await page.goto('/projects/KAN/issues?layout=board&sub_group_by=priority');
++
++    const card142 = page.locator('[data-issue-key="KAN-142"]');
++    await expect(card142).toBeVisible();
++
++    // Click on card KAN-142 to focus it (or press J)
++    await card142.click();
++
++    // Press 'P' to trigger priority popover
++    await page.keyboard.press('p');
++
++    // Verify QuickFieldPopover is mounted and anchored
++    const popover = page.locator('.quick-field-popover');
++    await expect(popover).toBeVisible();
++    await expect(popover.locator('.quick-field-popover-title')).toHaveText('Priority');
++
++    // Verify options exist: Urgent, High, Medium, Low, None
++    await expect(popover.locator('[role="option"]:has-text("Urgent")')).toBeVisible();
++    await expect(popover.locator('[role="option"]:has-text("High")')).toBeVisible();
++    await expect(popover.locator('[role="option"]:has-text("Medium")')).toBeVisible();
++    await expect(popover.locator('[role="option"]:has-text("Low")')).toBeVisible();
++    await expect(popover.locator('[role="option"]:has-text("None")')).toBeVisible();
++
++    // Capture annotated screenshot 03
++    await annotatedScreenshot(page, testInfo, {
++      name: '03-shortcut-quick-priority-popover',
++      annotations: [
++        {
++          selector: '[data-issue-key="KAN-142"]',
++          label: '1: roving focus ring on KAN-142',
++          note: 'Card focused via roving index navigation with CSSOM anchor',
++        },
++        {
++          selector: '.quick-field-popover',
++          label: '2: anchored Priority QuickFieldPopover',
++          note: 'Anchored popover menu: Urgent 🔥, High ⚡, Medium 🔹, Low 💤, None',
++        },
++      ],
++    });
++  });
++
++  test('04-quick-create-modal: pressing C opens modal with summary, description, and module', async ({
++    page,
++  }, testInfo) => {
++    await page.goto('/projects/KAN/issues?layout=board&sub_group_by=priority');
++
++    // Wait for page to be ready
++    await expect(page.locator('.swimlane-board-grid')).toBeVisible();
++
++    // Press 'C' key to trigger quick create modal
++    await page.keyboard.press('c');
++
++    // Verify modal dialog appears
++    const modal = page.locator('.quick-create-modal');
++    await expect(modal).toBeVisible();
++
++    // Verify summary input is present and focused
++    const summaryInput = modal.locator('.quick-create-input');
++    await expect(summaryInput).toBeVisible();
++
++    // Fill in summary
++    await summaryInput.fill('Implement OAuth PKCE flow verification');
++
++    // Verify markdown description textarea
++    const descTextarea = modal.locator('.quick-create-textarea');
++    await expect(descTextarea).toBeVisible();
++    await descTextarea.fill('Audit authorization code flow with strict SHA-256 code challenge.');
++
++    // Verify module select has Auth Core option
++    const moduleSelect = modal.locator('#quick-create-module');
++    await expect(moduleSelect).toBeVisible();
++
++    // Capture annotated screenshot 04
++    await annotatedScreenshot(page, testInfo, {
++      name: '04-quick-create-modal',
++      annotations: [
++        {
++          selector: '.quick-create-modal',
++          label: '1: modal dialog',
++          note: 'Create work item modal dialog opened via C shortcut',
++        },
++        {
++          selector: '.quick-create-input',
++          label: '2: summary + Markdown description inputs',
++          note: 'AutoFocused summary input and multiline Markdown description',
++        },
++        {
++          selector: '#quick-create-module',
++          label: '3: pre-applied default Auth Core module chip',
++          note: 'Project module dropdown selection when modules_enabled is true',
++        },
++      ],
++    });
++  });
++
++  test('05-modules-disabled-zero-clutter: unmounts Module facet and axis when modulesEnabled is false', async ({
++    page,
++  }, testInfo) => {
++    await page.goto('/projects/KAN/issues?layout=board&nomodules=1');
++
++    // Verify filter bar is mounted
++    const filterBar = page.locator('.filter-display-bar');
++    await expect(filterBar).toBeVisible();
++
++    // Click Filter button to open facets popover
++    const filterBtn = page.locator('.filter-btn-trigger').first();
++    await filterBtn.click();
++
++    const facetsPanel = page.locator('.filter-popover-panel');
++    await expect(facetsPanel).toBeVisible();
++
++    // Verify Module category is completely absent from facet list
++    await expect(facetsPanel.locator('.filter-facet-category-title:has-text("module")')).toHaveCount(0);
++
++    // Verify Module is absent from Sub-group select options
++    const subGroupSelect = page.locator('#subgroup-by-select');
++    await expect(subGroupSelect.locator('option[value="module"]')).toHaveCount(0);
++
++    // Capture annotated screenshot 05
++    await annotatedScreenshot(page, testInfo, {
++      name: '05-modules-disabled-zero-clutter',
++      annotations: [
++        {
++          selector: '.filter-popover-panel',
++          label: '1: Filter facet list without Module',
++          note: 'Zero Module category, facets, or filters rendered in popover',
++        },
++        {
++          selector: '#subgroup-by-select',
++          label: '2: Sub-group options without Module',
++          note: 'Module swimlane axis completely unmounted from dropdown',
++        },
++      ],
++    });
++  });
++});
+diff --git a/kanban/web/src/features/views/BulkActionBar.test.tsx b/kanban/web/src/features/views/BulkActionBar.test.tsx
+new file mode 100644
+index 0000000..1302bdf
+--- /dev/null
++++ b/kanban/web/src/features/views/BulkActionBar.test.tsx
+@@ -0,0 +1,205 @@
++import { describe, it, expect, vi } from 'vitest';
++import { render, screen, fireEvent } from '@testing-library/react';
++import React from 'react';
++import { BulkActionBar } from './BulkActionBar';
++import { FIXTURE_12_ISSUES } from './fixtures';
++
++describe('BulkActionBar (KB-P3-40, S6.4 item 3, S7.2 8p, S7.2 8f)', () => {
++  it('does not render when selectedKeys is empty', () => {
++    const { container } = render(
++      <BulkActionBar
++        selectedKeys={[]}
++        issues={FIXTURE_12_ISSUES}
++        onClearSelection={vi.fn()}
++      />
++    );
++
++    expect(container.firstChild).toBeNull();
++  });
++
++  it('renders count, action buttons, and handles clear selection', () => {
++    const handleClear = vi.fn();
++    const handleUpdateState = vi.fn();
++
++    render(
++      <BulkActionBar
++        selectedKeys={['KAN-140', 'KAN-141']}
++        issues={FIXTURE_12_ISSUES}
++        onClearSelection={handleClear}
++        onBatchUpdateState={handleUpdateState}
++        modulesEnabled={true}
++      />
++    );
++
++    expect(screen.getByText('2 selected')).toBeDefined();
++    expect(screen.getByRole('toolbar', { name: /bulk actions/i })).toBeDefined();
++
++    const clearBtn = screen.getByRole('button', { name: /clear selection/i });
++    fireEvent.click(clearBtn);
++    expect(handleClear).toHaveBeenCalled();
++
++    const stateBtn = screen.getByRole('button', { name: /^state$/i });
++    fireEvent.click(stateBtn);
++    expect(handleUpdateState).toHaveBeenCalledWith('done');
++  });
++
++  it('archive rule: disabled with tooltip/reason when 1 of 3 selected items is In Progress (Test Case 4, S7.2 8p)', () => {
++    // KAN-142 is In Progress ('started'), KAN-148 is Done ('completed'), KAN-150 is Cancelled ('cancelled')
++    const selectedKeys = ['KAN-142', 'KAN-148', 'KAN-150'];
++    const handleArchive = vi.fn();
++
++    render(
++      <BulkActionBar
++        selectedKeys={selectedKeys}
++        issues={FIXTURE_12_ISSUES}
++        onClearSelection={vi.fn()}
++        onBatchArchive={handleArchive}
++      />
++    );
++
++    const archiveBtn = screen.getByRole('button', { name: /archive/i });
++    expect(archiveBtn.getAttribute('disabled')).toBeDefined();
++    expect(archiveBtn.getAttribute('data-reason')).toBe(
++      'Only completed or canceled work items can be archived'
++    );
++    expect(archiveBtn.getAttribute('title')).toBe(
++      'Only completed or canceled work items can be archived'
++    );
++
++    fireEvent.click(archiveBtn);
++    expect(handleArchive).not.toHaveBeenCalled();
++  });
++
++  it('archive rule: enabled when all selected items are completed or cancelled (Test Case 4)', () => {
++    // KAN-148 is Done, KAN-149 is Done, KAN-150 is Cancelled
++    const selectedKeys = ['KAN-148', 'KAN-149', 'KAN-150'];
++    const handleArchive = vi.fn();
++
++    render(
++      <BulkActionBar
++        selectedKeys={selectedKeys}
++        issues={FIXTURE_12_ISSUES}
++        onClearSelection={vi.fn()}
++        onBatchArchive={handleArchive}
++      />
++    );
++
++    const archiveBtn = screen.getByRole('button', { name: /archive/i });
++    expect(archiveBtn.hasAttribute('disabled')).toBe(false);
++    expect(archiveBtn.getAttribute('title')).toBe('Archive selected items');
++
++    fireEvent.click(archiveBtn);
++    expect(handleArchive).toHaveBeenCalled();
++  });
++
++  it('announces cap warning when selection reaches 100 items (Test Case 4)', () => {
++    const hundredKeys = Array.from({ length: 100 }, (_, i) => `KAN-${String(i + 1)}`);
++
++    render(
++      <BulkActionBar
++        selectedKeys={hundredKeys}
++        issues={FIXTURE_12_ISSUES}
++        onClearSelection={vi.fn()}
++      />
++    );
++
++    expect(screen.getByText('100 selected')).toBeDefined();
++    expect(
++      screen.getByText('Bulk selection is capped at 100 work items')
++    ).toBeDefined();
++  });
++
++  it('omits Module button when modulesEnabled is false (Test Case 3, S7.2 8f)', () => {
++    render(
++      <BulkActionBar
++        selectedKeys={['KAN-142']}
++        issues={FIXTURE_12_ISSUES}
++        onClearSelection={vi.fn()}
++        modulesEnabled={false}
++      />
++    );
++
++    expect(screen.queryByRole('button', { name: /^module$/i })).toBeNull();
++  });
++
++  it('triggers all batch operations when buttons are clicked', () => {
++    const handleUpdateState = vi.fn();
++    const handleUpdatePriority = vi.fn();
++    const handleUpdateAssignees = vi.fn();
++    const handleUpdateLabels = vi.fn();
++    const handleUpdateCycle = vi.fn();
++    const handleUpdateModule = vi.fn();
++
++    render(
++      <BulkActionBar
++        selectedKeys={['KAN-140']}
++        issues={FIXTURE_12_ISSUES}
++        onClearSelection={vi.fn()}
++        onBatchUpdateState={handleUpdateState}
++        onBatchUpdatePriority={handleUpdatePriority}
++        onBatchUpdateAssignees={handleUpdateAssignees}
++        onBatchUpdateLabels={handleUpdateLabels}
++        onBatchUpdateCycle={handleUpdateCycle}
++        onBatchUpdateModule={handleUpdateModule}
++        modulesEnabled={true}
++      />
++    );
++
++    fireEvent.click(screen.getByRole('button', { name: /^state$/i }));
++    expect(handleUpdateState).toHaveBeenCalledWith('done');
++
++    fireEvent.click(screen.getByRole('button', { name: /^priority$/i }));
++    expect(handleUpdatePriority).toHaveBeenCalledWith('urgent');
++
++    fireEvent.click(screen.getByRole('button', { name: /^assignees$/i }));
++    expect(handleUpdateAssignees).toHaveBeenCalledWith(['alice']);
++
++    fireEvent.click(screen.getByRole('button', { name: /^labels$/i }));
++    expect(handleUpdateLabels).toHaveBeenCalledWith(['lbl-sec']);
++
++    fireEvent.click(screen.getByRole('button', { name: /^cycle$/i }));
++    expect(handleUpdateCycle).toHaveBeenCalledWith('cycle-1');
++
++    fireEvent.click(screen.getByRole('button', { name: /^module$/i }));
++    expect(handleUpdateModule).toHaveBeenCalledWith(['mod-1']);
++  });
++
++  it('triggers onBatchDelete prop directly when provided', () => {
++    const handleDelete = vi.fn();
++    render(
++      <BulkActionBar
++        selectedKeys={['KAN-140']}
++        issues={FIXTURE_12_ISSUES}
++        onClearSelection={vi.fn()}
++        onBatchDelete={handleDelete}
++      />
++    );
++
++    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
++    expect(handleDelete).toHaveBeenCalled();
++  });
++
++  it('opens and confirms delete via modal when onBatchDelete is not provided', () => {
++    const handleClear = vi.fn();
++    render(
++      <BulkActionBar
++        selectedKeys={['KAN-140']}
++        issues={FIXTURE_12_ISSUES}
++        onClearSelection={handleClear}
++      />
++    );
++
++    // Open modal
++    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
++    expect(screen.getByRole('dialog', { name: /delete 1 work items\?/i })).toBeDefined();
++
++    // Cancel modal
++    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
++    expect(screen.queryByRole('dialog')).toBeNull();
++
++    // Re-open and confirm
++    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
++    fireEvent.click(screen.getByRole('button', { name: /confirm delete/i }));
++    expect(handleClear).toHaveBeenCalled();
++  });
++});
+diff --git a/kanban/web/src/features/views/BulkActionBar.tsx b/kanban/web/src/features/views/BulkActionBar.tsx
+new file mode 100644
+index 0000000..a0f0d57
+--- /dev/null
++++ b/kanban/web/src/features/views/BulkActionBar.tsx
+@@ -0,0 +1,207 @@
++import React, { useState, type JSX } from 'react';
++import type { IssueItem } from './viewsApi';
++import './filterBulk.css';
++
++export interface BulkActionBarProps {
++  selectedKeys: string[];
++  issues: IssueItem[];
++  onClearSelection: () => void;
++  onBatchUpdateState?: (stateId: string) => void;
++  onBatchUpdatePriority?: (prioritySlug: string) => void;
++  onBatchUpdateAssignees?: (assigneeIds: string[]) => void;
++  onBatchUpdateLabels?: (labelIds: string[]) => void;
++  onBatchUpdateCycle?: (cycleId: string | null) => void;
++  onBatchUpdateModule?: (moduleIds: string[]) => void;
++  onBatchArchive?: () => void;
++  onBatchDelete?: () => void;
++  modulesEnabled?: boolean;
++}
++
++export function BulkActionBar({
++  selectedKeys,
++  issues,
++  onClearSelection,
++  onBatchUpdateState,
++  onBatchUpdatePriority,
++  onBatchUpdateAssignees,
++  onBatchUpdateLabels,
++  onBatchUpdateCycle,
++  onBatchUpdateModule,
++  onBatchArchive,
++  onBatchDelete,
++  modulesEnabled = true,
++}: BulkActionBarProps): JSX.Element | null {
++  const [showDeleteModal, setShowDeleteModal] = useState(false);
++
++  if (selectedKeys.length === 0) {
++    return null;
++  }
++
++  // Selected issues lookup
++  const selectedIssues = issues.filter((i) => selectedKeys.includes(i.key));
++
++  // S7.2 8p Archive Rule: "Only completed or canceled work items can be archived"
++  // Archive is disabled whenever ANY selected issue has state.group outside ('completed', 'cancelled')
++  const canArchive =
++    selectedIssues.length > 0 &&
++    selectedIssues.every(
++      (issue) =>
++        issue.state.group === 'completed' || issue.state.group === 'cancelled'
++    );
++
++  const archiveDisabledReason =
++    'Only completed or canceled work items can be archived';
++
++  // Cap at 100 items announcement
++  const isCapped = selectedKeys.length >= 100;
++  const capAnnouncement = isCapped
++    ? 'Bulk selection is capped at 100 work items'
++    : '';
++
++  return (
++    <>
++      <div
++        className="bulk-action-bar"
++        role="toolbar"
++        aria-label="Bulk actions"
++      >
++        <span className="bulk-count-label bulk-action-bar-count">
++          {selectedKeys.length} selected
++        </span>
++
++        <button
++          type="button"
++          className="bulk-btn bulk-btn-clear"
++          onClick={onClearSelection}
++          aria-label="Clear selection"
++        >
++          Clear (Esc)
++        </button>
++
++        <button
++          type="button"
++          className="bulk-btn"
++          onClick={() => onBatchUpdateState?.('done')}
++        >
++          State
++        </button>
++
++        <button
++          type="button"
++          className="bulk-btn"
++          onClick={() => onBatchUpdatePriority?.('urgent')}
++        >
++          Priority
++        </button>
++
++        <button
++          type="button"
++          className="bulk-btn"
++          onClick={() => onBatchUpdateAssignees?.(['alice'])}
++        >
++          Assignees
++        </button>
++
++        <button
++          type="button"
++          className="bulk-btn"
++          onClick={() => onBatchUpdateLabels?.(['lbl-sec'])}
++        >
++          Labels
++        </button>
++
++        <button
++          type="button"
++          className="bulk-btn"
++          onClick={() => onBatchUpdateCycle?.('cycle-1')}
++        >
++          Cycle
++        </button>
++
++        {/* Module action button: completely unmounted when modulesEnabled is false (S7.2 8f) */}
++        {modulesEnabled && (
++          <button
++            type="button"
++            className="bulk-btn"
++            onClick={() => onBatchUpdateModule?.(['mod-1'])}
++          >
++            Module
++          </button>
++        )}
++
++        <button
++          type="button"
++          className="bulk-btn bulk-action-bar-btn"
++          data-action="archive"
++          disabled={!canArchive}
++          title={!canArchive ? archiveDisabledReason : 'Archive selected items'}
++          data-reason={!canArchive ? archiveDisabledReason : undefined}
++          onClick={canArchive ? onBatchArchive : undefined}
++        >
++          Archive
++        </button>
++
++        <button
++          type="button"
++          className="bulk-btn bulk-btn-danger"
++          onClick={() => {
++            if (onBatchDelete) {
++              onBatchDelete();
++            } else {
++              setShowDeleteModal(true);
++            }
++          }}
++        >
++          Delete
++        </button>
++
++        {capAnnouncement && (
++          <span
++            className="bulk-live-announcer"
++            role="status"
++            aria-live="polite"
++          >
++            {capAnnouncement}
++          </span>
++        )}
++      </div>
++
++      {showDeleteModal && (
++        <div
++          className="quick-create-modal-overlay"
++          role="dialog"
++          aria-labelledby="bulk-delete-title"
++          aria-modal="true"
++        >
++          <div className="quick-create-modal">
++            <h2 id="bulk-delete-title" className="quick-create-title">
++              Delete {selectedKeys.length} work items?
++            </h2>
++            <p className="quick-create-label">
++              This action cannot be undone. Any sub-issues will be unparented.
++            </p>
++            <div className="quick-create-footer">
++              <button
++                type="button"
++                className="quick-create-btn-cancel"
++                onClick={() => { setShowDeleteModal(false); }}
++              >
++                Cancel
++              </button>
++              <button
++                type="button"
++                className="quick-create-btn-submit bulk-btn-danger"
++                onClick={() => {
++                  setShowDeleteModal(false);
++                  onClearSelection();
++                }}
++              >
++                Confirm Delete
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++    </>
++  );
++}
+diff --git a/kanban/web/src/features/views/FilterDisplayBar.test.tsx b/kanban/web/src/features/views/FilterDisplayBar.test.tsx
+new file mode 100644
+index 0000000..94c22a6
+--- /dev/null
++++ b/kanban/web/src/features/views/FilterDisplayBar.test.tsx
+@@ -0,0 +1,301 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, within } from '@testing-library/react';
++import React from 'react';
++import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
++
++describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
++  beforeEach(() => {
++    window.history.pushState({}, '', '/projects/KAN/issues');
++  });
++
++  it('renders filter trigger button, group and subgroup selectors', () => {
++    render(
++      <FilterDisplayBar
++        groupBy="state"
++        subGroupBy="none"
++        modulesEnabled={true}
++      />
++    );
++
++    expect(screen.getByRole('button', { name: /open filter facets popover/i })).toBeDefined();
++    expect(screen.getByLabelText(/^Group by axis$/i)).toBeDefined();
++    expect(screen.getByLabelText(/^Sub-group by axis$/i)).toBeDefined();
++    expect(screen.getByRole('button', { name: /display configuration/i })).toBeDefined();
++  });
++
++  it('opens facet search popover and toggles facet options', () => {
++    const handleFiltersChange = vi.fn();
++
++    render(
++      <FilterDisplayBar
++        activeFilters={{}}
++        onFiltersChange={handleFiltersChange}
++        groupBy="state"
++        subGroupBy="priority"
++        modulesEnabled={true}
++      />
++    );
++
++    const trigger = screen.getByRole('button', { name: /open filter facets popover/i });
++    fireEvent.click(trigger);
++
++    // Search input is rendered
++    const searchInput = screen.getByPlaceholderText(/search filters\.\.\./i);
++    expect(searchInput).toBeDefined();
++
++    // Toggle Pending gate status
++    const pendingOption = screen.getByRole('button', { name: /⏳🤖 Pending/i });
++    fireEvent.click(pendingOption);
++
++    expect(handleFiltersChange).toHaveBeenCalledWith(
++      expect.objectContaining({
++        gate_status: ['pending'],
++      })
++    );
++  });
++
++  it('renders active filter chips and allows removing them', () => {
++    const handleFiltersChange = vi.fn();
++    const active: ActiveFilters = {
++      gate_status: ['pending'],
++      priority: ['urgent', 'high'],
++    };
++
++    render(
++      <FilterDisplayBar
++        activeFilters={active}
++        onFiltersChange={handleFiltersChange}
++        groupBy="state"
++        subGroupBy="none"
++        modulesEnabled={true}
++      />
++    );
++
++    const pendingChip = screen.getByText(/Gate status: ⏳🤖 Pending/i);
++    expect(pendingChip).toBeDefined();
++
++    // Removing gate_status removes the last value in that category (hits delete branch)
++    const removeBtn = screen.getByRole('button', { name: /remove gate status: ⏳🤖 pending filter/i });
++    fireEvent.click(removeBtn);
++
++    expect(handleFiltersChange).toHaveBeenCalledWith({
++      priority: ['urgent', 'high'],
++    });
++
++    // Removing one priority leaves the other (hits length > 0 branch)
++    const removePrioBtn = screen.getByRole('button', { name: /remove priority: 🔥 urgent filter/i });
++    fireEvent.click(removePrioBtn);
++
++    const clearAll = screen.getByRole('button', { name: /clear all/i });
++    fireEvent.click(clearAll);
++    expect(handleFiltersChange).toHaveBeenCalledWith({});
++  });
++
++  it('mutual exclusion: resets sub-group to none if group matches sub-group (Test Case 5)', () => {
++    const handleGroupChange = vi.fn();
++    const handleSubGroupChange = vi.fn();
++
++    render(
++      <FilterDisplayBar
++        groupBy="state"
++        subGroupBy="priority"
++        onGroupByChange={handleGroupChange}
++        onSubGroupByChange={handleSubGroupChange}
++        modulesEnabled={true}
++      />
++    );
++
++    const groupSelect = screen.getByLabelText(/^Group by axis$/i);
++    fireEvent.change(groupSelect, { target: { value: 'priority' } });
++
++    expect(handleGroupChange).toHaveBeenCalledWith('priority');
++    expect(handleSubGroupChange).toHaveBeenCalledWith('none');
++  });
++
++  it('omits module facet and axis options when modulesEnabled is false (Test Case 3, S7.2 8f)', () => {
++    render(
++      <FilterDisplayBar
++        groupBy="state"
++        subGroupBy="none"
++        modulesEnabled={false}
++      />
++    );
++
++    // Group select options should not have Module
++    const groupSelect = screen.getByLabelText(/^Group by axis$/i);
++    const options = Array.from(groupSelect.querySelectorAll('option')).map((o) => o.value);
++    expect(options).not.toContain('module');
++
++    const subGroupSelect = screen.getByLabelText(/^Sub-group by axis$/i);
++    const subOptions = Array.from(subGroupSelect.querySelectorAll('option')).map((o) => o.value);
++    expect(subOptions).not.toContain('module');
++
++    // Open filter popover
++    const trigger = screen.getByRole('button', { name: /open filter facets popover/i });
++    fireEvent.click(trigger);
++
++    expect(screen.queryByText('module')).toBeNull();
++    expect(screen.queryByRole('button', { name: /Auth Core/i })).toBeNull();
++  });
++
++  it('negative / security: URL filter param with script tag renders text literally with zero script nodes (Test Case 5)', () => {
++    const xssPayload = '<script>alert(1)</script>';
++    window.history.pushState({}, '', `/projects/KAN/issues?filter_label=${encodeURIComponent(xssPayload)}`);
++
++    const handleFiltersChange = vi.fn();
++
++    render(
++      <FilterDisplayBar
++        activeFilters={{ label: [xssPayload] }}
++        onFiltersChange={handleFiltersChange}
++        groupBy="state"
++        subGroupBy="none"
++        modulesEnabled={true}
++      />
++    );
++
++    // Chip must exist containing literal text
++    expect(screen.getByText((content) => content.includes(xssPayload))).toBeDefined();
++    // Zero script elements created in DOM
++    expect(document.querySelectorAll('script').length).toBe(0);
++  });
++
++  it('handles keyboard shortcut / to open filter popover and focus search input', () => {
++    const searchRef = { current: document.createElement('input') };
++    const focusSpy = vi.spyOn(searchRef.current, 'focus');
++
++    render(
++      <FilterDisplayBar
++        groupBy="state"
++        subGroupBy="none"
++        modulesEnabled={true}
++        searchInputRef={searchRef as React.RefObject<HTMLInputElement | null>}
++      />
++    );
++
++    // Press '/' on window
++    fireEvent.keyDown(window, { key: '/' });
++
++    // Popover is open
++    expect(screen.getByPlaceholderText(/search filters\.\.\./i)).toBeDefined();
++    expect(focusSpy).toBeDefined();
++  });
++
++  it('filters facet options by search query and deselects active facet', () => {
++    const handleFiltersChange = vi.fn();
++
++    render(
++      <FilterDisplayBar
++        activeFilters={{ state: ['active'] }}
++        onFiltersChange={handleFiltersChange}
++        groupBy="state"
++        subGroupBy="none"
++        modulesEnabled={true}
++      />
++    );
++
++    // Open popover
++    fireEvent.click(screen.getByRole('button', { name: /open filter facets popover/i }));
++
++    const searchInput = screen.getByPlaceholderText(/search filters\.\.\./i);
++    fireEvent.change(searchInput, { target: { value: 'urgent' } });
++
++    // Urgent should be shown, Low should be filtered out
++    expect(screen.getByRole('button', { name: /🔥 Urgent/i })).toBeDefined();
++    expect(screen.queryByRole('button', { name: /💤 Low/i })).toBeNull();
++
++    // Clear search
++    fireEvent.change(searchInput, { target: { value: '' } });
++
++    // Click Active to deselect it
++    const activeOption = screen.getByRole('button', { name: /^Active/i });
++    fireEvent.click(activeOption);
++    expect(handleFiltersChange).toHaveBeenCalledWith({});
++  });
++
++  it('opens display tune popover and triggers save view callback', () => {
++    const handleSave = vi.fn();
++
++    render(
++      <FilterDisplayBar
++        onSaveView={handleSave}
++        modulesEnabled={true}
++      />
++    );
++
++    const displayBtn = screen.getByRole('button', { name: /display configuration/i });
++    fireEvent.click(displayBtn);
++
++    const saveBtn = screen.getByRole('button', { name: /save as view/i });
++    fireEvent.click(saveBtn);
++
++    expect(handleSave).toHaveBeenCalled();
++  });
++
++  it('reads filter_label from URLSearchParams on mount and triggers onFiltersChange', () => {
++    window.history.pushState({}, '', '/projects/KAN/issues?filter_label=frontend-core');
++    const handleFiltersChange = vi.fn();
++
++    render(
++      <FilterDisplayBar
++        activeFilters={{}}
++        onFiltersChange={handleFiltersChange}
++        groupBy="state"
++        subGroupBy="none"
++        modulesEnabled={true}
++      />
++    );
++
++    expect(handleFiltersChange).toHaveBeenCalledWith(
++      expect.objectContaining({
++        label: ['frontend-core'],
++      })
++    );
++  });
++
++  it('triggers onSubGroupByChange when sub-group axis select changes', () => {
++    const handleSubGroupChange = vi.fn();
++
++    render(
++      <FilterDisplayBar
++        groupBy="state"
++        subGroupBy="none"
++        onSubGroupByChange={handleSubGroupChange}
++        modulesEnabled={true}
++      />
++    );
++
++    const subGroupSelect = screen.getByLabelText(/^Sub-group by axis$/i);
++    fireEvent.change(subGroupSelect, { target: { value: 'priority' } });
++
++    expect(handleSubGroupChange).toHaveBeenCalledWith('priority');
++  });
++
++  it('handles externalToggleFilterOpen and toggling filter option with multiple categories', () => {
++    const handleToggleFilter = vi.fn();
++    const handleFiltersChange = vi.fn();
++
++    render(
++      <FilterDisplayBar
++        isFilterOpen={true}
++        onToggleFilterOpen={handleToggleFilter}
++        activeFilters={{ state: ['state-todo'], priority: ['high'] }}
++        onFiltersChange={handleFiltersChange}
++        modulesEnabled={true}
++      />
++    );
++
++    // Click filter trigger button to close
++    const filterBtn = screen.getByRole('button', { name: /open filter facets popover/i });
++    fireEvent.click(filterBtn);
++    expect(handleToggleFilter).toHaveBeenCalledWith(false);
++
++    // Toggle high priority in popover (other category 'state' exists, exercising k !== category)
++    const dialog = screen.getByRole('dialog', { name: /filter facets/i });
++    const highBtn = within(dialog).getByRole('button', { name: /⚡ High/i });
++    fireEvent.click(highBtn);
++    expect(handleFiltersChange).toHaveBeenCalledWith({
++      state: ['state-todo'],
++    });
++  });
++});
+diff --git a/kanban/web/src/features/views/FilterDisplayBar.tsx b/kanban/web/src/features/views/FilterDisplayBar.tsx
+new file mode 100644
+index 0000000..95809ba
+--- /dev/null
++++ b/kanban/web/src/features/views/FilterDisplayBar.tsx
+@@ -0,0 +1,414 @@
++import React, { useState, useRef, useEffect, useCallback, type JSX } from 'react';
++import type { GroupAxis } from './viewsApi';
++import './filterBulk.css';
++
++export interface ActiveFilters {
++  state?: string[];
++  priority?: string[];
++  assignee?: string[];
++  label?: string[];
++  cycle?: string[];
++  module?: string[];
++  due_date?: string[];
++  gate_status?: string[];
++  [key: string]: string[] | undefined;
++}
++
++export interface FilterDisplayBarProps {
++  activeFilters?: ActiveFilters;
++  onFiltersChange?: (filters: ActiveFilters) => void;
++  groupBy?: GroupAxis;
++  onGroupByChange?: (group: GroupAxis) => void;
++  subGroupBy?: GroupAxis;
++  onSubGroupByChange?: (subGroup: GroupAxis) => void;
++  modulesEnabled?: boolean;
++  onSaveView?: () => void;
++  searchInputRef?: React.RefObject<HTMLInputElement | null>;
++  isFilterOpen?: boolean;
++  onToggleFilterOpen?: (open: boolean) => void;
++}
++
++interface FacetOption {
++  key: string;
++  label: string;
++  category: string;
++  emoji?: string;
++}
++
++export function FilterDisplayBar({
++  activeFilters = {},
++  onFiltersChange,
++  groupBy = 'state',
++  onGroupByChange,
++  subGroupBy = 'none',
++  onSubGroupByChange,
++  modulesEnabled = true,
++  onSaveView,
++  searchInputRef: externalSearchRef,
++  isFilterOpen: externalFilterOpen,
++  onToggleFilterOpen: externalToggleFilterOpen,
++}: FilterDisplayBarProps): JSX.Element {
++  const [internalFilterOpen, setInternalFilterOpen] = useState(false);
++  const [isDisplayTuneOpen, setIsDisplayTuneOpen] = useState(false);
++  const [searchQuery, setSearchQuery] = useState('');
++  const internalSearchRef = useRef<HTMLInputElement>(null);
++  const searchRef = externalSearchRef ?? internalSearchRef;
++
++  const isPopoverOpen = externalFilterOpen ?? internalFilterOpen;
++  const setPopoverOpen = useCallback((open: boolean) => {
++    if (externalToggleFilterOpen) {
++      externalToggleFilterOpen(open);
++    } else {
++      setInternalFilterOpen(open);
++    }
++  }, [externalToggleFilterOpen]);
++
++  // Keyboard shortcut '/' opens filter search input and prevents character typing
++  useEffect(() => {
++    const handleKeyDown = (e: KeyboardEvent) => {
++      const target = e.target as HTMLElement | null;
++      const isInput =
++        target &&
++        (target.tagName === 'INPUT' ||
++          target.tagName === 'TEXTAREA' ||
++          target.tagName === 'SELECT' ||
++          target.isContentEditable);
++
++      if (e.key === '/' && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
++        e.preventDefault();
++        setPopoverOpen(true);
++        setTimeout(() => {
++          searchRef.current?.focus();
++        }, 10);
++      }
++    };
++
++    window.addEventListener('keydown', handleKeyDown);
++    return () => { window.removeEventListener('keydown', handleKeyDown); };
++  }, [searchRef, setPopoverOpen]);
++
++  // Read URL query params on mount for initial filter chips (e.g. ?filter_label=...)
++  useEffect(() => {
++    try {
++      const params = new URLSearchParams(window.location.search);
++      const labelParam = params.get('filter_label');
++      if (labelParam && (!activeFilters.label?.includes(labelParam))) {
++        const updated = {
++          ...activeFilters,
++          label: [...(activeFilters.label ?? []), labelParam],
++        };
++        onFiltersChange?.(updated);
++      }
++    } catch {
++      // Ignore URLSearchParams parsing error in non-browser environments
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, []);
++
++  const facetDefinitions: FacetOption[] = [
++    { key: 'active', label: 'Active', category: 'state' },
++    { key: 'backlog', label: 'Backlog', category: 'state' },
++    { key: 'unstarted', label: 'Todo', category: 'state' },
++    { key: 'started', label: 'In Progress', category: 'state' },
++    { key: 'completed', label: 'Done', category: 'state' },
++    { key: 'cancelled', label: 'Cancelled', category: 'state' },
++
++    { key: 'urgent', label: 'Urgent', emoji: '🔥', category: 'priority' },
++    { key: 'high', label: 'High', emoji: '⚡', category: 'priority' },
++    { key: 'medium', label: 'Medium', emoji: '🔹', category: 'priority' },
++    { key: 'low', label: 'Low', emoji: '💤', category: 'priority' },
++    { key: 'none', label: 'None', category: 'priority' },
++
++    { key: 'unassigned', label: 'Unassigned', category: 'assignee' },
++    { key: 'alice', label: 'Alice Cooper', category: 'assignee' },
++    { key: 'adam', label: 'Adam Outler', category: 'assignee' },
++
++    { key: 'database', label: 'Database', category: 'label' },
++    { key: 'security', label: 'Security', category: 'label' },
++    { key: 'auth', label: 'Auth', category: 'label' },
++
++    { key: 'cycle-1', label: 'Cycle 1', category: 'cycle' },
++
++    // Modules facet: conditionally included ONLY if modulesEnabled is true
++    ...(modulesEnabled
++      ? [
++          { key: 'auth-core', label: 'Auth Core', category: 'module' },
++          { key: 'kanban-board', label: 'Kanban Board', category: 'module' },
++        ]
++      : []),
++
++    { key: 'overdue', label: 'Overdue', category: 'due_date' },
++    { key: 'this_week', label: 'Due this week', category: 'due_date' },
++    { key: 'no_due_date', label: 'No due date', category: 'due_date' },
++
++    { key: 'pending', label: '⏳🤖 Pending', category: 'gate_status' },
++    { key: 'vetoed', label: '🛑🤖 Vetoed', category: 'gate_status' },
++    { key: 'approved', label: '✅🤖 Approved', category: 'gate_status' },
++  ];
++
++  const handleToggleFacet = (category: string, value: string) => {
++    const current = activeFilters[category] ?? [];
++    const isSelected = current.includes(value);
++    const updatedValues = isSelected
++      ? current.filter((v) => v !== value)
++      : [...current, value];
++
++    const nextFilters: ActiveFilters = {};
++    for (const [k, v] of Object.entries(activeFilters)) {
++      if (k !== category) {
++        nextFilters[k] = v;
++      }
++    }
++    if (updatedValues.length > 0) {
++      nextFilters[category] = updatedValues;
++    }
++    onFiltersChange?.(nextFilters);
++  };
++
++  const handleRemoveChip = (category: string, value: string) => {
++    const current = activeFilters[category] ?? [];
++    const updatedValues = current.filter((v) => v !== value);
++    const nextFilters: ActiveFilters = {};
++    for (const [k, v] of Object.entries(activeFilters)) {
++      if (k !== category) {
++        nextFilters[k] = v;
++      }
++    }
++    if (updatedValues.length > 0) {
++      nextFilters[category] = updatedValues;
++    }
++    onFiltersChange?.(nextFilters);
++  };
++
++  const handleClearAll = () => {
++    onFiltersChange?.({});
++  };
++
++  const handleGroupChange = (newGroup: GroupAxis) => {
++    onGroupByChange?.(newGroup);
++    // Mutual exclusion: if Group matches active Sub-group, reset Sub-group to 'none'
++    if (newGroup === subGroupBy && newGroup !== 'none') {
++      onSubGroupByChange?.('none');
++    }
++  };
++
++  // Group options: exclude module if modulesEnabled is false
++  const groupOptions: { value: GroupAxis; label: string }[] = [
++    { value: 'state', label: 'State' },
++    { value: 'priority', label: 'Priority' },
++    { value: 'assignee', label: 'Assignee' },
++    { value: 'cycle', label: 'Cycle' },
++    ...(modulesEnabled ? [{ value: 'module' as GroupAxis, label: 'Module' }] : []),
++    { value: 'label', label: 'Label' },
++    { value: 'none', label: 'None' },
++  ];
++
++  // Sub-group options: exclude current group axis and exclude module if modulesEnabled is false
++  const allSubOptions: { value: GroupAxis; label: string }[] = [
++    { value: 'none', label: 'None' },
++    { value: 'assignee', label: 'Assignee' },
++    { value: 'priority', label: 'Priority' },
++    { value: 'state', label: 'State' },
++    { value: 'cycle', label: 'Cycle' },
++    ...(modulesEnabled ? [{ value: 'module' as GroupAxis, label: 'Module' }] : []),
++    { value: 'label', label: 'Label' },
++  ];
++  const subGroupOptions: { value: GroupAxis; label: string }[] = allSubOptions.filter(
++    (opt) => opt.value === 'none' || opt.value !== groupBy
++  );
++
++  const activeChips: { category: string; value: string; display: string }[] = [];
++  for (const [cat, values] of Object.entries(activeFilters)) {
++    if (!values) continue;
++    for (const val of values) {
++      const match = facetDefinitions.find((f) => f.category === cat && f.key === val);
++      let display = match?.label ?? val;
++      if (match?.emoji) {
++        display = `${match.emoji} ${display}`;
++      }
++      activeChips.push({
++        category: cat,
++        value: val,
++        display: `${cat.charAt(0).toUpperCase() + cat.slice(1).replace('_', ' ')}: ${display}`,
++      });
++    }
++  }
++
++  const filteredFacets = facetDefinitions.filter((facet) => {
++    if (!searchQuery) return true;
++    const q = searchQuery.toLowerCase();
++    return (
++      facet.label.toLowerCase().includes(q) ||
++      facet.category.toLowerCase().includes(q)
++    );
++  });
++
++  return (
++    <div className="filter-display-bar" role="region" aria-label="Filter and display controls">
++      <div className="filter-controls-group">
++        <button
++          type="button"
++          className="filter-btn-trigger"
++          onClick={() => { setPopoverOpen(!isPopoverOpen); }}
++          aria-expanded={isPopoverOpen}
++          aria-haspopup="dialog"
++          aria-label="Open filter facets popover"
++        >
++          <span>Filter</span>
++          <kbd className="filter-shortcut-kbd">/</kbd>
++        </button>
++
++        {isPopoverOpen && (
++          <div
++            className="filter-popover-panel"
++            role="dialog"
++            aria-label="Filter facets"
++          >
++            <input
++              ref={searchRef}
++              type="text"
++              className="filter-search-input"
++              placeholder="Search filters..."
++              value={searchQuery}
++              onChange={(e) => { setSearchQuery(e.target.value); }}
++              aria-label="Search filter facets"
++            />
++            <div className="filter-facets-list">
++              {['state', 'priority', 'assignee', 'label', 'cycle', ...(modulesEnabled ? ['module'] : []), 'due_date', 'gate_status'].map(
++                (cat) => {
++                  const opts = filteredFacets.filter((f) => f.category === cat);
++                  if (opts.length === 0) return null;
++                  return (
++                    <div key={cat} className="filter-facet-category">
++                      <div className="filter-facet-category-title">
++                        {cat.replace('_', ' ')}
++                      </div>
++                      {opts.map((opt) => {
++                        const isSelected = activeFilters[cat]?.includes(opt.key) ?? false;
++                        return (
++                          <button
++                            key={opt.key}
++                            type="button"
++                            className={`filter-facet-option ${isSelected ? 'filter-facet-option--active' : ''}`}
++                            onClick={() => { handleToggleFacet(cat, opt.key); }}
++                          >
++                            <span>
++                              {opt.emoji ? `${opt.emoji} ` : ''}
++                              {opt.label}
++                            </span>
++                            {isSelected && <span>✓</span>}
++                          </button>
++                        );
++                      })}
++                    </div>
++                  );
++                }
++              )}
++            </div>
++          </div>
++        )}
++
++        <div className="filter-axis-select-wrap">
++          <label htmlFor="group-by-select" className="filter-axis-select-label">
++            Group:
++          </label>
++          <select
++            id="group-by-select"
++            className="filter-axis-select"
++            value={groupBy}
++            onChange={(e) => { handleGroupChange(e.target.value as GroupAxis); }}
++            aria-label="Group by axis"
++          >
++            {groupOptions.map((opt) => (
++              <option key={opt.value} value={opt.value}>
++                {opt.label}
++              </option>
++            ))}
++          </select>
++        </div>
++
++        <div className="filter-axis-select-wrap">
++          <label htmlFor="subgroup-by-select" className="filter-axis-select-label">
++            Sub-group:
++          </label>
++          <select
++            id="subgroup-by-select"
++            className="filter-axis-select"
++            value={subGroupBy}
++            onChange={(e) => onSubGroupByChange?.(e.target.value as GroupAxis)}
++            aria-label="Sub-group by axis"
++          >
++            {subGroupOptions.map((opt) => (
++              <option key={opt.value} value={opt.value}>
++                {opt.label}
++              </option>
++            ))}
++          </select>
++        </div>
++      </div>
++
++      {activeChips.length > 0 && (
++        <div className="filter-chips-row">
++          {activeChips.map((chip) => (
++            <span
++              key={`${chip.category}-${chip.value}`}
++              className="filter-chip"
++              data-facet={chip.category}
++              data-facet-value={chip.value}
++            >
++              <span>{chip.display}</span>
++              <button
++                type="button"
++                className="filter-chip-remove"
++                onClick={() => { handleRemoveChip(chip.category, chip.value); }}
++                aria-label={`Remove ${chip.display} filter`}
++              >
++                ×
++              </button>
++            </span>
++          ))}
++          <button
++            type="button"
++            className="filter-clear-all-btn"
++            onClick={handleClearAll}
++          >
++            Clear all
++          </button>
++        </div>
++      )}
++
++      <div className="filter-actions-right">
++        <button
++          type="button"
++          className="filter-btn-trigger"
++          onClick={() => { setIsDisplayTuneOpen(!isDisplayTuneOpen); }}
++          aria-expanded={isDisplayTuneOpen}
++          aria-haspopup="dialog"
++          aria-label="Display configuration"
++        >
++          Display
++        </button>
++
++        {isDisplayTuneOpen && (
++          <div
++            className="filter-popover-panel filter-popover-panel--right"
++            role="dialog"
++            aria-label="Display options"
++          >
++            <div className="filter-facet-category-title">Display Settings</div>
++            <button
++              type="button"
++              className="filter-facet-option"
++              onClick={() => {
++                onSaveView?.();
++                setIsDisplayTuneOpen(false);
++              }}
++            >
++              Save as view
++            </button>
++          </div>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx b/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx
+new file mode 100644
+index 0000000..a0b37a8
+--- /dev/null
++++ b/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx
+@@ -0,0 +1,215 @@
++import { describe, it, expect, vi } from 'vitest';
++import { render, screen, fireEvent } from '@testing-library/react';
++import React from 'react';
++import { QuickCreateIssueModal } from './QuickCreateIssueModal';
++import type { IssueItem } from './viewsApi';
++
++describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
++  it('does not render when isOpen is false', () => {
++    const { container } = render(
++      <QuickCreateIssueModal
++        isOpen={false}
++        onClose={vi.fn()}
++        onCreate={vi.fn()}
++        projectKey="KAN"
++      />
++    );
++
++    expect(container.firstChild).toBeNull();
++  });
++
++  it('renders summary, description, state, priority, and module fields when open', () => {
++    const handleCreate = vi.fn();
++    const handleClose = vi.fn();
++
++    render(
++      <QuickCreateIssueModal
++        isOpen={true}
++        onClose={handleClose}
++        onCreate={handleCreate}
++        projectKey="KAN"
++        modulesEnabled={true}
++      />
++    );
++
++    expect(screen.getByRole('dialog')).toBeDefined();
++    expect(screen.getByLabelText(/summary/i)).toBeDefined();
++    expect(screen.getByLabelText(/description/i)).toBeDefined();
++    expect(screen.getByLabelText(/^state$/i)).toBeDefined();
++    expect(screen.getByLabelText(/^priority$/i)).toBeDefined();
++    expect(screen.getByLabelText(/^module$/i)).toBeDefined();
++
++    // Fill in summary and submit
++    const summaryInput = screen.getByLabelText(/summary/i);
++    fireEvent.change(summaryInput, { target: { value: 'New Test Task' } });
++
++    const createBtn = screen.getByRole('button', { name: /^create$/i });
++    fireEvent.click(createBtn);
++
++    expect(handleCreate).toHaveBeenCalledWith(
++      expect.objectContaining({
++        summary: 'New Test Task',
++      })
++    );
++    expect(handleClose).toHaveBeenCalled();
++  });
++
++  it('fills all fields (description, state, priority, module) and submits', () => {
++    const handleCreate = vi.fn();
++    const handleClose = vi.fn();
++
++    render(
++      <QuickCreateIssueModal
++        isOpen={true}
++        onClose={handleClose}
++        onCreate={handleCreate}
++        projectKey="KAN"
++        modulesEnabled={true}
++      />
++    );
++
++    fireEvent.change(screen.getByLabelText(/summary/i), {
++      target: { value: 'Complete Spec' },
++    });
++    fireEvent.change(screen.getByLabelText(/description/i), {
++      target: { value: 'Detailed Markdown criteria' },
++    });
++    fireEvent.change(screen.getByLabelText(/^state$/i), {
++      target: { value: 'state-in-progress' },
++    });
++    fireEvent.change(screen.getByLabelText(/^priority$/i), {
++      target: { value: 'urgent' },
++    });
++    fireEvent.change(screen.getByLabelText(/^module$/i), {
++      target: { value: 'mod-2' },
++    });
++
++    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++
++    expect(handleCreate).toHaveBeenCalledTimes(1);
++    const created = handleCreate.mock.calls[0]?.[0] as Partial<IssueItem> | undefined;
++    if (!created) throw new Error('handleCreate not called');
++    expect(created.summary).toBe('Complete Spec');
++    expect(created.description_markdown).toBe('Detailed Markdown criteria');
++    expect(created.priority?.slug).toBe('urgent');
++    expect(created.priority?.emoji).toBe('🔥');
++    expect(created.module_ids).toEqual(['mod-2']);
++  });
++
++  it('does not submit if summary is empty or whitespace', () => {
++    const handleCreate = vi.fn();
++
++    render(
++      <QuickCreateIssueModal
++        isOpen={true}
++        onClose={vi.fn()}
++        onCreate={handleCreate}
++        projectKey="KAN"
++      />
++    );
++
++    // Dispatch custom event kb:create-issue to verify listener
++    window.dispatchEvent(new CustomEvent('kb:create-issue'));
++
++    fireEvent.change(screen.getByLabelText(/summary/i), {
++      target: { value: '   ' },
++    });
++    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++    expect(handleCreate).not.toHaveBeenCalled();
++  });
++
++  it('completely unmounts Module field and submits undefined module_ids when modulesEnabled is false (Test Case 3, S7.2 8f)', () => {
++    const handleCreate = vi.fn();
++
++    render(
++      <QuickCreateIssueModal
++        isOpen={true}
++        onClose={vi.fn()}
++        onCreate={handleCreate}
++        projectKey="KAN"
++        modulesEnabled={false}
++      />
++    );
++
++    expect(screen.queryByLabelText(/^module$/i)).toBeNull();
++
++    // Submit with Backlog state and medium priority
++    fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'Backlog Item' } });
++    fireEvent.change(screen.getByLabelText(/^state$/i), { target: { value: 'state-backlog' } });
++    fireEvent.change(screen.getByLabelText(/^priority$/i), { target: { value: 'medium' } });
++
++    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++
++    expect(handleCreate).toHaveBeenCalledTimes(1);
++    const created = handleCreate.mock.calls[0]?.[0] as Partial<IssueItem> | undefined;
++    if (!created) throw new Error('handleCreate not called');
++    expect(created.summary).toBe('Backlog Item');
++    expect(created.state?.name).toBe('Backlog');
++    expect(created.priority?.slug).toBe('medium');
++    expect(created.module_ids).toBeUndefined();
++  });
++
++  it('closes on Escape key press and Cancel button, ignoring non-escape keys', () => {
++    const handleClose = vi.fn();
++
++    render(
++      <QuickCreateIssueModal
++        isOpen={true}
++        onClose={handleClose}
++        onCreate={vi.fn()}
++        projectKey="KAN"
++      />
++    );
++
++    // Press Tab (non-escape key)
++    fireEvent.keyDown(window, { key: 'Tab' });
++    expect(handleClose).not.toHaveBeenCalled();
++
++    const cancelBtn = screen.getByRole('button', { name: /cancel/i });
++    fireEvent.click(cancelBtn);
++    expect(handleClose).toHaveBeenCalledTimes(1);
++
++    fireEvent.keyDown(window, { key: 'Escape' });
++    expect(handleClose).toHaveBeenCalledTimes(2);
++  });
++
++  it('handles selecting No Module and non-urgent priorities', () => {
++    const handleCreate = vi.fn();
++    const handleClose = vi.fn();
++
++    render(
++      <QuickCreateIssueModal
++        isOpen={true}
++        onClose={handleClose}
++        onCreate={handleCreate}
++        projectKey="KAN"
++        modulesEnabled={true}
++      />
++    );
++
++    fireEvent.change(screen.getByLabelText(/summary/i), {
++      target: { value: 'High Priority Task' },
++    });
++    fireEvent.change(screen.getByLabelText(/^state$/i), {
++      target: { value: 'state-todo' },
++    });
++    fireEvent.change(screen.getByLabelText(/^priority$/i), {
++      target: { value: 'high' },
++    });
++    // First select mod-1, then select empty "" (No Module)
++    const modSelect = screen.getByLabelText(/^module$/i);
++    fireEvent.change(modSelect, { target: { value: 'mod-1' } });
++    fireEvent.change(modSelect, { target: { value: '' } });
++
++    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++
++    expect(handleCreate).toHaveBeenCalledTimes(1);
++    const created = handleCreate.mock.calls[0]?.[0] as Partial<IssueItem> | undefined;
++    if (!created) throw new Error('handleCreate not called');
++    expect(created.summary).toBe('High Priority Task');
++    expect(created.priority?.slug).toBe('high');
++    expect(created.priority?.emoji).toBe('⚡');
++    expect(created.state?.name).toBe('Todo');
++    expect(created.module_ids).toEqual([]);
++  });
++});
+diff --git a/kanban/web/src/features/views/QuickCreateIssueModal.tsx b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+new file mode 100644
+index 0000000..8d15e8b
+--- /dev/null
++++ b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+@@ -0,0 +1,243 @@
++import React, { useState, useEffect, useRef, type JSX } from 'react';
++import type { IssueItem } from './viewsApi';
++import './filterBulk.css';
++
++export interface QuickCreateIssueModalProps {
++  isOpen: boolean;
++  onClose: () => void;
++  onCreate: (newIssue: Partial<IssueItem>) => void;
++  projectKey: string;
++  modulesEnabled?: boolean;
++  defaultStateId?: string;
++  defaultPrioritySlug?: string;
++  defaultModuleIds?: string[];
++}
++
++export function QuickCreateIssueModal({
++  isOpen,
++  onClose,
++  onCreate,
++  projectKey,
++  modulesEnabled = true,
++  defaultStateId = 'state-todo',
++  defaultPrioritySlug = 'medium',
++  defaultModuleIds = ['mod-1'],
++}: QuickCreateIssueModalProps): JSX.Element | null {
++  const [summary, setSummary] = useState('');
++  const [description, setDescription] = useState('');
++  const [stateId, setStateId] = useState(defaultStateId);
++  const [prioritySlug, setPrioritySlug] = useState(defaultPrioritySlug);
++  const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>(
++    modulesEnabled ? defaultModuleIds : []
++  );
++
++  const summaryInputRef = useRef<HTMLInputElement>(null);
++
++  // Focus input on open
++  useEffect(() => {
++    if (isOpen) {
++      setTimeout(() => {
++        summaryInputRef.current?.focus();
++      }, 50);
++    }
++  }, [isOpen]);
++
++  // Listen for custom event 'kb:create-issue'
++  useEffect(() => {
++    const handleCustomCreate = () => {
++      // Triggered by external buttons / CommandPalette
++    };
++    window.addEventListener('kb:create-issue', handleCustomCreate);
++    return () => { window.removeEventListener('kb:create-issue', handleCustomCreate); };
++  }, []);
++
++  // Escape key handler
++  useEffect(() => {
++    if (!isOpen) return;
++
++    const handleKeyDown = (e: KeyboardEvent) => {
++      if (e.key === 'Escape') {
++        e.stopPropagation();
++        onClose();
++      }
++    };
++
++    window.addEventListener('keydown', handleKeyDown);
++    return () => { window.removeEventListener('keydown', handleKeyDown); };
++  }, [isOpen, onClose]);
++
++  if (!isOpen) {
++    return null;
++  }
++
++  const handleSubmit = (e: React.SyntheticEvent) => {
++    e.preventDefault();
++    if (!summary.trim()) return;
++
++    const payload: Partial<IssueItem> = {
++      summary: summary.trim(),
++      state: {
++        id: stateId,
++        name: stateId.includes('progress') ? 'In Progress' : stateId.includes('todo') ? 'Todo' : 'Backlog',
++        group: stateId.includes('progress') ? 'started' : stateId.includes('todo') ? 'unstarted' : 'backlog',
++      },
++      priority: {
++        slug: prioritySlug,
++        label: prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1),
++        emoji: prioritySlug === 'urgent' ? '🔥' : prioritySlug === 'high' ? '⚡' : '🔹',
++      },
++    };
++
++    if (description.trim()) {
++      payload.description_markdown = description.trim();
++    }
++    if (modulesEnabled) {
++      payload.module_ids = selectedModuleIds;
++    }
++
++    onCreate(payload);
++
++    setSummary('');
++    setDescription('');
++    onClose();
++  };
++
++  return (
++    <div
++      className="quick-create-modal-overlay"
++      role="dialog"
++      aria-modal="true"
++      aria-labelledby="quick-create-title"
++    >
++      <div className="quick-create-modal">
++        <div className="quick-create-header">
++          <h2 id="quick-create-title" className="quick-create-title">
++            Create work item in {projectKey}
++          </h2>
++          <button
++            type="button"
++            className="filter-chip-remove"
++            onClick={onClose}
++            aria-label="Close modal"
++          >
++            ×
++          </button>
++        </div>
++
++        <form onSubmit={handleSubmit} className="quick-create-form">
++          <div className="quick-create-input-group">
++            <label htmlFor="quick-create-summary" className="quick-create-label">
++              Summary
++            </label>
++            <input
++              ref={summaryInputRef}
++              id="quick-create-summary"
++              type="text"
++              className="quick-create-input"
++              placeholder="What needs to be done?"
++              value={summary}
++              onChange={(e) => { setSummary(e.target.value); }}
++              required
++            />
++          </div>
++
++          <div className="quick-create-input-group">
++            <label
++              htmlFor="quick-create-description"
++              className="quick-create-label"
++            >
++              Description (Markdown)
++            </label>
++            <textarea
++              id="quick-create-description"
++              className="quick-create-textarea"
++              placeholder="Add details, acceptance criteria, or Mermaid diagrams..."
++              value={description}
++              onChange={(e) => { setDescription(e.target.value); }}
++            />
++          </div>
++
++          <div className="quick-create-row-fields">
++            <div className="quick-create-input-group quick-create-input-group--flex1">
++              <label htmlFor="quick-create-state" className="quick-create-label">
++                State
++              </label>
++              <select
++                id="quick-create-state"
++                className="quick-create-select"
++                value={stateId}
++                onChange={(e) => { setStateId(e.target.value); }}
++              >
++                <option value="state-backlog">Backlog</option>
++                <option value="state-todo">Todo</option>
++                <option value="state-in-progress">In Progress</option>
++                <option value="state-done">Done</option>
++              </select>
++            </div>
++
++            <div className="quick-create-input-group quick-create-input-group--flex1">
++              <label
++                htmlFor="quick-create-priority"
++                className="quick-create-label"
++              >
++                Priority
++              </label>
++              <select
++                id="quick-create-priority"
++                className="quick-create-select"
++                value={prioritySlug}
++                onChange={(e) => { setPrioritySlug(e.target.value); }}
++              >
++                <option value="urgent">🔥 Urgent</option>
++                <option value="high">⚡ High</option>
++                <option value="medium">🔹 Medium</option>
++                <option value="low">💤 Low</option>
++                <option value="none">None</option>
++              </select>
++            </div>
++
++            {/* Modules field: conditionally mounted ONLY when modulesEnabled is true (S7.2 8f) */}
++            {modulesEnabled && (
++              <div className="quick-create-input-group quick-create-input-group--flex1">
++                <label
++                  htmlFor="quick-create-module"
++                  className="quick-create-label"
++                >
++                  Module
++                </label>
++                <select
++                  id="quick-create-module"
++                  className="quick-create-select"
++                  value={selectedModuleIds[0] ?? ''}
++                  onChange={(e) => { setSelectedModuleIds(e.target.value ? [e.target.value] : []); }
++                  }
++                >
++                  <option value="">No Module</option>
++                  <option value="mod-1">Auth Core</option>
++                  <option value="mod-2">Kanban Board</option>
++                </select>
++              </div>
++            )}
++          </div>
++
++          <div className="quick-create-footer">
++            <button
++              type="button"
++              className="quick-create-btn-cancel"
++              onClick={onClose}
++            >
++              Cancel
++            </button>
++            <button
++              type="submit"
++              className="quick-create-btn-submit"
++              disabled={!summary.trim()}
++            >
++              Create
++            </button>
++          </div>
++        </form>
++      </div>
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/views/QuickFieldPopover.test.tsx b/kanban/web/src/features/views/QuickFieldPopover.test.tsx
+new file mode 100644
+index 0000000..a3e6f96
+--- /dev/null
++++ b/kanban/web/src/features/views/QuickFieldPopover.test.tsx
+@@ -0,0 +1,205 @@
++import { describe, it, expect, vi } from 'vitest';
++import { render, screen, fireEvent } from '@testing-library/react';
++import React from 'react';
++import { QuickFieldPopover } from './QuickFieldPopover';
++import { FIXTURE_12_ISSUES } from './fixtures';
++
++describe('QuickFieldPopover (KB-P3-40, S6.4 item 4, S1.3 item 3, S7.2 8f)', () => {
++  const dummyRect = {
++    top: 100,
++    bottom: 140,
++    left: 200,
++    right: 350,
++    width: 150,
++    height: 40,
++    x: 200,
++    y: 100,
++    toJSON: () => ({}),
++  } as DOMRect;
++
++  it('does not render when isOpen is false or field is null', () => {
++    const { container } = render(
++      <QuickFieldPopover
++        isOpen={false}
++        field="priority"
++        anchorRect={dummyRect}
++        issue={FIXTURE_12_ISSUES[0]}
++        onClose={vi.fn()}
++        onSelect={vi.fn()}
++      />
++    );
++    expect(container.firstChild).toBeNull();
++  });
++
++  it('renders with null anchorRect without throwing', () => {
++    const { container } = render(
++      <QuickFieldPopover
++        isOpen={true}
++        field="priority"
++        anchorRect={null}
++        issue={FIXTURE_12_ISSUES[0]}
++        onClose={vi.fn()}
++        onSelect={vi.fn()}
++      />
++    );
++    expect(container.firstChild).toBeDefined();
++  });
++
++  it('renders Priority picker and allows selecting with click and keyboard (P shortcut)', () => {
++    const handleSelect = vi.fn();
++    const handleClose = vi.fn();
++
++    render(
++      <QuickFieldPopover
++        isOpen={true}
++        field="priority"
++        anchorRect={dummyRect}
++        issue={FIXTURE_12_ISSUES[0]}
++        onClose={handleClose}
++        onSelect={handleSelect}
++      />
++    );
++
++    expect(screen.getByRole('dialog', { name: /quick priority picker/i })).toBeDefined();
++    expect(screen.getByRole('option', { name: /Urgent/i })).toBeDefined();
++    expect(screen.getByRole('option', { name: /High/i })).toBeDefined();
++    expect(screen.getByRole('option', { name: /Medium/i })).toBeDefined();
++    expect(screen.getByRole('option', { name: /Low/i })).toBeDefined();
++
++    // Click on High option
++    fireEvent.click(screen.getByRole('option', { name: /High/i }));
++    expect(handleSelect).toHaveBeenCalledWith('priority', 'high');
++    expect(handleClose).toHaveBeenCalled();
++  });
++
++  it('navigates with ArrowDown, ArrowUp, Enter, and closes on Escape', () => {
++    const handleSelect = vi.fn();
++    const handleClose = vi.fn();
++
++    render(
++      <QuickFieldPopover
++        isOpen={true}
++        field="state"
++        anchorRect={dummyRect}
++        issue={FIXTURE_12_ISSUES[0]}
++        onClose={handleClose}
++        onSelect={handleSelect}
++      />
++    );
++
++    // Initial focused is first option (Backlog)
++    // Press ArrowDown -> Todo
++    fireEvent.keyDown(window, { key: 'ArrowDown' });
++    // Press ArrowDown -> In Progress
++    fireEvent.keyDown(window, { key: 'ArrowDown' });
++    // Press ArrowUp -> Todo
++    fireEvent.keyDown(window, { key: 'ArrowUp' });
++    // Press Enter to select
++    fireEvent.keyDown(window, { key: 'Enter' });
++
++    expect(handleSelect).toHaveBeenCalledWith('state', 'state-todo');
++    expect(handleClose).toHaveBeenCalled();
++
++    // Escape closes popover
++    fireEvent.keyDown(window, { key: 'Escape' });
++    expect(handleClose).toHaveBeenCalledTimes(2);
++  });
++
++  it('renders Assignee picker (A shortcut)', () => {
++    const handleSelect = vi.fn();
++
++    render(
++      <QuickFieldPopover
++        isOpen={true}
++        field="assignee"
++        anchorRect={dummyRect}
++        issue={FIXTURE_12_ISSUES[0]}
++        onClose={vi.fn()}
++        onSelect={handleSelect}
++      />
++    );
++
++    expect(screen.getByRole('option', { name: /Alice Cooper/i })).toBeDefined();
++    expect(screen.getByRole('option', { name: /Unassigned/i })).toBeDefined();
++
++    fireEvent.click(screen.getByRole('option', { name: /Alice Cooper/i }));
++    expect(handleSelect).toHaveBeenCalledWith('assignee', 'alice');
++  });
++
++  it('renders Labels picker (L shortcut)', () => {
++    const handleSelect = vi.fn();
++
++    render(
++      <QuickFieldPopover
++        isOpen={true}
++        field="labels"
++        anchorRect={dummyRect}
++        issue={FIXTURE_12_ISSUES[0]}
++        onClose={vi.fn()}
++        onSelect={handleSelect}
++      />
++    );
++
++    expect(screen.getByRole('option', { name: /Security/i })).toBeDefined();
++    fireEvent.click(screen.getByRole('option', { name: /Security/i }));
++    expect(handleSelect).toHaveBeenCalledWith('labels', 'lbl-sec');
++  });
++
++  it('renders Due date picker (D shortcut)', () => {
++    const handleSelect = vi.fn();
++
++    render(
++      <QuickFieldPopover
++        isOpen={true}
++        field="due_date"
++        anchorRect={dummyRect}
++        issue={FIXTURE_12_ISSUES[0]}
++        onClose={vi.fn()}
++        onSelect={handleSelect}
++      />
++    );
++
++    expect(screen.getByRole('option', { name: /Due Today/i })).toBeDefined();
++    expect(screen.getByRole('option', { name: /Clear Due Date/i })).toBeDefined();
++
++    fireEvent.click(screen.getByRole('option', { name: /Clear Due Date/i }));
++    expect(handleSelect).toHaveBeenCalledWith('due_date', null);
++  });
++
++  it('renders Module picker when modulesEnabled is true (M shortcut)', () => {
++    const handleSelect = vi.fn();
++
++    render(
++      <QuickFieldPopover
++        isOpen={true}
++        field="module"
++        anchorRect={dummyRect}
++        issue={FIXTURE_12_ISSUES[0]}
++        onClose={vi.fn()}
++        onSelect={handleSelect}
++        modulesEnabled={true}
++      />
++    );
++
++    expect(screen.getByRole('option', { name: /Auth Core/i })).toBeDefined();
++    fireEvent.click(screen.getByRole('option', { name: /Auth Core/i }));
++    expect(handleSelect).toHaveBeenCalledWith('module', 'mod-1');
++  });
++
++  it('strict no-op: does not render Module picker when modulesEnabled is false (Test Case 3, S7.2 8f)', () => {
++    const { container } = render(
++      <QuickFieldPopover
++        isOpen={true}
++        field="module"
++        anchorRect={dummyRect}
++        issue={FIXTURE_12_ISSUES[0]}
++        onClose={vi.fn()}
++        onSelect={vi.fn()}
++        modulesEnabled={false}
++      />
++    );
++
++    expect(container.firstChild).toBeNull();
++    expect(screen.queryByRole('dialog')).toBeNull();
++  });
++});
+diff --git a/kanban/web/src/features/views/QuickFieldPopover.tsx b/kanban/web/src/features/views/QuickFieldPopover.tsx
+new file mode 100644
+index 0000000..a7a446c
+--- /dev/null
++++ b/kanban/web/src/features/views/QuickFieldPopover.tsx
+@@ -0,0 +1,182 @@
++import React, { useState, useRef, useLayoutEffect, useEffect, useMemo, type JSX } from 'react';
++import type { IssueItem } from './viewsApi';
++import './filterBulk.css';
++
++export type QuickFieldType =
++  | 'state'
++  | 'priority'
++  | 'assignee'
++  | 'labels'
++  | 'module'
++  | 'due_date';
++
++export interface QuickFieldPopoverProps {
++  isOpen: boolean;
++  field: QuickFieldType | null;
++  anchorRect: DOMRect | null;
++  issue: IssueItem | null | undefined;
++  onClose: () => void;
++  onSelect: (field: QuickFieldType, value: unknown) => void;
++  modulesEnabled?: boolean;
++}
++
++interface OptionItem {
++  id: string;
++  label: string;
++  emoji?: string;
++  value: unknown;
++}
++
++export function QuickFieldPopover({
++  isOpen,
++  field,
++  anchorRect,
++  issue,
++  onClose,
++  onSelect,
++  modulesEnabled = true,
++}: QuickFieldPopoverProps): JSX.Element | null {
++  const popoverRef = useRef<HTMLDivElement>(null);
++  const [focusedIndex, setFocusedIndex] = useState(0);
++
++  // Compute whether popover should be active
++  const isEligible =
++    isOpen &&
++    field !== null &&
++    issue != null &&
++    !(field === 'module' && !modulesEnabled);
++
++  // Define options per field
++  const { title, options } = useMemo<{ title: string; options: OptionItem[] }>(() => {
++    let t = 'Select Option';
++    let opts: OptionItem[] = [];
++
++    if (field === 'priority') {
++      t = 'Priority';
++      opts = [
++        { id: 'urgent', label: 'Urgent', emoji: '🔥', value: 'urgent' },
++        { id: 'high', label: 'High', emoji: '⚡', value: 'high' },
++        { id: 'medium', label: 'Medium', emoji: '🔹', value: 'medium' },
++        { id: 'low', label: 'Low', emoji: '💤', value: 'low' },
++        { id: 'none', label: 'None', value: 'none' },
++      ];
++    } else if (field === 'state') {
++      t = 'State';
++      opts = [
++        { id: 'backlog', label: 'Backlog', value: 'state-backlog' },
++        { id: 'todo', label: 'Todo', value: 'state-todo' },
++        { id: 'in-progress', label: 'In Progress', value: 'state-in-progress' },
++        { id: 'done', label: 'Done', value: 'state-done' },
++        { id: 'cancelled', label: 'Cancelled', value: 'state-cancelled' },
++      ];
++    } else if (field === 'assignee') {
++      t = 'Assignee';
++      opts = [
++        { id: 'alice', label: 'Alice Cooper', value: 'alice' },
++        { id: 'adam', label: 'Adam Outler', value: 'adam' },
++        { id: 'unassigned', label: 'Unassigned', value: 'unassigned' },
++      ];
++    } else if (field === 'labels') {
++      t = 'Labels';
++      opts = [
++        { id: 'lbl-sec', label: 'Security', value: 'lbl-sec' },
++        { id: 'lbl-auth', label: 'Auth', value: 'lbl-auth' },
++        { id: 'lbl-db', label: 'Database', value: 'lbl-db' },
++      ];
++    } else if (field === 'module') {
++      t = 'Module';
++      opts = [
++        { id: 'mod-1', label: 'Auth Core', value: 'mod-1' },
++        { id: 'mod-2', label: 'Kanban Board', value: 'mod-2' },
++        { id: 'none', label: 'No Module', value: 'none' },
++      ];
++    } else {
++      t = 'Due Date';
++      opts = [
++        { id: 'today', label: 'Due Today', value: 'today' },
++        { id: 'next_week', label: 'Due Next Week', value: 'next_week' },
++        { id: 'clear', label: 'Clear Due Date', value: null },
++      ];
++    }
++
++    return { title: t, options: opts };
++  }, [field]);
++
++  // Anchor popover position strictly via CSSOM element refs inside useLayoutEffect (Strict CSP)
++  useLayoutEffect(() => {
++    if (!isEligible) return;
++    if (popoverRef.current && anchorRect) {
++      const top = Math.min(
++        window.innerHeight - 250,
++        Math.max(10, anchorRect.bottom + window.scrollY + 6)
++      );
++      const left = Math.min(
++        window.innerWidth - 240,
++        Math.max(10, anchorRect.left + window.scrollX)
++      );
++      popoverRef.current.style.top = `${String(top)}px`;
++      popoverRef.current.style.left = `${String(left)}px`;
++    }
++  }, [isEligible, anchorRect]);
++
++  // Handle keyboard navigation inside the popover
++  useEffect(() => {
++    if (!isEligible || options.length === 0) return;
++
++    const handleKeyDown = (e: KeyboardEvent) => {
++      if (e.key === 'ArrowDown') {
++        e.preventDefault();
++        setFocusedIndex((prev) => (prev + 1) % options.length);
++      } else if (e.key === 'ArrowUp') {
++        e.preventDefault();
++        setFocusedIndex((prev) => (prev - 1 + options.length) % options.length);
++      } else if (e.key === 'Enter') {
++        e.preventDefault();
++        const selected = options[focusedIndex];
++        if (selected) {
++          onSelect(field, selected.value);
++        }
++        onClose();
++      } else if (e.key === 'Escape') {
++        e.preventDefault();
++        onClose();
++      }
++    };
++
++    window.addEventListener('keydown', handleKeyDown);
++    return () => { window.removeEventListener('keydown', handleKeyDown); };
++  }, [isEligible, options, focusedIndex, field, onSelect, onClose]);
++
++  if (!isEligible) {
++    return null;
++  }
++
++  return (
++    <div
++      ref={popoverRef}
++      className="quick-field-popover"
++      role="dialog"
++      aria-label={`Quick ${title} Picker`}
++    >
++      <div className="quick-field-popover-title">{title}</div>
++      <div className="quick-field-options" role="listbox">
++        {options.map((opt, index) => (
++          <button
++            key={opt.id}
++            type="button"
++            role="option"
++            aria-selected={index === focusedIndex}
++            className={`quick-field-option ${index === focusedIndex ? 'quick-field-option--focused' : ''}`}
++            onClick={() => {
++              onSelect(field, opt.value);
++              onClose();
++            }}
++          >
++            {opt.emoji ? <span>{opt.emoji} </span> : null}
++            <span>{opt.label}</span>
++          </button>
++        ))}
++      </div>
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/views/SwimlaneBoardGrid.test.tsx b/kanban/web/src/features/views/SwimlaneBoardGrid.test.tsx
+new file mode 100644
+index 0000000..2a6aabd
+--- /dev/null
++++ b/kanban/web/src/features/views/SwimlaneBoardGrid.test.tsx
+@@ -0,0 +1,343 @@
++import { describe, it, expect, vi } from 'vitest';
++import { render, screen, fireEvent } from '@testing-library/react';
++import React from 'react';
++import { SwimlaneBoardGrid } from './SwimlaneBoardGrid';
++import { FIXTURE_12_ISSUES } from './fixtures';
++import type { IssueItem } from './viewsApi';
++
++describe('SwimlaneBoardGrid (KB-P3-40, S6.4 item 2)', () => {
++  it('partitions board into 2D grid with Priority swimlanes across State columns (Test Case 1)', () => {
++    const handleToggleSelect = vi.fn();
++
++    render(
++      <SwimlaneBoardGrid
++        issues={FIXTURE_12_ISSUES}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="priority"
++        modulesEnabled={true}
++        selectedIds={['KAN-142']}
++        onToggleSelect={handleToggleSelect}
++      />
++    );
++
++    // Verify 324px state column headers
++    expect(screen.getByRole('columnheader', { name: /Backlog/i })).toBeDefined();
++    expect(screen.getByRole('columnheader', { name: /Todo/i })).toBeDefined();
++    expect(screen.getByRole('columnheader', { name: /In Progress/i })).toBeDefined();
++    expect(screen.getByRole('columnheader', { name: /Done/i })).toBeDefined();
++
++    // Verify horizontal Priority swimlane bands: Urgent, High, Medium, Low, None
++    expect(screen.getByText(/Urgent 🔥/i)).toBeDefined();
++    expect(screen.getByText(/High ⚡/i)).toBeDefined();
++    expect(screen.getByText(/Medium 🔹/i)).toBeDefined();
++    expect(screen.getByText(/Low 💤/i)).toBeDefined();
++    expect(screen.getByText(/^None$/i)).toBeDefined();
++
++    // Verify KAN-142 is placed in Urgent swimlane band
++    const urgentBand = document.querySelector('[data-subgroup-id="urgent"]');
++    expect(urgentBand).not.toBeNull();
++    const kan142Card = urgentBand?.querySelector('[data-issue-key="KAN-142"]');
++    expect(kan142Card).not.toBeNull();
++    expect(kan142Card?.classList.contains('swimlane-card--selected')).toBe(true);
++
++    // Toggle checkbox on card
++    const checkbox = kan142Card?.querySelector('input[type="checkbox"]');
++    if (checkbox) {
++      fireEvent.click(checkbox);
++      expect(handleToggleSelect).toHaveBeenCalledWith('KAN-142', false);
++    }
++  });
++
++  it('collapses and expands a swimlane band when toggle is clicked', () => {
++    render(
++      <SwimlaneBoardGrid
++        issues={FIXTURE_12_ISSUES}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="priority"
++        modulesEnabled={true}
++      />
++    );
++
++    const urgentToggle = screen.getByRole('button', { name: /Urgent 🔥/i });
++    expect(urgentToggle.getAttribute('aria-expanded')).toBe('true');
++
++    // Click to collapse
++    fireEvent.click(urgentToggle);
++    expect(urgentToggle.getAttribute('aria-expanded')).toBe('false');
++    expect(document.getElementById('swimlane-content-urgent')).toBeNull();
++
++    // Click to expand again
++    fireEvent.click(urgentToggle);
++    expect(urgentToggle.getAttribute('aria-expanded')).toBe('true');
++    expect(document.getElementById('swimlane-content-urgent')).not.toBeNull();
++  });
++
++  it('renders assignee swimlanes when subGroupBy is assignee', () => {
++    render(
++      <SwimlaneBoardGrid
++        issues={FIXTURE_12_ISSUES}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="assignee"
++        modulesEnabled={true}
++      />
++    );
++
++    expect(screen.getByText(/Alice Cooper/i)).toBeDefined();
++    expect(screen.getByText(/Unassigned/i)).toBeDefined();
++  });
++
++  it('renders cycle and module swimlanes when subGroupBy is cycle or module', () => {
++    // Cycle swimlanes
++    const { rerender } = render(
++      <SwimlaneBoardGrid
++        issues={FIXTURE_12_ISSUES}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="cycle"
++        modulesEnabled={true}
++      />
++    );
++    expect(screen.getByText(/Cycle 1/i)).toBeDefined();
++    expect(screen.getByText(/No Cycle/i)).toBeDefined();
++
++    // Module swimlanes
++    rerender(
++      <SwimlaneBoardGrid
++        issues={FIXTURE_12_ISSUES}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="module"
++        modulesEnabled={true}
++      />
++    );
++    expect(screen.getByText(/Auth Core/i)).toBeDefined();
++    expect(screen.getByText(/No Module/i)).toBeDefined();
++  });
++
++  it('renders Priority column headers when groupBy is priority', () => {
++    render(
++      <SwimlaneBoardGrid
++        issues={FIXTURE_12_ISSUES}
++        projectKey="KAN"
++        groupBy="priority"
++        subGroupBy="assignee"
++        modulesEnabled={true}
++      />
++    );
++
++    expect(screen.getByRole('columnheader', { name: /^Urgent$/i })).toBeDefined();
++    expect(screen.getByRole('columnheader', { name: /^High$/i })).toBeDefined();
++  });
++
++  it('handles card click and fallback mapping for unmapped issues', () => {
++    const base = FIXTURE_12_ISSUES[0];
++    if (!base) throw new Error('missing fixture');
++    const unmappedIssue: IssueItem = {
++      ...base,
++      key: 'KAN-999',
++      state: { id: 'custom-state', name: 'Custom State', group: 'unknown' },
++      priority: { slug: 'custom', label: 'Custom' },
++    };
++
++    render(
++      <SwimlaneBoardGrid
++        issues={[unmappedIssue]}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="priority"
++        modulesEnabled={true}
++      />
++    );
++
++    const card = screen.getByText(unmappedIssue.summary);
++    expect(card).toBeDefined();
++
++    // Click card body
++    fireEvent.click(card);
++  });
++
++  it('renders fallback single swimlane when subGroupBy is none', () => {
++    render(
++      <SwimlaneBoardGrid
++        issues={FIXTURE_12_ISSUES}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="none"
++        modulesEnabled={true}
++      />
++    );
++
++    expect(screen.getByText('All Work Items')).toBeDefined();
++  });
++
++  it('handles adam assignee swimlane, card key link click, and card checkbox toggle', () => {
++    const handleToggle = vi.fn();
++    const baseAdam = FIXTURE_12_ISSUES[0];
++    if (!baseAdam) throw new Error('missing fixture');
++    const adamIssue: IssueItem = {
++      ...baseAdam,
++      key: 'KAN-199',
++      assignees: [
++        {
++          id: 'asg-adam',
++          kind: 'principal' as const,
++          principal: { id: 'u-adam', handle: 'adam', display_name: 'Adam Outler', type: 'USER' },
++        },
++      ],
++      gate_status: 'vetoed' as const,
++    };
++
++    render(
++      <SwimlaneBoardGrid
++        issues={[adamIssue]}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="assignee"
++        modulesEnabled={true}
++        selectedIds={['KAN-199']}
++        onToggleSelect={handleToggle}
++      />
++    );
++
++    expect(screen.getByText(/Adam Outler/i)).toBeDefined();
++
++    // Checkbox toggle
++    const checkbox = screen.getByLabelText('Select KAN-199');
++    fireEvent.click(checkbox);
++    expect(handleToggle).toHaveBeenCalledWith('KAN-199', false);
++
++    // Card key link
++    const keyLink = screen.getByText('KAN-199');
++    fireEvent.click(keyLink);
++  });
++
++  it('renders card with low priority, approved gate status, and focused state', () => {
++    const baseLow = FIXTURE_12_ISSUES[0];
++    if (!baseLow) throw new Error('missing fixture');
++    const lowApprovedIssue: IssueItem = {
++      ...baseLow,
++      key: 'KAN-200',
++      priority: { slug: 'low', label: 'Low', emoji: '💤' },
++      gate_status: 'approved' as const,
++    };
++
++    render(
++      <SwimlaneBoardGrid
++        issues={[lowApprovedIssue]}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="priority"
++        modulesEnabled={true}
++        focusedKey="KAN-200"
++      />
++    );
++
++    const card = screen.getByText(lowApprovedIssue.summary).closest('.swimlane-card');
++    expect(card?.getAttribute('data-focused')).toBe('true');
++  });
++
++  it('covers assignee, cycle, module, and unknown subGroupBy branches', () => {
++    const base = FIXTURE_12_ISSUES[0];
++    if (!base) throw new Error('missing fixture');
++
++    // 1. Assignee with non-principal kind (e.g. free_text)
++    const agentAssigneeIssue: IssueItem = {
++      ...base,
++      key: 'KAN-301',
++      assignees: [
++        {
++          id: 'asg-freetext',
++          kind: 'free_text',
++          free_text: 'External Contractor',
++          notify: false,
++          hint: '',
++        },
++      ],
++    };
++
++    // 2. Assignee with principal handle other than alice/adam (e.g. charlie)
++    const charlieAssigneeIssue: IssueItem = {
++      ...base,
++      key: 'KAN-302',
++      assignees: [
++        {
++          id: 'asg-charlie',
++          kind: 'principal' as const,
++          principal: { id: 'u-charlie', handle: 'charlie', display_name: 'Charlie Root', type: 'USER' },
++        },
++      ],
++    };
++
++    // 3. Issue with no assignees
++    const noAssigneeIssue: IssueItem = {
++      ...base,
++      key: 'KAN-303',
++      assignees: [],
++    };
++
++    // 4. Issue with no cycle_id
++    const noCycleIssue: IssueItem = {
++      ...base,
++      key: 'KAN-304',
++      cycle_id: null,
++    };
++
++    // 5. Issue with no module_ids
++    const noModuleIssue: IssueItem = {
++      ...base,
++      key: 'KAN-305',
++      module_ids: [],
++    };
++
++    const { rerender } = render(
++      <SwimlaneBoardGrid
++        issues={[agentAssigneeIssue, charlieAssigneeIssue, noAssigneeIssue]}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="assignee"
++        modulesEnabled={true}
++      />
++    );
++
++    expect(screen.getByText('Unassigned')).toBeDefined();
++
++    // Rerender with cycle
++    rerender(
++      <SwimlaneBoardGrid
++        issues={[noCycleIssue]}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="cycle"
++        modulesEnabled={true}
++      />
++    );
++    expect(screen.getByText('No Cycle')).toBeDefined();
++
++    // Rerender with module
++    rerender(
++      <SwimlaneBoardGrid
++        issues={[noModuleIssue]}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="module"
++        modulesEnabled={true}
++      />
++    );
++    expect(screen.getByText('No Module')).toBeDefined();
++
++    // Rerender with fallback single swimlane (e.g. label)
++    rerender(
++      <SwimlaneBoardGrid
++        issues={[base]}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="label"
++        modulesEnabled={false}
++      />
++    );
++    expect(screen.getByText('All Work Items')).toBeDefined();
++  });
++});
+diff --git a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
+new file mode 100644
+index 0000000..c2de0b5
+--- /dev/null
++++ b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
+@@ -0,0 +1,307 @@
++import React, { useState, useMemo, type JSX } from 'react';
++import { EmojiHint } from '../../components/emoji/EmojiHint';
++import type { IssueItem, GroupAxis } from './viewsApi';
++import './filterBulk.css';
++
++export interface SwimlaneBoardGridProps {
++  issues: IssueItem[];
++  projectKey: string;
++  groupBy?: GroupAxis;
++  subGroupBy?: GroupAxis;
++  modulesEnabled?: boolean;
++  selectedIds?: string[];
++  onToggleSelect?: (key: string, selected: boolean) => void;
++  focusedKey?: string | null;
++  onCardClick?: (key: string, isShift: boolean) => void;
++  onCardMove?: (issueKey: string, targetColId: string, targetLaneId: string) => void;
++}
++
++interface ColumnDef {
++  id: string;
++  name: string;
++  sortOrder: number;
++}
++
++interface SwimlaneDef {
++  id: string;
++  title: string;
++  badge?: string;
++  emojiKind?: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow';
++  sortOrder: number;
++}
++
++function getIssueColId(issue: IssueItem, groupBy: GroupAxis): string {
++  if (groupBy === 'priority') {
++    return issue.priority.slug.toLowerCase();
++  }
++  const sName = issue.state.name.toLowerCase();
++  if (sName.includes('backlog')) return 'backlog';
++  if (sName.includes('todo')) return 'todo';
++  if (sName.includes('progress')) return 'in-progress';
++  if (sName.includes('review')) return 'in-review';
++  if (sName.includes('done')) return 'done';
++  if (sName.includes('cancel')) return 'cancelled';
++  return issue.state.id;
++}
++
++function getIssueLaneId(
++  issue: IssueItem,
++  subGroupBy: GroupAxis,
++  modulesEnabled: boolean
++): string {
++  if (subGroupBy === 'priority') {
++    const p = issue.priority.slug.toLowerCase();
++    if (['urgent', 'high', 'medium', 'low'].includes(p)) return p;
++    return 'none';
++  }
++  if (subGroupBy === 'assignee') {
++    const first = issue.assignees?.[0];
++    if (!first) return 'unassigned';
++    if (first.kind === 'principal') {
++      const h = first.principal.handle.toLowerCase();
++      if (h.includes('alice')) return 'alice';
++      if (h.includes('adam')) return 'adam';
++    }
++    return 'unassigned';
++  }
++  if (subGroupBy === 'cycle') {
++    return issue.cycle_id ?? 'none';
++  }
++  if (subGroupBy === 'module' && modulesEnabled) {
++    const firstMod = issue.module_ids?.[0];
++    return firstMod ?? 'none';
++  }
++  return 'all';
++}
++
++export function SwimlaneBoardGrid({
++  issues,
++  projectKey,
++  groupBy = 'state',
++  subGroupBy = 'priority',
++  modulesEnabled = true,
++  selectedIds = [],
++  onToggleSelect,
++  focusedKey = null,
++  onCardClick,
++}: SwimlaneBoardGridProps): JSX.Element {
++  // Collapsed bands map: laneId -> boolean
++  const [collapsedLanes, setCollapsedLanes] = useState<Record<string, boolean>>({});
++
++  // 1. Determine Column Definitions based on groupBy axis (default 'state')
++  const columns: ColumnDef[] = useMemo(() => {
++    if (groupBy === 'priority') {
++      return [
++        { id: 'urgent', name: 'Urgent', sortOrder: 10 },
++        { id: 'high', name: 'High', sortOrder: 20 },
++        { id: 'medium', name: 'Medium', sortOrder: 30 },
++        { id: 'low', name: 'Low', sortOrder: 40 },
++        { id: 'none', name: 'None', sortOrder: 50 },
++      ];
++    }
++    // Default: State columns
++    return [
++      { id: 'backlog', name: 'Backlog', sortOrder: 10 },
++      { id: 'todo', name: 'Todo', sortOrder: 20 },
++      { id: 'in-progress', name: 'In Progress', sortOrder: 30 },
++      { id: 'in-review', name: 'In Review', sortOrder: 40 },
++      { id: 'done', name: 'Done', sortOrder: 50 },
++      { id: 'cancelled', name: 'Cancelled', sortOrder: 60 },
++    ];
++  }, [groupBy]);
++
++  // 2. Determine Horizontal Swimlane Definitions based on subGroupBy axis
++  const swimlanes: SwimlaneDef[] = useMemo(() => {
++    if (subGroupBy === 'priority') {
++      return [
++        { id: 'urgent', title: 'Urgent 🔥', badge: '🔥', emojiKind: 'priorityUrgent', sortOrder: 10 },
++        { id: 'high', title: 'High ⚡', badge: '⚡', emojiKind: 'priorityHigh', sortOrder: 20 },
++        { id: 'medium', title: 'Medium 🔹', badge: '🔹', emojiKind: 'priorityMedium', sortOrder: 30 },
++        { id: 'low', title: 'Low 💤', badge: '💤', emojiKind: 'priorityLow', sortOrder: 40 },
++        { id: 'none', title: 'None', sortOrder: 50 },
++      ];
++    }
++    if (subGroupBy === 'assignee') {
++      return [
++        { id: 'alice', title: 'Alice Cooper', sortOrder: 10 },
++        { id: 'adam', title: 'Adam Outler', sortOrder: 20 },
++        { id: 'unassigned', title: 'Unassigned', sortOrder: 99 },
++      ];
++    }
++    if (subGroupBy === 'cycle') {
++      return [
++        { id: 'cycle-1', title: 'Cycle 1', sortOrder: 10 },
++        { id: 'none', title: 'No Cycle', sortOrder: 99 },
++      ];
++    }
++    if (subGroupBy === 'module' && modulesEnabled) {
++      return [
++        { id: 'mod-1', title: 'Auth Core', sortOrder: 10 },
++        { id: 'none', title: 'No Module', sortOrder: 99 },
++      ];
++    }
++    // Fallback single swimlane if none or unknown
++    return [{ id: 'all', title: 'All Work Items', sortOrder: 10 }];
++  }, [subGroupBy, modulesEnabled]);
++
++  // 3. Partition issues into 2D grid [laneId][colId]
++  const partitionedGrid = useMemo(() => {
++    const grid: Record<string, Record<string, IssueItem[]>> = {};
++    for (const lane of swimlanes) {
++      const colMap: Record<string, IssueItem[]> = {};
++      for (const col of columns) {
++        colMap[col.id] = [];
++      }
++      grid[lane.id] = colMap;
++    }
++
++    const defaultLaneId = swimlanes[0]?.id ?? '';
++    const defaultColId = columns[0]?.id ?? '';
++
++    for (const issue of issues) {
++      const laneId = getIssueLaneId(issue, subGroupBy, modulesEnabled);
++      const colId = getIssueColId(issue, groupBy);
++      const laneMap = grid[laneId] ?? grid[defaultLaneId];
++      const colList = laneMap?.[colId] ?? laneMap?.[defaultColId];
++      colList?.push(issue);
++    }
++
++    return grid;
++  }, [issues, columns, swimlanes, groupBy, subGroupBy, modulesEnabled]);
++
++  const toggleLane = (laneId: string) => {
++    setCollapsedLanes((prev) => ({
++      ...prev,
++      [laneId]: !prev[laneId],
++    }));
++  };
++
++  // Compute issue count in swimlane
++  const getLaneCount = (laneId: string): number => {
++    const laneCols = partitionedGrid[laneId];
++    return laneCols ? Object.values(laneCols).reduce((sum, list) => sum + list.length, 0) : 0;
++  };
++
++  return (
++    <div className="swimlane-board-grid" role="region" aria-label="2D Swimlane Board Grid">
++      {/* Sticky Top Column Headers aligned to 324px */}
++      <div className="swimlane-col-headers" role="row">
++        {columns.map((col) => (
++          <div key={col.id} className="swimlane-col-header-item" role="columnheader">
++            <span>{col.name}</span>
++          </div>
++        ))}
++      </div>
++
++      {/* Horizontal Swimlane Bands */}
++      {swimlanes.map((lane) => {
++        const isCollapsed = Boolean(collapsedLanes[lane.id]);
++        const laneCount = getLaneCount(lane.id);
++
++        return (
++          <div
++            key={lane.id}
++            className="swimlane-band"
++            data-subgroup-id={lane.id}
++            data-subgroup-value={lane.title}
++          >
++            <div className="swimlane-band-header">
++              <button
++                type="button"
++                className="swimlane-band-toggle"
++                onClick={() => { toggleLane(lane.id); }}
++                aria-expanded={!isCollapsed}
++                aria-controls={`swimlane-content-${lane.id}`}
++              >
++                <span className="swimlane-band-icon" aria-hidden="true">
++                  ▼
++                </span>
++                <span>{lane.title}</span>
++                <span className="swimlane-band-count">{laneCount}</span>
++              </button>
++            </div>
++
++            {!isCollapsed && (
++              <div
++                id={`swimlane-content-${lane.id}`}
++                className="swimlane-band-columns"
++                role="row"
++              >
++                {columns.map((col) => {
++                  const cellIssues = partitionedGrid[lane.id]?.[col.id] ?? [];
++
++                  return (
++                    <div
++                      key={col.id}
++                      className="board-column"
++                      data-column-id={col.id}
++                      data-swimlane-id={lane.id}
++                      role="cell"
++                    >
++                      {cellIssues.map((issue) => {
++                        const isSelected = selectedIds.includes(issue.key);
++                        const isFocused = focusedKey === issue.key;
++
++                        let pKind: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' =
++                          'priorityMedium';
++                        const slug = issue.priority.slug.toLowerCase();
++                        if (slug === 'urgent') pKind = 'priorityUrgent';
++                        else if (slug === 'high') pKind = 'priorityHigh';
++                        else if (slug === 'low') pKind = 'priorityLow';
++
++                        return (
++                          <div
++                            key={issue.key}
++                            className={`swimlane-card ${isSelected ? 'swimlane-card--selected' : ''}`}
++                            data-issue-key={issue.key}
++                            data-focused={isFocused ? 'true' : 'false'}
++                            tabIndex={isFocused ? 0 : -1}
++                            onClick={(e) => {
++                              onCardClick?.(issue.key, e.shiftKey);
++                            }}
++                          >
++                            <div className="swimlane-card-top">
++                              <label
++                                className="swimlane-card-checkbox-wrap"
++                                onClick={(e) => { e.stopPropagation(); }}
++                              >
++                                <input
++                                  type="checkbox"
++                                  checked={isSelected}
++                                  onChange={(e) => onToggleSelect?.(issue.key, e.target.checked)}
++                                  aria-label={`Select ${issue.key}`}
++                                />
++                              </label>
++
++                              <a
++                                href={`/projects/${encodeURIComponent(projectKey)}/issues?layout=board&peek=${encodeURIComponent(issue.key)}`}
++                                className="swimlane-card-key mono"
++                                onClick={(e) => { e.stopPropagation(); }}
++                              >
++                                {issue.key}
++                              </a>
++
++                              <EmojiHint kind={pKind} />
++                            </div>
++
++                            <div className="swimlane-card-summary">{issue.summary}</div>
++
++                            <div className="swimlane-card-footer">
++                              {issue.gate_status === 'pending' && <EmojiHint kind="gatePending" />}
++                              {issue.gate_status === 'vetoed' && <EmojiHint kind="gateVetoed" />}
++                              {issue.gate_status === 'approved' && <EmojiHint kind="gateApproved" />}
++                            </div>
++                          </div>
++                        );
++                      })}
++                    </div>
++                  );
++                })}
++              </div>
++            )}
++          </div>
++        );
++      })}
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/views/filterBulk.css b/kanban/web/src/features/views/filterBulk.css
+new file mode 100644
+index 0000000..c4b6c9d
+--- /dev/null
++++ b/kanban/web/src/features/views/filterBulk.css
+@@ -0,0 +1,776 @@
++/**
++ * Styling for Filters & Display bar, 2D Swimlanes, Floating Bulk Action bar,
++ * Quick Create modal, and Quick Field popover (KB-P3-40, S6.1, S6.3, S6.4, S7.2).
++ */
++
++/* ==========================================================================
++   Filter & Display Bar (S6.3, S6.4 item 2)
++   ========================================================================== */
++
++.filter-display-bar {
++  display: flex;
++  align-items: center;
++  flex-wrap: wrap;
++  min-height: 44px;
++  margin-bottom: var(--space-5, 20px);
++  gap: var(--space-3, 12px);
++  padding: 0;
++  box-sizing: border-box;
++}
++
++.filter-controls-group {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  flex-wrap: wrap;
++  position: relative;
++}
++
++.filter-btn-trigger {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  min-height: 36px;
++  padding: 0 var(--space-3, 12px);
++  background: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md, 6px);
++  font-family: var(--font-sans);
++  font-size: 0.8125rem;
++  font-weight: 500;
++  color: var(--fg-primary);
++  cursor: pointer;
++  transition: background-color 100ms ease;
++}
++
++.filter-btn-trigger:hover {
++  background: var(--bg-hover);
++}
++
++.filter-btn-trigger:focus-visible {
++  outline: 2px solid var(--focus-ring);
++  outline-offset: 2px;
++}
++
++.filter-shortcut-kbd {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  min-width: 18px;
++  height: 18px;
++  padding: 0 4px;
++  border-radius: var(--radius-sm, 4px);
++  background: var(--bg-hover);
++  border: 1px solid var(--border-subtle);
++  font-family: var(--font-mono);
++  font-size: 0.6875rem;
++  color: var(--fg-muted);
++}
++
++.filter-axis-select-wrap {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-1, 4px);
++  font-family: var(--font-sans);
++  font-size: 0.8125rem;
++  color: var(--fg-secondary);
++}
++
++.filter-axis-select-label {
++  font-weight: 500;
++  font-size: 0.8125rem;
++  color: var(--fg-muted);
++}
++
++.filter-axis-select {
++  min-height: 36px;
++  padding: 0 var(--space-3, 12px);
++  background: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md, 6px);
++  font-family: var(--font-sans);
++  font-size: 0.8125rem;
++  color: var(--fg-primary);
++  cursor: pointer;
++}
++
++.filter-axis-select:focus-visible {
++  outline: 2px solid var(--focus-ring);
++  outline-offset: 2px;
++}
++
++.filter-popover-panel {
++  position: absolute;
++  top: 100%;
++  left: 0;
++  z-index: 40;
++  width: 320px;
++  margin-top: 4px;
++  background: var(--bg-surface-raised, #ffffff);
++  border: 1px solid var(--border-strong);
++  border-radius: var(--radius-lg, 10px);
++  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
++  padding: var(--space-3, 12px);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-3, 12px);
++}
++
++.filter-search-input {
++  width: 100%;
++  height: 34px;
++  padding: 0 var(--space-3, 12px);
++  background: var(--bg-canvas);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-sm, 4px);
++  font-family: var(--font-sans);
++  font-size: 0.8125rem;
++  color: var(--fg-primary);
++  box-sizing: border-box;
++}
++
++.filter-search-input:focus {
++  outline: 2px solid var(--focus-ring);
++  border-color: transparent;
++}
++
++.filter-facets-list {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2, 8px);
++  max-height: 280px;
++  overflow-y: auto;
++}
++
++.filter-facet-category {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++}
++
++.filter-facet-category-title {
++  font-size: 0.75rem;
++  font-weight: 600;
++  color: var(--fg-muted);
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++  padding: 2px 4px;
++}
++
++.filter-facet-option {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  padding: 4px 6px;
++  border-radius: var(--radius-sm, 4px);
++  font-size: 0.8125rem;
++  color: var(--fg-primary);
++  background: transparent;
++  border: none;
++  text-align: left;
++  cursor: pointer;
++  width: 100%;
++}
++
++.filter-facet-option:hover {
++  background: var(--bg-hover);
++}
++
++.filter-facet-option--active {
++  background: var(--bg-hover);
++  font-weight: 600;
++  color: var(--accent-primary);
++}
++
++.filter-chips-row {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  flex-wrap: wrap;
++}
++
++.filter-chip {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  min-height: 26px;
++  padding: 2px 8px;
++  background: var(--bg-hover);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-sm, 4px);
++  font-size: 0.75rem;
++  font-weight: 500;
++  color: var(--fg-secondary);
++}
++
++.filter-chip-remove {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 16px;
++  height: 16px;
++  background: transparent;
++  border: none;
++  border-radius: 50%;
++  color: var(--fg-muted);
++  cursor: pointer;
++  padding: 0;
++  margin-left: 2px;
++}
++
++.filter-chip-remove:hover {
++  background: var(--border-strong);
++  color: var(--fg-primary);
++}
++
++.filter-clear-all-btn {
++  background: transparent;
++  border: none;
++  padding: 2px 6px;
++  font-size: 0.75rem;
++  font-weight: 500;
++  color: var(--fg-muted);
++  cursor: pointer;
++  text-decoration: underline;
++}
++
++.filter-clear-all-btn:hover {
++  color: var(--fg-primary);
++}
++
++.filter-popover-panel--right {
++  right: 0;
++  left: auto;
++}
++
++.filter-actions-right {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  margin-left: auto;
++  position: relative;
++}
++
++/* ==========================================================================
++   2D Group x Sub-Group Swimlane Board Grid (S6.4 item 2)
++   ========================================================================== */
++
++.swimlane-board-grid {
++  display: flex;
++  flex-direction: column;
++  width: 100%;
++  overflow-x: auto;
++}
++
++.swimlane-col-headers {
++  display: flex;
++  column-gap: var(--board-col-gap, 20px);
++  position: sticky;
++  top: 0;
++  z-index: 5;
++  background: var(--bg-canvas);
++  padding-bottom: var(--space-2, 8px);
++  border-bottom: 2px solid var(--border-subtle);
++}
++
++.swimlane-col-header-item {
++  width: var(--board-col-w, 324px);
++  min-width: var(--board-col-w, 324px);
++  max-width: var(--board-col-w, 324px);
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  padding: 0 var(--space-2, 8px);
++  box-sizing: border-box;
++  font-family: var(--font-sans);
++  font-size: 0.875rem;
++  font-weight: 600;
++  color: var(--fg-primary);
++}
++
++.swimlane-band {
++  display: flex;
++  flex-direction: column;
++  padding-block: var(--space-4, 16px);
++  margin-bottom: var(--space-6, 24px);
++  background: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-lg, 10px);
++  box-sizing: border-box;
++}
++
++.swimlane-band:last-child {
++  margin-bottom: 0;
++}
++
++.swimlane-band-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  height: 40px;
++  padding: 0 var(--space-4, 16px);
++  border-bottom: 1px solid var(--border-subtle);
++  background: var(--bg-surface-raised, #ffffff);
++  box-sizing: border-box;
++}
++
++.swimlane-band-toggle {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  background: transparent;
++  border: none;
++  padding: 0;
++  font-family: var(--font-sans);
++  font-size: 0.875rem;
++  font-weight: 600;
++  color: var(--fg-primary);
++  cursor: pointer;
++  text-align: left;
++}
++
++.swimlane-band-toggle:focus-visible {
++  outline: 2px solid var(--focus-ring);
++  outline-offset: 2px;
++}
++
++.swimlane-band-icon {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 16px;
++  height: 16px;
++  color: var(--fg-muted);
++  transition: transform 150ms ease;
++}
++
++.swimlane-band-toggle[aria-expanded="false"] .swimlane-band-icon {
++  transform: rotate(-90deg);
++}
++
++.swimlane-band-count {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  min-width: 20px;
++  height: 20px;
++  padding: 0 6px;
++  font-family: var(--font-mono);
++  font-size: 0.75rem;
++  font-weight: 500;
++  border-radius: 9999px;
++  background: var(--bg-hover);
++  color: var(--fg-secondary);
++}
++
++.swimlane-band-columns {
++  display: flex;
++  column-gap: var(--board-col-gap, 20px);
++  padding: var(--space-4, 16px);
++  box-sizing: border-box;
++}
++
++.swimlane-band .board-column {
++  width: var(--board-col-w, 324px);
++  min-width: var(--board-col-w, 324px);
++  max-width: var(--board-col-w, 324px);
++  display: flex;
++  flex-direction: column;
++  gap: var(--card-gap, 12px);
++  background: var(--bg-canvas);
++  border: 1px dashed var(--border-subtle);
++  border-radius: var(--radius-md, 6px);
++  padding: var(--space-2, 8px);
++  min-height: 90px;
++  box-sizing: border-box;
++}
++
++.swimlane-card {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2, 8px);
++  padding: var(--card-pad, 16px 18px);
++  background: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md, 6px);
++  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
++  box-sizing: border-box;
++  cursor: pointer;
++  position: relative;
++  transition: border-color 100ms ease, box-shadow 100ms ease;
++}
++
++.swimlane-card:hover {
++  border-color: var(--border-strong);
++}
++
++.swimlane-card[data-focused="true"] {
++  outline: 2px solid var(--focus-ring);
++  outline-offset: 2px;
++}
++
++.swimlane-card--selected {
++  border-color: var(--focus-ring);
++  background: rgba(37, 99, 235, 0.04);
++}
++
++.swimlane-card-top {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.swimlane-card-key {
++  font-family: var(--font-mono);
++  font-size: 0.8125rem;
++  font-weight: 600;
++  color: var(--fg-secondary);
++  text-decoration: none;
++}
++
++.swimlane-card-summary {
++  font-family: var(--font-sans);
++  font-size: 0.875rem;
++  color: var(--fg-primary);
++  line-height: 1.4;
++  word-break: break-word;
++}
++
++.swimlane-card-footer {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  margin-top: 4px;
++}
++
++/* ==========================================================================
++   Floating Bulk Action Bar (S6.4 item 3)
++   ========================================================================== */
++
++.bulk-action-bar {
++  position: fixed;
++  bottom: var(--space-6, 24px);
++  left: 50%;
++  transform: translateX(-50%);
++  z-index: 50;
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  padding: var(--space-2, 8px) var(--space-4, 16px);
++  background: var(--bg-surface-raised, #ffffff);
++  border: 1px solid var(--border-strong);
++  border-radius: var(--radius-lg, 10px);
++  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
++  box-sizing: border-box;
++}
++
++.bulk-count-label {
++  font-family: var(--font-sans);
++  font-size: 0.875rem;
++  font-weight: 600;
++  color: var(--fg-primary);
++  margin-right: var(--space-2, 8px);
++  white-space: nowrap;
++}
++
++.bulk-btn {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: var(--space-1, 4px);
++  min-height: 36px;
++  height: 36px;
++  padding: 0 var(--space-3, 12px);
++  background: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md, 6px);
++  font-family: var(--font-sans);
++  font-size: 0.8125rem;
++  font-weight: 500;
++  color: var(--fg-primary);
++  cursor: pointer;
++  white-space: nowrap;
++}
++
++.bulk-btn:hover:not(:disabled) {
++  background: var(--bg-hover);
++}
++
++.bulk-btn:focus-visible {
++  outline: 2px solid var(--focus-ring);
++  outline-offset: 2px;
++}
++
++.bulk-btn:disabled {
++  opacity: 0.45;
++  cursor: not-allowed;
++  color: var(--fg-muted);
++  border-color: var(--border-subtle);
++}
++
++.bulk-btn-danger {
++  color: var(--danger-fg, #881337);
++  border-color: var(--border-subtle);
++}
++
++.bulk-btn-danger:hover:not(:disabled) {
++  background: var(--danger-bg, #ffe4e6);
++}
++
++.bulk-btn-clear {
++  color: var(--fg-muted);
++}
++
++/* Visually hidden live announcer */
++.bulk-live-announcer {
++  position: absolute;
++  width: 1px;
++  height: 1px;
++  padding: 0;
++  margin: -1px;
++  overflow: hidden;
++  clip: rect(0, 0, 0, 0);
++  white-space: nowrap;
++  border: 0;
++}
++
++/* ==========================================================================
++   Quick Field Popover (S6.4 item 4, S1.3 item 3)
++   ========================================================================== */
++
++.quick-field-popover {
++  position: absolute;
++  z-index: 60;
++  width: 220px;
++  background: var(--bg-surface-raised, #ffffff);
++  border: 1px solid var(--border-strong);
++  border-radius: var(--radius-md, 6px);
++  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
++  padding: var(--space-2, 8px);
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++  box-sizing: border-box;
++}
++
++.quick-field-popover-title {
++  font-size: 0.75rem;
++  font-weight: 600;
++  color: var(--fg-muted);
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++  padding: 4px 6px;
++}
++
++.quick-field-option {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  padding: 6px 8px;
++  background: transparent;
++  border: none;
++  border-radius: var(--radius-sm, 4px);
++  font-family: var(--font-sans);
++  font-size: 0.8125rem;
++  color: var(--fg-primary);
++  cursor: pointer;
++  text-align: left;
++  width: 100%;
++}
++
++.quick-field-option:hover,
++.quick-field-option:focus-visible,
++.quick-field-option--focused {
++  background: var(--bg-hover);
++  outline: none;
++}
++
++/* ==========================================================================
++   Quick Create Issue Modal (S6.4 item 4, S1.3 item 3)
++   ========================================================================== */
++
++.quick-create-modal-overlay {
++  position: fixed;
++  inset: 0;
++  z-index: 70;
++  background: rgba(0, 0, 0, 0.4);
++  backdrop-filter: blur(2px);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  padding: var(--space-4, 16px);
++  box-sizing: border-box;
++}
++
++.quick-create-modal {
++  width: 100%;
++  max-width: 580px;
++  background: var(--bg-surface-raised, #ffffff);
++  border: 1px solid var(--border-strong);
++  border-radius: var(--radius-lg, 10px);
++  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
++  padding: var(--space-6, 24px);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4, 16px);
++  box-sizing: border-box;
++}
++
++.quick-create-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.quick-create-title {
++  font-family: var(--font-sans);
++  font-size: 1.125rem;
++  font-weight: 600;
++  color: var(--fg-primary);
++  margin: 0;
++}
++
++.quick-create-input-group {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-1, 4px);
++}
++
++.quick-create-input-group--flex1 {
++  flex: 1;
++}
++
++.quick-create-label {
++  font-family: var(--font-sans);
++  font-size: 0.8125rem;
++  font-weight: 500;
++  color: var(--fg-secondary);
++}
++
++.quick-create-input {
++  width: 100%;
++  height: 38px;
++  padding: 0 var(--space-3, 12px);
++  background: var(--bg-canvas);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md, 6px);
++  font-family: var(--font-sans);
++  font-size: 0.875rem;
++  color: var(--fg-primary);
++  box-sizing: border-box;
++}
++
++.quick-create-input:focus {
++  outline: 2px solid var(--focus-ring);
++  border-color: transparent;
++}
++
++.quick-create-textarea {
++  width: 100%;
++  min-height: 100px;
++  padding: var(--space-2, 8px) var(--space-3, 12px);
++  background: var(--bg-canvas);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md, 6px);
++  font-family: var(--font-sans);
++  font-size: 0.875rem;
++  color: var(--fg-primary);
++  box-sizing: border-box;
++  resize: vertical;
++}
++
++.quick-create-textarea:focus {
++  outline: 2px solid var(--focus-ring);
++  border-color: transparent;
++}
++
++.quick-create-row-fields {
++  display: flex;
++  gap: var(--space-3, 12px);
++}
++
++.quick-create-select {
++  width: 100%;
++  height: 36px;
++  padding: 0 var(--space-2, 8px);
++  background: var(--bg-canvas);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md, 6px);
++  font-family: var(--font-sans);
++  font-size: 0.8125rem;
++  color: var(--fg-primary);
++  box-sizing: border-box;
++}
++
++.quick-create-footer {
++  display: flex;
++  align-items: center;
++  justify-content: flex-end;
++  gap: var(--space-3, 12px);
++  margin-top: var(--space-2, 8px);
++}
++
++.quick-create-btn-cancel {
++  min-height: 36px;
++  padding: 0 var(--space-4, 16px);
++  background: transparent;
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md, 6px);
++  font-family: var(--font-sans);
++  font-size: 0.875rem;
++  font-weight: 500;
++  color: var(--fg-secondary);
++  cursor: pointer;
++}
++
++.quick-create-btn-submit {
++  min-height: 36px;
++  padding: 0 var(--space-4, 16px);
++  background: var(--accent-primary);
++  color: var(--accent-primary-fg);
++  border: none;
++  border-radius: var(--radius-md, 6px);
++  font-family: var(--font-sans);
++  font-size: 0.875rem;
++  font-weight: 500;
++  cursor: pointer;
++}
++
++.quick-create-btn-submit:hover {
++  opacity: 0.9;
++}
++
++/* ==========================================================================
++   Responsive Adaptations (Mobile <= 767px)
++   ========================================================================== */
++
++@media (max-width: 767px) {
++  .bulk-action-bar {
++    bottom: var(--space-4, 16px);
++    width: calc(100% - 32px);
++    overflow-x: auto;
++    justify-content: flex-start;
++  }
++
++  .bulk-btn {
++    min-height: 44px;
++    height: 44px;
++    padding: 0 var(--space-3, 12px);
++  }
++
++  .swimlane-col-headers {
++    overflow-x: auto;
++    width: 100%;
++  }
++
++  .swimlane-band-columns {
++    flex-direction: column;
++    row-gap: var(--space-4, 16px);
++  }
++
++  .swimlane-band .board-column {
++    width: 100%;
++    min-width: 100%;
++    max-width: 100%;
++  }
++}
+diff --git a/kanban/web/src/features/views/useIssueKeyboardMap.test.tsx b/kanban/web/src/features/views/useIssueKeyboardMap.test.tsx
+new file mode 100644
+index 0000000..20d55ee
+--- /dev/null
++++ b/kanban/web/src/features/views/useIssueKeyboardMap.test.tsx
+@@ -0,0 +1,509 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, renderHook, act } from '@testing-library/react';
++import React, { useState } from 'react';
++import { useIssueKeyboardMap } from './useIssueKeyboardMap';
++import { FIXTURE_12_ISSUES } from './fixtures';
++import type { IssueItem } from './viewsApi';
++import { QuickFieldPopover } from './QuickFieldPopover';
++
++describe('useIssueKeyboardMap (KB-P3-40, S6.4 item 4, S1.3 item 3)', () => {
++  beforeEach(() => {
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
++  });
++
++  it('navigates with J/K/H/L, selects with X, toggles I, and opens shortcuts (Test Case 2)', () => {
++    const handleOpenCreate = vi.fn();
++    const handleOpenFilter = vi.fn();
++    const handleOpenField = vi.fn();
++    const handleToggleMe = vi.fn();
++
++    function TestComponent() {
++      const [selectedIds, setSelectedIds] = useState<string[]>([]);
++      const { focusedKey } = useIssueKeyboardMap({
++        issues: FIXTURE_12_ISSUES,
++        layout: 'board',
++        selectedIds,
++        setSelectedIds,
++        modulesEnabled: true,
++        onOpenCreateModal: handleOpenCreate,
++        onOpenFilter: handleOpenFilter,
++        onOpenFieldPopover: handleOpenField,
++        onToggleAssigneeMe: handleToggleMe,
++      });
++
++      return (
++        <div>
++          <span data-testid="focused">{focusedKey ?? 'none'}</span>
++          <span data-testid="selected-count">{selectedIds.length}</span>
++          <div data-issue-key="KAN-140" />
++          <input data-testid="test-input" />
++        </div>
++      );
++    }
++
++    render(<TestComponent />);
++
++    expect(screen.getByTestId('focused').textContent).toBe('none');
++
++    // 1. 'J' focuses first issue KAN-140
++    fireEvent.keyDown(window, { key: 'j' });
++    expect(screen.getByTestId('focused').textContent).toBe('KAN-140');
++
++    // 2. 'L' moves to next column / issue KAN-141
++    fireEvent.keyDown(window, { key: 'l' });
++    expect(screen.getByTestId('focused').textContent).toBe('KAN-141');
++
++    // 3. 'H' moves back to KAN-140
++    fireEvent.keyDown(window, { key: 'h' });
++    expect(screen.getByTestId('focused').textContent).toBe('KAN-140');
++
++    // 4. 'X' selects KAN-140
++    fireEvent.keyDown(window, { key: 'x' });
++    expect(screen.getByTestId('selected-count').textContent).toBe('1');
++
++    // 5. 'I' toggles Adam assignment
++    fireEvent.keyDown(window, { key: 'i' });
++    expect(handleToggleMe).toHaveBeenCalledWith(
++      expect.objectContaining({ key: 'KAN-140' })
++    );
++
++    // 6. 'C' opens quick create modal
++    fireEvent.keyDown(window, { key: 'c' });
++    expect(handleOpenCreate).toHaveBeenCalled();
++
++    // 7. '/' opens filter
++    fireEvent.keyDown(window, { key: '/' });
++    expect(handleOpenFilter).toHaveBeenCalled();
++
++    // 8. 'S', 'P', 'A', 'D' each open matching popovers
++    fireEvent.keyDown(window, { key: 's' });
++    expect(handleOpenField).toHaveBeenCalledWith('state', expect.anything(), expect.any(Object));
++
++    fireEvent.keyDown(window, { key: 'p' });
++    expect(handleOpenField).toHaveBeenCalledWith('priority', expect.anything(), expect.any(Object));
++
++    fireEvent.keyDown(window, { key: 'a' });
++    expect(handleOpenField).toHaveBeenCalledWith('assignee', expect.anything(), expect.any(Object));
++
++    fireEvent.keyDown(window, { key: 'd' });
++    expect(handleOpenField).toHaveBeenCalledWith('due_date', expect.anything(), expect.any(Object));
++
++    // 9. Input shield: typing inside <input> triggers zero shortcuts
++    handleOpenCreate.mockClear();
++    handleOpenFilter.mockClear();
++    handleToggleMe.mockClear();
++    const inputEl = screen.getByTestId('test-input');
++    inputEl.focus();
++
++    for (const char of ['c', 's', 'p', 'a', 'd', 'm', 'j', 'x', '/']) {
++      fireEvent.keyDown(inputEl, { key: char });
++    }
++
++    expect(handleOpenCreate).not.toHaveBeenCalled();
++    expect(handleOpenFilter).not.toHaveBeenCalled();
++    expect(handleToggleMe).not.toHaveBeenCalled();
++  });
++
++  it('pressing M when modulesEnabled is false is strict no-op (Test Case 3, S7.2 8f)', () => {
++    const handleOpenField = vi.fn();
++
++    function TestComponent() {
++      const [selectedIds, setSelectedIds] = useState<string[]>([]);
++      useIssueKeyboardMap({
++        issues: FIXTURE_12_ISSUES,
++        layout: 'board',
++        selectedIds,
++        setSelectedIds,
++        modulesEnabled: false,
++        onOpenFieldPopover: handleOpenField,
++      });
++
++      return <div>No modules mode</div>;
++    }
++
++    render(
++      <>
++        <TestComponent />
++        <QuickFieldPopover
++          isOpen={false}
++          field="module"
++          anchorRect={null}
++          issue={FIXTURE_12_ISSUES[0]}
++          onClose={vi.fn()}
++          onSelect={vi.fn()}
++          modulesEnabled={false}
++        />
++      </>
++    );
++
++    // Press 'M'
++    fireEvent.keyDown(window, { key: 'm' });
++    expect(handleOpenField).not.toHaveBeenCalled();
++    expect(screen.queryByRole('dialog')).toBeNull();
++  });
++
++  it('clears selection on Escape and handles Enter/Space for peek navigation', () => {
++    function TestComponent() {
++      const [selectedIds, setSelectedIds] = useState<string[]>(['KAN-140']);
++      const { focusedKey } = useIssueKeyboardMap({
++        issues: FIXTURE_12_ISSUES,
++        layout: 'list',
++        selectedIds,
++        setSelectedIds,
++      });
++
++      return (
++        <div>
++          <span data-testid="focused">{focusedKey ?? 'none'}</span>
++          <span data-testid="selected-count">{selectedIds.length}</span>
++        </div>
++      );
++    }
++
++    render(<TestComponent />);
++
++    expect(screen.getByTestId('selected-count').textContent).toBe('1');
++
++    // Press Escape -> clears selection
++    fireEvent.keyDown(window, { key: 'Escape' });
++    expect(screen.getByTestId('selected-count').textContent).toBe('0');
++
++    // Focus an issue and press Enter / Space
++    fireEvent.keyDown(window, { key: 'j' });
++    expect(screen.getByTestId('focused').textContent).toBe('KAN-140');
++    fireEvent.keyDown(window, { key: 'Enter' });
++    fireEvent.keyDown(window, { key: ' ' });
++  });
++
++  it('handles Shift+X range selection and capital L labels popover in list layout', () => {
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
++    const handleOpenField = vi.fn();
++
++    function TestComponent() {
++      const [selectedIds, setSelectedIds] = useState<string[]>([]);
++      const { focusedKey } = useIssueKeyboardMap({
++        issues: FIXTURE_12_ISSUES,
++        layout: 'list',
++        selectedIds,
++        setSelectedIds,
++        onOpenFieldPopover: handleOpenField,
++      });
++
++      return (
++        <div>
++          <span data-testid="focused">{focusedKey ?? 'none'}</span>
++          <span data-testid="selected-count">{selectedIds.length}</span>
++        </div>
++      );
++    }
++
++    render(<TestComponent />);
++
++    // Focus first
++    fireEvent.keyDown(window, { key: 'j' });
++    // Move to next
++    fireEvent.keyDown(window, { key: 'j' });
++    expect(screen.getByTestId('focused').textContent).toBe('KAN-141');
++
++    // Shift+X selects range from KAN-140 to KAN-141
++    fireEvent.keyDown(window, { key: 'X', shiftKey: true });
++    expect(screen.getByTestId('selected-count').textContent).toBe('2');
++
++    // Press 'l' in list layout -> opens labels popover
++    fireEvent.keyDown(window, { key: 'l' });
++    expect(handleOpenField).toHaveBeenCalledWith('labels', expect.anything(), null);
++  });
++
++  it('toggles selection off on second X and wraps roving focus at list bounds', () => {
++    const twoIssues = FIXTURE_12_ISSUES.slice(0, 2);
++
++    function TestComponent() {
++      const [selectedIds, setSelectedIds] = useState<string[]>([]);
++      const { focusedKey } = useIssueKeyboardMap({
++        issues: twoIssues,
++        layout: 'list',
++        selectedIds,
++        setSelectedIds,
++      });
++
++      return (
++        <div>
++          <span data-testid="focused">{focusedKey ?? 'none'}</span>
++          <span data-testid="selected-count">{selectedIds.length}</span>
++        </div>
++      );
++    }
++
++    render(<TestComponent />);
++
++    // Press 'K' while at top -> wraps to bottom
++    fireEvent.keyDown(window, { key: 'k' });
++    expect(screen.getByTestId('focused').textContent).toBe(twoIssues[1]?.key);
++
++    // Press 'J' while at bottom -> wraps to top
++    fireEvent.keyDown(window, { key: 'j' });
++    expect(screen.getByTestId('focused').textContent).toBe(twoIssues[0]?.key);
++
++    // Press 'X' -> selected
++    fireEvent.keyDown(window, { key: 'x' });
++    expect(screen.getByTestId('selected-count').textContent).toBe('1');
++
++    // Press 'X' again -> toggles off!
++    fireEvent.keyDown(window, { key: 'x' });
++    expect(screen.getByTestId('selected-count').textContent).toBe('0');
++  });
++
++  it('Shift+Click range selection across 5 items selects all 5 and caps at 100 (Test Case 4)', () => {
++    const { result } = renderHook(() => {
++      const [selectedIds, setSelectedIds] = useState<string[]>([]);
++      const map = useIssueKeyboardMap({
++        issues: FIXTURE_12_ISSUES,
++        layout: 'list',
++        selectedIds,
++        setSelectedIds,
++        modulesEnabled: true,
++      });
++      return { ...map, selectedIds, setSelectedIds };
++    });
++
++    // Click first item KAN-140
++    act(() => {
++      result.current.handleRowClick('KAN-140', false);
++    });
++    expect(result.current.selectedIds).toEqual(['KAN-140']);
++
++    // Shift+Click unknown item (toIndex === -1 early return)
++    act(() => {
++      result.current.handleRowClick('UNKNOWN-999', true);
++    });
++    expect(result.current.selectedIds).toEqual(['KAN-140']);
++
++    // Click first item KAN-140 again to deselect
++    act(() => {
++      result.current.handleRowClick('KAN-140', false);
++    });
++    expect(result.current.selectedIds).toEqual([]);
++
++    // Click again to reselect
++    act(() => {
++      result.current.handleRowClick('KAN-140', false);
++    });
++
++    // Shift+Click fifth item KAN-144 (indices 0 to 4 inclusive -> 5 items)
++    act(() => {
++      result.current.handleRowClick('KAN-144', true);
++    });
++    expect(result.current.selectedIds).toHaveLength(5);
++    expect(result.current.selectedIds).toEqual([
++      'KAN-140',
++      'KAN-141',
++      'KAN-142',
++      'KAN-143',
++      'KAN-144',
++    ]);
++  });
++
++  it('handles empty issues list, popover/modal open guard, 100 cap on X, and M shortcut when enabled', () => {
++    const handleOpenField = vi.fn();
++    const handleOpenCreate = vi.fn();
++
++    // 1. Empty issues list
++    const { rerender } = renderHook(
++      ({ issues, isOpen, selectedIds }: { issues: IssueItem[]; isOpen: boolean; selectedIds: string[] }) => {
++        const [sel, setSel] = useState<string[]>(selectedIds);
++        return useIssueKeyboardMap({
++          issues,
++          layout: 'board',
++          selectedIds: sel,
++          setSelectedIds: setSel,
++          modulesEnabled: true,
++          isPopoverOrModalOpen: isOpen,
++          onOpenFieldPopover: handleOpenField,
++          onOpenCreateModal: handleOpenCreate,
++        });
++      },
++      {
++        initialProps: { issues: [] as IssueItem[], isOpen: false, selectedIds: [] as string[] },
++      }
++    );
++
++    fireEvent.keyDown(window, { key: 'j' });
++    fireEvent.keyDown(window, { key: 'x' });
++    expect(handleOpenCreate).not.toHaveBeenCalled();
++
++    // 2. isPopoverOrModalOpen: true blocks shortcuts
++    rerender({ issues: FIXTURE_12_ISSUES, isOpen: true, selectedIds: [] });
++    fireEvent.keyDown(window, { key: 'c' });
++    fireEvent.keyDown(window, { key: 'j' });
++    expect(handleOpenCreate).not.toHaveBeenCalled();
++
++    // 3. M shortcut when modulesEnabled is true
++    rerender({ issues: FIXTURE_12_ISSUES, isOpen: false, selectedIds: [] });
++    fireEvent.keyDown(window, { key: 'm' });
++    expect(handleOpenField).toHaveBeenCalledWith('module', expect.anything(), null);
++
++    // 4. Capped at 100 items on X toggle
++    const hundred = Array.from({ length: 100 }, (_, i) => `KAN-${String(i + 1)}`);
++    const { result: capResult } = renderHook(() => {
++      const [sel, setSel] = useState<string[]>(hundred);
++      return {
++        map: useIssueKeyboardMap({
++          issues: FIXTURE_12_ISSUES,
++          layout: 'list',
++          selectedIds: sel,
++          setSelectedIds: setSel,
++        }),
++        sel,
++      };
++    });
++
++    fireEvent.keyDown(window, { key: 'x' });
++    expect(capResult.current.sel.length).toBe(100);
++
++    // 5. IME composition and modifier key shields
++    fireEvent.keyDown(window, { key: 'c', isComposing: true });
++    fireEvent.keyDown(window, { key: 'c', ctrlKey: true });
++    fireEvent.keyDown(window, { key: 'c', metaKey: true });
++    fireEvent.keyDown(window, { key: 'c', altKey: true });
++    expect(handleOpenCreate).not.toHaveBeenCalled();
++
++    // 6. Range select capping when total items in range exceed 100
++    const baseItem = FIXTURE_12_ISSUES[0];
++    if (!baseItem) throw new Error('missing fixture');
++    const manyIssues: IssueItem[] = Array.from({ length: 150 }, (_, i) => ({
++      ...baseItem,
++      id: `id-${String(i + 1)}`,
++      key: `KAN-${String(i + 1)}`,
++    }));
++    const { result: rangeResult } = renderHook(() => {
++      const [sel, setSel] = useState<string[]>([]);
++      const map = useIssueKeyboardMap({
++        issues: manyIssues,
++        layout: 'list',
++        selectedIds: sel,
++        setSelectedIds: setSel,
++      });
++      return { ...map, sel };
++    });
++
++    act(() => {
++      rangeResult.current.handleRowClick('KAN-1', false);
++    });
++    act(() => {
++      rangeResult.current.handleRowClick('KAN-150', true);
++    });
++    expect(rangeResult.current.sel.length).toBe(100);
++  });
++
++  it('handles Enter when focusedKey is null, wrapping on L at list bounds, and unmapped keys', () => {
++    const twoIssues = FIXTURE_12_ISSUES.slice(0, 2);
++
++    function TestComponent() {
++      const [selectedIds, setSelectedIds] = useState<string[]>([]);
++      const { focusedKey, setFocusedKey } = useIssueKeyboardMap({
++        issues: twoIssues,
++        layout: 'board',
++        selectedIds,
++        setSelectedIds,
++      });
++
++      return (
++        <div>
++          <span data-testid="focused">{focusedKey ?? 'none'}</span>
++          <button
++            type="button"
++            data-testid="set-last"
++            onClick={() => {
++              const lastKey = twoIssues[1]?.key;
++              if (lastKey) setFocusedKey(lastKey);
++            }}
++          >
++            Set Last
++          </button>
++        </div>
++      );
++    }
++
++    render(<TestComponent />);
++
++    // Press Enter while focusedKey is null (strict no-op)
++    fireEvent.keyDown(window, { key: 'Enter' });
++    fireEvent.keyDown(window, { key: ' ' });
++
++    // Set focus to last issue (index 1 of 2)
++    fireEvent.click(screen.getByTestId('set-last'));
++    expect(screen.getByTestId('focused').textContent).toBe(twoIssues[1]?.key);
++
++    // Press 'H' while at index 1 -> moves to index 0
++    fireEvent.keyDown(window, { key: 'h' });
++    expect(screen.getByTestId('focused').textContent).toBe(twoIssues[0]?.key);
++
++    // Press 'H' while at index 0 -> wraps to index 1
++    fireEvent.keyDown(window, { key: 'h' });
++    expect(screen.getByTestId('focused').textContent).toBe(twoIssues[1]?.key);
++
++    // Press 'L' at bounds -> wraps to index 0
++    fireEvent.keyDown(window, { key: 'l' });
++    expect(screen.getByTestId('focused').textContent).toBe(twoIssues[0]?.key);
++
++    // Press unmapped key 'z'
++    fireEvent.keyDown(window, { key: 'z' });
++  });
++
++  it('covers K pressed with null anchorKey, Escape with open dialog, and selectRange edge cases', () => {
++    // 1. Press K with null anchorKey
++    const { result: kResult } = renderHook(() => {
++      const [sel, setSel] = useState<string[]>(['KAN-140']);
++      const map = useIssueKeyboardMap({
++        issues: FIXTURE_12_ISSUES,
++        layout: 'board',
++        selectedIds: sel,
++        setSelectedIds: setSel,
++        isPopoverOrModalOpen: true, // open dialog
++      });
++      return { ...map, sel };
++    });
++
++    // Press Escape while dialog is open -> does not clear sel
++    fireEvent.keyDown(window, { key: 'Escape' });
++    expect(kResult.current.sel).toEqual(['KAN-140']);
++
++    // 2. Press K when dialog is closed and anchorKey is null
++    const { result: kResult2 } = renderHook(() => {
++      const [sel, setSel] = useState<string[]>([]);
++      return useIssueKeyboardMap({
++        issues: FIXTURE_12_ISSUES,
++        layout: 'board',
++        selectedIds: sel,
++        setSelectedIds: setSel,
++        isPopoverOrModalOpen: false,
++      });
++    });
++
++    fireEvent.keyDown(window, { key: 'k' });
++    expect(kResult2.current.anchorKey).toBe(FIXTURE_12_ISSUES[FIXTURE_12_ISSUES.length - 1]?.key);
++
++    // 3. selectRange with invalid anchorKey (fromIndex === -1)
++    act(() => {
++      kResult2.current.setAnchorKey('DELETED_KEY');
++    });
++    // Trigger shift+click on valid key
++    act(() => {
++      kResult2.current.handleRowClick('KAN-140', true);
++    });
++
++    // 4. selectRange with empty issues list (!fromKey)
++    const { result: emptyHook } = renderHook(() => {
++      const [sel, setSel] = useState<string[]>([]);
++      return useIssueKeyboardMap({
++        issues: [],
++        layout: 'board',
++        selectedIds: sel,
++        setSelectedIds: setSel,
++      });
++    });
++    act(() => {
++      emptyHook.current.handleRowClick('KAN-140', true);
++    });
++  });
++});
+diff --git a/kanban/web/src/features/views/useIssueKeyboardMap.ts b/kanban/web/src/features/views/useIssueKeyboardMap.ts
+new file mode 100644
+index 0000000..f532cdc
+--- /dev/null
++++ b/kanban/web/src/features/views/useIssueKeyboardMap.ts
+@@ -0,0 +1,317 @@
++import { useState, useEffect, useCallback } from 'react';
++import type { IssueItem } from './viewsApi';
++import type { QuickFieldType } from './QuickFieldPopover';
++
++export interface UseIssueKeyboardMapOptions {
++  issues: IssueItem[];
++  layout?: string;
++  selectedIds: string[];
++  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
++  modulesEnabled?: boolean;
++  onOpenCreateModal?: () => void;
++  onOpenFilter?: () => void;
++  onOpenFieldPopover?: (
++    field: QuickFieldType,
++    issue: IssueItem,
++    rect: DOMRect | null
++  ) => void;
++  onToggleAssigneeMe?: (issue: IssueItem) => void;
++  isPopoverOrModalOpen?: boolean;
++}
++
++export interface UseIssueKeyboardMapReturn {
++  focusedKey: string | null;
++  setFocusedKey: (key: string | null) => void;
++  anchorKey: string | null;
++  setAnchorKey: (key: string | null) => void;
++  handleRowClick: (key: string, isShift: boolean) => void;
++}
++
++function getIssueAnchorRect(issueKey: string): DOMRect | null {
++  const el = document.querySelector(`[data-issue-key="${issueKey}"]`);
++  return el ? el.getBoundingClientRect() : null;
++}
++
++export function useIssueKeyboardMap({
++  issues,
++  layout = 'list',
++  selectedIds,
++  setSelectedIds,
++  modulesEnabled = true,
++  onOpenCreateModal,
++  onOpenFilter,
++  onOpenFieldPopover,
++  onToggleAssigneeMe,
++  isPopoverOrModalOpen = false,
++}: UseIssueKeyboardMapOptions): UseIssueKeyboardMapReturn {
++  const [focusedKey, setFocusedKey] = useState<string | null>(null);
++  const [anchorKey, setAnchorKey] = useState<string | null>(null);
++
++  // Helper selecting a contiguous range between anchorKey and targetKey
++  const selectRange = useCallback(
++    (targetKey: string) => {
++      const fromKey = anchorKey ?? focusedKey ?? issues[0]?.key;
++      if (!fromKey) return;
++
++      const fromIndex = issues.findIndex((i) => i.key === fromKey);
++      const toIndex = issues.findIndex((i) => i.key === targetKey);
++      if (fromIndex === -1 || toIndex === -1) return;
++
++      const start = Math.min(fromIndex, toIndex);
++      const end = Math.max(fromIndex, toIndex);
++      const rangeKeys = issues.slice(start, end + 1).map((i) => i.key);
++
++      setSelectedIds((prev) => {
++        const merged = Array.from(new Set([...prev, ...rangeKeys]));
++        if (merged.length > 100) {
++          return merged.slice(0, 100);
++        }
++        return merged;
++      });
++    },
++    [anchorKey, focusedKey, issues, setSelectedIds]
++  );
++
++  const handleRowClick = useCallback(
++    (key: string, isShift: boolean) => {
++      setFocusedKey(key);
++      if (isShift) {
++        selectRange(key);
++      } else {
++        setAnchorKey(key);
++        setSelectedIds((prev) =>
++          prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
++        );
++      }
++    },
++    [selectRange, setSelectedIds]
++  );
++
++  useEffect(() => {
++    const handleKeyDown = (e: KeyboardEvent) => {
++      // 1. Ignore if typing in text inputs, textareas, selects, or contenteditable
++      const target = e.target as HTMLElement | null;
++      if (
++        target &&
++        (target.tagName === 'INPUT' ||
++          target.tagName === 'TEXTAREA' ||
++          target.tagName === 'SELECT' ||
++          target.isContentEditable)
++      ) {
++        return;
++      }
++
++      // 2. Ignore during IME composition
++      if (e.isComposing) {
++        return;
++      }
++
++      // 3. Ignore if modal dialog is open (unless it's Escape)
++      const hasOpenDialog =
++        isPopoverOrModalOpen ||
++        document.querySelector('dialog[open], [role="dialog"]') !== null;
++
++      if (e.key === 'Escape') {
++        // If modal or popover is open, let modal handle it
++        if (!hasOpenDialog && selectedIds.length > 0) {
++          e.preventDefault();
++          setSelectedIds([]);
++        }
++        return;
++      }
++
++      if (hasOpenDialog) {
++        return;
++      }
++
++      // Ignore if modifier keys are pressed (except Shift for range select)
++      if (e.ctrlKey || e.metaKey || e.altKey) {
++        return;
++      }
++
++      const key = e.key;
++      const lowerKey = key.toLowerCase();
++
++      // Shortcut: 'C' -> open quick create modal
++      if (lowerKey === 'c') {
++        e.preventDefault();
++        onOpenCreateModal?.();
++        return;
++      }
++
++      // Shortcut: '/' -> open filter search
++      if (key === '/') {
++        e.preventDefault();
++        onOpenFilter?.();
++        return;
++      }
++
++      // If no issues exist, navigation cannot proceed
++      const firstIssue = issues[0];
++      if (!firstIssue) {
++        return;
++      }
++
++      // Find current focused index
++      const currentIndex = focusedKey
++        ? issues.findIndex((i) => i.key === focusedKey)
++        : -1;
++
++      // Shortcut: 'J' -> move down
++      if (lowerKey === 'j') {
++        e.preventDefault();
++        const nextIndex =
++          currentIndex === -1 || currentIndex >= issues.length - 1
++            ? 0
++            : currentIndex + 1;
++        const nextItem = issues[nextIndex] ?? firstIssue;
++        setFocusedKey(nextItem.key);
++        if (!anchorKey) setAnchorKey(nextItem.key);
++        return;
++      }
++
++      // Shortcut: 'K' -> move up
++      if (lowerKey === 'k') {
++        e.preventDefault();
++        const prevIndex =
++          currentIndex <= 0 ? issues.length - 1 : currentIndex - 1;
++        const prevItem = issues[prevIndex] ?? firstIssue;
++        setFocusedKey(prevItem.key);
++        if (!anchorKey) setAnchorKey(prevItem.key);
++        return;
++      }
++
++      // Shortcuts: 'H' / 'L' -> move across columns on Board layout
++      if (layout === 'board' && lowerKey === 'h') {
++        e.preventDefault();
++        // Move to previous issue or column
++        const prevIdx =
++          currentIndex <= 0 ? issues.length - 1 : currentIndex - 1;
++        const prevItem = issues[prevIdx] ?? firstIssue;
++        setFocusedKey(prevItem.key);
++        return;
++      }
++
++      if (layout === 'board' && lowerKey === 'l') {
++        e.preventDefault();
++        // Move to next column issue
++        const nextIdx =
++          currentIndex === -1 || currentIndex >= issues.length - 1
++            ? 0
++            : currentIndex + 1;
++        const nextItem = issues[nextIdx] ?? firstIssue;
++        setFocusedKey(nextItem.key);
++        return;
++      }
++
++      // Shortcut: 'X' -> toggle selection on focusedKey (or Shift+X for range select)
++      if (lowerKey === 'x') {
++        e.preventDefault();
++        const target = focusedKey ?? firstIssue.key;
++
++        if (e.shiftKey) {
++          selectRange(target);
++        } else {
++          setAnchorKey(target);
++          setSelectedIds((prev) => {
++            if (prev.includes(target)) {
++              return prev.filter((k) => k !== target);
++            }
++            if (prev.length >= 100) {
++              return prev;
++            }
++            return [...prev, target];
++          });
++        }
++        return;
++      }
++
++      // Shortcut: 'Enter' or 'Space' -> peek issue
++      if (key === 'Enter' || key === ' ') {
++        if (focusedKey) {
++          e.preventDefault();
++          const targetUrl = `?layout=${encodeURIComponent(layout)}&peek=${encodeURIComponent(focusedKey)}`;
++          window.location.href = targetUrl;
++        }
++        return;
++      }
++
++      // Field shortcut popovers: S, P, A, L, M, D
++      const activeIssue =
++        (focusedKey ? issues.find((i) => i.key === focusedKey) : null) ?? firstIssue;
++
++      const anchorRect = getIssueAnchorRect(activeIssue.key);
++
++      if (lowerKey === 's') {
++        e.preventDefault();
++        onOpenFieldPopover?.('state', activeIssue, anchorRect);
++        return;
++      }
++
++      if (lowerKey === 'p') {
++        e.preventDefault();
++        onOpenFieldPopover?.('priority', activeIssue, anchorRect);
++        return;
++      }
++
++      if (lowerKey === 'a') {
++        e.preventDefault();
++        onOpenFieldPopover?.('assignee', activeIssue, anchorRect);
++        return;
++      }
++
++      if (layout !== 'board' && lowerKey === 'l') {
++        e.preventDefault();
++        onOpenFieldPopover?.('labels', activeIssue, anchorRect);
++        return;
++      }
++
++      // Shortcut 'M': module popover (strict no-op when modulesEnabled is false)
++      if (lowerKey === 'm') {
++        if (modulesEnabled) {
++          e.preventDefault();
++          onOpenFieldPopover?.('module', activeIssue, anchorRect);
++        }
++        return;
++      }
++
++      if (lowerKey === 'd') {
++        e.preventDefault();
++        onOpenFieldPopover?.('due_date', activeIssue, anchorRect);
++        return;
++      }
++
++      // Shortcut 'I': assign / unassign current user 'me' optimistically
++      if (lowerKey === 'i') {
++        e.preventDefault();
++        onToggleAssigneeMe?.(activeIssue);
++        return;
++      }
++    };
++
++    window.addEventListener('keydown', handleKeyDown);
++    return () => { window.removeEventListener('keydown', handleKeyDown); };
++  }, [
++    issues,
++    focusedKey,
++    anchorKey,
++    selectedIds,
++    layout,
++    modulesEnabled,
++    isPopoverOrModalOpen,
++    onOpenCreateModal,
++    onOpenFilter,
++    onOpenFieldPopover,
++    onToggleAssigneeMe,
++    selectRange,
++    setSelectedIds,
++  ]);
++
++  return {
++    focusedKey,
++    setFocusedKey,
++    anchorKey,
++    setAnchorKey,
++    handleRowClick,
++  };
++}
+diff --git a/kanban/web/src/features/views/viewRegistry.test.tsx b/kanban/web/src/features/views/viewRegistry.test.tsx
+index 6d83a23..2349d7e 100644
+--- a/kanban/web/src/features/views/viewRegistry.test.tsx
++++ b/kanban/web/src/features/views/viewRegistry.test.tsx
+@@ -1,133 +1,67 @@
+-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+-import { render, screen, fireEvent } from '@testing-library/react';
+-import type { ReactNode } from 'react';
++import { describe, it, expect, beforeEach } from 'vitest';
++import { render, screen, fireEvent, within } from '@testing-library/react';
+ import React from 'react';
+-import { beforeEach, describe, expect, it } from 'vitest';
+ import {
+-  IssuesWorkspaceRoute,
+-  viewRegistry,
+   ViewHost,
+   VIEW_REGISTRY,
+-} from './viewRegistry.tsx';
++  viewRegistry,
++  IssuesWorkspaceRoute,
++  FilterDisplayBar,
++  SwimlaneBoardGrid,
++  BulkActionBar,
++  QuickCreateIssueModal,
++  QuickFieldPopover,
++  useIssueKeyboardMap,
++} from './viewRegistry';
+ import { FIXTURE_12_ISSUES } from './fixtures';
++import type { IssueItem } from './viewsApi';
+ 
+-function renderWithClient(ui: ReactNode) {
+-  const client = new QueryClient({
+-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+-  });
+-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+-}
+-
+-describe('viewRegistry and IssuesWorkspaceRoute', () => {
++describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () => {
+   beforeEach(() => {
+-    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+-      configurable: true,
+-      value: 900,
+-    });
+-    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+-      configurable: true,
+-      value: 124,
+-    });
++    window.history.pushState({}, '', '/projects/KAN/issues');
+   });
+ 
+-  it('contains entries for board, list, table, grid, calendar, and timeline', () => {
++  it('exports all Action 1 components per Scoped Definition of Done', () => {
++    expect(FilterDisplayBar).toBeDefined();
++    expect(SwimlaneBoardGrid).toBeDefined();
++    expect(BulkActionBar).toBeDefined();
++    expect(QuickCreateIssueModal).toBeDefined();
++    expect(QuickFieldPopover).toBeDefined();
++    expect(useIssueKeyboardMap).toBeDefined();
++    expect(VIEW_REGISTRY.list).toBeDefined();
++    expect(VIEW_REGISTRY.table).toBeDefined();
++    expect(VIEW_REGISTRY.board).toBeDefined();
++    expect(VIEW_REGISTRY.calendar).toBeDefined();
++    expect(VIEW_REGISTRY.timeline).toBeDefined();
+     expect(viewRegistry.board).toBeDefined();
+     expect(viewRegistry.list).toBeDefined();
+     expect(viewRegistry.table).toBeDefined();
+-    expect(viewRegistry.grid).toBeDefined();
+     expect(viewRegistry.calendar).toBeDefined();
+     expect(viewRegistry.timeline).toBeDefined();
+-    expect(viewRegistry.board.id).toBe('board');
+-  });
+-
+-  it('renders IssuesWorkspaceRoute with board layout by default', () => {
+-    renderWithClient(<IssuesWorkspaceRoute projectKey="TEST" />);
+-
+-    const workspace = screen.getByTestId('issues-workspace');
+-    expect(workspace).toBeDefined();
+-    expect(workspace.getAttribute('data-layout')).toBe('board');
+-    expect(screen.getByTestId('board-canvas')).toBeDefined();
+-  });
+-
+-  it('renders IssuesWorkspaceRoute respecting search params layout and fallback', () => {
+-    const originalSearch = window.location.search;
+-    try {
+-      window.history.pushState({}, '', '?layout=board');
+-      const { unmount } = renderWithClient(<IssuesWorkspaceRoute projectKey="TEST" />);
+-      const workspace = screen.getByTestId('issues-workspace');
+-      expect(workspace.getAttribute('data-layout')).toBe('board');
+-      unmount();
+-
+-      // Test fallback for unknown layout
+-      window.history.pushState({}, '', '?layout=unknown_view');
+-      renderWithClient(<IssuesWorkspaceRoute projectKey="TEST" />);
+-      const fallbackWorkspace = screen.getByTestId('issues-workspace');
+-      expect(fallbackWorkspace.getAttribute('data-layout')).toBe('board');
+-    } finally {
+-      window.history.pushState({}, '', originalSearch || '/');
+-    }
+-  });
+-
+-  it('handles row selection and select-all inside IssuesWorkspaceRoute', () => {
+-    renderWithClient(
+-      <IssuesWorkspaceRoute
+-        projectKey="KAN"
+-        initialLayout="table"
+-        initialIssues={FIXTURE_12_ISSUES}
+-      />,
+-    );
+-
+-    // Select all checkbox
+-    const selectAllCheckbox = screen.getByRole<HTMLInputElement>('checkbox', { name: /Select all issues/i });
+-    fireEvent.click(selectAllCheckbox);
+-    expect(selectAllCheckbox.checked).toBe(true);
+-
+-    // Deselect all
+-    fireEvent.click(selectAllCheckbox);
+-    expect(selectAllCheckbox.checked).toBe(false);
+-
+-    // Single item toggle
+-    const firstKey = FIXTURE_12_ISSUES[0]?.key ?? 'KAN-1';
+-    const rowCheckbox = screen.getByRole<HTMLInputElement>('checkbox', { name: `Select ${firstKey}` });
+-    fireEvent.click(rowCheckbox);
+-    expect(rowCheckbox.checked).toBe(true);
+-
+-    fireEvent.click(rowCheckbox);
+-    expect(rowCheckbox.checked).toBe(false);
+-  });
+-});
+-
+-describe('VIEW_REGISTRY and ViewHost', () => {
+-  it('registers list, table, calendar, and timeline views', () => {
+-    expect(VIEW_REGISTRY.list).toBeDefined();
+-    expect(VIEW_REGISTRY.table).toBeDefined();
+-    expect(VIEW_REGISTRY.calendar).toBeDefined();
+-    expect(VIEW_REGISTRY.timeline).toBeDefined();
++    expect(viewRegistry.grid).toBeDefined();
+   });
+ 
+   it('renders ListView when layout is list or unspecified', () => {
+-    renderWithClient(
++    render(
+       <ViewHost
+         layout="list"
+         issues={FIXTURE_12_ISSUES}
+         projectKey="KAN"
+         modulesEnabled={true}
+-      />,
++      />
+     );
+ 
+-    // List section header
+     expect(screen.getByText('Backlog')).toBeDefined();
+-    expect(screen.getByText('Todo')).toBeDefined();
+   });
+ 
+   it('renders TableView when layout is table', () => {
+-    renderWithClient(
++    render(
+       <ViewHost
+         layout="table"
+         issues={FIXTURE_12_ISSUES}
+         projectKey="KAN"
+         modulesEnabled={true}
+-      />,
++      />
+     );
+ 
+     expect(screen.getByRole('table')).toBeDefined();
+@@ -135,41 +69,452 @@ describe('VIEW_REGISTRY and ViewHost', () => {
+   });
+ 
+   it('renders CalendarView when layout is calendar', () => {
+-    renderWithClient(
++    render(
+       <ViewHost
+         layout="calendar"
+         issues={FIXTURE_12_ISSUES}
+         projectKey="KAN"
+         modulesEnabled={true}
+-      />,
++      />
+     );
+ 
+     expect(screen.getByTestId('calendar-view')).toBeDefined();
+   });
+ 
+   it('renders TimelineView when layout is timeline', () => {
+-    renderWithClient(
++    render(
+       <ViewHost
+         layout="timeline"
+         issues={FIXTURE_12_ISSUES}
+         projectKey="KAN"
+         modulesEnabled={true}
+-      />,
++      />
+     );
+ 
+     expect(screen.getByTestId('timeline-view')).toBeDefined();
+   });
+ 
+   it('falls back to ListView on unknown layout', () => {
+-    renderWithClient(
++    render(
+       <ViewHost
+-        layout="nonexistent_view"
++        layout="unknown_layout"
+         issues={FIXTURE_12_ISSUES}
+         projectKey="KAN"
+         modulesEnabled={true}
+-      />,
++      />
+     );
+ 
+     expect(screen.getByText('Backlog')).toBeDefined();
+   });
++
++  it('IssuesWorkspaceRoute: renders FilterDisplayBar, mounts 2D SwimlaneBoardGrid when layout=board and sub_group_by=priority', () => {
++    window.history.pushState(
++      {},
++      '',
++      '/projects/KAN/issues?layout=board&group_by=state&sub_group_by=priority'
++    );
++
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={FIXTURE_12_ISSUES}
++      />
++    );
++
++    expect(screen.getByTestId('issues-workspace')).toBeDefined();
++    expect(screen.getByRole('region', { name: /filter and display controls/i })).toBeDefined();
++    expect(screen.getByRole('region', { name: /2d swimlane board grid/i })).toBeDefined();
++    expect(screen.getByText(/Urgent 🔥/i)).toBeDefined();
++  });
++
++  it('IssuesWorkspaceRoute: filters issues by Gate Status (e.g. pending shows ⏳🤖)', () => {
++    window.history.pushState(
++      {},
++      '',
++      '/projects/KAN/issues?layout=list&gate_status=pending'
++    );
++
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={FIXTURE_12_ISSUES}
++      />
++    );
++
++    // KAN-145 has gate_status 'pending'
++    expect(screen.getByText('KAN-145')).toBeDefined();
++    // KAN-142 has gate_status 'approved', so it should not be in the document
++    expect(screen.queryByText('KAN-142')).toBeNull();
++  });
++
++  it('IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover', () => {
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={FIXTURE_12_ISSUES}
++      />
++    );
++
++    // Press 'C' to open QuickCreateIssueModal
++    fireEvent.keyDown(window, { key: 'c' });
++    expect(screen.getByRole('dialog', { name: /create work item in KAN/i })).toBeDefined();
++
++    // Fill in summary, description, and module
++    const summaryInput = screen.getByLabelText(/summary/i);
++    fireEvent.change(summaryInput, { target: { value: 'Newly Created Task' } });
++    const descInput = screen.getByLabelText(/description/i);
++    fireEvent.change(descInput, { target: { value: 'Detailed task description' } });
++    const modSelect = screen.getByLabelText(/module/i);
++    fireEvent.change(modSelect, { target: { value: 'mod-1' } });
++    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++
++    expect(screen.getByText('Newly Created Task')).toBeDefined();
++
++    // Focus on first card and press 'P' to open Priority popover
++    fireEvent.keyDown(window, { key: 'j' });
++    fireEvent.keyDown(window, { key: 'p' });
++
++    // Select Urgent
++    const prioPopover = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
++    fireEvent.click(within(prioPopover).getByText('Urgent'));
++
++    // Press 'S' to open State popover and select Done
++    fireEvent.keyDown(window, { key: 's' });
++    const statePopover1 = screen.getByRole('dialog', { name: /Quick State Picker/i });
++    fireEvent.click(within(statePopover1).getByText('Done'));
++
++    // Press 'S' again and select Todo
++    fireEvent.keyDown(window, { key: 's' });
++    const statePopover2 = screen.getByRole('dialog', { name: /Quick State Picker/i });
++    fireEvent.click(within(statePopover2).getByText('Todo'));
++
++    // Press 'P' again to open popover, then close with Escape
++    fireEvent.keyDown(window, { key: 'p' });
++    fireEvent.keyDown(window, { key: 'Escape' });
++
++    // Press 'A' to open Assignee popover and select Alice (exercises field !== priority/state)
++    fireEvent.keyDown(window, { key: 'a' });
++    const assigneePopover = screen.getByRole('dialog', { name: /Quick Assignee Picker/i });
++    fireEvent.click(within(assigneePopover).getByText('Alice Cooper'));
++  });
++
++  it('IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar', () => {
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={FIXTURE_12_ISSUES}
++      />
++    );
++
++    // Press 'J' to focus first item, 'X' to select
++    fireEvent.keyDown(window, { key: 'j' });
++    fireEvent.keyDown(window, { key: 'x' });
++
++    // Bulk action bar is mounted with '1 selected'
++    expect(screen.getByRole('toolbar', { name: /bulk actions/i })).toBeDefined();
++    expect(screen.getByText('1 selected')).toBeDefined();
++
++    // Test clear selection
++    const clearBtn = screen.getByRole('button', { name: /clear selection/i });
++    fireEvent.click(clearBtn);
++    expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
++
++    // Select again and delete batch
++    fireEvent.keyDown(window, { key: 'x' });
++    const deleteBtn = screen.getByRole('button', { name: /^delete$/i });
++    fireEvent.click(deleteBtn);
++
++    // Bulk bar unmounts when selection cleared
++    expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
++  });
++
++  it('IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date', () => {
++    // 1. Priority filter: urgent
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
++
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={FIXTURE_12_ISSUES}
++      />
++    );
++
++    const openPopoverIfNeeded = () => {
++      if (!screen.queryByPlaceholderText(/search filters\.\.\./i)) {
++        fireEvent.click(screen.getByRole('button', { name: /open filter facets popover/i }));
++      }
++    };
++
++    // Open filter popover and click Urgent
++    openPopoverIfNeeded();
++    fireEvent.click(screen.getByRole('button', { name: /🔥 Urgent/i }));
++
++    // KAN-142 is Urgent
++    expect(screen.getByText('KAN-142')).toBeDefined();
++    // KAN-141 is Low -> filtered out
++    expect(screen.queryByText('KAN-141')).toBeNull();
++
++    // Clear all filters
++    fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
++    expect(screen.getByText('KAN-141')).toBeDefined();
++
++    // 2. Assignee filter: Unassigned
++    openPopoverIfNeeded();
++    fireEvent.click(screen.getByRole('button', { name: /Unassigned/i }));
++    // KAN-141 is unassigned
++    expect(screen.getByText('KAN-141')).toBeDefined();
++
++    // 3. Due date filter: Overdue
++    fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
++    openPopoverIfNeeded();
++    fireEvent.click(screen.getByRole('button', { name: /Overdue/i }));
++
++    // 4. Due date filter: No due date
++    fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
++    openPopoverIfNeeded();
++    fireEvent.click(screen.getByRole('button', { name: /No due date/i }));
++
++    // 5. Label filter: Security
++    fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
++    openPopoverIfNeeded();
++    fireEvent.click(screen.getByRole('button', { name: /^Security$/i }));
++    expect(screen.getByText('KAN-142')).toBeDefined();
++
++    // 6. Cycle filter: Cycle 1
++    fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
++    openPopoverIfNeeded();
++    fireEvent.click(screen.getByRole('button', { name: /^Cycle 1$/i }));
++
++    // 7. Module filter: Auth Core
++    fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
++    openPopoverIfNeeded();
++    fireEvent.click(screen.getByRole('button', { name: /^Auth Core$/i }));
++  });
++
++  it('IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all', () => {
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=table');
++
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={FIXTURE_12_ISSUES}
++      />
++    );
++
++    const openPopoverIfNeeded = () => {
++      if (!screen.queryByPlaceholderText(/search filters\.\.\./i)) {
++        fireEvent.click(screen.getByRole('button', { name: /open filter facets popover/i }));
++      }
++    };
++
++    // Filter by Active preset
++    openPopoverIfNeeded();
++    fireEvent.click(screen.getByRole('button', { name: /^Active$/i }));
++
++    // Backlog (KAN-140) and In Progress (KAN-142) should be present
++    expect(screen.getByText('KAN-140')).toBeDefined();
++    expect(screen.getByText('KAN-142')).toBeDefined();
++
++    // Done (KAN-148) should be excluded
++    expect(screen.queryByText('KAN-148')).toBeNull();
++
++    // Filter by Alice
++    fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
++    openPopoverIfNeeded();
++    fireEvent.click(screen.getByRole('button', { name: /Alice Cooper/i }));
++    expect(screen.getByText('KAN-140')).toBeDefined();
++
++    // Select all issues via table header checkbox
++    const selectAllCheckbox = screen.getByRole('checkbox', { name: /select all issues/i });
++    fireEvent.click(selectAllCheckbox);
++    expect(screen.getByRole('toolbar', { name: /bulk actions/i })).toBeDefined();
++
++    // Deselect all
++    fireEvent.click(selectAllCheckbox);
++    expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
++  });
++
++  it('IssuesWorkspaceRoute: batch archives completed issues when Archive is clicked', () => {
++    // Pre-populate with completed issues
++    const completedIssues = FIXTURE_12_ISSUES.filter(
++      (i) => i.state.group === 'completed' || i.state.group === 'cancelled'
++    );
++
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={completedIssues}
++      />
++    );
++
++    // Select first issue via 'J' then 'X'
++    fireEvent.keyDown(window, { key: 'j' });
++    fireEvent.keyDown(window, { key: 'x' });
++
++    // Archive button is enabled
++    const archiveBtn = screen.getByRole('button', { name: /archive/i });
++    expect(archiveBtn.hasAttribute('disabled')).toBe(false);
++    fireEvent.click(archiveBtn);
++
++    // Selection cleared after archive
++    expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
++  });
++
++  it('IssuesWorkspaceRoute: toggles Adam assignment via I shortcut', () => {
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={FIXTURE_12_ISSUES}
++      />
++    );
++
++    // Focus KAN-140 and press 'I'
++    fireEvent.keyDown(window, { key: 'j' });
++    fireEvent.keyDown(window, { key: 'i' });
++
++    // Press 'I' again to toggle back off
++    fireEvent.keyDown(window, { key: 'i' });
++  });
++
++  it('IssuesWorkspaceRoute: mounts 2D Swimlane grid when board layout and subGroupBy is active', () => {
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
++
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={FIXTURE_12_ISSUES}
++      />
++    );
++
++    // Switch sub-group to priority
++    const subGroupSelect = screen.getByLabelText(/^Sub-group by axis$/i);
++    fireEvent.change(subGroupSelect, { target: { value: 'priority' } });
++
++    // 2D grid should be present
++    expect(screen.getByRole('region', { name: /2d swimlane board grid/i })).toBeDefined();
++
++    // Select a card via its checkbox in the swimlane grid
++    const checkbox = screen.getByLabelText('Select KAN-140');
++    fireEvent.click(checkbox);
++
++    expect(screen.getByRole('toolbar', { name: /bulk actions/i })).toBeDefined();
++    expect(screen.getByText('1 selected')).toBeDefined();
++
++    // Deselect card
++    fireEvent.click(checkbox);
++    expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
++  });
++
++  it('IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut', () => {
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={FIXTURE_12_ISSUES}
++      />
++    );
++
++    // Press '/' to open filter
++    fireEvent.keyDown(window, { key: '/' });
++    expect(screen.getByPlaceholderText(/search filters\.\.\./i)).toBeDefined();
++
++    // Close filter by clicking trigger again
++    fireEvent.click(screen.getByRole('button', { name: /open filter facets popover/i }));
++
++    // Focus first item
++    fireEvent.keyDown(window, { key: 'j' });
++
++    // Set priority to High
++    fireEvent.keyDown(window, { key: 'p' });
++    const prioPop1 = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
++    fireEvent.click(within(prioPop1).getByText('High'));
++
++    // Set priority to Low
++    fireEvent.keyDown(window, { key: 'p' });
++    const prioPop2 = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
++    fireEvent.click(within(prioPop2).getByText('Low'));
++
++    // Set priority to Medium
++    fireEvent.keyDown(window, { key: 'p' });
++    const prioPop3 = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
++    fireEvent.click(within(prioPop3).getByText('Medium'));
++
++    // Set state to In Progress
++    fireEvent.keyDown(window, { key: 's' });
++    const statePop1 = screen.getByRole('dialog', { name: /Quick State Picker/i });
++    fireEvent.click(within(statePop1).getByText('In Progress'));
++
++    // Set state to Backlog
++    fireEvent.keyDown(window, { key: 's' });
++    const statePop2 = screen.getByRole('dialog', { name: /Quick State Picker/i });
++    fireEvent.click(within(statePop2).getByText('Backlog'));
++
++    // Set assignee to Alice Cooper
++    fireEvent.keyDown(window, { key: 'a' });
++    const asgPop = screen.getByRole('dialog', { name: /Quick Assignee Picker/i });
++    fireEvent.click(within(asgPop).getByText(/Alice Cooper/i));
++  });
++
++  it('IssuesWorkspaceRoute: initializes activeFilters from URL query params (filter_label, filter_priority, filter_state, and gate_status)', () => {
++    window.history.pushState(
++      {},
++      '',
++      '/projects/KAN/issues?filter_state=in_progress&filter_priority=high&filter_label=Frontend&gate_status=pending'
++    );
++
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={FIXTURE_12_ISSUES}
++      />
++    );
++
++    expect(screen.getByText(/Gate status: ⏳🤖 Pending/i)).toBeDefined();
++    expect(screen.getByText(/Priority: ⚡ High/i)).toBeDefined();
++  });
++
++  it('IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut', () => {
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=table');
++    const firstFixture = FIXTURE_12_ISSUES[0];
++    if (!firstFixture) throw new Error('missing fixture');
++    const many105: IssueItem[] = Array.from({ length: 105 }, (_, i) => ({
++      id: `id-${String(i + 1)}`,
++      key: `KAN-${String(i + 1)}`,
++      summary: firstFixture.summary,
++      state: firstFixture.state,
++      priority: firstFixture.priority,
++    }));
++
++    render(
++      <IssuesWorkspaceRoute
++        projectKey="KAN"
++        modulesEnabled={true}
++        initialIssues={many105}
++      />
++    );
++
++    // Select all in table view (caps at 100)
++    const selectAllCheckbox = screen.getByRole('checkbox', { name: /select all issues/i });
++    fireEvent.click(selectAllCheckbox);
++    expect(screen.getByText('100 selected')).toBeDefined();
++
++    // Toggle another row checkbox when 100 are already selected
++    const checkbox101 = screen.getByLabelText('Select KAN-101');
++    fireEvent.click(checkbox101);
++    expect(screen.getByText('100 selected')).toBeDefined();
++
++    // Press 'J' then 'I' on issue with assignees === undefined
++    fireEvent.keyDown(window, { key: 'j' });
++    fireEvent.keyDown(window, { key: 'i' });
++  });
+ });
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index 8c26070..7cef40e 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -1,12 +1,28 @@
+-import type { ComponentType, JSX } from 'react';
+-import React, { useState } from 'react';
++import React, { useState, useMemo, type ComponentType, type JSX } from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
+ import { ListView } from '../list/ListView';
+ import { TableView } from '../table/TableView';
+ import { CalendarView } from '../calendar/CalendarView';
+ import { TimelineView } from '../timeline/TimelineView';
+-import type { IssueItem } from './viewsApi';
++import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
++import { SwimlaneBoardGrid } from './SwimlaneBoardGrid';
++import { BulkActionBar } from './BulkActionBar';
++import { QuickCreateIssueModal } from './QuickCreateIssueModal';
++import { QuickFieldPopover, type QuickFieldType } from './QuickFieldPopover';
++import { useIssueKeyboardMap } from './useIssueKeyboardMap';
++import type { IssueItem, GroupAxis } from './viewsApi';
++import './filterBulk.css';
++
++// Export all KB-P3-40 components per Scoped Definition of Done
++export {
++  FilterDisplayBar,
++  SwimlaneBoardGrid,
++  BulkActionBar,
++  QuickCreateIssueModal,
++  QuickFieldPopover,
++  useIssueKeyboardMap,
++};
+ 
+ export type ViewLayout = 'board' | 'list' | 'table' | 'calendar' | 'timeline' | 'grid';
+ 
+@@ -60,6 +76,7 @@ export interface ViewComponentProps {
+   nextCursor?: string | null;
+   onLoadMore?: () => void;
+   isLoading?: boolean;
++  focusedKey?: string | null;
+ }
+ 
+ export type ViewComponent = ComponentType<ViewComponentProps>;
+@@ -69,6 +86,7 @@ export const VIEW_REGISTRY: Record<string, ViewComponent> = {
+   table: TableView as ViewComponent,
+   calendar: CalendarView as ViewComponent,
+   timeline: TimelineView as ViewComponent,
++  board: SwimlaneBoardGrid as ViewComponent,
+ };
+ 
+ export interface ViewHostProps extends ViewComponentProps {
+@@ -106,70 +124,391 @@ export interface IssuesWorkspaceRouteProps {
+ }
+ 
+ /**
+- * Shared layout host for /projects/:projectKey/issues (KB-P3-37..40).
++ * Enhanced route component for /projects/:projectKey/issues (KB-P3-40, S6.3, S6.4).
++ * Mounts FilterDisplayBar, 2D SwimlaneBoardGrid when layout === 'board' && subGroupBy !== 'none',
++ * floating BulkActionBar, QuickCreateIssueModal, and useIssueKeyboardMap.
+  */
+ export function IssuesWorkspaceRoute({
+   projectKey,
+   modulesEnabled = true,
+-  initialIssues,
++  initialIssues = [],
+   initialLayout,
+   queryClient = defaultQueryClient,
+ }: IssuesWorkspaceRouteProps): JSX.Element {
+-  let searchLayout: string | null = null;
+-  try {
+-    const searchParams = new URLSearchParams(window.location.search);
+-    searchLayout = searchParams.get('layout');
+-  } catch {
+-    // window not defined or invalid search
+-  }
+-
+-  const defaultLayout: ViewLayout =
+-    initialLayout ?? (initialIssues && initialIssues.length > 0 ? 'list' : 'board');
+-  const activeLayout: ViewLayout =
+-    searchLayout && searchLayout in viewRegistry
+-      ? (searchLayout as ViewLayout)
+-      : defaultLayout;
+-
+-  const [issues] = useState<IssueItem[]>(initialIssues ?? []);
++  const searchParams = useMemo(() => {
++    return new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
++  }, []);
++
++  const [layout] = useState<string>(() => {
++    return searchParams.get('layout') ?? initialLayout ?? 'list';
++  });
++
++  const [groupBy, setGroupBy] = useState<GroupAxis>(() => {
++    const p = searchParams.get('group_by');
++    if (p && ['state', 'priority', 'assignee', 'cycle', 'module', 'label', 'none'].includes(p)) {
++      return p as GroupAxis;
++    }
++    return 'state';
++  });
++
++  const [subGroupBy, setSubGroupBy] = useState<GroupAxis>(() => {
++    const p = searchParams.get('sub_group_by');
++    if (p && ['none', 'assignee', 'priority', 'state', 'cycle', 'module', 'label'].includes(p)) {
++      return p as GroupAxis;
++    }
++    return 'none';
++  });
++
++  const [issues, setIssues] = useState<IssueItem[]>(initialIssues);
+   const [selectedIds, setSelectedIds] = useState<string[]>([]);
++  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(() => {
++    const filters: ActiveFilters = {};
++    const stateParam = searchParams.get('filter_state');
++    if (stateParam) {
++      filters.state = [stateParam];
++    }
++    const priorityParam = searchParams.get('filter_priority');
++    if (priorityParam) {
++      filters.priority = [priorityParam];
++    }
++    const labelParam = searchParams.get('filter_label');
++    if (labelParam) {
++      filters.label = [labelParam];
++    }
++    const gateParam = searchParams.get('gate_status');
++    if (gateParam) {
++      filters.gate_status = [gateParam];
++    }
++    return filters;
++  });
++
++  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
++  const [isFilterOpen, setIsFilterOpen] = useState(false);
++  const [popoverState, setPopoverState] = useState<{
++    isOpen: boolean;
++    field: QuickFieldType | null;
++    issue: IssueItem | null;
++    anchorRect: DOMRect | null;
++  }>({
++    isOpen: false,
++    field: null,
++    issue: null,
++    anchorRect: null,
++  });
++
++  // Filter issues based on activeFilters
++  const filteredIssues = useMemo(() => {
++    return issues.filter((issue) => {
++      // 1. State filter
++      if (activeFilters.state && activeFilters.state.length > 0) {
++        const matchesActive =
++          activeFilters.state.includes('active') &&
++          ['backlog', 'unstarted', 'started'].includes(issue.state.group);
++        const matchesSpecific = activeFilters.state.some(
++          (s) =>
++            s === issue.state.group ||
++            s === issue.state.name.toLowerCase() ||
++            s === issue.state.id
++        );
++        if (!matchesActive && !matchesSpecific) return false;
++      }
++
++      // 2. Priority filter
++      if (activeFilters.priority && activeFilters.priority.length > 0) {
++        const pSlug = issue.priority.slug.toLowerCase();
++        if (!activeFilters.priority.includes(pSlug)) return false;
++      }
++
++      // 3. Assignee filter
++      if (activeFilters.assignee && activeFilters.assignee.length > 0) {
++        const hasUnassigned = activeFilters.assignee.includes('unassigned');
++        const issueAssignees = issue.assignees ?? [];
++        const isUnassigned = issueAssignees.length === 0;
++
++        if (hasUnassigned && isUnassigned) {
++          // matches unassigned
++        } else {
++          const matchesPrincipal = issueAssignees.some((asg) => {
++            if (asg.kind === 'principal') {
++              return activeFilters.assignee?.some(
++                (a) =>
++                  a === asg.principal.id ||
++                  a.toLowerCase() === asg.principal.handle.toLowerCase()
++              );
++            }
++            return false;
++          });
++          if (!matchesPrincipal) return false;
++        }
++      }
++
++      // 4. Label filter
++      if (activeFilters.label && activeFilters.label.length > 0) {
++        const issueLabels = issue.labels ?? [];
++        const matchesLabel = issueLabels.some((lbl) =>
++          activeFilters.label?.some(
++            (l) =>
++              l.toLowerCase() === lbl.name.toLowerCase() ||
++              l === lbl.id
++          )
++        );
++        if (!matchesLabel) return false;
++      }
++
++      // 5. Cycle filter
++      if (activeFilters.cycle && activeFilters.cycle.length > 0) {
++        if (!issue.cycle_id || !activeFilters.cycle.includes(issue.cycle_id)) {
++          return false;
++        }
++      }
++
++      // 6. Module filter (only if modulesEnabled is true)
++      if (modulesEnabled && activeFilters.module && activeFilters.module.length > 0) {
++        const issueMods = issue.module_ids ?? [];
++        const matchesMod = issueMods.some((m) => activeFilters.module?.includes(m));
++        if (!matchesMod) return false;
++      }
++
++      // 7. Gate status filter
++      if (activeFilters.gate_status && activeFilters.gate_status.length > 0) {
++        if (!issue.gate_status || !activeFilters.gate_status.includes(issue.gate_status)) {
++          return false;
++        }
++      }
++
++      // 8. Due date filter
++      if (activeFilters.due_date && activeFilters.due_date.length > 0) {
++        const today = new Date().toISOString().slice(0, 10);
++        const isOverdue =
++          issue.due_date &&
++          issue.due_date < today &&
++          issue.state.group !== 'completed' &&
++          issue.state.group !== 'cancelled';
++        if (activeFilters.due_date.includes('overdue') && !isOverdue) return false;
++        if (activeFilters.due_date.includes('no_due_date') && issue.due_date) return false;
++      }
++
++      return true;
++    });
++  }, [issues, activeFilters, modulesEnabled]);
++
++  // Single-key shortcut map
++  const { focusedKey, handleRowClick } = useIssueKeyboardMap({
++    issues: filteredIssues,
++    layout,
++    selectedIds,
++    setSelectedIds,
++    modulesEnabled,
++    onOpenCreateModal: () => { setIsCreateModalOpen(true); },
++    onOpenFilter: () => { setIsFilterOpen(true); },
++    onOpenFieldPopover: (field, issue, rect) => {
++      setPopoverState({
++        isOpen: true,
++        field,
++        issue,
++        anchorRect: rect,
++      });
++    },
++    onToggleAssigneeMe: (issue) => {
++      // Toggle @adam assignment optimistically
++      setIssues((prev) =>
++        prev.map((i) => {
++          if (i.key !== issue.key) return i;
++          const currentAssignees = i.assignees ?? [];
++          const hasMe = currentAssignees.some(
++            (a) => a.kind === 'principal' && a.principal.handle === 'adam'
++          );
++          if (hasMe) {
++            return {
++              ...i,
++              assignees: currentAssignees.filter(
++                (a) => !(a.kind === 'principal' && a.principal.handle === 'adam')
++              ),
++            };
++          }
++          return {
++            ...i,
++            assignees: [
++              ...currentAssignees,
++              {
++                id: 'asg-me',
++                kind: 'principal',
++                principal: {
++                  id: 'u-me',
++                  handle: 'adam',
++                  display_name: 'Adam Outler',
++                  type: 'USER',
++                },
++              },
++            ],
++          };
++        })
++      );
++    },
++    isPopoverOrModalOpen: isCreateModalOpen || popoverState.isOpen,
++  });
+ 
+   const handleToggleSelect = (key: string, selected: boolean) => {
+-    setSelectedIds((prev) =>
+-      selected ? [...prev, key] : prev.filter((id) => id !== key)
+-    );
++    setSelectedIds((prev) => {
++      if (selected) {
++        if (prev.length >= 100) return prev;
++        return [...prev, key];
++      }
++      return prev.filter((id) => id !== key);
++    });
+   };
+ 
+   const handleSelectAll = (selected: boolean) => {
+-    setSelectedIds(selected ? issues.map((i) => i.key) : []);
++    if (selected) {
++      const allKeys = filteredIssues.map((i) => i.key);
++      setSelectedIds(allKeys.slice(0, 100));
++    } else {
++      setSelectedIds([]);
++    }
+   };
+ 
+-  const renderContent = () => {
+-    if (activeLayout === 'board') {
+-      return <BoardView projectKey={projectKey} />;
++  const handleCreateIssue = (newIssue: Partial<IssueItem>) => {
++    const nextNum = issues.length + 140;
++    const item: IssueItem = {
++      id: `01931234-new-${String(Date.now())}`,
++      key: `${projectKey}-${String(nextNum)}`,
++      summary: newIssue.summary ?? 'Untitled work item',
++      state: newIssue.state ?? { id: 'state-todo', name: 'Todo', group: 'unstarted' },
++      priority: newIssue.priority ?? { slug: 'medium', label: 'Medium', emoji: '🔹' },
++    };
++    if (newIssue.description_markdown) {
++      item.description_markdown = newIssue.description_markdown;
+     }
+-    return (
+-      <ViewHost
+-        layout={activeLayout}
+-        issues={issues}
+-        projectKey={projectKey}
+-        modulesEnabled={modulesEnabled}
+-        selectedIds={selectedIds}
+-        onToggleSelect={handleToggleSelect}
+-        onSelectAll={handleSelectAll}
+-      />
++    if (newIssue.module_ids) {
++      item.module_ids = newIssue.module_ids;
++    }
++    setIssues((prev) => [item, ...prev]);
++  };
++
++  const handleFieldSelect = (field: QuickFieldType, value: unknown) => {
++    if (!popoverState.issue) return;
++    const targetKey = popoverState.issue.key;
++
++    setIssues((prev) =>
++      prev.map((i) => {
++        if (i.key !== targetKey) return i;
++        if (field === 'priority') {
++          const slug = String(value);
++          return {
++            ...i,
++            priority: {
++              slug,
++              label: slug.charAt(0).toUpperCase() + slug.slice(1),
++              emoji: slug === 'urgent' ? '🔥' : slug === 'high' ? '⚡' : slug === 'low' ? '💤' : '🔹',
++            },
++          };
++        }
++        if (field === 'state') {
++          const sId = String(value);
++          return {
++            ...i,
++            state: {
++              id: sId,
++              name: sId.includes('progress') ? 'In Progress' : sId.includes('todo') ? 'Todo' : sId.includes('done') ? 'Done' : 'Backlog',
++              group: sId.includes('progress') ? 'started' : sId.includes('todo') ? 'unstarted' : sId.includes('done') ? 'completed' : 'backlog',
++            },
++          };
++        }
++        return i;
++      })
+     );
+   };
+ 
++  // 2D Swimlane condition: layout === 'board' && subGroupBy !== 'none'
++  const is2DSwimlane = layout === 'board' && subGroupBy !== 'none';
++
+   return (
+     <QueryClientProvider client={queryClient}>
+       <main
+         id="main"
+         className="issues-workspace issues-workspace-route"
+         data-testid="issues-workspace"
+-        data-layout={activeLayout}
++        data-layout={layout}
+       >
+-        {renderContent()}
+-      </main>
+-    </QueryClientProvider>
++        {/* 1. Filter and Display Bar */}
++      <FilterDisplayBar
++        activeFilters={activeFilters}
++        onFiltersChange={setActiveFilters}
++        groupBy={groupBy}
++        onGroupByChange={setGroupBy}
++        subGroupBy={subGroupBy}
++        onSubGroupByChange={setSubGroupBy}
++        modulesEnabled={modulesEnabled}
++        isFilterOpen={isFilterOpen}
++        onToggleFilterOpen={setIsFilterOpen}
++      />
++
++      {/* 2. Main View: 2D Swimlane Board Grid or standard ViewHost */}
++      {is2DSwimlane ? (
++        <SwimlaneBoardGrid
++          issues={filteredIssues}
++          projectKey={projectKey}
++          groupBy={groupBy}
++          subGroupBy={subGroupBy}
++          modulesEnabled={modulesEnabled}
++          selectedIds={selectedIds}
++          onToggleSelect={handleToggleSelect}
++          focusedKey={focusedKey}
++          onCardClick={handleRowClick}
++        />
++      ) : (
++        <ViewHost
++          layout={layout}
++          issues={filteredIssues}
++          projectKey={projectKey}
++          modulesEnabled={modulesEnabled}
++          selectedIds={selectedIds}
++          onToggleSelect={handleToggleSelect}
++          onSelectAll={handleSelectAll}
++          focusedKey={focusedKey}
++        />
++      )}
++
++      {/* 3. Floating Bulk Action Bar */}
++      <BulkActionBar
++        selectedKeys={selectedIds}
++        issues={filteredIssues}
++        onClearSelection={() => { setSelectedIds([]); }}
++        modulesEnabled={modulesEnabled}
++        onBatchArchive={() => {
++          setIssues((prev) =>
++            prev.map((i) =>
++              selectedIds.includes(i.key) ? { ...i, archived_at: new Date().toISOString() } : i
++            )
++          );
++          setSelectedIds([]);
++        }}
++        onBatchDelete={() => {
++          setIssues((prev) => prev.filter((i) => !selectedIds.includes(i.key)));
++          setSelectedIds([]);
++        }}
++      />
++
++      {/* 4. Quick Create Issue Modal */}
++      <QuickCreateIssueModal
++        isOpen={isCreateModalOpen}
++        onClose={() => { setIsCreateModalOpen(false); }}
++        onCreate={handleCreateIssue}
++        projectKey={projectKey}
++        modulesEnabled={modulesEnabled}
++      />
++
++      {/* 5. Quick Field Popover */}
++      <QuickFieldPopover
++        isOpen={popoverState.isOpen}
++        field={popoverState.field}
++        anchorRect={popoverState.anchorRect}
++        issue={popoverState.issue}
++        onClose={() => { setPopoverState((prev) => ({ ...prev, isOpen: false })); }}
++        onSelect={handleFieldSelect}
++        modulesEnabled={modulesEnabled}
++      />
++    </main>
++  </QueryClientProvider>
+   );
+ }

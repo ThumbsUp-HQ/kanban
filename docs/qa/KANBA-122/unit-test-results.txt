@@ -1,0 +1,50 @@
+
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-121/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/views/viewsApi.test.ts (2 tests) 19ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/views/useIssueKeyboardMap.test.tsx (9 tests) 239ms
+ ✓ src/features/views/BulkActionBar.test.tsx (9 tests) 626ms
+ ✓ src/features/views/QuickFieldPopover.test.tsx (9 tests) 486ms
+ ✓ src/features/views/QuickCreateIssueModal.test.tsx (7 tests) 647ms
+   ✓ QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f) (7)
+     ✓ renders summary, description, state, priority, and module fields when open 345ms
+Not implemented: navigation to another Document
+ ✓ src/features/views/SwimlaneBoardGrid.test.tsx (10 tests) 890ms
+   ✓ SwimlaneBoardGrid (KB-P3-40, S6.4 item 2) (10)
+     ✓ partitions board into 2D grid with Priority swimlanes across State columns (Test Case 1) 378ms
+ ✓ src/features/views/FilterDisplayBar.test.tsx (12 tests) 1124ms
+ ✓ src/features/views/viewRegistry.test.tsx (16 tests) 6244ms
+   ✓ viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) (16)
+     ✓ renders TableView when layout is table 374ms
+     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 652ms
+     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 304ms
+     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 1899ms
+     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 694ms
+     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 452ms
+     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 1236ms
+
+ Test Files  8 passed (8)
+      Tests  74 passed (74)
+   Start at  09:35:43
+   Duration  8.11s (tests 49%, environment 41%, import 7%, worker 3%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.53 |    95.74 |     100 |     100 |                   
+ BulkActionBar.tsx |     100 |      100 |     100 |     100 |                   
+ ...DisplayBar.tsx |   98.98 |    96.42 |     100 |     100 | 169,190,222       
+ ...IssueModal.tsx |   97.82 |    97.36 |     100 |     100 | 75                
+ ...eldPopover.tsx |     100 |    95.34 |     100 |     100 | 136-140           
+ ...eBoardGrid.tsx |     100 |    94.25 |     100 |     100 | 158-164,182,231   
+ filterBulk.css    |       0 |        0 |       0 |       0 |                   
+ fixtures.ts       |     100 |      100 |     100 |     100 |                   
+ listTable.css     |       0 |        0 |       0 |       0 |                   
+ ...KeyboardMap.ts |     100 |    95.23 |     100 |     100 | ...77-180,190,202 
+ viewRegistry.tsx  |   99.35 |    95.32 |     100 |     100 | 79,209,315-329    
+ viewsApi.ts       |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
