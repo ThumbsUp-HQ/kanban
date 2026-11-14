@@ -1,0 +1,40 @@
+=== RUFF CHECK ===
+All checks passed!
+
+=== RUFF FORMAT CHECK ===
+1156 files already formatted
+
+=== MYPY STRICT ===
+Success: no issues found in 665 source files
+
+=== IMPORT LINTER ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 665 files, 2119 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT (15 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+
+=== LICENSE CHECK ===
+SUMMARY python=115 node=1 violations=0
+
+=== NO-DASHES CHECK ===
+0 dash violations found.
+
+=== ALL BUILD CHECKS PASSED ===

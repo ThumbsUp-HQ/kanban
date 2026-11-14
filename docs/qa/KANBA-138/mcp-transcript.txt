@@ -1,0 +1,295 @@
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_agt_***REDACTED***
+Content-Length: 157
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 403 Forbidden
+content-length: 32
+content-type: application/json
+
+{"error":"SURFACE_KEY_MISMATCH"}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: mock-csrf-token
+Cookie: __Host-kb_csrf=mock-csrf-token
+Content-Length: 80
+Content-Type: application/json
+
+{"token":"kb_adm_***REDACTED***","surface":"admin"}
+
+HTTP/1.1 200 OK
+Content-Length: 199
+Content-Type: application/json
+
+{"active":true,"principal_id":"48993a34-4fe2-439e-94dc-df1e6d0c9738","workspace_id":"def387a4-15a6-482a-b441-c35706bed40e","surface":"admin","scopes":["admin:read","admin:write","admin:destructive"]}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_adm_***REDACTED***
+Content-Length: 157
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: YdHmm4TNmy6B1jqjoYn2YZy6_wnhiZdA1ovq8evuvfE
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+mcp-session-id: YdHmm4TNmy6B1jqjoYn2YZy6_wnhiZdA1ovq8evuvfE
+Authorization: Bearer kb_adm_***REDACTED***
+Content-Length: 224
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"override_ticket_provenance","arguments":{"action":"override_creator","issue":"KAN-142","new_creator":"@maya","reason":"Imported from Plane under bot account"}}}
+
+HTTP/1.1 200 OK
+content-length: 237
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"status: creator_overridden\nissue: KAN-142\noriginal_created_by: '@bot-import'\ncreated_by: '@maya'\nreason: Imported from Plane under bot account\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+mcp-session-id: YdHmm4TNmy6B1jqjoYn2YZy6_wnhiZdA1ovq8evuvfE
+Authorization: Bearer kb_adm_***REDACTED***
+Content-Length: 236
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"override_ticket_provenance","arguments":{"action":"override_hard_wip_move","issue":"KAN-142","target_state":"In Progress","reason":"Emergency security vulnerability fix"}}}
+
+HTTP/1.1 200 OK
+content-length: 236
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"status: wip_overridden_moved\nissue: KAN-142\nstate: In Progress\nhard_limit: 5\nresulting_count: 6\nreason: Emergency security vulnerability fix\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+mcp-session-id: YdHmm4TNmy6B1jqjoYn2YZy6_wnhiZdA1ovq8evuvfE
+Authorization: Bearer kb_adm_***REDACTED***
+Content-Length: 197
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"override_ticket_provenance","arguments":{"action":"unarchive_issue","issue":"KAN-142","reason":"Re-auditing completed deliverable"}}}
+
+HTTP/1.1 200 OK
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"status: issue_unarchived\nissue: KAN-142\nreason: Re-auditing completed deliverable\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Content-Length: 82
+Content-Type: application/json
+
+{"token":"kb_adm_dest_***REDACTED***","surface":"admin"}
+
+HTTP/1.1 200 OK
+Content-Length: 199
+Content-Type: application/json
+
+{"active":true,"principal_id":"54a14219-4ef5-493e-b5c1-71be4f5e6a87","workspace_id":"86c2e158-6f72-4c31-a526-b9c0012183d7","surface":"admin","scopes":["admin:read","admin:write","admin:destructive"]}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_adm_dest_***REDACTED***
+Content-Length: 157
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: Lc0baBEINxOWNebMynno_KrOpeFXUbXV7LhL7qE6C-E
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+mcp-session-id: Lc0baBEINxOWNebMynno_KrOpeFXUbXV7LhL7qE6C-E
+Authorization: Bearer kb_adm_dest_***REDACTED***
+Content-Length: 130
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"audit_and_purge_object_links","arguments":{"action":"run_audit"}}}
+
+HTTP/1.1 200 OK
+content-length: 150
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"flagged_total: 1\nby_reason: {ARCHIVED_POLICY_VIOLATION: 1}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+mcp-session-id: Lc0baBEINxOWNebMynno_KrOpeFXUbXV7LhL7qE6C-E
+Authorization: Bearer kb_adm_dest_***REDACTED***
+Content-Length: 150
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"audit_and_purge_object_links","arguments":{"action":"list_flagged","lod":"standard"}}}
+
+HTTP/1.1 200 OK
+content-length: 345
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"total_unpurged: 1\ntotal_returned: 1\nhas_more: false\nitems:\n- audit_id: fcc6c0e4-1cff-4461-864e-92ebb1732d4f\n  link_id: ea70e0c2-cc10-4e3b-837b-9374c98e15d5\n  reason: ARCHIVED_POLICY_VIOLATION\n  link_type: BLOCKS\n  source_key: s1\n  target_key: t1\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+mcp-session-id: Lc0baBEINxOWNebMynno_KrOpeFXUbXV7LhL7qE6C-E
+Authorization: Bearer kb_adm_dest_***REDACTED***
+Content-Length: 208
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"audit_and_purge_object_links","arguments":{"action":"purge_audited","audit_ids":["conflict-uuid"],"reason":"Remediating conflict link record"}}}
+
+HTTP/1.1 200 OK
+content-length: 157
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"error: {code: LINK_NOT_FLAGGED, message: Link not flagged conflict}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+mcp-session-id: Lc0baBEINxOWNebMynno_KrOpeFXUbXV7LhL7qE6C-E
+Authorization: Bearer kb_adm_dest_***REDACTED***
+Content-Length: 242
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"audit_and_purge_object_links","arguments":{"action":"purge_audited","audit_ids":["fcc6c0e4-1cff-4461-864e-92ebb1732d4f"],"reason":"Administrative remediation of invalid links"}}}
+
+HTTP/1.1 200 OK
+content-length: 229
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"status: purged\npurged_count: 1\nactivity_ids: [23aed9ff-5ac2-4486-a743-2b598e72f9e4]\nreason: Administrative remediation of invalid links\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /internal/v1/mcp/introspect HTTP/1.1
+Host: kanban.local
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Content-Length: 82
+Content-Type: application/json
+
+{"token":"kb_adm_wron_***REDACTED***","surface":"admin"}
+
+HTTP/1.1 200 OK
+Content-Length: 179
+Content-Type: application/json
+
+{"active":true,"principal_id":"45d1c08c-a6ba-46b0-a15b-e494c61d3fb7","workspace_id":"08b14249-8353-455f-af6d-1d9a35ed4f54","surface":"admin","scopes":["admin:read","admin:write"]}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Authorization: Bearer kb_adm_wron_***REDACTED***
+Content-Length: 157
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: eJoMfpEw8cWWwZtuebyPQ6VvHSh6fSkbtPEzQL-dRXY
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+mcp-session-id: eJoMfpEw8cWWwZtuebyPQ6VvHSh6fSkbtPEzQL-dRXY
+Authorization: Bearer kb_adm_wron_***REDACTED***
+Content-Length: 242
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"audit_and_purge_object_links","arguments":{"action":"purge_audited","audit_ids":["fcc6c0e4-1cff-4461-864e-92ebb1732d4f"],"reason":"Administrative remediation of invalid links"}}}
+
+HTTP/1.1 200 OK
+content-length: 197
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"error: {code: INSUFFICIENT_SCOPE, message: 'Purging invalid object links requires admin:destructive scope'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
