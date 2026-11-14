@@ -1,0 +1,3654 @@
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 0733adc..e6ef399 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -43,6 +43,7 @@ from kanban.api.v1.issue_delete import router as issue_delete_router
+ from kanban.api.v1.issue_move import router as issue_move_router
+ from kanban.api.v1.issue_provenance import router as issue_provenance_router
+ from kanban.api.v1.issue_trees import router as issue_trees_router
++from kanban.api.v1.issue_workflow import router as issue_workflow_router
+ from kanban.api.v1.issues import router as issues_router
+ from kanban.api.v1.links import router as links_router
+ from kanban.api.v1.media_proxy import router as media_proxy_router
+@@ -75,6 +76,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(modules_router)
+     v1.include_router(issues_router)
+     v1.include_router(issue_trees_router)
++    v1.include_router(issue_workflow_router)
+     v1.include_router(issue_copy_router)
+     v1.include_router(assignees_router)
+     v1.include_router(links_router)
+diff --git a/kanban/api/v1/issue_workflow.py b/kanban/api/v1/issue_workflow.py
+new file mode 100644
+index 0000000..1a6f246
+--- /dev/null
++++ b/kanban/api/v1/issue_workflow.py
+@@ -0,0 +1,229 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Composite issue workflow transition endpoints (KB-P4-06)."""
++
++from __future__ import annotations
++
++from typing import Annotated, Any
++
++from fastapi import APIRouter, Depends, Header, Response, status
++from pydantic import BaseModel, ConfigDict, Field
++from sqlalchemy.ext.asyncio import AsyncSession
++from starlette.responses import JSONResponse
++
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.timing import timing_floor
++from kanban.issues.workflow_service import begin_work, complete_work, transition_ticket
++from kanban.services import issues as svc
++
++router = APIRouter(tags=["issue-workflow"])
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++class BeginWorkRequest(BaseModel):
++    """Payload for initiating work on an issue."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    plan_markdown: Annotated[str, Field(min_length=1, max_length=65536)]
++
++
++class TransitionTicketRequest(BaseModel):
++    """Payload for transitioning issue state."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    to_state: Annotated[str, Field(min_length=1, max_length=100)]
++    comment_markdown: Annotated[str | None, Field(max_length=65536)] = None
++    verification_proof: dict[str, Any] | None = None
++
++
++class CompleteWorkRequest(BaseModel):
++    """Payload for completing work with verification proof."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    summary_markdown: Annotated[str, Field(min_length=1, max_length=65536)]
++    verification_proof: dict[str, Any]
++    to_state: Annotated[str | None, Field(max_length=100)] = None
++
++
++@router.post(
++    "/issues/{issue_key}/begin-work",
++    summary="Atomically assign caller, attach active cycle, move to started state, and post plan",
++)
++async def api_begin_work(  # noqa: PLR0913, PLR0917
++    issue_key: str,
++    body: BeginWorkRequest,
++    caller: Caller,
++    session: Session,
++    response: Response,
++    if_match: Annotated[str | None, Header()] = None,
++) -> JSONResponse:
++    """Initiate work on an issue in a single atomic transaction."""
++    async with timing_floor(floor_ms=25.0):
++        issue, from_state, started_state, comment_ref, gate_hold = await begin_work(
++            session,
++            caller,
++            issue_key,
++            body.plan_markdown,
++            if_match=if_match,
++        )
++
++        if gate_hold is not None:
++            return JSONResponse(
++                status_code=status.HTTP_202_ACCEPTED,
++                content={
++                    "status": "pending_agent_gate",
++                    "execution_id": str(gate_hold.execution_id),
++                    "active_agent": gate_hold.active_agent,
++                    "from_state": gate_hold.from_state,
++                    "to_state": gate_hold.to_state,
++                },
++            )
++
++        serialized = await svc.serialize_issue(session, caller, issue)
++        issue_dict = serialized.model_dump(mode="json")
++        issue_dict["status"] = "started"
++        issue_dict["workflow_status"] = "started"
++        issue_dict["from_state"] = {
++            "id": str(from_state.id),
++            "name": from_state.name,
++            "group": from_state.state_group,
++        }
++        issue_dict["to_state"] = {
++            "id": str(started_state.id),
++            "name": started_state.name,
++            "group": started_state.state_group,
++        }
++        issue_dict["comment_ref"] = comment_ref
++        issue_dict["comment_id"] = comment_ref
++
++        sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
++        if sha256_hex:
++            response.headers["ETag"] = f'"{sha256_hex}"'
++
++        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict)
++
++
++@router.post(
++    "/issues/{issue_key}/transition",
++    summary="Transition issue to intermediate workflow state",
++)
++async def api_transition_ticket(  # noqa: PLR0913, PLR0917
++    issue_key: str,
++    body: TransitionTicketRequest,
++    caller: Caller,
++    session: Session,
++    response: Response,
++    if_match: Annotated[str | None, Header()] = None,
++) -> JSONResponse:
++    """Transition an issue state under concurrency and gate hook evaluation."""
++    async with timing_floor(floor_ms=25.0):
++        issue, from_state, target_state, gate_hold = await transition_ticket(
++            session,
++            caller,
++            issue_key,
++            body.to_state,
++            comment_markdown=body.comment_markdown,
++            verification_proof=body.verification_proof,
++            if_match=if_match,
++        )
++
++        if gate_hold is not None:
++            return JSONResponse(
++                status_code=status.HTTP_202_ACCEPTED,
++                content={
++                    "status": "pending_agent_gate",
++                    "execution_id": str(gate_hold.execution_id),
++                    "active_agent": gate_hold.active_agent,
++                    "from_state": gate_hold.from_state,
++                    "to_state": gate_hold.to_state,
++                },
++            )
++
++        serialized = await svc.serialize_issue(session, caller, issue)
++        issue_dict = serialized.model_dump(mode="json")
++        issue_dict["status"] = "transitioned"
++        issue_dict["workflow_status"] = "transitioned"
++        issue_dict["target_state"] = target_state.name
++        issue_dict["from_state"] = {
++            "id": str(from_state.id),
++            "name": from_state.name,
++            "group": from_state.state_group,
++        }
++        issue_dict["to_state"] = {
++            "id": str(target_state.id),
++            "name": target_state.name,
++            "group": target_state.state_group,
++        }
++
++        sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
++        if sha256_hex:
++            response.headers["ETag"] = f'"{sha256_hex}"'
++
++        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict)
++
++
++@router.post(
++    "/issues/{issue_key}/complete-work",
++    summary="Verify blockers and QA gate, transition to completed, and log proof",
++)
++async def api_complete_work(  # noqa: PLR0913, PLR0917
++    issue_key: str,
++    body: CompleteWorkRequest,
++    caller: Caller,
++    session: Session,
++    response: Response,
++    if_match: Annotated[str | None, Header()] = None,
++) -> JSONResponse:
++    """Verify preconditions, complete issue workflow, and record WORK_COMPLETED activity."""
++    async with timing_floor(floor_ms=25.0):
++        issue, from_state, target_state, proof, comment_ref, gate_hold = await complete_work(
++            session,
++            caller,
++            issue_key,
++            body.summary_markdown,
++            body.verification_proof,
++            to_state_ref=body.to_state,
++            if_match=if_match,
++        )
++
++        if gate_hold is not None:
++            return JSONResponse(
++                status_code=status.HTTP_202_ACCEPTED,
++                content={
++                    "status": "pending_agent_gate",
++                    "execution_id": str(gate_hold.execution_id),
++                    "active_agent": gate_hold.active_agent,
++                    "from_state": gate_hold.from_state,
++                    "to_state": gate_hold.to_state,
++                },
++            )
++
++        serialized = await svc.serialize_issue(session, caller, issue)
++        issue_dict = serialized.model_dump(mode="json")
++        issue_dict["status"] = "completed"
++        issue_dict["workflow_status"] = "completed"
++        issue_dict["target_state"] = target_state.name
++        issue_dict["from_state"] = {
++            "id": str(from_state.id),
++            "name": from_state.name,
++            "group": from_state.state_group,
++        }
++        issue_dict["to_state"] = {
++            "id": str(target_state.id),
++            "name": target_state.name,
++            "group": target_state.state_group,
++        }
++        issue_dict["comment_ref"] = comment_ref
++        issue_dict["comment_id"] = comment_ref
++        issue_dict["proof"] = proof
++
++        sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
++        if sha256_hex:
++            response.headers["ETag"] = f'"{sha256_hex}"'
++
++        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict)
+diff --git a/kanban/issues/__init__.py b/kanban/issues/__init__.py
+index c32d61f..7a67326 100644
+--- a/kanban/issues/__init__.py
++++ b/kanban/issues/__init__.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Issue management services and tree operations (KB-P4-05)."""
++"""Issue management services, tree operations, and domain workflows (KB-P4-05, KB-P4-06)."""
+ 
+ from __future__ import annotations
+ 
+@@ -9,9 +9,27 @@ from kanban.issues.tree_service import (
+     create_issue_tree,
+     get_tree_height,
+ )
++from kanban.issues.workflow_service import (
++    DefaultWorkflowGateHook,
++    GateHoldResult,
++    WorkflowGateHook,
++    begin_work,
++    complete_work,
++    get_workflow_gate_hook,
++    set_workflow_gate_hook,
++    transition_ticket,
++)
+ 
+ __all__ = [
++    "DefaultWorkflowGateHook",
++    "GateHoldResult",
++    "WorkflowGateHook",
++    "begin_work",
++    "complete_work",
+     "count_nodes",
+     "create_issue_tree",
+     "get_tree_height",
++    "get_workflow_gate_hook",
++    "set_workflow_gate_hook",
++    "transition_ticket",
+ ]
+diff --git a/kanban/issues/proof.py b/kanban/issues/proof.py
+new file mode 100644
+index 0000000..b7626c4
+--- /dev/null
++++ b/kanban/issues/proof.py
+@@ -0,0 +1,111 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Verification proof model and path invariants for issue workflow (KB-P4-06)."""
++
++from __future__ import annotations
++
++import re
++from typing import Annotated, Final, Literal
++
++from pydantic import BaseModel, ConfigDict, Field, field_validator
++
++__all__ = [
++    "ARTIFACT_PATH_REGEX",
++    "CI_RUN_URL_REGEX",
++    "QA_DIR_REGEX",
++    "RealityCheckerProof",
++    "VerificationProof",
++    "validate_proof_ticket_key",
++]
++
++QA_DIR_REGEX: Final[str] = r"^docs/qa/([A-Z][A-Z0-9]{1,9}-[0-9]{1,18})/?$"
++ARTIFACT_PATH_REGEX: Final[str] = (
++    r"^docs/qa/([A-Z][A-Z0-9]{1,9}-[0-9]{1,18})/([A-Za-z0-9._/-]{1,200})$"
++)
++CI_RUN_URL_REGEX: Final[str] = r"^https://[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=]+$"
++
++_QA_DIR_PAT: Final[re.Pattern[str]] = re.compile(QA_DIR_REGEX)
++_ARTIFACT_PAT: Final[re.Pattern[str]] = re.compile(ARTIFACT_PATH_REGEX)
++
++
++def _check_no_traversal(path: str) -> None:
++    """Ensure path contains no directory traversal (..) or double slashes (//)."""
++    if ".." in path:
++        msg = f"Path '{path}' contains forbidden directory traversal '..'"
++        raise ValueError(msg)
++    if "//" in path:
++        msg = f"Path '{path}' contains forbidden double slash '//'"
++        raise ValueError(msg)
++
++
++class RealityCheckerProof(BaseModel):
++    """Reality-checker forensic report proof block."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    verdict: Literal["READY", "NEEDS_WORK"]
++    grade: Annotated[str, Field(pattern=r"^[A-F]$")]
++    report_path: Annotated[
++        str,
++        Field(pattern=r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$"),
++    ]
++
++    @field_validator("report_path")
++    @classmethod
++    def _validate_report_path(cls, v: str) -> str:
++        _check_no_traversal(v)
++        return v
++
++
++class VerificationProof(BaseModel):
++    """Pydantic model representing structured forensic verification proof packet."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    qa_dir: Annotated[str, Field(pattern=r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/?$")]
++    artifacts: Annotated[
++        list[
++            Annotated[
++                str,
++                Field(pattern=r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$"),
++            ]
++        ],
++        Field(max_length=50),
++    ]
++    reality_checker: RealityCheckerProof
++    ci_run_url: Annotated[str, Field(pattern=CI_RUN_URL_REGEX)]
++
++    @field_validator("qa_dir")
++    @classmethod
++    def _validate_qa_dir(cls, v: str) -> str:
++        _check_no_traversal(v)
++        return v
++
++    @field_validator("artifacts")
++    @classmethod
++    def _validate_artifacts(cls, v: list[str]) -> list[str]:
++        for item in v:
++            _check_no_traversal(item)
++        return v
++
++
++def validate_proof_ticket_key(proof: VerificationProof, expected_ticket_key: str) -> None:
++    """Assert all paths in verification proof target the exact issue key."""
++    m_dir = _QA_DIR_PAT.match(proof.qa_dir)
++    if not m_dir or m_dir.group(1) != expected_ticket_key:
++        msg = f"qa_dir '{proof.qa_dir}' does not match expected ticket key '{expected_ticket_key}'"
++        raise ValueError(msg)
++
++    m_rep = _ARTIFACT_PAT.match(proof.reality_checker.report_path)
++    if not m_rep or m_rep.group(1) != expected_ticket_key:
++        msg = (
++            f"report_path '{proof.reality_checker.report_path}' does not match "
++            f"expected ticket key '{expected_ticket_key}'"
++        )
++        raise ValueError(msg)
++
++    for item in proof.artifacts:
++        m_art = _ARTIFACT_PAT.match(item)
++        if not m_art or m_art.group(1) != expected_ticket_key:
++            msg = f"artifact '{item}' does not match expected ticket key '{expected_ticket_key}'"
++            raise ValueError(msg)
+diff --git a/kanban/issues/workflow_service.py b/kanban/issues/workflow_service.py
+new file mode 100644
+index 0000000..637b144
+--- /dev/null
++++ b/kanban/issues/workflow_service.py
+@@ -0,0 +1,718 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Workflow transition service and gate hook abstractions for issues (KB-P4-06)."""
++
++from __future__ import annotations
++
++import uuid
++from dataclasses import dataclass
++from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
++
++from pydantic import ValidationError
++from sqlalchemy import select, text
++
++from database.models.issues import Issue, IssueAssignee, IssueComment
++from database.models.projects import Cycle, Project, WorkflowState
++from kanban.api.problems import ProblemException
++from kanban.content import normalize_to_markdown
++from kanban.issues.proof import VerificationProof, validate_proof_ticket_key
++from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
++from kanban.services.activity import ActivityEventType, record_activity
++from kanban.services.issue_keys import resolve_issue_ref
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.api.deps import PrincipalContext
++
++__all__ = [
++    "DefaultWorkflowGateHook",
++    "GateHoldResult",
++    "WorkflowGateHook",
++    "begin_work",
++    "complete_work",
++    "get_workflow_gate_hook",
++    "render_proof_table",
++    "set_workflow_gate_hook",
++    "transition_ticket",
++]
++
++MAX_BODY_BYTES: Final[int] = 65536
++
++
++@dataclass(frozen=True, slots=True)
++class GateHoldResult:
++    """Provisional transition hold details emitted when a gate interceptor activates."""
++
++    execution_id: uuid.UUID
++    active_agent: str
++    from_state: str
++    to_state: str
++
++
++@runtime_checkable
++class WorkflowGateHook(Protocol):
++    """Protocol for pluggable workflow transition interceptors and gates."""
++
++    async def evaluate_transition(  # noqa: PLR0913, PLR0917
++        self,
++        session: AsyncSession,
++        caller: PrincipalContext,
++        issue: Issue,
++        from_state: WorkflowState,
++        to_state: WorkflowState,
++        verification_proof: dict[str, Any] | None = None,
++    ) -> GateHoldResult | None:
++        """Evaluate whether transition can proceed immediately or must be held."""
++        ...
++
++
++class DefaultWorkflowGateHook:
++    """Default pass-through gate hook that introduces zero holds."""
++
++    async def evaluate_transition(  # noqa: PLR0913, PLR0917
++        self,
++        session: AsyncSession,
++        caller: PrincipalContext,
++        issue: Issue,
++        from_state: WorkflowState,
++        to_state: WorkflowState,
++        verification_proof: dict[str, Any] | None = None,
++    ) -> GateHoldResult | None:
++        """Allow all transitions without provisional hold."""
++        del session, caller, issue, from_state, to_state, verification_proof
++        return None
++
++
++_ACTIVE_GATE_HOOK: WorkflowGateHook = DefaultWorkflowGateHook()
++
++
++def get_workflow_gate_hook() -> WorkflowGateHook:
++    """Retrieve active WorkflowGateHook."""
++    return _ACTIVE_GATE_HOOK
++
++
++def set_workflow_gate_hook(hook: WorkflowGateHook | None) -> None:
++    """Configure active WorkflowGateHook."""
++    global _ACTIVE_GATE_HOOK  # noqa: PLW0603
++    _ACTIVE_GATE_HOOK = hook if hook is not None else DefaultWorkflowGateHook()
++
++
++def render_proof_table(summary_markdown: str, proof: dict[str, Any]) -> str:
++    """Render markdown summary coupled with structured verification proof table."""
++    qa_dir = str(proof.get("qa_dir", ""))
++    rc = proof.get("reality_checker", {})
++    verdict = str(rc.get("verdict", ""))
++    grade = str(rc.get("grade", ""))
++    report_path = str(rc.get("report_path", ""))
++    ci_run_url = str(proof.get("ci_run_url", ""))
++    artifacts = proof.get("artifacts", [])
++    count = len(artifacts) if isinstance(artifacts, list) else 0
++
++    return (
++        f"{summary_markdown.strip()}\n\n"
++        "### Verification Proof\n"
++        "| Metric | Value |\n"
++        "| :--- | :--- |\n"
++        f"| **QA Directory** | `{qa_dir}` |\n"
++        f"| **Verdict** | `{verdict}` |\n"
++        f"| **Grade** | `{grade}` |\n"
++        f"| **Report** | `{report_path}` |\n"
++        f"| **CI Run** | [{ci_run_url}]({ci_run_url}) |\n"
++        f"| **Artifacts** | {count} files |"
++    )
++
++
++async def _check_if_match_etag(issue: Issue, if_match: str | None) -> None:
++    """Validate optional If-Match ETag against issue description SHA-256."""
++    if not if_match:
++        return
++    current_etag = issue.description_sha256.hex() if issue.description_sha256 else ""
++    clean_match = if_match.strip().strip('"')
++    if clean_match != current_etag:
++        raise ProblemException(
++            code="CONFLICT_ETAG",
++            status=412,
++            title="Precondition Failed",
++            detail="If-Match ETag does not match current issue description ETag",
++        )
++
++
++async def _resolve_state_by_ref(
++    session: AsyncSession,
++    project_id: uuid.UUID,
++    state_ref: str,
++) -> WorkflowState:
++    """Resolve workflow state in project by UUID string or exact/case-insensitive name."""
++    clean_ref = state_ref.strip()
++    try:
++        state_uuid = uuid.UUID(clean_ref)
++        res = await session.execute(
++            select(WorkflowState).where(
++                WorkflowState.project_id == project_id,
++                WorkflowState.id == state_uuid,
++            )
++        )
++        found = res.scalars().first()
++        if found:
++            return found
++    except ValueError:
++        pass
++
++    res_name = await session.execute(
++        select(WorkflowState).where(
++            WorkflowState.project_id == project_id,
++            WorkflowState.name.ilike(clean_ref),
++        )
++    )
++    found_by_name = res_name.scalars().first()
++    if found_by_name:
++        return found_by_name
++
++    raise ProblemException(
++        code="INVALID_TRANSITION",
++        status=422,
++        title="Invalid Transition",
++        detail=f"Target state '{state_ref}' not found in project",
++    )
++
++
++async def begin_work(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_ref: str,
++    plan_markdown: str,
++    if_match: str | None = None,
++) -> tuple[Issue, WorkflowState, WorkflowState, str, GateHoldResult | None]:
++    """Execute atomic begin_work operation on an issue in a single transaction."""
++    issue = await resolve_issue_ref(session, caller, issue_ref)
++    await require_capability(
++        session,
++        caller,
++        issue.id,
++        Capability.EDIT | Capability.TRANSITION,
++    )
++
++    await _check_if_match_etag(issue, if_match)
++
++    if issue.pending_transition_exec_id is not None:
++        raise ProblemException(
++            code="TRANSITION_HELD",
++            status=409,
++            title="Transition Held",
++            detail="Issue transition is currently held by an active gate hook",
++        )
++
++    # Validate plan markdown byte length
++    encoded_plan = plan_markdown.encode("utf-8")
++    if len(encoded_plan) < 1 or len(encoded_plan) > MAX_BODY_BYTES:
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail="plan_markdown length must be between 1 and 65536 bytes",
++        )
++
++    normalized_plan = normalize_to_markdown(plan_markdown)
++
++    # 1. Assign caller principal if not already assigned
++    assigned_row = (
++        await session.execute(
++            select(IssueAssignee.id).where(
++                IssueAssignee.issue_id == issue.id,
++                IssueAssignee.principal_id == caller.principal_id,
++            )
++        )
++    ).scalar_one_or_none()
++
++    if assigned_row is None:
++        await session.execute(
++            text(
++                "INSERT INTO issue_assignees (workspace_id, issue_id, principal_id) "
++                "VALUES (:ws, :iss, :p)"
++            ),
++            {"ws": caller.workspace_id, "iss": issue.id, "p": caller.principal_id},
++        )
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=issue.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.ASSIGNEE_ADDED,
++            payload={"kind": "principal", "principal_id": str(caller.principal_id)},
++        )
++
++    # 2. Attach project's single active cycle if issue currently has none
++    if issue.cycle_id is None:
++        active_cycle = (
++            (
++                await session.execute(
++                    select(Cycle).where(
++                        Cycle.project_id == issue.project_id,
++                        Cycle.status == "active",
++                    )
++                )
++            )
++            .scalars()
++            .first()
++        )
++        if active_cycle is not None:
++            issue.cycle_id = active_cycle.id
++            await record_activity(
++                session,
++                workspace_id=caller.workspace_id,
++                object_id=issue.id,
++                actor_principal_id=caller.principal_id,
++                event_type=ActivityEventType.ISSUE_CYCLE_CHANGED,
++                payload={"cycle_id": str(active_cycle.id)},
++            )
++
++    # 3. Locate lowest sort_order state with group = 'started'
++    stmt_state = (
++        select(WorkflowState)
++        .where(
++            WorkflowState.project_id == issue.project_id,
++            WorkflowState.state_group == "started",
++        )
++        .order_by(WorkflowState.sort_order.asc(), WorkflowState.id.asc())
++    )
++    started_state = (await session.execute(stmt_state)).scalars().first()
++    if started_state is None:
++        raise ProblemException(
++            code="NO_STARTED_STATE",
++            status=409,
++            title="No Started State",
++            detail="Project has no workflow state configured in the 'started' group",
++        )
++
++    from_state = await session.get(WorkflowState, issue.state_id)
++    if from_state is None:
++        raise ProblemException(
++            code="INVALID_TRANSITION",
++            status=422,
++            title="Invalid Transition",
++            detail="Current issue state could not be resolved",
++        )
++
++    # Evaluate gate hook
++    hook = get_workflow_gate_hook()
++    gate_hold = await hook.evaluate_transition(session, caller, issue, from_state, started_state)
++
++    if gate_hold is not None:
++        issue.pending_transition_exec_id = gate_hold.execution_id
++    elif issue.state_id != started_state.id:
++        old_id = issue.state_id
++        issue.state_id = started_state.id
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=issue.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
++            payload={
++                "from_state_id": str(old_id),
++                "to_state_id": str(started_state.id),
++                "from_state": from_state.name,
++                "to_state": started_state.name,
++            },
++        )
++
++    # 4. Post plan_markdown as an issue comment
++    comment = IssueComment(
++        workspace_id=caller.workspace_id,
++        issue_id=issue.id,
++        author_id=caller.principal_id,
++        body_markdown=normalized_plan,
++    )
++    session.add(comment)
++    await session.flush()
++    await session.refresh(comment)
++
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=issue.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.COMMENT_CREATED,
++        payload={
++            "comment_id": str(comment.id),
++            "body_sha256": comment.body_sha256.hex() if comment.body_sha256 else "",
++        },
++    )
++
++    # Generate permalink
++    proj = await session.get(Project, issue.project_id)
++    p_ident = proj.identifier if proj else "ISSUE"
++    comment_ref = f"{p_ident}-{issue.sequence_id}#c-{str(comment.id)[:8]}"
++
++    await session.flush()
++    await session.refresh(issue)
++    return issue, from_state, started_state, comment_ref, gate_hold
++
++
++async def transition_ticket(  # noqa: PLR0913, PLR0917
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_ref: str,
++    to_state_ref: str,
++    comment_markdown: str | None = None,
++    verification_proof: dict[str, Any] | None = None,
++    if_match: str | None = None,
++) -> tuple[Issue, WorkflowState, WorkflowState, GateHoldResult | None]:
++    """Execute intermediate state transition on an issue."""
++    issue = await resolve_issue_ref(session, caller, issue_ref)
++    await require_capability(session, caller, issue.id, Capability.TRANSITION)
++
++    await _check_if_match_etag(issue, if_match)
++
++    if issue.pending_transition_exec_id is not None:
++        raise ProblemException(
++            code="TRANSITION_HELD",
++            status=409,
++            title="Transition Held",
++            detail="Issue transition is currently held by an active gate hook",
++        )
++
++    target_state = await _resolve_state_by_ref(session, issue.project_id, to_state_ref)
++
++    if target_state.state_group == "completed":
++        raise ProblemException(
++            code="USE_COMPLETE_WORK",
++            status=422,
++            title="Use Complete Work",
++            detail=(
++                f"Cannot transition to terminal state '{target_state.name}' using "
++                "transition_ticket. Use complete_work with verification proof."
++            ),
++        )
++
++    from_state = await session.get(WorkflowState, issue.state_id)
++    if from_state is None:
++        raise ProblemException(
++            code="INVALID_TRANSITION",
++            status=422,
++            title="Invalid Transition",
++            detail="Current issue state could not be resolved",
++        )
++
++    hook = get_workflow_gate_hook()
++    gate_hold = await hook.evaluate_transition(
++        session,
++        caller,
++        issue,
++        from_state,
++        target_state,
++        verification_proof=verification_proof,
++    )
++
++    if gate_hold is not None:
++        issue.pending_transition_exec_id = gate_hold.execution_id
++    elif issue.state_id != target_state.id:
++        old_id = issue.state_id
++        issue.state_id = target_state.id
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=issue.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
++            payload={
++                "from_state_id": str(old_id),
++                "to_state_id": str(target_state.id),
++                "from_state": from_state.name,
++                "to_state": target_state.name,
++            },
++        )
++
++    if comment_markdown:
++        encoded = comment_markdown.encode("utf-8")
++        if len(encoded) > MAX_BODY_BYTES:
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail="comment_markdown length must be <= 65536 bytes",
++            )
++        normalized_comment = normalize_to_markdown(comment_markdown)
++        c = IssueComment(
++            workspace_id=caller.workspace_id,
++            issue_id=issue.id,
++            author_id=caller.principal_id,
++            body_markdown=normalized_comment,
++        )
++        session.add(c)
++        await session.flush()
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=issue.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.COMMENT_CREATED,
++            payload={
++                "comment_id": str(c.id),
++                "body_sha256": c.body_sha256.hex() if c.body_sha256 else "",
++            },
++        )
++
++    await session.flush()
++    await session.refresh(issue)
++    return issue, from_state, target_state, gate_hold
++
++
++async def _collect_open_blockers(
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue: Issue,
++) -> list[str]:
++    """Inspect recursive child issues and incoming BLOCKS links for uncompleted work."""
++    visible_keys: list[str] = []
++    redacted_count = 0
++    seen_ids: set[uuid.UUID] = set()
++
++    # 1. Recursive child issues
++    stmt_children = text(
++        "WITH RECURSIVE descendants AS ("
++        "    SELECT id, project_id, state_id, sequence_id FROM issues WHERE parent_issue_id = :iid "
++        "    UNION ALL "
++        "    SELECT i.id, i.project_id, i.state_id, i.sequence_id FROM issues i "
++        "    JOIN descendants d ON i.parent_issue_id = d.id "
++        ") "
++        "SELECT d.id, d.project_id, d.sequence_id, p.identifier "
++        "FROM descendants d "
++        "JOIN projects p ON p.id = d.project_id "
++        "JOIN workflow_states ws ON ws.id = d.state_id "
++        "WHERE ws.state_group NOT IN ('completed', 'cancelled')"
++    )
++    child_rows = (await session.execute(stmt_children, {"iid": issue.id})).all()
++    for row in child_rows:
++        b_id, _, b_seq, b_pident = row[0], row[1], row[2], row[3]
++        if b_id in seen_ids:
++            continue
++        seen_ids.add(b_id)
++        caps = await evaluate_capabilities(session, caller, b_id)
++        if Capability.VIEW in caps:
++            visible_keys.append(f"{b_pident}-{b_seq}")
++        else:
++            redacted_count += 1
++
++    # 2. Inbound BLOCKS links from object_links
++    stmt_blocks = text(
++        "SELECT ol.source_id, ol.source_key_snapshot "
++        "FROM object_links ol "
++        "WHERE ol.target_id = :iid "
++        "  AND ol.link_type = 'BLOCKS' "
++        "  AND ol.link_state = 'ACTIVE'"
++    )
++    block_links = (await session.execute(stmt_blocks, {"iid": issue.id})).all()
++    for row in block_links:
++        src_id = row[0]
++        if src_id in seen_ids:
++            continue
++        seen_ids.add(src_id)
++
++        caps = await evaluate_capabilities(session, caller, src_id)
++        if Capability.VIEW not in caps:
++            redacted_count += 1
++            continue
++
++        # For readable source, check whether its state is non-terminal
++        src_state_stmt = text(
++            "SELECT p.identifier, src.sequence_id, ws.state_group "
++            "FROM issues src "
++            "JOIN projects p ON p.id = src.project_id "
++            "JOIN workflow_states ws ON ws.id = src.state_id "
++            "WHERE src.id = :sid"
++        )
++        src_state_row = (await session.execute(src_state_stmt, {"sid": src_id})).first()
++        if src_state_row is not None:
++            p_ident, seq, state_grp = src_state_row[0], src_state_row[1], src_state_row[2]
++            if state_grp not in ("completed", "cancelled"):
++                visible_keys.append(f"{p_ident}-{seq}")
++
++    result_keys = visible_keys[:20]
++    if redacted_count > 0:
++        plural = "blocker" if redacted_count == 1 else "blockers"
++        result_keys.append(f"redacted: {redacted_count} hidden {plural}")
++
++    return result_keys
++
++
++async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue_ref: str,
++    summary_markdown: str,
++    verification_proof: dict[str, Any],
++    to_state_ref: str | None = None,
++    if_match: str | None = None,
++) -> tuple[Issue, WorkflowState, WorkflowState, dict[str, Any], str, GateHoldResult | None]:
++    """Execute complete_work workflow: blocker audit, QA gate verification, and transition."""
++    issue = await resolve_issue_ref(session, caller, issue_ref)
++    await require_capability(session, caller, issue.id, Capability.TRANSITION)
++
++    await _check_if_match_etag(issue, if_match)
++
++    if issue.pending_transition_exec_id is not None:
++        raise ProblemException(
++            code="TRANSITION_HELD",
++            status=409,
++            title="Transition Held",
++            detail="Issue transition is currently held by an active gate hook",
++        )
++
++    # 1. Check open child blockers and inbound BLOCKS links
++    blockers = await _collect_open_blockers(session, caller, issue)
++    if blockers:
++        raise ProblemException(
++            code="OPEN_CHILD_BLOCKERS",
++            status=409,
++            title="Open Child Blockers",
++            detail=f"Issue has open blockers: {', '.join(blockers)}",
++            extra={"blockers": blockers},
++        )
++
++    # 2. Validate structured verification_proof schema and ticket key invariants
++    proj = await session.get(Project, issue.project_id)
++    issue_key = f"{proj.identifier}-{issue.sequence_id}" if proj else str(issue.id)
++
++    try:
++        parsed_proof = VerificationProof.model_validate(verification_proof)
++        validate_proof_ticket_key(parsed_proof, issue_key)
++    except (ValueError, ValidationError) as exc:
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=str(exc),
++        ) from exc
++
++    if parsed_proof.reality_checker.verdict != "READY" or parsed_proof.reality_checker.grade != "A":
++        raise ProblemException(
++            code="QA_VERDICT_NOT_READY",
++            status=422,
++            title="QA Verdict Not Ready",
++            detail=(
++                "Reality-Checker verdict must be READY with grade A "
++                f"(got {parsed_proof.reality_checker.verdict} / "
++                f"{parsed_proof.reality_checker.grade})"
++            ),
++        )
++
++    # Validate summary markdown length
++    encoded_summary = summary_markdown.encode("utf-8")
++    if len(encoded_summary) < 1 or len(encoded_summary) > MAX_BODY_BYTES:
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail="summary_markdown length must be between 1 and 65536 bytes",
++        )
++
++    # Resolve target completed state
++    if to_state_ref:
++        target_state = await _resolve_state_by_ref(session, issue.project_id, to_state_ref)
++        if target_state.state_group != "completed":
++            raise ProblemException(
++                code="INVALID_TRANSITION",
++                status=422,
++                title="Invalid Transition",
++                detail=f"Target state '{target_state.name}' is not in the 'completed' group",
++            )
++    else:
++        stmt_comp = (
++            select(WorkflowState)
++            .where(
++                WorkflowState.project_id == issue.project_id,
++                WorkflowState.state_group == "completed",
++            )
++            .order_by(WorkflowState.sort_order.asc(), WorkflowState.id.asc())
++        )
++        comp_state = (await session.execute(stmt_comp)).scalars().first()
++        if comp_state is None:
++            raise ProblemException(
++                code="INVALID_TRANSITION",
++                status=422,
++                title="Invalid Transition",
++                detail="Project has no workflow state configured in the 'completed' group",
++            )
++        target_state = comp_state
++
++    from_state = await session.get(WorkflowState, issue.state_id)
++    if from_state is None:
++        raise ProblemException(
++            code="INVALID_TRANSITION",
++            status=422,
++            title="Invalid Transition",
++            detail="Current issue state could not be resolved",
++        )
++
++    # 3. Evaluate gate hook
++    hook = get_workflow_gate_hook()
++    gate_hold = await hook.evaluate_transition(
++        session,
++        caller,
++        issue,
++        from_state,
++        target_state,
++        verification_proof=verification_proof,
++    )
++
++    if gate_hold is not None:
++        issue.pending_transition_exec_id = gate_hold.execution_id
++    elif issue.state_id != target_state.id:
++        old_id = issue.state_id
++        issue.state_id = target_state.id
++        await record_activity(
++            session,
++            workspace_id=caller.workspace_id,
++            object_id=issue.id,
++            actor_principal_id=caller.principal_id,
++            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
++            payload={
++                "from_state_id": str(old_id),
++                "to_state_id": str(target_state.id),
++                "from_state": from_state.name,
++                "to_state": target_state.name,
++            },
++        )
++
++    # 4. Post summary comment with rendered proof table
++    comment_content = render_proof_table(summary_markdown, verification_proof)
++    normalized_content = normalize_to_markdown(comment_content)
++    comment = IssueComment(
++        workspace_id=caller.workspace_id,
++        issue_id=issue.id,
++        author_id=caller.principal_id,
++        body_markdown=normalized_content,
++    )
++    session.add(comment)
++    await session.flush()
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=issue.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.COMMENT_CREATED,
++        payload={
++            "comment_id": str(comment.id),
++            "body_sha256": comment.body_sha256.hex() if comment.body_sha256 else "",
++        },
++    )
++
++    # 5. Record WORK_COMPLETED activity
++    await record_activity(
++        session,
++        workspace_id=caller.workspace_id,
++        object_id=issue.id,
++        actor_principal_id=caller.principal_id,
++        event_type=ActivityEventType.WORK_COMPLETED,
++        payload=verification_proof,
++    )
++
++    proj = await session.get(Project, issue.project_id)
++    p_ident = proj.identifier if proj else "ISSUE"
++    comment_ref = f"{p_ident}-{issue.sequence_id}#c-{str(comment.id)[:8]}"
++
++    await session.flush()
++    await session.refresh(issue)
++    return issue, from_state, target_state, verification_proof, comment_ref, gate_hold
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index 3e7a7e4..95f0168 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -178,6 +178,7 @@ class ActivityEventType(StrEnum):
+     PLANE_IMPORT_COMPLETED = "PLANE_IMPORT_COMPLETED"
+     WORKSPACE_SETTINGS_CHANGED = "WORKSPACE_SETTINGS_CHANGED"
+     AIR_GAP_MODE_CHANGED = "AIR_GAP_MODE_CHANGED"
++    WORK_COMPLETED = "WORK_COMPLETED"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -295,6 +296,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.AUTH_CARD_DELETED: ActivityCategory.SYSTEM,
+         ActivityEventType.AUTH_CARD_HANDSHAKE_TESTED: ActivityCategory.SYSTEM,
+         ActivityEventType.STANDALONE_BACKUP_EXPORTED: ActivityCategory.SYSTEM,
++        ActivityEventType.WORK_COMPLETED: ActivityCategory.HISTORY,
+         ActivityEventType.CUSTOM_FIELD_APPROVAL_REQUESTED: ActivityCategory.HISTORY,
+         ActivityEventType.CUSTOM_FIELD_APPROVED_PRIMARY: ActivityCategory.HISTORY,
+         ActivityEventType.CUSTOM_FIELD_APPROVED: ActivityCategory.HISTORY,
+diff --git a/kanban/tests/api/test_issue_workflow.py b/kanban/tests/api/test_issue_workflow.py
+new file mode 100644
+index 0000000..47ce0d7
+--- /dev/null
++++ b/kanban/tests/api/test_issue_workflow.py
+@@ -0,0 +1,742 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Integration tests for Issue Workflow API endpoints (KB-P4-06).
++
++Covers:
++  - POST /api/v1/issues/{id}/begin-work: atomic assignment, started state, cycle, plan comment.
++  - POST /api/v1/issues/{id}/transition: state changes, USE_COMPLETE_WORK guard, gate hold.
++  - POST /api/v1/issues/{id}/complete-work: blocker check, QA gate check, proof table comment,
++    activity record, redacted foreign blockers, path traversal rejection.
++"""
++
++# ruff: noqa: ARG001, ARG002, F841, PLR0913, PLR0917, ANN401, D401
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING, Any
++
++import pytest
++from sqlalchemy import text
++
++from kanban.issues.workflow_service import (
++    GateHoldResult,
++    WorkflowGateHook,
++    set_workflow_gate_hook,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _make_valid_proof(key: str) -> dict[str, Any]:
++    """Helper to build a valid VerificationProof dictionary for a given ticket key."""
++    return {
++        "qa_dir": f"docs/qa/{key}/",
++        "reality_checker": {
++            "verdict": "READY",
++            "grade": "A",
++            "report_path": f"docs/qa/{key}/reality-checker-report.md",
++        },
++        "ci_run_url": "https://dash.hackedyour.info/runs/12345",
++        "artifacts": [
++            f"docs/qa/{key}/git-diff.patch",
++            f"docs/qa/{key}/unit-test-results.txt",
++        ],
++    }
++
++
++async def test_begin_work_positive(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """begin_work moves issue to started state, assigns caller, binds active cycle, posts plan."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    dev = await make_user("dev")
++    proj_id = await make_project(
++        "BWK", created_by=admin, roles={admin: "PROJECT_ADMIN", dev: "MEMBER"}
++    )
++
++    client_admin = as_principal(admin)
++
++    # Seed an active cycle in project via API
++    c_resp = await client_admin.post(
++        "/api/v1/projects/BWK/cycles",
++        json={"name": "Sprint 1", "start_date": "2026-11-15", "end_date": "2026-11-29"},
++    )
++    assert c_resp.status_code == 201, c_resp.text
++    cycle_id = c_resp.json()["id"]
++    start_resp = await client_admin.post(f"/api/v1/cycles/{cycle_id}/start")
++    assert start_resp.status_code == 200, start_resp.text
++
++    # Create issue in Todo
++    create_resp = await client_admin.post(
++        "/api/v1/projects/BWK/issues",
++        json={"summary": "Build workflow engine", "description_markdown": "Details"},
++    )
++    assert create_resp.status_code == 201
++    issue_data = create_resp.json()
++    issue_key = issue_data["key"]
++
++    # Call begin_work as dev
++    client_dev = as_principal(dev)
++    plan = "### Execution Plan\n1. Write tests\n2. Implement\n3. Verify"
++    bw_resp = await client_dev.post(
++        f"/api/v1/issues/{issue_key}/begin-work",
++        json={"plan_markdown": plan},
++    )
++    assert bw_resp.status_code == 200, bw_resp.text
++    result = bw_resp.json()
++
++    assert result["status"] == "started"
++    assert result["key"] == issue_key
++    assert result["from_state"]["name"] in ("Backlog", "Todo")
++    assert result["to_state"]["name"] == "In Progress"
++    assert result["cycle_id"] == str(cycle_id)
++    res_assignees = [
++        str(a["principal"]["id"])
++        for a in result.get("assignees", [])
++        if a.get("kind") == "principal"
++    ]
++    assert str(dev.id) in res_assignees
++    assert result["comment_id"] is not None
++
++    # Check issue in database: state, cycle, assignee
++    get_resp = await client_dev.get(f"/api/v1/issues/{issue_key}")
++    assert get_resp.status_code == 200
++    issue_after = get_resp.json()
++    assert issue_after["state"]["name"] == "In Progress"
++    assert issue_after["cycle_id"] == str(cycle_id)
++    assignee_ids = [
++        str(a["principal"]["id"])
++        for a in issue_after.get("assignees", [])
++        if a.get("kind") == "principal"
++    ]
++    assert str(dev.id) in assignee_ids
++
++    # Second call to begin_work: caller is already assigned, cycle already attached, already started
++    bw2_resp = await client_dev.post(
++        f"/api/v1/issues/{issue_key}/begin-work",
++        json={"plan_markdown": "Updated plan\n- step A"},
++    )
++    assert bw2_resp.status_code == 200
++    assert bw2_resp.json()["status"] == "started"
++
++
++async def test_begin_work_no_started_state_error(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """begin_work returns 409 NO_STARTED_STATE when no started states exist."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("NSS", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # Delete or change all 'started' states
++    await api_env.seed.execute(
++        text("UPDATE workflow_states SET state_group = 'unstarted' WHERE project_id = :proj"),
++        {"proj": proj_id},
++    )
++    await api_env.seed.commit()
++
++    create_resp = await client.post(
++        "/api/v1/projects/NSS/issues",
++        json={"summary": "Task with no started state", "description_markdown": "None"},
++    )
++    issue_key = create_resp.json()["key"]
++
++    bw_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/begin-work",
++        json={"plan_markdown": "My plan"},
++    )
++    assert bw_resp.status_code == 409
++    body = bw_resp.json()
++    assert body["code"] == "NO_STARTED_STATE"
++
++
++async def test_transition_ticket_positive_and_guards(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """transition_ticket transitions non-completed states and blocks completed states."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("TRN", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    create_resp = await client.post(
++        "/api/v1/projects/TRN/issues",
++        json={"summary": "Transition testing", "description_markdown": "Testing"},
++    )
++    issue_key = create_resp.json()["key"]
++
++    # 1. Attempt to transition directly to completed state -> 422 USE_COMPLETE_WORK
++    trans_done_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transition",
++        json={"to_state": "Done"},
++    )
++    assert trans_done_resp.status_code == 422
++    assert trans_done_resp.json()["code"] == "USE_COMPLETE_WORK"
++
++    # 2. Transition to "In Progress" -> 200 OK
++    trans_prog_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transition",
++        json={"to_state": "In Progress", "comment_markdown": "Moving to in progress"},
++    )
++    assert trans_prog_resp.status_code == 200
++    res = trans_prog_resp.json()
++    assert res["status"] == "transitioned"
++    assert res["to_state"]["name"] == "In Progress"
++
++    # 3. Invalid state name -> 422 INVALID_TRANSITION
++    bad_state_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transition",
++        json={"to_state": "NonExistentState"},
++    )
++    assert bad_state_resp.status_code == 422
++    assert bad_state_resp.json()["code"] == "INVALID_TRANSITION"
++
++
++async def test_transition_ticket_pending_gate_hold(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """transition_ticket returns 202 Accepted when a WorkflowGateHook holds transition."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("HLD", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    create_resp = await client.post(
++        "/api/v1/projects/HLD/issues",
++        json={"summary": "Held transition issue", "description_markdown": "Test"},
++    )
++    issue_key = create_resp.json()["key"]
++
++    exec_id = uuid.uuid4()
++
++    class MockGateHook(WorkflowGateHook):
++        async def evaluate_transition(
++            self,
++            session: Any,
++            caller: Any,
++            issue: Any,
++            from_state: Any,
++            to_state: Any,
++            verification_proof: Any = None,
++        ) -> GateHoldResult | None:
++            return GateHoldResult(
++                execution_id=exec_id,
++                active_agent="code-reviewer",
++                from_state=from_state.name,
++                to_state=to_state.name,
++            )
++
++    set_workflow_gate_hook(MockGateHook())
++    try:
++        resp = await client.post(
++            f"/api/v1/issues/{issue_key}/transition",
++            json={"to_state": "In Progress"},
++        )
++        assert resp.status_code == 202, resp.text
++        data = resp.json()
++        assert data["status"] == "pending_agent_gate"
++        assert data["execution_id"] == str(exec_id)
++        assert data["active_agent"] == "code-reviewer"
++        assert data["from_state"] in ("Backlog", "Todo")
++        assert data["to_state"] == "In Progress"
++
++        # Create separate issue for begin-work gate hold (202 Accepted)
++        c_bw = await client.post(
++            "/api/v1/projects/HLD/issues",
++            json={"summary": "Held begin issue", "description_markdown": "Test"},
++        )
++        issue_bw_key = c_bw.json()["key"]
++        bw_held = await client.post(
++            f"/api/v1/issues/{issue_bw_key}/begin-work",
++            json={"plan_markdown": "Plan for held issue"},
++        )
++        assert bw_held.status_code == 202
++        assert bw_held.json()["status"] == "pending_agent_gate"
++
++        # Create separate issue for complete-work gate hold (202 Accepted)
++        c_cw = await client.post(
++            "/api/v1/projects/HLD/issues",
++            json={"summary": "Held complete issue", "description_markdown": "Test"},
++        )
++        issue_cw_key = c_cw.json()["key"]
++        proof = _make_valid_proof(issue_cw_key)
++        cw_held = await client.post(
++            f"/api/v1/issues/{issue_cw_key}/complete-work",
++            json={"summary_markdown": "Summary for held issue", "verification_proof": proof},
++        )
++        assert cw_held.status_code == 202
++        assert cw_held.json()["status"] == "pending_agent_gate"
++    finally:
++        set_workflow_gate_hook(None)
++
++
++async def test_complete_work_positive(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """complete_work transitions issue to completed, writes proof table comment and activity."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("CMP", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    create_resp = await client.post(
++        "/api/v1/projects/CMP/issues",
++        json={"summary": "Feature to complete", "description_markdown": "Feature desc"},
++    )
++    issue_key = create_resp.json()["key"]
++
++    # First begin work to move to In Progress
++    await client.post(
++        f"/api/v1/issues/{issue_key}/begin-work",
++        json={"plan_markdown": "Start feature"},
++    )
++
++    # Call complete_work
++    proof = _make_valid_proof(issue_key)
++    comp_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/complete-work",
++        json={
++            "summary_markdown": "Completed all work successfully.",
++            "verification_proof": proof,
++        },
++    )
++    assert comp_resp.status_code == 200, comp_resp.text
++    result = comp_resp.json()
++    assert result["status"] == "completed"
++    assert result["key"] == issue_key
++    assert result["from_state"]["name"] == "In Progress"
++    assert result["to_state"]["name"] == "Done"
++    assert result["comment_id"] is not None
++
++    # Check comments on issue
++    comments_resp = await client.get(f"/api/v1/issues/{issue_key}/comments")
++    assert comments_resp.status_code == 200
++    comments = comments_resp.json()["items"]
++    # The last comment should contain the verification proof table
++    last_comment = comments[-1] if comments else None
++    assert last_comment is not None
++    assert "### Verification Proof" in last_comment["body_markdown"]
++    assert "| **Verdict** | `READY` |" in last_comment["body_markdown"]
++    assert "| **Grade** | `A` |" in last_comment["body_markdown"]
++
++    # Verify WORK_COMPLETED activity record
++    activity_count = (
++        await api_env.seed.execute(
++            text("SELECT count(*) FROM activity_records WHERE event_type = 'WORK_COMPLETED'")
++        )
++    ).scalar_one()
++    assert activity_count >= 1
++
++
++async def test_complete_work_qa_verdict_not_ready(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """complete_work returns 422 QA_VERDICT_NOT_READY when verdict or grade is not READY / A."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("QAF", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    create_resp = await client.post(
++        "/api/v1/projects/QAF/issues",
++        json={"summary": "Fail QA gate", "description_markdown": "Test"},
++    )
++    issue_key = create_resp.json()["key"]
++
++    proof = _make_valid_proof(issue_key)
++    proof["reality_checker"]["verdict"] = "NEEDS_WORK"
++
++    resp = await client.post(
++        f"/api/v1/issues/{issue_key}/complete-work",
++        json={
++            "summary_markdown": "Almost done",
++            "verification_proof": proof,
++        },
++    )
++    assert resp.status_code == 422
++    assert resp.json()["code"] == "QA_VERDICT_NOT_READY"
++
++
++async def test_complete_work_open_child_and_link_blockers(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """complete_work returns 409 OPEN_CHILD_BLOCKERS when child or BLOCKS link is open."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("BLK", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # 1. Create parent issue
++    parent_resp = await client.post(
++        "/api/v1/projects/BLK/issues",
++        json={"summary": "Parent task", "description_markdown": "Parent"},
++    )
++    parent_key = parent_resp.json()["key"]
++    parent_id = parent_resp.json()["id"]
++
++    # 2. Create child issue
++    child_resp = await client.post(
++        "/api/v1/projects/BLK/issues",
++        json={"summary": "Child task", "description_markdown": "Child", "parent": parent_key},
++    )
++    assert child_resp.status_code == 201, child_resp.text
++    child_key = child_resp.json()["key"]
++
++    # Attempt complete parent -> blocked by child
++    proof = _make_valid_proof(parent_key)
++    comp_resp = await client.post(
++        f"/api/v1/issues/{parent_key}/complete-work",
++        json={"summary_markdown": "Trying to complete parent", "verification_proof": proof},
++    )
++    assert comp_resp.status_code == 409
++    body = comp_resp.json()
++    assert body["code"] == "OPEN_CHILD_BLOCKERS"
++    assert child_key in body["blockers"]
++
++    # Complete the child first
++    child_proof = _make_valid_proof(child_key)
++    child_comp_resp = await client.post(
++        f"/api/v1/issues/{child_key}/complete-work",
++        json={"summary_markdown": "Child done", "verification_proof": child_proof},
++    )
++    assert child_comp_resp.status_code == 200
++
++    # 3. Create a dependency blocker via BLOCKS link
++    dep_resp = await client.post(
++        "/api/v1/projects/BLK/issues",
++        json={"summary": "Blocking task", "description_markdown": "Blocker"},
++    )
++    assert dep_resp.status_code == 201, dep_resp.text
++    dep_key = dep_resp.json()["key"]
++    dep_id = dep_resp.json()["id"]
++
++    # Link: dep BLOCKS parent
++    link_resp = await client.post(
++        f"/api/v1/objects/{dep_key}/links",
++        json={"target": parent_key, "link_type": "BLOCKS"},
++    )
++    assert link_resp.status_code == 201, link_resp.text
++
++    # Attempt complete parent -> blocked by BLOCKS link
++    comp_resp2 = await client.post(
++        f"/api/v1/issues/{parent_key}/complete-work",
++        json={"summary_markdown": "Trying again", "verification_proof": proof},
++    )
++    assert comp_resp2.status_code == 409
++    body2 = comp_resp2.json()
++    assert body2["code"] == "OPEN_CHILD_BLOCKERS"
++    assert dep_key in body2["blockers"]
++
++
++async def test_complete_work_redacted_foreign_blocker(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Caller without VIEW permission on foreign blocking issue gets redacted blocker notice."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("member")
++
++    proj_pub = await make_project(
++        "PUB", created_by=admin, roles={admin: "PROJECT_ADMIN", member: "MEMBER"}
++    )
++    proj_sec = await make_project(
++        "SEC",
++        created_by=admin,
++        roles={admin: "PROJECT_ADMIN"},  # member has NO access to SEC
++    )
++
++    client_admin = as_principal(admin)
++
++    # Public issue
++    pub_resp = await client_admin.post(
++        "/api/v1/projects/PUB/issues",
++        json={"summary": "Public task", "description_markdown": "Public"},
++    )
++    assert pub_resp.status_code == 201, pub_resp.text
++    pub_key = pub_resp.json()["key"]
++
++    # Secret issue
++    sec_resp = await client_admin.post(
++        "/api/v1/projects/SEC/issues",
++        json={"summary": "Secret blocker", "description_markdown": "Secret"},
++    )
++    assert sec_resp.status_code == 201, sec_resp.text
++    sec_key = sec_resp.json()["key"]
++
++    # Link: SEC issue blocks PUB issue
++    link_resp = await client_admin.post(
++        f"/api/v1/objects/{sec_key}/links",
++        json={"target": pub_key, "link_type": "BLOCKS"},
++    )
++    assert link_resp.status_code == 201, link_resp.text
++
++    # Member attempts complete PUB issue -> blocked with redacted foreign identifier
++    client_member = as_principal(member)
++    proof = _make_valid_proof(pub_key)
++    comp_resp = await client_member.post(
++        f"/api/v1/issues/{pub_key}/complete-work",
++        json={"summary_markdown": "Member completing work", "verification_proof": proof},
++    )
++    assert comp_resp.status_code == 409
++    body = comp_resp.json()
++    assert body["code"] == "OPEN_CHILD_BLOCKERS"
++    assert "redacted: 1 hidden blocker" in body["blockers"]
++    assert sec_key not in body["blockers"]
++
++
++async def test_complete_work_path_validation(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """complete_work rejects path traversal (..) and key mismatches in verification_proof."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("PTH", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    create_resp = await client.post(
++        "/api/v1/projects/PTH/issues",
++        json={"summary": "Path testing", "description_markdown": "Desc"},
++    )
++    issue_key = create_resp.json()["key"]
++
++    # 1. Path traversal in artifact
++    bad_proof = _make_valid_proof(issue_key)
++    bad_proof["artifacts"].append(f"docs/qa/{issue_key}/../secret.txt")
++
++    resp1 = await client.post(
++        f"/api/v1/issues/{issue_key}/complete-work",
++        json={"summary_markdown": "Bad path", "verification_proof": bad_proof},
++    )
++    assert resp1.status_code == 422
++    assert resp1.json()["code"] == "VALIDATION_FAILED"
++
++    # 2. Key mismatch in artifact
++    mismatch_proof = _make_valid_proof(issue_key)
++    mismatch_proof["artifacts"].append("docs/qa/OTHER-99/unit-test-results.txt")
++
++    resp2 = await client.post(
++        f"/api/v1/issues/{issue_key}/complete-work",
++        json={"summary_markdown": "Mismatch key", "verification_proof": mismatch_proof},
++    )
++    assert resp2.status_code == 422
++    assert resp2.json()["code"] == "VALIDATION_FAILED"
++
++
++async def test_if_match_etag_handling(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """If-Match header is enforced on workflow mutations."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("ETG", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    create_resp = await client.post(
++        "/api/v1/projects/ETG/issues",
++        json={"summary": "ETag test", "description_markdown": "Original description"},
++    )
++    assert create_resp.status_code == 201
++    issue_data = create_resp.json()
++    issue_key = issue_data["key"]
++    correct_etag = issue_data["description_sha256"]
++
++    # Wrong ETag -> 412
++    bw_fail = await client.post(
++        f"/api/v1/issues/{issue_key}/begin-work",
++        json={"plan_markdown": "Plan"},
++        headers={"if-match": "deadbeef" * 8},
++    )
++    assert bw_fail.status_code == 412
++    assert bw_fail.json()["code"] == "CONFLICT_ETAG"
++
++    # Correct ETag -> 200
++    bw_ok = await client.post(
++        f"/api/v1/issues/{issue_key}/begin-work",
++        json={"plan_markdown": "Plan"},
++        headers={"if-match": f'"{correct_etag}"'},
++    )
++    assert bw_ok.status_code == 200
++
++
++async def test_transition_held_conflict_on_all_endpoints(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Active pending_transition_exec_id causes 409 TRANSITION_HELD across endpoints."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("HLD", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    create_resp = await client.post(
++        "/api/v1/projects/HLD/issues",
++        json={"summary": "Held issue", "description_markdown": "Desc"},
++    )
++    issue_key = create_resp.json()["key"]
++
++    # Mark issue as pending transition in database
++    exec_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text("UPDATE issues SET pending_transition_exec_id = :eid WHERE sequence_id = 1"),
++        {"eid": exec_id},
++    )
++    await api_env.seed.commit()
++
++    # begin-work -> 409
++    res1 = await client.post(
++        f"/api/v1/issues/{issue_key}/begin-work",
++        json={"plan_markdown": "Plan"},
++    )
++    assert res1.status_code == 409
++    assert res1.json()["code"] == "TRANSITION_HELD"
++
++    # transition -> 409
++    res2 = await client.post(
++        f"/api/v1/issues/{issue_key}/transition",
++        json={"to_state": "Todo"},
++    )
++    assert res2.status_code == 409
++    assert res2.json()["code"] == "TRANSITION_HELD"
++
++    # complete-work -> 409
++    proof = _make_valid_proof(issue_key)
++    res3 = await client.post(
++        f"/api/v1/issues/{issue_key}/complete-work",
++        json={"summary_markdown": "Done", "verification_proof": proof},
++    )
++    assert res3.status_code == 409
++    assert res3.json()["code"] == "TRANSITION_HELD"
++
++
++async def test_state_resolution_and_custom_to_state(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test UUID state resolution, invalid state error, and non-completed target state error."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("RES", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    create_resp = await client.post(
++        "/api/v1/projects/RES/issues",
++        json={"summary": "State resolution test", "description_markdown": "Desc"},
++    )
++    issue_key = create_resp.json()["key"]
++
++    # Fetch states
++    states = (
++        await api_env.seed.execute(
++            text("SELECT id, name, state_group FROM workflow_states WHERE project_id = :p"),
++            {"p": proj_id},
++        )
++    ).all()
++    todo_state = next(s for s in states if s[1] == "Todo")
++    done_state = next(s for s in states if s[1] == "Done")
++
++    # Transition using state UUID string
++    tr_uuid_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transition",
++        json={"to_state": str(todo_state[0]), "comment_markdown": "Move via UUID"},
++    )
++    assert tr_uuid_resp.status_code == 200
++    assert tr_uuid_resp.json()["to_state"]["name"] == "Todo"
++
++    # Invalid state string -> 422
++    tr_inv_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transition",
++        json={"to_state": "NonExistentState"},
++    )
++    assert tr_inv_resp.status_code == 422
++    assert tr_inv_resp.json()["code"] == "INVALID_TRANSITION"
++
++    # complete_work with non-completed state -> 422
++    proof = _make_valid_proof(issue_key)
++    comp_inv_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/complete-work",
++        json={
++            "summary_markdown": "Completing work",
++            "verification_proof": proof,
++            "to_state": "Todo",
++        },
++    )
++    assert comp_inv_resp.status_code == 422
++    assert comp_inv_resp.json()["code"] == "INVALID_TRANSITION"
++
++    # complete_work with valid completed UUID state -> 200
++    comp_ok_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/complete-work",
++        json={
++            "summary_markdown": "Completing work",
++            "verification_proof": proof,
++            "to_state": str(done_state[0]),
++        },
++    )
++    assert comp_ok_resp.status_code == 200
++    assert comp_ok_resp.json()["status"] == "completed"
++
++
++async def test_complete_work_no_completed_state_error(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """complete_work returns 409 NO_COMPLETED_STATE when project lacks a completed state."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("NCS", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # Change all completed states to started
++    await api_env.seed.execute(
++        text("UPDATE workflow_states SET state_group = 'started' WHERE project_id = :proj"),
++        {"proj": proj_id},
++    )
++    await api_env.seed.commit()
++
++    create_resp = await client.post(
++        "/api/v1/projects/NCS/issues",
++        json={"summary": "No completed state", "description_markdown": "Test"},
++    )
++    issue_key = create_resp.json()["key"]
++
++    proof = _make_valid_proof(issue_key)
++    cw_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/complete-work",
++        json={"summary_markdown": "Completing work", "verification_proof": proof},
++    )
++    assert cw_resp.status_code == 422
++    assert cw_resp.json()["code"] == "INVALID_TRANSITION"
++    assert "no workflow state configured in the 'completed' group" in cw_resp.json()["detail"]
+diff --git a/kanban/tests/issues/__init__.py b/kanban/tests/issues/__init__.py
+new file mode 100644
+index 0000000..6e42607
+--- /dev/null
++++ b/kanban/tests/issues/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for issue domain services and validation models."""
+diff --git a/kanban/tests/issues/test_proof.py b/kanban/tests/issues/test_proof.py
+new file mode 100644
+index 0000000..2ea84cf
+--- /dev/null
++++ b/kanban/tests/issues/test_proof.py
+@@ -0,0 +1,120 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for VerificationProof and RealityCheckerProof models (KB-P4-06)."""
++
++from __future__ import annotations
++
++from typing import Any
++
++import pytest
++from pydantic import ValidationError
++
++from kanban.issues.proof import (
++    RealityCheckerProof,
++    VerificationProof,
++    validate_proof_ticket_key,
++)
++
++
++def _valid_proof_dict(key: str = "KAN-142") -> dict[str, Any]:
++    return {
++        "qa_dir": f"docs/qa/{key}/",
++        "artifacts": [
++            f"docs/qa/{key}/git-diff.patch",
++            f"docs/qa/{key}/unit-test-results.txt",
++        ],
++        "reality_checker": {
++            "verdict": "READY",
++            "grade": "A",
++            "report_path": f"docs/qa/{key}/reality-checker-report.md",
++        },
++        "ci_run_url": "https://dash.hackedyour.info/runs/1234",
++    }
++
++
++def test_proof_positive_validation() -> None:
++    """Validate that positive verification proof parses cleanly and matches ticket key."""
++    data = _valid_proof_dict("KAN-142")
++    proof = VerificationProof.model_validate(data)
++    assert proof.qa_dir == "docs/qa/KAN-142/"
++    assert proof.reality_checker.verdict == "READY"
++    assert proof.reality_checker.grade == "A"
++    validate_proof_ticket_key(proof, "KAN-142")
++
++
++def test_proof_traversal_double_slash_rejected() -> None:
++    """Verify that double slashes are rejected across all paths in verification proof."""
++    # Double slash in artifacts
++    data = _valid_proof_dict("KAN-142")
++    data["artifacts"] = ["docs/qa/KAN-142/dir//git-diff.patch"]
++    with pytest.raises(ValidationError, match="forbidden double slash"):
++        VerificationProof.model_validate(data)
++
++    # Double slash in report_path
++    data2 = _valid_proof_dict("KAN-142")
++    rc_data = dict(data2["reality_checker"])
++    rc_data["report_path"] = "docs/qa/KAN-142/sub//report.md"
++    data2["reality_checker"] = rc_data
++    with pytest.raises(ValidationError, match="forbidden double slash"):
++        VerificationProof.model_validate(data2)
++
++
++def test_proof_directory_traversal_dot_dot_rejected() -> None:
++    """Verify that directory traversal (..) is rejected in verification proof."""
++    data = _valid_proof_dict("KAN-142")
++    data["artifacts"] = ["docs/qa/KAN-142/sub/../git-diff.patch"]
++    with pytest.raises(ValidationError, match="forbidden directory traversal"):
++        VerificationProof.model_validate(data)
++
++
++def test_proof_ticket_key_mismatch_detection() -> None:
++    """Verify that mismatched ticket keys in qa_dir, report_path, or artifacts raise error."""
++    data = _valid_proof_dict("KAN-142")
++    proof = VerificationProof.model_validate(data)
++
++    # qa_dir mismatch
++    with pytest.raises(ValueError, match="qa_dir 'docs/qa/KAN-142/' does not match"):
++        validate_proof_ticket_key(proof, "KAN-999")
++
++    # report_path mismatch
++    bad_rep_data = _valid_proof_dict("KAN-142")
++    bad_rep_rc = dict(bad_rep_data["reality_checker"])
++    bad_rep_rc["report_path"] = "docs/qa/KAN-999/reality-checker-report.md"
++    bad_rep_data["reality_checker"] = bad_rep_rc
++    proof_bad_rep = VerificationProof.model_validate(bad_rep_data)
++    with pytest.raises(
++        ValueError,
++        match=r"report_path '.*' does not match expected ticket key 'KAN-142'",
++    ):
++        validate_proof_ticket_key(proof_bad_rep, "KAN-142")
++
++    # artifact mismatch
++    bad_art_data = _valid_proof_dict("KAN-142")
++    bad_art_data["artifacts"] = ["docs/qa/KAN-999/git-diff.patch"]
++    proof_bad_art = VerificationProof.model_validate(bad_art_data)
++    with pytest.raises(
++        ValueError,
++        match=r"artifact '.*' does not match expected ticket key 'KAN-142'",
++    ):
++        validate_proof_ticket_key(proof_bad_art, "KAN-142")
++
++
++def test_reality_checker_grade_and_verdict_bounds() -> None:
++    """Verify that reality-checker grade and verdict boundaries are enforced by enum/regex."""
++    with pytest.raises(ValidationError):
++        RealityCheckerProof.model_validate(
++            {
++                "verdict": "INVALID_VERDICT",
++                "grade": "A",
++                "report_path": "docs/qa/KAN-142/report.md",
++            }
++        )
++
++    with pytest.raises(ValidationError):
++        RealityCheckerProof.model_validate(
++            {
++                "verdict": "READY",
++                "grade": "Z",
++                "report_path": "docs/qa/KAN-142/report.md",
++            }
++        )
+diff --git a/mcp/auth.py b/mcp/auth.py
+index 193db8c..12d2557 100644
+--- a/mcp/auth.py
++++ b/mcp/auth.py
+@@ -59,9 +59,9 @@ SCOPE_REQUIREMENTS: Final[dict[str, frozenset[str]]] = {
+     "create_ticket": frozenset({"agent:write"}),
+     "update_ticket": frozenset({"agent:write"}),
+     "begin_work": frozenset({"agent:write"}),
++    "transition_ticket": frozenset({"agent:write"}),
+     "complete_work": frozenset({"agent:write"}),
+     "add_comment": frozenset({"agent:write"}),
+-    "transition_ticket": frozenset({"agent:write"}),
+     "link_objects": frozenset({"agent:write"}),
+     "test_agent_write": frozenset({"agent:write"}),
+     # Docs surface tools
+diff --git a/mcp/errors.py b/mcp/errors.py
+index ad48eda..d7c0446 100644
+--- a/mcp/errors.py
++++ b/mcp/errors.py
+@@ -50,6 +50,11 @@ class McpErrorCode(StrEnum):
+     STATE_IN_USE = "STATE_IN_USE"
+     PRIORITY_IN_USE = "PRIORITY_IN_USE"
+     INVALID_TRANSITION = "INVALID_TRANSITION"
++    NO_STARTED_STATE = "NO_STARTED_STATE"
++    USE_COMPLETE_WORK = "USE_COMPLETE_WORK"
++    OPEN_CHILD_BLOCKERS = "OPEN_CHILD_BLOCKERS"
++    QA_VERDICT_NOT_READY = "QA_VERDICT_NOT_READY"
++    TRANSITION_HELD = "TRANSITION_HELD"
+ 
+ 
+ class KbMcpError(Exception):
+@@ -65,8 +70,9 @@ class KbMcpError(Exception):
+         allowed_tools: list[str] | None = None,
+         budget: dict[str, int] | None = None,
+         extra: dict[str, Any] | None = None,
++        blockers: list[str] | None = None,
+     ) -> None:
+-        """Initialize KbMcpError with code, message, optional hint, candidates, budget."""
++        """Initialize KbMcpError with code, message, optional hint, candidates, budget, blockers."""
+         enum_code = McpErrorCode(code)
+         super().__init__(f"[{enum_code.value}] {message}")
+         self.code: Final[McpErrorCode] = enum_code
+@@ -76,9 +82,10 @@ class KbMcpError(Exception):
+         self.allowed_tools: Final[list[str] | None] = allowed_tools
+         self.budget: Final[dict[str, int] | None] = budget
+         self.extra: Final[dict[str, Any] | None] = extra
++        self.blockers: Final[list[str] | None] = blockers
+ 
+     def to_yaml(self) -> str:
+-        """Serialize error payload containing code, message, optional hint and extra details."""
++        """Serialize error payload containing code, message, optional hint, candidates, blockers."""
+         payload: dict[str, Any] = {
+             "code": self.code.value,
+             "message": self.message,
+@@ -93,4 +100,6 @@ class KbMcpError(Exception):
+             payload["hint"] = self.hint
+         if self.candidates:
+             payload["candidates"] = self.candidates
++        if self.blockers:
++            payload["blockers"] = self.blockers
+         return dump_yaml({"error": payload}, strip_nulls=True)
+diff --git a/mcp/internal_client.py b/mcp/internal_client.py
+index 780964c..c1957be 100644
+--- a/mcp/internal_client.py
++++ b/mcp/internal_client.py
+@@ -263,7 +263,15 @@ class KanbanApiClient:
+         candidates_list = (
+             [dict(c) for c in prob_candidates] if isinstance(prob_candidates, list) else None
+         )
+-        raise KbMcpError(mapped_code, error_message, hint=hint_str, candidates=candidates_list)
++        prob_blockers = problem.get("blockers")
++        blockers_list = [str(b) for b in prob_blockers] if isinstance(prob_blockers, list) else None
++        raise KbMcpError(
++            mapped_code,
++            error_message,
++            hint=hint_str,
++            candidates=candidates_list,
++            blockers=blockers_list,
++        )
+ 
+     @staticmethod
+     def _resolve_conflict_code(prob_type: str, prob_code: str) -> McpErrorCode:
+@@ -282,6 +290,8 @@ class KanbanApiClient:
+             "PRIORITY_IN_USE": McpErrorCode.PRIORITY_IN_USE,
+             "INVALID_TRANSITION": McpErrorCode.INVALID_TRANSITION,
+             "INVALID_CYCLE_TRANSITION": McpErrorCode.INVALID_TRANSITION,
++            "OPEN_CHILD_BLOCKERS": McpErrorCode.OPEN_CHILD_BLOCKERS,
++            "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
+         }
+         if prob_code in conflict_map:
+             return conflict_map[prob_code]
+@@ -291,7 +301,11 @@ class KanbanApiClient:
+         return McpErrorCode.VALIDATION_FAILED
+ 
+     @staticmethod
+-    def _resolve_error_code(status_code: int, prob_type: str, prob_code: str = "") -> McpErrorCode:
++    def _resolve_error_code(
++        status_code: int,
++        prob_type: str,
++        prob_code: str = "",
++    ) -> McpErrorCode:
+         """Determine McpErrorCode from HTTP status and problem type."""
+         code_map: dict[str, McpErrorCode] = {
+             "AAL2_REQUIRED": McpErrorCode.AAL2_REQUIRED,
+@@ -310,6 +324,12 @@ class KanbanApiClient:
+             "KEY_SCOPE_VIOLATION": McpErrorCode.KEY_SCOPE_VIOLATION,
+             "CONNECTION_SCOPE_VIOLATION": McpErrorCode.CONNECTION_SCOPE_VIOLATION,
+             "CONFLICTING_SCOPE_HEADERS": McpErrorCode.CONFLICTING_SCOPE_HEADERS,
++            "NO_STARTED_STATE": McpErrorCode.NO_STARTED_STATE,
++            "USE_COMPLETE_WORK": McpErrorCode.USE_COMPLETE_WORK,
++            "OPEN_CHILD_BLOCKERS": McpErrorCode.OPEN_CHILD_BLOCKERS,
++            "QA_VERDICT_NOT_READY": McpErrorCode.QA_VERDICT_NOT_READY,
++            "INVALID_TRANSITION": McpErrorCode.INVALID_TRANSITION,
++            "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
+         }
+         if prob_code in code_map:
+             return code_map[prob_code]
+@@ -327,6 +347,12 @@ class KanbanApiClient:
+             "not-archived": McpErrorCode.NOT_ARCHIVED,
+             "confirm-phrase-mismatch": McpErrorCode.CONFIRM_PHRASE_MISMATCH,
+             "lockout-prevented": McpErrorCode.LOCKOUT_PREVENTED,
++            "no-started-state": McpErrorCode.NO_STARTED_STATE,
++            "use-complete-work": McpErrorCode.USE_COMPLETE_WORK,
++            "open-child-blockers": McpErrorCode.OPEN_CHILD_BLOCKERS,
++            "qa-verdict-not-ready": McpErrorCode.QA_VERDICT_NOT_READY,
++            "invalid-transition": McpErrorCode.INVALID_TRANSITION,
++            "transition-held": McpErrorCode.TRANSITION_HELD,
+         }
+         for suffix, err_code in suffix_map.items():
+             if prob_type.endswith(suffix):
+diff --git a/mcp/surfaces/agent/__init__.py b/mcp/surfaces/agent/__init__.py
+index fac753b..904fb76 100644
+--- a/mcp/surfaces/agent/__init__.py
++++ b/mcp/surfaces/agent/__init__.py
+@@ -1,35 +1,49 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Agent surface tool registry and definitions (KB-P4-04, KB-P4-05)."""
++"""Agent surface tool registry and definitions (KB-P4-04, KB-P4-05, KB-P4-06)."""
+ 
+ from __future__ import annotations
+ 
+ from mcp.registry import Surface, ToolRegistry, ToolSpec
++from mcp.surfaces.agent.begin_work import BEGIN_WORK_SCHEMA, begin_work
++from mcp.surfaces.agent.complete_work import COMPLETE_WORK_SCHEMA, complete_work
+ from mcp.surfaces.agent.create_ticket import CREATE_TICKET_SCHEMA, create_ticket
+ from mcp.surfaces.agent.read_ticket import READ_TICKET_SCHEMA, read_ticket
+ from mcp.surfaces.agent.search_tickets import SEARCH_TICKETS_SCHEMA, search_tickets
++from mcp.surfaces.agent.transition_ticket import (
++    TRANSITION_TICKET_SCHEMA,
++    transition_ticket,
++)
+ from mcp.surfaces.agent.update_ticket import UPDATE_TICKET_SCHEMA, update_ticket
+ 
+ __all__ = [
++    "BEGIN_WORK_SCHEMA",
++    "COMPLETE_WORK_SCHEMA",
+     "CREATE_TICKET_SCHEMA",
+     "READ_TICKET_SCHEMA",
+     "SEARCH_TICKETS_SCHEMA",
++    "TRANSITION_TICKET_SCHEMA",
+     "UPDATE_TICKET_SCHEMA",
++    "begin_work",
++    "complete_work",
+     "create_agent_registry",
+     "create_ticket",
+     "read_ticket",
+     "search_tickets",
++    "transition_ticket",
+     "update_ticket",
+ ]
+ 
+ 
+ def create_agent_registry() -> ToolRegistry:
+-    """Construct and return the agent surface ToolRegistry with official tools."""
++    """Construct frozen ToolRegistry containing official tools for /mcp/agent."""
+     registry = ToolRegistry(Surface.AGENT)
+     registry.register(
+         ToolSpec(
+             name="search_tickets",
+-            description="Search tickets by text and structured filters under caller permissions.",
++            description=(
++                "Search and filter tickets by query text, lifecycle attributes, or assignees."
++            ),
+             input_schema=SEARCH_TICKETS_SCHEMA,
+             surface=Surface.AGENT,
+             handler=search_tickets,
+@@ -39,7 +53,7 @@ def create_agent_registry() -> ToolRegistry:
+         ToolSpec(
+             name="read_ticket",
+             description=(
+-                "Read ticket details, markdown, links, comments, and activity at chosen LOD."
++                "Read full ticket details, child hierarchy, comments, activities, or blockers."
+             ),
+             input_schema=READ_TICKET_SCHEMA,
+             surface=Surface.AGENT,
+@@ -68,4 +82,33 @@ def create_agent_registry() -> ToolRegistry:
+             handler=update_ticket,
+         )
+     )
++    registry.register(
++        ToolSpec(
++            name="begin_work",
++            description=(
++                "Atomically assign caller, bind cycle, move to started state, and post plan."
++            ),
++            input_schema=BEGIN_WORK_SCHEMA,
++            surface=Surface.AGENT,
++            handler=begin_work,
++        )
++    )
++    registry.register(
++        ToolSpec(
++            name="transition_ticket",
++            description="Transition ticket to intermediate workflow state under gate evaluation.",
++            input_schema=TRANSITION_TICKET_SCHEMA,
++            surface=Surface.AGENT,
++            handler=transition_ticket,
++        )
++    )
++    registry.register(
++        ToolSpec(
++            name="complete_work",
++            description="Verify blockers and QA gate, transition to completed, and log proof.",
++            input_schema=COMPLETE_WORK_SCHEMA,
++            surface=Surface.AGENT,
++            handler=complete_work,
++        )
++    )
+     return registry
+diff --git a/mcp/surfaces/agent/begin_work.py b/mcp/surfaces/agent/begin_work.py
+new file mode 100644
+index 0000000..42cf7fa
+--- /dev/null
++++ b/mcp/surfaces/agent/begin_work.py
+@@ -0,0 +1,152 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Implementation of the begin_work MCP tool (S11.2, KB-P4-06)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, Final
++
++from mcp.context import get_current_mcp_context
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.help import build_help
++from mcp.surfaces.agent.read_ticket import _format_assignees
++
++if TYPE_CHECKING:
++    from mcp.internal_client import KanbanApiClient
++
++__all__ = [
++    "BEGIN_WORK_SCHEMA",
++    "begin_work",
++]
++
++_MAX_IDENTIFIER_LEN: Final[int] = 200
++_MAX_PLAN_BYTES: Final[int] = 65536
++
++BEGIN_WORK_SCHEMA: Final[dict[str, Any]] = {
++    "type": "object",
++    "properties": {
++        "identifier": {
++            "type": "string",
++            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
++        },
++        "plan_markdown": {
++            "type": "string",
++            "description": "Implementation plan markdown (1..65536 bytes)",
++        },
++    },
++    "required": ["identifier", "plan_markdown"],
++    "additionalProperties": False,
++}
++
++
++def _validate_begin_work_arguments(arguments: dict[str, Any]) -> None:
++    """Validate begin_work arguments against schema constraints."""
++    if "identifier" not in arguments:
++        msg = "Missing required argument 'identifier'"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    identifier = arguments["identifier"]
++    if not isinstance(identifier, str) or not identifier.strip():
++        msg = "Argument 'identifier' must be a non-empty string"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if len(identifier.strip()) > _MAX_IDENTIFIER_LEN:
++        msg = f"Argument 'identifier' exceeds maximum length of {_MAX_IDENTIFIER_LEN}"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if identifier.strip() == "help":
++        return
++
++    if "plan_markdown" not in arguments:
++        msg = "Missing required argument 'plan_markdown'"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    plan = arguments["plan_markdown"]
++    if not isinstance(plan, str):
++        msg = "Argument 'plan_markdown' must be a string"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    plan_bytes = len(plan.encode("utf-8"))
++    if plan_bytes < 1 or plan_bytes > _MAX_PLAN_BYTES:
++        msg = f"Argument 'plan_markdown' must be 1..{_MAX_PLAN_BYTES} bytes"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++
++async def begin_work(
++    arguments: dict[str, Any],
++    *,
++    client: KanbanApiClient | None = None,
++) -> dict[str, Any]:
++    """Execute begin_work workflow: assign caller, move state, attach cycle, post plan."""
++    _validate_begin_work_arguments(arguments)
++    identifier = arguments["identifier"].strip()
++
++    ctx = get_current_mcp_context()
++    active_client = client or (ctx.client if ctx else None)
++    if active_client is None:
++        msg = "MCP request context or client unavailable"
++        raise KbMcpError(McpErrorCode.INTERNAL, msg)
++
++    subject_token = ctx.subject_token if ctx else None
++    session_id = ctx.session_id if ctx else None
++
++    if identifier == "help":
++        return await build_help(
++            "begin_work",
++            client=active_client,
++            subject_token=subject_token,
++            mcp_session_id=session_id,
++        )
++
++    plan_markdown = arguments["plan_markdown"]
++    payload = {"plan_markdown": plan_markdown}
++
++    resp_data = await active_client.request(
++        "POST",
++        f"/api/v1/issues/{identifier}/begin-work",
++        json_data=payload,
++        subject_token=subject_token,
++        mcp_session_id=session_id,
++    )
++
++    if not isinstance(resp_data, dict):
++        msg = "Invalid response from upstream begin-work endpoint"
++        raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++    # Check for 202 Accepted pending_agent_gate hold
++    if "execution_id" in resp_data and "active_agent" in resp_data:
++        return {
++            "status": "pending_agent_gate",
++            "key": str(resp_data.get("key", identifier)),
++            "from_state": str(resp_data.get("from_state", "")),
++            "to_state": str(resp_data.get("to_state", "")),
++            "execution_id": str(resp_data.get("execution_id", "")),
++            "active_agent": str(resp_data.get("active_agent", "")),
++            "hint": "transition is held; poll read_ticket for the gate verdict",
++        }
++
++    key = str(resp_data.get("key", identifier))
++    state_val = resp_data.get("state")
++    state_str = (
++        str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
++    )
++
++    assignees = _format_assignees(resp_data.get("assignees", []))
++
++    result: dict[str, Any] = {
++        "status": "started",
++        "key": key,
++        "state": state_str,
++        "assignees": assignees,
++    }
++
++    cycle_val = resp_data.get("cycle")
++    if isinstance(cycle_val, dict) and cycle_val.get("name"):
++        result["cycle"] = str(cycle_val["name"])
++    elif isinstance(cycle_val, str) and cycle_val:
++        result["cycle"] = cycle_val
++
++    if resp_data.get("comment_ref"):
++        result["comment"] = str(resp_data["comment_ref"])
++
++    return result
+diff --git a/mcp/surfaces/agent/complete_work.py b/mcp/surfaces/agent/complete_work.py
+new file mode 100644
+index 0000000..095e029
+--- /dev/null
++++ b/mcp/surfaces/agent/complete_work.py
+@@ -0,0 +1,197 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Implementation of the complete_work MCP tool (S11.2, KB-P4-06)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, Final
++
++from pydantic import ValidationError
++
++from mcp.context import get_current_mcp_context
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.help import build_help
++from mcp.surfaces.agent.proof import VerificationProof, validate_proof_ticket_key
++
++if TYPE_CHECKING:
++    from mcp.internal_client import KanbanApiClient
++
++__all__ = [
++    "COMPLETE_WORK_SCHEMA",
++    "complete_work",
++]
++
++_MAX_IDENTIFIER_LEN: Final[int] = 200
++_MAX_SUMMARY_BYTES: Final[int] = 65536
++_MAX_STATE_LEN: Final[int] = 100
++
++COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
++    "type": "object",
++    "properties": {
++        "identifier": {
++            "type": "string",
++            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
++        },
++        "summary_markdown": {
++            "type": "string",
++            "description": "Comprehensive summary of completed work (1..65536 bytes)",
++        },
++        "verification_proof": {
++            "type": "object",
++            "description": "Structured VerificationProof object matching required schema",
++        },
++        "to_state": {
++            "type": "string",
++            "description": "Optional completed group state name or UUID",
++        },
++    },
++    "required": ["identifier", "summary_markdown", "verification_proof"],
++    "additionalProperties": False,
++}
++
++
++def _validate_complete_work_arguments(  # noqa: C901, PLR0912
++    arguments: dict[str, Any],
++) -> VerificationProof | None:
++    """Validate complete_work arguments against schema constraints and return parsed proof."""
++    if "identifier" not in arguments:
++        msg = "Missing required argument 'identifier'"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    identifier = arguments["identifier"]
++    if not isinstance(identifier, str) or not identifier.strip():
++        msg = "Argument 'identifier' must be a non-empty string"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if len(identifier.strip()) > _MAX_IDENTIFIER_LEN:
++        msg = f"Argument 'identifier' exceeds maximum length of {_MAX_IDENTIFIER_LEN}"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if identifier.strip() == "help":
++        return None
++
++    if "summary_markdown" not in arguments:
++        msg = "Missing required argument 'summary_markdown'"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    summary = arguments["summary_markdown"]
++    if not isinstance(summary, str):
++        msg = "Argument 'summary_markdown' must be a string"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    summary_bytes = len(summary.encode("utf-8"))
++    if summary_bytes < 1 or summary_bytes > _MAX_SUMMARY_BYTES:
++        msg = f"Argument 'summary_markdown' must be 1..{_MAX_SUMMARY_BYTES} bytes"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if "verification_proof" not in arguments:
++        msg = "Missing required argument 'verification_proof'"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    raw_proof = arguments["verification_proof"]
++    if not isinstance(raw_proof, dict):
++        msg = "Argument 'verification_proof' must be a dictionary"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    try:
++        proof = VerificationProof.model_validate(raw_proof)
++        validate_proof_ticket_key(proof, identifier.strip())
++    except (ValidationError, ValueError) as err:
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, str(err)) from err
++
++    if "to_state" in arguments and arguments["to_state"] is not None:
++        ts = arguments["to_state"]
++        if not isinstance(ts, str) or not ts.strip():
++            msg = "Argument 'to_state' must be a non-empty string"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++        if len(ts.strip()) > _MAX_STATE_LEN:
++            msg = f"Argument 'to_state' exceeds maximum length of {_MAX_STATE_LEN}"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    return proof
++
++
++async def complete_work(
++    arguments: dict[str, Any],
++    *,
++    client: KanbanApiClient | None = None,
++) -> dict[str, Any]:
++    """Execute complete_work workflow: audit blockers, check QA gate, and close ticket."""
++    proof_obj = _validate_complete_work_arguments(arguments)
++    identifier = arguments["identifier"].strip()
++
++    ctx = get_current_mcp_context()
++    active_client = client or (ctx.client if ctx else None)
++    if active_client is None:
++        msg = "MCP request context or client unavailable"
++        raise KbMcpError(McpErrorCode.INTERNAL, msg)
++
++    subject_token = ctx.subject_token if ctx else None
++    session_id = ctx.session_id if ctx else None
++
++    if identifier == "help":
++        return await build_help(
++            "complete_work",
++            client=active_client,
++            subject_token=subject_token,
++            mcp_session_id=session_id,
++        )
++
++    summary_markdown = arguments["summary_markdown"]
++    payload: dict[str, Any] = {
++        "summary_markdown": summary_markdown,
++        "verification_proof": arguments["verification_proof"],
++    }
++    if arguments.get("to_state"):
++        payload["to_state"] = arguments["to_state"].strip()
++
++    resp_data = await active_client.request(
++        "POST",
++        f"/api/v1/issues/{identifier}/complete-work",
++        json_data=payload,
++        subject_token=subject_token,
++        mcp_session_id=session_id,
++    )
++
++    if not isinstance(resp_data, dict):
++        msg = "Invalid response from upstream complete-work endpoint"
++        raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++    # Check for 202 Accepted pending_agent_gate hold
++    if "execution_id" in resp_data and "active_agent" in resp_data:
++        return {
++            "status": "pending_agent_gate",
++            "key": str(resp_data.get("key", identifier)),
++            "from_state": str(resp_data.get("from_state", "")),
++            "to_state": str(resp_data.get("to_state", "")),
++            "execution_id": str(resp_data.get("execution_id", "")),
++            "active_agent": str(resp_data.get("active_agent", "")),
++            "hint": "transition is held; poll read_ticket for the gate verdict",
++        }
++
++    key = str(resp_data.get("key", identifier))
++    state_val = resp_data.get("state")
++    state_str = (
++        str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
++    )
++
++    proof_summary: dict[str, Any] = {
++        "qa_dir": proof_obj.qa_dir if proof_obj else arguments["verification_proof"].get("qa_dir"),
++        "artifacts": len(proof_obj.artifacts)
++        if proof_obj
++        else len(arguments["verification_proof"].get("artifacts", [])),
++        "verdict": proof_obj.reality_checker.verdict
++        if proof_obj
++        else arguments["verification_proof"].get("reality_checker", {}).get("verdict"),
++    }
++
++    result: dict[str, Any] = {
++        "status": "completed",
++        "key": key,
++        "state": resp_data.get("target_state") or state_str or "Done",
++        "proof": proof_summary,
++    }
++    if resp_data.get("comment_ref"):
++        result["comment"] = str(resp_data["comment_ref"])
++
++    return result
+diff --git a/mcp/surfaces/agent/proof.py b/mcp/surfaces/agent/proof.py
+new file mode 100644
+index 0000000..f259a95
+--- /dev/null
++++ b/mcp/surfaces/agent/proof.py
+@@ -0,0 +1,23 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Verification proof model and path invariants for MCP agent workflows (KB-P4-06)."""
++
++from __future__ import annotations
++
++from kanban.issues.proof import (
++    ARTIFACT_PATH_REGEX,
++    CI_RUN_URL_REGEX,
++    QA_DIR_REGEX,
++    RealityCheckerProof,
++    VerificationProof,
++    validate_proof_ticket_key,
++)
++
++__all__ = [
++    "ARTIFACT_PATH_REGEX",
++    "CI_RUN_URL_REGEX",
++    "QA_DIR_REGEX",
++    "RealityCheckerProof",
++    "VerificationProof",
++    "validate_proof_ticket_key",
++]
+diff --git a/mcp/surfaces/agent/transition_ticket.py b/mcp/surfaces/agent/transition_ticket.py
+new file mode 100644
+index 0000000..eb690a3
+--- /dev/null
++++ b/mcp/surfaces/agent/transition_ticket.py
+@@ -0,0 +1,174 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Implementation of the transition_ticket MCP tool (S11.2, KB-P4-06)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, Final
++
++from pydantic import ValidationError
++
++from mcp.context import get_current_mcp_context
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.help import build_help
++from mcp.surfaces.agent.proof import VerificationProof, validate_proof_ticket_key
++
++if TYPE_CHECKING:
++    from mcp.internal_client import KanbanApiClient
++
++__all__ = [
++    "TRANSITION_TICKET_SCHEMA",
++    "transition_ticket",
++]
++
++_MAX_IDENTIFIER_LEN: Final[int] = 200
++_MAX_STATE_LEN: Final[int] = 100
++_MAX_COMMENT_BYTES: Final[int] = 65536
++
++TRANSITION_TICKET_SCHEMA: Final[dict[str, Any]] = {
++    "type": "object",
++    "properties": {
++        "identifier": {
++            "type": "string",
++            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
++        },
++        "to_state": {
++            "type": "string",
++            "description": "Target workflow state name or UUID (cannot be a completed state)",
++        },
++        "comment_markdown": {
++            "type": "string",
++            "description": "Optional comment markdown (<= 65536 bytes)",
++        },
++        "verification_proof": {
++            "type": "object",
++            "description": "Optional structured VerificationProof packet",
++        },
++    },
++    "required": ["identifier", "to_state"],
++    "additionalProperties": False,
++}
++
++
++def _validate_transition_arguments(arguments: dict[str, Any]) -> None:  # noqa: C901, PLR0912
++    """Validate transition_ticket arguments against schema constraints."""
++    if "identifier" not in arguments:
++        msg = "Missing required argument 'identifier'"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    identifier = arguments["identifier"]
++    if not isinstance(identifier, str) or not identifier.strip():
++        msg = "Argument 'identifier' must be a non-empty string"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if len(identifier.strip()) > _MAX_IDENTIFIER_LEN:
++        msg = f"Argument 'identifier' exceeds maximum length of {_MAX_IDENTIFIER_LEN}"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if identifier.strip() == "help":
++        return
++
++    if "to_state" not in arguments:
++        msg = "Missing required argument 'to_state'"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    to_state = arguments["to_state"]
++    if not isinstance(to_state, str) or not to_state.strip():
++        msg = "Argument 'to_state' must be a non-empty string"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if len(to_state.strip()) > _MAX_STATE_LEN:
++        msg = f"Argument 'to_state' exceeds maximum length of {_MAX_STATE_LEN}"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if "comment_markdown" in arguments and arguments["comment_markdown"] is not None:
++        c = arguments["comment_markdown"]
++        if not isinstance(c, str):
++            msg = "Argument 'comment_markdown' must be a string"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++        if len(c.encode("utf-8")) > _MAX_COMMENT_BYTES:
++            msg = f"Argument 'comment_markdown' exceeds {_MAX_COMMENT_BYTES} bytes"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if "verification_proof" in arguments and arguments["verification_proof"] is not None:
++        raw_proof = arguments["verification_proof"]
++        if not isinstance(raw_proof, dict):
++            msg = "Argument 'verification_proof' must be a dictionary"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++        try:
++            proof = VerificationProof.model_validate(raw_proof)
++            validate_proof_ticket_key(proof, identifier.strip())
++        except (ValidationError, ValueError) as err:
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, str(err)) from err
++
++
++async def transition_ticket(
++    arguments: dict[str, Any],
++    *,
++    client: KanbanApiClient | None = None,
++) -> dict[str, Any]:
++    """Execute intermediate state transition on an issue."""
++    _validate_transition_arguments(arguments)
++    identifier = arguments["identifier"].strip()
++
++    ctx = get_current_mcp_context()
++    active_client = client or (ctx.client if ctx else None)
++    if active_client is None:
++        msg = "MCP request context or client unavailable"
++        raise KbMcpError(McpErrorCode.INTERNAL, msg)
++
++    subject_token = ctx.subject_token if ctx else None
++    session_id = ctx.session_id if ctx else None
++
++    if identifier == "help":
++        return await build_help(
++            "transition_ticket",
++            client=active_client,
++            subject_token=subject_token,
++            mcp_session_id=session_id,
++        )
++
++    to_state = arguments["to_state"].strip()
++    payload: dict[str, Any] = {"to_state": to_state}
++    if arguments.get("comment_markdown") is not None:
++        payload["comment_markdown"] = arguments["comment_markdown"]
++    if arguments.get("verification_proof") is not None:
++        payload["verification_proof"] = arguments["verification_proof"]
++
++    resp_data = await active_client.request(
++        "POST",
++        f"/api/v1/issues/{identifier}/transition",
++        json_data=payload,
++        subject_token=subject_token,
++        mcp_session_id=session_id,
++    )
++
++    if not isinstance(resp_data, dict):
++        msg = "Invalid response from upstream transition endpoint"
++        raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++    # Check for 202 Accepted pending_agent_gate hold
++    if "execution_id" in resp_data and "active_agent" in resp_data:
++        return {
++            "status": "pending_agent_gate",
++            "key": str(resp_data.get("key", identifier)),
++            "from_state": str(resp_data.get("from_state", "")),
++            "to_state": str(resp_data.get("to_state", "")),
++            "execution_id": str(resp_data.get("execution_id", "")),
++            "active_agent": str(resp_data.get("active_agent", "")),
++            "hint": "transition is held; poll read_ticket for the gate verdict",
++        }
++
++    key = str(resp_data.get("key", identifier))
++    state_val = resp_data.get("state")
++    state_str = (
++        str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
++    )
++    from_state = str(resp_data.get("from_state", ""))
++
++    return {
++        "status": "transitioned",
++        "key": key,
++        "from_state": from_state or "In Progress",
++        "to_state": resp_data.get("target_state") or state_str or to_state,
++    }
+diff --git a/mcp/tests/agent/test_pending_gate_contract.py b/mcp/tests/agent/test_pending_gate_contract.py
+new file mode 100644
+index 0000000..7fef67e
+--- /dev/null
++++ b/mcp/tests/agent/test_pending_gate_contract.py
+@@ -0,0 +1,168 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for pending_agent_gate contract and mock transport verification (KB-P4-06).
++
++Covers:
++  - 202 Accepted response translation to status: pending_agent_gate.
++  - Exact YAML keys: status, key, from_state, to_state, execution_id, active_agent, hint.
++  - TRANSITION_HELD error handling on non-null pending_transition_exec_id.
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++import httpx
++import pytest
++import yaml
++
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.internal_client import KanbanApiClient
++from mcp.settings import McpSettings
++from mcp.surfaces.agent.complete_work import complete_work
++from mcp.surfaces.agent.transition_ticket import transition_ticket
++from mcp.yaml_out import dump_yaml
++
++if TYPE_CHECKING:
++    from collections.abc import Callable
++
++
++def _create_mock_client(
++    handler: Callable[[httpx.Request], httpx.Response],
++) -> KanbanApiClient:
++    """Instantiate a KanbanApiClient backed by an httpx.MockTransport."""
++
++    def wrapped_handler(request: httpx.Request) -> httpx.Response:
++        if request.url.path == "/api/v1/auth/session" and request.method == "GET":
++            return httpx.Response(status_code=200, json={"csrf_token": "dummy_csrf_token"})
++        return handler(request)
++
++    transport = httpx.MockTransport(wrapped_handler)
++    settings = McpSettings()
++    return KanbanApiClient(settings=settings, transport=transport)
++
++
++async def test_transition_ticket_pending_agent_gate_contract() -> None:
++    """202 Accepted from kanban-api formats exact pending_agent_gate YAML structure."""
++    execution_id = "0196ed40-7b2a-7000-8000-112233445566"
++
++    def handler(request: httpx.Request) -> httpx.Response:
++        assert request.method == "POST"
++        assert "/transition" in request.url.path
++        return httpx.Response(
++            status_code=202,
++            json={
++                "status": "pending_agent_gate",
++                "execution_id": execution_id,
++                "active_agent": "code-reviewer",
++                "from_state": "In Review",
++                "to_state": "Done",
++            },
++        )
++
++    client = _create_mock_client(handler)
++
++    res = await transition_ticket(
++        {
++            "identifier": "KAN-142",
++            "to_state": "Done",
++            "comment_markdown": "Ready for review",
++        },
++        client=client,
++    )
++
++    assert res["status"] == "pending_agent_gate"
++    assert res["key"] == "KAN-142"
++    assert res["from_state"] == "In Review"
++    assert res["to_state"] == "Done"
++    assert res["execution_id"] == execution_id
++    assert res["active_agent"] == "code-reviewer"
++    assert res["hint"] == "transition is held; poll read_ticket for the gate verdict"
++
++    # Verify YAML serialization produces exact required keys
++    yaml_text = dump_yaml(res)
++    parsed = yaml.safe_load(yaml_text)
++    assert parsed["status"] == "pending_agent_gate"
++    assert parsed["key"] == "KAN-142"
++    assert parsed["from_state"] == "In Review"
++    assert parsed["to_state"] == "Done"
++    assert parsed["execution_id"] == execution_id
++    assert parsed["active_agent"] == "code-reviewer"
++    assert parsed["hint"] == "transition is held; poll read_ticket for the gate verdict"
++
++
++async def test_complete_work_pending_agent_gate_contract() -> None:
++    """complete_work returns pending_agent_gate structure on 202 Accepted."""
++    execution_id = "0196ed40-7b2a-7000-8000-223344556677"
++
++    def handler(request: httpx.Request) -> httpx.Response:
++        assert request.method == "POST"
++        assert "/complete-work" in request.url.path
++        return httpx.Response(
++            status_code=202,
++            json={
++                "status": "pending_agent_gate",
++                "execution_id": execution_id,
++                "active_agent": "reality-checker",
++                "from_state": "In Progress",
++                "to_state": "Done",
++            },
++        )
++
++    client = _create_mock_client(handler)
++
++    proof = {
++        "qa_dir": "docs/qa/KAN-142/",
++        "reality_checker": {
++            "verdict": "READY",
++            "grade": "A",
++            "report_path": "docs/qa/KAN-142/reality-checker-report.md",
++        },
++        "ci_run_url": "https://dash.hackedyour.info/runs/4444",
++        "artifacts": ["docs/qa/KAN-142/unit-test-results.txt"],
++    }
++
++    res = await complete_work(
++        {
++            "identifier": "KAN-142",
++            "summary_markdown": "Completing work",
++            "verification_proof": proof,
++        },
++        client=client,
++    )
++
++    assert res["status"] == "pending_agent_gate"
++    assert res["key"] == "KAN-142"
++    assert res["from_state"] == "In Progress"
++    assert res["to_state"] == "Done"
++    assert res["execution_id"] == execution_id
++    assert res["active_agent"] == "reality-checker"
++    assert res["hint"] == "transition is held; poll read_ticket for the gate verdict"
++
++
++async def test_transition_held_error_mapping() -> None:
++    """Issue with existing active gate hold yields TRANSITION_HELD error."""
++
++    def handler(_request: httpx.Request) -> httpx.Response:
++        return httpx.Response(
++            status_code=409,
++            json={
++                "code": "TRANSITION_HELD",
++                "title": "Transition Held",
++                "detail": "Issue transition is currently held by an active gate hook",
++            },
++        )
++
++    client = _create_mock_client(handler)
++
++    with pytest.raises(KbMcpError) as exc_info:
++        await transition_ticket(
++            {
++                "identifier": "KAN-142",
++                "to_state": "In Review",
++            },
++            client=client,
++        )
++
++    assert exc_info.value.code == McpErrorCode.TRANSITION_HELD
++    assert "currently held" in str(exc_info.value)
+diff --git a/mcp/tests/agent/test_search_tickets.py b/mcp/tests/agent/test_search_tickets.py
+index 4d2771b..11809b2 100644
+--- a/mcp/tests/agent/test_search_tickets.py
++++ b/mcp/tests/agent/test_search_tickets.py
+@@ -375,4 +375,12 @@ async def test_tools_list_agent_surface(agent_test_env: AgentTestEnv) -> None:
+     res_data = list_resp.json()
+     assert res_data["jsonrpc"] == "2.0"
+     tool_names = [t["name"] for t in res_data["result"]["tools"]]
+-    assert tool_names == ["search_tickets", "read_ticket", "create_ticket", "update_ticket"]
++    assert tool_names == [
++        "search_tickets",
++        "read_ticket",
++        "create_ticket",
++        "update_ticket",
++        "begin_work",
++        "transition_ticket",
++        "complete_work",
++    ]
+diff --git a/mcp/tests/agent/test_workflow_argument_validation.py b/mcp/tests/agent/test_workflow_argument_validation.py
+new file mode 100644
+index 0000000..fd8897c
+--- /dev/null
++++ b/mcp/tests/agent/test_workflow_argument_validation.py
+@@ -0,0 +1,352 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for argument validation and client error handling in MCP workflow tools (KB-P4-06)."""
++
++from __future__ import annotations
++
++from typing import Any
++from unittest.mock import AsyncMock
++
++import pytest
++
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.surfaces.agent.begin_work import (
++    _validate_begin_work_arguments,
++    begin_work,
++)
++from mcp.surfaces.agent.complete_work import (
++    _validate_complete_work_arguments,
++    complete_work,
++)
++from mcp.surfaces.agent.transition_ticket import (
++    _validate_transition_arguments,
++    transition_ticket,
++)
++
++
++def _valid_proof(key: str = "KAN-142") -> dict[str, Any]:
++    return {
++        "qa_dir": f"docs/qa/{key}/",
++        "artifacts": [f"docs/qa/{key}/git-diff.patch"],
++        "reality_checker": {
++            "verdict": "READY",
++            "grade": "A",
++            "report_path": f"docs/qa/{key}/reality-checker-report.md",
++        },
++        "ci_run_url": "https://dash.hackedyour.info/runs/1234",
++    }
++
++
++def test_begin_work_argument_validation() -> None:
++    """Validate begin_work arguments against schema rules and type boundaries."""
++    # Missing identifier
++    with pytest.raises(KbMcpError) as exc:
++        _validate_begin_work_arguments({})
++    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
++
++    # Non-string identifier
++    with pytest.raises(KbMcpError):
++        _validate_begin_work_arguments({"identifier": 123})
++
++    # Empty identifier
++    with pytest.raises(KbMcpError):
++        _validate_begin_work_arguments({"identifier": "   "})
++
++    # Identifier too long (> 200)
++    with pytest.raises(KbMcpError):
++        _validate_begin_work_arguments({"identifier": "a" * 201, "plan_markdown": "plan"})
++
++    # Identifier == "help" -> early exit
++    _validate_begin_work_arguments({"identifier": "help"})
++
++    # Missing plan_markdown
++    with pytest.raises(KbMcpError):
++        _validate_begin_work_arguments({"identifier": "KAN-142"})
++
++    # Non-string plan_markdown
++    with pytest.raises(KbMcpError):
++        _validate_begin_work_arguments({"identifier": "KAN-142", "plan_markdown": 123})
++
++    # Empty plan_markdown
++    with pytest.raises(KbMcpError):
++        _validate_begin_work_arguments({"identifier": "KAN-142", "plan_markdown": ""})
++
++    # Oversized plan_markdown
++    with pytest.raises(KbMcpError):
++        _validate_begin_work_arguments({"identifier": "KAN-142", "plan_markdown": "x" * 65537})
++
++    # Valid
++    _validate_begin_work_arguments({"identifier": "KAN-142", "plan_markdown": "Valid plan"})
++
++
++def test_transition_ticket_argument_validation() -> None:
++    """Validate transition_ticket arguments against schema rules and type boundaries."""
++    # Missing identifier
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments({})
++
++    # Non-string identifier
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments({"identifier": 123})
++
++    # Empty identifier
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments({"identifier": "  "})
++
++    # Identifier too long
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments({"identifier": "a" * 201, "to_state": "Todo"})
++
++    # Identifier == "help" -> early exit
++    _validate_transition_arguments({"identifier": "help"})
++
++    # Missing to_state
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments({"identifier": "KAN-142"})
++
++    # Non-string to_state
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments({"identifier": "KAN-142", "to_state": 123})
++
++    # Empty to_state
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments({"identifier": "KAN-142", "to_state": "   "})
++
++    # to_state too long (> 100)
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments({"identifier": "KAN-142", "to_state": "a" * 101})
++
++    # Non-string comment_markdown
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments(
++            {
++                "identifier": "KAN-142",
++                "to_state": "Todo",
++                "comment_markdown": 123,
++            }
++        )
++
++    # Oversized comment_markdown
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments(
++            {
++                "identifier": "KAN-142",
++                "to_state": "Todo",
++                "comment_markdown": "x" * 65537,
++            }
++        )
++
++    # Non-dict verification_proof
++    with pytest.raises(KbMcpError):
++        _validate_transition_arguments(
++            {
++                "identifier": "KAN-142",
++                "to_state": "Todo",
++                "verification_proof": "not a dict",
++            }
++        )
++
++    # Valid with proof
++    proof = _valid_proof("KAN-142")
++    _validate_transition_arguments(
++        {
++            "identifier": "KAN-142",
++            "to_state": "Todo",
++            "comment_markdown": "Comment",
++            "verification_proof": proof,
++        }
++    )
++
++
++def test_complete_work_argument_validation() -> None:
++    """Validate complete_work arguments against schema rules and type boundaries."""
++    # Missing identifier
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments({})
++
++    # Non-string identifier
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments({"identifier": 123})
++
++    # Empty identifier
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments({"identifier": ""})
++
++    # Identifier too long
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments({"identifier": "a" * 201})
++
++    # Identifier == "help" -> returns None
++    assert _validate_complete_work_arguments({"identifier": "help"}) is None
++
++    # Missing summary_markdown
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments({"identifier": "KAN-142"})
++
++    # Non-string summary_markdown
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments({"identifier": "KAN-142", "summary_markdown": 123})
++
++    # Empty summary_markdown
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments({"identifier": "KAN-142", "summary_markdown": ""})
++
++    # Oversized summary_markdown
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments(
++            {
++                "identifier": "KAN-142",
++                "summary_markdown": "x" * 65537,
++            }
++        )
++
++    # Missing verification_proof
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments(
++            {
++                "identifier": "KAN-142",
++                "summary_markdown": "Summary",
++            }
++        )
++
++    # Non-dict verification_proof
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments(
++            {
++                "identifier": "KAN-142",
++                "summary_markdown": "Summary",
++                "verification_proof": "invalid",
++            }
++        )
++
++    # Invalid to_state type / empty / too long
++    proof = _valid_proof("KAN-142")
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments(
++            {
++                "identifier": "KAN-142",
++                "summary_markdown": "Summary",
++                "verification_proof": proof,
++                "to_state": 123,
++            }
++        )
++
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments(
++            {
++                "identifier": "KAN-142",
++                "summary_markdown": "Summary",
++                "verification_proof": proof,
++                "to_state": "   ",
++            }
++        )
++
++    with pytest.raises(KbMcpError):
++        _validate_complete_work_arguments(
++            {
++                "identifier": "KAN-142",
++                "summary_markdown": "Summary",
++                "verification_proof": proof,
++                "to_state": "x" * 101,
++            }
++        )
++
++    # Valid
++    p = _validate_complete_work_arguments(
++        {
++            "identifier": "KAN-142",
++            "summary_markdown": "Summary",
++            "verification_proof": proof,
++            "to_state": "Done",
++        }
++    )
++    assert p is not None
++
++
++async def test_tool_invocations_without_client() -> None:
++    """Invoking tools outside MCP request context and without client raises INTERNAL."""
++    with pytest.raises(KbMcpError) as exc1:
++        await begin_work({"identifier": "KAN-142", "plan_markdown": "plan"}, client=None)
++    assert exc1.value.code == McpErrorCode.INTERNAL
++
++    with pytest.raises(KbMcpError) as exc2:
++        await transition_ticket({"identifier": "KAN-142", "to_state": "Todo"}, client=None)
++    assert exc2.value.code == McpErrorCode.INTERNAL
++
++    proof = _valid_proof("KAN-142")
++    with pytest.raises(KbMcpError) as exc3:
++        await complete_work(
++            {"identifier": "KAN-142", "summary_markdown": "done", "verification_proof": proof},
++            client=None,
++        )
++    assert exc3.value.code == McpErrorCode.INTERNAL
++
++
++async def test_mocked_upstream_responses() -> None:
++    """Test upstream error, pending_agent_gate, cycle handling, and comment handling."""
++    mock_client = AsyncMock()
++
++    # Upstream non-dict response
++    mock_client.request.return_value = "not a dict"
++    with pytest.raises(KbMcpError) as exc:
++        await begin_work(
++            {"identifier": "KAN-142", "plan_markdown": "plan"},
++            client=mock_client,
++        )
++    assert exc.value.code == McpErrorCode.UPSTREAM_ERROR
++
++    with pytest.raises(KbMcpError) as exc_tr:
++        await transition_ticket(
++            {"identifier": "KAN-142", "to_state": "Todo"},
++            client=mock_client,
++        )
++    assert exc_tr.value.code == McpErrorCode.UPSTREAM_ERROR
++
++    proof = _valid_proof("KAN-142")
++    with pytest.raises(KbMcpError) as exc_cw:
++        await complete_work(
++            {"identifier": "KAN-142", "summary_markdown": "done", "verification_proof": proof},
++            client=mock_client,
++        )
++    assert exc_cw.value.code == McpErrorCode.UPSTREAM_ERROR
++
++    # pending_agent_gate response in begin_work
++    mock_client.request.return_value = {
++        "execution_id": "01932e6a-7a54-7221-a3f1-e7a9b0c1d2e3",
++        "active_agent": "reality-checker",
++        "from_state": "Backlog",
++        "to_state": "In Progress",
++    }
++    gate_res = await begin_work(
++        {"identifier": "KAN-142", "plan_markdown": "plan"},
++        client=mock_client,
++    )
++    assert gate_res["status"] == "pending_agent_gate"
++    assert gate_res["active_agent"] == "reality-checker"
++
++    # Comment in complete_work
++    mock_client.request.return_value = {
++        "key": "KAN-142",
++        "state": {"name": "Done"},
++        "comment_ref": "KAN-142#c-123",
++    }
++    cw_res = await complete_work(
++        {"identifier": "KAN-142", "summary_markdown": "done", "verification_proof": proof},
++        client=mock_client,
++    )
++    assert cw_res["status"] == "completed"
++    assert cw_res["comment"] == "KAN-142#c-123"
++    assert cw_res["proof"]["verdict"] == "READY"
++
++    # Cycle as string in begin_work
++    mock_client.request.return_value = {
++        "key": "KAN-142",
++        "state": "In Progress",
++        "cycle": "Sprint 99",
++        "assignees": [],
++    }
++    bw_res = await begin_work(
++        {"identifier": "KAN-142", "plan_markdown": "plan"},
++        client=mock_client,
++    )
++    assert bw_res["cycle"] == "Sprint 99"
+diff --git a/mcp/tests/agent/test_workflow_tools.py b/mcp/tests/agent/test_workflow_tools.py
+new file mode 100644
+index 0000000..c404f1d
+--- /dev/null
++++ b/mcp/tests/agent/test_workflow_tools.py
+@@ -0,0 +1,238 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for /mcp/agent workflow tools (KB-P4-06).
++
++Covers:
++  - begin_work: help, positive transition, plan comment, validation errors.
++  - transition_ticket: help, positive transition, USE_COMPLETE_WORK guard, validation.
++  - complete_work: help, positive completion, QA gate check, blocker guard, validation.
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, cast
++
++import pytest
++import yaml
++
++if TYPE_CHECKING:
++    from mcp.tests.agent.conftest import AgentTestEnv
++
++pytestmark = pytest.mark.committed_db
++
++
++def _make_proof(ticket_key: str, verdict: str = "READY", grade: str = "A") -> dict[str, Any]:
++    """Construct a valid VerificationProof dictionary for a ticket key."""
++    return {
++        "qa_dir": f"docs/qa/{ticket_key}/",
++        "reality_checker": {
++            "verdict": verdict,
++            "grade": grade,
++            "report_path": f"docs/qa/{ticket_key}/reality-checker-report.md",
++        },
++        "ci_run_url": "https://dash.hackedyour.info/runs/9876",
++        "artifacts": [
++            f"docs/qa/{ticket_key}/git-diff.patch",
++            f"docs/qa/{ticket_key}/unit-test-results.txt",
++        ],
++    }
++
++
++async def _call_tool(
++    env: AgentTestEnv,
++    tool_name: str,
++    arguments: dict[str, Any],
++    *,
++    subject_token: str | None = None,
++    session_id: str | None = None,
++) -> dict[str, Any]:
++    """Invoke tool via JSON-RPC 2.0 tools/call."""
++    active_session_id = session_id
++    if active_session_id is None:
++        init_resp = await env.mcp_client.post(
++            "/mcp/agent",
++            json={
++                "jsonrpc": "2.0",
++                "id": 999,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-agent", "version": "1.0"},
++                },
++            },
++            headers={"X-KB-Subject-Token": subject_token} if subject_token else {},
++        )
++        assert init_resp.status_code == 200
++        active_session_id = init_resp.headers["mcp-session-id"]
++
++    headers: dict[str, str] = {"mcp-session-id": active_session_id}
++    if subject_token is not None:
++        headers["X-KB-Subject-Token"] = subject_token
++
++    req_payload = {
++        "jsonrpc": "2.0",
++        "id": 1,
++        "method": "tools/call",
++        "params": {
++            "name": tool_name,
++            "arguments": arguments,
++        },
++    }
++    resp = await env.mcp_client.post("/mcp/agent", json=req_payload, headers=headers)
++    assert resp.status_code == 200
++    data = resp.json()
++    assert data["jsonrpc"] == "2.0"
++    assert data["id"] == 1
++    return cast("dict[str, Any]", data["result"])
++
++
++async def test_begin_work_help(agent_test_env: AgentTestEnv) -> None:
++    """begin_work('help') returns tool help documentation."""
++    env = agent_test_env
++    res = await _call_tool(env, "begin_work", {"identifier": "help", "plan_markdown": "none"})
++    assert res["isError"] is False
++    text = res["content"][0]["text"]
++    assert "begin_work" in text
++
++
++async def test_begin_work_validation_errors(agent_test_env: AgentTestEnv) -> None:
++    """begin_work enforces required fields and size constraints."""
++    env = agent_test_env
++
++    # Missing plan_markdown
++    res1 = await _call_tool(env, "begin_work", {"identifier": "KAN-142"})
++    assert res1["isError"] is True
++
++    # Empty plan_markdown
++    res2 = await _call_tool(env, "begin_work", {"identifier": "KAN-142", "plan_markdown": ""})
++    assert res2["isError"] is True
++
++    # Oversized plan_markdown (> 65536 bytes)
++    res3 = await _call_tool(
++        env,
++        "begin_work",
++        {"identifier": "KAN-142", "plan_markdown": "x" * 65537},
++    )
++    assert res3["isError"] is True
++
++
++async def test_begin_work_positive_execution(agent_test_env: AgentTestEnv) -> None:
++    """begin_work moves issue to started state, attaches plan comment and caller."""
++    env = agent_test_env
++    res = await _call_tool(
++        env,
++        "begin_work",
++        {"identifier": "KAN-150", "plan_markdown": "### Implementation Plan\n1. Run tests"},
++        subject_token=env.token_adam,
++    )
++    assert res["isError"] is False
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert parsed["status"] == "started"
++    assert parsed["key"] == "KAN-150"
++    assert parsed["state"] == "In Progress"
++    assert "@adam" in parsed["assignees"]
++    assert "comment" in parsed
++
++
++async def test_transition_ticket_help_and_guards(agent_test_env: AgentTestEnv) -> None:
++    """transition_ticket provides help and blocks transitions to completed states."""
++    env = agent_test_env
++
++    # Help
++    h_res = await _call_tool(env, "transition_ticket", {"identifier": "help", "to_state": "Todo"})
++    assert h_res["isError"] is False
++    assert "transition_ticket" in h_res["content"][0]["text"]
++
++    # Blocked: transition to Done requires complete_work
++    guard_res = await _call_tool(
++        env,
++        "transition_ticket",
++        {"identifier": "KAN-142", "to_state": "Done"},
++        subject_token=env.token_adam,
++    )
++    assert guard_res["isError"] is True
++    err_text = guard_res["content"][0]["text"]
++    assert "USE_COMPLETE_WORK" in err_text or "complete_work" in err_text
++
++
++async def test_transition_ticket_positive_execution(agent_test_env: AgentTestEnv) -> None:
++    """transition_ticket successfully transitions to another non-completed state."""
++    env = agent_test_env
++    res = await _call_tool(
++        env,
++        "transition_ticket",
++        {
++            "identifier": "KAN-142",
++            "to_state": "Todo",
++            "comment_markdown": "Moving back to Todo for refinement",
++        },
++        subject_token=env.token_adam,
++    )
++    assert res["isError"] is False
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert parsed["status"] == "transitioned"
++    assert parsed["key"] == "KAN-142"
++    assert parsed["to_state"] == "Todo"
++
++
++async def test_complete_work_help_and_validations(agent_test_env: AgentTestEnv) -> None:
++    """complete_work validates proof paths, traversal, and verdict."""
++    env = agent_test_env
++
++    # Help
++    h_res = await _call_tool(
++        env,
++        "complete_work",
++        {"identifier": "help", "summary_markdown": "Done", "verification_proof": {}},
++    )
++    assert h_res["isError"] is False
++
++    # Path traversal rejection (..)
++    bad_proof = _make_proof("KAN-142")
++    bad_proof["artifacts"].append("docs/qa/KAN-142/../../evil.sh")
++    res1 = await _call_tool(
++        env,
++        "complete_work",
++        {"identifier": "KAN-142", "summary_markdown": "Summary", "verification_proof": bad_proof},
++        subject_token=env.token_adam,
++    )
++    assert res1["isError"] is True
++    err_text = res1["content"][0]["text"]
++    assert "traversal" in err_text.lower() or "VALIDATION_FAILED" in err_text
++
++    # Key mismatch rejection
++    mismatch_proof = _make_proof("KAN-999")
++    res2 = await _call_tool(
++        env,
++        "complete_work",
++        {
++            "identifier": "KAN-142",
++            "summary_markdown": "Summary",
++            "verification_proof": mismatch_proof,
++        },
++        subject_token=env.token_adam,
++    )
++    assert res2["isError"] is True
++
++
++async def test_complete_work_positive_execution(agent_test_env: AgentTestEnv) -> None:
++    """complete_work marks ticket Done and posts verification proof table."""
++    env = agent_test_env
++    proof = _make_proof("KAN-150")
++    res = await _call_tool(
++        env,
++        "complete_work",
++        {
++            "identifier": "KAN-150",
++            "summary_markdown": "All deliverables and automated tests complete.",
++            "verification_proof": proof,
++        },
++        subject_token=env.token_adam,
++    )
++    assert res["isError"] is False
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert parsed["status"] == "completed"
++    assert parsed["key"] == "KAN-150"
++    assert parsed["state"] == "Done"
++    assert "comment" in parsed
+diff --git a/mcp/tests/test_protocol.py b/mcp/tests/test_protocol.py
+index e7d9a8a..bba7199 100644
+--- a/mcp/tests/test_protocol.py
++++ b/mcp/tests/test_protocol.py
+@@ -30,7 +30,15 @@ async def test_case_1_positive_initialize_and_tools_list(
+         (
+             "/mcp/agent",
+             "kanban-mcp-agent",
+-            ["search_tickets", "read_ticket", "create_ticket", "update_ticket"],
++            [
++                "search_tickets",
++                "read_ticket",
++                "create_ticket",
++                "update_ticket",
++                "begin_work",
++                "transition_ticket",
++                "complete_work",
++            ],
+             "search_tickets",
+             {"gate_status": "approved"},
+             "gate history available",

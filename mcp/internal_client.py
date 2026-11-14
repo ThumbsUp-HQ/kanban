@@ -263,7 +263,15 @@ class KanbanApiClient:
         candidates_list = (
             [dict(c) for c in prob_candidates] if isinstance(prob_candidates, list) else None
         )
-        raise KbMcpError(mapped_code, error_message, hint=hint_str, candidates=candidates_list)
+        prob_blockers = problem.get("blockers")
+        blockers_list = [str(b) for b in prob_blockers] if isinstance(prob_blockers, list) else None
+        raise KbMcpError(
+            mapped_code,
+            error_message,
+            hint=hint_str,
+            candidates=candidates_list,
+            blockers=blockers_list,
+        )
 
     @staticmethod
     def _resolve_conflict_code(prob_type: str, prob_code: str) -> McpErrorCode:
@@ -282,6 +290,8 @@ class KanbanApiClient:
             "PRIORITY_IN_USE": McpErrorCode.PRIORITY_IN_USE,
             "INVALID_TRANSITION": McpErrorCode.INVALID_TRANSITION,
             "INVALID_CYCLE_TRANSITION": McpErrorCode.INVALID_TRANSITION,
+            "OPEN_CHILD_BLOCKERS": McpErrorCode.OPEN_CHILD_BLOCKERS,
+            "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
         }
         if prob_code in conflict_map:
             return conflict_map[prob_code]
@@ -291,7 +301,11 @@ class KanbanApiClient:
         return McpErrorCode.VALIDATION_FAILED
 
     @staticmethod
-    def _resolve_error_code(status_code: int, prob_type: str, prob_code: str = "") -> McpErrorCode:
+    def _resolve_error_code(
+        status_code: int,
+        prob_type: str,
+        prob_code: str = "",
+    ) -> McpErrorCode:
         """Determine McpErrorCode from HTTP status and problem type."""
         code_map: dict[str, McpErrorCode] = {
             "AAL2_REQUIRED": McpErrorCode.AAL2_REQUIRED,
@@ -310,6 +324,12 @@ class KanbanApiClient:
             "KEY_SCOPE_VIOLATION": McpErrorCode.KEY_SCOPE_VIOLATION,
             "CONNECTION_SCOPE_VIOLATION": McpErrorCode.CONNECTION_SCOPE_VIOLATION,
             "CONFLICTING_SCOPE_HEADERS": McpErrorCode.CONFLICTING_SCOPE_HEADERS,
+            "NO_STARTED_STATE": McpErrorCode.NO_STARTED_STATE,
+            "USE_COMPLETE_WORK": McpErrorCode.USE_COMPLETE_WORK,
+            "OPEN_CHILD_BLOCKERS": McpErrorCode.OPEN_CHILD_BLOCKERS,
+            "QA_VERDICT_NOT_READY": McpErrorCode.QA_VERDICT_NOT_READY,
+            "INVALID_TRANSITION": McpErrorCode.INVALID_TRANSITION,
+            "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
         }
         if prob_code in code_map:
             return code_map[prob_code]
@@ -327,6 +347,12 @@ class KanbanApiClient:
             "not-archived": McpErrorCode.NOT_ARCHIVED,
             "confirm-phrase-mismatch": McpErrorCode.CONFIRM_PHRASE_MISMATCH,
             "lockout-prevented": McpErrorCode.LOCKOUT_PREVENTED,
+            "no-started-state": McpErrorCode.NO_STARTED_STATE,
+            "use-complete-work": McpErrorCode.USE_COMPLETE_WORK,
+            "open-child-blockers": McpErrorCode.OPEN_CHILD_BLOCKERS,
+            "qa-verdict-not-ready": McpErrorCode.QA_VERDICT_NOT_READY,
+            "invalid-transition": McpErrorCode.INVALID_TRANSITION,
+            "transition-held": McpErrorCode.TRANSITION_HELD,
         }
         for suffix, err_code in suffix_map.items():
             if prob_type.endswith(suffix):

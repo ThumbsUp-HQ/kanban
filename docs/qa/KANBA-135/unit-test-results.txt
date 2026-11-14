@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /tmp/kb-wt-KANBA-135
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, socket-0.8.1, cov-7.1.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 33 items
+
+kanban/tests/api/test_issue_workflow.py .............                    [ 39%]
+kanban/tests/issues/test_proof.py .....                                  [ 54%]
+mcp/tests/agent/test_pending_gate_contract.py ...                        [ 63%]
+mcp/tests/agent/test_workflow_tools.py .......                           [ 84%]
+mcp/tests/agent/test_workflow_argument_validation.py .....               [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/api/v1/issue_workflow.py              81      0     12      3    97%   105->108, 164->167, 226->229
+kanban/issues/__init__.py                     3      0      0      0   100%
+kanban/issues/proof.py                       58      0     14      0   100%
+kanban/issues/workflow_service.py           234      9     78     14    93%   157->162, 209, 290, 391, 410->427, 430, 490, 496, 510, 527->507, 529->507, 604, 642, 662->680
+mcp/surfaces/agent/begin_work.py             67      2     28      2    96%   94, 145
+mcp/surfaces/agent/complete_work.py          87      2     36      3    96%   133, 146, 194->197
+mcp/surfaces/agent/proof.py                   3      0      0      0   100%
+mcp/surfaces/agent/transition_ticket.py      82      4     36      2    95%   101-102, 124, 136
+-------------------------------------------------------------------------------------
+TOTAL                                       615     17    204     24    95%
+============================= 33 passed in 10.08s ==============================

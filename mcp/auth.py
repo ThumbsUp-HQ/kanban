@@ -59,9 +59,9 @@ SCOPE_REQUIREMENTS: Final[dict[str, frozenset[str]]] = {
     "create_ticket": frozenset({"agent:write"}),
     "update_ticket": frozenset({"agent:write"}),
     "begin_work": frozenset({"agent:write"}),
+    "transition_ticket": frozenset({"agent:write"}),
     "complete_work": frozenset({"agent:write"}),
     "add_comment": frozenset({"agent:write"}),
-    "transition_ticket": frozenset({"agent:write"}),
     "link_objects": frozenset({"agent:write"}),
     "test_agent_write": frozenset({"agent:write"}),
     # Docs surface tools

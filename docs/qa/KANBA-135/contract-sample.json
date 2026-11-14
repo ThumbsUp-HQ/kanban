@@ -1,0 +1,94 @@
+{
+  "begin_work": {
+    "request": {
+      "identifier": "KAN-142",
+      "plan_markdown": "### Implementation Plan\n1. Run isolated tests\n2. Implement composite endpoints\n3. Verify forensic proof"
+    },
+    "mcp_response": {
+      "status": "started",
+      "key": "KAN-142",
+      "state": "In Progress",
+      "assignees": ["@adam"],
+      "cycle": "Cycle 4",
+      "comment": "KAN-142#c-0196ed40"
+    }
+  },
+  "transition_ticket": {
+    "request": {
+      "identifier": "KAN-142",
+      "to_state": "In Review",
+      "comment_markdown": "Implementation complete; moving to In Review for specialist audit."
+    },
+    "mcp_response": {
+      "status": "transitioned",
+      "key": "KAN-142",
+      "to_state": "In Review",
+      "comment": "KAN-142#c-0196ed41"
+    }
+  },
+  "complete_work": {
+    "request": {
+      "identifier": "KAN-142",
+      "summary_markdown": "### Implementation Complete\nAll unit tests passing with >=95% coverage, zero linter warnings, and verified specialist sign-offs.",
+      "verification_proof": {
+        "qa_dir": "docs/qa/KAN-142/",
+        "artifacts": [
+          "docs/qa/KAN-142/git-diff.patch",
+          "docs/qa/KAN-142/unit-test-results.txt",
+          "docs/qa/KAN-142/build-check.txt",
+          "docs/qa/KAN-142/mcp-transcript.txt"
+        ],
+        "reality_checker": {
+          "verdict": "READY",
+          "grade": "A",
+          "report_path": "docs/qa/KAN-142/reality-checker-report.md"
+        },
+        "ci_run_url": "https://dash.hackedyour.info/runs/48291"
+      }
+    },
+    "mcp_response": {
+      "status": "completed",
+      "key": "KAN-142",
+      "state": "Done",
+      "proof": {
+        "qa_dir": "docs/qa/KAN-142/",
+        "artifacts": 4,
+        "verdict": "READY"
+      },
+      "comment": "KAN-142#c-0196ed42"
+    }
+  },
+  "pending_agent_gate": {
+    "http_status": 202,
+    "api_response": {
+      "status": "pending_agent_gate",
+      "execution_id": "0196ed40-7b2a-7000-8000-112233445566",
+      "active_agent": "reality-checker",
+      "from_state": "In Progress",
+      "to_state": "Done"
+    },
+    "mcp_tool_output": {
+      "status": "pending_agent_gate",
+      "key": "KAN-142",
+      "from_state": "In Progress",
+      "to_state": "Done",
+      "execution_id": "0196ed40-7b2a-7000-8000-112233445566",
+      "active_agent": "reality-checker",
+      "hint": "transition is held; poll read_ticket for the gate verdict"
+    }
+  },
+  "open_child_blockers_redacted": {
+    "http_status": 409,
+    "api_response": {
+      "type": "urn:kanban:problem:OPEN_CHILD_BLOCKERS",
+      "title": "Open Child Blockers",
+      "status": 409,
+      "code": "OPEN_CHILD_BLOCKERS",
+      "detail": "Issue has open blockers preventing completion",
+      "blockers": [
+        "KAN-143",
+        "redacted: 1 hidden blocker"
+      ]
+    }
+  }
+}

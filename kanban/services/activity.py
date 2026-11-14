@@ -178,6 +178,7 @@ class ActivityEventType(StrEnum):
     PLANE_IMPORT_COMPLETED = "PLANE_IMPORT_COMPLETED"
     WORKSPACE_SETTINGS_CHANGED = "WORKSPACE_SETTINGS_CHANGED"
     AIR_GAP_MODE_CHANGED = "AIR_GAP_MODE_CHANGED"
+    WORK_COMPLETED = "WORK_COMPLETED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -295,6 +296,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.AUTH_CARD_DELETED: ActivityCategory.SYSTEM,
         ActivityEventType.AUTH_CARD_HANDSHAKE_TESTED: ActivityCategory.SYSTEM,
         ActivityEventType.STANDALONE_BACKUP_EXPORTED: ActivityCategory.SYSTEM,
+        ActivityEventType.WORK_COMPLETED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVAL_REQUESTED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVED_PRIMARY: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVED: ActivityCategory.HISTORY,

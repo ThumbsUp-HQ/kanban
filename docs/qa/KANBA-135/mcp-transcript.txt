@@ -1,0 +1,168 @@
+=== MCP Surface /mcp/agent Protocol Transcript: KANBA-135 ===
+Client: stdio / JSON-RPC 2.0
+Surface: /mcp/agent
+Version: 2025-06-18
+
+--- 1. tools/call begin_work (Assign caller, move to In Progress, attach active cycle, post plan) ---
+--> Request:
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "begin_work",
+    "arguments": {
+      "identifier": "KAN-150",
+      "plan_markdown": "### Implementation Plan\n1. Run isolated tests\n2. Implement composite endpoints\n3. Verify forensic proof"
+    }
+  }
+}
+
+<-- Response:
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "status: started\nkey: KAN-150\nstate: In Progress\nassignees:\n  - \"@adam\"\ncomment: KAN-150#c-01a1d824\n"
+      }
+    ],
+    "isError": false
+  }
+}
+
+--- 2. tools/call transition_ticket with USE_COMPLETE_WORK Guard (Attempt transition to Done) ---
+--> Request:
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "transition_ticket",
+    "arguments": {
+      "identifier": "KAN-142",
+      "to_state": "Done"
+    }
+  }
+}
+
+<-- Response:
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "error: USE_COMPLETE_WORK\nmessage: Cannot transition to terminal state 'Done' using transition_ticket.\nhint: Use complete_work with required verification proof and summary markdown.\n"
+      }
+    ],
+    "isError": true
+  }
+}
+
+--- 3. tools/call transition_ticket (Valid intermediate move to In Review) ---
+--> Request:
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "transition_ticket",
+    "arguments": {
+      "identifier": "KAN-142",
+      "to_state": "In Review",
+      "comment_markdown": "All unit tests passing with >=95% coverage; handing over for specialist gate audit."
+    }
+  }
+}
+
+<-- Response:
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "status: transitioned\nkey: KAN-142\nto_state: In Review\ncomment: KAN-142#c-01a1d825\n"
+      }
+    ],
+    "isError": false
+  }
+}
+
+--- 4. tools/call complete_work (QA Gate Certified, Blocker Audit Clean, Done State) ---
+--> Request:
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "complete_work",
+    "arguments": {
+      "identifier": "KAN-150",
+      "summary_markdown": "### Implementation Complete\nAll deliverables complete and verified with automated test suites.",
+      "verification_proof": {
+        "qa_dir": "docs/qa/KAN-150/",
+        "artifacts": [
+          "docs/qa/KAN-150/git-diff.patch",
+          "docs/qa/KAN-150/unit-test-results.txt"
+        ],
+        "reality_checker": {
+          "verdict": "READY",
+          "grade": "A",
+          "report_path": "docs/qa/KAN-150/reality-checker-report.md"
+        },
+        "ci_run_url": "https://dash.hackedyour.info/runs/9876"
+      }
+    }
+  }
+}
+
+<-- Response:
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "status: completed\nkey: KAN-150\nstate: Done\nproof:\n  qa_dir: docs/qa/KAN-150/\n  artifacts: 2\n  verdict: READY\ncomment: KAN-150#c-01a1d826\n"
+      }
+    ],
+    "isError": false
+  }
+}
+
+--- 5. tools/call transition_ticket (Provisional Gate Hold 202 -> pending_agent_gate) ---
+--> Request:
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "name": "transition_ticket",
+    "arguments": {
+      "identifier": "KAN-142",
+      "to_state": "Done"
+    }
+  }
+}
+
+<-- Response:
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "status: pending_agent_gate\nkey: KAN-142\nfrom_state: In Review\nto_state: Done\nexecution_id: 0196ed40-7b2a-7000-8000-112233445566\nactive_agent: code-reviewer\nhint: transition is held; poll read_ticket for the gate verdict\n"
+      }
+    ],
+    "isError": false
+  }
+}
