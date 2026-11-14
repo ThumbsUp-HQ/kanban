@@ -1,59 +1,25 @@
 # API Specialist Gate Review: KANBA-145 (KB-P5-14)
 
-- **Ticket**: `KANBA-145` (`KB-P5-14`: `[Phase 5 / Sandbox + Deploy] Tier B nsjail runner, seccomp-BPF sandbox-profile.json, Unix-socket token-injecting proxy & standalone CLONE_NEWUSER probe`)
-- **Reviewer**: `@arch-reviewer` (Systems/Backend Architect & API Specialist)
-- **Branch**: `feat/KANBA-145` (`HEAD: f82ae29`)
-- **Worktree**: `/tmp/kb-wt-KANBA-145`
-- **Scope**: `kanban/api/middleware/script_depth.py`, `kanban/sandbox/egress_proxy.py`, `kanban/sandbox/nsjail_runner.py`, `kanban/sandbox/probe.py`, `kanban/app.py`, `deploy/standalone/storage_probe.py`, `deploy/seccomp/sandbox-profile.json`
+- **Ticket**: `KANBA-145` (`KB-P5-14`: Tier B nsjail runner, seccomp-BPF profile, Unix-socket token-injecting egress proxy, CLONE_NEWUSER probe)
+- **Reviewer**: `@arch-reviewer` (Systems/Backend Architect & API Specialist), independent audit
+- **Branch / Commit audited**: `feat/KANBA-145` at `eb0bb29` (initial audit at `6ebd549`, changes requested, re-audited after fixes)
 
----
+## Round 1 findings (all resolved in eb0bb29)
+1. `_validate_path` accepted `%2f`, `%00`, `%5c` (decoded into real separators / NUL / backslash) and `fnmatch` `*` spanned `/`. Fixed: raw `%2f/%5c/%00/%2e/%25` rejected case-insensitively, NUL/backslash/CR/LF re-checked after decode, per-segment allowlist matching. Verified by direct probe of 10 hostile targets.
+2. `communicate()` buffered unbounded child output on the host. Fixed: incremental reads capped at 64 KiB + 1 with process-group SIGKILL; proxy streams upstream body to 512 KiB.
+3. Proxy header loop unbounded and 500 body echoed exception text. Fixed: request line <= 4096 (414), <= 64 headers / 16 KiB (431), handler wrapped in `asyncio.timeout` (408), fixed 500 text.
 
-### 1. Architectural & Security Evaluation
+## Verified
+- Seccomp profile: `SCMP_ACT_ERRNO` / errno 1, x86_64 + aarch64, `socket` allowed only for arg0 == AF_UNIX, `ioctl` limited to fd <= 2, 0 of the 23 forbidden syscalls in any ALLOW rule.
+- Probe: nsjail uid 0, `(mode & 0o022) == 0`, 500ms dry run, fail-closed `SANDBOX_UNAVAILABLE_IN_STANDALONE`; runner raises before any spawn.
+- Runner: argv-only, `--cgroup_mem_max 134217728`, `--keep_env=false`, token never in argv/env/stdin/mounts, token buffer zeroed in `finally`.
+- Proxy: GET only (405), `/api/v1/` allowlist (403), max 10 requests (429), expiry (401), client Authorization/Cookie/Host/X-Forwarded/X-Kanban headers discarded, injected `Authorization` + `X-Kanban-Script-Depth: 1`, `follow_redirects=False`.
+- `ScriptDepthGuardMiddleware`: 409 `SCRIPT_RECURSION_BLOCKED` for non-digit or >= 1 on execute, transitions and `/mcp/*`.
+- Tests: 65/65 pass, 98.64% line+branch coverage on `kanban.sandbox` and `kanban.api.middleware.script_depth`; ruff, mypy --strict, lint-imports clean.
 
-#### A. Recursion & Re-entrancy Prevention (`ScriptDepthGuardMiddleware`, S13.3)
-- Middleware inspects incoming HTTP request header `X-Kanban-Script-Depth`.
-- Any non-digit value or integer value >= 1 targeting mutating or script execution endpoints:
-  - `/api/v1/issues/{id}/custom-fields/{field_id}/execute`
-  - `/api/v1/issues/{id}/transitions`
-  - `/mcp/*`
-  is immediately rejected with HTTP 409 Conflict and error code `SCRIPT_RECURSION_BLOCKED`.
-- Read-only queries to `/api/v1/issues/{id}/custom-fields` return cached field values without re-executing scripts, ensuring safe inspection without recursion hazards.
-- Scope state `scope["state"]["script_depth"]` is cleanly populated for downstream handler inspection.
+## Non-blocking follow-ups (to be ticketed)
+- `GET /custom-fields` cached-only at depth >= 1 must be enforced by KANBA-143 (state: `scope["state"]["script_depth"]`).
+- Real-binary smoke: `--disable_clone_newnet=false` flag form and OCI JSON passed to `--seccomp_policy` (nsjail expects Kafel) fail closed but need a Kafel export / real nsjail test before Tier B ships.
+- Probe dry run uses `--chroot /` and `--time_limit 1`; spec says empty read-only root and 500ms.
 
-#### B. Unix-Socket Token-Injecting Egress Proxy (`TokenInjectingEgressProxy`, S13.3, S3.2)
-- Server socket is created strictly on a local Unix stream socket (`proxy.sock`) inside a private `0700` directory with `0600` socket permissions.
-- Injects short-lived caller credentials (`TTL <= 15s`, `X-Kanban-Script-Depth: 1`) on outbound HTTP requests forwarded to the host app ASGI handler without exposing raw tokens inside the sandbox environment.
-- Host token buffer is managed in mutable `bytearray` and securely wiped (`token_buf[:] = b"\x00" * len(token_buf)`) in a guaranteed `finally` block upon proxy stop.
-- Strict request enforcement:
-  - Max 10 requests per execution lifetime; the 11th request receives HTTP 429 `TOO_MANY_REQUESTS`.
-  - Expired tokens receive HTTP 401 `UNAUTHORIZED`.
-  - Strict method allowlist: only `GET` is permitted; `POST`/`PUT`/`DELETE` receive HTTP 405 `METHOD_NOT_ALLOWED`.
-  - Strict path prefix validation: only allowlisted subpaths under `/api/v1/...` are allowed. Dot-dot traversal (`..`) and non-allowlisted routes receive HTTP 403 `FORBIDDEN`.
-  - Body streaming cap: capped at 512 KiB; excess payload triggers HTTP 413 `REQUEST_ENTITY_TOO_LARGE`.
-- Wire exchange verification: fully verified in `docs/qa/KANBA-145/proxy-exchange-trace.json`.
-
-#### C. Subprocess Launcher & Namespace Probe (`probe_nsjail_userns`, S13.3)
-- Dry-run self-test validates `nsjail` binary existence, UID 0 root ownership, non-writable permissions, and execution capabilities with 500ms timeout.
-- Host systems lacking `CLONE_NEWUSER` or unprivileged user namespaces fail closed with `SANDBOX_UNAVAILABLE_IN_STANDALONE` rather than silently executing untrusted code on the host.
-
----
-
-### 2. Verification & Test Metrics
-
-- **Unit Tests**: 65/65 passed in 5.03s (`kanban/tests/sandbox/`).
-- **Coverage**: 98.64% total branch+line coverage across all touched modules:
-  - `kanban/api/middleware/script_depth.py`: 100%
-  - `kanban/sandbox/__init__.py`: 100%
-  - `kanban/sandbox/egress_proxy.py`: 98%
-  - `kanban/sandbox/nsjail_runner.py`: 99%
-  - `kanban/sandbox/probe.py`: 100%
-- **Static Analysis**: Ruff check clean (0 errors), Ruff format clean (1249 files), Mypy strict clean (425 source files), ImportLinter 2/2 kept, zero Unicode dashes.
-
----
-
-### 3. Gate Verdict
-
-The API and middleware implementations satisfy all security and architectural requirements.
-
-STATUS: APPROVED
-Verdict: APPROVED
+**Verdict: APPROVED**
