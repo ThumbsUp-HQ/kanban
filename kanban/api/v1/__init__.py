@@ -36,6 +36,7 @@ from kanban.api.v1.objects_access import router as objects_access_router
 from kanban.api.v1.project_config import router as project_config_router
 from kanban.api.v1.projects import router as projects_router
 from kanban.api.v1.resolve import router as resolve_router
+from kanban.api.v1.search import router as search_router
 from kanban.api.v1.stickies import router as stickies_router
 from kanban.api.v1.subscriptions import router as subscriptions_router
 from kanban.api.v1.views import router as views_router
@@ -79,4 +80,5 @@ def build_v1_router() -> APIRouter:
     v1.include_router(mcp_introspect_router)
     v1.include_router(subscriptions_router)
     v1.include_router(notifications_router)
+    v1.include_router(search_router)
     return v1
