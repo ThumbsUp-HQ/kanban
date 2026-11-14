@@ -1,0 +1,1232 @@
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: iRWsrTVtgsND-Toav1ZeJAjFlLNXPtPvpY3qUKW3TKg
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: iRWsrTVtgsND-Toav1ZeJAjFlLNXPtPvpY3qUKW3TKg
+Cookie: __Host-kb_csrf=OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+Content-Length: 128
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-142","lod":"full"}}}
+
+HTTP/1.1 200 OK
+content-length: 2666
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"key: KAN-142\nsummary: Harden Multi-Card OIDC & LDAPS Auth Studio\nstate: In Progress\npriority: urgent\nassignees: ['@adam']\ndescription_markdown: |-\n  # OIDC Architecture\n  Full description with sensitive details.\n  Line 2.\nlinks:\n  outbound:\n  - id: b16e8fd4-e137-4e0f-8c99-ab79915cef9e\n    link_type: RELATES_TO\n    link_state: ACTIVE\n    target: {id: df384700-9329-4617-a9ae-e37f6533cb97, type: issue, key: KAN-150, title: LDAPS StartTLS bind verification}\n  truncated: false\netag: 12e33633a0a9390ffd7d0f810768edf334927f70260f4a5ac499a91ae9a48864\naccess_manifest:\n  pill_label: Project\n  explicit_grant_count: 0\n  inherited_scope:\n    kind: project\n    scope_label: 'Project: KAN'\n    workspace_id: 01a1d7f3-ebd3-7214-9647-3509edfd348e\n    workspace_name: Engineering WS\n    project_id: 01a1d7f3-ebef-7ebd-be21-702be8479cab\n    project_key: KAN\n    project_name: Kanban Core\n  users:\n  - principal_id: 01a1d7f3-ebd5-74ac-b9bf-725f8d9b757e\n    handle: '@admin'\n    display_name: Admin User\n    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]\n    grant_source: project_owner\n  - principal_id: 01a1d7f3-ebe9-77b9-89f5-4b79f5593f9a\n    handle: '@adam'\n    display_name: Adam\n    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK]\n    grant_source: project_role\n  redacted_count: 0\ncomments:\n- id: a5a6ecfa-66ad-4220-8d24-f6a43bbef04a\n  issue_id: 1f68e76d-8ed3-4a7f-9641-5afded9fd447\n  author_id: 01a1d7f3-ebe9-77b9-89f5-4b79f5593f9a\n  author: {id: 01a1d7f3-ebe9-77b9-89f5-4b79f5593f9a, handle: '@adam', display_name: Adam}\n  body_markdown: Initial security audit comment for OIDC.\n  body_sha256: 1cd3f45f80f9c59e3f595269bd8df0162ad725fb580a9ef783096835453893c2\n  permalink: /projects/KAN/issues/KAN-142#comment-a5a6ecfa-66ad-4220-8d24-f6a43bbef04a\n  created_at: '2026-11-14T02:47:29.554629Z'\n  deleted: false\nactivity:\n- id: 01a1d7f3-ec17-706e-8be1-e2e5b4524b98\n  category: COMMENT\n  event_type: COMMENT_CREATED\n  actor: {id: 01a1d7f3-ebe9-77b9-89f5-4b79f5593f9a, type: USER, handle: '@01a1d7f3', display_name: Adam}\n  created_at: '2026-11-14T02:47:29.559562Z'\n  payload: {comment_id: a5a6ecfa-66ad-4220-8d24-f6a43bbef04a}\n  comment: {id: a5a6ecfa-66ad-4220-8d24-f6a43bbef04a, body_markdown: Initial security audit comment for OIDC., permalink: /projects/KAN/issues/KAN-142#comment-a5a6ecfa-66ad-4220-8d24-f6a43bbef04a}\nprovenance:\n  created_by: {redacted: true, label: 1 External Collaborator}\n  original_created_by: {redacted: true, label: 1 External Collaborator}\n  overridden: false\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: -6VtvdhLm4gA86jKVwoSLR-oXcGbI3u3ZjzunsU1SOQ
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: -6VtvdhLm4gA86jKVwoSLR-oXcGbI3u3ZjzunsU1SOQ
+Cookie: __Host-kb_csrf=OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+Content-Length: 132
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-142","lod":"standard"}}}
+
+HTTP/1.1 200 OK
+content-length: 654
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"key: KAN-142\nsummary: Harden Multi-Card OIDC & LDAPS Auth Studio\nstate: In Progress\npriority: urgent\nassignees: ['@adam']\ndescription_markdown: |-\n  # OIDC Architecture\n  Full description with sensitive details.\n  Line 2.\nlinks:\n  outbound:\n  - id: b16e8fd4-e137-4e0f-8c99-ab79915cef9e\n    link_type: RELATES_TO\n    link_state: ACTIVE\n    target: {id: df384700-9329-4617-a9ae-e37f6533cb97, type: issue, key: KAN-150, title: LDAPS StartTLS bind verification}\n  truncated: false\netag: 12e33633a0a9390ffd7d0f810768edf334927f70260f4a5ac499a91ae9a48864\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: AqF8Tozlvq4jI-DQmNChdhcYdZDWqpXZrAa2pQ4FpLY
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: AqF8Tozlvq4jI-DQmNChdhcYdZDWqpXZrAa2pQ4FpLY
+Cookie: __Host-kb_csrf=OszYgoGMnvUy03AokMXsSw.3Ks12LnVKO5RQuDZdVPO3tN5nIVx5TKDfrMeWqIIGnA
+Content-Length: 131
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-142","lod":"summary"}}}
+
+HTTP/1.1 200 OK
+content-length: 216
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"key: KAN-142\nsummary: Harden Multi-Card OIDC & LDAPS Auth Studio\nstate: In Progress\npriority: urgent\nassignees: ['@adam']\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: qouYYdZ_B3ACFnnKDdNHYg.3TxuI9Wk1rmPbLEBXifVgXQQ9iaLp_gpDCLLoOEO-P4
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=qouYYdZ_B3ACFnnKDdNHYg.3TxuI9Wk1rmPbLEBXifVgXQQ9iaLp_gpDCLLoOEO-P4
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: chApl8Bhw7G7wPwyc2lcZKFK8rsZagH5fj6cJhAF6z4
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: qouYYdZ_B3ACFnnKDdNHYg.3TxuI9Wk1rmPbLEBXifVgXQQ9iaLp_gpDCLLoOEO-P4
+mcp-session-id: chApl8Bhw7G7wPwyc2lcZKFK8rsZagH5fj6cJhAF6z4
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=qouYYdZ_B3ACFnnKDdNHYg.3TxuI9Wk1rmPbLEBXifVgXQQ9iaLp_gpDCLLoOEO-P4
+Content-Length: 113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"SEC-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 141
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: NOT_FOUND, message: ticket not found}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: qouYYdZ_B3ACFnnKDdNHYg.3TxuI9Wk1rmPbLEBXifVgXQQ9iaLp_gpDCLLoOEO-P4
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=qouYYdZ_B3ACFnnKDdNHYg.3TxuI9Wk1rmPbLEBXifVgXQQ9iaLp_gpDCLLoOEO-P4
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: m8Q9zaHPAiRKhAARJj3SCNSsLTU1O-em5oPT4SoCGWE
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: qouYYdZ_B3ACFnnKDdNHYg.3TxuI9Wk1rmPbLEBXifVgXQQ9iaLp_gpDCLLoOEO-P4
+mcp-session-id: m8Q9zaHPAiRKhAARJj3SCNSsLTU1O-em5oPT4SoCGWE
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=qouYYdZ_B3ACFnnKDdNHYg.3TxuI9Wk1rmPbLEBXifVgXQQ9iaLp_gpDCLLoOEO-P4
+Content-Length: 117
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-99999"}}}
+
+HTTP/1.1 200 OK
+content-length: 141
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: NOT_FOUND, message: ticket not found}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: _kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=_kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: EEph4eDuZv9rU-8dSAnmB6mNNb6udNYRItlvtoF3zeU
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: _kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: EEph4eDuZv9rU-8dSAnmB6mNNb6udNYRItlvtoF3zeU
+Cookie: __Host-kb_csrf=_kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+Content-Length: 93
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{}}}
+
+HTTP/1.1 200 OK
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: Missing required parameter 'identifier'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: _kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=_kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: RDHQ9lIH9ydZkr1B6368H2mb83csYSTWuj5wTHGJnqE
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: _kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: RDHQ9lIH9ydZkr1B6368H2mb83csYSTWuj5wTHGJnqE
+Cookie: __Host-kb_csrf=_kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+Content-Length: 133
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-142","extra":"invalid"}}}
+
+HTTP/1.1 200 OK
+content-length: 158
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: Unknown parameter 'extra'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: _kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=_kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: SUbqK1ZbTqWk6kFgN-wsS5KsYmJAgL6MIRKS9JV_p7g
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: _kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: SUbqK1ZbTqWk6kFgN-wsS5KsYmJAgL6MIRKS9JV_p7g
+Cookie: __Host-kb_csrf=_kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+Content-Length: 134
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-142","lod":"super_full"}}}
+
+HTTP/1.1 200 OK
+content-length: 210
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: 'Invalid lod ''super_full''. Expected ''summary'', ''standard'', or ''full'''}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: _kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=_kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: RylGR9F5rsA78baKFXaI9h1qjJJlK-r24YKOhemb7vI
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: _kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: RylGR9F5rsA78baKFXaI9h1qjJJlK-r24YKOhemb7vI
+Cookie: __Host-kb_csrf=_kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+Content-Length: 135
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-142","comments_limit":51}}}
+
+HTTP/1.1 200 OK
+content-length: 183
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: comments_limit must be an integer between 0 and 50}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: _kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=_kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: YSWyH0IfXN_SZn03x9RnXodwh1GUfBtz8rWM6OG7mvc
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: _kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: YSWyH0IfXN_SZn03x9RnXodwh1GUfBtz8rWM6OG7mvc
+Cookie: __Host-kb_csrf=_kjDmLoLrEqn3BwbiDaEgA.yZpmeJc4UaQZArLUT3UZD017IRRcXPr1_b65rSvSFfA
+Content-Length: 135
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-142","comments_limit":-1}}}
+
+HTTP/1.1 200 OK
+content-length: 183
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: comments_limit must be an integer between 0 and 50}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: EWtAFobm1NwsGga9NUJigQ.fN4fIOJUMEzqgzArsbzgZrjP_Ulu9KFEYqgmv_Kkyxo
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=EWtAFobm1NwsGga9NUJigQ.fN4fIOJUMEzqgzArsbzgZrjP_Ulu9KFEYqgmv_Kkyxo
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: hEfRnvztMAsWyUPWzCWP0q1U-GuKGEslpuHOAj41464
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: EWtAFobm1NwsGga9NUJigQ.fN4fIOJUMEzqgzArsbzgZrjP_Ulu9KFEYqgmv_Kkyxo
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: hEfRnvztMAsWyUPWzCWP0q1U-GuKGEslpuHOAj41464
+Cookie: __Host-kb_csrf=EWtAFobm1NwsGga9NUJigQ.fN4fIOJUMEzqgzArsbzgZrjP_Ulu9KFEYqgmv_Kkyxo
+Content-Length: 112
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"help"}}}
+
+HTTP/1.1 200 OK
+content-length: 178
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"tool: read_ticket\nparams: {identifier: KAN-142 | uuid, lod: summary | standard | full}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: klHb_-OD_NiW7fa-8A_oEg.bOtPMgWZnV3l9Ex5xsDXmOQ4V563JabWEngixKrq0fA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=klHb_-OD_NiW7fa-8A_oEg.bOtPMgWZnV3l9Ex5xsDXmOQ4V563JabWEngixKrq0fA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: jUBJGW-XFSVyFlYxzc8SXmsuxql6086t3-8pToT8d6w
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: klHb_-OD_NiW7fa-8A_oEg.bOtPMgWZnV3l9Ex5xsDXmOQ4V563JabWEngixKrq0fA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: jUBJGW-XFSVyFlYxzc8SXmsuxql6086t3-8pToT8d6w
+Cookie: __Host-kb_csrf=klHb_-OD_NiW7fa-8A_oEg.bOtPMgWZnV3l9Ex5xsDXmOQ4V563JabWEngixKrq0fA
+Content-Length: 147
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-142","lod":"full","comments_limit":0}}}
+
+HTTP/1.1 200 OK
+content-length: 2128
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"key: KAN-142\nsummary: Harden Multi-Card OIDC & LDAPS Auth Studio\nstate: In Progress\npriority: urgent\nassignees: ['@adam']\ndescription_markdown: |-\n  # OIDC Architecture\n  Full description with sensitive details.\n  Line 2.\nlinks:\n  outbound:\n  - id: b422bf5b-327b-4fc7-9776-5a268e500955\n    link_type: RELATES_TO\n    link_state: ACTIVE\n    target: {id: 9aa4c2e8-9a6a-4f58-bcc7-2f9ce94c787c, type: issue, key: KAN-150, title: LDAPS StartTLS bind verification}\n  truncated: false\netag: 12e33633a0a9390ffd7d0f810768edf334927f70260f4a5ac499a91ae9a48864\naccess_manifest:\n  pill_label: Project\n  explicit_grant_count: 0\n  inherited_scope:\n    kind: project\n    scope_label: 'Project: KAN'\n    workspace_id: 01a1d7f3-f1d7-739d-8e97-ff55cdd1a4d2\n    workspace_name: Engineering WS\n    project_id: 01a1d7f3-f1df-7737-8718-6a88052d83b7\n    project_key: KAN\n    project_name: Kanban Core\n  users:\n  - principal_id: 01a1d7f3-f1d8-798d-ae48-711c43d9c006\n    handle: '@admin'\n    display_name: Admin User\n    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]\n    grant_source: project_owner\n  - principal_id: 01a1d7f3-f1dd-7c7f-b6b1-96842ba4cb70\n    handle: '@adam'\n    display_name: Adam\n    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK]\n    grant_source: project_role\n  redacted_count: 0\nactivity:\n- id: 01a1d7f3-f1f0-761d-b085-db9696c35576\n  category: COMMENT\n  event_type: COMMENT_CREATED\n  actor: {id: 01a1d7f3-f1dd-7c7f-b6b1-96842ba4cb70, type: USER, handle: '@01a1d7f3', display_name: Adam}\n  created_at: '2026-11-14T02:47:31.056229Z'\n  payload: {comment_id: 991e7ab6-aeea-453f-bdd1-2f8202e9a860}\n  comment: {id: 991e7ab6-aeea-453f-bdd1-2f8202e9a860, body_markdown: Initial security audit comment for OIDC., permalink: /projects/KAN/issues/KAN-142#comment-991e7ab6-aeea-453f-bdd1-2f8202e9a860}\nprovenance:\n  created_by: {redacted: true, label: 1 External Collaborator}\n  original_created_by: {redacted: true, label: 1 External Collaborator}\n  overridden: false\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: y4KhOGh_oegMW6otWydhdg.HxkWrFmYPEnhNzqTMWon56fP795umOhYfAuOn2k1NHw
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=y4KhOGh_oegMW6otWydhdg.HxkWrFmYPEnhNzqTMWon56fP795umOhYfAuOn2k1NHw
+Content-Length: 157
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: SM6HZEnHRQkPzjHzI1BLT-o-3PInCOPk57pvtzbC9gY
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: y4KhOGh_oegMW6otWydhdg.HxkWrFmYPEnhNzqTMWon56fP795umOhYfAuOn2k1NHw
+mcp-session-id: SM6HZEnHRQkPzjHzI1BLT-o-3PInCOPk57pvtzbC9gY
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=y4KhOGh_oegMW6otWydhdg.HxkWrFmYPEnhNzqTMWon56fP795umOhYfAuOn2k1NHw
+Content-Length: 186
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"query":"OIDC","project":"KAN","states":["In Progress"],"assignees":["me"],"lod":"summary"}}}
+
+HTTP/1.1 200 OK
+content-length: 259
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 1\nitems:\n- key: KAN-142\n  summary: Harden Multi-Card OIDC & LDAPS Auth Studio\n  state: In Progress\n  priority: urgent\n  assignees: ['@adam']\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: TtDqmLqmkMk6iKwnpKLoJBpsEOMu9UZSuxMo9aOyRiQ
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+mcp-session-id: TtDqmLqmkMk6iKwnpKLoJBpsEOMu9UZSuxMo9aOyRiQ
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+Content-Length: 112
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"query":"secret"}}}
+
+HTTP/1.1 200 OK
+content-length: 114
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+X-KB-Subject-Token: kb_agt_admin_***REDACTED***
+Cookie: __Host-kb_csrf=suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: aeAIOaaZ-6-fnVdjMLmmX5sJfmttB5lk4CLzKNf-HMk
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+mcp-session-id: aeAIOaaZ-6-fnVdjMLmmX5sJfmttB5lk4CLzKNf-HMk
+X-KB-Subject-Token: kb_agt_admin_***REDACTED***
+Cookie: __Host-kb_csrf=suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+Content-Length: 112
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"query":"secret"}}}
+
+HTTP/1.1 200 OK
+content-length: 212
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 1\nitems: [{key: SEC-1, summary: Secret issue containing secret data, state: Todo, priority: high}]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+X-KB-Subject-Token: kb_agt_nogrant_***REDACTED***
+Cookie: __Host-kb_csrf=suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: yoySN5PkFlN_cEMpSFbaApCsrvgNjbyGPRetV0kmFWk
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+mcp-session-id: yoySN5PkFlN_cEMpSFbaApCsrvgNjbyGPRetV0kmFWk
+X-KB-Subject-Token: kb_agt_nogrant_***REDACTED***
+Cookie: __Host-kb_csrf=suO8LPw4MfHrT-Fc2A3lCw.zdY65KV8Q1O4nXy7yFsOzs7i9UUPnbbVal_e17z1jRA
+Content-Length: 126
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"query":"OIDC","project":"KAN"}}}
+
+HTTP/1.1 200 OK
+content-length: 114
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 897JxDJDE-EFWA-C5ZgVy97PqKGbg-aBQpsL250GEeA
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: 897JxDJDE-EFWA-C5ZgVy97PqKGbg-aBQpsL250GEeA
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 106
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"limit":51}}}
+
+HTTP/1.1 200 OK
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: limit must be an integer between 1 and 50}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: M-UrB3yXuTQZYVDWzAJs5g0cqZXgdngDBIwhsnwVAtI
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: M-UrB3yXuTQZYVDWzAJs5g0cqZXgdngDBIwhsnwVAtI
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 607
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"query":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}
+
+HTTP/1.1 200 OK
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: query length (501) exceeds maximum of 500}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: O6crpOuSMIJdAxmRavIjptAnncmymy_k6W4DNx4EPVE
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: O6crpOuSMIJdAxmRavIjptAnncmymy_k6W4DNx4EPVE
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 107
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"foo":"bar"}}}
+
+HTTP/1.1 200 OK
+content-length: 156
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: Unknown parameter 'foo'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: ucGGEwB06i_UiTdrvAfuk4gRpQSdVPZNV5k2OwWCERA
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+mcp-session-id: ucGGEwB06i_UiTdrvAfuk4gRpQSdVPZNV5k2OwWCERA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 106
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"limit":50}}}
+
+HTTP/1.1 200 OK
+content-length: 2843
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 30\nitems:\n- {key: KAN-4, summary: KAN Issue 4 for pagination test, state: Todo, priority: medium}\n- {key: KAN-10, summary: KAN Issue 10 for pagination test, state: Todo, priority: medium}\n- {key: KAN-15, summary: KAN Issue 15 for pagination test, state: Todo, priority: medium}\n- {key: KAN-18, summary: KAN Issue 18 for pagination test, state: Todo, priority: medium}\n- {key: KAN-14, summary: KAN Issue 14 for pagination test, state: Todo, priority: medium}\n- {key: KAN-3, summary: OIDC Token Refresh, state: Todo, priority: medium}\n- {key: PUB-7, summary: PUB Issue 7 for public backlog, state: Todo, priority: medium}\n- {key: PUB-4, summary: PUB Issue 4 for public backlog, state: Todo, priority: medium}\n- {key: KAN-12, summary: KAN Issue 12 for pagination test, state: Todo, priority: medium}\n- key: KAN-142\n  summary: Harden Multi-Card OIDC & LDAPS Auth Studio\n  state: In Progress\n  priority: urgent\n  assignees: ['@adam']\n- {key: PUB-6, summary: PUB Issue 6 for public backlog, state: Todo, priority: medium}\n- {key: PUB-3, summary: PUB Issue 3 for public backlog, state: Todo, priority: medium}\n- {key: KAN-150, summary: LDAPS StartTLS bind verification, state: Todo, priority: high}\n- {key: KAN-7, summary: KAN Issue 7 for pagination test, state: Todo, priority: medium}\n- {key: PUB-8, summary: PUB Issue 8 for public backlog, state: Todo, priority: medium}\n- {key: KAN-13, summary: KAN Issue 13 for pagination test, state: Todo, priority: medium}\n- {key: KAN-20, summary: KAN Issue 20 for pagination test, state: Todo, priority: medium}\n- {key: PUB-9, summary: PUB Issue 9 for public backlog, state: Todo, priority: medium}\n- {key: KAN-5, summary: KAN Issue 5 for pagination test, state: Todo, priority: medium}\n- {key: KAN-6, summary: KAN Issue 6 for pagination test, state: Todo, priority: medium}\n- {key: KAN-17, summary: KAN Issue 17 for pagination test, state: Todo, priority: medium}\n- {key: KAN-8, summary: KAN Issue 8 for pagination test, state: Todo, priority: medium}\n- {key: PUB-5, summary: PUB Issue 5 for public backlog, state: Todo, priority: medium}\n- {key: PUB-1, summary: PUB Issue 1 for public backlog, state: Todo, priority: medium}\n- {key: PUB-10, summary: PUB Issue 10 for public backlog, state: Todo, priority: medium}\n- {key: KAN-19, summary: KAN Issue 19 for pagination test, state: Todo, priority: medium}\n- {key: PUB-2, summary: PUB Issue 2 for public backlog, state: Todo, priority: medium}\n- {key: KAN-9, summary: KAN Issue 9 for pagination test, state: Todo, priority: medium}\n- {key: KAN-16, summary: KAN Issue 16 for pagination test, state: Todo, priority: medium}\n- {key: KAN-11, summary: KAN Issue 11 for pagination test, state: Todo, priority: medium}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: PQHNdO3nkFroGga5rWrwp36OyYJ8noL0J3ekPYA1038
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+mcp-session-id: PQHNdO3nkFroGga5rWrwp36OyYJ8noL0J3ekPYA1038
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 106
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"limit":20}}}
+
+HTTP/1.1 200 OK
+content-length: 2160
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 30\nitems:\n- {key: KAN-4, summary: KAN Issue 4 for pagination test, state: Todo, priority: medium}\n- {key: KAN-10, summary: KAN Issue 10 for pagination test, state: Todo, priority: medium}\n- {key: KAN-15, summary: KAN Issue 15 for pagination test, state: Todo, priority: medium}\n- {key: KAN-18, summary: KAN Issue 18 for pagination test, state: Todo, priority: medium}\n- {key: KAN-14, summary: KAN Issue 14 for pagination test, state: Todo, priority: medium}\n- {key: KAN-3, summary: OIDC Token Refresh, state: Todo, priority: medium}\n- {key: PUB-7, summary: PUB Issue 7 for public backlog, state: Todo, priority: medium}\n- {key: PUB-4, summary: PUB Issue 4 for public backlog, state: Todo, priority: medium}\n- {key: KAN-12, summary: KAN Issue 12 for pagination test, state: Todo, priority: medium}\n- key: KAN-142\n  summary: Harden Multi-Card OIDC & LDAPS Auth Studio\n  state: In Progress\n  priority: urgent\n  assignees: ['@adam']\n- {key: PUB-6, summary: PUB Issue 6 for public backlog, state: Todo, priority: medium}\n- {key: PUB-3, summary: PUB Issue 3 for public backlog, state: Todo, priority: medium}\n- {key: KAN-150, summary: LDAPS StartTLS bind verification, state: Todo, priority: high}\n- {key: KAN-7, summary: KAN Issue 7 for pagination test, state: Todo, priority: medium}\n- {key: PUB-8, summary: PUB Issue 8 for public backlog, state: Todo, priority: medium}\n- {key: KAN-13, summary: KAN Issue 13 for pagination test, state: Todo, priority: medium}\n- {key: KAN-20, summary: KAN Issue 20 for pagination test, state: Todo, priority: medium}\n- {key: PUB-9, summary: PUB Issue 9 for public backlog, state: Todo, priority: medium}\n- {key: KAN-5, summary: KAN Issue 5 for pagination test, state: Todo, priority: medium}\n- {key: KAN-6, summary: KAN Issue 6 for pagination test, state: Todo, priority: medium}\nnext_cursor: eyJ2IjoiMS4wIiwiaSI6IjU0MzZiZGU1LTAzMTMtNDBmOS1iMDBjLWIyNzY4OTA3ODdmNyIsInEiOiIxNWMzOGFmZTY5YjY2NThiIiwicyI6ImEzMGM3NmU5YzZkM2IxZDIzMmY5M2NjYmU3MDNiMmM3YjJlZmU4NTgyMjRhZDM1MTlkOTZkYThiN2QwODZkNTMifQ\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 0yiqTtpYOFG6hedz8gWxLSj8qV0R-7ROBZ1E81dgAqA
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+mcp-session-id: 0yiqTtpYOFG6hedz8gWxLSj8qV0R-7ROBZ1E81dgAqA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=hAwf3TTDqjpSOxamxGDbSg.qIF-hNotw4nYDk6Zonvcv2UkQCNDv7vzPacAxTu1We8
+Content-Length: 316
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"limit":20,"cursor":"eyJ2IjoiMS4wIiwiaSI6IjU0MzZiZGU1LTAzMTMtNDBmOS1iMDBjLWIyNzY4OTA3ODdmNyIsInEiOiIxNWMzOGFmZTY5YjY2NThiIiwicyI6ImEzMGM3NmU5YzZkM2IxZDIzMmY5M2NjYmU3MDNiMmM3YjJlZmU4NTgyMjRhZDM1MTlkOTZkYThiN2QwODZkNTMifQ"}}}
+
+HTTP/1.1 200 OK
+content-length: 1019
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 30\nitems:\n- {key: KAN-17, summary: KAN Issue 17 for pagination test, state: Todo, priority: medium}\n- {key: KAN-8, summary: KAN Issue 8 for pagination test, state: Todo, priority: medium}\n- {key: PUB-5, summary: PUB Issue 5 for public backlog, state: Todo, priority: medium}\n- {key: PUB-1, summary: PUB Issue 1 for public backlog, state: Todo, priority: medium}\n- {key: PUB-10, summary: PUB Issue 10 for public backlog, state: Todo, priority: medium}\n- {key: KAN-19, summary: KAN Issue 19 for pagination test, state: Todo, priority: medium}\n- {key: PUB-2, summary: PUB Issue 2 for public backlog, state: Todo, priority: medium}\n- {key: KAN-9, summary: KAN Issue 9 for pagination test, state: Todo, priority: medium}\n- {key: KAN-16, summary: KAN Issue 16 for pagination test, state: Todo, priority: medium}\n- {key: KAN-11, summary: KAN Issue 11 for pagination test, state: Todo, priority: medium}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: _D_P7TySW7mApIe4ILRDiXqWC5NsOl3CrBCZbYUORnY
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+mcp-session-id: _D_P7TySW7mApIe4ILRDiXqWC5NsOl3CrBCZbYUORnY
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+Content-Length: 126
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"query":"OIDC","lod":"summary"}}}
+
+HTTP/1.1 200 OK
+content-length: 335
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 2\nitems:\n- key: KAN-142\n  summary: Harden Multi-Card OIDC & LDAPS Auth Studio\n  state: In Progress\n  priority: urgent\n  assignees: ['@adam']\n- {key: KAN-3, summary: OIDC Token Refresh, state: Todo, priority: medium}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: WVwGDjinqSlsZr9sLGJEjEn3NN8kG-GteX5fSvvVXaQ
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+mcp-session-id: WVwGDjinqSlsZr9sLGJEjEn3NN8kG-GteX5fSvvVXaQ
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+Content-Length: 127
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"query":"OIDC","lod":"standard"}}}
+
+HTTP/1.1 200 OK
+content-length: 517
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 2\nitems:\n- key: KAN-142\n  summary: Harden Multi-Card OIDC & LDAPS Auth Studio\n  state: In Progress\n  priority: urgent\n  assignees: ['@adam']\n  description_markdown: |-\n    # OIDC Architecture\n    Full description with sensitive details.\n    Line 2.\n- key: KAN-3\n  summary: OIDC Token Refresh\n  state: Todo\n  priority: medium\n  description_markdown: Refresh tokens under OIDC specification.\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: DkCpUE0Ndcl8r4HmeoCIOOeI3AbJ2CAv-pNGlVAxcDo
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+mcp-session-id: DkCpUE0Ndcl8r4HmeoCIOOeI3AbJ2CAv-pNGlVAxcDo
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+Content-Length: 126
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"query":"OIDC","mode":"hybrid"}}}
+
+HTTP/1.1 200 OK
+content-length: 335
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 2\nitems:\n- key: KAN-142\n  summary: Harden Multi-Card OIDC & LDAPS Auth Studio\n  state: In Progress\n  priority: urgent\n  assignees: ['@adam']\n- {key: KAN-3, summary: OIDC Token Refresh, state: Todo, priority: medium}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: yAGQfXtqGt0CWGHPiG2reJBbLevIiqTzsO2bcl4LWeQ
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+mcp-session-id: yAGQfXtqGt0CWGHPiG2reJBbLevIiqTzsO2bcl4LWeQ
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+Content-Length: 119
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"gate_status":"pending"}}}
+
+HTTP/1.1 200 OK
+content-length: 197
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 1\nitems: [{key: KAN-3, summary: OIDC Token Refresh, state: Todo, priority: medium}]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: KrFChzXjUc-KJcmp2qNJCeIv3VaGbfztlQKKQ4RwCyM
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+mcp-session-id: KrFChzXjUc-KJcmp2qNJCeIv3VaGbfztlQKKQ4RwCyM
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=ieamjygU1YqW0u6k5AsJOg._2fqiMysBOIYw7Hl89NJKknUvSNCGl9Nb9RUeJUyghA
+Content-Length: 120
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tickets","arguments":{"gate_status":"approved"}}}
+
+HTTP/1.1 200 OK
+content-length: 155
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"mode: lexical\ntotal: 0\nnote: gate history available in Phase 5\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: QZWV_zqTQn6oYsul2r4H-g.I3HP1HIDIbwtkb-JaAZGzVm-TSObnbjxxpRzlINhfr8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+Cookie: __Host-kb_csrf=QZWV_zqTQn6oYsul2r4H-g.I3HP1HIDIbwtkb-JaAZGzVm-TSObnbjxxpRzlINhfr8
+Content-Length: 157
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: M-mk6NF97wSSe-4UC75Ha5VCtb4TBKa4IJ1prIHfswk
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/agent HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: QZWV_zqTQn6oYsul2r4H-g.I3HP1HIDIbwtkb-JaAZGzVm-TSObnbjxxpRzlINhfr8
+X-KB-Subject-Token: kb_agt_adam_***REDACTED***
+mcp-session-id: M-mk6NF97wSSe-4UC75Ha5VCtb4TBKa4IJ1prIHfswk
+Cookie: __Host-kb_csrf=QZWV_zqTQn6oYsul2r4H-g.I3HP1HIDIbwtkb-JaAZGzVm-TSObnbjxxpRzlINhfr8
+Content-Length: 58
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+
+HTTP/1.1 200 OK
+content-length: 2140
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search_tickets","description":"Search tickets by text and structured filters under caller permissions.","inputSchema":{"type":"object","properties":{"query":{"type":"string","maxLength":500,"description":"Optional lexical query string"},"project":{"type":"string","description":"Project key or UUID"},"states":{"type":"array","items":{"type":"string"},"maxItems":20,"description":"State names or UUIDs"},"assignees":{"type":"array","items":{"type":"string"},"maxItems":20,"description":"Assignee handles (@handle), 'me', or UUIDs"},"cycle":{"type":"string","description":"Cycle number or UUID"},"modules":{"type":"array","items":{"type":"string"},"maxItems":20,"description":"Module names or UUIDs"},"labels":{"type":"array","items":{"type":"string"},"maxItems":20,"description":"Label names or UUIDs"},"blocked":{"type":"boolean","description":"true = has open inbound BLOCKS links"},"gate_status":{"type":"string","enum":["pending","approved","rejected"],"description":"Filter by gate review status"},"mode":{"type":"string","enum":["lexical","hybrid"],"default":"lexical","description":"Search mode ('lexical' or 'hybrid')"},"lod":{"type":"string","enum":["summary","standard"],"default":"summary","description":"Level of detail for returned items"},"limit":{"type":"integer","minimum":1,"maximum":50,"default":20,"description":"Maximum number of items to return (1..50)"},"cursor":{"type":"string","maxLength":200,"description":"Opaque pagination cursor from previous response"}},"additionalProperties":false}},{"name":"read_ticket","description":"Read ticket details, markdown, links, comments, and activity at chosen LOD.","inputSchema":{"type":"object","properties":{"identifier":{"type":"string","description":"Issue key (e.g. 'KAN-142'), UUID, or 'help'"},"lod":{"type":"string","enum":["summary","standard","full"],"default":"standard","description":"Level of detail for response projection"},"comments_limit":{"type":"integer","minimum":0,"maximum":50,"default":20,"description":"Maximum comments to return (0..50)"}},"required":["identifier"],"additionalProperties":false}}]}}
+
+--------------------------------------------------------------------------------

@@ -58,6 +58,10 @@ class IssueSearchItem(BaseModel):
     snippet: str
     match_spans: list[tuple[int, int]] = Field(default_factory=list)
     score: float
+    state: str | None = None
+    priority: str | None = None
+    assignees: list[str] = Field(default_factory=list)
+    description_markdown: str | None = None
 
 
 class IssueSearchRequest(BaseModel):
@@ -65,7 +69,7 @@ class IssueSearchRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    query: str
+    query: str = ""
     project: str | None = None
     filters: FilterSpec | None = None
     mode: SearchMode = "lexical"

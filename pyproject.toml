@@ -108,3 +108,7 @@ name = "mcp forbidden from importing database"
 type = "forbidden"
 source_modules = ["mcp"]
 forbidden_modules = ["database"]
+ignore_imports = [
+    "mcp.tests.** -> database.**",
+    "mcp.tests.** -> kanban.**",
+]
