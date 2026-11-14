@@ -1,0 +1,91 @@
+{
+  "$defs": {
+    "DocSection": {
+      "additionalProperties": false,
+      "description": "Structured section within a Sticky -> Doc proposal.",
+      "properties": {
+        "heading": {
+          "description": "Section heading (single line, 1..140 characters)",
+          "maxLength": 140,
+          "minLength": 1,
+          "title": "Heading",
+          "type": "string"
+        },
+        "level": {
+          "description": "Markdown heading level (strictly 2 or 3)",
+          "enum": [
+            2,
+            3
+          ],
+          "title": "Level",
+          "type": "integer"
+        },
+        "body_markdown": {
+          "description": "Section body Markdown content (1..65536 characters)",
+          "maxLength": 65536,
+          "minLength": 1,
+          "title": "Body Markdown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "heading",
+        "level",
+        "body_markdown"
+      ],
+      "title": "DocSection",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Structured output proposal for promoting a scratchpad sticky to a document.",
+  "properties": {
+    "schema": {
+      "const": "kb-sticky-doc-proposal/v1",
+      "default": "kb-sticky-doc-proposal/v1",
+      "description": "Schema identifier",
+      "title": "Schema",
+      "type": "string"
+    },
+    "proposed_title": {
+      "description": "Proposed document title (single line, 1..200 characters)",
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Proposed Title",
+      "type": "string"
+    },
+    "summary_markdown": {
+      "description": "Executive summary in Markdown (1..1000 characters)",
+      "maxLength": 1000,
+      "minLength": 1,
+      "title": "Summary Markdown",
+      "type": "string"
+    },
+    "sections": {
+      "description": "Structured sections (1..20 items)",
+      "items": {
+        "$ref": "#/$defs/DocSection"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Sections",
+      "type": "array"
+    },
+    "extracted_action_items": {
+      "description": "Extracted action items (0..25 items, each 1..280 characters)",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 25,
+      "title": "Extracted Action Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "proposed_title",
+    "summary_markdown",
+    "sections"
+  ],
+  "title": "StickyDocProposal",
+  "type": "object"
+}

@@ -52,11 +52,7 @@ class Reservation:
 
 def get_current_period_dates(now_dt: datetime | None = None) -> tuple[date, date]:
     """Compute (daily_period_start, monthly_period_start) in UTC."""
-    current_utc = (
-        now_dt.astimezone(UTC)
-        if now_dt is not None
-        else datetime.now(UTC)
-    )
+    current_utc = now_dt.astimezone(UTC) if now_dt is not None else datetime.now(UTC)
     daily_start = current_utc.date()
     monthly_start = date(current_utc.year, current_utc.month, 1)
     return daily_start, monthly_start

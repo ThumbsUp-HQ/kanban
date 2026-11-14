@@ -193,10 +193,7 @@ async def test_03_ai_token_ledgers_ddl_and_constraints(
     with pytest.raises(DBAPIError) as exc_cap:
         async with db_session.begin_nested():
             await db_session.execute(
-                text(
-                    "UPDATE ai_token_ledgers "
-                    "SET tokens_reserved = 80 WHERE id = :id"
-                ),
+                text("UPDATE ai_token_ledgers SET tokens_reserved = 80 WHERE id = :id"),
                 {"id": ledger_id},
             )
     assert "check constraint" in str(exc_cap.value).lower()
