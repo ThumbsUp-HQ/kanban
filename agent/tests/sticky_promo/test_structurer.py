@@ -227,11 +227,7 @@ async def test_structure_sticky_positive_flow() -> None:
 async def test_structure_sticky_secret_scrubbed() -> None:
     """Verify secrets inside raw notes are scrubbed before provider dispatch."""
     dummy_key = "s" + "k-proj-" + "1234567890abcdef1234567890"
-    raw_notes = (
-        f"# Secret Notes\n\n"
-        f"Here is my API key: {dummy_key}\n"
-        f"Do not leak it.\n"
-    )
+    raw_notes = f"# Secret Notes\n\nHere is my API key: {dummy_key}\nDo not leak it.\n"
     router = _make_router_with_cassette("sticky_promo_auth_notes_ok.yaml")
 
     res = await structure_sticky_to_doc_proposal(

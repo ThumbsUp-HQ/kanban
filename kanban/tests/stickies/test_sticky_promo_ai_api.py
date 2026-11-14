@@ -340,9 +340,7 @@ async def test_case_4_secret_scrubbing_and_hostile_html(
 
     dummy_key = "s" + "k-live-" + "secret1234567890abcdef"
     body_with_secret = (
-        f"# Scratchpad Notes\n\n"
-        f"Here is my live API key: {dummy_key}\n"
-        f"Please convert to doc."
+        f"# Scratchpad Notes\n\nHere is my live API key: {dummy_key}\nPlease convert to doc."
     )
     create_resp = await client.post(
         f"/api/v1/projects/{proj_id}/stickies",
