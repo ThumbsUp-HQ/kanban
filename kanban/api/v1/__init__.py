@@ -7,11 +7,13 @@ from fastapi import APIRouter
 from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
 from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
 from kanban.api.v1.activity import router as activity_router
+from kanban.api.v1.admin.acl import router as admin_acl_router
 from kanban.api.v1.admin.ai_providers import router as admin_ai_router
 from kanban.api.v1.admin.auth_cards import router as admin_auth_cards_router
 from kanban.api.v1.admin.imports import router as admin_imports_router
 from kanban.api.v1.admin.link_auditor import router as admin_link_auditor_router
 from kanban.api.v1.admin.mcp_keys import router as admin_mcp_keys_router
+from kanban.api.v1.admin.principals import router as admin_principals_router
 from kanban.api.v1.admin.project_blueprint import (
     router as admin_project_blueprint_router,
 )
@@ -112,6 +114,8 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(admin_mcp_keys_router)
     v1.include_router(admin_workspace_settings_router)
     v1.include_router(admin_project_blueprint_router)
+    v1.include_router(admin_principals_router)
+    v1.include_router(admin_acl_router)
     v1.include_router(oauth_v1_router)
     v1.include_router(mcp_introspect_router)
     v1.include_router(mcp_ephemeral_router)

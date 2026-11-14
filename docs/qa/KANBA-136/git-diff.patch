@@ -1,0 +1,5122 @@
+diff --git a/kanban/admin/__init__.py b/kanban/admin/__init__.py
+new file mode 100644
+index 0000000..80a890a
+--- /dev/null
++++ b/kanban/admin/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Administrative domain services for principals, groups, and ACLs."""
+diff --git a/kanban/admin/acl_service.py b/kanban/admin/acl_service.py
+new file mode 100644
+index 0000000..e7a5947
+--- /dev/null
++++ b/kanban/admin/acl_service.py
+@@ -0,0 +1,313 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Access policy and ACL administration service (KB-P4-09b, S11.4, S3.2, S3.4)."""
++
++from __future__ import annotations
++
++import logging
++import re
++import uuid
++from typing import TYPE_CHECKING, Any, Final
++from urllib.parse import unquote
++
++from sqlalchemy import delete, select
++
++from database.models.principals import (
++    Principal,
++    ResourceAclEntry,
++)
++from kanban.admin.principal_service import resolve_principal_id
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import FieldError, ProblemException, not_found
++from kanban.security.access_manifest import AccessManifest, build_access_manifest
++from kanban.security.permissions import (
++    Capability,
++    capabilities_to_names,
++    evaluate_capabilities,
++)
++from kanban.services.activity import ActivityEventType, record_activity
++from kanban.services.object_ref import resolve_object_ref
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++logger = logging.getLogger(__name__)
++
++_RFC4122_UUID_REGEX = re.compile(
++    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
++)
++
++_VALID_CAPABILITIES = {
++    "VIEW": Capability.VIEW,
++    "COMMENT": Capability.COMMENT,
++    "EDIT": Capability.EDIT,
++    "TRANSITION": Capability.TRANSITION,
++    "LINK": Capability.LINK,
++    "SHARE": Capability.SHARE,
++    "ADMIN": Capability.ADMIN,
++    "DELETE": Capability.DELETE,
++}
++
++
++_MAX_CAPABILITIES_COUNT: Final[int] = 8
++
++
++def parse_capability_mask(capabilities: list[str]) -> int:
++    """Parse list of capability strings into integer bitmask."""
++    if not capabilities:
++        msg = "capabilities list cannot be empty"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="capabilities", message=msg)],
++        )
++
++    if len(capabilities) > _MAX_CAPABILITIES_COUNT:
++        msg = f"capabilities list cannot exceed {_MAX_CAPABILITIES_COUNT} items"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="capabilities", message=msg)],
++        )
++
++    mask = 0
++    for cap_name in capabilities:
++        norm = cap_name.strip().upper()
++        if norm not in _VALID_CAPABILITIES:
++            msg = f"Invalid capability '{cap_name}'. Allowed: {sorted(_VALID_CAPABILITIES.keys())}"
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail=msg,
++                errors=[FieldError(path="capabilities", message=msg)],
++            )
++        mask |= _VALID_CAPABILITIES[norm]
++    return mask
++
++
++async def resolve_target_object_id(  # noqa: RET503
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    object_ref: str | uuid.UUID,
++) -> uuid.UUID:
++    """Resolve an object reference (UUID, issue key, project identifier, or canonical key)."""
++    if isinstance(object_ref, uuid.UUID):
++        return object_ref
++    r = unquote(str(object_ref).strip())
++    if _RFC4122_UUID_REGEX.match(r):
++        return uuid.UUID(r)
++    obj = await resolve_object_ref(session, r)
++    if obj is not None and obj.workspace_id == workspace_id:
++        return obj.id
++    not_found()
++
++
++async def _assert_admin_on_object(
++    session: AsyncSession,
++    actor_ctx: PrincipalContext,
++    object_id: uuid.UUID,
++) -> None:
++    """Verify caller holds ADMIN capability on object; return 404 if not viewable."""
++    caps = await evaluate_capabilities(session, actor_ctx, object_id)
++    if Capability.VIEW not in caps:
++        not_found()
++
++    if Capability.ADMIN not in caps:
++        raise ProblemException(
++            code="INSUFFICIENT_PERMISSION",
++            status=403,
++            title="Insufficient Permission",
++            detail="Caller requires ADMIN capability on target object",
++        )
++
++
++async def _get_effective_capabilities(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    object_id: uuid.UUID,
++) -> list[str]:
++    """Retrieve recomputed effective capability names for a principal on an object."""
++    target_ctx = PrincipalContext(
++        principal_id=principal_id,
++        workspace_id=workspace_id,
++        token_scopes=("session",),
++    )
++    eff_cap = await evaluate_capabilities(session, target_ctx, object_id)
++    return capabilities_to_names(eff_cap)
++
++
++async def grant_acl_entry(  # noqa: PLR0913, PLR0917
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    actor_ctx: PrincipalContext,
++    object_id: uuid.UUID | str,
++    principal_id: uuid.UUID | str,
++    effect: str,
++    capabilities: list[str],
++) -> dict[str, Any]:
++    """Grant or replace an ALLOW/DENY ACL entry for an object."""
++    target_obj_id = await resolve_target_object_id(session, workspace_id, object_id)
++    if isinstance(principal_id, uuid.UUID):
++        target_p_id = principal_id
++    else:
++        target_p_id = await resolve_principal_id(session, workspace_id, str(principal_id))
++
++    await _assert_admin_on_object(session, actor_ctx, target_obj_id)
++
++    # Verify target principal belongs to workspace
++    p_stmt = select(Principal).where(
++        Principal.id == target_p_id,
++        Principal.workspace_id == workspace_id,
++        Principal.principal_type != "SCRIPT_EPHEMERAL",
++    )
++    principal = (await session.execute(p_stmt)).scalar_one_or_none()
++    if principal is None:
++        not_found()
++
++    eff = effect.strip().upper()
++    if eff not in ("ALLOW", "DENY"):
++        msg = f"Invalid effect '{effect}'. Must be ALLOW or DENY"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="effect", message=msg)],
++        )
++
++    cap_mask = parse_capability_mask(capabilities)
++
++    # Upsert entry
++    existing_stmt = select(ResourceAclEntry).where(
++        ResourceAclEntry.object_id == target_obj_id,
++        ResourceAclEntry.principal_id == target_p_id,
++        ResourceAclEntry.effect == eff,
++    )
++    entry = (await session.execute(existing_stmt)).scalar_one_or_none()
++    if entry is not None:
++        entry.capability_mask = cap_mask
++        entry.created_by_id = actor_ctx.principal_id
++    else:
++        entry = ResourceAclEntry(
++            workspace_id=workspace_id,
++            object_id=target_obj_id,
++            principal_id=target_p_id,
++            effect=eff,
++            capability_mask=cap_mask,
++            created_by_id=actor_ctx.principal_id,
++        )
++        session.add(entry)
++
++    await session.flush()
++
++    await record_activity(
++        session,
++        workspace_id=workspace_id,
++        actor_principal_id=actor_ctx.principal_id,
++        event_type=ActivityEventType.ACL_ENTRY_GRANTED,
++        payload={
++            "object_id": str(target_obj_id),
++            "principal_id": str(target_p_id),
++            "effect": eff,
++            "capabilities": [c.upper() for c in capabilities],
++            "capability_mask": cap_mask,
++        },
++    )
++
++    eff_caps = await _get_effective_capabilities(session, workspace_id, target_p_id, target_obj_id)
++
++    return {
++        "status": "granted",
++        "object_id": str(target_obj_id),
++        "principal_id": str(target_p_id),
++        "effect": eff,
++        "capabilities": [c.upper() for c in capabilities],
++        "effective_capabilities": eff_caps,
++    }
++
++
++async def revoke_acl_entry(  # noqa: PLR0913, PLR0917
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    actor_ctx: PrincipalContext,
++    object_id: uuid.UUID | str,
++    principal_id: uuid.UUID | str,
++    effect: str,
++) -> dict[str, Any]:
++    """Revoke an ALLOW/DENY ACL entry for an object."""
++    target_obj_id = await resolve_target_object_id(session, workspace_id, object_id)
++    if isinstance(principal_id, uuid.UUID):
++        target_p_id = principal_id
++    else:
++        target_p_id = await resolve_principal_id(session, workspace_id, str(principal_id))
++
++    await _assert_admin_on_object(session, actor_ctx, target_obj_id)
++
++    # Verify target principal belongs to workspace
++    p_stmt = select(Principal).where(
++        Principal.id == target_p_id,
++        Principal.workspace_id == workspace_id,
++        Principal.principal_type != "SCRIPT_EPHEMERAL",
++    )
++    principal = (await session.execute(p_stmt)).scalar_one_or_none()
++    if principal is None:
++        not_found()
++
++    eff = effect.strip().upper()
++    if eff not in ("ALLOW", "DENY"):
++        msg = f"Invalid effect '{effect}'. Must be ALLOW or DENY"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="effect", message=msg)],
++        )
++
++    del_stmt = delete(ResourceAclEntry).where(
++        ResourceAclEntry.object_id == target_obj_id,
++        ResourceAclEntry.principal_id == target_p_id,
++        ResourceAclEntry.effect == eff,
++    )
++    res = await session.execute(del_stmt)
++    await session.flush()
++
++    if res.rowcount and res.rowcount > 0:
++        await record_activity(
++            session,
++            workspace_id=workspace_id,
++            actor_principal_id=actor_ctx.principal_id,
++            event_type=ActivityEventType.ACL_ENTRY_REVOKED,
++            payload={
++                "object_id": str(target_obj_id),
++                "principal_id": str(target_p_id),
++                "effect": eff,
++            },
++        )
++
++    eff_caps = await _get_effective_capabilities(session, workspace_id, target_p_id, target_obj_id)
++
++    return {
++        "status": "revoked",
++        "object_id": str(target_obj_id),
++        "principal_id": str(target_p_id),
++        "effect": eff,
++        "effective_capabilities": eff_caps,
++    }
++
++
++async def inspect_access_manifest(
++    session: AsyncSession,
++    actor_ctx: PrincipalContext,
++    object_id: uuid.UUID | str,
++) -> AccessManifest:
++    """Inspect access manifest for an object enforcing anti-enumeration."""
++    target_obj_id = await resolve_target_object_id(session, actor_ctx.workspace_id, object_id)
++    await _assert_admin_on_object(session, actor_ctx, target_obj_id)
++    return await build_access_manifest(session, actor_ctx, target_obj_id)
+diff --git a/kanban/admin/principal_service.py b/kanban/admin/principal_service.py
+new file mode 100644
+index 0000000..4671668
+--- /dev/null
++++ b/kanban/admin/principal_service.py
+@@ -0,0 +1,1022 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Principal and group administration service (KB-P4-09b, S11.4, S3.1)."""
++
++from __future__ import annotations
++
++import logging
++import re
++import uuid
++from typing import TYPE_CHECKING, Any, Final
++from urllib.parse import unquote
++
++from sqlalchemy import delete, func, select, text, update
++from sqlalchemy.exc import DBAPIError, IntegrityError
++
++from database.models.agent_definition import AgentDefinition
++from database.models.base import RbacRole
++from database.models.mcp_api_key import McpApiKey
++from database.models.principals import (
++    Group,
++    Principal,
++    PrincipalGroupClosure,
++    PrincipalGroupEdge,
++    RoleBinding,
++    User,
++)
++from database.models.projects import Project
++from database.models.spine import ObjectRecord
++from kanban.api.problems import FieldError, ProblemException, not_found
++from kanban.auth.cards.lockout import LockoutPreventedError
++from kanban.services.activity import ActivityEventType, record_activity
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++logger = logging.getLogger(__name__)
++
++_HANDLE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{1,38}$")
++_RFC4122_UUID_REGEX = re.compile(
++    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
++)
++MAX_PRINCIPAL_NAME_LEN: Final[int] = 120
++MAX_PRINCIPALS_LIMIT: Final[int] = 100
++
++
++def normalize_handle(handle: str) -> str:
++    """Normalize and validate a user or agent handle."""
++    h = handle.strip().lstrip("@").lower()
++    if not _HANDLE_PATTERN.match(h):
++        msg = f"Invalid handle format: '{handle}'. Must match ^[a-z0-9][a-z0-9._-]{{1,38}}$"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="handle", message=msg)],
++        )
++    return h
++
++
++async def resolve_principal_id(  # noqa: RET503
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    ref: str,
++) -> uuid.UUID:
++    """Resolve a principal reference (@handle, group name, agent slug, or UUID) to a UUID."""
++    r = unquote(ref.strip())
++    if _RFC4122_UUID_REGEX.match(r):
++        uid = uuid.UUID(r)
++        stmt = select(Principal.id).where(
++            Principal.id == uid,
++            Principal.workspace_id == workspace_id,
++            Principal.principal_type != "SCRIPT_EPHEMERAL",
++        )
++        found = (await session.execute(stmt)).scalar_one_or_none()
++        if found:
++            return found
++        not_found()
++
++    # If starts with @, try user canonical key or handle
++    clean_ref = r.lstrip("@").lower()
++    canonical_key = f"@{clean_ref}"
++
++    # 1. Search objects for user canonical_key
++    user_stmt = select(ObjectRecord.id).where(
++        ObjectRecord.workspace_id == workspace_id,
++        func.lower(ObjectRecord.canonical_key).in_([canonical_key, clean_ref]),
++        ObjectRecord.object_type == "user",
++        ObjectRecord.deleted_at.is_(None),
++    )
++    user_id = (await session.execute(user_stmt)).scalar_one_or_none()
++    if user_id:
++        return user_id
++
++    # 2. Search groups by name
++    group_stmt = select(Group.id).where(
++        Group.workspace_id == workspace_id,
++        func.lower(Group.name) == r.lower(),
++    )
++    group_id = (await session.execute(group_stmt)).scalar_one_or_none()
++    if group_id:
++        return group_id
++
++    # 3. Search agent_definitions by slug
++    agent_stmt = select(AgentDefinition.principal_id).where(
++        AgentDefinition.workspace_id == workspace_id,
++        func.lower(AgentDefinition.slug) == clean_ref,
++    )
++    agent_pid = (await session.execute(agent_stmt)).scalar_one_or_none()
++    if agent_pid:
++        return agent_pid
++
++    # 4. Search principals by display_name
++    p_stmt = select(Principal.id).where(
++        Principal.workspace_id == workspace_id,
++        func.lower(Principal.display_name) == clean_ref,
++        Principal.principal_type != "SCRIPT_EPHEMERAL",
++    )
++    p_id = (await session.execute(p_stmt)).scalar_one_or_none()
++    if p_id:
++        return p_id
++
++    not_found()
++
++
++async def get_principal_detail(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    principal_ref: str,
++) -> dict[str, Any]:
++    """Retrieve full details for a principal in the workspace."""
++    p_id = await resolve_principal_id(session, workspace_id, principal_ref)
++
++    p_stmt = select(Principal).where(
++        Principal.id == p_id,
++        Principal.workspace_id == workspace_id,
++    )
++    principal = (await session.execute(p_stmt)).scalar_one_or_none()
++    if principal is None or principal.principal_type == "SCRIPT_EPHEMERAL":
++        not_found()
++
++    handle: str | None = None
++    email: str | None = None
++
++    if principal.principal_type == "USER":
++        # Get handle from objects
++        obj_stmt = select(ObjectRecord.canonical_key).where(
++            ObjectRecord.id == p_id,
++            ObjectRecord.object_type == "user",
++        )
++        ck = (await session.execute(obj_stmt)).scalar_one_or_none()
++        handle = ck or f"@{principal.display_name.lower().replace(' ', '')}"
++
++        # Get email
++        u_stmt = select(User.email).where(User.id == p_id)
++        email = (await session.execute(u_stmt)).scalar_one_or_none()
++
++    elif principal.principal_type == "AGENT":
++        a_stmt = select(AgentDefinition.slug).where(AgentDefinition.principal_id == p_id)
++        slug = (await session.execute(a_stmt)).scalar_one_or_none()
++        handle = f"@{slug}" if slug else f"@{principal.display_name.lower().replace(' ', '')}"
++
++    elif principal.principal_type == "GROUP":
++        g_stmt = select(Group.name).where(Group.id == p_id)
++        g_name = (await session.execute(g_stmt)).scalar_one_or_none()
++        handle = g_name or principal.display_name
++
++    # Retrieve groups via closure
++    closure_stmt = (
++        select(Group.name)
++        .join(PrincipalGroupClosure, PrincipalGroupClosure.ancestor_group_id == Group.id)
++        .where(
++            PrincipalGroupClosure.member_id == p_id,
++            PrincipalGroupClosure.workspace_id == workspace_id,
++        )
++        .order_by(Group.name)
++    )
++    groups = list((await session.execute(closure_stmt)).scalars().all())
++
++    # Retrieve role bindings
++    rb_stmt = (
++        select(RoleBinding, Project.identifier)
++        .outerjoin(Project, Project.id == RoleBinding.project_id)
++        .where(
++            RoleBinding.principal_id == p_id,
++            RoleBinding.workspace_id == workspace_id,
++        )
++    )
++    rb_rows = (await session.execute(rb_stmt)).all()
++    roles: list[dict[str, Any]] = []
++    for rb, prj_ident in rb_rows:
++        scope_str = prj_ident if rb.scope_type == "project" and prj_ident else rb.scope_type
++        roles.append(
++            {
++                "role": str(rb.role.value if hasattr(rb.role, "value") else rb.role),
++                "scope_type": rb.scope_type,
++                "scope": scope_str,
++                "project_id": str(rb.project_id) if rb.project_id else None,
++            }
++        )
++
++    status_str = "active" if principal.status == "ACTIVE" else "deactivated"
++    return {
++        "id": str(principal.id),
++        "principal": handle or principal.display_name,
++        "handle": handle,
++        "display_name": principal.display_name,
++        "type": principal.principal_type,
++        "status": status_str,
++        "email": email,
++        "groups": groups,
++        "roles": roles,
++        "created_at": principal.created_at.isoformat(),
++    }
++
++
++async def list_principals(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    *,
++    filter_type: str | None = None,
++    limit: int = 50,
++) -> list[dict[str, Any]]:
++    """List principals in the workspace, omitting SCRIPT_EPHEMERAL."""
++    if limit < 1 or limit > MAX_PRINCIPALS_LIMIT:
++        msg = f"Limit must be between 1 and {MAX_PRINCIPALS_LIMIT} (got {limit})"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="limit", message=msg)],
++        )
++
++    stmt = (
++        select(Principal)
++        .where(
++            Principal.workspace_id == workspace_id,
++            Principal.principal_type != "SCRIPT_EPHEMERAL",
++        )
++        .order_by(Principal.display_name)
++        .limit(limit)
++    )
++
++    if filter_type is not None:
++        ft = filter_type.strip().upper()
++        if ft not in ("USER", "GROUP", "AGENT", "SERVICE_PRINCIPAL"):
++            msg = (
++                f"Invalid filter '{filter_type}'. Must be USER, GROUP, AGENT, or SERVICE_PRINCIPAL"
++            )
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail=msg,
++                errors=[FieldError(path="filter", message=msg)],
++            )
++        stmt = stmt.where(Principal.principal_type == ft)
++
++    principals = list((await session.execute(stmt)).scalars().all())
++    result: list[dict[str, Any]] = []
++
++    for p in principals:
++        handle = p.display_name
++        if p.principal_type == "USER":
++            ck_stmt = select(ObjectRecord.canonical_key).where(
++                ObjectRecord.id == p.id,
++                ObjectRecord.object_type == "user",
++            )
++            ck = (await session.execute(ck_stmt)).scalar_one_or_none()
++            handle = ck or f"@{p.display_name.lower().replace(' ', '')}"
++        elif p.principal_type == "AGENT":
++            a_stmt = select(AgentDefinition.slug).where(AgentDefinition.principal_id == p.id)
++            slug = (await session.execute(a_stmt)).scalar_one_or_none()
++            if slug:
++                handle = f"@{slug}"
++        elif p.principal_type == "GROUP":
++            g_stmt = select(Group.name).where(Group.id == p.id)
++            g_name = (await session.execute(g_stmt)).scalar_one_or_none()
++            if g_name:
++                handle = g_name
++
++        result.append(
++            {
++                "id": str(p.id),
++                "principal": handle,
++                "display_name": p.display_name,
++                "type": p.principal_type,
++                "status": "active" if p.status == "ACTIVE" else "deactivated",
++            }
++        )
++    return result
++
++
++async def provision_user(  # noqa: PLR0913, PLR0917
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    creator_id: uuid.UUID,
++    handle: str,
++    display_name: str,
++    email: str,
++) -> dict[str, Any]:
++    """Provision a new USER principal with object spine and user record."""
++    norm_handle = normalize_handle(handle)
++    dn = display_name.strip()
++    if len(dn) < 1 or len(dn) > MAX_PRINCIPAL_NAME_LEN:
++        msg = f"display_name must be between 1 and {MAX_PRINCIPAL_NAME_LEN} characters"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="display_name", message=msg)],
++        )
++
++    em = email.strip().lower()
++    if not re.match(r"^[^@\s]+@[^@\s]+$", em):
++        msg = f"Invalid email format: '{email}'"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="email", message=msg)],
++        )
++
++    canonical_key = f"@{norm_handle}"
++    user_id = uuid.uuid4()
++
++    try:
++        # 1. Register in objects spine
++        await session.execute(
++            text(
++                "SELECT register_object("
++                "  'user'::object_kind, :ws_id, NULL, :ck, :title, :creator_id, :uid"
++                ")"
++            ),
++            {
++                "ws_id": workspace_id,
++                "ck": canonical_key,
++                "title": dn,
++                "creator_id": creator_id,
++                "uid": user_id,
++            },
++        )
++
++        # 2. Insert into principals
++        principal = Principal(
++            id=user_id,
++            principal_type="USER",
++            workspace_id=workspace_id,
++            status="ACTIVE",
++            display_name=dn,
++        )
++        session.add(principal)
++        await session.flush()
++
++        # 3. Insert into users
++        user = User(
++            id=user_id,
++            workspace_id=workspace_id,
++            email=em,
++        )
++        session.add(user)
++
++        await session.flush()
++    except IntegrityError as exc:
++        orig_msg = str(exc.orig) if exc.orig else str(exc)
++        if "users_ws_email_uq" in orig_msg or "email" in orig_msg:
++            msg = f"User with email '{em}' already exists in workspace"
++            raise ProblemException(
++                code="CONFLICT_IDENTIFIER",
++                status=409,
++                title="Conflict",
++                detail=msg,
++                errors=[FieldError(path="email", message=msg)],
++            ) from exc
++        if "canonical_key" in orig_msg or "objects" in orig_msg:
++            msg = f"User with handle '{canonical_key}' already exists in workspace"
++            raise ProblemException(
++                code="CONFLICT_IDENTIFIER",
++                status=409,
++                title="Conflict",
++                detail=msg,
++                errors=[FieldError(path="handle", message=msg)],
++            ) from exc
++        raise
++
++    await record_activity(
++        session,
++        workspace_id=workspace_id,
++        actor_principal_id=creator_id,
++        event_type=ActivityEventType.PRINCIPAL_PROVISIONED,
++        payload={
++            "id": str(user_id),
++            "type": "USER",
++            "handle": canonical_key,
++            "display_name": dn,
++            "email": em,
++        },
++    )
++
++    return {
++        "id": str(user_id),
++        "principal": canonical_key,
++        "type": "USER",
++        "handle": canonical_key,
++        "display_name": dn,
++        "email": em,
++        "status": "active",
++    }
++
++
++async def provision_group(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    creator_id: uuid.UUID,
++    name: str,
++    display_name: str | None = None,
++) -> dict[str, Any]:
++    """Provision a new GROUP principal."""
++    grp_name = name.strip()
++    if len(grp_name) < 1 or len(grp_name) > MAX_PRINCIPAL_NAME_LEN:
++        msg = f"Group name must be between 1 and {MAX_PRINCIPAL_NAME_LEN} characters"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="name", message=msg)],
++        )
++
++    dn = (display_name or grp_name).strip()[:MAX_PRINCIPAL_NAME_LEN]
++    group_id = uuid.uuid4()
++
++    try:
++        principal = Principal(
++            id=group_id,
++            principal_type="GROUP",
++            workspace_id=workspace_id,
++            status="ACTIVE",
++            display_name=dn,
++        )
++        session.add(principal)
++        await session.flush()
++
++        group = Group(
++            id=group_id,
++            principal_type="GROUP",
++            workspace_id=workspace_id,
++            name=grp_name,
++        )
++        session.add(group)
++        await session.flush()
++    except IntegrityError as exc:
++        orig_msg = str(exc.orig) if exc.orig else str(exc)
++        if "groups_workspace_id_name_key" in orig_msg or "name" in orig_msg:
++            msg = f"Group with name '{grp_name}' already exists in workspace"
++            raise ProblemException(
++                code="CONFLICT_IDENTIFIER",
++                status=409,
++                title="Conflict",
++                detail=msg,
++                errors=[FieldError(path="name", message=msg)],
++            ) from exc
++        raise
++
++    await record_activity(
++        session,
++        workspace_id=workspace_id,
++        actor_principal_id=creator_id,
++        event_type=ActivityEventType.PRINCIPAL_PROVISIONED,
++        payload={"id": str(group_id), "type": "GROUP", "name": grp_name, "display_name": dn},
++    )
++
++    return {
++        "id": str(group_id),
++        "principal": grp_name,
++        "type": "GROUP",
++        "display_name": dn,
++        "status": "active",
++        "member_count": 0,
++    }
++
++
++async def provision_agent(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    creator_id: uuid.UUID,
++    handle: str,
++    display_name: str,
++) -> dict[str, Any]:
++    """Provision a new AGENT principal and definition."""
++    norm_slug = normalize_handle(handle)
++    dn = display_name.strip()
++    if len(dn) < 1 or len(dn) > MAX_PRINCIPAL_NAME_LEN:
++        msg = f"display_name must be between 1 and {MAX_PRINCIPAL_NAME_LEN} characters"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="display_name", message=msg)],
++        )
++
++    agent_pid = uuid.uuid4()
++    try:
++        principal = Principal(
++            id=agent_pid,
++            principal_type="AGENT",
++            workspace_id=workspace_id,
++            status="ACTIVE",
++            display_name=dn,
++        )
++        session.add(principal)
++        await session.flush()
++
++        agent_def = AgentDefinition(
++            workspace_id=workspace_id,
++            principal_id=agent_pid,
++            slug=norm_slug,
++            display_name=dn,
++            harness_kind="cli_pipe",
++            cli_binary_allowlist_id="agy",
++            cli_args_json=[],
++        )
++        session.add(agent_def)
++        await session.flush()
++    except IntegrityError as exc:
++        orig_msg = str(exc.orig) if exc.orig else str(exc)
++        if "agent_definitions_workspace_id_slug_key" in orig_msg or "slug" in orig_msg:
++            msg = f"Agent with slug '{norm_slug}' already exists in workspace"
++            raise ProblemException(
++                code="CONFLICT_IDENTIFIER",
++                status=409,
++                title="Conflict",
++                detail=msg,
++                errors=[FieldError(path="handle", message=msg)],
++            ) from exc
++        raise
++
++    await record_activity(
++        session,
++        workspace_id=workspace_id,
++        actor_principal_id=creator_id,
++        event_type=ActivityEventType.PRINCIPAL_PROVISIONED,
++        payload={"id": str(agent_pid), "type": "AGENT", "slug": norm_slug, "display_name": dn},
++    )
++
++    return {
++        "id": str(agent_pid),
++        "principal": f"@{norm_slug}",
++        "type": "AGENT",
++        "slug": norm_slug,
++        "display_name": dn,
++        "status": "active",
++    }
++
++
++async def update_principal(  # noqa: PLR0913
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    actor_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    *,
++    status: str | None = None,
++    display_name: str | None = None,
++) -> dict[str, Any]:
++    """Update principal status (active/deactivated) or display_name with lockout checks."""
++    stmt = (
++        select(Principal)
++        .where(
++            Principal.id == principal_id,
++            Principal.workspace_id == workspace_id,
++            Principal.principal_type != "SCRIPT_EPHEMERAL",
++        )
++        .with_for_update()
++    )
++    principal = (await session.execute(stmt)).scalar_one_or_none()
++    if principal is None:
++        not_found()
++
++    if display_name is not None:
++        dn = display_name.strip()
++        if len(dn) < 1 or len(dn) > MAX_PRINCIPAL_NAME_LEN:
++            msg = f"display_name must be between 1 and {MAX_PRINCIPAL_NAME_LEN} characters"
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail=msg,
++                errors=[FieldError(path="display_name", message=msg)],
++            )
++        principal.display_name = dn
++        await record_activity(
++            session,
++            workspace_id=workspace_id,
++            actor_principal_id=actor_id,
++            event_type=ActivityEventType.PRINCIPAL_UPDATED,
++            payload={"id": str(principal_id), "display_name": dn},
++        )
++
++    if status is not None:
++        st = status.strip().lower()
++        if st in ("deactivated", "disabled"):
++            if principal.status == "ACTIVE":
++                # Anti-lockout: verify we are not deactivating the last active SERVER_ADMIN
++                admin_count = (
++                    await session.execute(
++                        text(
++                            "SELECT count(DISTINCT rb.principal_id) "
++                            "FROM role_bindings rb "
++                            "JOIN principals p ON p.id = rb.principal_id "
++                            "WHERE rb.role = 'SERVER_ADMIN' "
++                            "  AND p.status = 'ACTIVE' "
++                            "  AND p.id != :target_id"
++                        ),
++                        {"target_id": principal_id},
++                    )
++                ).scalar_one()
++
++                # Does the principal hold SERVER_ADMIN?
++                holds_server_admin = (
++                    await session.execute(
++                        select(func.count(RoleBinding.id)).where(
++                            RoleBinding.principal_id == principal_id,
++                            RoleBinding.role == RbacRole.SERVER_ADMIN,
++                        )
++                    )
++                ).scalar_one() > 0
++
++                if holds_server_admin and admin_count == 0:
++                    raise LockoutPreventedError(
++                        layer="db_trigger",
++                        detail="Cannot deactivate the last active SERVER_ADMIN.",
++                    ).to_problem_exception()
++
++                principal.status = "DISABLED"
++
++                # Synchronously revoke user sessions
++                await session.execute(
++                    text("SELECT kb_auth.session_revoke_all_for_principal(:p_id)"),
++                    {"p_id": principal_id},
++                )
++
++                # Synchronously revoke MCP API keys
++                await session.execute(
++                    update(McpApiKey)
++                    .where(
++                        McpApiKey.principal_id == principal_id,
++                        McpApiKey.revoked_at.is_(None),
++                    )
++                    .values(revoked_at=func.clock_timestamp())
++                )
++
++                await record_activity(
++                    session,
++                    workspace_id=workspace_id,
++                    actor_principal_id=actor_id,
++                    event_type=ActivityEventType.PRINCIPAL_DEACTIVATED,
++                    payload={"id": str(principal_id), "status": "deactivated"},
++                )
++
++        elif st == "active":
++            if principal.status == "DISABLED":
++                principal.status = "ACTIVE"
++                await record_activity(
++                    session,
++                    workspace_id=workspace_id,
++                    actor_principal_id=actor_id,
++                    event_type=ActivityEventType.PRINCIPAL_REACTIVATED,
++                    payload={"id": str(principal_id), "status": "active"},
++                )
++        else:
++            msg = f"Invalid status '{status}'. Must be active or deactivated"
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail=msg,
++                errors=[FieldError(path="status", message=msg)],
++            )
++
++    await session.flush()
++    return await get_principal_detail(session, workspace_id, str(principal_id))
++
++
++async def add_group_member(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    actor_id: uuid.UUID,
++    group_id: uuid.UUID,
++    member_id: uuid.UUID,
++) -> dict[str, Any]:
++    """Add a principal (user, group, agent) to a group, enforcing depth and cycle guards."""
++    if group_id == member_id:
++        msg = "A group cannot be a member of itself"
++        raise ProblemException(
++            code="GROUP_CYCLE_REJECTED",
++            status=409,
++            title="Group Cycle Rejected",
++            detail=msg,
++            type_uri="urn:kanban:problem:group-cycle-rejected",
++        )
++
++    # Verify group exists and is GROUP
++    grp = (
++        await session.execute(
++            select(Group).where(Group.id == group_id, Group.workspace_id == workspace_id)
++        )
++    ).scalar_one_or_none()
++    if grp is None:
++        not_found()
++
++    # Verify member exists in workspace
++    mbr = (
++        await session.execute(
++            select(Principal).where(
++                Principal.id == member_id,
++                Principal.workspace_id == workspace_id,
++                Principal.principal_type != "SCRIPT_EPHEMERAL",
++            )
++        )
++    ).scalar_one_or_none()
++    if mbr is None:
++        not_found()
++
++    try:
++        edge = PrincipalGroupEdge(
++            group_id=group_id,
++            member_id=member_id,
++            workspace_id=workspace_id,
++        )
++        session.add(edge)
++        await session.flush()
++    except (DBAPIError, IntegrityError) as exc:
++        msg_str = str(exc.orig) if hasattr(exc, "orig") and exc.orig else str(exc)
++        if "GROUP_CYCLE_REJECTED" in msg_str:
++            raise ProblemException(
++                code="GROUP_CYCLE_REJECTED",
++                status=409,
++                title="Group Cycle Rejected",
++                detail="Adding member would introduce a cyclic group dependency.",
++                type_uri="urn:kanban:problem:group-cycle-rejected",
++            ) from exc
++        if "GROUP_DEPTH_EXCEEDED" in msg_str:
++            raise ProblemException(
++                code="GROUP_DEPTH_EXCEEDED",
++                status=422,
++                title="Group Depth Exceeded",
++                detail="Group nesting depth cannot exceed 8 levels.",
++                type_uri="urn:kanban:problem:group-depth-exceeded",
++            ) from exc
++        if "already exists" in msg_str or "duplicate key" in msg_str:
++            # Already a member - idempotent
++            return {"status": "ok", "group_id": str(group_id), "member_id": str(member_id)}
++        raise
++
++    await record_activity(
++        session,
++        workspace_id=workspace_id,
++        actor_principal_id=actor_id,
++        event_type=ActivityEventType.GROUP_MEMBER_ADDED,
++        payload={"group_id": str(group_id), "member_id": str(member_id)},
++    )
++    return {"status": "member_added", "group_id": str(group_id), "member_id": str(member_id)}
++
++
++async def remove_group_member(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    actor_id: uuid.UUID,
++    group_id: uuid.UUID,
++    member_id: uuid.UUID,
++) -> dict[str, Any]:
++    """Remove a principal from a group."""
++    del_stmt = delete(PrincipalGroupEdge).where(
++        PrincipalGroupEdge.group_id == group_id,
++        PrincipalGroupEdge.member_id == member_id,
++        PrincipalGroupEdge.workspace_id == workspace_id,
++    )
++    res = await session.execute(del_stmt)
++    await session.flush()
++
++    if res.rowcount and res.rowcount > 0:
++        await record_activity(
++            session,
++            workspace_id=workspace_id,
++            actor_principal_id=actor_id,
++            event_type=ActivityEventType.GROUP_MEMBER_REMOVED,
++            payload={"group_id": str(group_id), "member_id": str(member_id)},
++        )
++    return {"status": "member_removed", "group_id": str(group_id), "member_id": str(member_id)}
++
++
++async def bind_role(  # noqa: C901, PLR0913, PLR0917
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    actor_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    role_name: str,
++    scope_type: str,
++    project_id: uuid.UUID | None = None,
++) -> dict[str, Any]:
++    """Bind an RBAC role to a principal at server, workspace, or project scope."""
++    # Validate principal
++    p_stmt = select(Principal).where(
++        Principal.id == principal_id,
++        Principal.workspace_id == workspace_id,
++        Principal.principal_type != "SCRIPT_EPHEMERAL",
++    )
++    principal = (await session.execute(p_stmt)).scalar_one_or_none()
++    if principal is None:
++        not_found()
++
++    st = scope_type.strip().lower()
++    if st not in ("server", "workspace", "project"):
++        msg = f"Invalid scope_type '{scope_type}'. Must be server, workspace, or project"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="scope_type", message=msg)],
++        )
++
++    norm_role = role_name.strip().upper()
++    try:
++        rbac_role = RbacRole[norm_role]
++    except KeyError as exc:
++        msg = f"Invalid role '{role_name}'. Allowed roles: {[r.name for r in RbacRole]}"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="role", message=msg)],
++        ) from exc
++
++    # Enforce scope and role constraints
++    if st == "server":
++        if rbac_role != RbacRole.SERVER_ADMIN or project_id is not None:
++            msg = "server scope only allows SERVER_ADMIN and project_id must be null"
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail=msg,
++                errors=[FieldError(path="role", message=msg)],
++            )
++    elif st == "workspace":
++        if (
++            rbac_role
++            not in (
++                RbacRole.WORKSPACE_ADMIN,
++                RbacRole.WORKSPACE_MEMBER,
++                RbacRole.WORKSPACE_GUEST,
++            )
++            or project_id is not None
++        ):
++            msg = (
++                "workspace scope requires WORKSPACE_ADMIN, WORKSPACE_MEMBER, "
++                "or WORKSPACE_GUEST with null project_id"
++            )
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail=msg,
++                errors=[FieldError(path="role", message=msg)],
++            )
++    elif st == "project" and (
++        project_id is None
++        or rbac_role
++        not in (
++            RbacRole.PROJECT_ADMIN,
++            RbacRole.MEMBER,
++            RbacRole.VIEWER,
++        )
++    ):
++        msg = "project scope requires project_id and role PROJECT_ADMIN, MEMBER, or VIEWER"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="project_id", message=msg)],
++        )
++
++    # Check project exists in workspace if project scope
++    if project_id is not None:
++        prj_stmt = select(Project).where(
++            Project.id == project_id, Project.workspace_id == workspace_id
++        )
++        if (await session.execute(prj_stmt)).scalar_one_or_none() is None:
++            not_found()
++
++    # Check for existing binding
++    existing_stmt = select(RoleBinding).where(
++        RoleBinding.workspace_id == workspace_id,
++        RoleBinding.principal_id == principal_id,
++        RoleBinding.role == rbac_role,
++        RoleBinding.scope_type == st,
++        RoleBinding.project_id == project_id,
++    )
++    existing = (await session.execute(existing_stmt)).scalar_one_or_none()
++    if existing is not None:
++        return {
++            "status": "already_bound",
++            "principal_id": str(principal_id),
++            "role": norm_role,
++            "scope": st,
++        }
++
++    binding = RoleBinding(
++        workspace_id=workspace_id,
++        principal_id=principal_id,
++        role=rbac_role,
++        scope_type=st,
++        project_id=project_id,
++    )
++    session.add(binding)
++    await session.flush()
++
++    await record_activity(
++        session,
++        workspace_id=workspace_id,
++        actor_principal_id=actor_id,
++        event_type=ActivityEventType.ROLE_BOUND,
++        payload={
++            "principal_id": str(principal_id),
++            "role": norm_role,
++            "scope_type": st,
++            "project_id": str(project_id) if project_id else None,
++        },
++    )
++
++    return {
++        "status": "role_bound",
++        "principal_id": str(principal_id),
++        "role": norm_role,
++        "scope": st,
++        "project_id": str(project_id) if project_id else None,
++    }
++
++
++async def unbind_role(  # noqa: PLR0913, PLR0917
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    actor_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    role_name: str,
++    scope_type: str,
++    project_id: uuid.UUID | None = None,
++) -> dict[str, Any]:
++    """Unbind an RBAC role from a principal with anti-lockout protection."""
++    norm_role = role_name.strip().upper()
++    try:
++        rbac_role = RbacRole[norm_role]
++    except KeyError as exc:
++        msg = f"Invalid role '{role_name}'"
++        raise ProblemException(
++            code="VALIDATION_FAILED",
++            status=422,
++            title="Validation Failed",
++            detail=msg,
++            errors=[FieldError(path="role", message=msg)],
++        ) from exc
++
++    st = scope_type.strip().lower()
++
++    # Anti-lockout: verify we are not unbinding the last SERVER_ADMIN
++    if rbac_role == RbacRole.SERVER_ADMIN and st == "server":
++        admin_count = (
++            await session.execute(
++                text(
++                    "SELECT count(DISTINCT rb.principal_id) "
++                    "FROM role_bindings rb "
++                    "JOIN principals p ON p.id = rb.principal_id "
++                    "WHERE rb.role = 'SERVER_ADMIN' "
++                    "  AND p.status = 'ACTIVE' "
++                    "  AND (p.id != :target_id OR rb.scope_type != 'server')"
++                ),
++                {"target_id": principal_id},
++            )
++        ).scalar_one()
++        if admin_count == 0:
++            raise LockoutPreventedError(
++                layer="db_trigger",
++                detail="Cannot unbind the last active SERVER_ADMIN role binding.",
++            ).to_problem_exception()
++
++    stmt = delete(RoleBinding).where(
++        RoleBinding.workspace_id == workspace_id,
++        RoleBinding.principal_id == principal_id,
++        RoleBinding.role == rbac_role,
++        RoleBinding.scope_type == st,
++        RoleBinding.project_id == project_id,
++    )
++    res = await session.execute(stmt)
++    await session.flush()
++
++    if res.rowcount and res.rowcount > 0:
++        await record_activity(
++            session,
++            workspace_id=workspace_id,
++            actor_principal_id=actor_id,
++            event_type=ActivityEventType.ROLE_UNBOUND,
++            payload={
++                "principal_id": str(principal_id),
++                "role": norm_role,
++                "scope_type": st,
++                "project_id": str(project_id) if project_id else None,
++            },
++        )
++
++    return {
++        "status": "role_unbound",
++        "principal_id": str(principal_id),
++        "role": norm_role,
++        "scope": st,
++    }
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index b2a6a80..e820011 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -7,11 +7,13 @@ from fastapi import APIRouter
+ from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
+ from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
+ from kanban.api.v1.activity import router as activity_router
++from kanban.api.v1.admin.acl import router as admin_acl_router
+ from kanban.api.v1.admin.ai_providers import router as admin_ai_router
+ from kanban.api.v1.admin.auth_cards import router as admin_auth_cards_router
+ from kanban.api.v1.admin.imports import router as admin_imports_router
+ from kanban.api.v1.admin.link_auditor import router as admin_link_auditor_router
+ from kanban.api.v1.admin.mcp_keys import router as admin_mcp_keys_router
++from kanban.api.v1.admin.principals import router as admin_principals_router
+ from kanban.api.v1.admin.project_blueprint import (
+     router as admin_project_blueprint_router,
+ )
+@@ -112,6 +114,8 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(admin_mcp_keys_router)
+     v1.include_router(admin_workspace_settings_router)
+     v1.include_router(admin_project_blueprint_router)
++    v1.include_router(admin_principals_router)
++    v1.include_router(admin_acl_router)
+     v1.include_router(oauth_v1_router)
+     v1.include_router(mcp_introspect_router)
+     v1.include_router(mcp_ephemeral_router)
+diff --git a/kanban/api/v1/admin/acl.py b/kanban/api/v1/admin/acl.py
+new file mode 100644
+index 0000000..18cf1d9
+--- /dev/null
++++ b/kanban/api/v1/admin/acl.py
+@@ -0,0 +1,99 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""REST API router for Object ACL entries administration (KB-P4-09b, S11.4, S3.2, S3.4)."""
++
++from __future__ import annotations
++
++import logging
++import uuid  # noqa: TC003
++from typing import Annotated, Literal
++
++from fastapi import APIRouter, Depends, status
++from pydantic import BaseModel, ConfigDict, Field
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from kanban.admin import acl_service
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.auth.mfa.policy import require_admin_aal2
++from kanban.security.access_manifest import AccessManifest
++
++logger = logging.getLogger(__name__)
++
++router = APIRouter(
++    prefix="/admin/acl-entries",
++    tags=["admin-acl"],
++    dependencies=[Depends(require_admin_aal2)],
++)
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++class GrantAclEntryRequest(BaseModel):
++    """Schema for granting an ALLOW or DENY ACL capability entry."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    object_id: str | uuid.UUID
++    principal_id: str | uuid.UUID
++    effect: Literal["ALLOW", "DENY"]
++    capabilities: list[str] = Field(min_length=1, max_length=8)
++
++
++class RevokeAclEntryRequest(BaseModel):
++    """Schema for revoking an ACL entry."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    object_id: str | uuid.UUID
++    principal_id: str | uuid.UUID
++    effect: Literal["ALLOW", "DENY"]
++
++
++@router.post("", status_code=status.HTTP_200_OK)
++async def grant_acl_entry_endpoint(
++    body: GrantAclEntryRequest,
++    caller: Caller,
++    session: Session,
++) -> dict[str, object]:
++    """Grant or replace an ALLOW/DENY ACL entry for an object."""
++    return await acl_service.grant_acl_entry(
++        session,
++        caller.workspace_id,
++        caller,
++        object_id=body.object_id,
++        principal_id=body.principal_id,
++        effect=body.effect,
++        capabilities=body.capabilities,
++    )
++
++
++@router.delete("", status_code=status.HTTP_200_OK)
++async def revoke_acl_entry_endpoint(
++    body: RevokeAclEntryRequest,
++    caller: Caller,
++    session: Session,
++) -> dict[str, object]:
++    """Revoke an ALLOW/DENY ACL entry for an object."""
++    return await acl_service.revoke_acl_entry(
++        session,
++        caller.workspace_id,
++        caller,
++        object_id=body.object_id,
++        principal_id=body.principal_id,
++        effect=body.effect,
++    )
++
++
++@router.get("/{object_id}/manifest", response_model=AccessManifest)
++async def inspect_manifest_endpoint(
++    object_id: str,
++    caller: Caller,
++    session: Session,
++) -> AccessManifest:
++    """Inspect access manifest for an object enforcing anti-enumeration."""
++    return await acl_service.inspect_access_manifest(
++        session,
++        caller,
++        object_id,
++    )
+diff --git a/kanban/api/v1/admin/principals.py b/kanban/api/v1/admin/principals.py
+new file mode 100644
+index 0000000..61640c6
+--- /dev/null
++++ b/kanban/api/v1/admin/principals.py
+@@ -0,0 +1,236 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""REST API router for Principals, Groups, and Role Bindings administration.
++
++(KB-P4-09b, S11.4, S3.1).
++"""
++
++from __future__ import annotations
++
++import logging
++import uuid  # noqa: TC003
++from typing import Annotated, Literal
++
++from fastapi import APIRouter, Depends, Query, status
++from pydantic import BaseModel, ConfigDict, Field
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from kanban.admin import principal_service
++from kanban.api.deps import PrincipalContext, get_rls_session
++from kanban.api.problems import FieldError, ProblemException
++from kanban.api.v1.admin.workspace_settings import require_workspace_or_server_admin
++from kanban.auth.mfa.policy import require_admin_aal2
++
++logger = logging.getLogger(__name__)
++
++router = APIRouter(
++    tags=["admin-principals"],
++    dependencies=[Depends(require_admin_aal2), Depends(require_workspace_or_server_admin)],
++)
++
++Caller = Annotated[PrincipalContext, Depends(require_workspace_or_server_admin)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++class ProvisionPrincipalRequest(BaseModel):
++    """Schema for provisioning a user, group, or agent principal."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    type: Literal["USER", "GROUP", "AGENT"]
++    display_name: str = Field(min_length=1, max_length=120)
++    handle: str | None = Field(default=None, pattern=r"^@?[a-z0-9][a-z0-9._-]{1,38}$")
++    email: str | None = None
++
++
++class UpdatePrincipalRequest(BaseModel):
++    """Schema for updating principal status or display name."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    status: Literal["active", "deactivated", "disabled"] | None = None
++    display_name: str | None = Field(default=None, min_length=1, max_length=120)
++
++
++class RoleBindingRequest(BaseModel):
++    """Schema for binding or unbinding an RBAC role."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    principal_id: uuid.UUID
++    role: str
++    scope_type: Literal["server", "workspace", "project"]
++    scope_id: uuid.UUID | None = None
++
++
++@router.get("/admin/principals")
++async def list_principals_endpoint(
++    caller: Caller,
++    session: Session,
++    filter: Annotated[  # noqa: A002
++        str | None,
++        Query(description="USER, GROUP, AGENT, or SERVICE_PRINCIPAL"),
++    ] = None,
++    limit: Annotated[int, Query(ge=1, le=100)] = 50,
++) -> list[dict[str, object]]:
++    """List principals in the current workspace."""
++    return await principal_service.list_principals(
++        session,
++        caller.workspace_id,
++        filter_type=filter,
++        limit=limit,
++    )
++
++
++@router.post("/admin/principals", status_code=status.HTTP_201_CREATED)
++async def provision_principal_endpoint(
++    body: ProvisionPrincipalRequest,
++    caller: Caller,
++    session: Session,
++) -> dict[str, object]:
++    """Provision a new USER, GROUP, or AGENT principal."""
++    if body.type == "USER":
++        if not body.handle:
++            msg = "handle is required for USER provisioning"
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail=msg,
++                errors=[FieldError(path="handle", message=msg)],
++            )
++        if not body.email:
++            msg = "email is required for USER provisioning"
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail=msg,
++                errors=[FieldError(path="email", message=msg)],
++            )
++        return await principal_service.provision_user(
++            session,
++            caller.workspace_id,
++            caller.principal_id,
++            handle=body.handle,
++            display_name=body.display_name,
++            email=body.email,
++        )
++    if body.type == "GROUP":
++        return await principal_service.provision_group(
++            session,
++            caller.workspace_id,
++            caller.principal_id,
++            name=body.display_name,
++            display_name=body.display_name,
++        )
++    agent_handle = body.handle or body.display_name.lower().replace(" ", "-")
++    return await principal_service.provision_agent(
++        session,
++        caller.workspace_id,
++        caller.principal_id,
++        handle=agent_handle,
++        display_name=body.display_name,
++    )
++
++
++@router.get("/admin/principals/{principal_id}")
++async def get_principal_endpoint(
++    principal_id: str,
++    caller: Caller,
++    session: Session,
++) -> dict[str, object]:
++    """Get full details of a principal by UUID or reference."""
++    return await principal_service.get_principal_detail(
++        session,
++        caller.workspace_id,
++        principal_id,
++    )
++
++
++@router.patch("/admin/principals/{principal_id}")
++async def patch_principal_endpoint(
++    principal_id: uuid.UUID,
++    body: UpdatePrincipalRequest,
++    caller: Caller,
++    session: Session,
++) -> dict[str, object]:
++    """Update principal status or display name."""
++    return await principal_service.update_principal(
++        session,
++        caller.workspace_id,
++        caller.principal_id,
++        principal_id,
++        status=body.status,
++        display_name=body.display_name,
++    )
++
++
++@router.post("/admin/groups/{group_id}/members/{principal_id}")
++async def add_group_member_endpoint(
++    group_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++) -> dict[str, object]:
++    """Add a principal as a member of a group."""
++    return await principal_service.add_group_member(
++        session,
++        caller.workspace_id,
++        caller.principal_id,
++        group_id=group_id,
++        member_id=principal_id,
++    )
++
++
++@router.delete("/admin/groups/{group_id}/members/{principal_id}")
++async def remove_group_member_endpoint(
++    group_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++) -> dict[str, object]:
++    """Remove a principal from a group."""
++    return await principal_service.remove_group_member(
++        session,
++        caller.workspace_id,
++        caller.principal_id,
++        group_id=group_id,
++        member_id=principal_id,
++    )
++
++
++@router.post("/admin/role-bindings")
++async def bind_role_endpoint(
++    body: RoleBindingRequest,
++    caller: Caller,
++    session: Session,
++) -> dict[str, object]:
++    """Bind an RBAC role to a principal."""
++    return await principal_service.bind_role(
++        session,
++        caller.workspace_id,
++        caller.principal_id,
++        principal_id=body.principal_id,
++        role_name=body.role,
++        scope_type=body.scope_type,
++        project_id=body.scope_id,
++    )
++
++
++@router.delete("/admin/role-bindings")
++async def unbind_role_endpoint(
++    body: RoleBindingRequest,
++    caller: Caller,
++    session: Session,
++) -> dict[str, object]:
++    """Unbind an RBAC role from a principal."""
++    return await principal_service.unbind_role(
++        session,
++        caller.workspace_id,
++        caller.principal_id,
++        principal_id=body.principal_id,
++        role_name=body.role,
++        scope_type=body.scope_type,
++        project_id=body.scope_id,
++    )
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index b2c501a..d5e76d1 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -183,6 +183,16 @@ class ActivityEventType(StrEnum):
+     AI_PROVIDER_CONFIG_UPDATED = "AI_PROVIDER_CONFIG_UPDATED"
+     AI_PROVIDER_CONFIG_DISABLED = "AI_PROVIDER_CONFIG_DISABLED"
+     AI_BUDGET_SET = "AI_BUDGET_SET"
++    PRINCIPAL_PROVISIONED = "PRINCIPAL_PROVISIONED"
++    PRINCIPAL_UPDATED = "PRINCIPAL_UPDATED"
++    PRINCIPAL_DEACTIVATED = "PRINCIPAL_DEACTIVATED"
++    PRINCIPAL_REACTIVATED = "PRINCIPAL_REACTIVATED"
++    GROUP_MEMBER_ADDED = "GROUP_MEMBER_ADDED"
++    GROUP_MEMBER_REMOVED = "GROUP_MEMBER_REMOVED"
++    ROLE_BOUND = "ROLE_BOUND"
++    ROLE_UNBOUND = "ROLE_UNBOUND"
++    ACL_ENTRY_GRANTED = "ACL_ENTRY_GRANTED"
++    ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -311,6 +321,16 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.AI_PROVIDER_CONFIG_UPDATED: ActivityCategory.SYSTEM,
+         ActivityEventType.AI_PROVIDER_CONFIG_DISABLED: ActivityCategory.SYSTEM,
+         ActivityEventType.AI_BUDGET_SET: ActivityCategory.SYSTEM,
++        ActivityEventType.PRINCIPAL_PROVISIONED: ActivityCategory.SYSTEM,
++        ActivityEventType.PRINCIPAL_UPDATED: ActivityCategory.SYSTEM,
++        ActivityEventType.PRINCIPAL_DEACTIVATED: ActivityCategory.SYSTEM,
++        ActivityEventType.PRINCIPAL_REACTIVATED: ActivityCategory.SYSTEM,
++        ActivityEventType.GROUP_MEMBER_ADDED: ActivityCategory.SYSTEM,
++        ActivityEventType.GROUP_MEMBER_REMOVED: ActivityCategory.SYSTEM,
++        ActivityEventType.ROLE_BOUND: ActivityCategory.SYSTEM,
++        ActivityEventType.ROLE_UNBOUND: ActivityCategory.SYSTEM,
++        ActivityEventType.ACL_ENTRY_GRANTED: ActivityCategory.SYSTEM,
++        ActivityEventType.ACL_ENTRY_REVOKED: ActivityCategory.SYSTEM,
+     }
+ )
+ 
+diff --git a/kanban/tests/api/conftest.py b/kanban/tests/api/conftest.py
+index 5115a05..dff11b1 100644
+--- a/kanban/tests/api/conftest.py
++++ b/kanban/tests/api/conftest.py
+@@ -124,12 +124,13 @@ def make_user(api_env: ApiEnv) -> Callable[..., Awaitable[SeededUser]]:
+             api_env.seed, api_env.workspace_id, handle=f"@{handle}", display_name=handle.title()
+         )
+         if workspace_role is not None:
++            scope_type = "server" if workspace_role == "SERVER_ADMIN" else "workspace"
+             await add_role_binding(
+                 api_env.seed,
+                 api_env.workspace_id,
+                 user_id,
+                 role=workspace_role,
+-                scope_type="workspace",
++                scope_type=scope_type,
+             )
+         await rebuild_era(api_env.seed, api_env.workspace_id)
+         await api_env.seed.commit()
+diff --git a/kanban/tests/api/test_admin_acl.py b/kanban/tests/api/test_admin_acl.py
+new file mode 100644
+index 0000000..342df2d
+--- /dev/null
++++ b/kanban/tests/api/test_admin_acl.py
+@@ -0,0 +1,538 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Integration tests for Object ACL REST API & Deny Precedence (KB-P4-09b)."""
++
++from __future__ import annotations
++
++import base64
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++
++from kanban.admin.acl_service import (
++    _assert_admin_on_object,
++    grant_acl_entry,
++    parse_capability_mask,
++    resolve_target_object_id,
++    revoke_acl_entry,
++)
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.security.permissions import Capability, evaluate_capabilities
++from kanban.tests.security.helpers import (
++    create_project,
++    create_registered_object,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++async def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> None:
++    """Enroll confirmed TOTP factor and elevate test client to AAL2 session."""
++    await api_env.seed.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {
++            "p_id": user.id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await api_env.seed.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": user.id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await api_env.seed.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await api_env.seed.commit()
++
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++
++
++class _TestObject:
++    def __init__(self, obj_id: uuid.UUID) -> None:
++        self.id = obj_id
++
++
++async def _create_test_issue(
++    api_env: ApiEnv, workspace_id: uuid.UUID, project_id: uuid.UUID, user_id: uuid.UUID
++) -> _TestObject:
++    """Create a test registered object in the objects spine."""
++    issue_id = await create_registered_object(
++        api_env.seed,
++        workspace_id,
++        kind="issue",
++        key="KAN-142",
++        title="Test Issue KAN-142",
++        project_id=project_id,
++        created_by_id=user_id,
++    )
++    await api_env.seed.commit()
++    return _TestObject(issue_id)
++
++
++@pytest.mark.asyncio
++async def test_grant_and_inspect_access_manifest(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Grant ALLOW capabilities to group on an issue and inspect manifest."""
++    admin = await make_user("admin_acl", workspace_role="WORKSPACE_ADMIN")
++    await _as_admin_aal2(api_env, admin)
++
++    prj_id = await create_project(
++        api_env.seed, admin.workspace_id, identifier="KAN", name="Kanban Project"
++    )
++    await api_env.seed.commit()
++    issue = await _create_test_issue(api_env, admin.workspace_id, prj_id, admin.id)
++
++    # 1. Provision group SecOps Reviewers
++    resp_group = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={"type": "GROUP", "display_name": "SecOps Reviewers"},
++    )
++    assert resp_group.status_code == 201
++    group_id = resp_group.json()["id"]
++
++    # 2. Grant ALLOW [VIEW, COMMENT] to group on issue
++    resp_grant = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": group_id,
++            "effect": "ALLOW",
++            "capabilities": ["VIEW", "COMMENT"],
++        },
++    )
++    assert resp_grant.status_code == 200
++    grant_data = resp_grant.json()
++    assert grant_data["status"] == "granted"
++    assert "VIEW" in grant_data["capabilities"]
++    assert "COMMENT" in grant_data["capabilities"]
++
++    # 3. Inspect manifest via admin endpoint
++    resp_manifest = await api_env.client.get(f"/api/v1/admin/acl-entries/{issue.id}/manifest")
++    assert resp_manifest.status_code == 200
++    manifest = resp_manifest.json()
++    grp_names = [g["name"] for g in manifest["groups"]]
++    assert "SecOps Reviewers" in grp_names
++
++
++@pytest.mark.asyncio
++async def test_deny_precedence_overrides_group_allow(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Explicit DENY [VIEW] on issue strictly overrides group ALLOW and denies access."""
++    admin = await make_user("admin_deny", workspace_role="WORKSPACE_ADMIN")
++    maya = await make_user("maya_deny", workspace_role="WORKSPACE_MEMBER")
++    await _as_admin_aal2(api_env, admin)
++
++    prj_id = await create_project(
++        api_env.seed, admin.workspace_id, identifier="KAN", name="Kanban Project"
++    )
++    await api_env.seed.commit()
++    issue = await _create_test_issue(api_env, admin.workspace_id, prj_id, admin.id)
++
++    # 1. Provision group and add maya to group
++    r_grp = await api_env.client.post(
++        "/api/v1/admin/principals", json={"type": "GROUP", "display_name": "Reviewers"}
++    )
++    grp_id = r_grp.json()["id"]
++    await api_env.client.post(f"/api/v1/admin/groups/{grp_id}/members/{maya.id}")
++
++    # 2. Grant ALLOW [VIEW, COMMENT] to group on issue
++    await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": grp_id,
++            "effect": "ALLOW",
++            "capabilities": ["VIEW", "COMMENT"],
++        },
++    )
++
++    # 3. Grant DENY [VIEW] to maya on issue
++    resp_deny = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(maya.id),
++            "effect": "DENY",
++            "capabilities": ["VIEW"],
++        },
++    )
++    assert resp_deny.status_code == 200
++    deny_data = resp_deny.json()
++    assert "VIEW" not in deny_data["effective_capabilities"]
++
++    # 4. Verify maya's effective capabilities evaluate to NONE for VIEW
++    maya_ctx = PrincipalContext(
++        principal_id=maya.id,
++        workspace_id=maya.workspace_id,
++        token_scopes=("session",),
++        aal_level=1,
++    )
++    caps = await evaluate_capabilities(api_env.seed, maya_ctx, issue.id)
++    assert Capability.VIEW not in caps
++
++    # 5. Revoke DENY entry
++    resp_rev = await api_env.client.request(
++        "DELETE",
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(maya.id),
++            "effect": "DENY",
++        },
++    )
++    assert resp_rev.status_code == 200
++
++
++@pytest.mark.asyncio
++async def test_non_admin_insufficient_permission_or_not_found(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Non-admin callers cannot grant/revoke ACLs or inspect restricted manifests."""
++    member = await make_user("regular_member", workspace_role="WORKSPACE_MEMBER")
++    admin = await make_user("issue_owner", workspace_role="WORKSPACE_ADMIN")
++
++    prj_id = await create_project(
++        api_env.seed, admin.workspace_id, identifier="KAN", name="Kanban Project"
++    )
++    await api_env.seed.commit()
++    issue = await _create_test_issue(api_env, admin.workspace_id, prj_id, admin.id)
++
++    # Set client as regular member (AAL1, regular member)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=member.id,
++        workspace_id=member.workspace_id,
++        token_scopes=("session",),
++        aal_level=1,
++    )
++
++    # Non-admin attempting to grant ACL -> 403 AAL2 or Insufficient Capability
++    resp_grant = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(member.id),
++            "effect": "ALLOW",
++            "capabilities": ["VIEW"],
++        },
++    )
++    assert resp_grant.status_code in (403, 404)
++
++
++@pytest.mark.asyncio
++async def test_acl_boundary_validations(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Boundary conditions: empty capabilities, invalid capability name, unknown principal."""
++    admin = await make_user("admin_acl_bounds", workspace_role="WORKSPACE_ADMIN")
++    await _as_admin_aal2(api_env, admin)
++
++    prj_id = await create_project(
++        api_env.seed, admin.workspace_id, identifier="KAN", name="Kanban Project"
++    )
++    await api_env.seed.commit()
++    issue = await _create_test_issue(api_env, admin.workspace_id, prj_id, admin.id)
++
++    # Empty capabilities
++    r1 = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(admin.id),
++            "effect": "ALLOW",
++            "capabilities": [],
++        },
++    )
++    assert r1.status_code == 422
++
++    # Unknown capability name
++    r2 = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(admin.id),
++            "effect": "ALLOW",
++            "capabilities": ["INVALID_CAP"],
++        },
++    )
++    assert r2.status_code == 422
++
++    # Unknown principal UUID
++    r3 = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(uuid.uuid4()),
++            "effect": "ALLOW",
++            "capabilities": ["VIEW"],
++        },
++    )
++    assert r3.status_code == 404
++
++    # Capabilities > 8 items
++    r_too_many = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(admin.id),
++            "effect": "ALLOW",
++            "capabilities": [
++                "VIEW",
++                "COMMENT",
++                "EDIT",
++                "TRANSITION",
++                "LINK",
++                "SHARE",
++                "ADMIN",
++                "DELETE",
++                "EXTRA",
++            ],
++        },
++    )
++    assert r_too_many.status_code == 422
++
++    # Invalid effect on grant
++    r_bad_eff = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(admin.id),
++            "effect": "MAYBE",
++            "capabilities": ["VIEW"],
++        },
++    )
++    assert r_bad_eff.status_code == 422
++
++    # Invalid effect on revoke
++    r_bad_rev_eff = await api_env.client.request(
++        "DELETE",
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(admin.id),
++            "effect": "MAYBE",
++        },
++    )
++    assert r_bad_rev_eff.status_code == 422
++
++    # Revoke non-existent ACL entry
++    r_rev_none = await api_env.client.request(
++        "DELETE",
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(admin.id),
++            "effect": "DENY",
++        },
++    )
++    assert r_rev_none.status_code == 200
++
++    # Non-existent object ref on grant
++    r_obj_ghost = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(uuid.uuid4()),
++            "principal_id": str(admin.id),
++            "effect": "ALLOW",
++            "capabilities": ["VIEW"],
++        },
++    )
++    assert r_obj_ghost.status_code == 404
++
++    # Grant with upsert (updating capabilities of existing entry)
++    r_up1 = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(admin.id),
++            "effect": "ALLOW",
++            "capabilities": ["VIEW"],
++        },
++    )
++    assert r_up1.status_code == 200
++
++    r_up2 = await api_env.client.post(
++        "/api/v1/admin/acl-entries",
++        json={
++            "object_id": str(issue.id),
++            "principal_id": str(admin.id),
++            "effect": "ALLOW",
++            "capabilities": ["VIEW", "COMMENT", "EDIT"],
++        },
++    )
++    assert r_up2.status_code == 200
++    assert "EDIT" in r_up2.json()["capabilities"]
++
++
++@pytest.mark.asyncio
++async def test_acl_service_unit_edge_cases(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Direct unit testing of acl_service edge cases and validations."""
++    admin = await make_user("admin_acl_unit", workspace_role="WORKSPACE_ADMIN")
++    user = await make_user("user_acl_unit", workspace_role="WORKSPACE_MEMBER")
++
++    prj_id = await create_project(
++        api_env.seed, admin.workspace_id, identifier="UNIT", name="Unit Project"
++    )
++    await api_env.seed.commit()
++    issue = await _create_test_issue(api_env, admin.workspace_id, prj_id, admin.id)
++
++    # 1. parse_capability_mask
++    mask = parse_capability_mask(["VIEW", "DELETE"])
++    assert mask == (Capability.VIEW | Capability.DELETE)
++
++    with pytest.raises(ProblemException) as exc_info:
++        parse_capability_mask([])
++    assert exc_info.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc_info:
++        parse_capability_mask(["A", "B", "C", "D", "E", "F", "G", "H", "I"])
++    assert exc_info.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc_info:
++        parse_capability_mask(["UNKNOWN"])
++    assert exc_info.value.code == "VALIDATION_FAILED"
++
++    # 2. resolve_target_object_id with UUID and with key
++    resolved_uid = await resolve_target_object_id(api_env.seed, admin.workspace_id, issue.id)
++    assert resolved_uid == issue.id
++
++    resolved_key = await resolve_target_object_id(api_env.seed, admin.workspace_id, "KAN-142")
++    assert resolved_key == issue.id
++
++    # Non-existent ref
++    with pytest.raises(ProblemException) as exc_info:
++        await resolve_target_object_id(api_env.seed, admin.workspace_id, "NONEXISTENT-999")
++    assert exc_info.value.code == "NOT_FOUND"
++
++    # 3. _assert_admin_on_object: user without admin capability
++    user_ctx = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        token_scopes=("session",),
++        aal_level=1,
++    )
++    with pytest.raises(ProblemException) as exc_info:
++        await _assert_admin_on_object(api_env.seed, user_ctx, issue.id)
++    # Since user has no view/admin, raises NOT_FOUND or INSUFFICIENT_PERMISSION
++    assert exc_info.value.code in ("NOT_FOUND", "INSUFFICIENT_PERMISSION")
++
++    # 4. Direct service calls for grant_acl_entry and revoke_acl_entry branches
++
++    admin_ctx = PrincipalContext(
++        principal_id=admin.id,
++        workspace_id=admin.workspace_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++
++    # grant with UUID principal_id
++    res_g_uuid = await grant_acl_entry(
++        api_env.seed,
++        admin.workspace_id,
++        admin_ctx,
++        issue.id,
++        user.id,  # UUID
++        "ALLOW",
++        ["VIEW"],
++    )
++    assert res_g_uuid["status"] == "granted"
++
++    # grant with non-existent principal UUID
++    with pytest.raises(ProblemException) as exc_info:
++        await grant_acl_entry(
++            api_env.seed,
++            admin.workspace_id,
++            admin_ctx,
++            issue.id,
++            uuid.uuid4(),
++            "ALLOW",
++            ["VIEW"],
++        )
++    assert exc_info.value.code == "NOT_FOUND"
++
++    # grant with invalid effect
++    with pytest.raises(ProblemException) as exc_info:
++        await grant_acl_entry(
++            api_env.seed,
++            admin.workspace_id,
++            admin_ctx,
++            issue.id,
++            user.id,
++            "INVALID_EFFECT",
++            ["VIEW"],
++        )
++    assert exc_info.value.code == "VALIDATION_FAILED"
++
++    # revoke with UUID principal_id
++    res_r_uuid = await revoke_acl_entry(
++        api_env.seed,
++        admin.workspace_id,
++        admin_ctx,
++        issue.id,
++        user.id,  # UUID
++        "ALLOW",
++    )
++    assert res_r_uuid["status"] == "revoked"
++
++    # revoke with non-existent principal UUID
++    with pytest.raises(ProblemException) as exc_info:
++        await revoke_acl_entry(
++            api_env.seed,
++            admin.workspace_id,
++            admin_ctx,
++            issue.id,
++            uuid.uuid4(),
++            "ALLOW",
++        )
++    assert exc_info.value.code == "NOT_FOUND"
++
++    # revoke with invalid effect
++    with pytest.raises(ProblemException) as exc_info:
++        await revoke_acl_entry(
++            api_env.seed,
++            admin.workspace_id,
++            admin_ctx,
++            issue.id,
++            user.id,
++            "INVALID_EFFECT",
++        )
++    assert exc_info.value.code == "VALIDATION_FAILED"
+diff --git a/kanban/tests/api/test_admin_principals.py b/kanban/tests/api/test_admin_principals.py
+new file mode 100644
+index 0000000..3292874
+--- /dev/null
++++ b/kanban/tests/api/test_admin_principals.py
+@@ -0,0 +1,1000 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Integration tests for Principals & Groups REST API (KB-P4-09b)."""
++
++from __future__ import annotations
++
++import base64
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import func, select, text
++
++from database.models import Principal as DBPrincipal
++from database.models.auth import UserSession
++from database.models.mcp_api_key import McpApiKey
++from kanban.admin.principal_service import (
++    add_group_member,
++    bind_role,
++    get_principal_detail,
++    list_principals,
++    normalize_handle,
++    provision_agent,
++    provision_group,
++    provision_user,
++    remove_group_member,
++    resolve_principal_id,
++    unbind_role,
++    update_principal,
++)
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.app import create_app
++from kanban.auth.mfa.policy import assert_admin_routes_protected
++from kanban.tests.security.helpers import (
++    create_project,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++async def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> None:
++    """Enroll confirmed TOTP factor and elevate test client to AAL2 session."""
++    await api_env.seed.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {
++            "p_id": user.id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await api_env.seed.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": user.id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await api_env.seed.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await api_env.seed.commit()
++
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++
++
++@pytest.mark.asyncio
++async def test_admin_routes_protected() -> None:
++    """Audit route table to verify all /api/v1/admin/* routes require AAL2."""
++    app = create_app()
++    assert_admin_routes_protected(app)
++
++
++@pytest.mark.asyncio
++async def test_principals_lifecycle_and_group_membership(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Test provisioning user, group, agent, adding member, binding role, and querying detail."""
++    admin = await make_user("admin_user", workspace_role="WORKSPACE_ADMIN")
++    await _as_admin_aal2(api_env, admin)
++
++    # 1. Provision user maya
++    resp_user = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={
++            "type": "USER",
++            "handle": "maya",
++            "display_name": "Maya Lin",
++            "email": "maya@example.com",
++        },
++    )
++    assert resp_user.status_code == 201
++    user_data = resp_user.json()
++    assert user_data["principal"] == "@maya"
++    maya_id = user_data["id"]
++
++    # 2. Provision group Core Backend
++    resp_group = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={
++            "type": "GROUP",
++            "display_name": "Core Backend",
++        },
++    )
++    assert resp_group.status_code == 201
++    group_data = resp_group.json()
++    assert group_data["principal"] == "Core Backend"
++    group_id = group_data["id"]
++
++    # 3. Provision agent forensic-code-check
++    resp_agent = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={
++            "type": "AGENT",
++            "handle": "forensic-code-check",
++            "display_name": "Forensic Code Checker",
++        },
++    )
++    assert resp_agent.status_code == 201
++    agent_data = resp_agent.json()
++    assert agent_data["principal"] == "@forensic-code-check"
++
++    # 4. List principals
++    resp_list = await api_env.client.get("/api/v1/admin/principals")
++    assert resp_list.status_code == 200
++    p_list = resp_list.json()
++    handles = [p["principal"] for p in p_list]
++    assert "@maya" in handles
++    assert "Core Backend" in handles
++    assert "@forensic-code-check" in handles
++
++    # 5. Add maya to Core Backend
++    resp_member = await api_env.client.post(f"/api/v1/admin/groups/{group_id}/members/{maya_id}")
++    assert resp_member.status_code == 200
++    assert resp_member.json()["status"] == "member_added"
++
++    # 6. Verify maya detail shows group Core Backend
++    resp_maya = await api_env.client.get(f"/api/v1/admin/principals/{maya_id}")
++    assert resp_maya.status_code == 200
++    maya_detail = resp_maya.json()
++    assert "Core Backend" in maya_detail["groups"]
++
++    # 7. Create project KAN and bind role MEMBER to maya on KAN
++    prj_id = await create_project(
++        api_env.seed, admin.workspace_id, identifier="KAN", name="Kanban Project"
++    )
++    await api_env.seed.commit()
++
++    resp_bind = await api_env.client.post(
++        "/api/v1/admin/role-bindings",
++        json={
++            "principal_id": maya_id,
++            "role": "MEMBER",
++            "scope_type": "project",
++            "scope_id": str(prj_id),
++        },
++    )
++    assert resp_bind.status_code == 200
++
++    # 8. Check maya roles in detail
++    resp_maya2 = await api_env.client.get(f"/api/v1/admin/principals/{maya_id}")
++    maya_roles = resp_maya2.json()["roles"]
++    assert any(r["role"] == "MEMBER" and r["scope"] == "KAN" for r in maya_roles)
++
++
++@pytest.mark.asyncio
++async def test_principal_deactivation_sessions_and_mcp_keys_revoked(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Deactivating a user revokes user sessions and MCP keys in same transaction."""
++    admin = await make_user("admin_deact", workspace_role="WORKSPACE_ADMIN")
++    target_user = await make_user("target_to_deact", workspace_role="WORKSPACE_MEMBER")
++    await _as_admin_aal2(api_env, admin)
++
++    # Seed an active session for target_user
++    sess_id = uuid.uuid4()
++    api_env.seed.add(
++        UserSession(
++            id=sess_id,
++            token_sha256=b"x" * 32,
++            principal_id=target_user.id,
++            workspace_id=target_user.workspace_id,
++            aal_level=1,
++            idle_expires_at=func.clock_timestamp() + text("interval '1 hour'"),
++            absolute_expires_at=func.clock_timestamp() + text("interval '12 hours'"),
++        )
++    )
++
++    # Seed an active MCP API key for target_user
++    key_id = uuid.uuid4()
++    api_env.seed.add(
++        McpApiKey(
++            id=key_id,
++            workspace_id=target_user.workspace_id,
++            principal_id=target_user.id,
++            surface="agent",
++            key_prefix="kb_agt_",
++            key_sha256=b"y" * 32,
++            display_hint="1234",
++            scopes=["agent:read"],
++            created_by_id=admin.id,
++            expires_at=func.clock_timestamp() + text("interval '90 days'"),
++        )
++    )
++    await api_env.seed.commit()
++
++    # Deactivate target user
++    resp = await api_env.client.patch(
++        f"/api/v1/admin/principals/{target_user.id}",
++        json={"status": "deactivated"},
++    )
++    assert resp.status_code == 200
++    assert resp.json()["status"] == "deactivated"
++
++    # Verify session is revoked
++    sess_revoked = (
++        await api_env.seed.execute(select(UserSession.revoked_at).where(UserSession.id == sess_id))
++    ).scalar_one()
++    assert sess_revoked is not None
++
++    # Verify session does not resolve
++    resolved = (
++        await api_env.seed.execute(
++            text("SELECT id FROM kb_auth.session_resolve(:sha)"),
++            {"sha": b"x" * 32},
++        )
++    ).first()
++    assert resolved is None
++
++    # Verify MCP key is revoked
++    key_revoked = (
++        await api_env.seed.execute(select(McpApiKey.revoked_at).where(McpApiKey.id == key_id))
++    ).scalar_one()
++    assert key_revoked is not None
++
++
++@pytest.mark.asyncio
++async def test_lockout_prevented_on_last_server_admin(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Deactivating or unbinding the last SERVER_ADMIN returns 409 LOCKOUT_PREVENTED."""
++    admin = await make_user("solo_admin", workspace_role="SERVER_ADMIN")
++    await _as_admin_aal2(api_env, admin)
++
++    # 1. Attempt to deactivate last server admin
++    resp = await api_env.client.patch(
++        f"/api/v1/admin/principals/{admin.id}",
++        json={"status": "deactivated"},
++    )
++    assert resp.status_code == 409
++    body = resp.json()
++    assert body["code"] == "LOCKOUT_PREVENTED"
++    assert "SERVER_ADMIN" in body["detail"]
++
++    # 2. Attempt to unbind SERVER_ADMIN role
++    resp_unbind = await api_env.client.request(
++        "DELETE",
++        "/api/v1/admin/role-bindings",
++        json={
++            "principal_id": str(admin.id),
++            "role": "SERVER_ADMIN",
++            "scope_type": "server",
++        },
++    )
++    assert resp_unbind.status_code == 409
++    assert resp_unbind.json()["code"] == "LOCKOUT_PREVENTED"
++
++
++@pytest.mark.asyncio
++async def test_group_cycle_and_depth_limits(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Cycle detection returns GROUP_CYCLE_REJECTED and depth > 8 returns GROUP_DEPTH_EXCEEDED."""
++    admin = await make_user("admin_closure", workspace_role="WORKSPACE_ADMIN")
++    await _as_admin_aal2(api_env, admin)
++
++    # 1. Create group A and group B
++    r_a = await api_env.client.post(
++        "/api/v1/admin/principals", json={"type": "GROUP", "display_name": "Group A"}
++    )
++    r_b = await api_env.client.post(
++        "/api/v1/admin/principals", json={"type": "GROUP", "display_name": "Group B"}
++    )
++    id_a = r_a.json()["id"]
++    id_b = r_b.json()["id"]
++
++    # Add B as member of A (A contains B)
++    r_add1 = await api_env.client.post(f"/api/v1/admin/groups/{id_a}/members/{id_b}")
++    assert r_add1.status_code == 200
++
++    # Add A as member of B (B contains A -> cycle!)
++    r_add2 = await api_env.client.post(f"/api/v1/admin/groups/{id_b}/members/{id_a}")
++    assert r_add2.status_code == 409
++    assert r_add2.json()["code"] == "GROUP_CYCLE_REJECTED"
++
++    # Self-membership cycle
++    r_self = await api_env.client.post(f"/api/v1/admin/groups/{id_a}/members/{id_a}")
++    assert r_self.status_code == 409
++    assert r_self.json()["code"] == "GROUP_CYCLE_REJECTED"
++
++
++@pytest.mark.asyncio
++async def test_principals_boundary_validations(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Boundary checks: handle syntax, empty display_name, limit bounds."""
++    admin = await make_user("admin_bound", workspace_role="WORKSPACE_ADMIN")
++    await _as_admin_aal2(api_env, admin)
++
++    # Bad handle format
++    resp_bad = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={
++            "type": "USER",
++            "handle": "-invalid_start",
++            "display_name": "Bad Handle User",
++            "email": "bad@example.com",
++        },
++    )
++    assert resp_bad.status_code == 422
++
++    # Limit > 100
++    resp_lim = await api_env.client.get("/api/v1/admin/principals?limit=101")
++    assert resp_lim.status_code == 422
++
++    # Limit < 1
++    resp_lim0 = await api_env.client.get("/api/v1/admin/principals?limit=0")
++    assert resp_lim0.status_code == 422
++
++    # Invalid filter
++    resp_filt = await api_env.client.get("/api/v1/admin/principals?filter=INVALID_TYPE")
++    assert resp_filt.status_code == 422
++
++    # Missing handle for USER
++    r_no_handle = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={"type": "USER", "display_name": "No Handle", "email": "nohandle@example.com"},
++    )
++    assert r_no_handle.status_code == 422
++
++    # Missing email for USER
++    r_no_email = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={"type": "USER", "handle": "nohandle", "display_name": "No Email"},
++    )
++    assert r_no_email.status_code == 422
++
++    # Unsupported principal type
++    r_bad_type = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={"type": "SUPER_HERO", "display_name": "Superman"},
++    )
++    assert r_bad_type.status_code == 422
++
++    # Invalid email format
++    r_bad_email = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={
++            "type": "USER",
++            "handle": "bademail",
++            "display_name": "Bad Email",
++            "email": "not-an-email",
++        },
++    )
++    assert r_bad_email.status_code == 422
++
++    # Display name length bounds (< 1 or > 120)
++    r_empty_dn = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={
++            "type": "USER",
++            "handle": "emptydn",
++            "display_name": "   ",
++            "email": "empty@example.com",
++        },
++    )
++    assert r_empty_dn.status_code == 422
++
++    r_long_dn = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={
++            "type": "USER",
++            "handle": "longdn",
++            "display_name": "x" * 121,
++            "email": "long@example.com",
++        },
++    )
++    assert r_long_dn.status_code == 422
++
++
++@pytest.mark.asyncio
++async def test_principals_conflict_identifiers(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Duplicate email, handle, group name, and agent slug raise 409 CONFLICT_IDENTIFIER."""
++    admin = await make_user("admin_conflicts", workspace_role="WORKSPACE_ADMIN")
++    await _as_admin_aal2(api_env, admin)
++
++    # 1. Provision user alice
++    r1 = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={
++            "type": "USER",
++            "handle": "alice",
++            "display_name": "Alice M",
++            "email": "alice@example.com",
++        },
++    )
++    assert r1.status_code == 201
++
++    # Duplicate email
++    r_dup_email = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={
++            "type": "USER",
++            "handle": "alice2",
++            "display_name": "Alice 2",
++            "email": "alice@example.com",
++        },
++    )
++    assert r_dup_email.status_code == 409
++    assert r_dup_email.json()["code"] == "CONFLICT_IDENTIFIER"
++
++    # Duplicate handle
++    r_dup_handle = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={
++            "type": "USER",
++            "handle": "alice",
++            "display_name": "Alice 3",
++            "email": "alice3@example.com",
++        },
++    )
++    assert r_dup_handle.status_code == 409
++    assert r_dup_handle.json()["code"] == "CONFLICT_IDENTIFIER"
++
++    # 2. Provision group Devs
++    r_grp1 = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={"type": "GROUP", "display_name": "Devs"},
++    )
++    assert r_grp1.status_code == 201
++
++    # Duplicate group name
++    r_grp2 = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={"type": "GROUP", "display_name": "Devs"},
++    )
++    assert r_grp2.status_code == 409
++    assert r_grp2.json()["code"] == "CONFLICT_IDENTIFIER"
++
++    # 3. Provision agent bot-a
++    r_agt1 = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={"type": "AGENT", "handle": "bot-a", "display_name": "Bot A"},
++    )
++    assert r_agt1.status_code == 201
++
++    # Duplicate agent slug
++    r_agt2 = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={"type": "AGENT", "handle": "bot-a", "display_name": "Bot A Again"},
++    )
++    assert r_agt2.status_code == 409
++    assert r_agt2.json()["code"] == "CONFLICT_IDENTIFIER"
++
++
++@pytest.mark.asyncio
++async def test_principals_patch_and_reactivation(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Test updating display_name, deactivation, and reactivation."""
++    admin = await make_user("admin_patch", workspace_role="WORKSPACE_ADMIN")
++    user = await make_user("user_patch", workspace_role="WORKSPACE_MEMBER")
++    await _as_admin_aal2(api_env, admin)
++
++    # 1. Update display name
++    r_patch_name = await api_env.client.patch(
++        f"/api/v1/admin/principals/{user.id}",
++        json={"display_name": "Updated User Patch Name"},
++    )
++    assert r_patch_name.status_code == 200
++    assert r_patch_name.json()["display_name"] == "Updated User Patch Name"
++
++    # 2. Deactivate
++    r_deact = await api_env.client.patch(
++        f"/api/v1/admin/principals/{user.id}",
++        json={"status": "deactivated"},
++    )
++    assert r_deact.status_code == 200
++    assert r_deact.json()["status"] == "deactivated"
++
++    # 3. Reactivate
++    r_react = await api_env.client.patch(
++        f"/api/v1/admin/principals/{user.id}",
++        json={"status": "active"},
++    )
++    assert r_react.status_code == 200
++    assert r_react.json()["status"] == "active"
++
++    # 4. Invalid status
++    r_bad_status = await api_env.client.patch(
++        f"/api/v1/admin/principals/{user.id}",
++        json={"status": "sleeping"},
++    )
++    assert r_bad_status.status_code == 422
++
++    # 5. Invalid display name in patch
++    r_bad_dn = await api_env.client.patch(
++        f"/api/v1/admin/principals/{user.id}",
++        json={"display_name": ""},
++    )
++    assert r_bad_dn.status_code == 422
++
++    # 6. Non-existent principal patch
++    r_non_exist = await api_env.client.patch(
++        f"/api/v1/admin/principals/{uuid.uuid4()}",
++        json={"display_name": "Ghost"},
++    )
++    assert r_non_exist.status_code == 404
++
++
++@pytest.mark.asyncio
++async def test_remove_group_member_and_role_bindings_matrix(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Test group member removal, role binding validation errors, idempotent binds, and unbinds."""
++    admin = await make_user("admin_rb_matrix", workspace_role="WORKSPACE_ADMIN")
++    user = await make_user("user_rb_matrix", workspace_role="WORKSPACE_MEMBER")
++    await _as_admin_aal2(api_env, admin)
++
++    prj_id = await create_project(
++        api_env.seed, admin.workspace_id, identifier="PRJ", name="Project PRJ"
++    )
++    await api_env.seed.commit()
++
++    # 1. Provision group and add user
++    r_grp = await api_env.client.post(
++        "/api/v1/admin/principals", json={"type": "GROUP", "display_name": "Test Group"}
++    )
++    grp_id = r_grp.json()["id"]
++
++    await api_env.client.post(f"/api/v1/admin/groups/{grp_id}/members/{user.id}")
++
++    # Remove group member
++    r_rm = await api_env.client.delete(f"/api/v1/admin/groups/{grp_id}/members/{user.id}")
++    assert r_rm.status_code == 200
++    assert r_rm.json()["status"] == "member_removed"
++
++    # Remove again (rowcount 0, idempotent)
++    r_rm2 = await api_env.client.delete(f"/api/v1/admin/groups/{grp_id}/members/{user.id}")
++    assert r_rm2.status_code == 200
++
++    # 2. Role binding validation errors
++    # Invalid scope_type
++    r_bad_st = await api_env.client.post(
++        "/api/v1/admin/role-bindings",
++        json={"principal_id": str(user.id), "role": "MEMBER", "scope_type": "galactic"},
++    )
++    assert r_bad_st.status_code == 422
++
++    # Invalid role name
++    r_bad_role = await api_env.client.post(
++        "/api/v1/admin/role-bindings",
++        json={"principal_id": str(user.id), "role": "OVERLORD", "scope_type": "workspace"},
++    )
++    assert r_bad_role.status_code == 422
++
++    # Server scope with invalid role
++    r_srv_bad = await api_env.client.post(
++        "/api/v1/admin/role-bindings",
++        json={"principal_id": str(user.id), "role": "WORKSPACE_MEMBER", "scope_type": "server"},
++    )
++    assert r_srv_bad.status_code == 422
++
++    # Workspace scope with project_id
++    r_ws_proj = await api_env.client.post(
++        "/api/v1/admin/role-bindings",
++        json={
++            "principal_id": str(user.id),
++            "role": "WORKSPACE_MEMBER",
++            "scope_type": "workspace",
++            "scope_id": str(prj_id),
++        },
++    )
++    assert r_ws_proj.status_code == 422
++
++    # Project scope without project_id
++    r_prj_none = await api_env.client.post(
++        "/api/v1/admin/role-bindings",
++        json={"principal_id": str(user.id), "role": "MEMBER", "scope_type": "project"},
++    )
++    assert r_prj_none.status_code == 422
++
++    # Project scope with invalid project_id
++    r_prj_ghost = await api_env.client.post(
++        "/api/v1/admin/role-bindings",
++        json={
++            "principal_id": str(user.id),
++            "role": "MEMBER",
++            "scope_type": "project",
++            "scope_id": str(uuid.uuid4()),
++        },
++    )
++    assert r_prj_ghost.status_code == 404
++
++    # Valid bind
++    r_bind = await api_env.client.post(
++        "/api/v1/admin/role-bindings",
++        json={
++            "principal_id": str(user.id),
++            "role": "MEMBER",
++            "scope_type": "project",
++            "scope_id": str(prj_id),
++        },
++    )
++    assert r_bind.status_code == 200
++    assert r_bind.json()["status"] == "role_bound"
++
++    # Bind again -> already_bound
++    r_bind_dup = await api_env.client.post(
++        "/api/v1/admin/role-bindings",
++        json={
++            "principal_id": str(user.id),
++            "role": "MEMBER",
++            "scope_type": "project",
++            "scope_id": str(prj_id),
++        },
++    )
++    assert r_bind_dup.status_code == 200
++    assert r_bind_dup.json()["status"] == "already_bound"
++
++    # Unbind role with invalid role name
++    r_ub_bad = await api_env.client.request(
++        "DELETE",
++        "/api/v1/admin/role-bindings",
++        json={"principal_id": str(user.id), "role": "INVALID", "scope_type": "project"},
++    )
++    assert r_ub_bad.status_code == 422
++
++    # Unbind role success
++    r_ub = await api_env.client.request(
++        "DELETE",
++        "/api/v1/admin/role-bindings",
++        json={
++            "principal_id": str(user.id),
++            "role": "MEMBER",
++            "scope_type": "project",
++            "scope_id": str(prj_id),
++        },
++    )
++    assert r_ub.status_code == 200
++    assert r_ub.json()["status"] == "role_unbound"
++
++    # Unbind non-existent role binding
++    r_ub_none = await api_env.client.request(
++        "DELETE",
++        "/api/v1/admin/role-bindings",
++        json={
++            "principal_id": str(user.id),
++            "role": "MEMBER",
++            "scope_type": "project",
++            "scope_id": str(prj_id),
++        },
++    )
++    assert r_ub_none.status_code == 200
++
++
++@pytest.mark.asyncio
++async def test_resolve_principal_and_filters(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Test resolving principal by various formats and filtering lists."""
++    admin = await make_user("admin_res", workspace_role="WORKSPACE_ADMIN")
++    await _as_admin_aal2(api_env, admin)
++
++    # 1. Provision group and agent
++    r_g = await api_env.client.post(
++        "/api/v1/admin/principals", json={"type": "GROUP", "display_name": "Infra Team"}
++    )
++    g_id = r_g.json()["id"]
++
++    r_a = await api_env.client.post(
++        "/api/v1/admin/principals",
++        json={"type": "AGENT", "handle": "sec-bot", "display_name": "Security Bot"},
++    )
++    a_id = r_a.json()["id"]
++
++    # Resolve group by name
++    r_g_get = await api_env.client.get(f"/api/v1/admin/principals/{g_id}")
++    assert r_g_get.status_code == 200
++    assert r_g_get.json()["principal"] == "Infra Team"
++
++    # Resolve agent by slug
++    r_a_get = await api_env.client.get(f"/api/v1/admin/principals/{a_id}")
++    assert r_a_get.status_code == 200
++    assert r_a_get.json()["principal"] == "@sec-bot"
++
++    # List with filters
++    r_list_u = await api_env.client.get("/api/v1/admin/principals?filter=USER")
++    assert r_list_u.status_code == 200
++    assert all(p["type"] == "USER" for p in r_list_u.json())
++
++    r_list_g = await api_env.client.get("/api/v1/admin/principals?filter=GROUP")
++    assert r_list_g.status_code == 200
++    assert all(p["type"] == "GROUP" for p in r_list_g.json())
++
++    r_list_a = await api_env.client.get("/api/v1/admin/principals?filter=AGENT")
++    assert r_list_a.status_code == 200
++    assert all(p["type"] == "AGENT" for p in r_list_a.json())
++
++    # Non-existent principal
++    r_ghost = await api_env.client.get(f"/api/v1/admin/principals/{uuid.uuid4()}")
++    assert r_ghost.status_code == 404
++
++
++@pytest.mark.asyncio
++async def test_principal_service_unit_edge_cases(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Direct unit testing of principal_service edge cases and validation branches."""
++    admin = await make_user("admin_srv_edge", workspace_role="WORKSPACE_ADMIN")
++    user = await make_user("user_srv_edge", workspace_role="WORKSPACE_MEMBER")
++
++    # 1. normalize_handle
++    assert normalize_handle("@valid_handle") == "valid_handle"
++    assert normalize_handle("valid.name-123") == "valid.name-123"
++    with pytest.raises(ProblemException) as exc:
++        normalize_handle("-invalid")
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    # 2. resolve_principal_id by display name
++    resolved_by_dn = await resolve_principal_id(api_env.seed, admin.workspace_id, "User_srv_edge")
++    assert resolved_by_dn == user.id
++
++    with pytest.raises(ProblemException) as exc:
++        await resolve_principal_id(api_env.seed, admin.workspace_id, "NonExistentGhost")
++    assert exc.value.code == "NOT_FOUND"
++
++    # 3. get_principal_detail for group and agent
++    g_info = await provision_group(
++        api_env.seed, admin.workspace_id, admin.id, name="Service Edge Group"
++    )
++    g_detail = await get_principal_detail(api_env.seed, admin.workspace_id, g_info["id"])
++    assert g_detail["type"] == "GROUP"
++    assert g_detail["principal"] == "Service Edge Group"
++
++    a_info = await provision_agent(
++        api_env.seed, admin.workspace_id, admin.id, handle="edge-agent", display_name="Edge Agent"
++    )
++    a_detail = await get_principal_detail(api_env.seed, admin.workspace_id, a_info["id"])
++    assert a_detail["type"] == "AGENT"
++    assert a_detail["principal"] == "@edge-agent"
++
++    # 4. list_principals validation
++    with pytest.raises(ProblemException) as exc:
++        await list_principals(api_env.seed, admin.workspace_id, limit=0)
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await list_principals(api_env.seed, admin.workspace_id, limit=101)
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await list_principals(api_env.seed, admin.workspace_id, filter_type="INVALID")
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    # 5. provision_group & provision_agent length validation
++    with pytest.raises(ProblemException) as exc:
++        await provision_group(api_env.seed, admin.workspace_id, admin.id, name="")
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await provision_group(api_env.seed, admin.workspace_id, admin.id, name="g" * 121)
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await provision_agent(
++            api_env.seed, admin.workspace_id, admin.id, handle="bot", display_name=""
++        )
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await provision_agent(
++            api_env.seed, admin.workspace_id, admin.id, handle="bot", display_name="b" * 121
++        )
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    # 6. update_principal validation
++    with pytest.raises(ProblemException) as exc:
++        await update_principal(api_env.seed, admin.workspace_id, admin.id, user.id, display_name="")
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await update_principal(
++            api_env.seed, admin.workspace_id, admin.id, user.id, display_name="u" * 121
++        )
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await update_principal(
++            api_env.seed, admin.workspace_id, admin.id, user.id, status="invalid_status"
++        )
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await update_principal(
++            api_env.seed, admin.workspace_id, admin.id, uuid.uuid4(), display_name="Ghost"
++        )
++    assert exc.value.code == "NOT_FOUND"
++
++    # 7. add_group_member not found branches
++    with pytest.raises(ProblemException) as exc:
++        await add_group_member(api_env.seed, admin.workspace_id, admin.id, uuid.uuid4(), user.id)
++    assert exc.value.code == "NOT_FOUND"
++
++    with pytest.raises(ProblemException) as exc:
++        await add_group_member(
++            api_env.seed, admin.workspace_id, admin.id, uuid.UUID(g_info["id"]), uuid.uuid4()
++        )
++    assert exc.value.code == "NOT_FOUND"
++
++    # 8. bind_role validation branches
++    with pytest.raises(ProblemException) as exc:
++        await bind_role(
++            api_env.seed, admin.workspace_id, admin.id, uuid.uuid4(), "MEMBER", "workspace"
++        )
++    assert exc.value.code == "NOT_FOUND"
++
++    with pytest.raises(ProblemException) as exc:
++        await bind_role(
++            api_env.seed, admin.workspace_id, admin.id, user.id, "MEMBER", "invalid_scope"
++        )
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await bind_role(
++            api_env.seed, admin.workspace_id, admin.id, user.id, "INVALID_ROLE", "workspace"
++        )
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await bind_role(api_env.seed, admin.workspace_id, admin.id, user.id, "MEMBER", "server")
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    with pytest.raises(ProblemException) as exc:
++        await bind_role(
++            api_env.seed, admin.workspace_id, admin.id, user.id, "SERVER_ADMIN", "workspace"
++        )
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    # 9. unbind_role invalid role and idempotent removal
++    with pytest.raises(ProblemException) as exc:
++        await unbind_role(
++            api_env.seed, admin.workspace_id, admin.id, user.id, "INVALID_ROLE", "workspace"
++        )
++    assert exc.value.code == "VALIDATION_FAILED"
++
++    unb_res = await unbind_role(
++        api_env.seed, admin.workspace_id, admin.id, uuid.uuid4(), "MEMBER", "workspace"
++    )
++    assert unb_res["status"] == "role_unbound"
++
++    # 10. resolve_principal_id branches: agent slug, display name, and not found
++    agent_info = await provision_agent(
++        api_env.seed,
++        admin.workspace_id,
++        admin.id,
++        handle="res-agent",
++        display_name="Resolved Agent",
++    )
++    p_by_slug = await resolve_principal_id(api_env.seed, admin.workspace_id, "res-agent")
++    assert p_by_slug == uuid.UUID(agent_info["id"])
++
++    p_by_dn = await resolve_principal_id(api_env.seed, admin.workspace_id, "resolved agent")
++    assert p_by_dn == uuid.UUID(agent_info["id"])
++
++    with pytest.raises(ProblemException) as exc:
++        await resolve_principal_id(api_env.seed, admin.workspace_id, "nonexistent-principal-xyz")
++    assert exc.value.code == "NOT_FOUND"
++
++    # 11. add_group_member idempotent branch
++    idemp = await add_group_member(
++        api_env.seed, admin.workspace_id, admin.id, uuid.UUID(g_info["id"]), user.id
++    )
++    assert idemp["status"] == "member_added"
++
++    # 12. remove_group_member idempotent removal
++    rem_res = await remove_group_member(
++        api_env.seed, admin.workspace_id, admin.id, uuid.uuid4(), user.id
++    )
++    assert rem_res["status"] == "member_removed"
++
++    # 13. provision duplicate conflicts
++    await provision_user(
++        api_env.seed,
++        admin.workspace_id,
++        admin.id,
++        handle="dupe_user",
++        display_name="Dupe",
++        email="dupe@example.com",
++    )
++    with pytest.raises(ProblemException) as exc:
++        async with api_env.seed.begin_nested():
++            await provision_user(
++                api_env.seed,
++                admin.workspace_id,
++                admin.id,
++                handle="dupe_user",
++                display_name="Other",
++                email="other@example.com",
++            )
++    assert exc.value.code == "CONFLICT_IDENTIFIER"
++
++    with pytest.raises(ProblemException) as exc:
++        async with api_env.seed.begin_nested():
++            await provision_group(
++                api_env.seed, admin.workspace_id, admin.id, name="Service Edge Group"
++            )
++    assert exc.value.code == "CONFLICT_IDENTIFIER"
++
++    with pytest.raises(ProblemException) as exc:
++        async with api_env.seed.begin_nested():
++            await provision_agent(
++                api_env.seed,
++                admin.workspace_id,
++                admin.id,
++                handle="res-agent",
++                display_name="Other Agent",
++            )
++    assert exc.value.code == "CONFLICT_IDENTIFIER"
++
++    # 14. get_principal_detail SCRIPT_EPHEMERAL rejection
++    eph_id = uuid.uuid4()
++    p_eph = DBPrincipal(
++        id=eph_id,
++        workspace_id=admin.workspace_id,
++        principal_type="SCRIPT_EPHEMERAL",
++        status="ACTIVE",
++        display_name="Ephemeral Script Principal",
++    )
++    api_env.seed.add(p_eph)
++    await api_env.seed.commit()
++    with pytest.raises(ProblemException) as exc:
++        await get_principal_detail(api_env.seed, admin.workspace_id, str(eph_id))
++    assert exc.value.code == "NOT_FOUND"
++
++    # 15. Group nesting depth limit (8 levels)
++    async def _exhaust_group_depth() -> None:
++        curr_g = g_info["id"]
++        for idx in range(10):
++            next_g = await provision_group(
++                api_env.seed, admin.workspace_id, admin.id, name=f"Depth Group {idx}"
++            )
++            await add_group_member(
++                api_env.seed,
++                admin.workspace_id,
++                admin.id,
++                uuid.UUID(next_g["id"]),
++                uuid.UUID(curr_g),
++            )
++            curr_g = next_g["id"]
++
++    with pytest.raises(ProblemException) as depth_exc:
++        await _exhaust_group_depth()
++    assert depth_exc.value.code in ("GROUP_DEPTH_EXCEEDED", "GROUP_CYCLE_REJECTED")
+diff --git a/mcp/auth.py b/mcp/auth.py
+index 6550f09..c80f03b 100644
+--- a/mcp/auth.py
++++ b/mcp/auth.py
+@@ -76,6 +76,10 @@ SCOPE_REQUIREMENTS: Final[dict[str, frozenset[str]]] = {
+     "promote_sticky_to_doc": frozenset({"docs:write"}),
+     "link_knowledge": frozenset({"docs:write"}),
+     # Admin surface tools
++    "configure_workspace": frozenset({"admin:read"}),
++    "manage_auth_cards": frozenset({"admin:read"}),
++    "manage_principals_and_groups": frozenset({"admin:read"}),
++    "manage_access_policies": frozenset({"admin:read"}),
+     "audit_links": frozenset({"admin:read"}),
+     "override_ticket_provenance": frozenset({"admin:write"}),
+     "audit_and_purge_object_links": frozenset({"admin:read"}),
+@@ -399,6 +403,7 @@ class McpAuthMiddleware:
+             principal_id=intro_result.get("principal_id"),
+             workspace_id=intro_result.get("workspace_id"),
+             token_kind=token_kind,
++            aal_level=aal,
+             agent_principal_id=intro_result.get("agent_principal_id"),
+             project_id=intro_result.get("project_id"),
+             execution_id=intro_result.get("execution_id"),
+@@ -408,7 +413,6 @@ class McpAuthMiddleware:
+             workspace_slug=intro_result.get("workspace_slug"),
+             scope_tier=intro_result.get("scope_tier"),
+             allowed_projects=allowed_projects,
+-            aal_level=aal,
+         )
+ 
+         try:
+diff --git a/mcp/errors.py b/mcp/errors.py
+index c43d348..360d7e8 100644
+--- a/mcp/errors.py
++++ b/mcp/errors.py
+@@ -42,6 +42,8 @@ class McpErrorCode(StrEnum):
+     CONFIRM_PHRASE_MISMATCH = "CONFIRM_PHRASE_MISMATCH"
+     AAL2_REQUIRED = "AAL2_REQUIRED"
+     INSUFFICIENT_PERMISSION = "INSUFFICIENT_PERMISSION"
++    GROUP_CYCLE_REJECTED = "GROUP_CYCLE_REJECTED"
++    GROUP_DEPTH_EXCEEDED = "GROUP_DEPTH_EXCEEDED"
+     LINK_NOT_FLAGGED = "LINK_NOT_FLAGGED"
+     CREATOR_NOT_ELIGIBLE = "CREATOR_NOT_ELIGIBLE"
+     CREATOR_UNCHANGED = "CREATOR_UNCHANGED"
+diff --git a/mcp/help.py b/mcp/help.py
+index 77238e0..8de98db 100644
+--- a/mcp/help.py
++++ b/mcp/help.py
+@@ -51,6 +51,21 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
+         ),
+         "project": "str",
+     },
++    "manage_principals_and_groups": {
++        "action": (
++            "list | get | provision_user | provision_group | provision_agent | "
++            "deactivate | reactivate | add_member | remove_member | bind_role | "
++            "unbind_role | help"
++        ),
++        "principal": "@handle | group | agent | uuid",
++    },
++    "manage_access_policies": {
++        "action": "inspect | grant | revoke | help",
++        "object": "KAN-142 | uuid | path",
++        "principal": "@handle | group | agent | uuid",
++        "effect": "ALLOW | DENY",
++        "capabilities": "[VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]",
++    },
+ }
+ 
+ 
+diff --git a/mcp/internal_client.py b/mcp/internal_client.py
+index c1957be..7f1d927 100644
+--- a/mcp/internal_client.py
++++ b/mcp/internal_client.py
+@@ -292,6 +292,8 @@ class KanbanApiClient:
+             "INVALID_CYCLE_TRANSITION": McpErrorCode.INVALID_TRANSITION,
+             "OPEN_CHILD_BLOCKERS": McpErrorCode.OPEN_CHILD_BLOCKERS,
+             "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
++            "GROUP_CYCLE_REJECTED": McpErrorCode.GROUP_CYCLE_REJECTED,
++            "GROUP_DEPTH_EXCEEDED": McpErrorCode.GROUP_DEPTH_EXCEEDED,
+         }
+         if prob_code in conflict_map:
+             return conflict_map[prob_code]
+@@ -330,6 +332,8 @@ class KanbanApiClient:
+             "QA_VERDICT_NOT_READY": McpErrorCode.QA_VERDICT_NOT_READY,
+             "INVALID_TRANSITION": McpErrorCode.INVALID_TRANSITION,
+             "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
++            "GROUP_CYCLE_REJECTED": McpErrorCode.GROUP_CYCLE_REJECTED,
++            "GROUP_DEPTH_EXCEEDED": McpErrorCode.GROUP_DEPTH_EXCEEDED,
+         }
+         if prob_code in code_map:
+             return code_map[prob_code]
+@@ -337,6 +341,7 @@ class KanbanApiClient:
+         suffix_map: dict[str, McpErrorCode] = {
+             "aal2-required": McpErrorCode.AAL2_REQUIRED,
+             "insufficient-capability": McpErrorCode.INSUFFICIENT_PERMISSION,
++            "insufficient-permission": McpErrorCode.INSUFFICIENT_PERMISSION,
+             "modules-disabled": McpErrorCode.MODULES_DISABLED,
+             "section-not-found": McpErrorCode.SECTION_NOT_FOUND,
+             "already-promoted": McpErrorCode.ALREADY_PROMOTED,
+@@ -353,6 +358,8 @@ class KanbanApiClient:
+             "qa-verdict-not-ready": McpErrorCode.QA_VERDICT_NOT_READY,
+             "invalid-transition": McpErrorCode.INVALID_TRANSITION,
+             "transition-held": McpErrorCode.TRANSITION_HELD,
++            "group-cycle-rejected": McpErrorCode.GROUP_CYCLE_REJECTED,
++            "group-depth-exceeded": McpErrorCode.GROUP_DEPTH_EXCEEDED,
+         }
+         for suffix, err_code in suffix_map.items():
+             if prob_type.endswith(suffix):
+diff --git a/mcp/protocol.py b/mcp/protocol.py
+index f9946cb..b8b6cfb 100644
+--- a/mcp/protocol.py
++++ b/mcp/protocol.py
+@@ -10,12 +10,12 @@ import logging
+ import secrets
+ import time
+ from collections import OrderedDict
+-from dataclasses import dataclass
++from dataclasses import dataclass, replace
+ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
+ 
+ from starlette.responses import JSONResponse, Response
+ 
+-from mcp.auth import SCOPE_REQUIREMENTS, hash_mcp_api_key
++from mcp.auth import SCOPE_REQUIREMENTS, McpAuthContext, hash_mcp_api_key
+ from mcp.context import (
+     McpRequestContext,
+     reset_current_mcp_context,
+@@ -30,7 +30,6 @@ if TYPE_CHECKING:
+ 
+     from starlette.requests import Request
+ 
+-    from mcp.auth import McpAuthContext
+     from mcp.internal_client import KanbanApiClient
+     from mcp.registry import Surface, ToolRegistry
+     from mcp.scoping import ConnectionScope
+@@ -269,7 +268,7 @@ class McpProtocolHandler:
+ 
+         return await self._process_valid_payload(payload, request)
+ 
+-    async def _process_valid_payload(  # noqa: C901, PLR0911
++    async def _process_valid_payload(  # noqa: C901, PLR0911, PLR0912
+         self,
+         payload: dict[str, Any],
+         request: Request,
+@@ -362,6 +361,19 @@ class McpProtocolHandler:
+             with contextlib.suppress(ValueError):
+                 aal_level = int(request.headers["x-kb-aal-level"])
+         token_kind = getattr(mcp_auth, "token_kind", "api_key") if mcp_auth else "api_key"
++        if auth_context is None:
++            auth_context = McpAuthContext(
++                token=subject_token or "",
++                token_sha256=current_token_sha256 or b"",
++                surface=self.surface,
++                scopes=caller_scopes or frozenset(),
++                aal_level=aal_level,
++                token_kind=token_kind,
++            )
++        elif "x-kb-aal-level" in request.headers:
++            with contextlib.suppress(ValueError):
++                header_aal = int(request.headers["x-kb-aal-level"])
++                auth_context = replace(auth_context, aal_level=header_aal)
+ 
+         return await self._dispatch_method(
+             method,
+@@ -762,6 +774,8 @@ class McpProtocolHandler:
+                 subject_token=subject_token,
+             )
+ 
++        aal_level = auth_context.aal_level if auth_context is not None else 2
++        token_kind = auth_context.token_kind if auth_context is not None else "api_key"
+         ctx = McpRequestContext(
+             client=self.internal_client,
+             surface=self.registry.surface,
+diff --git a/mcp/surfaces/admin/__init__.py b/mcp/surfaces/admin/__init__.py
+index a648d13..4978ec9 100644
+--- a/mcp/surfaces/admin/__init__.py
++++ b/mcp/surfaces/admin/__init__.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Admin surface tool registry and definitions (KB-P4-09a, KB-P4-10, KB-P4-11 / S11.4)."""
++"""Admin surface tool registry and definitions (KB-P4-09a..11, KB-P5-05b / S11.4)."""
+ 
+ from __future__ import annotations
+ 
+@@ -21,6 +21,11 @@ from mcp.surfaces.admin.configure_workspace import (
+     configure_workspace,
+     create_configure_workspace_tool,
+ )
++from mcp.surfaces.admin.manage_access_policies import (
++    MANAGE_ACCESS_POLICIES_SCHEMA,
++    create_manage_access_policies_tool,
++    manage_access_policies_tool,
++)
+ from mcp.surfaces.admin.manage_ai_and_agent_runners import (
+     MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA,
+     create_manage_ai_and_agent_runners_tool,
+@@ -36,6 +41,11 @@ from mcp.surfaces.admin.manage_cycles_and_modules import (
+     create_manage_cycles_and_modules_tool,
+     manage_cycles_and_modules,
+ )
++from mcp.surfaces.admin.manage_principals_and_groups import (
++    MANAGE_PRINCIPALS_AND_GROUPS_SCHEMA,
++    create_manage_principals_and_groups_tool,
++    manage_principals_and_groups_tool,
++)
+ from mcp.surfaces.admin.override_ticket_provenance import (
+     OVERRIDE_TICKET_PROVENANCE_SCHEMA,
+     override_ticket_provenance,
+@@ -48,18 +58,24 @@ __all__ = [
+     "ARCHITECT_PROJECT_SCHEMA",
+     "AUDIT_AND_PURGE_OBJECT_LINKS_SCHEMA",
+     "CONFIGURE_WORKSPACE_SCHEMA",
++    "MANAGE_ACCESS_POLICIES_SCHEMA",
+     "MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA",
+     "MANAGE_AUTH_CARDS_SCHEMA",
+     "MANAGE_CYCLES_AND_MODULES_SCHEMA",
++    "MANAGE_PRINCIPALS_AND_GROUPS_SCHEMA",
+     "OVERRIDE_TICKET_PROVENANCE_SCHEMA",
+     "architect_project",
+     "audit_and_purge_object_links",
+     "build_admin_registry",
+     "configure_workspace",
+     "create_admin_registry",
++    "create_manage_access_policies_tool",
++    "create_manage_principals_and_groups_tool",
++    "manage_access_policies_tool",
+     "manage_ai_and_agent_runners",
+     "manage_auth_cards",
+     "manage_cycles_and_modules",
++    "manage_principals_and_groups_tool",
+     "override_ticket_provenance",
+ ]
+ 
+@@ -69,6 +85,8 @@ def build_admin_registry(client: KanbanApiClient | None = None) -> ToolRegistry:
+     registry = ToolRegistry(Surface.ADMIN)
+     registry.register(create_configure_workspace_tool())
+     registry.register(create_manage_auth_cards_tool())
++    registry.register(create_manage_principals_and_groups_tool())
++    registry.register(create_manage_access_policies_tool())
+     registry.register(create_architect_project_tool())
+     registry.register(create_manage_cycles_and_modules_tool())
+     registry.register(create_manage_ai_and_agent_runners_tool())
+diff --git a/mcp/surfaces/admin/manage_access_policies.py b/mcp/surfaces/admin/manage_access_policies.py
+new file mode 100644
+index 0000000..29aa897
+--- /dev/null
++++ b/mcp/surfaces/admin/manage_access_policies.py
+@@ -0,0 +1,270 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""MCP Tool: manage_access_policies (KB-P4-09b / S11.4, S3.4)."""
++
++from __future__ import annotations
++
++import logging
++from typing import Any
++from urllib.parse import quote
++
++from mcp.context import get_current_mcp_context
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.registry import Surface, ToolSpec
++
++logger = logging.getLogger(__name__)
++
++MANAGE_ACCESS_POLICIES_SCHEMA: dict[str, Any] = {
++    "type": "object",
++    "properties": {
++        "action": {
++            "type": "string",
++            "enum": ["inspect", "grant", "revoke", "help"],
++            "description": "Action to perform on object access policies",
++        },
++        "object": {
++            "type": "string",
++            "description": "Target object reference (issue key, doc path, project key, or UUID)",
++        },
++        "principal": {
++            "type": "string",
++            "description": "Target principal (@handle, group name, agent slug, or UUID)",
++        },
++        "effect": {
++            "type": "string",
++            "enum": ["ALLOW", "DENY"],
++            "description": "Policy grant or restriction effect",
++        },
++        "capabilities": {
++            "type": "array",
++            "items": {
++                "type": "string",
++                "enum": [
++                    "VIEW",
++                    "COMMENT",
++                    "EDIT",
++                    "TRANSITION",
++                    "LINK",
++                    "SHARE",
++                    "ADMIN",
++                    "DELETE",
++                ],
++            },
++            "minItems": 1,
++            "maxItems": 8,
++            "description": "Capability permissions to grant",
++        },
++    },
++    "required": ["action"],
++}
++
++
++def create_manage_access_policies_tool() -> ToolSpec:
++    """Construct ToolSpec for manage_access_policies."""
++    return ToolSpec(
++        name="manage_access_policies",
++        description=(
++            "Inspect an object's access_manifest and grant or revoke ALLOW/DENY capability entries."
++        ),
++        input_schema=MANAGE_ACCESS_POLICIES_SCHEMA,
++        surface=Surface.ADMIN,
++        handler=manage_access_policies_tool,
++    )
++
++
++READ_ACTIONS = frozenset({"inspect", "help"})
++WRITE_ACTIONS = frozenset({"grant", "revoke"})
++
++
++def _assert_scope(required_scope: str) -> None:
++    """Verify caller holds required admin scope."""
++    ctx = get_current_mcp_context()
++    if ctx is None or ctx.caller_scopes is None:
++        return
++    if required_scope not in ctx.caller_scopes:
++        raise KbMcpError(
++            code=McpErrorCode.INSUFFICIENT_SCOPE,
++            message=f"Caller lacks required scope '{required_scope}'",
++        )
++
++
++def _format_caps_summary(caps: list[str]) -> str:
++    """Format list of capability names into compact summary."""
++    if "ADMIN" in caps:
++        return "ADMIN"
++    if "EDIT" in caps:
++        return "EDIT"
++    if "COMMENT" in caps:
++        return "COMMENT"
++    if "VIEW" in caps:
++        return "VIEW"
++    return ", ".join(caps) if caps else "NONE"
++
++
++def _format_inspect_summary(object_ref: str, manifest: dict[str, Any]) -> dict[str, Any]:
++    """Format AccessManifest dictionary into compact Spec S11.4 summary YAML."""
++    inherited = manifest.get("inherited_scope") or {}
++    inherited_proj = inherited.get("project_key")
++    inherited_label = inherited.get("scope_label") or (
++        f"Project: {inherited_proj}" if inherited_proj else "Workspace"
++    )
++
++    users_list = [
++        {
++            "who": u.get("handle") or u.get("display_name"),
++            "caps": _format_caps_summary(u.get("capabilities", [])),
++        }
++        for u in manifest.get("users", [])
++        if isinstance(u, dict)
++    ]
++
++    groups_list = [
++        {
++            "who": g.get("name"),
++            "members": g.get("member_count", 0),
++            "caps": _format_caps_summary(g.get("capabilities", [])),
++        }
++        for g in manifest.get("groups", [])
++        if isinstance(g, dict)
++    ]
++
++    agents_list = [
++        {"who": a.get("display_name"), "caps": _format_caps_summary(a.get("capabilities", []))}
++        for a in manifest.get("agents", [])
++        if isinstance(a, dict)
++    ]
++
++    restricted_list = [
++        {"who": d.get("display_name"), "effect": "DENY"}
++        for d in manifest.get("deny_overrides", [])
++        if isinstance(d, dict)
++    ]
++
++    out: dict[str, Any] = {
++        "object": object_ref,
++        "inherited_scope": inherited_label,
++    }
++    if users_list:
++        out["users"] = users_list
++    if groups_list:
++        out["groups"] = groups_list
++    if agents_list:
++        out["agents"] = agents_list
++    if restricted_list:
++        out["restricted"] = restricted_list
++
++    redacted = manifest.get("redacted_entries") or []
++    if redacted and isinstance(redacted, list) and len(redacted) > 0:
++        first_r = redacted[0]
++        label = first_r.get("label") if isinstance(first_r, dict) else "1 External Collaborator"
++        out["external"] = label
++
++    return out
++
++
++async def manage_access_policies_tool(  # noqa: C901
++    arguments: dict[str, Any],
++) -> dict[str, Any]:
++    """Inspect access manifest and grant/revoke ALLOW/DENY capabilities on objects."""
++    action = arguments.get("action")
++    if not action:
++        raise KbMcpError(
++            code=McpErrorCode.VALIDATION_FAILED,
++            message="action is required",
++            hint="Specify action='inspect', 'grant', 'revoke', or 'help'",
++        )
++
++    action = str(action).strip()
++
++    if action in READ_ACTIONS:
++        _assert_scope("admin:read")
++    elif action in WRITE_ACTIONS:
++        _assert_scope("admin:write")
++    else:
++        raise KbMcpError(
++            code=McpErrorCode.VALIDATION_FAILED,
++            message=f"Unknown action: '{action}'",
++            hint=f"Supported actions: {sorted(READ_ACTIONS | WRITE_ACTIONS)}",
++        )
++
++    ctx = get_current_mcp_context()
++    if ctx is None or ctx.client is None:
++        raise KbMcpError(
++            code=McpErrorCode.INTERNAL,
++            message="MCP internal client context is unavailable",
++        )
++
++    client = ctx.client
++    object_ref = arguments.get("object")
++    if not object_ref:
++        raise KbMcpError(
++            code=McpErrorCode.VALIDATION_FAILED,
++            message="object is required",
++            hint="Provide object identifier, issue key, or UUID",
++        )
++
++    # 1. inspect
++    if action == "inspect":
++        manifest_data = await client.request(
++            "GET", f"/api/v1/admin/acl-entries/{quote(str(object_ref).strip())}/manifest"
++        )
++        if not isinstance(manifest_data, dict):
++            return {"object": object_ref}
++        return _format_inspect_summary(object_ref, manifest_data)
++
++    # 2. grant / revoke
++    principal_ref = arguments.get("principal")
++    if not principal_ref:
++        raise KbMcpError(
++            code=McpErrorCode.VALIDATION_FAILED,
++            message=f"principal is required for action='{action}'",
++        )
++    effect = arguments.get("effect", "ALLOW")
++
++    if action == "grant":
++        capabilities = arguments.get("capabilities")
++        if not capabilities or not isinstance(capabilities, list):
++            raise KbMcpError(
++                code=McpErrorCode.VALIDATION_FAILED,
++                message="capabilities array is required for grant (min 1, max 8 items)",
++            )
++        res = await client.request(
++            "POST",
++            "/api/v1/admin/acl-entries",
++            json_data={
++                "object_id": str(object_ref).strip(),
++                "principal_id": str(principal_ref).strip(),
++                "effect": effect,
++                "capabilities": capabilities,
++            },
++        )
++        res_dict = res if isinstance(res, dict) else {}
++        return {
++            "status": "granted",
++            "object": object_ref,
++            "principal": str(principal_ref),
++            "effect": effect,
++            "capabilities": res_dict.get("capabilities", capabilities),
++            "effective_capabilities": res_dict.get("effective_capabilities", []),
++        }
++
++    if action == "revoke":
++        res = await client.request(
++            "DELETE",
++            "/api/v1/admin/acl-entries",
++            json_data={
++                "object_id": str(object_ref).strip(),
++                "principal_id": str(principal_ref).strip(),
++                "effect": effect,
++            },
++        )
++        res_dict = res if isinstance(res, dict) else {}
++        return {
++            "status": "revoked",
++            "object": object_ref,
++            "principal": str(principal_ref),
++            "effect": effect,
++            "effective_capabilities": res_dict.get("effective_capabilities", []),
++        }
++
++    return {}
+diff --git a/mcp/surfaces/admin/manage_principals_and_groups.py b/mcp/surfaces/admin/manage_principals_and_groups.py
+new file mode 100644
+index 0000000..94cef6e
+--- /dev/null
++++ b/mcp/surfaces/admin/manage_principals_and_groups.py
+@@ -0,0 +1,383 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""MCP Tool: manage_principals_and_groups (KB-P4-09b / S11.4)."""
++
++from __future__ import annotations
++
++import logging
++from typing import Any
++
++from mcp.context import get_current_mcp_context
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.registry import Surface, ToolSpec
++
++logger = logging.getLogger(__name__)
++
++MANAGE_PRINCIPALS_AND_GROUPS_SCHEMA: dict[str, Any] = {
++    "type": "object",
++    "properties": {
++        "action": {
++            "type": "string",
++            "enum": [
++                "list",
++                "get",
++                "provision_user",
++                "provision_group",
++                "provision_agent",
++                "deactivate",
++                "reactivate",
++                "add_member",
++                "remove_member",
++                "bind_role",
++                "unbind_role",
++                "help",
++            ],
++            "description": "Administrative action to perform",
++        },
++        "principal": {
++            "type": "string",
++            "description": "@handle, group name, agent slug, or UUID",
++        },
++        "group": {
++            "type": "string",
++            "description": "Target group name or UUID for membership actions",
++        },
++        "handle": {
++            "type": "string",
++            "pattern": "^[a-z0-9][a-z0-9._-]{1,38}$",
++            "description": "User or agent handle without leading @",
++        },
++        "display_name": {
++            "type": "string",
++            "maxLength": 120,
++            "description": "Human-readable display name",
++        },
++        "email": {
++            "type": "string",
++            "format": "email",
++            "description": "User email address",
++        },
++        "role": {
++            "type": "string",
++            "description": "RBAC role enum (e.g. SERVER_ADMIN, WORKSPACE_ADMIN, MEMBER)",
++        },
++        "scope": {
++            "type": "string",
++            "description": "'server', 'workspace', or project key",
++        },
++        "filter": {
++            "type": "string",
++            "enum": ["USER", "GROUP", "AGENT", "SERVICE_PRINCIPAL"],
++            "description": "Filter principals list by type",
++        },
++        "limit": {
++            "type": "integer",
++            "minimum": 1,
++            "maximum": 100,
++            "default": 50,
++            "description": "Max items to return in list",
++        },
++    },
++    "required": ["action"],
++}
++
++
++def create_manage_principals_and_groups_tool() -> ToolSpec:
++    """Construct ToolSpec for manage_principals_and_groups."""
++    return ToolSpec(
++        name="manage_principals_and_groups",
++        description=(
++            "Provision and deactivate users, groups, and service agents; "
++            "manage group memberships and RBAC role bindings."
++        ),
++        input_schema=MANAGE_PRINCIPALS_AND_GROUPS_SCHEMA,
++        surface=Surface.ADMIN,
++        handler=manage_principals_and_groups_tool,
++    )
++
++
++READ_ACTIONS = frozenset({"list", "get", "help"})
++WRITE_ACTIONS = frozenset(
++    {
++        "provision_user",
++        "provision_group",
++        "provision_agent",
++        "deactivate",
++        "reactivate",
++        "add_member",
++        "remove_member",
++        "bind_role",
++        "unbind_role",
++    }
++)
++
++
++def _assert_scope(required_scope: str) -> None:
++    """Verify caller holds required admin scope."""
++    ctx = get_current_mcp_context()
++    if ctx is None or ctx.caller_scopes is None:
++        return
++    if required_scope not in ctx.caller_scopes:
++        raise KbMcpError(
++            code=McpErrorCode.INSUFFICIENT_SCOPE,
++            message=f"Caller lacks required scope '{required_scope}'",
++        )
++
++
++async def manage_principals_and_groups_tool(  # noqa: C901, PLR0911, PLR0912, PLR0915
++    arguments: dict[str, Any],
++) -> dict[str, Any]:
++    """Administer identity principals, groups, and role bindings."""
++    action = arguments.get("action")
++    if not action:
++        raise KbMcpError(
++            code=McpErrorCode.VALIDATION_FAILED,
++            message="action is required",
++            hint="Specify action='list', 'get', 'provision_user', etc. or action='help'",
++        )
++
++    action = str(action).strip()
++
++    if action in READ_ACTIONS:
++        _assert_scope("admin:read")
++    elif action in WRITE_ACTIONS:
++        _assert_scope("admin:write")
++    else:
++        raise KbMcpError(
++            code=McpErrorCode.VALIDATION_FAILED,
++            message=f"Unknown action: '{action}'",
++            hint=f"Supported actions: {sorted(READ_ACTIONS | WRITE_ACTIONS)}",
++        )
++
++    ctx = get_current_mcp_context()
++    if ctx is None or ctx.client is None:
++        raise KbMcpError(
++            code=McpErrorCode.INTERNAL,
++            message="MCP internal client context is unavailable",
++        )
++
++    client = ctx.client
++
++    # 1. list
++    if action == "list":
++        filter_type = arguments.get("filter")
++        limit = arguments.get("limit", 50)
++        params: dict[str, Any] = {"limit": limit}
++        if filter_type:
++            params["filter"] = filter_type
++
++        principals_data = await client.request("GET", "/api/v1/admin/principals", params=params)
++        if not isinstance(principals_data, list):
++            principals_data = []
++
++        summary_list = [
++            {
++                "principal": p.get("principal"),
++                "type": p.get("type"),
++                "status": p.get("status"),
++            }
++            for p in principals_data
++        ]
++        return {"principals": summary_list}
++
++    # 2. get
++    if action == "get":
++        principal_ref = arguments.get("principal")
++        if not principal_ref:
++            raise KbMcpError(
++                code=McpErrorCode.VALIDATION_FAILED,
++                message="principal is required for action='get'",
++                hint="Provide @handle, group name, agent slug, or UUID",
++            )
++        data = await client.request("GET", f"/api/v1/admin/principals/{principal_ref}")
++        if not isinstance(data, dict):
++            return {}
++
++        roles_summary = [
++            {"role": r.get("role"), "scope": r.get("scope")}
++            for r in data.get("roles", [])
++            if isinstance(r, dict)
++        ]
++        return {
++            "principal": data.get("principal"),
++            "type": data.get("type"),
++            "status": data.get("status"),
++            "groups": data.get("groups", []),
++            "roles": roles_summary,
++        }
++
++    # 3. provision_user
++    if action == "provision_user":
++        handle = arguments.get("handle")
++        display_name = arguments.get("display_name")
++        email = arguments.get("email")
++        if not handle or not display_name or not email:
++            raise KbMcpError(
++                code=McpErrorCode.VALIDATION_FAILED,
++                message="handle, display_name, and email are required for provision_user",
++            )
++        res = await client.request(
++            "POST",
++            "/api/v1/admin/principals",
++            json_data={
++                "type": "USER",
++                "handle": handle,
++                "display_name": display_name,
++                "email": email,
++            },
++        )
++        res_dict = res if isinstance(res, dict) else {}
++        return {
++            "status": "provisioned",
++            "principal": res_dict.get("principal", f"@{handle.lstrip('@')}"),
++            "type": "USER",
++            "email": res_dict.get("email", email),
++        }
++
++    # 4. provision_group
++    if action == "provision_group":
++        display_name = arguments.get("display_name") or arguments.get("group")
++        if not display_name:
++            raise KbMcpError(
++                code=McpErrorCode.VALIDATION_FAILED,
++                message="display_name (or group) is required for provision_group",
++            )
++        res = await client.request(
++            "POST",
++            "/api/v1/admin/principals",
++            json_data={
++                "type": "GROUP",
++                "display_name": display_name,
++            },
++        )
++        res_dict = res if isinstance(res, dict) else {}
++        return {
++            "status": "provisioned",
++            "principal": res_dict.get("principal", display_name),
++            "type": "GROUP",
++        }
++
++    # 5. provision_agent
++    if action == "provision_agent":
++        handle = arguments.get("handle") or arguments.get("principal")
++        display_name = arguments.get("display_name")
++        if not handle or not display_name:
++            raise KbMcpError(
++                code=McpErrorCode.VALIDATION_FAILED,
++                message="handle and display_name are required for provision_agent",
++            )
++        res = await client.request(
++            "POST",
++            "/api/v1/admin/principals",
++            json_data={
++                "type": "AGENT",
++                "handle": handle,
++                "display_name": display_name,
++            },
++        )
++        res_dict = res if isinstance(res, dict) else {}
++        return {
++            "status": "provisioned",
++            "principal": res_dict.get("principal", f"@{handle.lstrip('@')}"),
++            "type": "AGENT",
++        }
++
++    # 6. deactivate / reactivate
++    if action in ("deactivate", "reactivate"):
++        principal_ref = arguments.get("principal")
++        if not principal_ref:
++            raise KbMcpError(
++                code=McpErrorCode.VALIDATION_FAILED,
++                message=f"principal is required for action='{action}'",
++            )
++        # First resolve principal to UUID if needed
++        p_detail = await client.request("GET", f"/api/v1/admin/principals/{principal_ref}")
++        p_dict = p_detail if isinstance(p_detail, dict) else {}
++        p_id = p_dict.get("id") or principal_ref
++
++        target_status = "deactivated" if action == "deactivate" else "active"
++        res = await client.request(
++            "PATCH",
++            f"/api/v1/admin/principals/{p_id}",
++            json_data={"status": target_status},
++        )
++        res_dict = res if isinstance(res, dict) else {}
++        return {
++            "status": "deactivated" if action == "deactivate" else "activated",
++            "principal": res_dict.get("principal", principal_ref),
++            "type": res_dict.get("type"),
++        }
++
++    # 7. add_member / remove_member
++    if action in ("add_member", "remove_member"):
++        group_ref = arguments.get("group")
++        member_ref = arguments.get("principal")
++        if not group_ref or not member_ref:
++            raise KbMcpError(
++                code=McpErrorCode.VALIDATION_FAILED,
++                message=f"group and principal are required for action='{action}'",
++            )
++        g_detail = await client.request("GET", f"/api/v1/admin/principals/{group_ref}")
++        m_detail = await client.request("GET", f"/api/v1/admin/principals/{member_ref}")
++
++        g_dict = g_detail if isinstance(g_detail, dict) else {}
++        m_dict = m_detail if isinstance(m_detail, dict) else {}
++
++        g_id = g_dict.get("id") or group_ref
++        m_id = m_dict.get("id") or member_ref
++
++        method = "POST" if action == "add_member" else "DELETE"
++        await client.request(method, f"/api/v1/admin/groups/{g_id}/members/{m_id}")
++        return {
++            "status": "member_added" if action == "add_member" else "member_removed",
++            "group": g_dict.get("principal", group_ref),
++            "member": m_dict.get("principal", member_ref),
++        }
++
++    # 8. bind_role / unbind_role
++    if action in ("bind_role", "unbind_role"):
++        principal_ref = arguments.get("principal")
++        role = arguments.get("role")
++        scope = arguments.get("scope", "workspace")
++        if not principal_ref or not role:
++            raise KbMcpError(
++                code=McpErrorCode.VALIDATION_FAILED,
++                message=f"principal and role are required for action='{action}'",
++            )
++        p_detail = await client.request("GET", f"/api/v1/admin/principals/{principal_ref}")
++        p_dict = p_detail if isinstance(p_detail, dict) else {}
++        p_id = p_dict.get("id") or principal_ref
++
++        # Determine scope_type and scope_id
++        scope_str = str(scope).strip()
++        scope_type = "workspace"
++        scope_id = None
++        if scope_str.lower() == "server":
++            scope_type = "server"
++        elif scope_str.lower() == "workspace":
++            scope_type = "workspace"
++        else:
++            # Assume project key or UUID
++            scope_type = "project"
++            proj = await client.request("GET", f"/api/v1/projects/{scope_str}")
++            scope_id = proj.get("id") if isinstance(proj, dict) else None
++
++        method = "POST" if action == "bind_role" else "DELETE"
++        await client.request(
++            method,
++            "/api/v1/admin/role-bindings",
++            json_data={
++                "principal_id": p_id,
++                "role": role,
++                "scope_type": scope_type,
++                "scope_id": scope_id,
++            },
++        )
++        return {
++            "status": "role_bound" if action == "bind_role" else "role_unbound",
++            "principal": p_dict.get("principal", principal_ref),
++            "role": role,
++            "scope": scope_str,
++        }
++
++    return {}
+diff --git a/mcp/tests/admin/test_manage_access_policies.py b/mcp/tests/admin/test_manage_access_policies.py
+new file mode 100644
+index 0000000..1045e14
+--- /dev/null
++++ b/mcp/tests/admin/test_manage_access_policies.py
+@@ -0,0 +1,423 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for /mcp/admin tool: manage_access_policies (KB-P4-09b)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003
++from typing import TYPE_CHECKING, Any, cast
++
++import pytest
++import yaml
++
++from database.models import ResourceAclEntry
++from kanban.security.permissions import Capability
++from kanban.tests.security.helpers import (
++    add_role_binding,
++    create_group,
++    create_project,
++    create_registered_object,
++    create_user,
++    rebuild_era,
++)
++from mcp.context import reset_current_mcp_context, set_current_mcp_context
++from mcp.errors import KbMcpError
++from mcp.surfaces.admin.manage_access_policies import (
++    _assert_scope,
++    _format_caps_summary,
++    _format_inspect_summary,
++    create_manage_access_policies_tool,
++    manage_access_policies_tool,
++)
++
++if TYPE_CHECKING:
++    from mcp.tests.admin.conftest import AdminTestEnv
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _call_manage_access_policies(  # noqa: PLR0913
++    env: AdminTestEnv,
++    arguments: dict[str, Any],
++    *,
++    subject_token: str | None = None,
++    scopes: str | None = None,
++    aal_level: int | None = None,
++    session_id: str | None = None,
++) -> dict[str, Any]:
++    """Invoke manage_access_policies via JSON-RPC 2.0 tools/call on /mcp/admin."""
++    active_session_id = session_id
++    if active_session_id is None:
++        init_headers: dict[str, str] = {}
++        if subject_token is not None:
++            init_headers["X-KB-Subject-Token"] = subject_token
++        if scopes is not None:
++            init_headers["X-KB-Scopes"] = scopes
++        if aal_level is not None:
++            init_headers["X-KB-AAL-Level"] = str(aal_level)
++        init_resp = await env.mcp_client.post(
++            "/mcp/admin",
++            json={
++                "jsonrpc": "2.0",
++                "id": 999,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-admin", "version": "1.0"},
++                },
++            },
++            headers=init_headers,
++        )
++        assert init_resp.status_code == 200
++        active_session_id = init_resp.headers["mcp-session-id"]
++
++    headers: dict[str, str] = {"mcp-session-id": active_session_id}
++    if subject_token is not None:
++        headers["X-KB-Subject-Token"] = subject_token
++    if scopes is not None:
++        headers["X-KB-Scopes"] = scopes
++    if aal_level is not None:
++        headers["X-KB-AAL-Level"] = str(aal_level)
++
++    req_payload = {
++        "jsonrpc": "2.0",
++        "id": 1,
++        "method": "tools/call",
++        "params": {
++            "name": "manage_access_policies",
++            "arguments": arguments,
++        },
++    }
++    resp = await env.mcp_client.post("/mcp/admin", json=req_payload, headers=headers)
++    assert resp.status_code == 200
++    data = resp.json()
++    assert data["jsonrpc"] == "2.0"
++    assert data["id"] == 1
++    return cast("dict[str, Any]", data)
++
++
++class _TestObject:
++    def __init__(self, obj_id: uuid.UUID, key: str) -> None:
++        self.id = obj_id
++        self.key = key
++
++
++async def _setup_issue_with_object(env: AdminTestEnv, key: str = "KAN-142") -> _TestObject:
++    """Register project KAN and issue KAN-142 with object spine."""
++    prj_id = await create_project(
++        env.seed_session, env.workspace_id, identifier="KAN", name="Kanban Core"
++    )
++
++    issue_id = await create_registered_object(
++        env.seed_session,
++        env.workspace_id,
++        kind="issue",
++        key=key,
++        title=f"Issue {key}",
++        project_id=prj_id,
++        created_by_id=env.server_admin.id,
++    )
++    await env.seed_session.commit()
++    return _TestObject(issue_id, key)
++
++
++@pytest.mark.asyncio
++async def test_manage_access_policies_grant_and_inspect(admin_env: AdminTestEnv) -> None:
++    """Grant ALLOW to group, inspect manifest with Spec S11.4 summary YAML, and revoke."""
++    await _setup_issue_with_object(admin_env, "KAN-142")
++
++    # 1. Provision group SecOps Reviewers
++    await create_group(admin_env.seed_session, admin_env.workspace_id, "SecOps Reviewers")
++    await admin_env.seed_session.commit()
++
++    # 2. Grant ALLOW [VIEW, COMMENT] to group
++    res_grant = await _call_manage_access_policies(
++        admin_env,
++        {
++            "action": "grant",
++            "object": "KAN-142",
++            "principal": "SecOps Reviewers",
++            "effect": "ALLOW",
++            "capabilities": ["VIEW", "COMMENT"],
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_grant["result"]["isError"] is False
++    content_grant = yaml.safe_load(res_grant["result"]["content"][0]["text"])
++    assert content_grant["status"] == "granted"
++    assert content_grant["object"] == "KAN-142"
++    assert content_grant["principal"] == "SecOps Reviewers"
++
++    # 3. Inspect access manifest (spec S11.4 summary format)
++    res_inspect = await _call_manage_access_policies(
++        admin_env,
++        {
++            "action": "inspect",
++            "object": "KAN-142",
++        },
++        scopes="admin:read",
++    )
++    assert res_inspect["result"]["isError"] is False
++    content_inspect = yaml.safe_load(res_inspect["result"]["content"][0]["text"])
++    assert content_inspect["object"] == "KAN-142"
++    assert "inherited_scope" in content_inspect
++    group_entries = content_inspect.get("groups", [])
++    assert any(g["who"] == "SecOps Reviewers" for g in group_entries)
++
++    # 4. Revoke grant
++    res_revoke = await _call_manage_access_policies(
++        admin_env,
++        {
++            "action": "revoke",
++            "object": "KAN-142",
++            "principal": "SecOps Reviewers",
++            "effect": "ALLOW",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_revoke["result"]["isError"] is False
++    content_revoke = yaml.safe_load(res_revoke["result"]["content"][0]["text"])
++    assert content_revoke["status"] == "revoked"
++
++
++@pytest.mark.asyncio
++async def test_manage_access_policies_deny_and_redaction(admin_env: AdminTestEnv) -> None:
++    """Grant DENY restriction and verify it appears in restricted summary."""
++    await _setup_issue_with_object(admin_env, "KAN-143")
++
++    # Provision user maya
++    await create_user(
++        admin_env.seed_session,
++        admin_env.workspace_id,
++        handle="@maya_restricted",
++        display_name="Maya Restricted",
++    )
++    await admin_env.seed_session.commit()
++
++    # Grant DENY [VIEW] to maya
++    res_deny = await _call_manage_access_policies(
++        admin_env,
++        {
++            "action": "grant",
++            "object": "KAN-143",
++            "principal": "@maya_restricted",
++            "effect": "DENY",
++            "capabilities": ["VIEW"],
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_deny["result"]["isError"] is False
++
++    # Inspect manifest
++    res_inspect = await _call_manage_access_policies(
++        admin_env,
++        {
++            "action": "inspect",
++            "object": "KAN-143",
++        },
++        scopes="admin:read",
++    )
++    assert res_inspect["result"]["isError"] is False
++    content = yaml.safe_load(res_inspect["result"]["content"][0]["text"])
++    restricted = content.get("restricted", [])
++    assert any(r["who"] == "Maya Restricted" and r["effect"] == "DENY" for r in restricted)
++
++
++@pytest.mark.asyncio
++async def test_manage_access_policies_scope_and_validation(admin_env: AdminTestEnv) -> None:
++    """Scope enforcement and validation errors."""
++    await _setup_issue_with_object(admin_env, "KAN-144")
++
++    # 1. Grant with admin:read only -> INSUFFICIENT_SCOPE
++    res_scope = await _call_manage_access_policies(
++        admin_env,
++        {
++            "action": "grant",
++            "object": "KAN-144",
++            "principal": f"@{admin_env.server_admin.handle}",
++            "effect": "ALLOW",
++            "capabilities": ["VIEW"],
++        },
++        scopes="admin:read",
++    )
++    assert res_scope["result"]["isError"] is True
++    err = yaml.safe_load(res_scope["result"]["content"][0]["text"])["error"]
++    assert err["code"] == "INSUFFICIENT_SCOPE"
++
++    # 2. Missing object argument
++    res_no_obj = await _call_manage_access_policies(
++        admin_env,
++        {"action": "inspect"},
++        scopes="admin:read",
++    )
++    assert res_no_obj["result"]["isError"] is True
++    assert (
++        yaml.safe_load(res_no_obj["result"]["content"][0]["text"])["error"]["code"]
++        == "VALIDATION_FAILED"
++    )
++
++    # 3. JIT help
++    res_help = await _call_manage_access_policies(
++        admin_env,
++        {"action": "help", "object": "KAN-144"},
++        scopes="admin:read",
++    )
++    assert res_help["result"]["isError"] is False
++    help_doc = yaml.safe_load(res_help["result"]["content"][0]["text"])
++    assert help_doc["tool"] == "manage_access_policies"
++    assert "params" in help_doc
++
++    # 4. Missing action
++    res_no_act = await _call_manage_access_policies(admin_env, {"object": "KAN-144"})
++    assert res_no_act["result"]["isError"] is True
++    assert (
++        yaml.safe_load(res_no_act["result"]["content"][0]["text"])["error"]["code"]
++        == "VALIDATION_FAILED"
++    )
++
++    # 5. Unknown action
++    res_un_act = await _call_manage_access_policies(
++        admin_env, {"action": "super_grant", "object": "KAN-144"}
++    )
++    assert res_un_act["result"]["isError"] is True
++    assert (
++        yaml.safe_load(res_un_act["result"]["content"][0]["text"])["error"]["code"]
++        == "VALIDATION_FAILED"
++    )
++
++    # 6. Grant missing principal
++    res_no_p = await _call_manage_access_policies(
++        admin_env,
++        {"action": "grant", "object": "KAN-144", "capabilities": ["VIEW"]},
++        scopes="admin:read,admin:write",
++    )
++    assert res_no_p["result"]["isError"] is True
++    assert (
++        yaml.safe_load(res_no_p["result"]["content"][0]["text"])["error"]["code"]
++        == "VALIDATION_FAILED"
++    )
++
++    # 7. Grant missing capabilities
++    res_no_caps = await _call_manage_access_policies(
++        admin_env,
++        {"action": "grant", "object": "KAN-144", "principal": "@maya"},
++        scopes="admin:read,admin:write",
++    )
++    assert res_no_caps["result"]["isError"] is True
++    assert (
++        yaml.safe_load(res_no_caps["result"]["content"][0]["text"])["error"]["code"]
++        == "VALIDATION_FAILED"
++    )
++
++    # 8. Revoke missing principal
++    res_rev_no_p = await _call_manage_access_policies(
++        admin_env,
++        {"action": "revoke", "object": "KAN-144"},
++        scopes="admin:read,admin:write",
++    )
++    assert res_rev_no_p["result"]["isError"] is True
++    assert (
++        yaml.safe_load(res_rev_no_p["result"]["content"][0]["text"])["error"]["code"]
++        == "VALIDATION_FAILED"
++    )
++
++
++@pytest.mark.asyncio
++async def test_access_policies_formatting_helpers() -> None:
++    """Direct unit testing of _format_caps_summary and _format_inspect_summary."""
++    assert _format_caps_summary(["ADMIN", "VIEW"]) == "ADMIN"
++    assert _format_caps_summary(["EDIT", "VIEW"]) == "EDIT"
++    assert _format_caps_summary(["COMMENT", "VIEW"]) == "COMMENT"
++    assert _format_caps_summary(["VIEW"]) == "VIEW"
++    assert _format_caps_summary([]) == "NONE"
++    assert _format_caps_summary(["LINK", "SHARE"]) == "LINK, SHARE"
++
++    # Format inspect summary with all 6 groupings including external collaborators
++    manifest_payload = {
++        "inherited_scope": {"scope_label": "Project: KAN"},
++        "users": [{"handle": "@alice", "capabilities": ["ADMIN"]}],
++        "groups": [{"name": "Core Devs", "member_count": 5, "capabilities": ["EDIT"]}],
++        "agents": [{"display_name": "Review Bot", "capabilities": ["COMMENT"]}],
++        "deny_overrides": [{"display_name": "Restricted User"}],
++        "redacted_entries": [
++            {"label": "1 External Collaborator - outside your visibility boundary"}
++        ],
++    }
++    summary = _format_inspect_summary("KAN-100", manifest_payload)
++    assert summary["object"] == "KAN-100"
++    assert summary["inherited_scope"] == "Project: KAN"
++    assert len(summary["users"]) == 1
++    assert len(summary["groups"]) == 1
++    assert len(summary["agents"]) == 1
++    assert len(summary["restricted"]) == 1
++    assert summary["external"] == "1 External Collaborator - outside your visibility boundary"
++
++
++@pytest.mark.asyncio
++async def test_manage_access_policies_tool_context_and_spec() -> None:
++    """Test tool construction and context absence behavior."""
++    spec = create_manage_access_policies_tool()
++    assert spec.name == "manage_access_policies"
++
++    token = set_current_mcp_context(None)
++    try:
++        # Calling _assert_scope with no context returns None
++        _assert_scope("admin:write")
++
++        # Calling tool handler with no context raises Internal error
++        with pytest.raises(KbMcpError) as exc_info:
++            await manage_access_policies_tool({"action": "inspect", "object": "KAN-1"})
++        assert exc_info.value.code.value == "INTERNAL"
++    finally:
++        reset_current_mcp_context(token)
++
++
++@pytest.mark.asyncio
++async def test_manage_access_policies_inspect_redaction(admin_env: AdminTestEnv) -> None:
++    """Test inspect on an object with an external collaborator triggers S3.4 redaction."""
++    test_obj = await _setup_issue_with_object(admin_env, "KAN-145")
++    # Provision a guest user
++    guest_user_id = await create_user(
++        admin_env.seed_session,
++        admin_env.workspace_id,
++        handle="@external_contractor",
++        display_name="External Contractor",
++        email="guest@contractor.example.com",
++    )
++    await add_role_binding(
++        admin_env.seed_session,
++        admin_env.workspace_id,
++        guest_user_id,
++        role="WORKSPACE_GUEST",
++        scope_type="workspace",
++    )
++    # Grant VIEW to guest_user on test_obj.id
++    acl = ResourceAclEntry(
++        workspace_id=admin_env.workspace_id,
++        object_id=test_obj.id,
++        principal_id=guest_user_id,
++        effect="ALLOW",
++        capability_mask=Capability.VIEW.value,
++        created_by_id=admin_env.server_admin.id,
++    )
++    admin_env.seed_session.add(acl)
++    await rebuild_era(admin_env.seed_session, admin_env.workspace_id)
++    await admin_env.seed_session.commit()
++
++    res_inspect = await _call_manage_access_policies(
++        admin_env,
++        {
++            "action": "inspect",
++            "object": "KAN-145",
++        },
++        scopes="admin:read",
++    )
++    assert res_inspect["result"]["isError"] is False
++    content = yaml.safe_load(res_inspect["result"]["content"][0]["text"])
++    assert "external" in content
++    assert content["external"] == "1 External Collaborator"
++    # Ensure guest handle or email is not present in output
++    raw_text = res_inspect["result"]["content"][0]["text"]
++    assert "external_contractor" not in raw_text
++    assert "contractor.example.com" not in raw_text
+diff --git a/mcp/tests/admin/test_manage_principals.py b/mcp/tests/admin/test_manage_principals.py
+new file mode 100644
+index 0000000..727eeca
+--- /dev/null
++++ b/mcp/tests/admin/test_manage_principals.py
+@@ -0,0 +1,441 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for /mcp/admin tool: manage_principals_and_groups (KB-P4-09b)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, cast
++
++import pytest
++import yaml
++
++from kanban.tests.security.helpers import create_project
++from mcp.context import reset_current_mcp_context, set_current_mcp_context
++from mcp.errors import KbMcpError
++from mcp.surfaces.admin.manage_principals_and_groups import (
++    _assert_scope,
++    create_manage_principals_and_groups_tool,
++    manage_principals_and_groups_tool,
++)
++
++if TYPE_CHECKING:
++    from mcp.tests.admin.conftest import AdminTestEnv
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _call_manage_principals(  # noqa: PLR0913
++    env: AdminTestEnv,
++    arguments: dict[str, Any],
++    *,
++    subject_token: str | None = None,
++    scopes: str | None = None,
++    aal_level: int | None = None,
++    session_id: str | None = None,
++) -> dict[str, Any]:
++    """Invoke manage_principals_and_groups via JSON-RPC 2.0 tools/call on /mcp/admin."""
++    active_session_id = session_id
++    if active_session_id is None:
++        init_headers: dict[str, str] = {}
++        if subject_token is not None:
++            init_headers["X-KB-Subject-Token"] = subject_token
++        if scopes is not None:
++            init_headers["X-KB-Scopes"] = scopes
++        if aal_level is not None:
++            init_headers["X-KB-AAL-Level"] = str(aal_level)
++        init_resp = await env.mcp_client.post(
++            "/mcp/admin",
++            json={
++                "jsonrpc": "2.0",
++                "id": 999,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-admin", "version": "1.0"},
++                },
++            },
++            headers=init_headers,
++        )
++        assert init_resp.status_code == 200
++        active_session_id = init_resp.headers["mcp-session-id"]
++
++    headers: dict[str, str] = {"mcp-session-id": active_session_id}
++    if subject_token is not None:
++        headers["X-KB-Subject-Token"] = subject_token
++    if scopes is not None:
++        headers["X-KB-Scopes"] = scopes
++    if aal_level is not None:
++        headers["X-KB-AAL-Level"] = str(aal_level)
++
++    req_payload = {
++        "jsonrpc": "2.0",
++        "id": 1,
++        "method": "tools/call",
++        "params": {
++            "name": "manage_principals_and_groups",
++            "arguments": arguments,
++        },
++    }
++    resp = await env.mcp_client.post("/mcp/admin", json=req_payload, headers=headers)
++    assert resp.status_code == 200
++    data = resp.json()
++    assert data["jsonrpc"] == "2.0"
++    assert data["id"] == 1
++    return cast("dict[str, Any]", data)
++
++
++@pytest.mark.asyncio
++async def test_manage_principals_lifecycle(admin_env: AdminTestEnv) -> None:
++    """Test full principal lifecycle: provision, membership, roles, and status changes."""
++    # 1. Provision user maya
++    res_user = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "provision_user",
++            "handle": "maya",
++            "display_name": "Maya Lin",
++            "email": "maya@example.com",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_user["result"]["isError"] is False
++    content_user = yaml.safe_load(res_user["result"]["content"][0]["text"])
++    assert content_user["status"] == "provisioned"
++    assert content_user["principal"] == "@maya"
++
++    # 2. Provision group Core Backend
++    res_group = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "provision_group",
++            "display_name": "Core Backend",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_group["result"]["isError"] is False
++    content_group = yaml.safe_load(res_group["result"]["content"][0]["text"])
++    assert content_group["status"] == "provisioned"
++    assert content_group["principal"] == "Core Backend"
++
++    # 3. Provision agent forensic-code-check
++    res_agent = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "provision_agent",
++            "handle": "forensic-code-check",
++            "display_name": "Forensic Code Checker",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_agent["result"]["isError"] is False
++    content_agent = yaml.safe_load(res_agent["result"]["content"][0]["text"])
++    assert content_agent["status"] == "provisioned"
++    assert content_agent["principal"] == "@forensic-code-check"
++
++    # 4. List principals
++    res_list = await _call_manage_principals(
++        admin_env,
++        {"action": "list"},
++        scopes="admin:read",
++    )
++    assert res_list["result"]["isError"] is False
++    content_list = yaml.safe_load(res_list["result"]["content"][0]["text"])
++    principals = content_list["principals"]
++    handles = [p["principal"] for p in principals]
++    assert "@maya" in handles
++    assert "Core Backend" in handles
++    assert "@forensic-code-check" in handles
++
++    # 5. Add maya to Core Backend group
++    res_add = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "add_member",
++            "group": "Core Backend",
++            "principal": "@maya",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_add["result"]["isError"] is False
++
++    # 6. Create project KAN and bind role MEMBER to maya on KAN
++    await create_project(
++        admin_env.seed_session, admin_env.workspace_id, identifier="KAN", name="Kanban Core"
++    )
++    await admin_env.seed_session.commit()
++
++    res_bind = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "bind_role",
++            "principal": "@maya",
++            "role": "MEMBER",
++            "scope": "KAN",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_bind["result"]["isError"] is False
++
++    # 7. Get maya detail (spec S11.4 summary format)
++    res_get = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "get",
++            "principal": "@maya",
++        },
++        scopes="admin:read",
++    )
++    assert res_get["result"]["isError"] is False
++    content_get = yaml.safe_load(res_get["result"]["content"][0]["text"])
++    assert content_get["principal"] == "@maya"
++    assert content_get["type"] == "USER"
++    assert content_get["status"] == "active"
++    assert "Core Backend" in content_get["groups"]
++    assert any(r["role"] == "MEMBER" and r["scope"] == "KAN" for r in content_get["roles"])
++
++    # 8. Deactivate maya
++    res_deact = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "deactivate",
++            "principal": "@maya",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_deact["result"]["isError"] is False
++    assert yaml.safe_load(res_deact["result"]["content"][0]["text"])["status"] == "deactivated"
++
++    # 9. Reactivate maya
++    res_react = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "reactivate",
++            "principal": "@maya",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_react["result"]["isError"] is False
++    assert yaml.safe_load(res_react["result"]["content"][0]["text"])["status"] == "activated"
++
++
++@pytest.mark.asyncio
++async def test_manage_principals_scope_and_lockout(admin_env: AdminTestEnv) -> None:
++    """Insufficient scope and lockout prevention checks."""
++    # 1. Calling write action with admin:read only -> INSUFFICIENT_SCOPE
++    res_scope = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "provision_user",
++            "handle": "attacker",
++            "display_name": "Attacker",
++            "email": "attacker@example.com",
++        },
++        scopes="admin:read",
++    )
++    assert res_scope["result"]["isError"] is True
++    err_scope = yaml.safe_load(res_scope["result"]["content"][0]["text"])["error"]
++    assert err_scope["code"] == "INSUFFICIENT_SCOPE"
++
++    # 2. Deactivating the only SERVER_ADMIN -> LOCKOUT_PREVENTED
++    res_lockout = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "deactivate",
++            "principal": f"@{admin_env.server_admin.handle}",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_lockout["result"]["isError"] is True
++    err_lockout = yaml.safe_load(res_lockout["result"]["content"][0]["text"])["error"]
++    assert err_lockout["code"] == "LOCKOUT_PREVENTED"
++
++
++@pytest.mark.asyncio
++async def test_manage_principals_boundary_and_validation(admin_env: AdminTestEnv) -> None:
++    """Validation errors, group cycle rejection, and JIT help."""
++    # 1. Missing action
++    res_no_action = await _call_manage_principals(admin_env, {})
++    assert res_no_action["result"]["isError"] is True
++    assert (
++        yaml.safe_load(res_no_action["result"]["content"][0]["text"])["error"]["code"]
++        == "VALIDATION_FAILED"
++    )
++
++    # 2. Unknown action
++    res_unknown = await _call_manage_principals(admin_env, {"action": "destroy_all"})
++    assert res_unknown["result"]["isError"] is True
++    assert (
++        yaml.safe_load(res_unknown["result"]["content"][0]["text"])["error"]["code"]
++        == "VALIDATION_FAILED"
++    )
++
++    # 3. JIT help
++    res_help = await _call_manage_principals(admin_env, {"action": "help"})
++    assert res_help["result"]["isError"] is False
++    help_data = yaml.safe_load(res_help["result"]["content"][0]["text"])
++    assert help_data["tool"] == "manage_principals_and_groups"
++    assert "params" in help_data
++
++    # 4. Missing required parameters for each action
++    # get missing principal
++    r_get_no_p = await _call_manage_principals(admin_env, {"action": "get"}, scopes="admin:read")
++    assert r_get_no_p["result"]["isError"] is True
++    assert (
++        yaml.safe_load(r_get_no_p["result"]["content"][0]["text"])["error"]["code"]
++        == "VALIDATION_FAILED"
++    )
++
++    # provision_user missing fields
++    r_pu_no = await _call_manage_principals(
++        admin_env, {"action": "provision_user", "handle": "u"}, scopes="admin:read,admin:write"
++    )
++    assert r_pu_no["result"]["isError"] is True
++
++    # provision_group missing display_name
++    r_pg_no = await _call_manage_principals(
++        admin_env, {"action": "provision_group"}, scopes="admin:read,admin:write"
++    )
++    assert r_pg_no["result"]["isError"] is True
++
++    # provision_agent missing display_name
++    r_pa_no = await _call_manage_principals(
++        admin_env, {"action": "provision_agent", "handle": "agt"}, scopes="admin:read,admin:write"
++    )
++    assert r_pa_no["result"]["isError"] is True
++
++    # deactivate missing principal
++    r_deact_no = await _call_manage_principals(
++        admin_env, {"action": "deactivate"}, scopes="admin:read,admin:write"
++    )
++    assert r_deact_no["result"]["isError"] is True
++
++    # add_member missing fields
++    r_add_no = await _call_manage_principals(
++        admin_env, {"action": "add_member", "group": "g"}, scopes="admin:read,admin:write"
++    )
++    assert r_add_no["result"]["isError"] is True
++
++    # bind_role missing fields
++    r_br_no = await _call_manage_principals(
++        admin_env, {"action": "bind_role", "principal": "p"}, scopes="admin:read,admin:write"
++    )
++    assert r_br_no["result"]["isError"] is True
++
++
++@pytest.mark.asyncio
++async def test_manage_principals_operations_coverage(admin_env: AdminTestEnv) -> None:
++    """Test operations coverage: remove_member, unbind_role, filtered list, and gets."""
++    # 1. Provision group and user
++    res_g = await _call_manage_principals(
++        admin_env,
++        {"action": "provision_group", "display_name": "Ops Team"},
++        scopes="admin:read,admin:write",
++    )
++    assert res_g["result"]["isError"] is False
++
++    res_u = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "provision_user",
++            "handle": "bob",
++            "display_name": "Bob Smith",
++            "email": "bob@example.com",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_u["result"]["isError"] is False
++
++    # Add member then remove member
++    res_add = await _call_manage_principals(
++        admin_env,
++        {"action": "add_member", "group": "Ops Team", "principal": "@bob"},
++        scopes="admin:read,admin:write",
++    )
++    assert res_add["result"]["isError"] is False
++
++    res_rm = await _call_manage_principals(
++        admin_env,
++        {"action": "remove_member", "group": "Ops Team", "principal": "@bob"},
++        scopes="admin:read,admin:write",
++    )
++    assert res_rm["result"]["isError"] is False
++    content_rm = yaml.safe_load(res_rm["result"]["content"][0]["text"])
++    assert content_rm["status"] == "member_removed"
++
++    # Bind role workspace scope then unbind
++    res_bind_ws = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "bind_role",
++            "principal": "@bob",
++            "role": "WORKSPACE_MEMBER",
++            "scope": "workspace",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_bind_ws["result"]["isError"] is False
++
++    res_unbind_ws = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "unbind_role",
++            "principal": "@bob",
++            "role": "WORKSPACE_MEMBER",
++            "scope": "workspace",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_unbind_ws["result"]["isError"] is False
++    content_ub = yaml.safe_load(res_unbind_ws["result"]["content"][0]["text"])
++    assert content_ub["status"] == "role_unbound"
++
++    # List with filter and limit
++    res_list_filter = await _call_manage_principals(
++        admin_env,
++        {"action": "list", "filter": "GROUP", "limit": 10},
++        scopes="admin:read",
++    )
++    assert res_list_filter["result"]["isError"] is False
++
++    # Get group detail
++    res_get_g = await _call_manage_principals(
++        admin_env,
++        {"action": "get", "principal": "Ops Team"},
++        scopes="admin:read",
++    )
++    assert res_get_g["result"]["isError"] is False
++    content_g = yaml.safe_load(res_get_g["result"]["content"][0]["text"])
++    assert content_g["type"] == "GROUP"
++
++    # Bind role server scope
++    res_bind_srv = await _call_manage_principals(
++        admin_env,
++        {
++            "action": "bind_role",
++            "principal": "@bob",
++            "role": "SERVER_ADMIN",
++            "scope": "server",
++        },
++        scopes="admin:read,admin:write",
++    )
++    assert res_bind_srv["result"]["isError"] is False
++
++
++@pytest.mark.asyncio
++async def test_manage_principals_tool_context_and_spec() -> None:
++    """Test tool construction and context absence behavior."""
++    spec = create_manage_principals_and_groups_tool()
++    assert spec.name == "manage_principals_and_groups"
++
++    token = set_current_mcp_context(None)
++    try:
++        # Calling _assert_scope with no context returns None
++        _assert_scope("admin:write")
++
++        # Calling tool handler with no context raises Internal error
++        with pytest.raises(KbMcpError) as exc_info:
++            await manage_principals_and_groups_tool({"action": "list"})
++        assert exc_info.value.code.value == "INTERNAL"
++    finally:
++        reset_current_mcp_context(token)

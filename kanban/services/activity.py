@@ -183,6 +183,16 @@ class ActivityEventType(StrEnum):
     AI_PROVIDER_CONFIG_UPDATED = "AI_PROVIDER_CONFIG_UPDATED"
     AI_PROVIDER_CONFIG_DISABLED = "AI_PROVIDER_CONFIG_DISABLED"
     AI_BUDGET_SET = "AI_BUDGET_SET"
+    PRINCIPAL_PROVISIONED = "PRINCIPAL_PROVISIONED"
+    PRINCIPAL_UPDATED = "PRINCIPAL_UPDATED"
+    PRINCIPAL_DEACTIVATED = "PRINCIPAL_DEACTIVATED"
+    PRINCIPAL_REACTIVATED = "PRINCIPAL_REACTIVATED"
+    GROUP_MEMBER_ADDED = "GROUP_MEMBER_ADDED"
+    GROUP_MEMBER_REMOVED = "GROUP_MEMBER_REMOVED"
+    ROLE_BOUND = "ROLE_BOUND"
+    ROLE_UNBOUND = "ROLE_UNBOUND"
+    ACL_ENTRY_GRANTED = "ACL_ENTRY_GRANTED"
+    ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -311,6 +321,16 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.AI_PROVIDER_CONFIG_UPDATED: ActivityCategory.SYSTEM,
         ActivityEventType.AI_PROVIDER_CONFIG_DISABLED: ActivityCategory.SYSTEM,
         ActivityEventType.AI_BUDGET_SET: ActivityCategory.SYSTEM,
+        ActivityEventType.PRINCIPAL_PROVISIONED: ActivityCategory.SYSTEM,
+        ActivityEventType.PRINCIPAL_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.PRINCIPAL_DEACTIVATED: ActivityCategory.SYSTEM,
+        ActivityEventType.PRINCIPAL_REACTIVATED: ActivityCategory.SYSTEM,
+        ActivityEventType.GROUP_MEMBER_ADDED: ActivityCategory.SYSTEM,
+        ActivityEventType.GROUP_MEMBER_REMOVED: ActivityCategory.SYSTEM,
+        ActivityEventType.ROLE_BOUND: ActivityCategory.SYSTEM,
+        ActivityEventType.ROLE_UNBOUND: ActivityCategory.SYSTEM,
+        ActivityEventType.ACL_ENTRY_GRANTED: ActivityCategory.SYSTEM,
+        ActivityEventType.ACL_ENTRY_REVOKED: ActivityCategory.SYSTEM,
     }
 )
 

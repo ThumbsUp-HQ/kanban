@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Admin surface tool registry and definitions (KB-P4-09a, KB-P4-10, KB-P4-11 / S11.4)."""
+"""Admin surface tool registry and definitions (KB-P4-09a..11, KB-P5-05b / S11.4)."""
 
 from __future__ import annotations
 
@@ -21,6 +21,11 @@ from mcp.surfaces.admin.configure_workspace import (
     configure_workspace,
     create_configure_workspace_tool,
 )
+from mcp.surfaces.admin.manage_access_policies import (
+    MANAGE_ACCESS_POLICIES_SCHEMA,
+    create_manage_access_policies_tool,
+    manage_access_policies_tool,
+)
 from mcp.surfaces.admin.manage_ai_and_agent_runners import (
     MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA,
     create_manage_ai_and_agent_runners_tool,
@@ -36,6 +41,11 @@ from mcp.surfaces.admin.manage_cycles_and_modules import (
     create_manage_cycles_and_modules_tool,
     manage_cycles_and_modules,
 )
+from mcp.surfaces.admin.manage_principals_and_groups import (
+    MANAGE_PRINCIPALS_AND_GROUPS_SCHEMA,
+    create_manage_principals_and_groups_tool,
+    manage_principals_and_groups_tool,
+)
 from mcp.surfaces.admin.override_ticket_provenance import (
     OVERRIDE_TICKET_PROVENANCE_SCHEMA,
     override_ticket_provenance,
@@ -48,18 +58,24 @@ __all__ = [
     "ARCHITECT_PROJECT_SCHEMA",
     "AUDIT_AND_PURGE_OBJECT_LINKS_SCHEMA",
     "CONFIGURE_WORKSPACE_SCHEMA",
+    "MANAGE_ACCESS_POLICIES_SCHEMA",
     "MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA",
     "MANAGE_AUTH_CARDS_SCHEMA",
     "MANAGE_CYCLES_AND_MODULES_SCHEMA",
+    "MANAGE_PRINCIPALS_AND_GROUPS_SCHEMA",
     "OVERRIDE_TICKET_PROVENANCE_SCHEMA",
     "architect_project",
     "audit_and_purge_object_links",
     "build_admin_registry",
     "configure_workspace",
     "create_admin_registry",
+    "create_manage_access_policies_tool",
+    "create_manage_principals_and_groups_tool",
+    "manage_access_policies_tool",
     "manage_ai_and_agent_runners",
     "manage_auth_cards",
     "manage_cycles_and_modules",
+    "manage_principals_and_groups_tool",
     "override_ticket_provenance",
 ]
 
@@ -69,6 +85,8 @@ def build_admin_registry(client: KanbanApiClient | None = None) -> ToolRegistry:
     registry = ToolRegistry(Surface.ADMIN)
     registry.register(create_configure_workspace_tool())
     registry.register(create_manage_auth_cards_tool())
+    registry.register(create_manage_principals_and_groups_tool())
+    registry.register(create_manage_access_policies_tool())
     registry.register(create_architect_project_tool())
     registry.register(create_manage_cycles_and_modules_tool())
     registry.register(create_manage_ai_and_agent_runners_tool())

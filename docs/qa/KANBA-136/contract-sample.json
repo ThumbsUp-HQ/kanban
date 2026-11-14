@@ -1,0 +1,457 @@
+{
+  "ticket": "KANBA-136",
+  "exchanges": [
+    {
+      "name": "admin_principals_aal2_required_403",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/principals",
+        "headers": {
+          "host": "test",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": {
+          "type": "USER",
+          "handle": "maya",
+          "display_name": "Maya Lin",
+          "email": "maya@example.com"
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-type": "application/problem+json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "type": "urn:kanban:problem:AAL2_REQUIRED",
+          "title": "AAL2 Authentication Required",
+          "status": 403,
+          "code": "AAL2_REQUIRED",
+          "detail": "Administrative routes require multi-factor authentication (AAL2)."
+        }
+      }
+    },
+    {
+      "name": "provision_user_principal_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/principals",
+        "headers": {
+          "host": "test",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "x-kb-aal-level": "2"
+        },
+        "body": {
+          "type": "USER",
+          "handle": "maya",
+          "display_name": "Maya Lin",
+          "email": "maya@example.com"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+          "workspace_id": "019318b7-6cb0-7600-84a1-4357c91ad000",
+          "principal_type": "USER",
+          "status": "ACTIVE",
+          "handle": "@maya",
+          "display_name": "Maya Lin",
+          "email": "maya@example.com",
+          "principal": "@maya",
+          "type": "USER"
+        }
+      }
+    },
+    {
+      "name": "provision_group_principal_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/principals",
+        "headers": {
+          "host": "test",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "x-kb-aal-level": "2"
+        },
+        "body": {
+          "type": "GROUP",
+          "display_name": "Core Backend"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "id": "019318b7-6cb0-7600-84a1-4357c91ad102",
+          "workspace_id": "019318b7-6cb0-7600-84a1-4357c91ad000",
+          "principal_type": "GROUP",
+          "status": "ACTIVE",
+          "display_name": "Core Backend",
+          "principal": "Core Backend",
+          "type": "GROUP"
+        }
+      }
+    },
+    {
+      "name": "provision_agent_principal_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/principals",
+        "headers": {
+          "host": "test",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "x-kb-aal-level": "2"
+        },
+        "body": {
+          "type": "AGENT",
+          "handle": "forensic-code-check",
+          "display_name": "Forensic Code Check"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "id": "019318b7-6cb0-7600-84a1-4357c91ad103",
+          "workspace_id": "019318b7-6cb0-7600-84a1-4357c91ad000",
+          "principal_type": "AGENT",
+          "status": "ACTIVE",
+          "handle": "@forensic-code-check",
+          "display_name": "Forensic Code Check",
+          "principal": "@forensic-code-check",
+          "type": "AGENT"
+        }
+      }
+    },
+    {
+      "name": "list_principals_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/admin/principals?filter=USER&limit=50",
+        "headers": {
+          "host": "test",
+          "accept": "application/json"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": [
+          {
+            "id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+            "workspace_id": "019318b7-6cb0-7600-84a1-4357c91ad000",
+            "principal_type": "USER",
+            "status": "ACTIVE",
+            "handle": "@maya",
+            "display_name": "Maya Lin",
+            "email": "maya@example.com",
+            "principal": "@maya",
+            "type": "USER",
+            "groups": ["Core Backend"],
+            "roles": [{"role": "MEMBER", "scope": "KAN"}]
+          }
+        ]
+      }
+    },
+    {
+      "name": "patch_principal_deactivate_200",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/admin/principals/019318b7-6cb0-7600-84a1-4357c91ad101",
+        "headers": {
+          "host": "test",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "x-kb-aal-level": "2"
+        },
+        "body": {
+          "status": "deactivated"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+          "workspace_id": "019318b7-6cb0-7600-84a1-4357c91ad000",
+          "principal_type": "USER",
+          "status": "DEACTIVATED",
+          "handle": "@maya",
+          "display_name": "Maya Lin",
+          "principal": "@maya",
+          "type": "USER"
+        }
+      }
+    },
+    {
+      "name": "add_group_member_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/groups/019318b7-6cb0-7600-84a1-4357c91ad102/members/019318b7-6cb0-7600-84a1-4357c91ad101",
+        "headers": {
+          "host": "test",
+          "accept": "application/json",
+          "x-kb-aal-level": "2"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "status": "member_added",
+          "group_id": "019318b7-6cb0-7600-84a1-4357c91ad102",
+          "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101"
+        }
+      }
+    },
+    {
+      "name": "delete_group_member_200",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/admin/groups/019318b7-6cb0-7600-84a1-4357c91ad102/members/019318b7-6cb0-7600-84a1-4357c91ad101",
+        "headers": {
+          "host": "test",
+          "accept": "application/json",
+          "x-kb-aal-level": "2"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "status": "member_removed",
+          "group_id": "019318b7-6cb0-7600-84a1-4357c91ad102",
+          "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101"
+        }
+      }
+    },
+    {
+      "name": "bind_role_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/role-bindings",
+        "headers": {
+          "host": "test",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "x-kb-aal-level": "2"
+        },
+        "body": {
+          "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+          "role": "PROJECT_MEMBER",
+          "scope_type": "project",
+          "scope_id": "019318b7-6cb0-7600-84a1-4357c91ad200"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "status": "role_bound",
+          "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+          "role": "PROJECT_MEMBER",
+          "scope_type": "project",
+          "scope_id": "019318b7-6cb0-7600-84a1-4357c91ad200"
+        }
+      }
+    },
+    {
+      "name": "unbind_role_200",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/admin/role-bindings",
+        "headers": {
+          "host": "test",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "x-kb-aal-level": "2"
+        },
+        "body": {
+          "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+          "role": "PROJECT_MEMBER",
+          "scope_type": "project",
+          "scope_id": "019318b7-6cb0-7600-84a1-4357c91ad200"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "status": "role_unbound",
+          "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+          "role": "PROJECT_MEMBER",
+          "scope_type": "project",
+          "scope_id": "019318b7-6cb0-7600-84a1-4357c91ad200"
+        }
+      }
+    },
+    {
+      "name": "grant_acl_entry_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/acl-entries",
+        "headers": {
+          "host": "test",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "x-kb-aal-level": "2"
+        },
+        "body": {
+          "object_id": "019318b7-6cb0-7600-84a1-4357c91ad300",
+          "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+          "effect": "ALLOW",
+          "capabilities": ["VIEW", "COMMENT"]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "status": "granted",
+          "object_id": "019318b7-6cb0-7600-84a1-4357c91ad300",
+          "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+          "effect": "ALLOW",
+          "capabilities": ["VIEW", "COMMENT"],
+          "effective_capabilities": ["VIEW", "COMMENT"]
+        }
+      }
+    },
+    {
+      "name": "revoke_acl_entry_200",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/admin/acl-entries",
+        "headers": {
+          "host": "test",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "x-kb-aal-level": "2"
+        },
+        "body": {
+          "object_id": "019318b7-6cb0-7600-84a1-4357c91ad300",
+          "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+          "effect": "ALLOW"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "status": "revoked",
+          "object_id": "019318b7-6cb0-7600-84a1-4357c91ad300",
+          "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+          "effect": "ALLOW",
+          "effective_capabilities": []
+        }
+      }
+    },
+    {
+      "name": "get_access_manifest_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/admin/acl-entries/019318b7-6cb0-7600-84a1-4357c91ad300/manifest",
+        "headers": {
+          "host": "test",
+          "accept": "application/json"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "object_id": "019318b7-6cb0-7600-84a1-4357c91ad300",
+          "canonical_key": "KAN-142",
+          "inherited_scope": {
+            "scope_type": "project",
+            "project_key": "KAN",
+            "scope_label": "Project: KAN"
+          },
+          "users": [
+            {
+              "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad001",
+              "handle": "@adam",
+              "display_name": "Adam Admin",
+              "capabilities": ["ADMIN", "VIEW", "COMMENT", "EDIT", "TRANSITION", "LINK", "SHARE", "DELETE"]
+            },
+            {
+              "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad101",
+              "handle": "@maya",
+              "display_name": "Maya Lin",
+              "capabilities": ["EDIT", "VIEW", "COMMENT"]
+            }
+          ],
+          "groups": [
+            {
+              "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad102",
+              "name": "SecOps Reviewers",
+              "member_count": 4,
+              "capabilities": ["COMMENT", "VIEW"]
+            }
+          ],
+          "agents": [
+            {
+              "principal_id": "019318b7-6cb0-7600-84a1-4357c91ad103",
+              "display_name": "forensic-code-check",
+              "capabilities": ["VIEW"]
+            }
+          ],
+          "deny_overrides": [],
+          "redacted_entries": [
+            {
+              "redacted": true,
+              "label": "1 External Collaborator"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

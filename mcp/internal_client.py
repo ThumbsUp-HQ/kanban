@@ -292,6 +292,8 @@ class KanbanApiClient:
             "INVALID_CYCLE_TRANSITION": McpErrorCode.INVALID_TRANSITION,
             "OPEN_CHILD_BLOCKERS": McpErrorCode.OPEN_CHILD_BLOCKERS,
             "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
+            "GROUP_CYCLE_REJECTED": McpErrorCode.GROUP_CYCLE_REJECTED,
+            "GROUP_DEPTH_EXCEEDED": McpErrorCode.GROUP_DEPTH_EXCEEDED,
         }
         if prob_code in conflict_map:
             return conflict_map[prob_code]
@@ -330,6 +332,8 @@ class KanbanApiClient:
             "QA_VERDICT_NOT_READY": McpErrorCode.QA_VERDICT_NOT_READY,
             "INVALID_TRANSITION": McpErrorCode.INVALID_TRANSITION,
             "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
+            "GROUP_CYCLE_REJECTED": McpErrorCode.GROUP_CYCLE_REJECTED,
+            "GROUP_DEPTH_EXCEEDED": McpErrorCode.GROUP_DEPTH_EXCEEDED,
         }
         if prob_code in code_map:
             return code_map[prob_code]
@@ -337,6 +341,7 @@ class KanbanApiClient:
         suffix_map: dict[str, McpErrorCode] = {
             "aal2-required": McpErrorCode.AAL2_REQUIRED,
             "insufficient-capability": McpErrorCode.INSUFFICIENT_PERMISSION,
+            "insufficient-permission": McpErrorCode.INSUFFICIENT_PERMISSION,
             "modules-disabled": McpErrorCode.MODULES_DISABLED,
             "section-not-found": McpErrorCode.SECTION_NOT_FOUND,
             "already-promoted": McpErrorCode.ALREADY_PROMOTED,
@@ -353,6 +358,8 @@ class KanbanApiClient:
             "qa-verdict-not-ready": McpErrorCode.QA_VERDICT_NOT_READY,
             "invalid-transition": McpErrorCode.INVALID_TRANSITION,
             "transition-held": McpErrorCode.TRANSITION_HELD,
+            "group-cycle-rejected": McpErrorCode.GROUP_CYCLE_REJECTED,
+            "group-depth-exceeded": McpErrorCode.GROUP_DEPTH_EXCEEDED,
         }
         for suffix, err_code in suffix_map.items():
             if prob_type.endswith(suffix):

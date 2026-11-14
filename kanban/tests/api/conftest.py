@@ -124,12 +124,13 @@ def make_user(api_env: ApiEnv) -> Callable[..., Awaitable[SeededUser]]:
             api_env.seed, api_env.workspace_id, handle=f"@{handle}", display_name=handle.title()
         )
         if workspace_role is not None:
+            scope_type = "server" if workspace_role == "SERVER_ADMIN" else "workspace"
             await add_role_binding(
                 api_env.seed,
                 api_env.workspace_id,
                 user_id,
                 role=workspace_role,
-                scope_type="workspace",
+                scope_type=scope_type,
             )
         await rebuild_era(api_env.seed, api_env.workspace_id)
         await api_env.seed.commit()
