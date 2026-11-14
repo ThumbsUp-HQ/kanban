@@ -73,7 +73,13 @@ export interface WorkflowGateEventPayload {
 export interface GateActivityItem {
   id: string;
   category: 'AGENT_GATE';
-  event_type: 'GATE_APPROVED' | 'GATE_REJECTED' | 'GATE_ABORTED_STALE' | 'GATE_FAIL_OPEN_WARN' | 'GATE_PENDING';
+  event_type:
+    | 'GATE_APPROVED'
+    | 'GATE_REJECTED'
+    | 'GATE_VETOED'
+    | 'GATE_ABORTED_STALE'
+    | 'GATE_FAIL_OPEN_WARN'
+    | 'GATE_PENDING';
   actor: {
     type?: string | undefined;
     slug?: string | undefined;

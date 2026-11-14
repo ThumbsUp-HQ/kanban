@@ -184,4 +184,26 @@ describe('GateActivityRow (KB-P5-25)', () => {
     render(<GateActivityRow item={itemWarnDefault} />);
     expect(screen.getByText('Gate failed open with warning: TIMEOUT')).not.toBeNull();
   });
+
+  it('renders GATE_VETOED alias with veto row and accessible jump button', () => {
+    const onJumpMock = vi.fn();
+    const item: GateActivityItem = {
+      id: 'gate-row-9',
+      category: 'AGENT_GATE',
+      event_type: 'GATE_VETOED',
+      actor: { display_name: 'veto-guard' },
+      created_at: '2026-11-14T00:00:00Z',
+      payload: {
+        hook_name: 'veto-guard',
+        reason: 'Missing test coverage',
+        audit_comment_id: 'audit-comm-123',
+      },
+    };
+
+    render(<GateActivityRow item={item} onJumpToComment={onJumpMock} />);
+    expect(screen.getByTestId('gate-vetoed-row')).not.toBeNull();
+    const jumpBtn = screen.getByRole('button', { name: 'View audit details' });
+    fireEvent.click(jumpBtn);
+    expect(onJumpMock).toHaveBeenCalledWith('audit-comm-123');
+  });
 });

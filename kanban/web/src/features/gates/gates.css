@@ -166,9 +166,15 @@
 .gate-activity-row {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-3, 12px);
   padding: var(--space-3, 12px) 0;
   border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+}
+
+.gate-activity-row__inner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3, 12px);
+  width: 100%;
 }
 
 .gate-activity-row__body {
