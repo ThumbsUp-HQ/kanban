@@ -1,0 +1,60 @@
+
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-125/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/activity/activityApi.test.ts (16 tests) 29ms
+ ✓ src/features/activity/SafeMarkdownPreview.test.tsx (10 tests) 242ms
+ ✓ src/features/activity/ActivityEventRow.test.tsx (13 tests) 367ms
+stderr | src/features/activity/drawerActivityCoverage.test.tsx > Branch Coverage Booster > ActivitySection Branches > covers keyboard navigation wrapping: ArrowLeft from 0 wraps to 3
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["comments","KAN-1"]
+
+stderr | src/features/activity/drawerActivityCoverage.test.tsx > Branch Coverage Booster > ActivitySection Branches > covers ActivitySection handleJumpToComment with element found in DOM
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["comments","KAN-1"]
+
+ ✓ src/features/activity/CommentComposer.test.tsx (18 tests) 773ms
+stderr | src/features/activity/drawerActivityCoverage.test.tsx > Branch Coverage Booster > ActivitySection Branches > covers ActivitySection handleJumpToComment with element found in DOM
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["comments","KAN-1"]
+
+stderr | src/features/activity/ActivitySection.test.tsx > ActivitySection > Test Case 1: 4 Tabs, Badge Counts, Keyboard switching & Feed rendering > triggers handleRefresh on comment update and submit
+An update to CommentComposer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to CommentComposer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/activity/ActivitySection.test.tsx (9 tests) 954ms
+ ✓ src/features/activity/CommentCard.test.tsx (14 tests) 1082ms
+ ✓ src/features/activity/drawerActivityCoverage.test.tsx (30 tests) 1033ms
+
+ Test Files  7 passed (7)
+      Tests  110 passed (110)
+   Start at  09:50:23
+   Duration  2.72s (environment 52%, tests 35%, import 10%, worker 3%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.02 |    95.84 |   98.19 |   99.79 |                   
+ ...tyEventRow.tsx |   98.68 |      100 |    87.5 |     100 |                   
+ ...itySection.tsx |   98.76 |    91.46 |     100 |   98.76 | 157               
+ CommentCard.tsx   |   98.46 |      100 |   96.42 |     100 |                   
+ ...ntComposer.tsx |   98.72 |    90.47 |     100 |     100 | ...14,160-168,257 
+ ...ownPreview.tsx |     100 |    98.03 |     100 |     100 | 141               
+ activityApi.ts    |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
