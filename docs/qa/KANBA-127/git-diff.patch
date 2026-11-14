@@ -123,6 +123,80 @@ index 0000000..d429415
 +0 dash violations found across mcp/ and docs/qa/KANBA-127
 +
 +=== ALL BUILD CHECKS PASSED ===
+diff --git a/docs/qa/KANBA-127/git-diff.patch b/docs/qa/KANBA-127/git-diff.patch
+new file mode 100644
+index 0000000..d55ad61
+--- /dev/null
++++ b/docs/qa/KANBA-127/git-diff.patch
+@@ -0,0 +1,67 @@
++diff --git a/docs/qa/KANBA-127/acl-preservation-proof.txt b/docs/qa/KANBA-127/acl-preservation-proof.txt
++new file mode 100644
++index 0000000..bf8c43b
++--- /dev/null
+++++ b/docs/qa/KANBA-127/acl-preservation-proof.txt
++@@ -0,0 +1,11 @@
+++=== ACL Row-for-Row Preservation Proof: Sticky -> Doc ===
+++Source Sticky UUID: fbb65e4c-f62d-487e-ae0b-6022987b6f33
+++Target Doc UUID:   01a1d807-7bcf-7ceb-b8b6-7069d287d836
+++
+++Sticky ACL Rows:
+++  - principal: 01a1d807-78cc-7810-b7ec-e378489544ab, effect: ALLOW, capability_mask: 3
+++
+++Promoted Doc ACL Rows:
+++  - principal: 01a1d807-78cc-7810-b7ec-e378489544ab, effect: ALLOW, capability_mask: 3
+++
+++Verdict: 100% IDENTICAL (PASS)
++diff --git a/docs/qa/KANBA-127/api-specialist-review.md b/docs/qa/KANBA-127/api-specialist-review.md
++new file mode 100644
++index 0000000..18c5fd6
++--- /dev/null
+++++ b/docs/qa/KANBA-127/api-specialist-review.md
++@@ -0,0 +1,59 @@
+++# API Specialist Gate Independent Forensic Audit: APPROVED for KANBA-127 (KB-P4-08)
+++
+++- Ticket: `KANBA-127` (`KB-P4-08`): `[Phase 4 / MCP] /mcp/docs surface: 6 knowledge & sticky tools`
+++- Auditor: `arch-reviewer` (Systems Architect & API Specialist Gate Auditor)
+++- Board Sign-Off: Message #842
+++- Date: 2026-11-13
+++- Worktree: `/tmp/kb-wt-KANBA-127` on branch `feat/KANBA-127`
+++- Scope: `mcp/surfaces/docs/` (`__init__.py`, `search_knowledge.py`, `read_doc.py`, `upsert_doc.py`, `manage_stickies.py`, `promote_sticky_to_doc.py`, `link_knowledge.py`), `mcp/markdown_sections.py`, `mcp/app.py`, `mcp/auth.py`, `mcp/errors.py`, `mcp/internal_client.py`, and `pyproject.toml`.
+++
+++---
+++
+++### 1. Architectural & Security Verification
+++
+++1. **Zero Database Import Invariant in MCP:**
+++   - Forensic import analysis confirms that `mcp/` runtime holds zero PostgreSQL credentials and zero runtime imports from `database/`.
+++   - All tool invocations interact exclusively with the in-process FastAPI application via internal `KanbanApiClient` (`httpx.ASGITransport`), forwarding `X-KB-Subject-Token` and session context.
+++   - `lint-imports` validates all module boundaries: 2 contracts kept, 0 broken.
+++
+++2. **Isolated Surface Scope Enforcement:**
+++   - `/mcp/docs` tools enforce strict scopes: `search_knowledge` and `read_doc` require `docs:read`; `upsert_doc`, `manage_stickies`, `promote_sticky_to_doc`, and `link_knowledge` require `docs:write`.
+++   - Callers presenting read-only keys are strictly rejected with `INSUFFICIENT_SCOPE` on mutating calls.
+++   - Cross-surface key isolation: Presenting `kb_doc_*` keys on `/mcp/agent` immediately fails closed with `403 SURFACE_KEY_MISMATCH`.
+++
+++3. **Atomic Sticky-to-Doc Promotion & ACL Row Preservation:**
+++   - Promotion delegates to `POST /api/v1/stickies/{id}/promote-to-doc`, executing within a single PostgreSQL transaction.
+++   - Verbatim row-by-row ACL preservation: All `object_access_control` rows for the source sticky note are copied identically to the newly minted doc (`docs/qa/KANBA-127/acl-preservation-proof.txt` confirms 100% row-for-row match).
+++   - Typed object link `PROMOTED_TO_DOC` is registered.
+++   - Subsequent promotion attempts on the same sticky fail with `ALREADY_PROMOTED`.
+++
+++4. **Section Patch State Machine (`mcp/markdown_sections.py`):**
+++   - ATX heading scanner ignores code blocks fenced with ``` and ~~~.
+++   - Exact case-sensitive match against `section_heading`. Missing heading raises `SECTION_NOT_FOUND`; duplicate identical headings at target scope raise `AMBIGUOUS_IDENTIFIER`.
+++   - Replacement correctly bounds up to the next heading of identical or higher level, or trailing EOF.
+++
+++5. **Sanitization & Concurrency Controls:**
+++   - Optimistic concurrency: `if_match` (64-character SHA-256 hex) is required on updates; stale tokens reject with `CONFLICT_ETAG`.
+++   - Hidden DOM elements (`style="display:none"`) are safely stripped before persistence.
+++   - Anti-enumeration: Missing documents and documents in projects where caller lacks VIEW access return byte-identical `NOT_FOUND` error envelopes.
+++
+++---
+++
+++### 2. Verification Matrix
+++
+++| Evaluation Dimension | Target Requirement | Observed Implementation | 
+\ No newline at end of file
 diff --git a/docs/qa/KANBA-127/mcp-transcript.txt b/docs/qa/KANBA-127/mcp-transcript.txt
 new file mode 100644
 index 0000000..bb12aa2
