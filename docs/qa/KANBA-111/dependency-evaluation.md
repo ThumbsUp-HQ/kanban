@@ -16,6 +16,7 @@
 - **License**: Apache-2.0 (100% project-compatible, permissive)
 - **Role**: Headless HTML5 drag-and-drop primitives (`draggable`, `dropTargetForElements`, `monitorForElements`) powering board card moves between 324px lanes with sub-12ms optimistic update budget.
 - **Lockfile Integrity (SHA-512)**: `sha512-pyDo2B5NiaExoKGmgeXKGNUL4aR4UzzSZm8QWWjYTEyBLVqSqKyKUwtVxMw2YEkakagOGFONUdHM32LAH2nPug==`
+- **Package SHA-256 Digest**: `b5517f02d7b6b503df7b5ba197ae017b4ddc79a4dc07bfd6270f4d6db01368a3` (`dist/esm/index.js`)
 - **Direct Dependencies**:
   * `raf-schd@^4.0.3` (MIT)
   * `@babel/runtime@^7.0.0` (MIT)
@@ -33,6 +34,7 @@
 - **License**: MIT (100% project-compatible, permissive)
 - **Role**: Vertical column virtualization (`useVirtualizer`) ensuring 500-card lanes mount <= 25 DOM elements at 900px viewport height.
 - **Lockfile Integrity (SHA-512)**: `sha512-HUDlfsrYH6ko5xH56L62Mcl/uzT+AGVNMHFuDNqDJMdZWc1AQa2oeVKNUvZ/RWBZQ4TYtyQerFrNvLnp39h65A==`
+- **Package SHA-256 Digest**: `c96d5598df79205f09d9bc4c45109adb1aa0c55ae5ceb9935e2f6b3294563167` (`dist/esm/index.js`)
 - **Direct Dependencies**:
   * `@tanstack/virtual-core@3.19.11` (MIT)
 - **Install Scripts**: Zero `preinstall` or `postinstall` lifecycle hooks.
