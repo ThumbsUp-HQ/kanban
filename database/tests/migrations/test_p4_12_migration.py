@@ -12,7 +12,7 @@ async def test_p4_12_destructive_tokens_migration_lifecycle() -> None:
     """Verify p4_12 upgrade applies destructive_confirmation_tokens with FORCE RLS, and downgrade reverts."""
     async with MigrationHarness() as harness:
         prev_rev = harness.previous_of("p4_12_destructive_tokens")
-        assert prev_rev == "p6_01_import_entity_mappings"
+        assert prev_rev == "p4_13_mcp_ephemeral_tokens"
 
         # 1. Upgrade to p4_12_destructive_tokens
         await harness.upgrade("p4_12_destructive_tokens")

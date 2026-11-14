@@ -21,7 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from database.models.base import Base
+from database.models.base import Base, ObjectKind, object_kind_pg_enum
 from database.models.spine import ObjectKind, object_kind_pg_enum
 
 
@@ -84,8 +84,8 @@ class DestructiveConfirmationToken(Base):
     target_object_id: Mapped[uuid.UUID] = mapped_column(
         nullable=False,
     )
-    target_object_type: Mapped[str] = mapped_column(
-        String,
+    target_object_type: Mapped[ObjectKind] = mapped_column(
+        object_kind_pg_enum,
         nullable=False,
     )
     mode: Mapped[str] = mapped_column(

@@ -92,4 +92,4 @@ class KbMcpError(Exception):
             payload["candidates"] = self.candidates
         if self.extra:
             payload.update(self.extra)
-        return dump_yaml(payload)
+        return dump_yaml({"error": payload}, strip_nulls=True)

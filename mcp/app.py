@@ -102,7 +102,7 @@ def create_mcp_app(  # noqa: PLR0913
 
     active_admin_reg = admin_registry
     if active_admin_reg is None:
-        active_admin_reg = create_admin_registry()
+        active_admin_reg = create_admin_registry(active_internal_client)
     if not active_admin_reg.is_frozen:
         active_admin_reg.freeze()
 

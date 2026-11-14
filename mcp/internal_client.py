@@ -307,6 +307,18 @@ class KanbanApiClient:
             return McpErrorCode.AAL2_REQUIRED
         if prob_code == "LOCKOUT_PREVENTED" or prob_type.endswith("lockout-prevented"):
             return McpErrorCode.LOCKOUT_PREVENTED
+        if prob_code == "CONFIRMATION_TOKEN_INVALID_OR_EXPIRED":
+            return McpErrorCode.CONFIRMATION_TOKEN_INVALID_OR_EXPIRED
+        if prob_code == "TOKEN_CALLER_MISMATCH":
+            return McpErrorCode.TOKEN_CALLER_MISMATCH
+        if prob_code == "TOKEN_TARGET_MISMATCH":
+            return McpErrorCode.TOKEN_TARGET_MISMATCH
+        if prob_code == "BLAST_RADIUS_CHANGED":
+            return McpErrorCode.BLAST_RADIUS_CHANGED
+        if prob_code == "SOFT_TRASH_REQUIRED_FIRST":
+            return McpErrorCode.SOFT_TRASH_REQUIRED_FIRST
+        if prob_code == "SERVER_ADMIN_REQUIRED":
+            return McpErrorCode.SERVER_ADMIN_REQUIRED
 
         direct_map = {
             _HTTP_NOT_FOUND: McpErrorCode.NOT_FOUND,
