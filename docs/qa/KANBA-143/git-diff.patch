@@ -274,10 +274,10 @@ index 0000000..61fbd8f
 +- **Summary:** The API routes and MCP admin tool implementations satisfy all architectural, security, and contract requirements of KB-P5-13. All endpoints are verified with 100% test coverage and clean error handling.
 diff --git a/docs/qa/KANBA-143/build-check.txt b/docs/qa/KANBA-143/build-check.txt
 new file mode 100644
-index 0000000..5317c75
+index 0000000..eb611c9
 --- /dev/null
 +++ b/docs/qa/KANBA-143/build-check.txt
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,27 @@
 +=== 1. Ruff Linter Check ===
 +All checks passed!
 +exit_code=0
@@ -290,23 +290,7 @@ index 0000000..5317c75
 +Success: no issues found in 5 source files
 +exit_code=0
 +
-+=== 4. Layered Import Architecture (lint-imports) ===
-+
-+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
-+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
-+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
-+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
-+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
-+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
-+  └──▶║║                    ▲ 
-+      ╚╝────────────────────┘
-+
-+
-+---------
-+Contracts
-+---------
-+
-+Analyzed 705 files, 2314 dependencies.
++=== 4. lint-imports ===
 +--------------------------------------
 +
 +Unidirectional module layers agent -> mcp -> kanban -> database KEPT
@@ -315,11 +299,11 @@ index 0000000..5317c75
 +Contracts: 2 kept, 0 broken.
 +exit_code=0
 +
-+=== 5. License Gate Validation ===
++=== 5. License Gate ===
 +SUMMARY python=116 node=1 violations=0
 +exit_code=0
 +
-+=== 6. No Em-dash or En-dash Verification ===
++=== 6. No Dashes ===
 +exit_code=0
 diff --git a/docs/qa/KANBA-143/contract-sample.json b/docs/qa/KANBA-143/contract-sample.json
 new file mode 100644
@@ -865,7 +849,7 @@ index 0000000..7251251
 +Verdict: APPROVED
 diff --git a/docs/qa/KANBA-143/unit-test-results.txt b/docs/qa/KANBA-143/unit-test-results.txt
 new file mode 100644
-index 0000000..883a346
+index 0000000..d01e65a
 --- /dev/null
 +++ b/docs/qa/KANBA-143/unit-test-results.txt
 @@ -0,0 +1,28 @@
@@ -888,14 +872,14 @@ index 0000000..883a346
 +
 +Name                                                  Stmts   Miss Branch BrPart  Cover   Missing
 +-------------------------------------------------------------------------------------------------
-+kanban/api/v1/custom_field_execution.py                  72      0     10      3    96%   57->62, 59->62, 93->109
++kanban/api/v1/custom_field_execution.py                  74      0     10      3    96%   66->71, 68->71, 102->118
 +kanban/custom_fields/executor.py                        146      6     34      2    96%   57-58, 258-259, 303->336, 411-427
 +kanban/sandbox/wasm_runner.py                           247     13     72      9    93%   163->165, 169->exit, 209->223, 237-238, 284-285, 293-294, 310-312, 320-321, 324-325, 331->335
 +mcp/admin/tools/manage_custom_fields_and_scripts.py     141      0     86      2    99%   267->266, 441->447
 +-------------------------------------------------------------------------------------------------
-+TOTAL                                                   606     19    202     16    96%
-+Required test coverage of 95% reached. Total coverage: 95.67%
-+============================== 39 passed in 6.53s ==============================
++TOTAL                                                   608     19    202     16    96%
++Required test coverage of 95% reached. Total coverage: 95.68%
++============================== 39 passed in 5.28s ==============================
 +exit_code=0
 diff --git a/docs/qa/KANBA-143/wasm-benchmark.txt b/docs/qa/KANBA-143/wasm-benchmark.txt
 new file mode 100644
@@ -983,10 +967,10 @@ index d032e14..2c600fd 100644
      v1.include_router(admin_imports_router)
 diff --git a/kanban/api/v1/custom_field_execution.py b/kanban/api/v1/custom_field_execution.py
 new file mode 100644
-index 0000000..4fe6ece
+index 0000000..79d4e1a
 --- /dev/null
 +++ b/kanban/api/v1/custom_field_execution.py
-@@ -0,0 +1,197 @@
+@@ -0,0 +1,206 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""REST API router for custom field execution and Wasm module registration (KB-P5-13, S13.3)."""
@@ -1000,7 +984,7 @@ index 0000000..4fe6ece
 +
 +from fastapi import APIRouter, Depends, Request, status
 +from sqlalchemy import select
-+from sqlalchemy.ext.asyncio import AsyncSession
++from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 +
 +from database.models.wasm_module import ApprovedWasmModule
 +from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
@@ -1024,6 +1008,15 @@ index 0000000..4fe6ece
 +
 +Caller = Annotated[PrincipalContext, Depends(get_principal)]
 +Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++def _execute_rate_limiter(session: AsyncSession) -> PgRateLimiter:
++    """Return a limiter that commits hits on its own connection.
++
++    Hits must survive rollback of the request transaction, otherwise trapping
++    scripts (which raise) would never advance the counter.
++    """
++    return PgRateLimiter(engine=AsyncEngine(session.get_bind().engine))
 +
 +
 +@router.get(
@@ -1080,7 +1073,7 @@ index 0000000..4fe6ece
 +        issue = await resolve_issue_ref(session, caller, issue_key)
 +
 +        if force_refresh:
-+            rate_limiter = PgRateLimiter(session=session)
++            rate_limiter = _execute_rate_limiter(session)
 +            policy = RateLimitPolicy(name="custom_field_execute", limit=6, window_seconds=60)
 +            key = hashlib.sha256(f"{caller.principal_id}:{issue.id}:{field_id}".encode()).digest()
 +            decision = await rate_limiter.hit(policy, key)
@@ -2207,10 +2200,10 @@ index 90b4c3c..06f1ef4 100644
      }
 diff --git a/kanban/tests/custom_fields/test_execution_api.py b/kanban/tests/custom_fields/test_execution_api.py
 new file mode 100644
-index 0000000..a8be50a
+index 0000000..4322557
 --- /dev/null
 +++ b/kanban/tests/custom_fields/test_execution_api.py
-@@ -0,0 +1,407 @@
+@@ -0,0 +1,419 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Feature unit tests for custom field execution REST API (KB-P5-13, S13.1, S13.3)."""
@@ -2544,6 +2537,18 @@ index 0000000..a8be50a
 +    assert resp_exec_loop.status_code == 422
 +    assert resp_exec_loop.json()["code"] == "SCRIPT_FUEL_EXHAUSTED"
 +
++    # 1b. Failing (rolled back) executions must still advance the rate limiter:
++    # 6 consecutive 422s, then 429 on the 7th.
++    for _ in range(5):
++        resp_fail = await client.post(
++            f"/api/v1/issues/{issue_key}/custom-fields/{loop_field_id}/execute"
++        )
++        assert resp_fail.status_code == 422
++    resp_fail_limited = await client.post(
++        f"/api/v1/issues/{issue_key}/custom-fields/{loop_field_id}/execute"
++    )
++    assert resp_fail_limited.status_code == 429
++    assert resp_fail_limited.json()["code"] == "RATE_LIMITED"
 +    # 2. Tier B (nsjail) raises 503 SANDBOX_UNAVAILABLE_IN_STANDALONE
 +    # Insert a tier B field directly in DB (or via API if supported)
 +    # Tier B definition:

@@ -10,23 +10,7 @@ exit_code=0
 Success: no issues found in 5 source files
 exit_code=0
 
-=== 4. Layered Import Architecture (lint-imports) ===
-
-╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
-╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
- ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
- ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
-╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
-╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
-  └──▶║║                    ▲ 
-      ╚╝────────────────────┘
-
-
----------
-Contracts
----------
-
-Analyzed 705 files, 2314 dependencies.
+=== 4. lint-imports ===
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT
@@ -35,9 +19,9 @@ mcp forbidden from importing database KEPT (35 ignored imports)
 Contracts: 2 kept, 0 broken.
 exit_code=0
 
-=== 5. License Gate Validation ===
+=== 5. License Gate ===
 SUMMARY python=116 node=1 violations=0
 exit_code=0
 
-=== 6. No Em-dash or En-dash Verification ===
+=== 6. No Dashes ===
 exit_code=0

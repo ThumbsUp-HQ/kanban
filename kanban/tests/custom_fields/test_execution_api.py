@@ -331,6 +331,18 @@ async def test_custom_field_execution_edge_cases(
     assert resp_exec_loop.status_code == 422
     assert resp_exec_loop.json()["code"] == "SCRIPT_FUEL_EXHAUSTED"
 
+    # 1b. Failing (rolled back) executions must still advance the rate limiter:
+    # 6 consecutive 422s, then 429 on the 7th.
+    for _ in range(5):
+        resp_fail = await client.post(
+            f"/api/v1/issues/{issue_key}/custom-fields/{loop_field_id}/execute"
+        )
+        assert resp_fail.status_code == 422
+    resp_fail_limited = await client.post(
+        f"/api/v1/issues/{issue_key}/custom-fields/{loop_field_id}/execute"
+    )
+    assert resp_fail_limited.status_code == 429
+    assert resp_fail_limited.json()["code"] == "RATE_LIMITED"
     # 2. Tier B (nsjail) raises 503 SANDBOX_UNAVAILABLE_IN_STANDALONE
     # Insert a tier B field directly in DB (or via API if supported)
     # Tier B definition:

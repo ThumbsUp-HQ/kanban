@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from database.models.wasm_module import ApprovedWasmModule
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
@@ -35,6 +35,15 @@ router = APIRouter(tags=["custom-field-execution"])
 
 Caller = Annotated[PrincipalContext, Depends(get_principal)]
 Session = Annotated[AsyncSession, Depends(get_rls_session)]
+
+
+def _execute_rate_limiter(session: AsyncSession) -> PgRateLimiter:
+    """Return a limiter that commits hits on its own connection.
+
+    Hits must survive rollback of the request transaction, otherwise trapping
+    scripts (which raise) would never advance the counter.
+    """
+    return PgRateLimiter(engine=AsyncEngine(session.get_bind().engine))
 
 
 @router.get(
@@ -91,7 +100,7 @@ async def execute_custom_field_for_issue(
         issue = await resolve_issue_ref(session, caller, issue_key)
 
         if force_refresh:
-            rate_limiter = PgRateLimiter(session=session)
+            rate_limiter = _execute_rate_limiter(session)
             policy = RateLimitPolicy(name="custom_field_execute", limit=6, window_seconds=60)
             key = hashlib.sha256(f"{caller.principal_id}:{issue.id}:{field_id}".encode()).digest()
             decision = await rate_limiter.hit(policy, key)
