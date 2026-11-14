@@ -1,7 +1,9 @@
 # API Specialist Gate Review: KANBA-148 (KB-P5-26)
 
 - **Ticket**: `KANBA-148` (`KB-P5-26`: `[Phase 5 / Agent + API + CLI] Sticky -> Doc AI structuring preview, ACL-preserving confirm contract & kanban-agent validate-sticky-promo`)
-- **Reviewer**: API Specialist (`backend-architect` persona)
+- **Reviewer**: `@arch-reviewer` (Systems/Backend Architect & API Specialist)
+- **Branch**: `feat/KANBA-148`
+- **Worktree**: `/tmp/kb-wt-KANBA-148`
 - **Status**: APPROVED
 
 ---
@@ -52,5 +54,6 @@ The implementation delivers the Sticky to Doc AI structuring preview and confirm
 - Combined line and branch coverage: **99.77%** (exceeds 95.0% mandate).
 - Mypy strict mode: 0 issues across 460 files.
 - Ruff linter & formatter: 0 issues.
+- Typography: Verified 0 non-ASCII dashes across all touched files.
 
-The API contract is hardened, secure, and production-ready.
+**Verdict: APPROVED**
