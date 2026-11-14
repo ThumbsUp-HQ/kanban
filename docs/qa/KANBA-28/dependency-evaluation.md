@@ -3,6 +3,9 @@
 - **Change to dependency set:** NONE. No entry was added to `pyproject.toml` or `uv.lock`.
   `pyyaml` is already present and hash-locked in `uv.lock` as a transitive dependency
   (via pre-commit and others). `types-PyYAML==6.0.12.20261111` is already a pinned dev dependency.
+- **Pinned version and hash (from `uv.lock`):** `pyyaml==6.0.3`, sdist
+  `sha256:d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f`
+  (every wheel is also hash-locked in `uv.lock`; installed version verified `6.0.3`).
 - **License:** MIT (Apache-2.0 compatible; `scripts/license_gate.py` passes).
 - **Usage:** `yaml.safe_load` only, in `scripts/tests/test_ci_workflow.py`, on repo-owned
   workflow files. Never `yaml.load`, never on network input.
