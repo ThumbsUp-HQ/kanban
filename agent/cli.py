@@ -25,6 +25,10 @@ from agent.cli_commands.validate_sticky_promo import (
     configure_validate_sticky_promo_parser,
     handle_validate_sticky_promo,
 )
+from agent.cli_commands.validate_verdict import (
+    configure_validate_verdict_parser,
+    handle_validate_verdict,
+)
 from agent.cli_report import (
     ContextScrubber,
     ExitCode,
@@ -224,6 +228,16 @@ register_subcommand(
         help="Validate Sticky -> Doc AI preview, ACL preservation and fenced block integrity",
         configure_parser=configure_validate_sticky_promo_parser,
         handler=handle_validate_sticky_promo,
+    )
+)
+
+# Register validate-verdict subcommand
+register_subcommand(
+    SubcommandSpec(
+        name="validate-verdict",
+        help="Validate transition gate verdict or render spotlighted context YAML",
+        configure_parser=configure_validate_verdict_parser,
+        handler=handle_validate_verdict,
     )
 )
 

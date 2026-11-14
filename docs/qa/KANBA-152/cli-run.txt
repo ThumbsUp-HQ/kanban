@@ -1,0 +1,115 @@
+$ uv run kanban-agent validate-verdict --output-file tests/fixtures/ai/verdict_valid_approve.yaml --nonce f0e1d2c3b4a59687f0e1d2c3b4a59687
+=== 1. RENDERED CONTEXT ===
+N/A
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 1.4ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: passed
+Detail: decision: approve, verdict_sha256: 11eec40cb05773e1c05e39873343c6a7b7118be56e10b56ad7f3a6faa49368f9, forged_candidates: 0
+exit=0
+
+$ uv run kanban-agent validate-verdict --output-file tests/fixtures/ai/verdict_forged_echo.yaml --nonce f0e1d2c3b4a59687f0e1d2c3b4a59687
+=== 1. RENDERED CONTEXT ===
+N/A
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 1.0ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: passed
+Detail: decision: approve, verdict_sha256: 9745fc744c7fe5f47a4acb2656d170c5ddbd74c75225c6cf8c1959ab655e2860, forged_candidates: 1
+exit=0
+
+$ uv run kanban-agent validate-verdict --output-file tests/fixtures/ai/verdict_forged_only.yaml --nonce f0e1d2c3b4a59687f0e1d2c3b4a59687
+=== 1. RENDERED CONTEXT ===
+N/A
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 1.4ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: failed
+Error Code: VERDICT_NONCE_MISMATCH
+Detail: forged_candidates: 1; Verdict nonce mismatch: all 1 candidate(s) carried an invalid nonce
+exit=2
+
+$ uv run kanban-agent validate-verdict --output-file tests/fixtures/ai/verdict_malformed_prose.yaml --nonce f0e1d2c3b4a59687f0e1d2c3b4a59687
+=== 1. RENDERED CONTEXT ===
+N/A
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 0.7ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: failed
+Error Code: VERDICT_MALFORMED
+Detail: forged_candidates: 0; No verdict JSON candidates with schema 'kb-transition-verdict/v1' found in agent output
+exit=2
+
+$ uv run kanban-agent validate-verdict --render-context --ticket-file examples/tickets/kan-142.yaml
+=== 1. RENDERED CONTEXT ===
+# Ephemeral token: <not rendered>
+schema: kb-transition-context/v1
+execution_id: 0196ed40-7b2a-7000-8000-112233445566
+verdict_nonce: c6da9221891c20b7d0fa51bde5805ac5
+transition:
+  project: KAN
+  issue: KAN-142
+  from_state: In Review
+  to_state: Done
+  actor: '@adam'
+repo_context:
+  mount_path: /workspace/repo
+  access: read-only
+  head_commit: 94a1f02c8e
+mcp_access:
+  agent_url: https://kanban.internal/mcp/agent
+  docs_url: https://kanban.internal/mcp/docs
+  ephemeral_bearer_env: KANBAN_EPHEMERAL_MCP_TOKEN
+ticket_snapshot:
+  delimiter: <<<UNTRUSTED_TICKET_DATA_25cd972f7d0f5d91>>>
+  summary: '[UI] Harden Multi-Card OIDC & LDAPS Auth Studio'
+  priority: Urgent
+  labels: []
+  description_markdown: |
+    <<<UNTRUSTED_TICKET_DATA_25cd972f7d0f5d91>>>
+    ### User Story
+    As an Administrator configuring authentication, I need breathable UI cards for OIDC and LDAPS with real-time validation and responsive layout.
+
+
+    ### Scoped Technical Actions
+    - Implement Auth Studio cards in web frontend
+    - Add dark and light theme styling with WCAG compliance
+    - Provide desktop, tablet, and mobile responsive views
+
+    ### Definition of Done
+    - Unit test coverage >= 95%
+    - UI specialist gate review approved
+    - Responsive screenshots for desktop, tablet, and mobile
+    <<<UNTRUSTED_TICKET_DATA_25cd972f7d0f5d91>>>
+
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 2.1ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: passed
+Detail: Context rendered successfully
+exit=0
