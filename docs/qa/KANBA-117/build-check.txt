@@ -1,0 +1,44 @@
+=== TypeScript typecheck ===
+
+> @kanban/web@0.1.0 typecheck /tmp/kb-wt-KANBA-117/kanban/web
+> tsc -b --noEmit
+
+EXIT_CODE: 0
+
+=== ESLint ===
+
+> @kanban/web@0.1.0 lint /tmp/kb-wt-KANBA-117/kanban/web
+> eslint . --max-warnings 0
+
+EXIT_CODE: 0
+
+=== Vite Build ===
+
+> @kanban/web@0.1.0 build /tmp/kb-wt-KANBA-117/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 557 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.39 kB │ gzip:   0.27 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-BJyMHKtc.css            127.42 kB │ gzip:  19.54 kB
+dist/assets/index-Ci4I9Rj2.js           1,119.62 kB │ gzip: 337.84 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.25s
+EXIT_CODE: 0
+
+=== Ruff Check ===
+All checks passed!
+EXIT_CODE: 0
+
+=== Mypy Strict ===
+Success: no issues found in 367 source files
+EXIT_CODE: 0
