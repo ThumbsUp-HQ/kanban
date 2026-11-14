@@ -174,7 +174,7 @@ describe('StandaloneStatusPanel', () => {
       }
       if (url.includes('/api/v1/admin/standalone/backup')) {
         return Promise.resolve(
-          new Response(new Blob(['encrypted-kbkp-octets']), {
+          new Response('encrypted-kbkp-octets', {
             status: 200,
             headers: {
               'Content-Type': 'application/octet-stream',
@@ -451,7 +451,7 @@ describe('StandaloneStatusPanel', () => {
     const mockFetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/api/v1/admin/standalone/backup')) {
         return Promise.resolve(
-          new Response(new Blob(['dump']), {
+          new Response('dump', {
             status: 200,
             headers: {
               'Content-Type': 'application/octet-stream',

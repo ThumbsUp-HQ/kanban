@@ -863,9 +863,18 @@ index e2c5b41..59bce5b 100644
 +`git ls-remote --tags https://github.com/<owner>/<repo>.git`), update every occurrence in
 +both workflow files together, keep the `# vX.Y.Z` comment, and re-run the tests above.
 diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
-index b39d27d..1f281fa 100644
+index b39d27d..8458175 100644
 --- a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
 +++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
+@@ -174,7 +174,7 @@ describe('StandaloneStatusPanel', () => {
+       }
+       if (url.includes('/api/v1/admin/standalone/backup')) {
+         return Promise.resolve(
+-          new Response(new Blob(['encrypted-kbkp-octets']), {
++          new Response('encrypted-kbkp-octets', {
+             status: 200,
+             headers: {
+               'Content-Type': 'application/octet-stream',
 @@ -236,7 +236,9 @@ describe('StandaloneStatusPanel', () => {
      });
  
@@ -877,6 +886,15 @@ index b39d27d..1f281fa 100644
      expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-url-1234');
    });
  
+@@ -449,7 +451,7 @@ describe('StandaloneStatusPanel', () => {
+     const mockFetch = vi.fn().mockImplementation((url: string) => {
+       if (url.includes('/api/v1/admin/standalone/backup')) {
+         return Promise.resolve(
+-          new Response(new Blob(['dump']), {
++          new Response('dump', {
+             status: 200,
+             headers: {
+               'Content-Type': 'application/octet-stream',
 @@ -484,7 +486,9 @@ describe('StandaloneStatusPanel', () => {
        await Promise.resolve();
      });

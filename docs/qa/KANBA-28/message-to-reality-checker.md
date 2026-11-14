@@ -30,13 +30,14 @@ full ticket scope plus the 6th `docker-push` job (commits `20a2586` and `d4361ca
 | `actionlint -color=never` | `-no-color` | `-color=never` is rejected by actionlint 1.7.7 |
 | `upload-artifact` must succeed | `continue-on-error: true` on both artifact uploads | v4 artifacts are not universally supported by Forgejo runners (Dash llms.txt); Dash upload is the reliable channel |
 | `pytest -n auto` | `pytest` without `-n auto` | on Forgejo Run 28 (`d4361ca`), `-n auto` xdist workers collided on the single test DB during DDL migration and card rank rebalancing tests |
-| (not in ticket) | `kanban/web/vitest.config.ts` `testTimeout` 5s -> 15s + `await waitFor` in `StandaloneStatusPanel.test.tsx` | heaviest jsdom route test timed out at 5s under coverage; `createObjectURLMock` raced async `res.blob()` on Run 28 |
+| (not in ticket) | `kanban/web/vitest.config.ts` `testTimeout` 5s -> 15s + `StandaloneStatusPanel.test.tsx` (`new Response('...')` string body + `await waitFor`) | heaviest jsdom route test timed out at 5s under coverage; Node 22 undici `new Response(new Blob(...))` threw `object.stream is not a function` on jsdom Blob in Run 29 |
 | (not in ticket) | `.gitignore` adds `reports/` | pytest/coverage report output dir |
 
 ## Known limitations
 
 - Dash keeps one log per (repo, sha); the six jobs read-then-append before POST, so a
   rare race can drop one job's section. A per-job artifact still holds every log.
-- After Run 28 (`d4361ca`) exposed the `-n auto` DB collision and `StandaloneStatusPanel.test.tsx`
-  async `res.blob()` race, both were fixed and re-verified locally; Worker 4 will update
-  `dash-status.txt` with the green re-run (newest section is authoritative).
+- After Run 28 (`d4361ca`) exposed the `-n auto` DB collision (fixed in `628f622`, `python-tests`
+  green on Run 29) and Run 29 exposed the Node 22 undici `new Response(new Blob(...))` jsdom error
+  in `StandaloneStatusPanel.test.tsx`, both are fixed and re-verified locally; Worker 4 will update
+  `dash-status.txt` with the green Run 30 (newest section is authoritative).
