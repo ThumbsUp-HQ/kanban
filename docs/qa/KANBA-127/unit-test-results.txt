@@ -1,47 +1,17 @@
-============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-127/.venv/bin/python
-rootdir: /tmp/kb-wt-KANBA-127
-configfile: pyproject.toml
-plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
-asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 22 items
-
-mcp/tests/docs/test_docs_surfaces_unit.py::test_manage_stickies_validations PASSED [  4%]
-mcp/tests/docs/test_docs_surfaces_unit.py::test_manage_stickies_mock_flows PASSED [  9%]
-mcp/tests/docs/test_docs_surfaces_unit.py::test_read_doc_validations_and_sticky PASSED [ 13%]
-mcp/tests/docs/test_docs_surfaces_unit.py::test_read_doc_pages_and_breadcrumbs PASSED [ 18%]
-mcp/tests/docs/test_docs_surfaces_unit.py::test_search_knowledge_mock PASSED [ 22%]
-mcp/tests/docs/test_docs_surfaces_unit.py::test_upsert_doc_modes_and_validations PASSED [ 27%]
-mcp/tests/docs/test_docs_surfaces_unit.py::test_promote_sticky_parent_resolutions PASSED [ 31%]
-mcp/tests/docs/test_docs_surfaces_unit.py::test_link_knowledge_validations_and_remove PASSED [ 36%]
-mcp/tests/docs/test_docs_surfaces_unit.py::test_docs_additional_edge_branches PASSED [ 40%]
-mcp/tests/docs/test_docs_surfaces_unit.py::test_docs_all_remaining_uncovered_branches PASSED [ 45%]
-mcp/tests/docs/test_docs_tools.py::test_case_1_positive_knowledge_lifecycle PASSED [ 50%]
-mcp/tests/docs/test_docs_tools.py::test_case_2_security_and_permission_isolation PASSED [ 54%]
-mcp/tests/docs/test_docs_tools.py::test_case_4_boundary_and_validation PASSED [ 59%]
-mcp/tests/docs/test_docs_tools.py::test_case_5_isolation_and_token_budget PASSED [ 63%]
-mcp/tests/docs/test_docs_tools.py::test_case_6_handler_exhaustive_branches PASSED [ 68%]
-mcp/tests/test_markdown_sections.py::test_extract_atx_headings_ignores_fenced_blocks PASSED [ 72%]
-mcp/tests/test_markdown_sections.py::test_patch_markdown_section_normal_body PASSED [ 77%]
-mcp/tests/test_markdown_sections.py::test_patch_markdown_section_with_replacement_heading PASSED [ 81%]
-mcp/tests/test_markdown_sections.py::test_patch_markdown_section_last_section PASSED [ 86%]
-mcp/tests/test_markdown_sections.py::test_patch_markdown_section_not_found PASSED [ 90%]
-mcp/tests/test_markdown_sections.py::test_patch_markdown_section_ambiguous_identifier PASSED [ 95%]
-mcp/tests/test_markdown_sections.py::test_patch_markdown_section_case_sensitive PASSED [100%]
-
+......................                                                   [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
 Name                                         Stmts   Miss Branch BrPart  Cover   Missing
 ----------------------------------------------------------------------------------------
-mcp/markdown_sections.py                        74      0     32      1    99%   48->51
-mcp/surfaces/docs/__init__.py                   21      0      0      0   100%
-mcp/surfaces/docs/link_knowledge.py            112      4     42      9    92%   86->90, 90->97, 93->97, 100->104, 154-155, 156->166, 160-161, 162->166, 193->207, 195->207, 203->196
-mcp/surfaces/docs/manage_stickies.py           103      0     50      2    99%   134->149, 199->205
-mcp/surfaces/docs/promote_sticky_to_doc.py      81      2     28      3    95%   67->75, 78->83, 95-96
-mcp/surfaces/docs/read_doc.py                  160      7     56      8    93%   98-100, 116->122, 118-119, 125->131, 134->140, 142->147, 177->213, 272, 276
-mcp/surfaces/docs/search_knowledge.py           63      0     26      0   100%
-mcp/surfaces/docs/upsert_doc.py                119      3     42      2    97%   91-92, 126, 151->153
+mcp/markdown_sections.py                        72      0     30      1    99%   50->53
+mcp/surfaces/docs/__init__.py                   22      0      0      0   100%
+mcp/surfaces/docs/link_knowledge.py            115      2     42      9    93%   89->93, 93->102, 98->102, 105->109, 159-160, 161->174, 167->174, 201->215, 203->215, 211->204
+mcp/surfaces/docs/manage_stickies.py           108      0     50      2    99%   133->148, 194->200
+mcp/surfaces/docs/promote_sticky_to_doc.py      84      2     26      3    95%   70->78, 83->88, 100-101
+mcp/surfaces/docs/read_doc.py                  163      7     56      8    93%   97-99, 117->123, 119-120, 128->134, 137->143, 145->150, 180->216, 279, 283
+mcp/surfaces/docs/search_knowledge.py           70      0     26      0   100%
+mcp/surfaces/docs/upsert_doc.py                127      3     42      2    97%   101-102, 136, 168->170
 ----------------------------------------------------------------------------------------
-TOTAL                                          733     16    276     25    96%
-============================== 22 passed in 5.43s ==============================
+TOTAL                                          761     14    272     25    96%
+22 passed in 5.35s

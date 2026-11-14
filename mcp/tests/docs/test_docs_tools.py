@@ -21,7 +21,7 @@ from mcp.surfaces.docs import DOCS_TOOL_NAMES, build_docs_registry
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from kanban.tests.api.conftest import ApiEnv, SeededUser
+    from mcp.tests.docs.conftest import ApiEnv, SeededUser
 
 pytestmark = pytest.mark.committed_db
 
@@ -665,9 +665,37 @@ async def test_case_4_boundary_and_validation(
             mcp_client,
             sess,
             "upsert_doc",
-            {"title": "Boundary Doc", "body_markdown": "Doc body"},
+            {"title": "Boundary Doc", "body_markdown": "# Boundary Doc\nInitial content."},
         )
         assert res_doc["isError"] is False
+
+        # 4a. Section patch with missing heading -> SECTION_NOT_FOUND
+        read_bnd = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "read_doc",
+            {"identifier": "docs/boundary-doc", "lod": "standard"},
+        )
+        bnd_etag = (
+            [l for l in read_bnd["content"][0]["text"].splitlines() if l.startswith("etag:")][0]
+            .split(":", 1)[1]
+            .strip()
+            .strip('"')
+        )
+        res_sec_not_found = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "upsert_doc",
+            {
+                "identifier": "docs/boundary-doc",
+                "mode": "section_patch",
+                "section_heading": "Nonexistent Heading",
+                "body_markdown": "Replacement",
+                "if_match": bnd_etag,
+            },
+        )
+        assert res_sec_not_found["isError"] is True
+        assert "code: SECTION_NOT_FOUND" in res_sec_not_found["content"][0]["text"]
 
         res_stale = await _call_mcp_tool(
             mcp_client,

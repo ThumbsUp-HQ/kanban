@@ -47,4 +47,3 @@ def build_docs_registry(client: KanbanApiClient | None = None) -> ToolRegistry:
 
 
 create_docs_registry = build_docs_registry
-
