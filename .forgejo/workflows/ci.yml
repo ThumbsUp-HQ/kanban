@@ -91,7 +91,7 @@ jobs:
         run: |
           mkdir -p reports
           scripts/ci/run_and_log.sh pytest -- \
-            uv run pytest -n auto -m "not container" \
+            uv run pytest -m "not container" \
               --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts \
               --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml \
               --cov-fail-under=95 --junitxml=reports/pytest.xml

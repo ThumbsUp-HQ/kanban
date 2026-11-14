@@ -12,7 +12,7 @@ permissions are `contents: read` only, every job has `timeout-minutes: 20`, and 
 | Job id | Commands (each wrapped by `scripts/ci/run_and_log.sh`) |
 | :--- | :--- |
 | `lint-type` | `uv sync --locked && make check` |
-| `python-tests` | `make testdb-up`; `uv run pytest -n auto -m "not container" --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-fail-under=95 --junitxml=reports/pytest.xml`; `make testdb-down` (`if: always()`) |
+| `python-tests` | `make testdb-up`; `uv run pytest -m "not container" --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-fail-under=95 --junitxml=reports/pytest.xml`; `make testdb-down` (`if: always()`) |
 | `web-tests` | `pnpm install --frozen-lockfile --ignore-scripts`; `pnpm --dir kanban/web typecheck`; `lint`; `test:unit --coverage`; `build` |
 | `license-gate` | `uv sync --locked && pnpm install --frozen-lockfile --ignore-scripts && make license` |
 | `docker-build` | `docker buildx build --target runtime-slim -t kanban:runtime-slim --load .`; same for `--target standalone`; `docker image ls kanban` |
@@ -22,8 +22,10 @@ Deviations from the original ticket text, kept deliberately because they are wha
 the `inferrence1` act_runner:
 
 - `python-tests` starts the database with `make testdb-up` (sibling container sharing the
-  workspace volume) instead of `docker compose`, and runs `-m "not container"` because the
-  runner has no nested Docker for container-marked tests.
+  workspace volume) instead of `docker compose`, runs `-m "not container"` because the
+  runner has no nested Docker for container-marked tests, and omits `-n auto` because
+  parallel xdist workers collide on the single shared database during DDL migration and
+  rank-rebalancing tests.
 - `docker-build` builds both image targets locally and never pushes. Publishing is isolated in
   `docker-push`, which keeps the pre-existing Docker Hub publish behavior but only on main
   pushes after every other job is green. `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are

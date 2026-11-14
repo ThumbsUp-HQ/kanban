@@ -1,7 +1,7 @@
-# KANBA-28 (KB-P0-06) Handoff to reality-checker (Option B, full scope)
+# KANBA-28 (KB-P0-06) Handoff to reality-checker (Option B, full scope + docker-push, commit d4361ca)
 
 Supersedes the earlier minimal single-job handoff (commit 52e14f9). User decision: implement the
-full ticket scope.
+full ticket scope plus the 6th `docker-push` job (commits `20a2586` and `d4361ca`).
 
 ## Delivered
 
@@ -15,7 +15,7 @@ full ticket scope.
   TLS verification on) followed by an `if: always()` `actions/upload-artifact` of `ci-logs/`
   (`ci-logs-<job>`); `python-tests` also uploads `reports/` (`coverage.xml`, `pytest.xml`).
 - `pyyaml==6.0.3` explicit in the dev group and `uv.lock` (see `dependency-evaluation.md`).
-- `docs/CI.md` rewritten for the 5-job layout; `.github/actionlint.yaml` declares `inferrence1`.
+- `docs/CI.md` rewritten for the 6-job layout; `.github/actionlint.yaml` declares `inferrence1`.
 - Tests: `scripts/tests/test_ci_workflow.py` (21), `test_run_and_log.py` (8),
   `test_upload_dash_log.py` (6, loopback fake Dash server).
 
@@ -29,17 +29,14 @@ full ticket scope.
 | `docker-build` build only | `docker-build` builds with `--load` only; publish moved to new `docker-push` job | keeps the old Docker Hub publish (`thumbs-up-kanban:latest`) without leaking `DOCKERHUB_*` into the 5 ticket jobs |
 | `actionlint -color=never` | `-no-color` | `-color=never` is rejected by actionlint 1.7.7 |
 | `upload-artifact` must succeed | `continue-on-error: true` on both artifact uploads | v4 artifacts are not universally supported by Forgejo runners (Dash llms.txt); Dash upload is the reliable channel |
-| (not in ticket) | `kanban/web/vitest.config.ts` `testTimeout` 5s -> 15s | heaviest jsdom route test measured 5.1s alone with coverage, 13s under load, and timed out |
+| `pytest -n auto` | `pytest` without `-n auto` | on Forgejo Run 28 (`d4361ca`), `-n auto` xdist workers collided on the single test DB during DDL migration and card rank rebalancing tests |
+| (not in ticket) | `kanban/web/vitest.config.ts` `testTimeout` 5s -> 15s + `await waitFor` in `StandaloneStatusPanel.test.tsx` | heaviest jsdom route test timed out at 5s under coverage; `createObjectURLMock` raced async `res.blob()` on Run 28 |
 | (not in ticket) | `.gitignore` adds `reports/` | pytest/coverage report output dir |
 
 ## Known limitations
 
-- Dash keeps one log per (repo, sha); the five parallel jobs read-then-append before POST, so a
+- Dash keeps one log per (repo, sha); the six jobs read-then-append before POST, so a
   rare race can drop one job's section. A per-job artifact still holds every log.
-- The run on the Forgejo runner for this commit has not happened yet at the time of writing;
-  `dash-status.txt` holds the run-24 evidence for the previous single-job commit until the
-  orchestrator appends the new run (if present, the newest section is authoritative).
-- Full Python suite is clean with `-n 6` locally (2475 passed, 97.36%). With `-n auto` on the shared
-  20-core host (load ~9-13) two timing-sensitive tests (`test_nsjail_runner` stdout-cap 3s wait,
-  `test_local_login` enumeration timing) failed; both pass alone. CI uses `-n auto` per the ticket;
-  if they flake on the runner, relax the worker count or file a follow-up. Tests not modified.
+- After Run 28 (`d4361ca`) exposed the `-n auto` DB collision and `StandaloneStatusPanel.test.tsx`
+  async `res.blob()` race, both were fixed and re-verified locally; Worker 4 will update
+  `dash-status.txt` with the green re-run (newest section is authoritative).

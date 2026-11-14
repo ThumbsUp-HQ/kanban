@@ -236,7 +236,9 @@ describe('StandaloneStatusPanel', () => {
     });
 
     // Verify blob URL was created and immediately revoked
-    expect(createObjectURLMock).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(createObjectURLMock).toHaveBeenCalled();
+    });
     expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-url-1234');
   });
 
@@ -484,7 +486,9 @@ describe('StandaloneStatusPanel', () => {
       await Promise.resolve();
     });
 
-    expect(createObjectURLMock).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(createObjectURLMock).toHaveBeenCalled();
+    });
   });
 
   it('covers non-Error throw branches in backup and copy', async () => {
@@ -709,7 +713,9 @@ describe('ComposeExportTab', () => {
       fireEvent.click(downloadBtn);
       await Promise.resolve();
     });
-    expect(createObjectURLMock).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(createObjectURLMock).toHaveBeenCalled();
+    });
 
     // 2. Download error with string throw
     createObjectURLMock.mockImplementationOnce(() => {
@@ -764,7 +770,9 @@ describe('ComposeExportTab', () => {
       fireEvent.click(downloadBtn);
     });
 
-    expect(createObjectURLMock).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(createObjectURLMock).toHaveBeenCalled();
+    });
     expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-compose-url');
 
     // Copy env button
@@ -817,7 +825,9 @@ describe('ComposeExportTab', () => {
       fireEvent.click(downloadBtn);
       await Promise.resolve();
     });
-    expect(createObjectURLMock).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(createObjectURLMock).toHaveBeenCalled();
+    });
   });
 
   it('handles copy early return when fetchExportData fails and returns null', async () => {

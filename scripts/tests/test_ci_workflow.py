@@ -187,12 +187,13 @@ def test_job_log_dir_env_matches_job_id(jobs: dict[str, dict[str, Any]]) -> None
 
 
 def test_python_tests_enforce_coverage_threshold(jobs: dict[str, dict[str, Any]]) -> None:
-    """Boundary: python-tests fails below 95% branch coverage."""
+    """Boundary: python-tests fails below 95% branch coverage and runs serially on shared DB."""
     run = _run_text(jobs["python-tests"])
     assert "--cov-fail-under=95" in run
     assert "--cov-branch" in run
     assert "make testdb-up" in run
     assert "make testdb-down" in run
+    assert "-n auto" not in run
 
 
 def test_testdb_teardown_always_runs(jobs: dict[str, dict[str, Any]]) -> None:
