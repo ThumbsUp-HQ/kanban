@@ -1,0 +1,32 @@
+=== 1. Dry Run (Preview) ===
+$ kanban-ctl import plane --bundle-dir tests/fixtures/plane_export_kanba --workspace cli-proof --dry-run
+=== Plane Import Complete (DRY-RUN) ===
+To Create: 27
+To Update: 0
+Unchanged: 5
+Sequence High Water Mark: 19
+Rewritten Attachments: 1
+Invalid Links: 0
+Exit Code: 0
+
+=== 2. Live Apply ===
+$ kanban-ctl import plane --bundle-dir tests/fixtures/plane_export_kanba --workspace cli-proof
+=== Plane Import Complete (LIVE) ===
+To Create: 27
+To Update: 0
+Unchanged: 5
+Sequence High Water Mark: 19
+Rewritten Attachments: 1
+Invalid Links: 0
+Exit Code: 0
+
+=== 3. Idempotent Re-Run ===
+$ kanban-ctl import plane --bundle-dir tests/fixtures/plane_export_kanba --workspace cli-proof
+=== Plane Import Complete (LIVE) ===
+To Create: 0
+To Update: 0
+Unchanged: 32
+Sequence High Water Mark: 19
+Rewritten Attachments: 0
+Invalid Links: 0
+Exit Code: 0

@@ -11,6 +11,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from kanban.cli.auth import register_auth_subparsers
+from kanban.cli.import_plane import register_import_subparsers
 from kanban.cli.jobs import register_jobs_subparsers
 from kanban.cli.ops import (
     FORBIDDEN_ARGV_MSG,
@@ -38,6 +39,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     register_ops_subparsers(subparsers)
     register_jobs_subparsers(subparsers)
     register_auth_subparsers(subparsers)
+    register_import_subparsers(subparsers)
 
     try:
         args = parser.parse_args(raw_argv)
