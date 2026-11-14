@@ -12,6 +12,9 @@ from kanban.api.v1.admin.destructive import router as admin_destructive_router
 from kanban.api.v1.admin.imports import router as admin_imports_router
 from kanban.api.v1.admin.link_auditor import router as admin_link_auditor_router
 from kanban.api.v1.admin.mcp_keys import router as admin_mcp_keys_router
+from kanban.api.v1.admin.project_blueprint import (
+    router as admin_project_blueprint_router,
+)
 from kanban.api.v1.admin.workspace_settings import (
     router as admin_workspace_settings_router,
 )
@@ -53,6 +56,7 @@ from kanban.api.v1.projects import router as projects_router
 from kanban.api.v1.resolve import router as resolve_router
 from kanban.api.v1.search import router as search_router
 from kanban.api.v1.stickies import router as stickies_router
+from kanban.api.v1.sticky_promo_ai import router as sticky_promo_ai_router
 from kanban.api.v1.subscriptions import router as subscriptions_router
 from kanban.api.v1.system_status import (
     admin_standalone_router,
@@ -91,6 +95,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(cycles_router)
     v1.include_router(docs_router)
     v1.include_router(stickies_router)
+    v1.include_router(sticky_promo_ai_router)
     v1.include_router(agent_definitions_router)
     v1.include_router(attachments_router)
     v1.include_router(views_router)
@@ -104,6 +109,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(admin_link_auditor_router)
     v1.include_router(admin_mcp_keys_router)
     v1.include_router(admin_workspace_settings_router)
+    v1.include_router(admin_project_blueprint_router)
     v1.include_router(oauth_v1_router)
     v1.include_router(mcp_introspect_router)
     v1.include_router(mcp_ephemeral_router)

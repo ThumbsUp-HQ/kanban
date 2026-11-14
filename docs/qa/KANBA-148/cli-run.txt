@@ -1,0 +1,102 @@
+$ uv run kanban-agent validate-sticky-promo --provider fixture --model gemini-2.5-flash --cassette tests/fixtures/ai/sticky_promo_auth_notes_ok.yaml --sticky-file ./examples/stickies/rough-auth-notes.md
+=== 1. RENDERED CONTEXT ===
+Sticky File: examples/stickies/rough-auth-notes.md (924 bytes)
+SHA-256: 8559a566e2353ab6b6810691b7498fc69646683dd3f777ce776b9f857ee0d18e
+Redacted Secrets: 0
+Fenced Blocks: 1
+
+--- Spotlighted Prompt Preview ---
+<<<UNTRUSTED_STICKY_DATA_829cba69843c>>>
+# Rough Auth Notes & Ideas
+
+- Need to support multi-card authentication for enterprise users
+- Local admin account must have break-glass access
+- References: #KAN-101 and #KAN-102 for OAuth provider mappings
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User Browser
+    participant App as Kanban Web
+    participant Auth as Auth Service
+    participant IdP as Identity Provider
+    User->>App: Click Login with OIDC
+    App->>Auth: Initiate OAuth Flow (PKCE S256)
+    Auth->>IdP: Redirect to IdP Auth URL
+    IdP-->>User: Present Login Challenge
+    User->>IdP: Provide Credentials
+    IdP-->>Auth: Callback with Authorization Code
+    Auth->>IdP: Exchange Code + PKCE Verifier for Tokens
+    IdP-->>Auth: ID Token + Access Token
+    Auth->>App: Issue Session Cookie
+    App-->>User: Render Dashboard
+```
+
+- Action item: implement WebAuthn Passkey registration
+- Action item: configure TOTP backup generator
+
+<<<UNTRUSTED_STICKY_DATA_829cba69843c>>>
+
+Please analyze the rough notes above and transform them into a formal specification document adhering to the kb-sticky-doc-proposal/v1 schema. Preserve all technical details, code blocks, and Mermaid diagrams verbatim in their respective sections.
+
+=== 2. TOOL TRACE ===
+Calls: 4; Tools: outbound_secret_scrubber, generate_structured, fenced_block_check, acl_preservation_check
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 10.0ms | Total: 4.9ms | Tokens: 420 in, 280 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: PROPOSAL_VALID
+Detail: Title: Authentication Architecture and Multi-Card Flow
+Summary: Technical specification for enterprise multi-card authentication, local break-gl...
+Sections (3):
+  1. [H2] Overview and Scope (206 chars)
+  2. [H2] Authentication Flow (705 chars)
+  3. [H2] Security Invariants (116 chars)
+Action Items (2):
+  - Implement WebAuthn Passkey registration
+  - Configure TOTP backup generator
+
+Exit Code: 0
+
+================================================================================
+$ uv run kanban-agent validate-sticky-promo --provider fixture --model gemini-2.5-flash --cassette tests/fixtures/ai/sticky_promo_schema_invalid.yaml --sticky-file ./examples/stickies/rough-auth-notes.md
+=== 1. RENDERED CONTEXT ===
+Sticky File: examples/stickies/rough-auth-notes.md (924 bytes)
+SHA-256: 8559a566e2353ab6b6810691b7498fc69646683dd3f777ce776b9f857ee0d18e
+Error: [SCHEMA_ERROR] Failed to validate response against StickyDocProposal: 1 validation error for StickyDocProposal
+sections
+  List should have at least 1 item after validation, not 0 [type=too_short, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.14/v/too_short
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 2.5ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: SCHEMA_ERROR
+Error Code: SCHEMA_ERROR
+Detail: [SCHEMA_ERROR] Failed to validate response against StickyDocProposal: 1 validation error for StickyDocProposal
+sections
+  List should have at least 1 item after validation, not 0 [type=too_short, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.14/v/too_short
+
+================================================================================
+$ uv run kanban-agent validate-sticky-promo --provider gemini --air-gap --sticky-file ./examples/stickies/rough-auth-notes.md
+=== 1. RENDERED CONTEXT ===
+Sticky File: examples/stickies/rough-auth-notes.md (924 bytes)
+SHA-256: 8559a566e2353ab6b6810691b7498fc69646683dd3f777ce776b9f857ee0d18e
+Air-Gap Check: BLOCKED ([AIR_GAP_EGRESS_DENIED] Air-gap mode is active: outbound cloud egress to provider 'gemini' is strictly prohibited)
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 0.1ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: AIR_GAP_EGRESS_DENIED
+Error Code: AIR_GAP_EGRESS_DENIED
+Detail: [AIR_GAP_EGRESS_DENIED] Air-gap mode is active: outbound cloud egress to provider 'gemini' is strictly prohibited

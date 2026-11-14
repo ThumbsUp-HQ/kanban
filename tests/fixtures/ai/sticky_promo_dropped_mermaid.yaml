@@ -1,0 +1,24 @@
+cassette_version: 1
+matcher:
+  prompt_contains: []
+simulated_ttft_ms: 10.0
+usage:
+  prompt_tokens: 420
+  completion_tokens: 210
+structured_output:
+  schema: "kb-sticky-doc-proposal/v1"
+  proposed_title: "Authentication Architecture and Multi-Card Flow"
+  summary_markdown: "Technical specification for enterprise multi-card authentication."
+  sections:
+    - heading: "Overview and Scope"
+      level: 2
+      body_markdown: "This document defines the authentication architecture supporting enterprise multi-card login cards."
+    - heading: "Authentication Flow"
+      level: 2
+      body_markdown: "The system uses OIDC authorization code flow with PKCE S256. (Note: diagram omitted)."
+    - heading: "Security Invariants"
+      level: 2
+      body_markdown: "All authentication operations enforce timing-safe comparison."
+  extracted_action_items:
+    - "Implement WebAuthn Passkey registration"
+    - "Configure TOTP backup generator"

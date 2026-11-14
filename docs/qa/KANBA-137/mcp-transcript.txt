@@ -1,0 +1,1696 @@
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: e9v98M8lNPJGBs44zAJueQ.LD-fuc6TZFcwm66f1URLLsY0KyFuSoal0tLomDiCAlI
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=e9v98M8lNPJGBs44zAJueQ.LD-fuc6TZFcwm66f1URLLsY0KyFuSoal0tLomDiCAlI
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 3_3ddqQmD8yR4RAdADaWRrbH-RSzSgGs-GHVhkPeYCA
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: e9v98M8lNPJGBs44zAJueQ.LD-fuc6TZFcwm66f1URLLsY0KyFuSoal0tLomDiCAlI
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+mcp-session-id: 3_3ddqQmD8yR4RAdADaWRrbH-RSzSgGs-GHVhkPeYCA
+Cookie: __Host-kb_csrf=e9v98M8lNPJGBs44zAJueQ.LD-fuc6TZFcwm66f1URLLsY0KyFuSoal0tLomDiCAlI
+Content-Length: 114
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"help"}}}
+
+HTTP/1.1 200 OK
+content-length: 210
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"tool: architect_project\nparams: {action: get | plan | apply | help, project: str, blueprint: object, plan_sha256: str}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 6Kj7TMWHCUwjC6qks2vwjQ.7ILwXk1bRLIy0X2BvB-CKfSScOr7GbUxQakvCRzt7IM
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=6Kj7TMWHCUwjC6qks2vwjQ.7ILwXk1bRLIy0X2BvB-CKfSScOr7GbUxQakvCRzt7IM
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: o845PD7mtFehn0VgdZEEtfDCGVIj6Eml3SmAOkgcQfI
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 6Kj7TMWHCUwjC6qks2vwjQ.7ILwXk1bRLIy0X2BvB-CKfSScOr7GbUxQakvCRzt7IM
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+mcp-session-id: o845PD7mtFehn0VgdZEEtfDCGVIj6Eml3SmAOkgcQfI
+X-KB-Scopes: admin:read
+Cookie: __Host-kb_csrf=6Kj7TMWHCUwjC6qks2vwjQ.7ILwXk1bRLIy0X2BvB-CKfSScOr7GbUxQakvCRzt7IM
+Content-Length: 149
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"get","project":"KAN","extra_bad_arg":123}}}
+
+HTTP/1.1 200 OK
+content-length: 252
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: 'Unknown parameter ''extra_bad_arg''. Allowed: [''action'', ''blueprint'', ''lod'',\n    ''plan_sha256'', ''project'']'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: BT8r6YWYnSJOscD5APEljQ.wt9I9s9kaimKLQm8jt25C_qCLifGUh-_JVtBWnhID6Q
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=BT8r6YWYnSJOscD5APEljQ.wt9I9s9kaimKLQm8jt25C_qCLifGUh-_JVtBWnhID6Q
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: SLCR3SESieqT23VvDbvhjk38sI-ohmZIx_W-D9gNGfQ
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: BT8r6YWYnSJOscD5APEljQ.wt9I9s9kaimKLQm8jt25C_qCLifGUh-_JVtBWnhID6Q
+mcp-session-id: SLCR3SESieqT23VvDbvhjk38sI-ohmZIx_W-D9gNGfQ
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:read
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=BT8r6YWYnSJOscD5APEljQ.wt9I9s9kaimKLQm8jt25C_qCLifGUh-_JVtBWnhID6Q
+Content-Length: 343
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"plan","blueprint":{"identifier":"SCP","name":"Scope Test","states":[{"name":"Todo","group":"started","color":"#3B82F6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}]}}}}
+
+HTTP/1.1 200 OK
+content-length: 182
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: INSUFFICIENT_SCOPE, message: 'Action ''plan'' requires ''admin:write'' scope'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: BT8r6YWYnSJOscD5APEljQ.wt9I9s9kaimKLQm8jt25C_qCLifGUh-_JVtBWnhID6Q
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=BT8r6YWYnSJOscD5APEljQ.wt9I9s9kaimKLQm8jt25C_qCLifGUh-_JVtBWnhID6Q
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: xYHyRUiZmFaeQaIqGQYaqepC_cYxHOQ5_tGha8QkmIY
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: BT8r6YWYnSJOscD5APEljQ.wt9I9s9kaimKLQm8jt25C_qCLifGUh-_JVtBWnhID6Q
+mcp-session-id: xYHyRUiZmFaeQaIqGQYaqepC_cYxHOQ5_tGha8QkmIY
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=BT8r6YWYnSJOscD5APEljQ.wt9I9s9kaimKLQm8jt25C_qCLifGUh-_JVtBWnhID6Q
+Content-Length: 343
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"plan","blueprint":{"identifier":"SCP","name":"Scope Test","states":[{"name":"Todo","group":"started","color":"#3B82F6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}]}}}}
+
+HTTP/1.1 200 OK
+content-length: 302
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"project: SCP\nplan_sha256: 317753ffede35f4ccc2792039e68c36d25b5855f88431bb3fc14239d2299a365\nchanges:\n  project: {create: true, identifier: SCP, name: Scope Test}\n  states:\n    create: [Todo, Done, Cancelled]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 8Tibn6qvgcrp1b9x3YQxmmajua2AcFKXz9su-yw6Uko
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+mcp-session-id: 8Tibn6qvgcrp1b9x3YQxmmajua2AcFKXz9su-yw6Uko
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+Content-Length: 1047
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"plan","blueprint":{"identifier":"ARC","name":"Architect Project","description_markdown":"Engineered via architect_project","states":[{"name":"Backlog","group":"backlog","color":"#94A3B8"},{"name":"Todo","group":"unstarted","color":"#64748B"},{"name":"In Progress","group":"started","color":"#3B82F6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}],"priorities":[{"name":"Urgent","emoji":"🔥","color":"#DC2626"},{"name":"High","emoji":"⚡","color":"#F97316"},{"name":"Medium","emoji":"🔹","color":"#EAB308"},{"name":"Low","emoji":"💤","color":"#22C55E"}],"labels":[{"name":"api","color":"#3B82F6","exclusive_group":"layer"},{"name":"ui","color":"#10B981","exclusive_group":"layer"}],"modules_enabled":true,"modules":[{"name":"Core"},{"name":"Auth"}],"default_modules":["Core"],"auto_archive_days":14,"wip_limits":{"In Progress":{"soft":3,"hard":6}}},"lod":"summary"}}}
+
+HTTP/1.1 200 OK
+content-length: 641
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"project: ARC\nplan_sha256: 434fba50fcccd705c9c28958e6ad074edafd0b3391ed693828967cf3aedf9b73\nchanges:\n  project: {create: true, identifier: ARC, name: Architect Project}\n  states:\n    create: [Backlog, Todo, In Progress, Done, Cancelled]\n  priorities:\n    create: [Urgent, High, Medium, Low]\n  labels:\n    create: [api, ui]\n  modules_enabled: {from: false, to: true}\n  modules:\n    create: [Core, Auth]\n  default_modules:\n    create: [Core]\n  auto_archive_days: {to: 14}\n  wip_limits:\n    create:\n      In Progress: {soft: 3, hard: 6}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: Nk9S9-gutJDXRGHUe7-d3Qp2Iy07k1yyI202qPoqNgQ
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+mcp-session-id: Nk9S9-gutJDXRGHUe7-d3Qp2Iy07k1yyI202qPoqNgQ
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+Content-Length: 1044
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"plan","blueprint":{"identifier":"ARC","name":"Architect Project","description_markdown":"Engineered via architect_project","states":[{"name":"Backlog","group":"backlog","color":"#94A3B8"},{"name":"Todo","group":"unstarted","color":"#64748B"},{"name":"In Progress","group":"started","color":"#3B82F6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}],"priorities":[{"name":"Urgent","emoji":"🔥","color":"#DC2626"},{"name":"High","emoji":"⚡","color":"#F97316"},{"name":"Medium","emoji":"🔹","color":"#EAB308"},{"name":"Low","emoji":"💤","color":"#22C55E"}],"labels":[{"name":"api","color":"#3B82F6","exclusive_group":"layer"},{"name":"ui","color":"#10B981","exclusive_group":"layer"}],"modules_enabled":true,"modules":[{"name":"Core"},{"name":"Auth"}],"default_modules":["Core"],"auto_archive_days":14,"wip_limits":{"In Progress":{"soft":3,"hard":6}}},"lod":"full"}}}
+
+HTTP/1.1 200 OK
+content-length: 641
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"project: ARC\nplan_sha256: 434fba50fcccd705c9c28958e6ad074edafd0b3391ed693828967cf3aedf9b73\nchanges:\n  project: {create: true, identifier: ARC, name: Architect Project}\n  states:\n    create: [Backlog, Todo, In Progress, Done, Cancelled]\n  priorities:\n    create: [Urgent, High, Medium, Low]\n  labels:\n    create: [api, ui]\n  modules_enabled: {from: false, to: true}\n  modules:\n    create: [Core, Auth]\n  default_modules:\n    create: [Core]\n  auto_archive_days: {to: 14}\n  wip_limits:\n    create:\n      In Progress: {soft: 3, hard: 6}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: Cso90FAE7npwBrgcT9TlvqLoikwiWtrbOf4LyXpBtcs
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+mcp-session-id: Cso90FAE7npwBrgcT9TlvqLoikwiWtrbOf4LyXpBtcs
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+Content-Length: 1113
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"apply","blueprint":{"identifier":"ARC","name":"Architect Project","description_markdown":"Engineered via architect_project","states":[{"name":"Backlog","group":"backlog","color":"#94A3B8"},{"name":"Todo","group":"unstarted","color":"#64748B"},{"name":"In Progress","group":"started","color":"#3B82F6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}],"priorities":[{"name":"Urgent","emoji":"🔥","color":"#DC2626"},{"name":"High","emoji":"⚡","color":"#F97316"},{"name":"Medium","emoji":"🔹","color":"#EAB308"},{"name":"Low","emoji":"💤","color":"#22C55E"}],"labels":[{"name":"api","color":"#3B82F6","exclusive_group":"layer"},{"name":"ui","color":"#10B981","exclusive_group":"layer"}],"modules_enabled":true,"modules":[{"name":"Core"},{"name":"Auth"}],"default_modules":["Core"],"auto_archive_days":14,"wip_limits":{"In Progress":{"soft":3,"hard":6}}},"plan_sha256":"434fba50fcccd705c9c28958e6ad074edafd0b3391ed693828967cf3aedf9b73"}}}
+
+HTTP/1.1 200 OK
+content-length: 658
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"project: ARC\nstatus: applied\nplan_sha256: 434fba50fcccd705c9c28958e6ad074edafd0b3391ed693828967cf3aedf9b73\nchanges:\n  project: {create: true, identifier: ARC, name: Architect Project}\n  states:\n    create: [Backlog, Todo, In Progress, Done, Cancelled]\n  priorities:\n    create: [Urgent, High, Medium, Low]\n  labels:\n    create: [api, ui]\n  modules_enabled: {from: false, to: true}\n  modules:\n    create: [Core, Auth]\n  default_modules:\n    create: [Core]\n  auto_archive_days: {to: 14}\n  wip_limits:\n    create:\n      In Progress: {soft: 3, hard: 6}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: jDamHD_Gz_xyjbk5yBCsEgcJNrEiefjgLdwLqccRG3c
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+mcp-session-id: jDamHD_Gz_xyjbk5yBCsEgcJNrEiefjgLdwLqccRG3c
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:read
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+Content-Length: 129
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"get","project":"ARC"}}}
+
+HTTP/1.1 200 OK
+content-length: 1349
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"identifier: ARC\nname: Architect Project\ndescription_markdown: Engineered via architect_project\nstates:\n- name: Backlog\n  group: backlog\n  color: '#94A3B8'\n  sort_order: 0\n  is_default: false\n- name: Todo\n  group: unstarted\n  color: '#64748B'\n  sort_order: 1\n  is_default: false\n- name: In Progress\n  group: started\n  color: '#3B82F6'\n  sort_order: 2\n  is_default: false\n  wip_soft_limit: 3\n  wip_hard_limit: 6\n- name: Done\n  group: completed\n  color: '#10B981'\n  sort_order: 3\n  is_default: false\n- name: Cancelled\n  group: cancelled\n  color: '#EF4444'\n  sort_order: 4\n  is_default: false\npriorities:\n- name: Urgent\n  emoji: 🔥\n  color: '#DC2626'\n  sort_order: 0\n  is_default: false\n- name: High\n  emoji: ⚡\n  color: '#F97316'\n  sort_order: 1\n  is_default: false\n- name: Medium\n  emoji: 🔹\n  color: '#EAB308'\n  sort_order: 2\n  is_default: false\n- name: Low\n  emoji: 💤\n  color: '#22C55E'\n  sort_order: 3\n  is_default: false\nlabels: [{name: api, exclusive_group: layer, color: '#3B82F6'}, {name: ui, exclusive_group: layer, color: '#10B981'}]\nmodules_enabled: true\nmodules: [{name: Auth}, {name: Core}]\ndefault_modules: [Core]\nauto_archive_days: 14\nwip_limits:\n  In Progress: {soft: 3, hard: 6}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: P2O1YdeVVNfBi9iuH6MXZ1WWYF6B2W5tfJq7DdJAcmY
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+mcp-session-id: P2O1YdeVVNfBi9iuH6MXZ1WWYF6B2W5tfJq7DdJAcmY
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=xCSCco54X627MhRuRn2C4Q.NfTDhoCkh7UsaLrLltkJ3roQyHMiWJV77FYYnQ71Dy8
+Content-Length: 1375
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"plan","blueprint":{"identifier":"ARC","name":"Architect Project","description_markdown":"Engineered via architect_project","states":[{"name":"Backlog","group":"backlog","color":"#94A3B8","sort_order":0,"is_default":false},{"name":"Todo","group":"unstarted","color":"#64748B","sort_order":1,"is_default":false},{"name":"In Progress","group":"started","color":"#3B82F6","sort_order":2,"is_default":false,"wip_soft_limit":3,"wip_hard_limit":6},{"name":"Done","group":"completed","color":"#10B981","sort_order":3,"is_default":false},{"name":"Cancelled","group":"cancelled","color":"#EF4444","sort_order":4,"is_default":false}],"priorities":[{"name":"Urgent","emoji":"🔥","color":"#DC2626","sort_order":0,"is_default":false},{"name":"High","emoji":"⚡","color":"#F97316","sort_order":1,"is_default":false},{"name":"Medium","emoji":"🔹","color":"#EAB308","sort_order":2,"is_default":false},{"name":"Low","emoji":"💤","color":"#22C55E","sort_order":3,"is_default":false}],"labels":[{"name":"api","exclusive_group":"layer","color":"#3B82F6"},{"name":"ui","exclusive_group":"layer","color":"#10B981"}],"modules_enabled":true,"modules":[{"name":"Auth"},{"name":"Core"}],"default_modules":["Core"],"auto_archive_days":14,"wip_limits":{"In Progress":{"soft":3,"hard":6}}}}}}
+
+HTTP/1.1 200 OK
+content-length: 182
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"project: ARC\nplan_sha256: aa3327fc169acd7d473d4c250eb1e3933883abec4d51e3c6ed9620fa7563ab9c\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: GfVP-Q4HWBSj6oqh-MBA0w.fSApmtsgt1ToFpYBLc-PCOP85gWS2U9GW7lG5c39OfM
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=GfVP-Q4HWBSj6oqh-MBA0w.fSApmtsgt1ToFpYBLc-PCOP85gWS2U9GW7lG5c39OfM
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: t1nF7KuDCJDgvqaFoWcYMeLZ0w-I5v3qP2N3y18z188
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: GfVP-Q4HWBSj6oqh-MBA0w.fSApmtsgt1ToFpYBLc-PCOP85gWS2U9GW7lG5c39OfM
+mcp-session-id: t1nF7KuDCJDgvqaFoWcYMeLZ0w-I5v3qP2N3y18z188
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=GfVP-Q4HWBSj6oqh-MBA0w.fSApmtsgt1ToFpYBLc-PCOP85gWS2U9GW7lG5c39OfM
+Content-Length: 349
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"plan","blueprint":{"identifier":"STL","name":"Stale Project","states":[{"name":"Started","group":"started","color":"#3B82F6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}]}}}}
+
+HTTP/1.1 200 OK
+content-length: 308
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"project: STL\nplan_sha256: c3831c286f24eeb85fdda501368cc47be6c06559b0574248fe46e46a6256af28\nchanges:\n  project: {create: true, identifier: STL, name: Stale Project}\n  states:\n    create: [Started, Done, Cancelled]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: GfVP-Q4HWBSj6oqh-MBA0w.fSApmtsgt1ToFpYBLc-PCOP85gWS2U9GW7lG5c39OfM
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=GfVP-Q4HWBSj6oqh-MBA0w.fSApmtsgt1ToFpYBLc-PCOP85gWS2U9GW7lG5c39OfM
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: iC2hvALc7yz5VgQFDQyYVLw8CIZL9kiiu1rdtUnmI8k
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: GfVP-Q4HWBSj6oqh-MBA0w.fSApmtsgt1ToFpYBLc-PCOP85gWS2U9GW7lG5c39OfM
+mcp-session-id: iC2hvALc7yz5VgQFDQyYVLw8CIZL9kiiu1rdtUnmI8k
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=GfVP-Q4HWBSj6oqh-MBA0w.fSApmtsgt1ToFpYBLc-PCOP85gWS2U9GW7lG5c39OfM
+Content-Length: 440
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"apply","blueprint":{"identifier":"STL","name":"Modified Stale Project","states":[{"name":"Started","group":"started","color":"#3B82F6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}]},"plan_sha256":"c3831c286f24eeb85fdda501368cc47be6c06559b0574248fe46e46a6256af28"}}}
+
+HTTP/1.1 200 OK
+content-length: 180
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: PLAN_STALE, message: Project configuration changed since plan was generated}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 50pnpOmf0Bi4WozVZZM6D--uEuxonOoU670K1KGgB1s
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+mcp-session-id: 50pnpOmf0Bi4WozVZZM6D--uEuxonOoU670K1KGgB1s
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+Content-Length: 543
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"plan","blueprint":{"identifier":"USE","name":"In Use Tool Test","states":[{"name":"Todo","group":"unstarted","color":"#64748B"},{"name":"In Progress","group":"started","color":"#3B82F6"},{"name":"StageA","group":"started","color":"#8B5CF6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}],"priorities":[{"name":"P1","color":"#EF4444"},{"name":"P2","color":"#3B82F6"}]}}}}
+
+HTTP/1.1 200 OK
+content-length: 366
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"project: USE\nplan_sha256: cae651e34c793242ddcde616ebe4d7b0552391a8ebd570af98c1cfaed68dfef5\nchanges:\n  project: {create: true, identifier: USE, name: In Use Tool Test}\n  states:\n    create: [Todo, In Progress, StageA, Done, Cancelled]\n  priorities:\n    create: [P1, P2]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: Duof3XvJmFeZWYqOsLsueNvME0JNuhUPFeriEFlRPN8
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+mcp-session-id: Duof3XvJmFeZWYqOsLsueNvME0JNuhUPFeriEFlRPN8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+Content-Length: 625
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"apply","blueprint":{"identifier":"USE","name":"In Use Tool Test","states":[{"name":"Todo","group":"unstarted","color":"#64748B"},{"name":"In Progress","group":"started","color":"#3B82F6"},{"name":"StageA","group":"started","color":"#8B5CF6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}],"priorities":[{"name":"P1","color":"#EF4444"},{"name":"P2","color":"#3B82F6"}]},"plan_sha256":"cae651e34c793242ddcde616ebe4d7b0552391a8ebd570af98c1cfaed68dfef5"}}}
+
+HTTP/1.1 200 OK
+content-length: 383
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"project: USE\nstatus: applied\nplan_sha256: cae651e34c793242ddcde616ebe4d7b0552391a8ebd570af98c1cfaed68dfef5\nchanges:\n  project: {create: true, identifier: USE, name: In Use Tool Test}\n  states:\n    create: [Todo, In Progress, StageA, Done, Cancelled]\n  priorities:\n    create: [P1, P2]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 6KqjrIvD7VewZTh-Od2JmM5XUTevoP9RNU1dIu3t6nI
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+mcp-session-id: 6KqjrIvD7VewZTh-Od2JmM5XUTevoP9RNU1dIu3t6nI
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+Content-Length: 489
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"plan","blueprint":{"identifier":"USE","name":"In Use Tool Test","states":[{"name":"Todo","group":"unstarted","color":"#64748B"},{"name":"In Progress","group":"started","color":"#3B82F6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}],"priorities":[{"name":"P1","color":"#EF4444"},{"name":"P2","color":"#3B82F6"}]}}}}
+
+HTTP/1.1 200 OK
+content-length: 325
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: STATE_IN_USE, message: 'State ''StageA'' has 1 active issues and requires a state migration. Specify state_migrations:\n    {''StageA'': ''<New State>''}', hint: 'Specify state_migrations: {\"Old State\": \"New State\"}'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 6sm6T_CFVOvqTlZUkPZAFBuGplMWSw833kLHzQu87b8
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+mcp-session-id: 6sm6T_CFVOvqTlZUkPZAFBuGplMWSw833kLHzQu87b8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=iILBe1EFjeCW0xHmXdC-dg.9pB0sE5nalP2Vnuc0gyU3opPxBaxOwz1txPNyYowJFg
+Content-Length: 511
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"architect_project","arguments":{"action":"plan","blueprint":{"identifier":"USE","name":"In Use Tool Test","states":[{"name":"Todo","group":"unstarted","color":"#64748B"},{"name":"In Progress","group":"started","color":"#3B82F6"},{"name":"StageA","group":"started","color":"#8B5CF6"},{"name":"Done","group":"completed","color":"#10B981"},{"name":"Cancelled","group":"cancelled","color":"#EF4444"}],"priorities":[{"name":"P2","color":"#3B82F6"}]}}}}
+
+HTTP/1.1 200 OK
+content-length: 166
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: PRIORITY_IN_USE, message: Priority 'P1' is in use by 1 issues}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: uU_dfptnydLTvfbX8HaRvg.eYk2oLkLHnfj7MreUJrIJl-caqXur_0e5hvuKtefUx0
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=uU_dfptnydLTvfbX8HaRvg.eYk2oLkLHnfj7MreUJrIJl-caqXur_0e5hvuKtefUx0
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: q5gtNN7qsJE786WsKHrcyqpBym6uro1Pk5anqL6aYg8
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: uU_dfptnydLTvfbX8HaRvg.eYk2oLkLHnfj7MreUJrIJl-caqXur_0e5hvuKtefUx0
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+mcp-session-id: q5gtNN7qsJE786WsKHrcyqpBym6uro1Pk5anqL6aYg8
+Cookie: __Host-kb_csrf=uU_dfptnydLTvfbX8HaRvg.eYk2oLkLHnfj7MreUJrIJl-caqXur_0e5hvuKtefUx0
+Content-Length: 122
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"help"}}}
+
+HTTP/1.1 200 OK
+content-length: 339
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"tool: manage_cycles_and_modules\nparams: {action: list_cycles | create_cycle | update_cycle | start_cycle | complete_cycle | rollover | list_modules | create_module\n    | update_module | list_views | create_view | update_view | help, project: str}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: m2sfQna3bVuGXdEn4PH2nw.Rnxl8T0FUsAnsWbLa3HNNStkwlxzoxJoLC_2hQigxFA
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=m2sfQna3bVuGXdEn4PH2nw.Rnxl8T0FUsAnsWbLa3HNNStkwlxzoxJoLC_2hQigxFA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: xzA7CnS6ZVWG7mYS5M8aD7R9CUYen4Hhi9QVTXSA-3c
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: m2sfQna3bVuGXdEn4PH2nw.Rnxl8T0FUsAnsWbLa3HNNStkwlxzoxJoLC_2hQigxFA
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+mcp-session-id: xzA7CnS6ZVWG7mYS5M8aD7R9CUYen4Hhi9QVTXSA-3c
+X-KB-Scopes: admin:read
+Cookie: __Host-kb_csrf=m2sfQna3bVuGXdEn4PH2nw.Rnxl8T0FUsAnsWbLa3HNNStkwlxzoxJoLC_2hQigxFA
+Content-Length: 169
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"list_cycles","project":"KAN","bad_unknown_key":"val"}}}
+
+HTTP/1.1 200 OK
+content-length: 328
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: 'Unknown parameter ''bad_unknown_key''. Allowed: [''action'', ''cycle'', ''end_date'',\n    ''lod'', ''module'', ''name'', ''project'', ''start_date'', ''target_cycle'', ''view'', ''view_spec'']'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: oe3LDLgVxob0gHUnfncLzFPdIbrVR3WM4MqVfNlLBwg
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+mcp-session-id: oe3LDLgVxob0gHUnfncLzFPdIbrVR3WM4MqVfNlLBwg
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:read
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+Content-Length: 146
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"list_cycles","project":"SCP2"}}}
+
+HTTP/1.1 200 OK
+content-length: 93
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{}\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 2bbddr79U5J-aav8GegTecLDYn_K5ZSSIB_SK5vbKew
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+mcp-session-id: 2bbddr79U5J-aav8GegTecLDYn_K5ZSSIB_SK5vbKew
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:read
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+Content-Length: 165
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"create_cycle","project":"SCP2","name":"Sprint 1"}}}
+
+HTTP/1.1 200 OK
+content-length: 190
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: INSUFFICIENT_SCOPE, message: 'Action ''create_cycle'' requires ''admin:write'' scope'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: JAU-7oxt1tTQUq790Eeo1qqkCZS-6Gh_kX3nNVt11eE
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+mcp-session-id: JAU-7oxt1tTQUq790Eeo1qqkCZS-6Gh_kX3nNVt11eE
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=2lATpTgHmKTpH7qS_HPO2g.NryXk6HqqS9LDVsv7GyZqKjxqv-__-GlXU0cR-Gzp1M
+Content-Length: 165
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"create_cycle","project":"SCP2","name":"Sprint 1"}}}
+
+HTTP/1.1 200 OK
+content-length: 251
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: 8f186c97-8d6e-4845-9623-c2017861aa62\nproject_id: 01a1d85d-3f15-79c7-9b67-83961166c64f\nname: Sprint 1\nstatus: upcoming\nissue_count: 0\ncompleted_count: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: SrVajfcWfyyx62x59XyCnXMFE-tI5gfy2Di17Iqqc-I
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+mcp-session-id: SrVajfcWfyyx62x59XyCnXMFE-tI5gfy2Di17Iqqc-I
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 218
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"create_cycle","project":"CYM","name":"Sprint Alpha","start_date":"2026-12-01","end_date":"2026-12-14"}}}
+
+HTTP/1.1 200 OK
+content-length: 305
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: f581f4b0-24e0-4d44-be08-c2626b855ef5\nproject_id: 01a1d85d-4005-7566-99d2-86d3eb5c0d5d\nname: Sprint Alpha\nstatus: upcoming\nstart_date: '2026-12-01'\nend_date: '2026-12-14'\nissue_count: 0\ncompleted_count: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: KsBWlK-DPUanPbpuZHaS_GJ41d824I_nVQ1nuNpNW2I
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+mcp-session-id: KsBWlK-DPUanPbpuZHaS_GJ41d824I_nVQ1nuNpNW2I
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:read
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 145
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"list_cycles","project":"CYM"}}}
+
+HTTP/1.1 200 OK
+content-length: 256
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"cycles:\n- id: f581f4b0-24e0-4d44-be08-c2626b855ef5\n  name: Sprint Alpha\n  status: upcoming\n  start_date: '2026-12-01'\n  end_date: '2026-12-14'\n  issue_count: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: nvkcaaCw1KBP8DEVXwFNBkHiDPznesg8FX3cLeerO6o
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+mcp-session-id: nvkcaaCw1KBP8DEVXwFNBkHiDPznesg8FX3cLeerO6o
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 171
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"complete_cycle","project":"CYM","cycle":"Sprint Alpha"}}}
+
+HTTP/1.1 200 OK
+content-length: 169
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: INVALID_TRANSITION, message: Only active cycles can be completed}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: nV9svRceWM7L55KNP3Zh3X68ZnMuXAvzQiKrg9hf610
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+mcp-session-id: nV9svRceWM7L55KNP3Zh3X68ZnMuXAvzQiKrg9hf610
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 168
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"start_cycle","project":"CYM","cycle":"Sprint Alpha"}}}
+
+HTTP/1.1 200 OK
+content-length: 303
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: f581f4b0-24e0-4d44-be08-c2626b855ef5\nproject_id: 01a1d85d-4005-7566-99d2-86d3eb5c0d5d\nname: Sprint Alpha\nstatus: active\nstart_date: '2026-12-01'\nend_date: '2026-12-14'\nissue_count: 0\ncompleted_count: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: U4SjEbwZZgHDGBCEsZoYbTiueJB0cHHbUW97V_W1n4A
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+mcp-session-id: U4SjEbwZZgHDGBCEsZoYbTiueJB0cHHbUW97V_W1n4A
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 199
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"update_cycle","project":"CYM","cycle":"Sprint Alpha","name":"Sprint Alpha Renamed"}}}
+
+HTTP/1.1 200 OK
+content-length: 311
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: f581f4b0-24e0-4d44-be08-c2626b855ef5\nproject_id: 01a1d85d-4005-7566-99d2-86d3eb5c0d5d\nname: Sprint Alpha Renamed\nstatus: active\nstart_date: '2026-12-01'\nend_date: '2026-12-14'\nissue_count: 0\ncompleted_count: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 2-GdYnCRWrzOxerjwu5teMSzl-Hh56r9fr4LycVQ6_g
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+mcp-session-id: 2-GdYnCRWrzOxerjwu5teMSzl-Hh56r9fr4LycVQ6_g
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=THGYsAoGEF_a07pn5p4QDQ.dMwl9fqsFa-eBw9HrSOkM5XtplabeTmOG8Jt9scMsr4
+Content-Length: 179
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"complete_cycle","project":"CYM","cycle":"Sprint Alpha Renamed"}}}
+
+HTTP/1.1 200 OK
+content-length: 354
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"cycle:\n  id: f581f4b0-24e0-4d44-be08-c2626b855ef5\n  project_id: 01a1d85d-4005-7566-99d2-86d3eb5c0d5d\n  name: Sprint Alpha Renamed\n  status: completed\n  start_date: '2026-12-01'\n  end_date: '2026-12-14'\n  issue_count: 0\n  completed_count: 0\nrolled_over: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: UfKhCkaRqQaiHDkVcCyNu3p6vM3_nGYzSrcBNu-7eTY
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+mcp-session-id: UfKhCkaRqQaiHDkVcCyNu3p6vM3_nGYzSrcBNu-7eTY
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+Content-Length: 163
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"create_cycle","project":"ROL","name":"Cycle 1"}}}
+
+HTTP/1.1 200 OK
+content-length: 250
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: f1d5433c-57c2-4f24-b790-6f4721b4c231\nproject_id: 01a1d85d-41ff-7ad9-860f-9781e0efe104\nname: Cycle 1\nstatus: upcoming\nissue_count: 0\ncompleted_count: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: hv8TQBYycYn_AKzPsZS70Bczm2K7Zqw7WpRV0XMPewY
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+mcp-session-id: hv8TQBYycYn_AKzPsZS70Bczm2K7Zqw7WpRV0XMPewY
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+Content-Length: 163
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"create_cycle","project":"ROL","name":"Cycle 2"}}}
+
+HTTP/1.1 200 OK
+content-length: 250
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: c102b5ab-2633-414a-8722-1507c85739c8\nproject_id: 01a1d85d-41ff-7ad9-860f-9781e0efe104\nname: Cycle 2\nstatus: upcoming\nissue_count: 0\ncompleted_count: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: b6uFFcPmE6d0Y8Xj-sHs6eh9xKUgA9nLAEIUqXEPygY
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+mcp-session-id: b6uFFcPmE6d0Y8Xj-sHs6eh9xKUgA9nLAEIUqXEPygY
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+Content-Length: 163
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"start_cycle","project":"ROL","cycle":"Cycle 1"}}}
+
+HTTP/1.1 200 OK
+content-length: 248
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: f1d5433c-57c2-4f24-b790-6f4721b4c231\nproject_id: 01a1d85d-41ff-7ad9-860f-9781e0efe104\nname: Cycle 1\nstatus: active\nissue_count: 0\ncompleted_count: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: Yhe95Uo-BvDxoKHAQofbin7DKjUtckPCN0rYShClAbQ
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+mcp-session-id: Yhe95Uo-BvDxoKHAQofbin7DKjUtckPCN0rYShClAbQ
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=oEC-y997X8Y4z0gBfv-RJg.vpWhjinsOuil1OR_5N_PLK57FvgtJEBQujdPcKUVCEM
+Content-Length: 185
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"rollover","project":"ROL","cycle":"Cycle 1","target_cycle":"Cycle 2"}}}
+
+HTTP/1.1 200 OK
+content-length: 148
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"status: rolled_over\nfrom: Cycle 1\nto: Cycle 2\nmoved: 4\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: XyOdR9i_brRE7Hvphiz73aokDFdhrd69I5WGsJ0jX1o
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+mcp-session-id: XyOdR9i_brRE7Hvphiz73aokDFdhrd69I5WGsJ0jX1o
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+Content-Length: 172
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"create_module","project":"MDIS","name":"Payment Engine"}}}
+
+HTTP/1.1 200 OK
+content-length: 176
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: MODULES_DISABLED, message: Modules feature is disabled for this project}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: d8t5R-VYCpt3C_F2aXEhv5Xq2oTMRFo9vMsGYJhYyxc
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+mcp-session-id: d8t5R-VYCpt3C_F2aXEhv5Xq2oTMRFo9vMsGYJhYyxc
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+Content-Length: 169
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"create_module","project":"MENA","name":"Auth Module"}}}
+
+HTTP/1.1 200 OK
+content-length: 203
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: 08410335-d911-4bc5-8ea8-bda41dca8ac1\nname: Auth Module\nstatus: planned\nissue_count: 0\ncompleted_count: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 2KSC_bgjQTUxdE8bhjcUwki--zxBe6SVxT0HmUMOD_4
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+mcp-session-id: 2KSC_bgjQTUxdE8bhjcUwki--zxBe6SVxT0HmUMOD_4
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:read
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+Content-Length: 147
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"list_modules","project":"MENA"}}}
+
+HTTP/1.1 200 OK
+content-length: 180
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"modules: [{id: 08410335-d911-4bc5-8ea8-bda41dca8ac1, name: Auth Module, status: planned}]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: xMwypBbxhm2sb7gVhd9WAOsOfUeyEIZ2g07-Zx9CUVU
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: 9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+mcp-session-id: xMwypBbxhm2sb7gVhd9WAOsOfUeyEIZ2g07-Zx9CUVU
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=9R_hateP6lcn8HNayElMKQ.kzFnubdfbLclkRVWMQnddP7bSIHCyD2kNW4au1xZyIk
+Content-Length: 190
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"update_module","project":"MENA","module":"Auth Module","name":"Auth Core"}}}
+
+HTTP/1.1 200 OK
+content-length: 201
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: 08410335-d911-4bc5-8ea8-bda41dca8ac1\nname: Auth Core\nstatus: planned\nissue_count: 0\ncompleted_count: 0\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: eNSwRu8p8CWx1P8Go-U3Cs6-0DJsmn-RotWiqgpbgwc
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+mcp-session-id: eNSwRu8p8CWx1P8Go-U3Cs6-0DJsmn-RotWiqgpbgwc
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+Content-Length: 217
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"create_view","project":"VIW","name":"Sprint Board","view_spec":{"layout":"board","group_by":"state"}}}}
+
+HTTP/1.1 200 OK
+content-length: 1592
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: 01a1d85d-462c-77cc-b29f-3db7871a2b31\nproject_id: 01a1d85d-45a8-7e2c-b029-1492033edbad\nname: Sprint Board\nlayout: board\ngroup_by: state\nsub_group_by: none\nfilters: {label_match: any, overdue_only: false, include_archived: false}\nis_shared: false\nvisibility: personal\nowner: {id: 01a1d85d-4598-70e1-8f54-33b3bb28051c, display_name: Server Admin, handle: server_admin}\naccess_manifest:\n  pill_label: Private\n  explicit_grant_count: 0\n  inherited_scope: {kind: private, scope_label: Private, workspace_id: 01a1d85d-4597-7d0e-9e9d-68729a3061cf, workspace_name: Engineering}\n  users:\n  - principal_id: 01a1d85d-4598-70e1-8f54-33b3bb28051c\n    handle: '@server_admin'\n    display_name: Server Admin\n    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]\n    grant_source: project_owner\n  - principal_id: 01a1d85d-459d-738d-877a-d72d8b81c134\n    handle: '@ws_admin'\n    display_name: Workspace Admin\n    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]\n    grant_source: workspace_role\n  - principal_id: 01a1d85d-459f-7a34-a0a3-a0ad27ea8b51\n    handle: '@member'\n    display_name: Member\n    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK]\n    grant_source: workspace_role\n  redacted_count: 0\n  caller_capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]\n  canonical_key: VIW/views/sprint-board\n  object_type: view\ncapabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: cmb-w_fQNwX0yVMfXDIMftssdGZzRPm3DCr0g_VXQj0
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+mcp-session-id: cmb-w_fQNwX0yVMfXDIMftssdGZzRPm3DCr0g_VXQj0
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:read
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+Content-Length: 144
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"list_views","project":"VIW"}}}
+
+HTTP/1.1 200 OK
+content-length: 194
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"views: [{id: 01a1d85d-462c-77cc-b29f-3db7871a2b31, name: Sprint Board, layout: board, group_by: state}]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: pn6UlalUK-EQRjYBNZgFZnhcRGZF3eGWtrHcWH-RWn4
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+mcp-session-id: pn6UlalUK-EQRjYBNZgFZnhcRGZF3eGWtrHcWH-RWn4
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+X-KB-AAL-Level: 2
+Cookie: __Host-kb_csrf=PgHrW70xGlZ8H6GsULzvkg.vpZsVltaLPyQnXQo2SdwCZPX-maP4ok23tTgFbQN79I
+Content-Length: 196
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"update_view","project":"VIW","view":"Sprint Board","name":"Active Sprint Board"}}}
+
+HTTP/1.1 200 OK
+content-length: 1599
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"id: 01a1d85d-462c-77cc-b29f-3db7871a2b31\nproject_id: 01a1d85d-45a8-7e2c-b029-1492033edbad\nname: Active Sprint Board\nlayout: board\ngroup_by: state\nsub_group_by: none\nfilters: {label_match: any, overdue_only: false, include_archived: false}\nis_shared: false\nvisibility: personal\nowner: {id: 01a1d85d-4598-70e1-8f54-33b3bb28051c, display_name: Server Admin, handle: server_admin}\naccess_manifest:\n  pill_label: Private\n  explicit_grant_count: 0\n  inherited_scope: {kind: private, scope_label: Private, workspace_id: 01a1d85d-4597-7d0e-9e9d-68729a3061cf, workspace_name: Engineering}\n  users:\n  - principal_id: 01a1d85d-4598-70e1-8f54-33b3bb28051c\n    handle: '@server_admin'\n    display_name: Server Admin\n    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]\n    grant_source: project_owner\n  - principal_id: 01a1d85d-459d-738d-877a-d72d8b81c134\n    handle: '@ws_admin'\n    display_name: Workspace Admin\n    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]\n    grant_source: workspace_role\n  - principal_id: 01a1d85d-459f-7a34-a0a3-a0ad27ea8b51\n    handle: '@member'\n    display_name: Member\n    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK]\n    grant_source: workspace_role\n  redacted_count: 0\n  caller_capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]\n  canonical_key: VIW/views/sprint-board\n  object_type: view\ncapabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------

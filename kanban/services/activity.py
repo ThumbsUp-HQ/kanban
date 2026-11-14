@@ -61,6 +61,7 @@ class ActivityEventType(StrEnum):
 
     PROJECT_CREATED = "PROJECT_CREATED"
     PROJECT_UPDATED = "PROJECT_UPDATED"
+    PROJECT_BLUEPRINT_APPLIED = "PROJECT_BLUEPRINT_APPLIED"
     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
     DOC_CREATED = "DOC_CREATED"
     DOC_UPDATED = "DOC_UPDATED"
@@ -184,6 +185,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
     {
         ActivityEventType.PROJECT_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.PROJECT_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.PROJECT_BLUEPRINT_APPLIED: ActivityCategory.SYSTEM,
         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.DOC_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.DOC_UPDATED: ActivityCategory.HISTORY,

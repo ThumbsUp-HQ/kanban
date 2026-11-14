@@ -1,0 +1,20 @@
+cassette_version: 1
+matcher:
+  prompt_contains: []
+simulated_ttft_ms: 10.0
+usage:
+  prompt_tokens: 420
+  completion_tokens: 280
+structured_output:
+  schema: "kb-sticky-doc-proposal/v1"
+  proposed_title: "Hostile HTML Output Test"
+  summary_markdown: "Testing malicious HTML scrubbing."
+  sections:
+    - heading: "Injected Payload Section"
+      level: 2
+      body_markdown: 'Normal text <script>alert(1)</script><a href="javascript:x">bad link</a> with payload.'
+    - heading: "Safe Section"
+      level: 2
+      body_markdown: "This is a safe section."
+  extracted_action_items:
+    - "Sanitize all HTML"

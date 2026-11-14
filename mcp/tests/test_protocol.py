@@ -49,6 +49,8 @@ async def test_case_1_positive_initialize_and_tools_list(
             [
                 "configure_workspace",
                 "manage_auth_cards",
+                "architect_project",
+                "manage_cycles_and_modules",
                 "override_ticket_provenance",
                 "audit_and_purge_object_links",
             ],

@@ -1,11 +1,17 @@
 # Copyright 2026 Kanban Platform Contributors
-"""Admin surface tool registry and definitions (KB-P4-09a, KB-P4-11, KB-P4-12 / S11.4)."""
+# Apache-2.0 License. See LICENSE for details.
+"""Admin surface tool registry and definitions (KB-P4-09a, KB-P4-10, KB-P4-11, KB-P4-12 / S11.4)."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
 from mcp.registry import Surface, ToolRegistry, ToolSpec
+from mcp.surfaces.admin.architect_project import (
+    ARCHITECT_PROJECT_SCHEMA,
+    architect_project,
+    create_architect_project_tool,
+)
 from mcp.surfaces.admin.audit_and_purge_object_links import (
     AUDIT_AND_PURGE_OBJECT_LINKS_SCHEMA,
     audit_and_purge_object_links,
@@ -25,6 +31,11 @@ from mcp.surfaces.admin.manage_auth_cards import (
     create_manage_auth_cards_tool,
     manage_auth_cards,
 )
+from mcp.surfaces.admin.manage_cycles_and_modules import (
+    MANAGE_CYCLES_AND_MODULES_SCHEMA,
+    create_manage_cycles_and_modules_tool,
+    manage_cycles_and_modules,
+)
 from mcp.surfaces.admin.override_ticket_provenance import (
     OVERRIDE_TICKET_PROVENANCE_SCHEMA,
     override_ticket_provenance,
@@ -35,23 +46,29 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ADMIN_TOOL_NAMES",
+    "ARCHITECT_PROJECT_SCHEMA",
     "AUDIT_AND_PURGE_OBJECT_LINKS_SCHEMA",
     "CONFIGURE_WORKSPACE_SCHEMA",
     "DESTRUCTIVE_LIFECYCLE_SCHEMA",
     "MANAGE_AUTH_CARDS_SCHEMA",
+    "MANAGE_CYCLES_AND_MODULES_SCHEMA",
     "OVERRIDE_TICKET_PROVENANCE_SCHEMA",
+    "architect_project",
     "audit_and_purge_object_links",
     "build_admin_registry",
     "configure_workspace",
     "create_admin_registry",
     "destructive_lifecycle",
     "manage_auth_cards",
+    "manage_cycles_and_modules",
     "override_ticket_provenance",
 ]
 
 ADMIN_TOOL_NAMES: Final[tuple[str, ...]] = (
     "configure_workspace",
     "manage_auth_cards",
+    "architect_project",
+    "manage_cycles_and_modules",
     "override_ticket_provenance",
     "audit_and_purge_object_links",
     "destructive_lifecycle",
@@ -63,6 +80,8 @@ def build_admin_registry(client: KanbanApiClient | None = None) -> ToolRegistry:
     registry = ToolRegistry(Surface.ADMIN)
     registry.register(create_configure_workspace_tool())
     registry.register(create_manage_auth_cards_tool())
+    registry.register(create_architect_project_tool())
+    registry.register(create_manage_cycles_and_modules_tool())
     registry.register(
         ToolSpec(
             name="override_ticket_provenance",
