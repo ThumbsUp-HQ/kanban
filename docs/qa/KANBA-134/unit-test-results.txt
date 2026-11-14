@@ -1,0 +1,37 @@
+
+> @kanban/web@0.1.0 test:unit /tmp/kb-wt-KANBA-134/kanban/web
+> vitest run src/features/admin-auth --coverage '--coverage.include=src/features/admin-auth/**'
+
+
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-134/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-auth/cardRank.test.ts (11 tests) 24ms
+ ✓ src/features/admin-auth/adminAuthApi.test.ts (9 tests) 17ms
+ ✓ src/features/admin-auth/LockoutPreventedBanner.test.tsx (5 tests) 367ms
+ ✓ src/features/admin-auth/AuthCardRow.test.tsx (7 tests) 441ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (19 tests) 1693ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (19)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 335ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (26 tests) 3075ms
+   ✓ AuthStudioPage (KB-P3-36) (26)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 383ms
+     ✓ opens drawer to add a new auth card and appends created card 380ms
+
+ Test Files  6 passed (6)
+      Tests  77 passed (77)
+   Start at  22:45:55
+   Duration  4.58s (tests 46%, environment 44%, import 6%, worker 3%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    99.4 |    96.92 |   98.56 |     100 |                   
+ ...itorDrawer.tsx |     100 |    98.13 |     100 |     100 | 91-92,229,236     
+ AuthCardRow.tsx   |     100 |      100 |     100 |     100 |                   
+ ...StudioPage.tsx |   98.71 |     92.8 |   98.38 |     100 | ...75,340-341,366 
+ ...ntedBanner.tsx |     100 |      100 |   83.33 |     100 |                   
+ adminAuthApi.ts   |     100 |      100 |     100 |     100 |                   
+ cardRank.ts       |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
