@@ -1,24 +1,61 @@
-============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/kanban
-configfile: pyproject.toml
-plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
-asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 21 items
 
-database/tests/migrations/test_p5_12_migration.py .                      [  4%]
-database/tests/test_custom_field_approvals_trigger.py ...                [ 19%]
-kanban/tests/custom_fields/test_approvals_matrix.py .........            [ 61%]
-kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [100%]
+ RUN  v5.1.0 /tmp/kb-wt-KANBA-114/kanban/web
+      Coverage enabled with v8
 
-================================ tests coverage ================================
-_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+ ✓ src/features/access/AgentKillSwitchControl.test.tsx (4 tests) 453ms
+   ✓ AgentKillSwitchControl (4)
+     ✓ renders [ Kill Switch ] and triggers 2-step confirmation with default Cancel focus 305ms
+ ✓ src/features/access/useAccessInspector.test.tsx (7 tests) 607ms
+   ✓ useAccessInspector & AccessInspectorHost (7)
+     ✓ opens inspector via window.dispatchEvent and ignores invalid objectId 382ms
+stderr | src/features/access/AccessInspectorPopover.test.tsx > AccessInspectorPopover > traps Tab and Shift+Tab focus correctly within dialog
+An update to EmojiHint inside a test was not wrapped in act(...).
 
-Name                                      Stmts   Miss Branch BrPart  Cover   Missing
--------------------------------------------------------------------------------------
-kanban/api/v1/custom_field_approvals.py      24      0      0      0   100%
-kanban/custom_fields/approvals.py           201      4     72      6    96%   329, 374->377, 386->388, 413->416, 437-438, 566
--------------------------------------------------------------------------------------
-TOTAL                                       225      4     72      6    97%
-============================== 21 passed in 7.78s ==============================
-EXIT_CODE=0
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EmojiHint inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EmojiHint inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/access/AccessInspectorPopover.test.tsx (11 tests) 934ms
+   ✓ AccessInspectorPopover (11)
+     ✓ renders positive S3.4 wireframe parity for KAN-142 469ms
+
+ Test Files  3 passed (3)
+      Tests  22 passed (22)
+   Start at  21:40:28
+   Duration  2.54s (environment 49%, tests 33%, import 12%, worker 3%, transform 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    96.57 |     100 |     100 |                   
+ ...torPopover.tsx |     100 |    95.55 |     100 |     100 | ...83,195-200,466 
+ ...tchControl.tsx |     100 |      100 |     100 |     100 |                   
+ ...sInspector.tsx |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
+EXIT: 0
