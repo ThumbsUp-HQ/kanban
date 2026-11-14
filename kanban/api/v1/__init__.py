@@ -21,6 +21,9 @@ from kanban.api.v1.auth_session import router as auth_session_router
 from kanban.api.v1.auth_setup import router as auth_setup_router
 from kanban.api.v1.auth_webauthn import router as auth_webauthn_router
 from kanban.api.v1.comments import router as comments_router
+from kanban.api.v1.custom_field_approvals import (
+    router as custom_field_approvals_router,
+)
 from kanban.api.v1.custom_fields import router as custom_fields_router
 from kanban.api.v1.cycles import router as cycles_router
 from kanban.api.v1.docs import router as docs_router
@@ -89,4 +92,5 @@ def build_v1_router() -> APIRouter:
     v1.include_router(subscriptions_router)
     v1.include_router(notifications_router)
     v1.include_router(search_router)
+    v1.include_router(custom_field_approvals_router)
     return v1

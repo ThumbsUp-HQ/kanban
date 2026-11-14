@@ -169,6 +169,10 @@ class ActivityEventType(StrEnum):
     AUTH_CARD_REORDERED = "AUTH_CARD_REORDERED"
     AUTH_CARD_DELETED = "AUTH_CARD_DELETED"
     AUTH_CARD_HANDSHAKE_TESTED = "AUTH_CARD_HANDSHAKE_TESTED"
+    CUSTOM_FIELD_APPROVAL_REQUESTED = "CUSTOM_FIELD_APPROVAL_REQUESTED"
+    CUSTOM_FIELD_APPROVED_PRIMARY = "CUSTOM_FIELD_APPROVED_PRIMARY"
+    CUSTOM_FIELD_APPROVED = "CUSTOM_FIELD_APPROVED"
+    CUSTOM_FIELD_APPROVAL_REVOKED = "CUSTOM_FIELD_APPROVAL_REVOKED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -283,6 +287,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.AUTH_CARD_REORDERED: ActivityCategory.SYSTEM,
         ActivityEventType.AUTH_CARD_DELETED: ActivityCategory.SYSTEM,
         ActivityEventType.AUTH_CARD_HANDSHAKE_TESTED: ActivityCategory.SYSTEM,
+        ActivityEventType.CUSTOM_FIELD_APPROVAL_REQUESTED: ActivityCategory.HISTORY,
+        ActivityEventType.CUSTOM_FIELD_APPROVED_PRIMARY: ActivityCategory.HISTORY,
+        ActivityEventType.CUSTOM_FIELD_APPROVED: ActivityCategory.HISTORY,
+        ActivityEventType.CUSTOM_FIELD_APPROVAL_REVOKED: ActivityCategory.HISTORY,
     }
 )
 
