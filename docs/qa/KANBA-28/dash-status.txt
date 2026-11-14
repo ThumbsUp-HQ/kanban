@@ -1,0 +1,10 @@
+NOT AVAILABLE: no remote CI run exists for this change yet.
+
+- The implementer does not push to origin (coordinator verifies and pushes) and has no Dash MCP tool
+  in this session, so no Dash `status` / `wait` / `logs` output was captured.
+- Remote is Forgejo (ssh://git@192.168.1.100:2223/AI/thumbs-up-kanban.git), not GitHub; the ticket's
+  "BLOCKED: no GitHub remote" clause (item 7) was superseded by the coordinator/orchestrator
+  instruction to reuse the existing Forgejo workflow on runner inferrence1.
+- Required follow-up after the coordinator pushes: run Dash `status`, `wait`, and `logs` for the
+  pushed SHA and append the raw output here. ci-artifact-listing.txt and ci-logs/ (GitHub artifact
+  upload) are N/A: logs go to Dash /api/logs, not upload-artifact.

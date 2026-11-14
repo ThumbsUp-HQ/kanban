@@ -1,0 +1,24 @@
+$ uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py -q
+.....................                                                    [100%]
+21 passed in 0.10s
+exit: 0
+
+$ ... --cov=scripts.ci --cov-fail-under=95   (orchestrator command)
+...................../home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/inorout.py:560: CoverageWarning: Module scripts.ci was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/control.py:967: CoverageWarning: No data was collected. (no-data-collected); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-no-data-collected
+  self._warn("No data was collected.", slug="no-data-collected")
+/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/pytest_cov/plugin.py:366: CovReportWarning: Failed to generate report: No data to report.
+
+  warnings.warn(CovReportWarning(message), stacklevel=1)
+
+WARNING: Failed to generate report: No data to report.
+
+
+ERROR: Coverage failure: total of 0 is less than fail-under=95
+                                                                         [100%]
+================================ tests coverage ================================
+FAIL Required test coverage of 95% not reached. Total coverage: 0.00%
+21 passed in 0.21s
+exit: 1
+NOTE: scripts/ci contains only run_and_log.sh (bash); coverage.py measures Python only, so --cov=scripts.ci reports no data and cannot reach 95%. Behavior of the shell script is covered by test_run_and_log.py (8 tests: success, failure, tee, traversal, charset, usage, no-eval, default dir).

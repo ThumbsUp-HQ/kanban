@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  CI_JOB_NAME: build-test-push
+
 jobs:
   build-test-push:
     runs-on: [inferrence1]
@@ -32,29 +35,25 @@ jobs:
       - name: Run lint and checks
         shell: bash
         run: |
-          set -o pipefail
-          echo "=== Lint, Type Checks, and License Gate ===" >> build.log
-          (uv sync --locked && make check && make license) 2>&1 | tee -a build.log
+          scripts/ci/run_and_log.sh lint-type-license -- \
+            bash -c 'uv sync --locked && make check && make license'
 
       - name: Start test database
         shell: bash
         run: |
-          set -o pipefail
-          echo "=== Test Database Startup ===" >> build.log
-          make testdb-up 2>&1 | tee -a build.log
+          scripts/ci/run_and_log.sh testdb-up -- make testdb-up
 
       - name: Run tests
         shell: bash
         run: |
-          set -o pipefail
-          echo "=== Unit Tests ===" >> build.log
-          (uv run pytest -q -m "not container") 2>&1 | tee -a build.log
+          scripts/ci/run_and_log.sh unit-tests -- \
+            uv run pytest -q -m "not container"
 
       - name: Stop test database
         if: always()
         shell: bash
         run: |
-          make testdb-down 2>&1 | tee -a build.log || true
+          scripts/ci/run_and_log.sh testdb-down -- make testdb-down || true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -75,17 +74,24 @@ jobs:
       - name: Upload logs to Dash
         if: always()
         shell: bash
+        env:
+          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
         run: |
-          TOKEN="${{ secrets.DASH_TOKEN }}"
-          if [ -z "$TOKEN" ]; then
-            TOKEN="${DASH_TOKEN:-}"
+          # Concatenate every per-step log into one body; never fail the job on upload problems.
+          if [ -z "${DASH_TOKEN:-}" ]; then
+            echo "Notice: DASH_TOKEN missing; skipping Dash upload"
+            exit 0
           fi
-          if [ -f build.log ] && [ -n "$TOKEN" ]; then
-            echo "Uploading build.log to Dash..."
-            curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
-                 -H "Authorization: Bearer ${TOKEN}" \
-                 -H "Content-Type: text/plain" \
-                 --data-binary @build.log
-          else
-            echo "Notice: build.log or DASH_TOKEN missing (TOKEN length: ${#TOKEN})"
+          if ! ls ci-logs/*/*.log >/dev/null 2>&1; then
+            echo "Notice: no ci-logs/*/*.log files to upload"
+            exit 0
           fi
+          for f in ci-logs/*/*.log; do
+            printf '=== %s (exit %s) ===\n' "$f" "$(cat "${f%.log}.exit" 2>/dev/null || echo '?')"
+            cat "$f"
+          done > build.log
+          echo "Uploading build.log to Dash..."
+          curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
+               -H "Authorization: Bearer ${DASH_TOKEN}" \
+               -H "Content-Type: text/plain" \
+               --data-binary @build.log || echo "Notice: Dash upload failed"

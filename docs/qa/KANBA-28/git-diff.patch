@@ -1,0 +1,540 @@
+diff --git a/.forgejo/workflows/ci.yml b/.forgejo/workflows/ci.yml
+index 5f33235..39a5d65 100644
+--- a/.forgejo/workflows/ci.yml
++++ b/.forgejo/workflows/ci.yml
+@@ -5,6 +5,9 @@ on:
+     branches: [main]
+   pull_request:
+ 
++env:
++  CI_JOB_NAME: build-test-push
++
+ jobs:
+   build-test-push:
+     runs-on: [inferrence1]
+@@ -32,29 +35,25 @@ jobs:
+       - name: Run lint and checks
+         shell: bash
+         run: |
+-          set -o pipefail
+-          echo "=== Lint, Type Checks, and License Gate ===" >> build.log
+-          (uv sync --locked && make check && make license) 2>&1 | tee -a build.log
++          scripts/ci/run_and_log.sh lint-type-license -- \
++            bash -c 'uv sync --locked && make check && make license'
+ 
+       - name: Start test database
+         shell: bash
+         run: |
+-          set -o pipefail
+-          echo "=== Test Database Startup ===" >> build.log
+-          make testdb-up 2>&1 | tee -a build.log
++          scripts/ci/run_and_log.sh testdb-up -- make testdb-up
+ 
+       - name: Run tests
+         shell: bash
+         run: |
+-          set -o pipefail
+-          echo "=== Unit Tests ===" >> build.log
+-          (uv run pytest -q -m "not container") 2>&1 | tee -a build.log
++          scripts/ci/run_and_log.sh unit-tests -- \
++            uv run pytest -q -m "not container"
+ 
+       - name: Stop test database
+         if: always()
+         shell: bash
+         run: |
+-          make testdb-down 2>&1 | tee -a build.log || true
++          scripts/ci/run_and_log.sh testdb-down -- make testdb-down || true
+ 
+       - name: Set up Docker Buildx
+         uses: docker/setup-buildx-action@v3
+@@ -75,17 +74,24 @@ jobs:
+       - name: Upload logs to Dash
+         if: always()
+         shell: bash
++        env:
++          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
+         run: |
+-          TOKEN="${{ secrets.DASH_TOKEN }}"
+-          if [ -z "$TOKEN" ]; then
+-            TOKEN="${DASH_TOKEN:-}"
++          # Concatenate every per-step log into one body; never fail the job on upload problems.
++          if [ -z "${DASH_TOKEN:-}" ]; then
++            echo "Notice: DASH_TOKEN missing; skipping Dash upload"
++            exit 0
+           fi
+-          if [ -f build.log ] && [ -n "$TOKEN" ]; then
+-            echo "Uploading build.log to Dash..."
+-            curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
+-                 -H "Authorization: Bearer ${TOKEN}" \
+-                 -H "Content-Type: text/plain" \
+-                 --data-binary @build.log
+-          else
+-            echo "Notice: build.log or DASH_TOKEN missing (TOKEN length: ${#TOKEN})"
++          if ! ls ci-logs/*/*.log >/dev/null 2>&1; then
++            echo "Notice: no ci-logs/*/*.log files to upload"
++            exit 0
+           fi
++          for f in ci-logs/*/*.log; do
++            printf '=== %s (exit %s) ===\n' "$f" "$(cat "${f%.log}.exit" 2>/dev/null || echo '?')"
++            cat "$f"
++          done > build.log
++          echo "Uploading build.log to Dash..."
++          curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
++               -H "Authorization: Bearer ${DASH_TOKEN}" \
++               -H "Content-Type: text/plain" \
++               --data-binary @build.log || echo "Notice: Dash upload failed"
+diff --git a/.github/actionlint.yaml b/.github/actionlint.yaml
+new file mode 100644
+index 0000000..342f80e
+--- /dev/null
++++ b/.github/actionlint.yaml
+@@ -0,0 +1,4 @@
++# actionlint config: declare the project Forgejo self-hosted runner label (KB-P0-06).
++self-hosted-runner:
++  labels:
++    - inferrence1
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 5f33235..39a5d65 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -5,6 +5,9 @@ on:
+     branches: [main]
+   pull_request:
+ 
++env:
++  CI_JOB_NAME: build-test-push
++
+ jobs:
+   build-test-push:
+     runs-on: [inferrence1]
+@@ -32,29 +35,25 @@ jobs:
+       - name: Run lint and checks
+         shell: bash
+         run: |
+-          set -o pipefail
+-          echo "=== Lint, Type Checks, and License Gate ===" >> build.log
+-          (uv sync --locked && make check && make license) 2>&1 | tee -a build.log
++          scripts/ci/run_and_log.sh lint-type-license -- \
++            bash -c 'uv sync --locked && make check && make license'
+ 
+       - name: Start test database
+         shell: bash
+         run: |
+-          set -o pipefail
+-          echo "=== Test Database Startup ===" >> build.log
+-          make testdb-up 2>&1 | tee -a build.log
++          scripts/ci/run_and_log.sh testdb-up -- make testdb-up
+ 
+       - name: Run tests
+         shell: bash
+         run: |
+-          set -o pipefail
+-          echo "=== Unit Tests ===" >> build.log
+-          (uv run pytest -q -m "not container") 2>&1 | tee -a build.log
++          scripts/ci/run_and_log.sh unit-tests -- \
++            uv run pytest -q -m "not container"
+ 
+       - name: Stop test database
+         if: always()
+         shell: bash
+         run: |
+-          make testdb-down 2>&1 | tee -a build.log || true
++          scripts/ci/run_and_log.sh testdb-down -- make testdb-down || true
+ 
+       - name: Set up Docker Buildx
+         uses: docker/setup-buildx-action@v3
+@@ -75,17 +74,24 @@ jobs:
+       - name: Upload logs to Dash
+         if: always()
+         shell: bash
++        env:
++          DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
+         run: |
+-          TOKEN="${{ secrets.DASH_TOKEN }}"
+-          if [ -z "$TOKEN" ]; then
+-            TOKEN="${DASH_TOKEN:-}"
++          # Concatenate every per-step log into one body; never fail the job on upload problems.
++          if [ -z "${DASH_TOKEN:-}" ]; then
++            echo "Notice: DASH_TOKEN missing; skipping Dash upload"
++            exit 0
+           fi
+-          if [ -f build.log ] && [ -n "$TOKEN" ]; then
+-            echo "Uploading build.log to Dash..."
+-            curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
+-                 -H "Authorization: Bearer ${TOKEN}" \
+-                 -H "Content-Type: text/plain" \
+-                 --data-binary @build.log
+-          else
+-            echo "Notice: build.log or DASH_TOKEN missing (TOKEN length: ${#TOKEN})"
++          if ! ls ci-logs/*/*.log >/dev/null 2>&1; then
++            echo "Notice: no ci-logs/*/*.log files to upload"
++            exit 0
+           fi
++          for f in ci-logs/*/*.log; do
++            printf '=== %s (exit %s) ===\n' "$f" "$(cat "${f%.log}.exit" 2>/dev/null || echo '?')"
++            cat "$f"
++          done > build.log
++          echo "Uploading build.log to Dash..."
++          curl -k -s -X POST "https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban" \
++               -H "Authorization: Bearer ${DASH_TOKEN}" \
++               -H "Content-Type: text/plain" \
++               --data-binary @build.log || echo "Notice: Dash upload failed"
+diff --git a/docs/CI.md b/docs/CI.md
+new file mode 100644
+index 0000000..e2c5b41
+--- /dev/null
++++ b/docs/CI.md
+@@ -0,0 +1,67 @@
++# CI Pipeline (KB-P0-06)
++
++CI runs on the project Forgejo runner `inferrence1` (workflow
++`.forgejo/workflows/ci.yml`, mirrored byte-for-byte at `.github/workflows/ci.yml`; a unit
++test fails if the two drift). It is a single job, `build-test-push`.
++
++## Jobs
++
++| Job id | Step | Command (wrapped by `scripts/ci/run_and_log.sh`) | Log name |
++| :--- | :--- | :--- | :--- |
++| `build-test-push` | Run lint and checks | `uv sync --locked && make check && make license` | `lint-type-license` |
++| `build-test-push` | Start test database | `make testdb-up` | `testdb-up` |
++| `build-test-push` | Run tests | `uv run pytest -q -m "not container"` | `unit-tests` |
++| `build-test-push` | Stop test database (`if: always()`) | `make testdb-down` | `testdb-down` |
++| `build-test-push` | Docker Buildx build and push | `docker/build-push-action` | (not captured) |
++| `build-test-push` | Upload logs to Dash (`if: always()`, last step) | `curl` POST of all step logs | n/a |
++
++The workflow triggers on `push` to `main` and on `pull_request`. It never uses
++`pull_request_target`. The only secrets referenced are `DOCKERHUB_USERNAME`,
++`DOCKERHUB_TOKEN` and `DASH_TOKEN`; `DASH_TOKEN` is passed through `env:` and never
++interpolated into the script body.
++
++## Reading Logs
++
++`scripts/ci/run_and_log.sh <logname> -- <command...>` runs the command as an argv vector
++(no `eval`), tees combined stdout and stderr, and exits with the command's exit code.
++Log names must match `^[a-z0-9-]+$` (otherwise exit `64`, nothing written).
++
++For each wrapped step it writes, under `ci-logs/build-test-push/`:
++
++- `<logname>.log`: combined stdout and stderr
++- `<logname>.exit`: the exit code
++
++The final `Upload logs to Dash` step concatenates every `ci-logs/*/*.log` (each prefixed
++with a `=== <path> (exit <n>) ===` header) into `build.log` and POSTs it to
++`https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban`.
++A missing `DASH_TOKEN` or an upload error never fails the job. Retrieve the uploaded log
++with the Dash `logs` tool (see below).
++
++## Dash Verification
++
++Follow the flow from <https://dash.hackedyour.info/llms.txt> with the Dash MCP tools:
++
++1. After `git push`, call Dash `status` for the repo to see the run for the pushed SHA.
++2. Call Dash `wait` until the run completes. Never poll with manual `sleep` loops.
++3. On failure, call Dash `logs` and read the uploaded `build.log` (look for the failing
++   `=== ci-logs/... (exit N) ===` section) before changing code.
++
++A red `main` is an emergency: halt all other work and fix it before anything else
++(AGENTS.md, Broken Build Taboo).
++
++## Local validation
++
++```bash
++uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py -q
++docker run --rm -v "$PWD:/repo" -w /repo \
++  rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 \
++  -no-color .github/workflows/ci.yml .forgejo/workflows/ci.yml
++```
++
++The runner label `inferrence1` is declared in `.github/actionlint.yaml`.
++
++## Known gaps (follow-ups)
++
++- `uses:` references are tag-pinned (`@v4`), not 40-char SHA-pinned.
++- The Dash upload uses `curl -k` (certificate verification off), inherited from the original workflow.
++- The workflow is single-job; the multi-job split (web tests, docker build matrix) is not done.
+diff --git a/scripts/ci/run_and_log.sh b/scripts/ci/run_and_log.sh
+new file mode 100755
+index 0000000..65ca8c3
+--- /dev/null
++++ b/scripts/ci/run_and_log.sh
+@@ -0,0 +1,36 @@
++#!/usr/bin/env bash
++# Run a command, tee combined stdout/stderr to ci-logs/<job>/<logname>.log and
++# record its exit code in ci-logs/<job>/<logname>.exit (KB-P0-06).
++#
++# Usage: run_and_log.sh <logname> -- <command> [args...]
++#
++# Contract:
++#   - <logname> must match ^[a-z0-9-]+$ (else exit 64, nothing written).
++#   - Log directory is $CI_LOG_DIR (default: ci-logs/${CI_JOB_NAME:-default}).
++#   - Exit status is the wrapped command's exit status (pipefail semantics).
++#   - No eval, no shell re-parsing: the command is executed as an argv vector.
++set -euo pipefail
++
++if [ "$#" -lt 3 ] || [ "$2" != "--" ]; then
++  echo "usage: run_and_log.sh <logname> -- <command> [args...]" >&2
++  exit 64
++fi
++
++logname="$1"
++shift 2
++
++if ! [[ "$logname" =~ ^[a-z0-9-]+$ ]]; then
++  echo "run_and_log.sh: invalid log name (must match ^[a-z0-9-]+\$)" >&2
++  exit 64
++fi
++
++log_dir="${CI_LOG_DIR:-ci-logs/${CI_JOB_NAME:-default}}"
++mkdir -p -- "$log_dir"
++log_file="$log_dir/$logname.log"
++exit_file="$log_dir/$logname.exit"
++
++rc=0
++"$@" 2>&1 | tee -- "$log_file" || rc=$?
++# pipefail makes the pipeline status the command's status; tee failure also surfaces here.
++printf '%s\n' "$rc" > "$exit_file"
++exit "$rc"
+diff --git a/scripts/tests/test_ci_workflow.py b/scripts/tests/test_ci_workflow.py
+new file mode 100644
+index 0000000..eabfebc
+--- /dev/null
++++ b/scripts/tests/test_ci_workflow.py
+@@ -0,0 +1,145 @@
++"""Structural and security tests for the CI workflow (KB-P0-06 / KANBA-28).
++
++The project CI runs on the Forgejo runner ``inferrence1`` as a single
++``build-test-push`` job. These tests pin the invariants that keep failed runs
++diagnosable: every verification command is wrapped by ``run_and_log.sh``, the
++Dash log upload always runs last, and the workflow never widens its trigger or
++permission surface.
++"""
++
++from __future__ import annotations
++
++from pathlib import Path
++from typing import Any, cast
++
++import pytest
++import yaml
++
++REPO_ROOT = Path(__file__).resolve().parents[2]
++GITHUB_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
++FORGEJO_WORKFLOW = REPO_ROOT / ".forgejo" / "workflows" / "ci.yml"
++JOB_ID = "build-test-push"
++
++
++def _load(path: Path) -> dict[str, Any]:
++    """Parse a workflow with ``safe_load`` only (never ``yaml.load``)."""
++    return cast("dict[str, Any]", yaml.safe_load(path.read_text(encoding="utf-8")))
++
++
++@pytest.fixture(scope="module")
++def workflow() -> dict[str, Any]:
++    """Return the parsed Forgejo workflow."""
++    return _load(FORGEJO_WORKFLOW)
++
++
++@pytest.fixture(scope="module")
++def steps(workflow: dict[str, Any]) -> list[dict[str, Any]]:
++    """Return the ordered steps of the single CI job."""
++    return cast("list[dict[str, Any]]", workflow["jobs"][JOB_ID]["steps"])
++
++
++def _step(steps: list[dict[str, Any]], name: str) -> dict[str, Any]:
++    matches = [s for s in steps if s.get("name") == name]
++    assert len(matches) == 1, f"expected exactly one step named {name!r}"
++    return matches[0]
++
++
++def test_workflow_copies_are_identical() -> None:
++    """Positive: the GitHub and Forgejo workflow files must not drift."""
++    assert GITHUB_WORKFLOW.read_text(encoding="utf-8") == FORGEJO_WORKFLOW.read_text(
++        encoding="utf-8"
++    )
++
++
++def test_job_runs_on_inferrence1(workflow: dict[str, Any]) -> None:
++    """Positive: the single job targets the project Forgejo runner."""
++    assert list(workflow["jobs"]) == [JOB_ID]
++    assert workflow["jobs"][JOB_ID]["runs-on"] == ["inferrence1"]
++
++
++def test_triggers_exclude_pull_request_target(workflow: dict[str, Any]) -> None:
++    """Security: no pull_request_target (it would expose secrets to forks)."""
++    # YAML 1.1 (PyYAML) parses the bare key `on` as boolean True.
++    raw = cast("dict[Any, Any]", workflow)
++    triggers = raw.get("on", raw.get(True))
++    assert triggers is not None
++    assert "pull_request_target" not in triggers
++    assert "push" in triggers
++    assert "pull_request" in triggers
++
++
++def test_verification_steps_use_run_and_log(steps: list[dict[str, Any]]) -> None:
++    """Positive: lint, DB start/stop and tests are wrapped for log capture."""
++    expected = {
++        "Run lint and checks": "run_and_log.sh lint-type-license --",
++        "Start test database": "run_and_log.sh testdb-up --",
++        "Run tests": "run_and_log.sh unit-tests --",
++        "Stop test database": "run_and_log.sh testdb-down --",
++    }
++    for name, needle in expected.items():
++        assert needle in _step(steps, name)["run"]
++
++
++def test_unit_test_command_excludes_container_marker(steps: list[dict[str, Any]]) -> None:
++    """Boundary: the runner has no nested docker for container-marked tests."""
++    assert 'pytest -q -m "not container"' in _step(steps, "Run tests")["run"]
++
++
++def test_lint_step_runs_make_check_and_license(steps: list[dict[str, Any]]) -> None:
++    """Positive: the Shift-Left gates stay in the pipeline."""
++    run = _step(steps, "Run lint and checks")["run"]
++    assert "make check" in run
++    assert "make license" in run
++    assert "uv sync --locked" in run
++
++
++def test_testdb_teardown_always_runs(steps: list[dict[str, Any]]) -> None:
++    """Positive: DB teardown runs on failure too."""
++    assert _step(steps, "Stop test database")["if"] == "always()"
++
++
++def test_dash_upload_is_last_and_always(steps: list[dict[str, Any]]) -> None:
++    """Positive: logs are uploaded to Dash with if: always(), as the final step."""
++    last = steps[-1]
++    assert last["name"] == "Upload logs to Dash"
++    assert last["if"] == "always()"
++    assert "https://dash.hackedyour.info/api/logs" in last["run"]
++    assert "ci-logs/*/*.log" in last["run"]
++
++
++def test_dash_token_passed_via_env_not_inlined(steps: list[dict[str, Any]]) -> None:
++    """Security: the Dash token is an env var, never interpolated into the script."""
++    last = steps[-1]
++    assert last["env"] == {"DASH_TOKEN": "${{ secrets.DASH_TOKEN }}"}
++    assert "secrets." not in last["run"]
++
++
++def test_dash_upload_tolerates_missing_token(steps: list[dict[str, Any]]) -> None:
++    """Negative: a missing token skips the upload instead of failing the job."""
++    run = steps[-1]["run"]
++    assert 'if [ -z "${DASH_TOKEN:-}" ]' in run
++    assert "exit 0" in run
++
++
++def test_job_log_dir_env_is_set(workflow: dict[str, Any]) -> None:
++    """Positive: CI_JOB_NAME places logs under ci-logs/build-test-push/."""
++    assert workflow["env"] == {"CI_JOB_NAME": JOB_ID}
++
++
++def test_only_expected_secrets_referenced() -> None:
++    """Security: only the registry and Dash secrets are ever referenced."""
++    text = FORGEJO_WORKFLOW.read_text(encoding="utf-8")
++    refs = {part.split("}}")[0].strip() for part in text.split("secrets.")[1:]}
++    assert refs <= {
++        "DOCKERHUB_USERNAME",
++        "DOCKERHUB_TOKEN",
++        "DASH_TOKEN",
++    }
++
++
++def test_ci_doc_has_required_sections() -> None:
++    """Positive: docs/CI.md documents jobs, log reading and Dash verification."""
++    text = (REPO_ROOT / "docs" / "CI.md").read_text(encoding="utf-8")
++    for heading in ("## Jobs", "## Reading Logs", "## Dash Verification"):
++        assert heading in text
++    assert "https://dash.hackedyour.info/llms.txt" in text
+diff --git a/scripts/tests/test_run_and_log.py b/scripts/tests/test_run_and_log.py
+new file mode 100644
+index 0000000..29ef513
+--- /dev/null
++++ b/scripts/tests/test_run_and_log.py
+@@ -0,0 +1,86 @@
++"""Behavior tests for scripts/ci/run_and_log.sh (KB-P0-06 / KANBA-28)."""
++
++from __future__ import annotations
++
++import subprocess
++from pathlib import Path
++
++REPO_ROOT = Path(__file__).resolve().parents[2]
++SCRIPT = REPO_ROOT / "scripts" / "ci" / "run_and_log.sh"
++
++
++def _run(tmp_path: Path, *args: str, job: str | None = None) -> subprocess.CompletedProcess[str]:
++    env = {"PATH": "/usr/bin:/bin", "CI_LOG_DIR": str(tmp_path / "logs")}
++    if job is not None:
++        env.pop("CI_LOG_DIR")
++        env["CI_JOB_NAME"] = job
++    return subprocess.run(
++        [str(SCRIPT), *args],
++        capture_output=True,
++        text=True,
++        check=False,
++        env=env,
++        cwd=tmp_path,
++    )
++
++
++def test_success_writes_log_and_zero_exit(tmp_path: Path) -> None:
++    """Positive: a passing command exits 0 and records exit code 0."""
++    result = _run(tmp_path, "ok", "--", "true")
++    assert result.returncode == 0
++    assert (tmp_path / "logs" / "ok.exit").read_text() == "0\n"
++    assert (tmp_path / "logs" / "ok.log").exists()
++
++
++def test_failure_propagates_exit_code(tmp_path: Path) -> None:
++    """Positive: a failing command exits 1 and records exit code 1."""
++    result = _run(tmp_path, "bad", "--", "false")
++    assert result.returncode == 1
++    assert (tmp_path / "logs" / "bad.exit").read_text() == "1\n"
++
++
++def test_output_is_teed_to_stdout_and_log(tmp_path: Path) -> None:
++    """Positive: combined stdout and stderr are captured and still echoed."""
++    result = _run(tmp_path, "tee-check", "--", "bash", "-c", "echo out; echo err >&2; exit 3")
++    assert result.returncode == 3
++    log = (tmp_path / "logs" / "tee-check.log").read_text()
++    assert "out" in log
++    assert "err" in log
++    assert "out" in result.stdout
++    assert (tmp_path / "logs" / "tee-check.exit").read_text() == "3\n"
++
++
++def test_path_traversal_log_name_rejected(tmp_path: Path) -> None:
++    """Security: '../x' exits 64 and writes nothing outside the log dir."""
++    result = _run(tmp_path, "../x", "--", "true")
++    assert result.returncode == 64
++    assert not (tmp_path / "x.log").exists()
++    assert not (tmp_path / "x.exit").exists()
++    assert not (tmp_path / "logs").exists()
++
++
++def test_uppercase_and_slash_names_rejected(tmp_path: Path) -> None:
++    """Boundary: only ^[a-z0-9-]+$ is accepted."""
++    for bad in ("Bad", "a/b", "a b", "a_b", ""):
++        assert _run(tmp_path, bad, "--", "true").returncode == 64
++
++
++def test_missing_separator_is_usage_error(tmp_path: Path) -> None:
++    """Negative: omitting '--' is a usage error (64)."""
++    assert _run(tmp_path, "ok", "true", "x").returncode == 64
++    assert _run(tmp_path, "ok").returncode == 64
++
++
++def test_arguments_are_not_shell_expanded(tmp_path: Path) -> None:
++    """Security: arguments are passed as an argv vector, never eval'd."""
++    result = _run(tmp_path, "argv", "--", "printf", "%s", "$(touch pwned); `id`")
++    assert result.returncode == 0
++    assert not (tmp_path / "pwned").exists()
++    assert "$(touch pwned)" in (tmp_path / "logs" / "argv.log").read_text()
++
++
++def test_default_dir_uses_job_name(tmp_path: Path) -> None:
++    """Positive: without CI_LOG_DIR logs land in ci-logs/<CI_JOB_NAME>/."""
++    result = _run(tmp_path, "ok", "--", "true", job="my-job")
++    assert result.returncode == 0
++    assert (tmp_path / "ci-logs" / "my-job" / "ok.exit").read_text() == "0\n"
