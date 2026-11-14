@@ -10,12 +10,12 @@ import logging
 import secrets
 import time
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 from starlette.responses import JSONResponse, Response
 
-from mcp.auth import SCOPE_REQUIREMENTS, hash_mcp_api_key
+from mcp.auth import SCOPE_REQUIREMENTS, McpAuthContext, hash_mcp_api_key
 from mcp.context import (
     McpRequestContext,
     reset_current_mcp_context,
@@ -30,7 +30,6 @@ if TYPE_CHECKING:
 
     from starlette.requests import Request
 
-    from mcp.auth import McpAuthContext
     from mcp.internal_client import KanbanApiClient
     from mcp.registry import Surface, ToolRegistry
     from mcp.settings import McpSettings
@@ -252,7 +251,7 @@ class McpProtocolHandler:
 
         return await self._process_valid_payload(payload, request)
 
-    async def _process_valid_payload(
+    async def _process_valid_payload(  # noqa: C901
         self,
         payload: dict[str, Any],
         request: Request,
@@ -314,15 +313,19 @@ class McpProtocolHandler:
             if "x-kb-aal-level" in request.headers:
                 with contextlib.suppress(ValueError):
                     aal_level = int(request.headers["x-kb-aal-level"])
-            token_kind = "api_key"
+            token_kind = "api_key"  # noqa: S105
             auth_context = McpAuthContext(
+                token=subject_token or "",
+                token_sha256=current_token_sha256 or b"",
+                surface=self.surface,
                 scopes=caller_scopes or frozenset(),
                 aal_level=aal_level,
                 token_kind=token_kind,
             )
         elif "x-kb-aal-level" in request.headers:
             with contextlib.suppress(ValueError):
-                auth_context.aal_level = int(request.headers["x-kb-aal-level"])
+                header_aal = int(request.headers["x-kb-aal-level"])
+                auth_context = replace(auth_context, aal_level=header_aal)
 
         return await self._dispatch_method(
             method,
@@ -495,7 +498,6 @@ class McpProtocolHandler:
         subject_token: str | None = None,
         caller_scopes: frozenset[str] | None = None,
         auth_context: McpAuthContext | None = None,
-    ) -> JSONResponse:
     ) -> JSONResponse:
         validated = self._validate_tools_call_params(req_id, params)
         if isinstance(validated, JSONResponse):

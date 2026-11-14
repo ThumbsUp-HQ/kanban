@@ -177,6 +177,16 @@ class ActivityEventType(StrEnum):
     PLANE_IMPORT_COMPLETED = "PLANE_IMPORT_COMPLETED"
     WORKSPACE_SETTINGS_CHANGED = "WORKSPACE_SETTINGS_CHANGED"
     AIR_GAP_MODE_CHANGED = "AIR_GAP_MODE_CHANGED"
+    PRINCIPAL_PROVISIONED = "PRINCIPAL_PROVISIONED"
+    PRINCIPAL_UPDATED = "PRINCIPAL_UPDATED"
+    PRINCIPAL_DEACTIVATED = "PRINCIPAL_DEACTIVATED"
+    PRINCIPAL_REACTIVATED = "PRINCIPAL_REACTIVATED"
+    GROUP_MEMBER_ADDED = "GROUP_MEMBER_ADDED"
+    GROUP_MEMBER_REMOVED = "GROUP_MEMBER_REMOVED"
+    ROLE_BOUND = "ROLE_BOUND"
+    ROLE_UNBOUND = "ROLE_UNBOUND"
+    ACL_ENTRY_GRANTED = "ACL_ENTRY_GRANTED"
+    ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -299,6 +309,16 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.CUSTOM_FIELD_APPROVAL_REVOKED: ActivityCategory.HISTORY,
         ActivityEventType.WORKSPACE_SETTINGS_CHANGED: ActivityCategory.SYSTEM,
         ActivityEventType.AIR_GAP_MODE_CHANGED: ActivityCategory.SYSTEM,
+        ActivityEventType.PRINCIPAL_PROVISIONED: ActivityCategory.SYSTEM,
+        ActivityEventType.PRINCIPAL_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.PRINCIPAL_DEACTIVATED: ActivityCategory.SYSTEM,
+        ActivityEventType.PRINCIPAL_REACTIVATED: ActivityCategory.SYSTEM,
+        ActivityEventType.GROUP_MEMBER_ADDED: ActivityCategory.SYSTEM,
+        ActivityEventType.GROUP_MEMBER_REMOVED: ActivityCategory.SYSTEM,
+        ActivityEventType.ROLE_BOUND: ActivityCategory.SYSTEM,
+        ActivityEventType.ROLE_UNBOUND: ActivityCategory.SYSTEM,
+        ActivityEventType.ACL_ENTRY_GRANTED: ActivityCategory.SYSTEM,
+        ActivityEventType.ACL_ENTRY_REVOKED: ActivityCategory.SYSTEM,
     }
 )
 

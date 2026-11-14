@@ -76,6 +76,10 @@ SCOPE_REQUIREMENTS: Final[dict[str, frozenset[str]]] = {
     "promote_sticky_to_doc": frozenset({"docs:write"}),
     "link_knowledge": frozenset({"docs:write"}),
     # Admin surface tools
+    "configure_workspace": frozenset({"admin:read"}),
+    "manage_auth_cards": frozenset({"admin:read"}),
+    "manage_principals_and_groups": frozenset({"admin:read"}),
+    "manage_access_policies": frozenset({"admin:read"}),
     "audit_links": frozenset({"admin:read"}),
     "override_ticket_provenance": frozenset({"admin:write"}),
     "audit_and_purge_object_links": frozenset({"admin:destructive"}),
