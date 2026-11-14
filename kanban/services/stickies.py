@@ -666,8 +666,10 @@ async def _create_doc_and_root_page(
     caller: PrincipalContext,
     sticky: Sticky,
     doc_title: str,
+    body_markdown: str | None = None,
 ) -> tuple[uuid.UUID, str, Page]:
     """Create a new Doc entity and initial root Page holding sticky markdown content."""
+    content = body_markdown if body_markdown is not None else sticky.body_markdown
     base_slug = _to_slug(doc_title, "doc")
     doc_ckey = await _allocate_unique_canonical_key(
         session, caller.workspace_id, "doc", "docs", base_slug
@@ -694,7 +696,7 @@ async def _create_doc_and_root_page(
         workspace_id=caller.workspace_id,
         project_id=sticky.project_id,
         title=doc_title,
-        body_markdown=sticky.body_markdown,
+        body_markdown=content,
         hierarchy_path="pending",
     )
     session.add(doc)
@@ -728,7 +730,7 @@ async def _create_doc_and_root_page(
         doc_id=doc.id,
         parent_page_id=None,
         title=doc_title,
-        body_markdown=sticky.body_markdown,
+        body_markdown=content,
         sort_rank="a0",
         hierarchy_path="pending",
     )
@@ -755,15 +757,17 @@ async def _create_doc_and_root_page(
     return doc.id, doc_ckey, page
 
 
-async def _create_sub_page_under_parent(
+async def _create_sub_page_under_parent(  # noqa: PLR0913
     session: AsyncSession,
     caller: PrincipalContext,
     sticky: Sticky,
     parent_target: tuple[Doc, uuid.UUID | None],
     *,
     doc_title: str,
+    body_markdown: str | None = None,
 ) -> tuple[uuid.UUID, str, Page]:
     """Create a Page under an existing Doc / parent page."""
+    content = body_markdown if body_markdown is not None else sticky.body_markdown
     parent_doc, parent_page_id = parent_target
     parent_doc_obj = await session.get(ObjectRecord, parent_doc.id)
     target_doc_ckey = parent_doc_obj.canonical_key if parent_doc_obj else f"docs/{parent_doc.id}"
@@ -807,7 +811,7 @@ async def _create_sub_page_under_parent(
         doc_id=parent_doc.id,
         parent_page_id=parent_page_id,
         title=doc_title,
-        body_markdown=sticky.body_markdown,
+        body_markdown=content,
         sort_rank=new_rank,
         hierarchy_path="pending",
     )
@@ -936,18 +940,37 @@ async def promote_sticky_to_doc(
             detail="This sticky has already been promoted to a document",
         )
 
+    sticky_sha_hex = (
+        sticky.body_sha256.hex()
+        if isinstance(sticky.body_sha256, (bytes, bytearray, memoryview))
+        else str(sticky.body_sha256)
+    )
+    if body.expected_sticky_sha256 is not None and sticky_sha_hex != body.expected_sticky_sha256:
+        raise ProblemException(
+            code="STICKY_MODIFIED_SINCE_PREVIEW",
+            status=409,
+            title="Sticky Modified Since Preview",
+            detail="Sticky content was modified after promotion preview was generated",
+        )
+
+    target_body = (
+        normalize_to_markdown(body.structured_body_markdown)
+        if body.structured_body_markdown is not None
+        else sticky.body_markdown
+    )
+
     parent_doc: Doc | None = None
     if body.parent_doc_id is not None:
         parent_doc = await _validate_parent_scope(
             session, caller, body.parent_doc_id, body.parent_page_id, sticky.project_id
         )
 
-    doc_title = _derive_title(body.title, sticky.body_markdown)
+    doc_title = _derive_title(body.title, target_body)
 
     async with session.begin_nested():
         if parent_doc is None:
             target_doc_id, target_doc_ckey, page = await _create_doc_and_root_page(
-                session, caller, sticky, doc_title
+                session, caller, sticky, doc_title, body_markdown=target_body
             )
             acl_targets = [target_doc_id, page.id]
         else:
@@ -957,6 +980,7 @@ async def promote_sticky_to_doc(
                 sticky,
                 (parent_doc, body.parent_page_id),
                 doc_title=doc_title,
+                body_markdown=target_body,
             )
             acl_targets = [page.id]
 

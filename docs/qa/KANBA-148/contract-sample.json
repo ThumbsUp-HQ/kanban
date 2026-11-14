@@ -1,0 +1,68 @@
+{
+  "preview_response": {
+    "proposal": {
+      "schema": "kb-sticky-doc-proposal/v1",
+      "proposed_title": "Authentication Architecture and Multi-Card Flow",
+      "summary_markdown": "Technical specification for enterprise multi-card authentication, local break-glass recovery, and OIDC dance sequencing.",
+      "sections": [
+        {
+          "heading": "Overview and Scope",
+          "level": 2,
+          "body_markdown": "System architecture for enterprise identity integration. Supports multiple concurrent identity providers with deterministic claim resolution and strict tenant isolation."
+        },
+        {
+          "heading": "Authentication Flow",
+          "level": 2,
+          "body_markdown": "```mermaid\nsequenceDiagram\n    autonumber\n    actor User as User Browser\n    participant App as Kanban Web\n    participant Auth as Auth Service\n    participant IdP as Identity Provider\n    User->>App: Click Login with OIDC\n    App->>Auth: Initiate OAuth Flow (PKCE S256)\n    Auth->>IdP: Redirect to IdP Auth URL\n    IdP-->>User: Present Login Challenge\n    User->>IdP: Provide Credentials\n    IdP-->>Auth: Callback with Authorization Code\n    Auth->>IdP: Exchange Code + PKCE Verifier for Tokens\n    IdP-->>Auth: ID Token + Access Token\n    Auth->>App: Issue Session Cookie\n    App-->>User: Render Dashboard\n```"
+        },
+        {
+          "heading": "Security Invariants",
+          "level": 2,
+          "body_markdown": "1. Zero plaintext tokens in localStorage.\n2. PKCE code verifier generated using cryptographically secure random bytes.\n3. Session cookie marked Secure, HttpOnly, and SameSite=Lax."
+        }
+      ],
+      "extracted_action_items": [
+        "Implement WebAuthn Passkey registration",
+        "Configure TOTP backup generator"
+      ]
+    },
+    "rendered_markdown": "# Authentication Architecture and Multi-Card Flow\n\n> Technical specification for enterprise multi-card authentication, local break-glass recovery, and OIDC dance sequencing.\n\n## Overview and Scope\n\nSystem architecture for enterprise identity integration. Supports multiple concurrent identity providers with deterministic claim resolution and strict tenant isolation.\n\n## Authentication Flow\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor User as User Browser\n    participant App as Kanban Web\n    participant Auth as Auth Service\n    participant IdP as Identity Provider\n    User->>App: Click Login with OIDC\n    App->>Auth: Initiate OAuth Flow (PKCE S256)\n    Auth->>IdP: Redirect to IdP Auth URL\n    IdP-->>User: Present Login Challenge\n    User->>IdP: Provide Credentials\n    IdP-->>Auth: Callback with Authorization Code\n    Auth->>IdP: Exchange Code + PKCE Verifier for Tokens\n    IdP-->>Auth: ID Token + Access Token\n    Auth->>App: Issue Session Cookie\n    App-->>User: Render Dashboard\n```\n\n## Security Invariants\n\n1. Zero plaintext tokens in localStorage.\n2. PKCE code verifier generated using cryptographically secure random bytes.\n3. Session cookie marked Secure, HttpOnly, and SameSite=Lax.\n\n## Open Action Items\n\n- [ ] Implement WebAuthn Passkey registration\n- [ ] Configure TOTP backup generator\n",
+    "original_sha256": "8559a566e2353ab6b6810691b7498fc69646683dd3f777ce776b9f857ee0d18e",
+    "warnings": [],
+    "acl_preview": {
+      "manifest": {
+        "object_id": "01940000-0000-7000-8000-000000000001",
+        "scope_type": "project",
+        "project_id": "01940000-0000-7000-8000-000000000002",
+        "effective_allow_mask": 31,
+        "direct_entries": [
+          {
+            "principal_id": "01940000-0000-7000-8000-000000000003",
+            "principal_type": "USER",
+            "effect": "ALLOW",
+            "capability_mask": 5
+          }
+        ]
+      },
+      "direct_entries_count": 1,
+      "will_copy_verbatim": true
+    }
+  },
+  "toctou_conflict_response": {
+    "type": "https://errors.kanban.dev/STICKY_MODIFIED_SINCE_PREVIEW",
+    "title": "Sticky Modified Since Preview",
+    "status": 409,
+    "code": "STICKY_MODIFIED_SINCE_PREVIEW",
+    "detail": "Sticky content was modified since preview was generated. Expected sha256 8559a566e2353ab6b6810691b7498fc69646683dd3f777ce776b9f857ee0d18e but found 7c4a1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab",
+    "instance": "/api/v1/stickies/01940000-0000-7000-8000-000000000001/promote-to-doc"
+  },
+  "confirm_response": {
+    "doc_id": "01940000-0000-7000-8000-000000000010",
+    "root_page_id": "01940000-0000-7000-8000-000000000020",
+    "sticky_id": "01940000-0000-7000-8000-000000000001",
+    "title": "Authentication Architecture and Multi-Card Flow",
+    "is_promoted_stub": true,
+    "promoted_to_doc_id": "01940000-0000-7000-8000-000000000010",
+    "copied_acl_entries_count": 1
+  }
+}

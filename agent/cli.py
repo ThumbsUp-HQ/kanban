@@ -21,6 +21,10 @@ from agent.cli_commands.validate_sparkle import (
     configure_validate_sparkle_parser,
     handle_validate_sparkle,
 )
+from agent.cli_commands.validate_sticky_promo import (
+    configure_validate_sticky_promo_parser,
+    handle_validate_sticky_promo,
+)
 from agent.cli_report import (
     ContextScrubber,
     ExitCode,
@@ -210,6 +214,16 @@ register_subcommand(
         help="Validate Sparkle FIM latency, RLS filtering and ghost-text output at a cursor offset",
         configure_parser=configure_validate_sparkle_parser,
         handler=handle_validate_sparkle,
+    )
+)
+
+# Register validate-sticky-promo subcommand
+register_subcommand(
+    SubcommandSpec(
+        name="validate-sticky-promo",
+        help="Validate Sticky -> Doc AI preview, ACL preservation and fenced block integrity",
+        configure_parser=configure_validate_sticky_promo_parser,
+        handler=handle_validate_sticky_promo,
     )
 )
 

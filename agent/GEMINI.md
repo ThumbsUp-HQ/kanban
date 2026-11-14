@@ -288,6 +288,24 @@ The `BudgetEnforcer` provides atomic LLM token allocation and settlement protoco
 - Time Boundaries:
   - Period starts are computed strictly in UTC (`daily` at `YYYY-MM-DD`, `monthly` at `YYYY-MM-01`).
 
+## Sticky to Doc AI Structuring (`agent.sticky_promo`, KB-P5-26, S8.2)
+
+The `agent.sticky_promo` module implements read-only AI proposal generation and preview contracts for promoting rough scratchpad stickies into structured specification documents:
+
+- Structured Proposal Schema (`agent.sticky_promo.schemas`):
+  - `StickyDocProposal`: Strict schema adhering to `kb-sticky-doc-proposal/v1` with `proposed_title` (1..140 single-line chars), `summary_markdown` (1..4096 chars), `sections` (1..20 `DocSection` objects with heading, level 2..3, body_markdown), and optional single-line `extracted_action_items` (each 1..280 chars).
+  - `render_canonical_doc_markdown`: Assembles `# Title`, summary blockquote, `##`/`###` sections, and `## Open Action Items` checklist, normalized via KB-P2-13 canonical markdown normalizer.
+- 4-Step Pipeline (`agent.sticky_promo.structurer`):
+  1. Size and format guard: Rejects inputs exceeding 131,072 bytes with `StickyTooLargeError` (`STICKY_TOO_LARGE`).
+  2. Secret scrubbing first: Redacts credential patterns using `scrub_text` before prompt assembly.
+  3. Spotlight boundary isolation: Wraps untrusted sticky markdown within cryptographically random delimiter tokens (`<<<UNTRUSTED_STICKY_DATA_<token>>>>`) with system instructions to ignore prompt-injection payloads.
+  4. Routing and budget reservation: Reserves tokens via `BudgetEnforcer`, enforces `--air-gap` egress checks, and dispatches structured generation request.
+  5. Lossless fenced block verification: Extracts all fenced code/diagram blocks (Mermaid, code snippets) from input. If omitted or modified by LLM, appends verbatim fallback blocks and records `FENCED_BLOCK_MODIFIED` warning (or raises `FencedBlockModifiedError` if strict).
+- CLI Verification Subcommand (`kanban-agent validate-sticky-promo`):
+  - Emits standard 4-section report with deterministic exit codes (`0` ok, `1` runtime error, `2` policy/schema violation).
+  - Audits optional `--acl-fixture` for verbatim ACL preservation.
+
+
 
 
 

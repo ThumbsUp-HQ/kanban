@@ -74,6 +74,37 @@ class StickyPromoteRequest(BaseModel):
         default=None,
         description="Optional parent page under parent_doc_id.",
     )
+    structured_body_markdown: str | None = Field(
+        default=None,
+        description="Optional structured or edited Markdown body confirming preview.",
+    )
+    expected_sticky_sha256: str | None = Field(
+        default=None,
+        description="Optional expected sticky body SHA-256 for TOCTOU conflict prevention.",
+    )
+
+
+class StickyPromotePreviewResponse(BaseModel):
+    """Response payload for Sticky -> Doc promotion preview."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    proposal: dict[str, Any] = Field(
+        description="Structured proposal adhering to kb-sticky-doc-proposal/v1",
+    )
+    rendered_markdown: str = Field(
+        description="Canonical GFM rendered representation of the proposal",
+    )
+    original_sha256: str = Field(
+        description="SHA-256 digest of current sticky body at preview time",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="List of integrity or structural warnings (e.g. FENCED_BLOCK_MODIFIED)",
+    )
+    acl_preview: dict[str, Any] = Field(
+        description="Access manifest and direct ACL entries count preview",
+    )
 
 
 class PromotedDocSummary(BaseModel):
