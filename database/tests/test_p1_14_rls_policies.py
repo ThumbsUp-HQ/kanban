@@ -413,7 +413,8 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
             "    'alembic_version', 'link_type_matrix', 'auth_provider_cards', "
             "    'rate_limit_buckets', 'local_admin_credentials', 'sessions', "
             "    'totp_factors', 'recovery_codes', 'webauthn_credentials', "
-            "    'webauthn_challenges', 'oidc_auth_requests'"
+            "    'webauthn_challenges', 'oidc_auth_requests', 'setup_claim_tokens', "
+            "    'user_identities'"
             "  ) "
             "ORDER BY c.relname"
         )

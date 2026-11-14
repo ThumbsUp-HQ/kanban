@@ -154,6 +154,7 @@ class ActivityEventType(StrEnum):
     CUSTOM_FIELD_UPDATED = "CUSTOM_FIELD_UPDATED"
     CUSTOM_FIELD_DELETED = "CUSTOM_FIELD_DELETED"
     EMERGENCY_BREAK_GLASS_INVOKED = "EMERGENCY_BREAK_GLASS_INVOKED"
+    FIRST_BOOT_SETUP_CLAIMED = "FIRST_BOOT_SETUP_CLAIMED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -253,6 +254,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.CUSTOM_FIELD_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_DELETED: ActivityCategory.HISTORY,
         ActivityEventType.EMERGENCY_BREAK_GLASS_INVOKED: ActivityCategory.SYSTEM,
+        ActivityEventType.FIRST_BOOT_SETUP_CLAIMED: ActivityCategory.SYSTEM,
     }
 )
 
