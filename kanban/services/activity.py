@@ -174,6 +174,7 @@ class ActivityEventType(StrEnum):
     CUSTOM_FIELD_APPROVED = "CUSTOM_FIELD_APPROVED"
     CUSTOM_FIELD_APPROVAL_REVOKED = "CUSTOM_FIELD_APPROVAL_REVOKED"
     STANDALONE_BACKUP_EXPORTED = "STANDALONE_BACKUP_EXPORTED"
+    PLANE_IMPORT_COMPLETED = "PLANE_IMPORT_COMPLETED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -215,6 +216,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_MODULE_REMOVED: ActivityCategory.HISTORY,
         ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.PLANE_IMPORT_COMPLETED: ActivityCategory.SYSTEM,
         ActivityEventType.EXTERNAL_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.EXTERNAL_LOGIN_UNPROVISIONED: ActivityCategory.SYSTEM,
         ActivityEventType.IDENTITY_AUTO_MERGE_BLOCKED: ActivityCategory.SYSTEM,

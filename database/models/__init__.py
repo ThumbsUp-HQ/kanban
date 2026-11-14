@@ -29,6 +29,7 @@ from database.models.base import (
 from database.models.custom_field import CustomFieldDefinition, CustomFieldValue
 from database.models.custom_field_approval import CustomFieldApproval
 from database.models.embeddings import ObjectEmbedding
+from database.models.import_mapping import ImportEntityMapping
 from database.models.issues import (
     CommentReaction,
     Issue,
@@ -94,6 +95,7 @@ __all__ = [
     "EffectiveResourceAccess",
     "Group",
     "IdentityLinkIntent",
+    "ImportEntityMapping",
     "InvalidLinkReason",
     "InvalidObjectLinkAudit",
     "Issue",
