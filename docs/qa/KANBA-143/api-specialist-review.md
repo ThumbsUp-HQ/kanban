@@ -1,37 +1,24 @@
-# API Specialist Review: KB-P5-13 / KANBA-143
+# API Specialist Gate Review: KANBA-143 (KB-P5-13)
 
-## 1. Scope of Review
-- **Endpoints Reviewed:**
-  - `GET /api/v1/issues/{issue_key}/custom-fields` (Issue custom field value listing under RLS)
-  - `POST /api/v1/issues/{issue_key}/custom-fields/{field_id}/execute` (Partitioned execution, caching, force_refresh)
-  - `POST /api/v1/projects/{project}/wasm-modules` (Admin Wasm bytecode upload, AAL2 gate, sha256 registration)
-  - `/mcp/admin` Tool 7: `manage_custom_fields_and_scripts` (Surface.ADMIN, scope enforcement, structured YAML responses)
-- **Reviewer:** Backend Architect / API Specialist (`backend-architect`)
-- **Date:** 2026-11-14
+- **Ticket**: `KANBA-143` (`KB-P5-13`: Tier A Wasmtime runner, partitioned execution API, `/mcp/admin` tool 7)
+- **Reviewer**: `@arch-reviewer` (Systems/Backend Architect & API Specialist), independent audit
+- **Branch / Commit audited**: `feat/KANBA-143` at `ffdde0d` (initial audit at `11ec86b` and uncommitted tree, changes requested, re-audited twice)
 
-## 2. API Contract & Ergonomics Audit
-1. **REST Resource Modeling:**
-   - Resource paths follow RESTful conventions nested under `/api/v1/issues/{issue_key}/custom-fields` and `/api/v1/projects/{project}/wasm-modules`.
-   - Issue keys (`KAN-142`) and UUIDs are properly resolved under caller RLS session using `resolve_issue_ref`.
-   - Responses use structured JSON schemas (`CustomFieldValueItem`, `WasmModuleResponse`) with explicit typing and RFC 7807 Problem Details for failure modes.
-2. **Error Code Semantics:**
-   - Verified standard HTTP status mappings:
-     - `400 Bad Request` with `SCRIPT_FUEL_EXHAUSTED`, `SCRIPT_TIMEOUT`, `SCRIPT_MEMORY_LIMIT`, `SCRIPT_TRAP`
-     - `403 Forbidden` with `INSUFFICIENT_CAPABILITY` or `AAL2_REQUIRED` on unauthorized escalation or missing AAL2
-     - `404 Not Found` with `ISSUE_NOT_FOUND`, `CUSTOM_FIELD_NOT_FOUND`, or `WASM_MODULE_NOT_FOUND`
-     - `409 Conflict` with `APPROVAL_REVOKED` when script manifest differs from approval signature
-3. **MCP Tool 7 Design:**
-   - Tool `manage_custom_fields_and_scripts` properly adheres to Model Context Protocol standards on `Surface.ADMIN`.
-   - Input schema defines clear sub-commands (`list_fields`, `get_field`, `upsert_field`, `delete_field`, `upload_wasm_module`, `request_escalation`, `approve_escalation`, `execute_field`, `help`).
-   - Strict scope verification ensures `admin:read` is required for queries, `admin:write` for upsert/upload/execute, and `admin:destructive` for field deletion.
-   - 2-stage confirmation with `sp_warning_acknowledged` required before approving Service Principal escalations (`PROJECT_ADMIN_SP` / `SERVER_ADMIN_SP`).
+## Findings raised and resolved
+1. Host-memory DoS: `host_kb_output` appended every call with no cap. Fixed: exactly one call permitted (second call traps `SCRIPT_TRAP`), explicit `ptr >= 0`, `length >= 0`, `ptr + length <= data_len` bounds check, NaN canonicalization enabled.
+2. `cached_only` (script depth >= 1) path called a non-existent method and ignored partitioning. Fixed: `assert_execution_authorized` (fail closed, `APPROVAL_REVOKED`), `compute_cache_partition_key`, `script_version` and `expires_at` filters, SERVER scope always `not_computed`, zero runner invocations.
+3. Unbounded forced execution. Fixed: 6 requests/minute per (principal, issue, field).
+4. Rate-limit bypass: first fix counted inside the request transaction, so failing scripts (422) rolled the hit back. Fixed in `ffdde0d`: hit commits on its own engine connection; test shows 6 x 422 then 429 against `infinite_loop.wasm`.
+5. Module upload had no ledger row. Fixed: `WASM_MODULE_UPLOADED` (sha256, name, size; no bytes), `base64 validate=True`, request length cap, no commit inside handler.
 
-## 3. Row-Level Security & Cache Partitioning
-- Cache keys in `custom_field_values` partition correctly by `(workspace_id, issue_id, field_id, user_access_hash)`.
-- When `credential_mode == 'INVOKING_USER'`, caller access hash isolates cached values between distinct users.
-- When `credential_mode == 'PROJECT_ADMIN_SP'`, zero user access hash permits safe team-wide cache reuse.
-- Escalation to `SERVER` token scope bypasses caching entirely (cache TTL = 0) and records audit events in `activity_records`.
+## Verified
+- Engine: fuel (<= 50M) + epoch interruption (5ms ticker, <= 500ms), store limits <= 32 MiB, downward-only `WasmRunLimits`, only `env.kb_output` import allowed (`WASM_FORBIDDEN_IMPORT` otherwise), ABI exports validated, module LRU keyed by sha256.
+- Partition key `(issue, field, script_version, user_access_hash)`; PROJECT_ADMIN_SP shared; SERVER scope zero-cache with `CUSTOM_FIELD_SERVER_INVOKED` ledger record.
+- Upload requires project ADMIN + AAL2; execution fails closed on revoked approval (409).
+- Tests: 39 pass, 95.68% line+branch; ruff, format, mypy --strict, lint-imports, license gate, no-dashes clean; `wasmtime` dependency evaluation present.
 
-## 4. Final Audit Verdict
-- **Verdict: APPROVED**
-- **Summary:** The API routes and MCP admin tool implementations satisfy all architectural, security, and contract requirements of KB-P5-13. All endpoints are verified with 100% test coverage and clean error handling.
+## Non-blocking
+- Tier B recursion: `ScriptDepthGuardMiddleware` (KANBA-145) must be merged so `request.state.script_depth` is populated; the header fallback covers the interim.
+- Input payload `labels` is empty and `state`/`priority` are ids; ticket if scripts need names.
+
+**Verdict: APPROVED**
