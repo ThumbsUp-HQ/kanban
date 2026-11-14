@@ -1,7 +1,7 @@
 # API Specialist Gate Review: KANBA-146 (KB-P5-15)
 
 - **Ticket**: `KANBA-146` (`KB-P5-15`: `[Phase 5 / Web UI] Custom fields UI: 🧪 rail display with refresh, admin definition editor & AAL2 approval flow`)
-- **Reviewer**: API Specialist (`.agents/agents/backend-architect.md` / `.agents/agents/api-tester.md`)
+- **Reviewer**: `@arch-reviewer` (Systems/Backend Architect & API Specialist)
 - **Worktree**: `/tmp/kb-wt-KANBA-146`
 - **Branch**: `feat/KANBA-146`
 
@@ -31,4 +31,4 @@
 4. **Anti-Enumeration Integrity**:
    - Non-admin callers attempting to access `/projects/:projectKey/settings/custom-fields` receive a uniform 404 response (`not-found-view`), preventing enumeration of admin endpoints.
 
-VERDICT: APPROVED
+**Verdict: APPROVED**
