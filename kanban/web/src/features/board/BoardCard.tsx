@@ -5,6 +5,7 @@ import {
 } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { EmojiHint } from '../../components/emoji/EmojiHint.tsx';
 import type { EmojiKey } from '../../components/emoji/emojiRegistry.ts';
+import { GateStatusPill } from '../gates/GateStatusPill.tsx';
 import type { BoardAssignee, BoardIssue, BoardPriority, StateGroup } from './boardApi.ts';
 
 export interface BoardCardProps {
@@ -14,6 +15,9 @@ export interface BoardCardProps {
   onKeyboardMove?: ((issue: BoardIssue, direction: 'up' | 'down' | 'left' | 'right') => void) | undefined;
   isDragging?: boolean | undefined;
   dropEdge?: 'top' | 'bottom' | null | undefined;
+  canCancelGate?: boolean | undefined;
+  onCancelGate?: ((executionId: string) => void | Promise<void>) | undefined;
+  onJumpToComment?: ((commentId: string) => void) | undefined;
   draggableFactory?: typeof draggable | undefined;
   dropTargetFactory?: typeof dropTargetForElements | undefined;
 }
@@ -84,10 +88,14 @@ export function BoardCard({
   onKeyboardMove,
   isDragging = false,
   dropEdge = null,
+  canCancelGate = true,
+  onCancelGate,
+  onJumpToComment,
   draggableFactory = draggable,
   dropTargetFactory = dropTargetForElements,
 }: BoardCardProps): JSX.Element {
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const isGatePending = issue.gate_status === 'pending' || Boolean(issue.pending_gate);
 
   useEffect(() => {
     const el = cardRef.current;
@@ -98,6 +106,7 @@ export function BoardCard({
 
     const cleanupDraggable = draggableFactory({
       element: el,
+      canDrag: () => !isGatePending,
       getInitialData: () => getCardDragData(issue),
     });
 
@@ -110,7 +119,7 @@ export function BoardCard({
       cleanupDraggable();
       cleanupDropTarget();
     };
-  }, [issue, draggableFactory, dropTargetFactory]);
+  }, [issue, isGatePending, draggableFactory, dropTargetFactory]);
 
   const handleOpenPeek = (): void => {
     if (onOpenPeek) {
@@ -159,9 +168,12 @@ export function BoardCard({
       ref={cardRef}
       role="button"
       tabIndex={0}
-      className="board-card"
+      className={`board-card ${isGatePending ? 'board-card--pending-gate' : ''}`}
       data-testid={`board-card-${issue.key}`}
       data-issue-key={issue.key}
+      data-gate-pending={isGatePending ? 'true' : undefined}
+      aria-disabled={isGatePending ? 'true' : undefined}
+      title={isGatePending ? 'Transition gate in progress' : undefined}
       data-dragging={isDragging ? 'true' : undefined}
       data-drop-target={dropEdge ?? undefined}
       onKeyDown={handleKeyDown}
@@ -181,15 +193,34 @@ export function BoardCard({
           {issue.key}
         </a>
         <div className="board-card-top-badges">
-          {issue.gate_status === 'pending' && (
-            <EmojiHint kind="gatePending" testId={`gate-pending-${issue.key}`} />
+          {isGatePending && (
+            <GateStatusPill
+              status="pending"
+              pendingGate={issue.pending_gate}
+              issueKey={issue.key}
+              canCancel={canCancelGate}
+              onCancelGate={onCancelGate}
+            />
           )}
-          {issue.gate_status === 'rejected' && (
-            <EmojiHint kind="gateVetoed" testId={`gate-vetoed-${issue.key}`} />
-          )}
-          {issue.gate_status === 'approved' && (
-            <EmojiHint kind="gateApproved" testId={`gate-approved-${issue.key}`} />
-          )}
+          {!isGatePending &&
+            (issue.gate_status === 'rejected' ||
+              issue.latest_gate_verdict?.decision === 'reject') && (
+              <GateStatusPill
+                status="rejected"
+                latestVerdict={issue.latest_gate_verdict}
+                issueKey={issue.key}
+                onJumpToComment={onJumpToComment}
+              />
+            )}
+          {!isGatePending &&
+            (issue.gate_status === 'approved' ||
+              issue.latest_gate_verdict?.decision === 'approve') && (
+              <GateStatusPill
+                status="approved"
+                latestVerdict={issue.latest_gate_verdict}
+                issueKey={issue.key}
+              />
+            )}
           {issue.has_explicit_acl && (
             <EmojiHint kind="access" label="Access scope" testId={`acl-badge-${issue.key}`} />
           )}

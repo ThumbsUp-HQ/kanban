@@ -60,7 +60,7 @@ export function App(): JSX.Element {
       );
     }
     if (window.location.pathname.startsWith('/__dev/drawer')) {
-      const router = createAppRouter(['/__dev/drawer']);
+      const router = createAppRouter([window.location.pathname + window.location.search]);
       return (
         <QueryClientProvider client={appQueryClient}>
           <ShellPanelsProvider>

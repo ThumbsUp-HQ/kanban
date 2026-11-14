@@ -1,5 +1,6 @@
 import { createContext, useContext, type ComponentType, type RefObject } from 'react';
 import type { AssigneeItem, ProjectCycle, ProjectLabel, ProjectModule } from '../drawer-rail/railApi';
+import type { PendingGateInfo, LatestGateVerdict } from '../gates/types';
 
 export interface CreatorSummary {
   id?: string;
@@ -70,6 +71,8 @@ export interface IssueDetail {
   } | undefined;
   label_ids?: string[] | undefined;
   labels?: ProjectLabel[] | string[] | undefined;
+  pending_gate?: PendingGateInfo | null | undefined;
+  latest_gate_verdict?: LatestGateVerdict | null | undefined;
   [key: string]: unknown;
 }
 
