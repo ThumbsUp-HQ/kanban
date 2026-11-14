@@ -54,6 +54,7 @@ class IssueSearchItem(BaseModel):
     title: str
     summary: str
     project_identifier: str
+    workspace: str | None = None
     anchor: str | None = None
     snippet: str
     match_spans: list[tuple[int, int]] = Field(default_factory=list)
@@ -71,6 +72,7 @@ class IssueSearchRequest(BaseModel):
 
     query: str = ""
     project: str | None = None
+    workspace: str | None = None
     filters: FilterSpec | None = None
     mode: SearchMode = "lexical"
     limit: int = Field(default=20, ge=1, le=50)

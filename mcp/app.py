@@ -12,9 +12,9 @@ from mcp.auth import McpAuthMiddleware
 from mcp.internal_client import KanbanApiClient
 from mcp.metadata import protected_resource_metadata_endpoint
 from mcp.protocol import InMemorySessionStore, McpProtocolHandler
-from mcp.registry import Surface, ToolRegistry, create_placeholder_tool
+from mcp.registry import Surface, ToolRegistry
 from mcp.settings import McpSettings
-from mcp.surfaces.admin import create_admin_registry
+from mcp.surfaces.admin import build_admin_registry
 from mcp.surfaces.agent import create_agent_registry
 from mcp.surfaces.docs import build_docs_registry
 
@@ -34,6 +34,16 @@ def _build_surface_sub_app(
     return Starlette(
         routes=[
             Route("/", handler.handle_request, methods=["GET", "POST", "DELETE"]),
+            Route(
+                "/w/{workspace_slug}",
+                handler.handle_request,
+                methods=["GET", "POST", "DELETE"],
+            ),
+            Route(
+                "/w/{workspace_slug}/p/{project_key}",
+                handler.handle_request,
+                methods=["GET", "POST", "DELETE"],
+            ),
         ]
     )
 
@@ -51,9 +61,9 @@ def create_mcp_app(  # noqa: PLR0913
     """Construct Starlette application mounting exactly 3 isolated MCP surfaces.
 
     Mounts:
-        - /mcp/agent
-        - /mcp/docs
-        - /mcp/admin
+        - /mcp/agent (Global, /w/{workspace_slug}, and /w/{workspace_slug}/p/{project_key})
+        - /mcp/docs (Global, /w/{workspace_slug}, and /w/{workspace_slug}/p/{project_key})
+        - /mcp/admin (Global, /w/{workspace_slug}, and /w/{workspace_slug}/p/{project_key})
     """
     active_settings: Final[McpSettings] = settings or McpSettings()
 
@@ -92,7 +102,7 @@ def create_mcp_app(  # noqa: PLR0913
 
     active_admin_reg = admin_registry
     if active_admin_reg is None:
-        active_admin_reg = create_admin_registry()
+        active_admin_reg = build_admin_registry(active_internal_client)
     if not active_admin_reg.is_frozen:
         active_admin_reg.freeze()
 
@@ -131,10 +141,52 @@ def create_mcp_app(  # noqa: PLR0913
             protected_resource_metadata_endpoint,
             methods=["GET"],
         ),
+        Route(
+            "/.well-known/oauth-protected-resource/mcp/{surface}/w/{workspace_slug}",
+            protected_resource_metadata_endpoint,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/oauth-protected-resource/mcp/{surface}/w/{workspace_slug}/p/{project_key}",
+            protected_resource_metadata_endpoint,
+            methods=["GET"],
+        ),
         # Explicit direct routes for /mcp/<surface>
         Route("/mcp/agent", agent_handler.handle_request, methods=["GET", "POST", "DELETE"]),
         Route("/mcp/docs", docs_handler.handle_request, methods=["GET", "POST", "DELETE"]),
         Route("/mcp/admin", admin_handler.handle_request, methods=["GET", "POST", "DELETE"]),
+        # Workspace-scoped routes
+        Route(
+            "/mcp/agent/w/{workspace_slug}",
+            agent_handler.handle_request,
+            methods=["GET", "POST", "DELETE"],
+        ),
+        Route(
+            "/mcp/docs/w/{workspace_slug}",
+            docs_handler.handle_request,
+            methods=["GET", "POST", "DELETE"],
+        ),
+        Route(
+            "/mcp/admin/w/{workspace_slug}",
+            admin_handler.handle_request,
+            methods=["GET", "POST", "DELETE"],
+        ),
+        # Project-scoped routes
+        Route(
+            "/mcp/agent/w/{workspace_slug}/p/{project_key}",
+            agent_handler.handle_request,
+            methods=["GET", "POST", "DELETE"],
+        ),
+        Route(
+            "/mcp/docs/w/{workspace_slug}/p/{project_key}",
+            docs_handler.handle_request,
+            methods=["GET", "POST", "DELETE"],
+        ),
+        Route(
+            "/mcp/admin/w/{workspace_slug}/p/{project_key}",
+            admin_handler.handle_request,
+            methods=["GET", "POST", "DELETE"],
+        ),
         # Mounts for sub-path routing
         Mount("/mcp/agent", app=agent_app),
         Mount("/mcp/docs", app=docs_app),

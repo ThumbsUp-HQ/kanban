@@ -259,6 +259,9 @@ async def introspect_and_consume_ephemeral_token(  # noqa: C901, PLR0911, PLR091
                 reason="EPHEMERAL_CALL_BUDGET_EXCEEDED",
                 calls_used=calls_used,
                 max_calls=max_calls,
+                workspace_id=workspace_id,
+                project_id=project_id,
+                execution_id=execution_id,
             )
 
         # Check principal status
@@ -369,14 +372,24 @@ async def introspect_and_consume_ephemeral_token(  # noqa: C901, PLR0911, PLR091
 
     # 0 rows updated: determine exact failure reason
     inspect_stmt = text(
-        "SELECT calls_used, max_calls, expires_at, revoked_at, allowed_tools "
+        "SELECT calls_used, max_calls, expires_at, revoked_at, allowed_tools, "
+        "workspace_id, project_id, execution_id "
         "FROM mcp_ephemeral_tokens WHERE token_sha256 = :digest"
     )
     rec = (await session.execute(inspect_stmt, {"digest": digest})).first()
     if rec is None:
         return McpIntrospectionResult(active=False, reason="NOT_FOUND")
 
-    rec_calls_used, rec_max_calls, rec_expires, rec_revoked, rec_tools = rec
+    (
+        rec_calls_used,
+        rec_max_calls,
+        rec_expires,
+        rec_revoked,
+        rec_tools,
+        rec_ws_id,
+        rec_proj_id,
+        rec_exec_id,
+    ) = rec
     if tool_name not in rec_tools:
         return McpIntrospectionResult(active=False, reason="EPHEMERAL_TOOL_FORBIDDEN")
     if rec_revoked is not None or rec_expires <= now:
@@ -387,6 +400,9 @@ async def introspect_and_consume_ephemeral_token(  # noqa: C901, PLR0911, PLR091
             reason="EPHEMERAL_CALL_BUDGET_EXCEEDED",
             calls_used=rec_calls_used,
             max_calls=rec_max_calls,
+            workspace_id=rec_ws_id,
+            project_id=rec_proj_id,
+            execution_id=rec_exec_id,
         )
 
     return McpIntrospectionResult(active=False, reason="TOKEN_EXPIRED_OR_REVOKED")

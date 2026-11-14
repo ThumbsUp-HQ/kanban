@@ -10,6 +10,7 @@ from kanban.api.v1.activity import router as activity_router
 from kanban.api.v1.admin.acl import router as admin_acl_router
 from kanban.api.v1.admin.auth_cards import router as admin_auth_cards_router
 from kanban.api.v1.admin.imports import router as admin_imports_router
+from kanban.api.v1.admin.link_auditor import router as admin_link_auditor_router
 from kanban.api.v1.admin.mcp_keys import router as admin_mcp_keys_router
 from kanban.api.v1.admin.principals import router as admin_principals_router
 from kanban.api.v1.admin.workspace_settings import (
@@ -40,6 +41,7 @@ from kanban.api.v1.issue_copy import router as issue_copy_router
 from kanban.api.v1.issue_delete import router as issue_delete_router
 from kanban.api.v1.issue_move import router as issue_move_router
 from kanban.api.v1.issue_provenance import router as issue_provenance_router
+from kanban.api.v1.issue_trees import router as issue_trees_router
 from kanban.api.v1.issues import router as issues_router
 from kanban.api.v1.links import router as links_router
 from kanban.api.v1.media_proxy import router as media_proxy_router
@@ -70,6 +72,7 @@ def build_v1_router() -> APIRouter:
     v1.include_router(project_config_router)
     v1.include_router(modules_router)
     v1.include_router(issues_router)
+    v1.include_router(issue_trees_router)
     v1.include_router(issue_copy_router)
     v1.include_router(assignees_router)
     v1.include_router(links_router)
@@ -98,6 +101,7 @@ def build_v1_router() -> APIRouter:
     v1.include_router(auth_cards_public_router)
     v1.include_router(admin_auth_cards_router)
     v1.include_router(admin_imports_router)
+    v1.include_router(admin_link_auditor_router)
     v1.include_router(admin_mcp_keys_router)
     v1.include_router(admin_workspace_settings_router)
     v1.include_router(admin_principals_router)

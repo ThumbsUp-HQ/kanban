@@ -62,3 +62,11 @@ class IssueMoveResponse(BaseModel):
         default=None,
         description="Non-null if the move caused the column to exceed its soft WIP limit",
     )
+    hard_limit: int | None = Field(
+        default=None,
+        description="Configured hard WIP limit on target state if overridden",
+    )
+    resulting_count: int | None = Field(
+        default=None,
+        description="Resulting active issue count in column if WIP limit was evaluated",
+    )

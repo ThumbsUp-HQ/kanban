@@ -114,7 +114,7 @@ export function LoginPage({
   const hasLocalAdmin = cards.some((c) => c.provider_kind === 'LOCAL_ADMIN');
 
   return (
-    <main className="auth-container" aria-labelledby="login-title">
+    <main className="auth-container" data-testid="login-page" aria-labelledby="login-title">
       <div className="auth-panel">
         <header className="auth-header">
           <div className="auth-header-title-row">

@@ -1,0 +1,269 @@
+{
+  "ticket": "KANBA-134",
+  "feature": "Admin Auth Studio UI API Contracts (KB-P3-36)",
+  "operations": {
+    "list_cards": {
+      "endpoint": "GET /api/v1/admin/auth-cards",
+      "request": {
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "cards": [
+            {
+              "id": "card-oidc-1",
+              "provider_kind": "OIDC",
+              "slug": "okta-workplace",
+              "display_name": "Okta SSO",
+              "button_subtext": "Sign in with Okta workforce account",
+              "icon_preset": "key",
+              "sort_rank": "1",
+              "is_enabled": true,
+              "auto_provision_users": true,
+              "allowed_email_domains": [
+                "corp.example.com",
+                "partner.example.com"
+              ],
+              "public_config": {
+                "issuer_url": "https://identity.corp.example.com",
+                "client_id": "0oa7b3c2d1e0f9a8b",
+                "scopes": [
+                  "openid",
+                  "profile",
+                  "email"
+                ],
+                "pkce_method": "S256",
+                "token_auth_method": "client_secret_basic"
+              },
+              "has_secret": true,
+              "dek_kid": "dek-oidc-42",
+              "last_health_status": "HEALTHY",
+              "latency_ms": 42,
+              "check_summary": "JWKS fetched cleanly; discovery endpoint responded 200 OK",
+              "last_handshake_at": "2026-11-13T22:30:00Z"
+            },
+            {
+              "id": "card-local-4",
+              "provider_kind": "LOCAL_ADMIN",
+              "slug": "local-admin",
+              "display_name": "Local Administrator",
+              "button_subtext": "Break-glass recovery login with hardware passkey",
+              "icon_preset": "shield",
+              "sort_rank": "z",
+              "is_enabled": true,
+              "auto_provision_users": false,
+              "allowed_email_domains": [],
+              "public_config": {
+                "hash_algorithm": "Argon2id",
+                "mfa_enforced": true
+              },
+              "has_secret": true,
+              "dek_kid": "dek-local-01",
+              "last_health_status": "HEALTHY",
+              "latency_ms": 2,
+              "check_summary": "Local admin password hash verified with server HMAC pepper",
+              "last_handshake_at": "2026-11-13T22:31:00Z"
+            }
+          ]
+        }
+      }
+    },
+    "create_card_with_secret": {
+      "endpoint": "POST /api/v1/admin/auth-cards",
+      "request": {
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "test-csrf-token"
+        },
+        "body": {
+          "provider_kind": "OIDC",
+          "slug": "auth0-eu",
+          "display_name": "Auth0 EU Realm",
+          "button_subtext": "Sign in via Auth0 Frankfurt",
+          "icon_preset": "globe",
+          "auto_provision_users": true,
+          "allowed_email_domains": [
+            "eu.example.com"
+          ],
+          "public_config": {
+            "issuer_url": "https://auth0.eu.example.com",
+            "client_id": "auth0_client_id_123",
+            "scopes": [
+              "openid",
+              "profile",
+              "email"
+            ],
+            "pkce_method": "S256",
+            "token_auth_method": "client_secret_basic"
+          },
+          "secret_input": "sec_envelope_kdf_test_value_789"
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "card-oidc-new",
+          "provider_kind": "OIDC",
+          "slug": "auth0-eu",
+          "display_name": "Auth0 EU Realm",
+          "button_subtext": "Sign in via Auth0 Frankfurt",
+          "icon_preset": "globe",
+          "sort_rank": "2",
+          "is_enabled": true,
+          "auto_provision_users": true,
+          "allowed_email_domains": [
+            "eu.example.com"
+          ],
+          "public_config": {
+            "issuer_url": "https://auth0.eu.example.com",
+            "client_id": "auth0_client_id_123",
+            "scopes": [
+              "openid",
+              "profile",
+              "email"
+            ],
+            "pkce_method": "S256",
+            "token_auth_method": "client_secret_basic"
+          },
+          "has_secret": true,
+          "dek_kid": "dek-oidc-99",
+          "last_health_status": "UNVERIFIED",
+          "latency_ms": null,
+          "check_summary": null,
+          "last_handshake_at": null
+        }
+      }
+    },
+    "edit_card_metadata_only": {
+      "endpoint": "PATCH /api/v1/admin/auth-cards/card-oidc-1",
+      "note": "Notice secret_input is completely omitted because 'Replace stored secret' was unchecked",
+      "request": {
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "test-csrf-token"
+        },
+        "body": {
+          "display_name": "Okta Enterprise SSO",
+          "button_subtext": "Primary workforce sign-in",
+          "icon_preset": "key",
+          "auto_provision_users": true,
+          "allowed_email_domains": [
+            "corp.example.com"
+          ],
+          "public_config": {
+            "issuer_url": "https://identity.corp.example.com",
+            "client_id": "0oa7b3c2d1e0f9a8b",
+            "scopes": [
+              "openid",
+              "profile",
+              "email"
+            ],
+            "pkce_method": "S256",
+            "token_auth_method": "client_secret_basic"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "card-oidc-1",
+          "provider_kind": "OIDC",
+          "slug": "okta-workplace",
+          "display_name": "Okta Enterprise SSO",
+          "button_subtext": "Primary workforce sign-in",
+          "icon_preset": "key",
+          "sort_rank": "1",
+          "is_enabled": true,
+          "auto_provision_users": true,
+          "allowed_email_domains": [
+            "corp.example.com"
+          ],
+          "public_config": {
+            "issuer_url": "https://identity.corp.example.com",
+            "client_id": "0oa7b3c2d1e0f9a8b",
+            "scopes": [
+              "openid",
+              "profile",
+              "email"
+            ],
+            "pkce_method": "S256",
+            "token_auth_method": "client_secret_basic"
+          },
+          "has_secret": true,
+          "dek_kid": "dek-oidc-42",
+          "last_health_status": "HEALTHY",
+          "latency_ms": 42,
+          "check_summary": "JWKS fetched cleanly; discovery endpoint responded 200 OK",
+          "last_handshake_at": "2026-11-13T22:30:00Z"
+        }
+      }
+    },
+    "reorder_card": {
+      "endpoint": "POST /api/v1/admin/auth-cards/card-github-2/reorder",
+      "request": {
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "test-csrf-token"
+        },
+        "body": {
+          "before_card_id": "card-oidc-1",
+          "after_card_id": "card-ldap-3",
+          "sort_rank": "1V"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "card-github-2",
+          "provider_kind": "OAUTH2",
+          "slug": "github-enterprise",
+          "display_name": "GitHub Enterprise",
+          "sort_rank": "1V",
+          "is_enabled": true
+        }
+      }
+    },
+    "test_handshake": {
+      "endpoint": "POST /api/v1/admin/auth-cards/card-oidc-1/test-handshake",
+      "request": {
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "test-csrf-token"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "last_health_status": "HEALTHY",
+          "latency_ms": 42,
+          "check_summary": "JWKS fetched cleanly; discovery endpoint responded 200 OK",
+          "last_handshake_at": "2026-11-13T22:30:00Z"
+        }
+      }
+    },
+    "lockout_prevented_error": {
+      "endpoint": "PATCH /api/v1/admin/auth-cards/card-local-4/enabled",
+      "request": {
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "test-csrf-token"
+        },
+        "body": {
+          "is_enabled": false
+        }
+      },
+      "response": {
+        "status": 409,
+        "body": {
+          "code": "LOCKOUT_PREVENTED",
+          "reason_code": "HANDSHAKE_STALE_FOR_LOCAL_DISABLE",
+          "message": "Local Administrator cannot be disabled until at least one external Server-Admin identity provider card completes a verified login handshake within the past 15 minutes."
+        }
+      }
+    }
+  }
+}

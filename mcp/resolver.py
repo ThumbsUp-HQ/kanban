@@ -44,16 +44,17 @@ class EntityResolver:
         self._client: Final[KanbanApiClient] = client
         self._subject_token: Final[str | None] = subject_token
         self._mcp_session_id: Final[str | None] = mcp_session_id
-        self._cache: dict[tuple[str, str, str | None], ResolvedRef] = {}
+        self._cache: dict[tuple[str, str, str | None, str | None], ResolvedRef] = {}
 
     async def resolve(
         self,
         kind: str,
         ref: str,
         project: str | None = None,
+        workspace: str | None = None,
     ) -> ResolvedRef:
         """Resolve a single entity reference with request-scoped memoization."""
-        cache_key = (kind, ref, project)
+        cache_key = (kind, ref, project, workspace)
         if cache_key in self._cache:
             return self._cache[cache_key]
 
@@ -63,6 +64,8 @@ class EntityResolver:
         }
         if project is not None:
             params["project"] = project
+        if workspace is not None:
+            params["workspace"] = workspace
 
         res = await self._client.request(
             "GET",
@@ -93,4 +96,4 @@ class EntityResolver:
         unique_queries = list(dict.fromkeys(items))
         tasks = [self.resolve(k, r, p) for k, r, p in unique_queries]
         await asyncio.gather(*tasks)
-        return [self._cache[(k, r, p)] for k, r, p in items]
+        return [self._cache[(k, r, p, None)] for k, r, p in items]

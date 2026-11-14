@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /tmp/kb-wt-KANBA-142
+configfile: pyproject.toml
+plugins: anyio-4.16.0, socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 6 items / 5 deselected / 1 selected
+
+agent/tests/test_budget.py 
+[CONCURRENCY PROOF] workers=50 successes=20 failures=30 total_reserved=200 total_used=0 total_allocated=200
+.
+
+======================= 1 passed, 5 deselected in 0.41s ========================
+EXIT_CODE: 0

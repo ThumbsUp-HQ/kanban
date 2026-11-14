@@ -42,6 +42,7 @@ from database.models import (
     ProjectPriority,
     Sticky,
     WorkflowState,
+    Workspace,
 )
 from kanban.api.problems import ProblemException
 from kanban.api.v1.schemas.search import (
@@ -276,6 +277,7 @@ def _build_issue_query(
             [
                 WorkflowState.name.label("state_name"),
                 ProjectPriority.slug.label("priority_slug"),
+                Workspace.slug.label("workspace_slug"),
             ]
         )
 
@@ -285,8 +287,10 @@ def _build_issue_query(
         .join(ObjectRecord, Issue.id == ObjectRecord.id)
     )
     if include_metadata:
-        stmt = stmt.outerjoin(WorkflowState, Issue.state_id == WorkflowState.id).outerjoin(
-            ProjectPriority, Issue.priority_id == ProjectPriority.id
+        stmt = (
+            stmt.outerjoin(WorkflowState, Issue.state_id == WorkflowState.id)
+            .outerjoin(ProjectPriority, Issue.priority_id == ProjectPriority.id)
+            .outerjoin(Workspace, Project.workspace_id == Workspace.id)
         )
 
     stmt = stmt.where(
@@ -564,6 +568,7 @@ async def _resolve_issue_search_scope(
     caller: PrincipalContext,
     project_ref: str | None,
     filters: FilterSpec | None,
+    workspace_ref: str | None = None,
 ) -> tuple[uuid.UUID | None, list[Any]]:
     """Resolve project ID and optional filter DSL predicates for issue search."""
     project_id: uuid.UUID | None = None
@@ -573,9 +578,11 @@ async def _resolve_issue_search_scope(
         project_id = proj.id
 
     extra_predicates: list[Any] = []
+    if workspace_ref:
+        extra_predicates.append(Workspace.slug == workspace_ref)
     if filters:
-        extra_predicates = compile_issue_filter_predicates(
-            session, proj, filters, caller.principal_id
+        extra_predicates.extend(
+            compile_issue_filter_predicates(session, proj, filters, caller.principal_id)
         )
     return project_id, extra_predicates
 
@@ -602,7 +609,7 @@ async def search_issues(
     valid_limit = validate_limit(request.limit)
 
     project_id, extra_predicates = await _resolve_issue_search_scope(
-        session, caller, request.project, request.filters
+        session, caller, request.project, request.filters, request.workspace
     )
 
     q_hash = _compute_query_hash(clean_query, ["issue"], request.project)
@@ -674,6 +681,7 @@ async def search_issues(
                 title=r.title,
                 summary=r.summary or r.title,
                 project_identifier=r.project_identifier,
+                workspace=getattr(r, "workspace_slug", None),
                 anchor=snippet_result.anchor,
                 snippet=snippet_result.snippet,
                 match_spans=snippet_result.match_spans,

@@ -375,4 +375,4 @@ async def test_tools_list_agent_surface(agent_test_env: AgentTestEnv) -> None:
     res_data = list_resp.json()
     assert res_data["jsonrpc"] == "2.0"
     tool_names = [t["name"] for t in res_data["result"]["tools"]]
-    assert tool_names == ["search_tickets", "read_ticket"]
+    assert tool_names == ["search_tickets", "read_ticket", "create_ticket", "update_ticket"]
