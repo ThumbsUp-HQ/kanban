@@ -1,0 +1,199 @@
+/* Copyright 2026 Kanban Platform Contributors */
+/* Apache-2.0 License. See LICENSE for details. */
+
+.kb-snippet-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.kb-snippet-modal-card {
+  width: 100%;
+  max-width: 640px;
+  background-color: var(--card-bg, #161b22);
+  border: 1px solid var(--border-subtle, #30363d);
+  border-radius: 8px;
+  padding: 32px 40px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: var(--text-primary, #e6edf3);
+  font-family: var(--font-sans);
+}
+
+.kb-snippet-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kb-snippet-modal-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, #ffffff);
+}
+
+.kb-snippet-modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+}
+
+.kb-snippet-modal-close-btn:hover {
+  color: #ffffff;
+}
+
+.kb-snippet-key-banner {
+  background-color: rgba(56, 139, 253, 0.15);
+  border: 1px solid rgba(56, 139, 253, 0.4);
+  border-radius: 6px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kb-snippet-key-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #58a6ff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.kb-snippet-key-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kb-snippet-key-value {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  background-color: #0d1117;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid #30363d;
+  color: #79c0ff;
+  word-break: break-all;
+}
+
+.kb-snippet-copy-btn {
+  height: 34px;
+  padding: 0 14px;
+  background-color: #21262d;
+  border: 1px solid var(--border-subtle, #30363d);
+  color: #c9d1d9;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.kb-snippet-copy-btn:hover {
+  background-color: #30363d;
+  color: #ffffff;
+}
+
+.kb-snippet-warning-note {
+  font-size: 0.75rem;
+  color: #8b949e;
+  margin: 0;
+}
+
+.kb-snippet-tabs-row {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-subtle, #30363d);
+  padding-bottom: 8px;
+}
+
+.kb-snippet-tab-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--text-secondary, #8b949e);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.kb-snippet-tab-btn:hover {
+  color: #ffffff;
+}
+
+.kb-snippet-tab-active {
+  background-color: rgba(110, 118, 129, 0.2);
+  color: #58a6ff;
+}
+
+.kb-snippet-url-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kb-snippet-url-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #8b949e);
+}
+
+.kb-snippet-url-select {
+  height: 32px;
+  background-color: #0d1117;
+  border: 1px solid var(--border-subtle, #30363d);
+  color: #c9d1d9;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 0.875rem;
+}
+
+.kb-snippet-code-box {
+  background-color: #0d1117;
+  border: 1px solid var(--border-subtle, #30363d);
+  border-radius: 6px;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #e6edf3;
+  overflow-x: auto;
+  max-height: 200px;
+  white-space: pre;
+}
+
+.kb-snippet-footer-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle, #30363d);
+}
+
+.kb-snippet-done-btn {
+  height: var(--prop-row-h);
+  padding: 0 20px;
+  background-color: #238636;
+  border: 1px solid rgba(240, 246, 252, 0.1);
+  color: #ffffff;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kb-snippet-done-btn:hover {
+  background-color: #2ea043;
+}

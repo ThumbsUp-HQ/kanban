@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+from database.models.mcp_api_key import McpApiKey
 from database.models.oauth import (
     OAuthAuthorizationCode,
     OAuthClient,
@@ -35,6 +36,12 @@ from database.models.projects import Project
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException, not_found
 from kanban.auth.mfa.policy import require_admin_aal2
+from kanban.oauth.device import (
+    activate_device_code,
+    create_device_authorization,
+    get_device_code_info,
+    poll_device_code,
+)
 from kanban.oauth.jwt import (
     ACCESS_TOKEN_TTL_SECONDS,
     get_jwks,
@@ -54,6 +61,10 @@ from kanban.oauth.server import (
     validate_redirect_uri,
     validate_registration_redirect_uris,
     verify_pkce_s256,
+)
+from kanban.security.mcp_keys import (
+    mint_mcp_api_key,
+    revoke_mcp_api_key,
 )
 
 
@@ -189,6 +200,7 @@ class OAuthGrantResponse(BaseModel):
 
     id: uuid.UUID
     client_id: str
+    client_name: str | None = None
     surface: str
     scopes: list[str]
     allowed_projects: list[uuid.UUID] | None = None
@@ -224,9 +236,14 @@ async def oauth_as_metadata(request: Request) -> JSONResponse:
             "token_endpoint": f"{base_url}/oauth/token",
             "revocation_endpoint": f"{base_url}/oauth/revoke",
             "registration_endpoint": f"{base_url}/oauth/register",
+            "device_authorization_endpoint": f"{base_url}/oauth/device/authorize",
             "jwks_uri": f"{base_url}/oauth/jwks.json",
             "code_challenge_methods_supported": ["S256"],
-            "grant_types_supported": ["authorization_code", "refresh_token"],
+            "grant_types_supported": [
+                "authorization_code",
+                "refresh_token",
+                "urn:ietf:params:oauth:grant-type:device_code",
+            ],
             "response_types_supported": ["code"],
             "token_endpoint_auth_methods_supported": ["none", "private_key_jwt"],
         },
@@ -296,6 +313,46 @@ async def oauth_register_client(
             "status": client_record.status,
         },
         status_code=201,
+    )
+
+
+@oauth_root_router.post(
+    "/oauth/device/authorize",
+    summary="OAuth 2.0 Device Authorization (RFC 8628)",
+)
+async def oauth_device_authorize(
+    request: Request,
+    session: UnauthSession,
+) -> JSONResponse:
+    """Initiate RFC 8628 Device Authorization Flow for headless clients."""
+    form = await _parse_request_payload(request)
+    client_id = str(form.get("client_id", ""))
+    resource = str(form.get("resource", ""))
+    scope = form.get("scope")
+    scope_str = str(scope) if scope is not None else None
+
+    if not client_id or not resource:
+        err = "invalid_request"
+        desc = "client_id and resource required"
+        raise OAuth2Error(err, desc, 400)
+
+    base_url = str(request.base_url).rstrip("/")
+    res = await create_device_authorization(
+        session,
+        client_id_str=client_id,
+        resource=resource,
+        scope_str=scope_str,
+        base_url=base_url,
+    )
+    return JSONResponse(
+        {
+            "device_code": res.device_code,
+            "user_code": res.user_code,
+            "verification_uri": res.verification_uri,
+            "verification_uri_complete": res.verification_uri_complete,
+            "expires_in": res.expires_in,
+            "interval": res.interval,
+        }
     )
 
 
@@ -734,6 +791,62 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
             headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
         )
 
+    # 3. Device Code Grant (RFC 8628)
+    if eff_grant_type == "urn:ietf:params:oauth:grant-type:device_code":
+        eff_dev_val = form.get("device_code")
+        eff_dev_code = str(eff_dev_val) if eff_dev_val is not None else ""
+        if not eff_dev_code:
+            err = "invalid_request"
+            desc = "device_code parameter required"
+            raise OAuth2Error(err, desc, 400)
+
+        grant = await poll_device_code(
+            session,
+            device_code=eff_dev_code,
+            client_id_str=eff_client_id,
+        )
+
+        surface_url = f"{base_url}/mcp/{grant.surface}"
+
+        access_token = mint_access_token(
+            issuer=base_url,
+            subject=grant.principal_id,
+            audience=surface_url,
+            surface=grant.surface,
+            scopes=grant.scopes,
+            client_id=eff_client_id,
+            grant_id=grant.id,
+            workspace_id=grant.workspace_id,
+            allowed_projects=grant.allowed_projects,
+            ttl_seconds=ACCESS_TOKEN_TTL_SECONDS,
+        )
+
+        rt_raw = secrets.token_urlsafe(32)
+        rt_sha = hash_token(rt_raw)
+        rt_record = OAuthRefreshToken(
+            token_sha256=rt_sha,
+            grant_id=grant.id,
+            workspace_id=grant.workspace_id,
+            client_id=grant.client_id,
+            principal_id=grant.principal_id,
+            created_at=now,
+            expires_at=now + timedelta(days=REFRESH_TOKEN_TTL_DAYS),
+            revoked_at=None,
+        )
+        session.add(rt_record)
+        await session.commit()
+
+        return JSONResponse(
+            {
+                "access_token": access_token,
+                "token_type": "Bearer",
+                "expires_in": ACCESS_TOKEN_TTL_SECONDS,
+                "refresh_token": rt_raw,
+                "scope": " ".join(grant.scopes),
+            },
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        )
+
     err = "unsupported_grant_type"
     desc = f"Unsupported grant_type {eff_grant_type!r}"
     raise OAuth2Error(err, desc, 400)
@@ -811,7 +924,7 @@ async def list_user_oauth_grants(
 ) -> list[OAuthGrantResponse]:
     """List all active and recent OAuth grants for the authenticated principal."""
     stmt = (
-        select(OAuthGrant, OAuthClient.client_id)
+        select(OAuthGrant, OAuthClient.client_id, OAuthClient.client_name)
         .join(OAuthClient, OAuthGrant.client_id == OAuthClient.id)
         .where(
             OAuthGrant.principal_id == caller.principal_id,
@@ -825,13 +938,14 @@ async def list_user_oauth_grants(
         OAuthGrantResponse(
             id=grant.id,
             client_id=client_id,
+            client_name=client_name,
             surface=grant.surface,
             scopes=grant.scopes,
             allowed_projects=grant.allowed_projects,
             created_at=grant.created_at,
             revoked_at=grant.revoked_at,
         )
-        for grant, client_id in rows
+        for grant, client_id, client_name in rows
     ]
 
 
@@ -928,3 +1042,177 @@ async def admin_patch_oauth_client(
             "updated_at": client_record.updated_at.isoformat(),
         }
     )
+
+
+# =========================================================================
+# RFC 8628 Device Flow Activation & Personal MCP Keys
+# =========================================================================
+
+
+class DeviceActivateRequest(BaseModel):
+    user_code: str
+    approved: bool
+    scopes: list[str] | None = None
+    allowed_projects: list[uuid.UUID] | None = None
+
+
+class PersonalMcpKeyMintRequest(BaseModel):
+    surface: Literal["agent", "docs", "admin"]
+    scopes: list[str]
+    expires_in_days: int | None = Field(default=30, ge=1, le=365)
+
+
+@oauth_v1_router.get(
+    "/oauth/device/info",
+    summary="Get pending device authorization info",
+)
+async def get_device_info(
+    request: Request,
+    session: Session,
+    user_code: Annotated[str, Query(description="User code in format XXXX-XXXX")],
+) -> JSONResponse:
+    """Retrieve metadata for a pending device authorization request."""
+    client_ip = request.client.host if request.client else "unknown"
+    info = await get_device_code_info(session, user_code, rate_limit_key=client_ip)
+    return JSONResponse(
+        {
+            "user_code": info.user_code,
+            "client_name": info.client_name,
+            "client_id": info.client_id,
+            "resource": info.resource,
+            "surface": info.surface,
+            "requested_scopes": info.requested_scopes,
+            "allowed_projects": (
+                [str(p) for p in info.allowed_projects] if info.allowed_projects else None
+            ),
+            "expires_at": info.expires_at.isoformat(),
+        }
+    )
+
+
+@oauth_v1_router.post(
+    "/oauth/device/activate",
+    summary="Activate or deny RFC 8628 device code",
+)
+async def activate_device(
+    request: Request,
+    body: DeviceActivateRequest,
+    caller: Caller,
+    session: Session,
+) -> JSONResponse:
+    """Approve or deny a device authorization request."""
+    client_ip = request.client.host if request.client else "unknown"
+    is_aal2 = caller.aal_level == _REQUIRED_AAL_LEVEL
+    grant = await activate_device_code(
+        session,
+        raw_user_code=body.user_code,
+        principal_id=caller.principal_id,
+        workspace_id=caller.workspace_id,
+        approved=body.approved,
+        allowed_scopes=body.scopes,
+        allowed_projects=body.allowed_projects,
+        rate_limit_key=client_ip,
+        is_aal2=is_aal2,
+    )
+    return JSONResponse({"status": "approved" if grant is not None else "denied"})
+
+
+@oauth_v1_router.get(
+    "/auth/mcp-keys",
+    summary="List personal MCP API keys",
+)
+async def list_personal_mcp_keys(
+    caller: Caller,
+    session: Session,
+) -> JSONResponse:
+    """List all active and revoked personal MCP API keys for the current caller."""
+    stmt = (
+        select(McpApiKey)
+        .where(
+            McpApiKey.principal_id == caller.principal_id,
+            McpApiKey.workspace_id == caller.workspace_id,
+        )
+        .order_by(McpApiKey.created_at.desc())
+    )
+    keys = (await session.execute(stmt)).scalars().all()
+    return JSONResponse(
+        {
+            "keys": [
+                {
+                    "id": str(k.id),
+                    "surface": k.surface,
+                    "key_prefix": k.key_prefix,
+                    "display_hint": k.display_hint,
+                    "scopes": k.scopes,
+                    "created_at": k.created_at.isoformat(),
+                    "expires_at": k.expires_at.isoformat(),
+                    "revoked_at": k.revoked_at.isoformat() if k.revoked_at else None,
+                }
+                for k in keys
+            ]
+        }
+    )
+
+
+@oauth_v1_router.post(
+    "/auth/mcp-keys",
+    status_code=201,
+    summary="Mint a personal MCP API key",
+)
+async def mint_personal_mcp_key_endpoint(
+    body: PersonalMcpKeyMintRequest,
+    caller: Caller,
+    session: Session,
+) -> JSONResponse:
+    """Mint a new personal MCP API key, returning the plaintext key once."""
+    key_record, raw_key = await mint_mcp_api_key(
+        session,
+        workspace_id=caller.workspace_id,
+        principal_id=caller.principal_id,
+        surface=body.surface,
+        scopes=body.scopes,
+        created_by_id=caller.principal_id,
+        expires_in_days=body.expires_in_days,
+    )
+    await session.commit()
+    return JSONResponse(
+        {
+            "id": str(key_record.id),
+            "raw_key": raw_key,
+            "surface": key_record.surface,
+            "key_prefix": key_record.key_prefix,
+            "display_hint": key_record.display_hint,
+            "scopes": key_record.scopes,
+            "created_at": key_record.created_at.isoformat(),
+            "expires_at": key_record.expires_at.isoformat(),
+        },
+        status_code=201,
+    )
+
+
+@oauth_v1_router.delete(
+    "/auth/mcp-keys/{key_id}",
+    status_code=204,
+    summary="Revoke personal MCP API key",
+)
+async def revoke_personal_mcp_key_endpoint(
+    key_id: uuid.UUID,
+    caller: Caller,
+    session: Session,
+) -> Response:
+    """Revoke a personal MCP API key owned by the caller."""
+    stmt = select(McpApiKey).where(
+        McpApiKey.id == key_id,
+        McpApiKey.principal_id == caller.principal_id,
+        McpApiKey.workspace_id == caller.workspace_id,
+    )
+    key = (await session.execute(stmt)).scalar_one_or_none()
+    if key is None:
+        raise not_found()
+    await revoke_mcp_api_key(
+        session,
+        key_id=key_id,
+        caller_principal_id=caller.principal_id,
+    )
+    await session.commit()
+    return Response(status_code=204)

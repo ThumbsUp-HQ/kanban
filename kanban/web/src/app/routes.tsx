@@ -39,6 +39,8 @@ import type { IssueDetail } from '../features/drawer/slots';
 import { LoginPage } from '../features/auth/LoginPage';
 import { SetupClaimPage } from '../features/auth/SetupClaimPage';
 import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
+import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
+import { McpAccessStudio } from '../features/settings/McpAccessStudio';
 
 export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
 
@@ -221,7 +223,15 @@ export const appRoutes: RouteObject[] = [
             path: 'docs/:pageId',
             element: <ProjectDocPageRoute />,
           },
+          {
+            path: 'settings/mcp',
+            element: <McpAccessStudio tier="project" />,
+          },
         ],
+      },
+      {
+        path: 'activate',
+        element: <DeviceActivatePage />,
       },
       {
         path: 'login',
@@ -241,6 +251,18 @@ export const appRoutes: RouteObject[] = [
           {
             path: 'stickies',
             element: <WorkspaceStickiesView />,
+          },
+          {
+            path: 'settings/mcp',
+            element: <McpAccessStudio tier="personal" />,
+          },
+          {
+            path: 'workspaces/settings/mcp',
+            element: <McpAccessStudio tier="workspace" />,
+          },
+          {
+            path: 'admin/mcp',
+            element: <McpAccessStudio tier="global" />,
           },
           {
             path: 'admin/auth',

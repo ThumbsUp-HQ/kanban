@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime  # noqa: TC003  # Runtime import required for SQLAlchemy Mapped[datetime]
 from typing import Literal
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, BYTEA, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -343,4 +343,117 @@ class OAuthRevokedJti(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=text("clock_timestamp()"),
+    )
+
+
+class OAuthDeviceCode(Base):
+    """RFC 8628 Headless CLI device authorization code."""
+
+    __tablename__ = "oauth_device_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.uuidv7(),
+    )
+    device_code_sha256: Mapped[bytes] = mapped_column(
+        BYTEA,
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    user_code: Mapped[str] = mapped_column(
+        Text,
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("oauth_clients.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    resource: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+    surface: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+    )
+    requested_scopes: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        nullable=False,
+    )
+    allowed_projects: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        nullable=True,
+    )
+    approved_grant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("oauth_grants.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("principals.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    approved_scopes: Mapped[list[str] | None] = mapped_column(
+        ARRAY(Text),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("clock_timestamp()"),
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    last_polled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    interval_sec: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=5,
+        server_default="5",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "octet_length(device_code_sha256) = 32",
+            name="oauth_device_codes_sha256_len_check",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'denied', 'expired')",
+            name="oauth_device_codes_status_check",
+        ),
+        CheckConstraint(
+            "surface IN ('agent', 'docs', 'admin')",
+            name="oauth_device_codes_surface_check",
+        ),
+        CheckConstraint(
+            "interval_sec >= 1",
+            name="oauth_device_codes_interval_check",
+        ),
     )
