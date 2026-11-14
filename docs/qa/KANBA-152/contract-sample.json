@@ -1,0 +1,40 @@
+{
+  "ticket": "KANBA-152",
+  "feature": "kb-transition-context/v1 spotlight builder, kb-transition-verdict/v1 parser, gate worker & validate-verdict CLI",
+  "rendered_context": {
+    "schema": "kb-transition-context/v1",
+    "verdict_nonce": "3eb13b9046685257bdd640fb06671ad1",
+    "delimiter": "<<<UNTRUSTED_TICKET_DATA_1c80317fa3b1799d>>>",
+    "yaml_text": "schema: kb-transition-context/v1\nexecution_id: 0196ed40-7b2a-7000-8000-112233445566\nverdict_nonce: 3eb13b9046685257bdd640fb06671ad1\ntransition:\n  project: KAN\n  issue: KAN-142\n  from_state: In Review\n  to_state: Done\n  actor: '@adam'\nrepo_context:\n  mount_path: /workspace/repo\n  access: read-only\n  head_commit: 94a1f02c8e\nmcp_access:\n  agent_url: https://kanban.internal/mcp/agent\n  docs_url: https://kanban.internal/mcp/docs\n  ephemeral_bearer_env: KANBAN_EPHEMERAL_MCP_TOKEN\nticket_snapshot:\n  delimiter: <<<UNTRUSTED_TICKET_DATA_1c80317fa3b1799d>>>\n  summary: Harden Multi-Card OIDC & LDAPS Auth Studio\n  priority: Urgent\n  labels:\n  - security\n  - auth\n  description_markdown: |\n    <<<UNTRUSTED_TICKET_DATA_1c80317fa3b1799d>>>\n    Enforce PKCE S256 and StartTLS bind verification across all cards.\n    <<<UNTRUSTED_TICKET_DATA_1c80317fa3b1799d>>>\n",
+    "sha256": "0f7bf8a5e4f56a2452397b24393d64f64b2af5d55c0241d1f112f12d56a66813",
+    "allowed_mutable_fields": [
+      "priority",
+      "labels"
+    ],
+    "ephemeral_token_scrubbed_from_yaml": true
+  },
+  "valid_verdict": {
+    "schema": "kb-transition-verdict/v1",
+    "nonce": "3eb13b9046685257bdd640fb06671ad1",
+    "decision": "approve",
+    "reason_markdown": "### Forensic QA Verification\nAll acceptance criteria verified against codebase and test suite.\n- Invariant checks pass\n- Zero dash violations\n- Test coverage >= 95%",
+    "field_updates": {
+      "priority": "High"
+    },
+    "add_labels": [
+      "qa:passed",
+      "security-hardened"
+    ],
+    "add_links": [
+      {
+        "link_type": "RELATES_TO",
+        "target": "KAN-142"
+      },
+      {
+        "link_type": "VERIFIED_BY_DOC",
+        "target": "qa-verification-guide"
+      }
+    ]
+  },
+  "valid_verdict_canonical_sha256": "e7c77c10d8eec193f3dad98f4cb388fd5e7d72eb9e086fedb428777dd5712613"
+}

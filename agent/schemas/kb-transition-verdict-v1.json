@@ -1,0 +1,88 @@
+{
+  "$defs": {
+    "VerdictLinkSpec": {
+      "additionalProperties": false,
+      "description": "Link relationship specification proposed in an agent transition verdict.",
+      "properties": {
+        "link_type": {
+          "enum": [
+            "RELATES_TO",
+            "BLOCKS",
+            "BLOCKED_BY",
+            "VERIFIED_BY_DOC"
+          ],
+          "title": "Link Type",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "link_type",
+        "target"
+      ],
+      "title": "VerdictLinkSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Schema-validated verdict returned by an AI transition gate.",
+  "properties": {
+    "schema": {
+      "const": "kb-transition-verdict/v1",
+      "default": "kb-transition-verdict/v1",
+      "title": "Schema",
+      "type": "string"
+    },
+    "nonce": {
+      "maxLength": 64,
+      "minLength": 16,
+      "title": "Nonce",
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "approve",
+        "reject"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "reason_markdown": {
+      "maxLength": 16384,
+      "minLength": 1,
+      "title": "Reason Markdown",
+      "type": "string"
+    },
+    "field_updates": {
+      "additionalProperties": true,
+      "title": "Field Updates",
+      "type": "object"
+    },
+    "add_labels": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Add Labels",
+      "type": "array"
+    },
+    "add_links": {
+      "items": {
+        "$ref": "#/$defs/VerdictLinkSpec"
+      },
+      "maxItems": 10,
+      "title": "Add Links",
+      "type": "array"
+    }
+  },
+  "required": [
+    "nonce",
+    "decision",
+    "reason_markdown"
+  ],
+  "title": "TransitionVerdict",
+  "type": "object"
+}

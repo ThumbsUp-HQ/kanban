@@ -1,0 +1,175 @@
+{
+  "$defs": {
+    "McpAccess": {
+      "additionalProperties": false,
+      "description": "Configuration for ephemeral MCP service connections.",
+      "properties": {
+        "agent_url": {
+          "title": "Agent Url",
+          "type": "string"
+        },
+        "docs_url": {
+          "title": "Docs Url",
+          "type": "string"
+        },
+        "ephemeral_bearer_env": {
+          "const": "KANBAN_EPHEMERAL_MCP_TOKEN",
+          "default": "KANBAN_EPHEMERAL_MCP_TOKEN",
+          "title": "Ephemeral Bearer Env",
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent_url",
+        "docs_url"
+      ],
+      "title": "McpAccess",
+      "type": "object"
+    },
+    "RepoContext": {
+      "additionalProperties": false,
+      "description": "Read-only repository mount configuration for the agent execution.",
+      "properties": {
+        "mount_path": {
+          "default": "/workspace/repo",
+          "title": "Mount Path",
+          "type": "string"
+        },
+        "access": {
+          "const": "read-only",
+          "default": "read-only",
+          "title": "Access",
+          "type": "string"
+        },
+        "head_commit": {
+          "title": "Head Commit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "head_commit"
+      ],
+      "title": "RepoContext",
+      "type": "object"
+    },
+    "TicketSnapshot": {
+      "additionalProperties": false,
+      "description": "Sanitized and spotlighted snapshot of the ticket undergoing transition.",
+      "properties": {
+        "delimiter": {
+          "title": "Delimiter",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "priority": {
+          "title": "Priority",
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Labels",
+          "type": "array"
+        },
+        "description_markdown": {
+          "title": "Description Markdown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "delimiter",
+        "summary",
+        "priority",
+        "description_markdown"
+      ],
+      "title": "TicketSnapshot",
+      "type": "object"
+    },
+    "TransitionMetadata": {
+      "additionalProperties": false,
+      "description": "Metadata describing the target workflow transition.",
+      "properties": {
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "issue": {
+          "title": "Issue",
+          "type": "string"
+        },
+        "from_state": {
+          "title": "From State",
+          "type": "string"
+        },
+        "to_state": {
+          "title": "To State",
+          "type": "string"
+        },
+        "actor": {
+          "title": "Actor",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "issue",
+        "from_state",
+        "to_state",
+        "actor"
+      ],
+      "title": "TransitionMetadata",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Canonical schema for kb-transition-context/v1 payload.",
+  "properties": {
+    "schema": {
+      "const": "kb-transition-context/v1",
+      "default": "kb-transition-context/v1",
+      "title": "Schema",
+      "type": "string"
+    },
+    "execution_id": {
+      "title": "Execution Id",
+      "type": "string"
+    },
+    "verdict_nonce": {
+      "title": "Verdict Nonce",
+      "type": "string"
+    },
+    "transition": {
+      "$ref": "#/$defs/TransitionMetadata"
+    },
+    "repo_context": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RepoContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "mcp_access": {
+      "$ref": "#/$defs/McpAccess"
+    },
+    "ticket_snapshot": {
+      "$ref": "#/$defs/TicketSnapshot"
+    }
+  },
+  "required": [
+    "execution_id",
+    "verdict_nonce",
+    "transition",
+    "mcp_access",
+    "ticket_snapshot"
+  ],
+  "title": "TransitionContextModel",
+  "type": "object"
+}

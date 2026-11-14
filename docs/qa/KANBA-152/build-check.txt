@@ -1,0 +1,39 @@
+=== 1. RUFF CHECK ===
+All checks passed!
+exit=0
+
+=== 2. RUFF FORMAT ===
+1227 files already formatted
+exit=0
+
+=== 3. MYPY STRICT AGENT ===
+Success: no issues found in 80 source files
+exit=0
+
+=== 4. LINT IMPORTS ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 715 files, 2327 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT (35 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+exit=0
+
+=== 5. CHECK NO DASHES ===
+exit=0

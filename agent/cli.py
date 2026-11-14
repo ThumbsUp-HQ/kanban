@@ -21,6 +21,10 @@ from agent.cli_commands.validate_sparkle import (
     configure_validate_sparkle_parser,
     handle_validate_sparkle,
 )
+from agent.cli_commands.validate_verdict import (
+    configure_validate_verdict_parser,
+    handle_validate_verdict,
+)
 from agent.cli_report import (
     ContextScrubber,
     ExitCode,
@@ -210,6 +214,16 @@ register_subcommand(
         help="Validate Sparkle FIM latency, RLS filtering and ghost-text output at a cursor offset",
         configure_parser=configure_validate_sparkle_parser,
         handler=handle_validate_sparkle,
+    )
+)
+
+# Register validate-verdict subcommand
+register_subcommand(
+    SubcommandSpec(
+        name="validate-verdict",
+        help="Validate transition gate verdict or render spotlighted context YAML",
+        configure_parser=configure_validate_verdict_parser,
+        handler=handle_validate_verdict,
     )
 )
 
