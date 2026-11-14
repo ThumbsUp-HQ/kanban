@@ -19,7 +19,7 @@ Authorization: Bearer kb_agt_global_key
 }
 
 HTTP/1.1 200 OK
-mcp-session-id: PKDXAfa7lLCtJ-iBnUxNNHaHbivCuf0psShwztBwtkI
+mcp-session-id: hZ6SIZyOE-RazrB20AT9COkoIknpiNwV9Qalct2HSOQ
 content-length: 172
 content-type: application/json
 
@@ -46,7 +46,7 @@ SCENARIO: 1. Global Mode tools/call read_ticket (unique cross-workspace)
 ================================================================================
 POST /mcp/agent HTTP/1.1
 Authorization: Bearer kb_agt_global_key
-mcp-session-id: PKDXAfa7lLCtJ-iBnUxNNHaHbivCuf0psShwztBwtkI
+mcp-session-id: hZ6SIZyOE-RazrB20AT9COkoIknpiNwV9Qalct2HSOQ
 
 {
   "jsonrpc": "2.0",
@@ -100,7 +100,7 @@ Authorization: Bearer kb_agt_global_key
 }
 
 HTTP/1.1 200 OK
-mcp-session-id: -XKBVIs7Dt97EeFdXZzmfVDRPqz1r_OLCoA5OfuB_Gc
+mcp-session-id: yhWBYZ7SqFXb9yjqMsb3gAhTEaqx_6G7cEVDRFl1mik
 content-length: 172
 content-type: application/json
 
@@ -143,7 +143,7 @@ Authorization: Bearer kb_agt_global_key
 }
 
 HTTP/1.1 200 OK
-mcp-session-id: qrz77tLV__LcXo5KQAiHBf9HGkQBqVCmUGbyZzdrQ_I
+mcp-session-id: RfPbJ7lwE1JYXmiX8OaD-SklL8pNymredRnP7pk1hv4
 content-length: 172
 content-type: application/json
 
@@ -170,7 +170,7 @@ SCENARIO: 3. Project-Scoped Mode tools/call create_ticket (auto-filled project=K
 ================================================================================
 POST /mcp/agent/w/kanban/p/KANBA HTTP/1.1
 Authorization: Bearer kb_agt_global_key
-mcp-session-id: qrz77tLV__LcXo5KQAiHBf9HGkQBqVCmUGbyZzdrQ_I
+mcp-session-id: RfPbJ7lwE1JYXmiX8OaD-SklL8pNymredRnP7pk1hv4
 
 {
   "jsonrpc": "2.0",
@@ -238,7 +238,7 @@ content-type: application/json
 SCENARIO: 5. Key Scope Violation (project=KANBA key presented to /mcp/agent/w/general)
 ================================================================================
 POST /mcp/agent/w/general HTTP/1.1
-Authorization: Bearer kb_agt_proj_kanba_key
+Authorization: Bearer kb_agt_proj_key
 
 {
   "jsonrpc": "2.0",

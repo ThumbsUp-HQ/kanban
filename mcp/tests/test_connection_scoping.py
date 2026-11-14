@@ -51,7 +51,7 @@ def _build_scoping_test_env(  # noqa: C901
             "scope_tier": "workspace",
             "scopes": ["agent:read", "agent:write"],
         },
-        "kb_agt_proj_kanba_key": {
+        "kb_agt_proj_key": {
             "active": True,
             "principal_id": "00000000-0000-0000-0000-000000000001",
             "workspace_id": "00000000-0000-0000-0000-000000000002",
@@ -674,7 +674,7 @@ async def test_case_4_security_monotonic_narrowing_and_cross_project_block() -> 
     assert err_cr["code"] == "CONNECTION_SCOPE_VIOLATION"
 
     # 3. Presenting single-project key (project=KANBA in workspace=kanban) to /mcp/agent/w/general
-    proj_headers = {"Authorization": "Bearer kb_agt_proj_kanba_key"}
+    proj_headers = {"Authorization": "Bearer kb_agt_proj_key"}
     violation_resp = await client.post(
         "/mcp/agent/w/general",
         headers=proj_headers,
