@@ -30,7 +30,7 @@ async def test_case_1_positive_initialize_and_tools_list(
         (
             "/mcp/agent",
             "kanban-mcp-agent",
-            ["search_tickets", "read_ticket"],
+            ["search_tickets", "read_ticket", "create_ticket", "update_ticket"],
             "search_tickets",
             {"gate_status": "approved"},
             "gate history available",
