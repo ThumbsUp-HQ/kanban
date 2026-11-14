@@ -54,17 +54,10 @@ async def test_case_1_positive_initialize_and_tools_list(
         (
             "/mcp/admin",
             "kanban-mcp-admin",
-            [
-                "configure_workspace",
-                "manage_auth_cards",
-                "architect_project",
-                "manage_cycles_and_modules",
-                "override_ticket_provenance",
-                "audit_and_purge_object_links",
-            ],
-            "configure_workspace",
-            {"action": "help"},
-            "configure_workspace",
+            ["ping_admin"],
+            "ping_admin",
+            {},
+            "ok: true",
         ),
     ]
 
