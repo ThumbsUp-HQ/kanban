@@ -86,7 +86,7 @@ export const VIEW_REGISTRY: Record<string, ViewComponent> = {
   table: TableView as ViewComponent,
   calendar: CalendarView as ViewComponent,
   timeline: TimelineView as ViewComponent,
-  board: SwimlaneBoardGrid as ViewComponent,
+  board: BoardView as unknown as ViewComponent,
 };
 
 export interface ViewHostProps extends ViewComponentProps {
@@ -456,6 +456,8 @@ export function IssuesWorkspaceRoute({
           focusedKey={focusedKey}
           onCardClick={handleRowClick}
         />
+      ) : layout === 'board' ? (
+        <BoardView projectKey={projectKey} />
       ) : (
         <ViewHost
           layout={layout}

@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from '../../api/client.ts';
+import type { PendingGateInfo, LatestGateVerdict } from '../gates/types.ts';
 
 export interface BoardPriority {
   id: string;
@@ -36,6 +37,8 @@ export interface BoardIssue {
   cycle?: BoardCycle | null;
   due_date?: string | null;
   gate_status?: 'pending' | 'rejected' | 'approved' | null;
+  pending_gate?: PendingGateInfo | null;
+  latest_gate_verdict?: LatestGateVerdict | null;
   has_explicit_acl?: boolean;
 }
 

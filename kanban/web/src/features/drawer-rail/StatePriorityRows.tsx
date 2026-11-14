@@ -3,6 +3,7 @@ import type { IssueDetail } from '../drawer/slots';
 import type { ProjectPriority, ProjectWorkflowState } from './railApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import type { EmojiKey } from '../../components/emoji/emojiRegistry';
+import { GateStatusPill } from '../gates/GateStatusPill';
 
 export interface StatePriorityRowsProps {
   issue: IssueDetail;
@@ -79,6 +80,31 @@ export function StatePriorityRows({
           State
         </label>
         <div className="prop-row__value">
+          {issue.pending_gate && (
+            <GateStatusPill
+              status="pending"
+              pendingGate={issue.pending_gate}
+              issueKey={issue.key}
+              canCancel={canTransition}
+              testId="drawer-gate-pending"
+            />
+          )}
+          {!issue.pending_gate && issue.latest_gate_verdict?.decision === 'reject' && (
+            <GateStatusPill
+              status="rejected"
+              latestVerdict={issue.latest_gate_verdict}
+              issueKey={issue.key}
+              testId="drawer-gate-vetoed"
+            />
+          )}
+          {!issue.pending_gate && issue.latest_gate_verdict?.decision === 'approve' && (
+            <GateStatusPill
+              status="approved"
+              latestVerdict={issue.latest_gate_verdict}
+              issueKey={issue.key}
+              testId="drawer-gate-approved"
+            />
+          )}
           <select
             id="prop-state-select"
             aria-label="State"

@@ -1,0 +1,259 @@
+/* Copyright 2026 Kanban Platform Contributors */
+/* Apache-2.0 License. See LICENSE for details. */
+
+:root {
+  --border-accent-subtle: rgba(29, 78, 216, 0.4);
+  --gate-snapback-duration: 240ms;
+  --gate-snapback-timing: cubic-bezier(0.2, 0, 0, 1);
+}
+
+[data-theme='dark'] {
+  --border-accent-subtle: rgba(59, 130, 246, 0.5);
+}
+
+/* Card provisional state during pending transition gate */
+.board-card--pending-gate {
+  border: 1px dashed var(--border-accent-subtle);
+  background: var(--bg-surface, #ffffff);
+}
+
+.board-card[data-gate-pending='true'][aria-disabled='true'] {
+  cursor: pointer;
+}
+
+.board-card-drag-disabled {
+  cursor: not-allowed !important;
+}
+
+/* Column header pending indicator */
+.board-column-header-gate-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--fg-secondary, #475569);
+  background: var(--bg-surface-raised, rgba(0, 0, 0, 0.04));
+  padding: 0 var(--space-2, 8px);
+  border-radius: var(--radius-sm, 4px);
+  margin-left: var(--space-1, 4px);
+}
+
+/* FLIP snapback animation */
+.gate-card-snapback {
+  transition: transform var(--gate-snapback-duration, 240ms) var(--gate-snapback-timing, cubic-bezier(0.2, 0, 0, 1)) !important;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gate-card-snapback {
+    transition-duration: 0ms !important;
+  }
+}
+
+/* Gate popover content formatting */
+.gate-popover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  max-width: 320px;
+  color: var(--fg-primary, #0f172a);
+}
+
+.gate-popover__line1 {
+  font-weight: 600;
+}
+
+.gate-popover__line2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  color: var(--fg-secondary, #475569);
+}
+
+.gate-popover__timer {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  background: var(--bg-surface-raised, rgba(0, 0, 0, 0.05));
+  padding: 0 var(--space-1, 4px);
+  border-radius: 3px;
+}
+
+.gate-popover__repo-ro {
+  font-size: 0.75rem;
+  color: var(--ok-fg, #059669);
+  font-weight: 500;
+}
+
+.gate-popover__cancel-btn {
+  margin-top: var(--space-1, 4px);
+  align-self: flex-start;
+  font-size: 0.75rem;
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  background: var(--bg-surface, #ffffff);
+  color: var(--danger-fg, #881337);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.gate-popover__cancel-btn:hover {
+  background: var(--danger-bg, #ffe4e6);
+}
+
+.gate-popover__reason {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  color: var(--fg-secondary, #475569);
+  font-size: 0.75rem;
+}
+
+.gate-popover__jump-link {
+  margin-top: var(--space-1, 4px);
+  align-self: flex-start;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-primary, #2563eb);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.gate-popover__jump-link:hover {
+  color: var(--accent-primary, #1d4ed8);
+}
+
+.gate-popover__hash-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-1, 4px);
+}
+
+.gate-popover__hash-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  background: var(--bg-surface-raised, rgba(0, 0, 0, 0.05));
+  padding: var(--space-1, 4px);
+  border-radius: 3px;
+  user-select: text;
+  word-break: break-all;
+}
+
+.gate-popover__copy-btn {
+  font-size: 0.6875rem;
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  background: var(--bg-surface, #ffffff);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.gate-popover__copy-btn:hover {
+  background: var(--bg-hover, #f1f3f5);
+}
+
+/* Gate Activity Row styling */
+.gate-activity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px) 0;
+  border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+}
+
+.gate-activity-row__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+
+.gate-activity-row__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2, 8px);
+  flex-wrap: wrap;
+}
+
+.gate-activity-row__hook {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--fg-primary, #0f172a);
+}
+
+.gate-activity-row__harness {
+  font-size: 0.75rem;
+  color: var(--fg-muted, #64748b);
+}
+
+.gate-activity-row__time {
+  font-size: 0.75rem;
+  color: var(--fg-muted, #64748b);
+  margin-left: auto;
+}
+
+.gate-activity-row__detail {
+  font-size: 0.8125rem;
+  color: var(--fg-secondary, #475569);
+  line-height: 1.4;
+}
+
+.gate-activity-row__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-1, 4px);
+}
+
+/* Calm inline toast for stale-snapshot or gate cancellation */
+.gate-stale-toast {
+  position: fixed;
+  bottom: var(--space-6, 24px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--fg-primary, #0f172a);
+  color: var(--bg-surface, #ffffff);
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  border-radius: var(--radius-md, 6px);
+  font-size: 0.8125rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  animation: gate-toast-in 0.2s ease-out;
+}
+
+@keyframes gate-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Gate pills carry two glyphs (state + robot): keep them on one line, height stays 24px (--emoji-pill). */
+.emoji-hint[data-testid^='gate-'],
+.emoji-hint[data-testid^='drawer-gate-'],
+.emoji-hint[data-testid^='activity-gate-hint'] {
+  width: auto;
+  min-width: var(--emoji-pill, 24px);
+  padding: 0 var(--space-1, 4px);
+}
+
+.emoji-hint[data-testid^='gate-'] .emoji-hint-glyph,
+.emoji-hint[data-testid^='drawer-gate-'] .emoji-hint-glyph,
+.emoji-hint[data-testid^='activity-gate-hint'] .emoji-hint-glyph {
+  white-space: nowrap;
+}

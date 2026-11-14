@@ -11,6 +11,9 @@ export interface BoardColumnProps {
   draggingKey?: string | null | undefined;
   dropTargetKey?: string | null | undefined;
   dropEdge?: 'top' | 'bottom' | null | undefined;
+  canCancelGate?: boolean | undefined;
+  onCancelGate?: ((executionId: string) => void | Promise<void>) | undefined;
+  onJumpToComment?: ((commentId: string) => void) | undefined;
   onOpenPeek?: ((issueKey: string) => void) | undefined;
   onKeyboardMove?: ((issue: BoardIssue, direction: 'up' | 'down' | 'left' | 'right') => void) | undefined;
   onNewItem?: ((stateId: string) => void) | undefined;
@@ -78,6 +81,9 @@ export function BoardColumn({
   draggingKey,
   dropTargetKey,
   dropEdge,
+  canCancelGate,
+  onCancelGate,
+  onJumpToComment,
   onOpenPeek,
   onKeyboardMove,
   onNewItem,
@@ -89,6 +95,9 @@ export function BoardColumn({
 
   const glyph = STATE_GLYPHS[state.group];
   const count = issues.length;
+  const pendingGateCount = issues.filter(
+    (i) => i.gate_status === 'pending' || Boolean(i.pending_gate),
+  ).length;
 
   const isSoftWipExceeded = Boolean(state.wip_soft_limit && count > state.wip_soft_limit);
   const isHardWipExceeded = Boolean(state.wip_hard_limit && count >= state.wip_hard_limit);
@@ -162,6 +171,16 @@ export function BoardColumn({
             {state.name}
           </span>
           <span className="board-column-count">{count}</span>
+          {pendingGateCount >= 1 && (
+            <span
+              className="board-column-header-gate-count"
+              data-testid={`board-column-gate-count-${state.id}`}
+              title={`${String(pendingGateCount)} gate(s) pending in this column`}
+            >
+              <span aria-hidden="true">⏳🤖</span>
+              <span>{pendingGateCount}</span>
+            </span>
+          )}
           {wipLabel && <span className="board-column-wip">{wipLabel}</span>}
         </div>
         <div className="board-column-header-right">
@@ -201,6 +220,9 @@ export function BoardColumn({
                   onKeyboardMove={onKeyboardMove}
                   isDragging={draggingKey === issue.key}
                   dropEdge={dropTargetKey === issue.key ? dropEdge : null}
+                  canCancelGate={canCancelGate}
+                  onCancelGate={onCancelGate}
+                  onJumpToComment={onJumpToComment}
                 />
               </VirtualCardWrapper>
             );

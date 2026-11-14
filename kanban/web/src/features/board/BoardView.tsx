@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { announce } from '../../api/RealtimeStatus.tsx';
 import { apiFetch } from '../../api/client.ts';
+import type { RealtimeClient } from '../../api/realtime.ts';
 import { useOptimisticMutation } from '../../api/optimistic.ts';
 import { qk } from '../../api/queryKeys.ts';
+import { useGateRealtimeSync, cancelGateTransitionApi } from '../gates/index.ts';
 import { BoardColumn } from './BoardColumn.tsx';
 import { HardWipOverrideModal } from './HardWipOverrideModal.tsx';
 import {
@@ -23,6 +25,7 @@ export interface BoardViewProps {
   states?: BoardWorkflowState[];
   issues?: BoardIssue[];
   currentUserCapabilities?: string[];
+  realtimeClient?: RealtimeClient | undefined;
   onOpenPeek?: (issueKey: string) => void;
   onNewItem?: (stateId: string) => void;
   onMoveSuccess?: (res: IssueMoveResponse) => void;
@@ -51,17 +54,31 @@ export function BoardView({
   states: propStates,
   issues: propIssues,
   currentUserCapabilities: propCapabilities,
+  realtimeClient,
   onOpenPeek,
   onNewItem,
   onMoveSuccess,
   monitorFactory = monitorForElements,
 }: BoardViewProps): JSX.Element {
+  const queryClient = useQueryClient();
   const [localIssues, setLocalIssues] = useState<BoardIssue[] | null>(null);
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [dropEdge, setDropEdge] = useState<'top' | 'bottom' | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pendingHardWipMove, setPendingHardWipMove] = useState<PendingHardWipMove | null>(null);
+
+  useGateRealtimeSync({
+    client: realtimeClient,
+    queryClient,
+    projectKey,
+    onToast: (msg) => {
+      setToastMessage(msg);
+      setTimeout(() => {
+        setToastMessage((prev) => (prev === msg ? null : prev));
+      }, 5000);
+    },
+  });
 
   // Fetch project details for states and capabilities when omitted
   const projectQuery = useQuery({
@@ -132,7 +149,15 @@ export function BoardView({
 
   const rawQueryIssues = issuesQuery.data;
   const issues = useMemo(() => {
-    return localIssues ?? propIssues ?? rawQueryIssues ?? [];
+    const raw = localIssues ?? propIssues ?? rawQueryIssues ?? [];
+    return raw.map((iss) => {
+      const record = iss as { state_id?: string; state?: { id?: string } };
+      const stateId = record.state_id ?? record.state?.id ?? '';
+      return {
+        ...iss,
+        state_id: stateId,
+      };
+    });
   }, [localIssues, propIssues, rawQueryIssues]);
 
   const isAdmin = useMemo(() => {
@@ -416,6 +441,10 @@ export function BoardView({
               draggingKey={draggingKey}
               dropTargetKey={dropTargetKey}
               dropEdge={dropEdge}
+              canCancelGate={isAdmin || true}
+              onCancelGate={async (execId) => {
+                await cancelGateTransitionApi(execId);
+              }}
               onOpenPeek={onOpenPeek}
               onKeyboardMove={handleKeyboardMove}
               onNewItem={onNewItem}

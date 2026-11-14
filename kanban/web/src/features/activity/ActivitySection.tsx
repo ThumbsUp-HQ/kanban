@@ -21,6 +21,8 @@ import {
   fetchComments,
 } from './activityApi';
 import { ActivityEventRow } from './ActivityEventRow';
+import { GateActivityRow } from '../gates/GateActivityRow';
+import type { GateActivityItem } from '../gates/types';
 import { CommentCard } from './CommentCard';
 import { CommentComposer } from './CommentComposer';
 import './activity.css';
@@ -188,6 +190,7 @@ export function ActivitySection({
                 type="button"
                 role="tab"
                 id={`activity-tab-${tab.id}`}
+                data-testid={`activity-tab-${tab.id}`}
                 aria-selected={isActive}
                 aria-controls={`activity-tabpanel-${tab.id}`}
                 aria-label={accessibleName}
@@ -268,9 +271,9 @@ export function ActivitySection({
             {activityItems
               .filter((item) => item.category === 'AGENT_GATE')
               .map((item) => (
-                <ActivityEventRow
+                <GateActivityRow
                   key={item.id}
-                  item={item}
+                  item={item as unknown as GateActivityItem}
                   onJumpToComment={handleJumpToComment}
                 />
               ))}

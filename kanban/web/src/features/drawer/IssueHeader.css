@@ -7,6 +7,8 @@
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-surface);
   flex-shrink: 0;
+  flex-wrap: wrap;
+  row-gap: var(--space-1);
 }
 
 .issue-header__btn {
@@ -40,13 +42,19 @@
   font-weight: 600;
   color: var(--fg-primary);
   font-size: 0.9375rem;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .issue-header__slots {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   column-gap: var(--space-2);
+  row-gap: var(--space-1);
   margin-left: auto;
+  min-width: 0;
 }
 
 @media (max-width: 767px) {
