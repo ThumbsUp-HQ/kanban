@@ -46,6 +46,7 @@ from database.models.notifications import Notification
 from database.models.oauth import (
     OAuthAuthorizationCode,
     OAuthClient,
+    OAuthDeviceCode,
     OAuthGrant,
     OAuthRefreshToken,
     OAuthRevokedJti,
@@ -116,6 +117,7 @@ __all__ = [
     "Notification",
     "OAuthAuthorizationCode",
     "OAuthClient",
+    "OAuthDeviceCode",
     "OAuthGrant",
     "OAuthRefreshToken",
     "OAuthRevokedJti",
