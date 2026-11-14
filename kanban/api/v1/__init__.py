@@ -61,7 +61,7 @@ from kanban.api.v1.system_status import (
 from kanban.api.v1.views import router as views_router
 
 
-def build_v1_router() -> APIRouter:
+def build_v1_router() -> APIRouter:  # noqa: PLR0915
     """Build and compose the canonical v1 API router tree."""
     v1 = APIRouter()
     v1.include_router(health_router)

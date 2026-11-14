@@ -4,16 +4,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 import hashlib
 import json
 import secrets
-from typing import TYPE_CHECKING, Any, Final, Literal
 import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 from sqlalchemy import delete, func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.base import ObjectKind
 from database.models.destructive_token import DestructiveConfirmationToken
@@ -37,13 +36,14 @@ from database.models.projects import (
     WorkflowState,
 )
 from database.models.spine import ObjectLink, ObjectRecord
-from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException, not_found
-from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
+from kanban.security.permissions import Capability, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from kanban.api.deps import PrincipalContext
 
 __all__ = [
     "ALLOWED_TARGET_KINDS",
@@ -61,6 +61,9 @@ ALLOWED_TARGET_KINDS: Final[frozenset[str]] = frozenset(
     {"issue", "project", "doc", "page", "sticky", "cycle", "module", "view"}
 )
 _MAX_TOKEN_TTL_SECONDS: Final[int] = 300
+_REQUIRED_AAL: Final[int] = 2
+_REASON_MIN_LEN: Final[int] = 10
+_REASON_MAX_LEN: Final[int] = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,7 +184,7 @@ async def _is_server_admin(session: AsyncSession) -> bool:
     return bool(result.scalar_one_or_none())
 
 
-async def _resolve_target_entity(  # noqa: C901, PLR0912
+async def _resolve_target_entity(  # noqa: C901, PLR0912, PLR0913, PLR0915
     session: AsyncSession,
     caller: PrincipalContext,
     target_kind: str,
@@ -195,6 +198,7 @@ async def _resolve_target_entity(  # noqa: C901, PLR0912
     Returns:
         (entity_instance, object_record, canonical_key)
     Raises 404 if not found, not accessible, or soft-deleted when include_deleted is False.
+
     """
     ref = target_ref.strip()
     parsed_uuid: uuid.UUID | None = None
@@ -234,44 +238,46 @@ async def _resolve_target_entity(  # noqa: C901, PLR0912
 
     elif target_kind == "project":
         if parsed_uuid is not None:
-            stmt = select(Project).where(
+            stmt_proj = select(Project).where(
                 Project.id == parsed_uuid, Project.workspace_id == caller.workspace_id
             )
         else:
-            stmt = select(Project).where(
+            stmt_proj = select(Project).where(
                 Project.identifier == ref.upper(), Project.workspace_id == caller.workspace_id
             )
         if for_update:
-            stmt = stmt.with_for_update()
-        entity = (await session.execute(stmt)).scalar_one_or_none()
+            stmt_proj = stmt_proj.with_for_update()
+        entity = (await session.execute(stmt_proj)).scalar_one_or_none()
         if entity is None:
             not_found()
         canonical_key = entity.identifier
 
     elif target_kind == "doc":
         if parsed_uuid is not None:
-            stmt = select(Doc).where(
+            stmt_doc = select(Doc).where(
                 Doc.id == parsed_uuid, Doc.workspace_id == caller.workspace_id
             )
         else:
-            stmt = select(Doc).where(Doc.title == ref, Doc.workspace_id == caller.workspace_id)
+            stmt_doc = select(Doc).where(Doc.title == ref, Doc.workspace_id == caller.workspace_id)
         if for_update:
-            stmt = stmt.with_for_update()
-        entity = (await session.execute(stmt)).scalar_one_or_none()
+            stmt_doc = stmt_doc.with_for_update()
+        entity = (await session.execute(stmt_doc)).scalar_one_or_none()
         if entity is None:
             not_found()
         canonical_key = entity.title
 
     elif target_kind == "page":
         if parsed_uuid is not None:
-            stmt = select(Page).where(
+            stmt_page = select(Page).where(
                 Page.id == parsed_uuid, Page.workspace_id == caller.workspace_id
             )
         else:
-            stmt = select(Page).where(Page.title == ref, Page.workspace_id == caller.workspace_id)
+            stmt_page = select(Page).where(
+                Page.title == ref, Page.workspace_id == caller.workspace_id
+            )
         if for_update:
-            stmt = stmt.with_for_update()
-        entity = (await session.execute(stmt)).scalar_one_or_none()
+            stmt_page = stmt_page.with_for_update()
+        entity = (await session.execute(stmt_page)).scalar_one_or_none()
         if entity is None:
             not_found()
         canonical_key = entity.title
@@ -279,56 +285,60 @@ async def _resolve_target_entity(  # noqa: C901, PLR0912
     elif target_kind == "sticky":
         if parsed_uuid is None:
             not_found()
-        stmt = select(Sticky).where(
+        stmt_sticky = select(Sticky).where(
             Sticky.id == parsed_uuid, Sticky.workspace_id == caller.workspace_id
         )
         if for_update:
-            stmt = stmt.with_for_update()
-        entity = (await session.execute(stmt)).scalar_one_or_none()
+            stmt_sticky = stmt_sticky.with_for_update()
+        entity = (await session.execute(stmt_sticky)).scalar_one_or_none()
         if entity is None:
             not_found()
         canonical_key = str(entity.id)
 
     elif target_kind == "cycle":
         if parsed_uuid is not None:
-            stmt = select(Cycle).where(
+            stmt_cyc = select(Cycle).where(
                 Cycle.id == parsed_uuid, Cycle.workspace_id == caller.workspace_id
             )
         else:
-            stmt = select(Cycle).where(Cycle.name == ref, Cycle.workspace_id == caller.workspace_id)
+            stmt_cyc = select(Cycle).where(
+                Cycle.name == ref, Cycle.workspace_id == caller.workspace_id
+            )
         if for_update:
-            stmt = stmt.with_for_update()
-        entity = (await session.execute(stmt)).scalar_one_or_none()
+            stmt_cyc = stmt_cyc.with_for_update()
+        entity = (await session.execute(stmt_cyc)).scalar_one_or_none()
         if entity is None:
             not_found()
         canonical_key = entity.name
 
     elif target_kind == "module":
         if parsed_uuid is not None:
-            stmt = select(Module).where(
+            stmt_mod = select(Module).where(
                 Module.id == parsed_uuid, Module.workspace_id == caller.workspace_id
             )
         else:
-            stmt = select(Module).where(
+            stmt_mod = select(Module).where(
                 Module.name == ref, Module.workspace_id == caller.workspace_id
             )
         if for_update:
-            stmt = stmt.with_for_update()
-        entity = (await session.execute(stmt)).scalar_one_or_none()
+            stmt_mod = stmt_mod.with_for_update()
+        entity = (await session.execute(stmt_mod)).scalar_one_or_none()
         if entity is None:
             not_found()
         canonical_key = entity.name
 
     elif target_kind == "view":
         if parsed_uuid is not None:
-            stmt = select(View).where(
+            stmt_view = select(View).where(
                 View.id == parsed_uuid, View.workspace_id == caller.workspace_id
             )
         else:
-            stmt = select(View).where(View.name == ref, View.workspace_id == caller.workspace_id)
+            stmt_view = select(View).where(
+                View.name == ref, View.workspace_id == caller.workspace_id
+            )
         if for_update:
-            stmt = stmt.with_for_update()
-        entity = (await session.execute(stmt)).scalar_one_or_none()
+            stmt_view = stmt_view.with_for_update()
+        entity = (await session.execute(stmt_view)).scalar_one_or_none()
         if entity is None:
             not_found()
         canonical_key = entity.name
@@ -352,7 +362,7 @@ async def _resolve_target_entity(  # noqa: C901, PLR0912
     return entity, obj, canonical_key
 
 
-async def compute_object_blast_radius(  # noqa: C901, PLR0912, PLR0915
+async def compute_object_blast_radius(  # noqa: PLR0913, PLR0915
     session: AsyncSession,
     caller: PrincipalContext,
     target_kind: str,
@@ -437,9 +447,7 @@ async def compute_object_blast_radius(  # noqa: C901, PLR0912, PLR0915
         ).scalar_one() or 0
         attachment_count = (
             await session.execute(
-                text(
-                    "SELECT count(*) FROM attachments WHERE issue_id = :issue_id"
-                ),
+                text("SELECT count(*) FROM attachments WHERE issue_id = :issue_id"),
                 {"issue_id": obj.id},
             )
         ).scalar_one() or 0
@@ -566,9 +574,7 @@ async def compute_object_blast_radius(  # noqa: C901, PLR0912, PLR0915
         child_counts = {}
         summary_text = "1 saved view to be removed"
 
-    content_etag_or_updated_at = (
-        obj.updated_at.isoformat() if obj.updated_at else obj.created_at.isoformat()
-    )
+    content_etag_or_updated_at = obj.updated_at.isoformat()
 
     canonical_dict = {
         "child_counts": child_counts,
@@ -610,7 +616,7 @@ async def request_delete(
     mode: Literal["trash", "permanent_purge"] = "trash",
 ) -> DestructiveRequestResult:
     """Stage 1: Compute blast radius and mint single-use 5-minute confirmation token."""
-    if caller.aal_level < 2:
+    if caller.aal_level < _REQUIRED_AAL:
         raise ProblemException(
             code="AAL2_REQUIRED",
             status=403,
@@ -646,7 +652,7 @@ async def request_delete(
         )
 
     include_deleted = mode == "permanent_purge"
-    entity, obj, _ = await _resolve_target_entity(
+    _entity, obj, _ = await _resolve_target_entity(
         session, caller, target_kind, target_ref, include_deleted=include_deleted
     )
 
@@ -661,7 +667,7 @@ async def request_delete(
                 ),
             )
     else:
-        # mode == "trash"
+        # In soft-trash mode
         await require_capability(session, caller, obj.id, Capability.DELETE)
 
     blast = await compute_object_blast_radius(session, caller, target_kind, target_ref, mode=mode)
@@ -699,7 +705,7 @@ async def request_delete(
     )
 
 
-async def execute_delete(  # noqa: C901, PLR0912, PLR0915
+async def execute_delete(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     session: AsyncSession,
     caller: PrincipalContext,
     target_kind: str,
@@ -710,7 +716,7 @@ async def execute_delete(  # noqa: C901, PLR0912, PLR0915
     reason: str,
 ) -> DestructiveExecuteResult:
     """Stage 2: Atomic single-use claim, fail-closed verification, and destructive execution."""
-    if caller.aal_level < 2:
+    if caller.aal_level < _REQUIRED_AAL:
         raise ProblemException(
             code="AAL2_REQUIRED",
             status=403,
@@ -718,28 +724,26 @@ async def execute_delete(  # noqa: C901, PLR0912, PLR0915
             detail="Operation requires Authenticator Assurance Level 2 (AAL2).",
         )
 
-    if not reason or len(reason.strip()) < 10 or len(reason.strip()) > 500:
+    if not reason or len(reason.strip()) < _REASON_MIN_LEN or len(reason.strip()) > _REASON_MAX_LEN:
         raise ProblemException(
             code="VALIDATION_FAILED",
             status=422,
             title="Validation Failed",
-            detail="reason must be between 10 and 500 characters",
+            detail=f"reason must be between {_REASON_MIN_LEN} and {_REASON_MAX_LEN} characters",
         )
 
     raw_token = confirmation_token.strip()
     token_sha256 = hashlib.sha256(raw_token.encode("utf-8")).digest()
 
     # Step 1: Atomic single-use claim
-    claim_stmt = (
-        text(
-            "UPDATE destructive_confirmation_tokens "
-            "SET consumed_at = clock_timestamp() "
-            "WHERE token_sha256 = :token_digest "
-            "  AND consumed_at IS NULL "
-            "  AND expires_at > clock_timestamp() "
-            "RETURNING id, workspace_id, caller_principal_id, target_object_id, "
-            "          target_object_type, mode, blast_hash, confirm_phrase"
-        )
+    claim_stmt = text(
+        "UPDATE destructive_confirmation_tokens "
+        "SET consumed_at = clock_timestamp() "
+        "WHERE token_sha256 = :token_digest "
+        "  AND consumed_at IS NULL "
+        "  AND expires_at > clock_timestamp() "
+        "RETURNING id, workspace_id, caller_principal_id, target_object_id, "
+        "          target_object_type, mode, blast_hash, confirm_phrase"
     )
     res = await session.execute(claim_stmt, {"token_digest": token_sha256})
     claimed_row = res.mappings().one_or_none()
@@ -878,7 +882,7 @@ async def execute_delete(  # noqa: C901, PLR0912, PLR0915
         )
 
     else:
-        # mode == "permanent_purge"
+        # In permanent_purge mode
         if not await _is_server_admin(session):
             raise ProblemException(
                 code="SERVER_ADMIN_REQUIRED",
@@ -916,18 +920,19 @@ async def execute_delete(  # noqa: C901, PLR0912, PLR0915
             "  AND (l.source_id = ANY(:target_ids) OR l.target_id = ANY(:target_ids))"
         )
         touching_audits = (
-            await session.execute(
-                touching_audits_stmt,
-                {"ws_id": caller.workspace_id, "target_ids": all_target_ids},
+            (
+                await session.execute(
+                    touching_audits_stmt,
+                    {"ws_id": caller.workspace_id, "target_ids": all_target_ids},
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         if touching_audits:
             await session.execute(
-                text(
-                    "SELECT * FROM purge_invalid_object_links("
-                    ":audit_ids, :actor_id, :reason)"
-                ),
+                text("SELECT * FROM purge_invalid_object_links(:audit_ids, :actor_id, :reason)"),
                 {
                     "audit_ids": list(touching_audits),
                     "actor_id": caller.principal_id,
@@ -937,7 +942,9 @@ async def execute_delete(  # noqa: C901, PLR0912, PLR0915
 
         # 4b: Delete entity rows and objects spine
         if target_kind == "issue":
-            await session.execute(delete(IssueComment).where(IssueComment.issue_id == target_obj.id))
+            await session.execute(
+                delete(IssueComment).where(IssueComment.issue_id == target_obj.id)
+            )
             await session.execute(
                 delete(IssueAssignee).where(IssueAssignee.issue_id == target_obj.id)
             )
@@ -960,9 +967,7 @@ async def execute_delete(  # noqa: C901, PLR0912, PLR0915
             await session.execute(delete(Page).where(Page.id == target_obj.id))
 
         elif target_kind == "doc":
-            pages_res = await session.execute(
-                select(Page.id).where(Page.doc_id == target_obj.id)
-            )
+            pages_res = await session.execute(select(Page.id).where(Page.doc_id == target_obj.id))
             doc_page_ids = list(pages_res.scalars().all())
             if doc_page_ids:
                 await session.execute(
@@ -981,9 +986,7 @@ async def execute_delete(  # noqa: C901, PLR0912, PLR0915
             await session.execute(delete(Cycle).where(Cycle.id == target_obj.id))
 
         elif target_kind == "module":
-            await session.execute(
-                delete(IssueModule).where(IssueModule.module_id == target_obj.id)
-            )
+            await session.execute(delete(IssueModule).where(IssueModule.module_id == target_obj.id))
             await session.execute(
                 delete(ProjectModuleDefault).where(ProjectModuleDefault.module_id == target_obj.id)
             )
@@ -996,13 +999,117 @@ async def execute_delete(  # noqa: C901, PLR0912, PLR0915
             await session.execute(delete(Sticky).where(Sticky.id == target_obj.id))
 
         elif target_kind == "project":
-            # Project contained items
+            # 1. Project contained issues
+            issues_res = await session.execute(
+                select(Issue.id).where(Issue.project_id == target_obj.id)
+            )
+            proj_issue_ids = list(issues_res.scalars().all())
+            if proj_issue_ids:
+                await session.execute(
+                    delete(IssueComment).where(IssueComment.issue_id.in_(proj_issue_ids))
+                )
+                await session.execute(
+                    delete(IssueAssignee).where(IssueAssignee.issue_id.in_(proj_issue_ids))
+                )
+                await session.execute(
+                    delete(IssueLabel).where(IssueLabel.issue_id.in_(proj_issue_ids))
+                )
+                await session.execute(
+                    delete(IssueModule).where(IssueModule.issue_id.in_(proj_issue_ids))
+                )
+                await session.execute(
+                    delete(IssueSubscription).where(IssueSubscription.issue_id.in_(proj_issue_ids))
+                )
+                await session.execute(delete(Issue).where(Issue.id.in_(proj_issue_ids)))
+                await session.execute(
+                    delete(ObjectRecord).where(ObjectRecord.id.in_(proj_issue_ids))
+                )
+
+            # 2. Project contained pages and docs
+            docs_res = await session.execute(select(Doc.id).where(Doc.project_id == target_obj.id))
+            proj_doc_ids = list(docs_res.scalars().all())
+            pages_res = await session.execute(
+                select(Page.id).where(Page.doc_id.in_(proj_doc_ids))
+                if proj_doc_ids
+                else select(Page.id).where(text("false"))
+            )
+            proj_page_ids = list(pages_res.scalars().all())
+            if proj_page_ids:
+                await session.execute(
+                    delete(PageVersion).where(PageVersion.page_id.in_(proj_page_ids))
+                )
+                await session.execute(delete(Page).where(Page.id.in_(proj_page_ids)))
+                await session.execute(
+                    delete(ObjectRecord).where(ObjectRecord.id.in_(proj_page_ids))
+                )
+            if proj_doc_ids:
+                await session.execute(delete(Doc).where(Doc.id.in_(proj_doc_ids)))
+                await session.execute(delete(ObjectRecord).where(ObjectRecord.id.in_(proj_doc_ids)))
+
+            # 3. Project contained stickies
+            stickies_res = await session.execute(
+                select(Sticky.id).where(Sticky.project_id == target_obj.id)
+            )
+            proj_sticky_ids = list(stickies_res.scalars().all())
+            if proj_sticky_ids:
+                await session.execute(delete(Sticky).where(Sticky.id.in_(proj_sticky_ids)))
+                await session.execute(
+                    delete(ObjectRecord).where(ObjectRecord.id.in_(proj_sticky_ids))
+                )
+
+            # 4. Project contained cycles
+            cycles_res = await session.execute(
+                select(Cycle.id).where(Cycle.project_id == target_obj.id)
+            )
+            proj_cycle_ids = list(cycles_res.scalars().all())
+            if proj_cycle_ids:
+                await session.execute(delete(Cycle).where(Cycle.id.in_(proj_cycle_ids)))
+                await session.execute(
+                    delete(ObjectRecord).where(ObjectRecord.id.in_(proj_cycle_ids))
+                )
+
+            # 5. Project contained modules
+            modules_res = await session.execute(
+                select(Module.id).where(Module.project_id == target_obj.id)
+            )
+            proj_mod_ids = list(modules_res.scalars().all())
+            if proj_mod_ids:
+                await session.execute(
+                    delete(ProjectModuleDefault).where(
+                        ProjectModuleDefault.module_id.in_(proj_mod_ids)
+                    )
+                )
+                await session.execute(
+                    delete(IssueModule).where(IssueModule.module_id.in_(proj_mod_ids))
+                )
+                await session.execute(delete(Module).where(Module.id.in_(proj_mod_ids)))
+                await session.execute(delete(ObjectRecord).where(ObjectRecord.id.in_(proj_mod_ids)))
+
+            # 6. Project contained views
+            views_res = await session.execute(
+                select(View.id).where(View.project_id == target_obj.id)
+            )
+            proj_view_ids = list(views_res.scalars().all())
+            if proj_view_ids:
+                await session.execute(delete(View).where(View.id.in_(proj_view_ids)))
+                await session.execute(
+                    delete(ObjectRecord).where(ObjectRecord.id.in_(proj_view_ids))
+                )
+
+            # 7. Project metadata
+            await session.execute(text("SET LOCAL kanban.allow_project_delete = 'on'"))
             await session.execute(
                 delete(ProjectModuleDefault).where(ProjectModuleDefault.project_id == target_obj.id)
             )
-            await session.execute(delete(ProjectPriority).where(ProjectPriority.project_id == target_obj.id))
-            await session.execute(delete(ProjectLabel).where(ProjectLabel.project_id == target_obj.id))
-            await session.execute(delete(WorkflowState).where(WorkflowState.project_id == target_obj.id))
+            await session.execute(
+                delete(ProjectPriority).where(ProjectPriority.project_id == target_obj.id)
+            )
+            await session.execute(
+                delete(ProjectLabel).where(ProjectLabel.project_id == target_obj.id)
+            )
+            await session.execute(
+                delete(WorkflowState).where(WorkflowState.project_id == target_obj.id)
+            )
             await session.execute(delete(Project).where(Project.id == target_obj.id))
 
         # Record activity before deleting from objects spine
@@ -1043,7 +1150,7 @@ async def restore_object(
     reason: str,
 ) -> DestructiveRestoreResult:
     """Restore a soft-deleted object from trash back to active state."""
-    if caller.aal_level < 2:
+    if caller.aal_level < _REQUIRED_AAL:
         raise ProblemException(
             code="AAL2_REQUIRED",
             status=403,
@@ -1051,12 +1158,12 @@ async def restore_object(
             detail="Operation requires Authenticator Assurance Level 2 (AAL2).",
         )
 
-    if not reason or len(reason.strip()) < 10 or len(reason.strip()) > 500:
+    if not reason or len(reason.strip()) < _REASON_MIN_LEN or len(reason.strip()) > _REASON_MAX_LEN:
         raise ProblemException(
             code="VALIDATION_FAILED",
             status=422,
             title="Validation Failed",
-            detail="reason must be between 10 and 500 characters",
+            detail=f"reason must be between {_REASON_MIN_LEN} and {_REASON_MAX_LEN} characters",
         )
 
     _, obj, canonical_key = await _resolve_target_entity(
@@ -1098,7 +1205,8 @@ async def restore_object(
         # Restore descendant pages that were deleted at the same timestamp
         desc_res = await session.execute(
             text(
-                "SELECT id FROM pages WHERE doc_id = (SELECT doc_id FROM pages WHERE id = :page_id) "
+                "SELECT id FROM pages "
+                "WHERE doc_id = (SELECT doc_id FROM pages WHERE id = :page_id) "
                 "  AND hierarchy_path <@ (SELECT hierarchy_path FROM pages WHERE id = :page_id)"
             ),
             {"page_id": obj.id},

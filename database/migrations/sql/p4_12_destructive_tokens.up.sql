@@ -47,3 +47,28 @@ CREATE POLICY destructive_tokens_delete_rls ON destructive_confirmation_tokens
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON destructive_confirmation_tokens TO kanban_app;
 GRANT SELECT ON destructive_confirmation_tokens TO app_rls_reader;
+
+-- Allow project destructive lifecycle to delete terminal workflow states
+CREATE OR REPLACE FUNCTION workflow_states_group_guard_bd() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    v_remaining INTEGER;
+BEGIN
+    IF current_setting('kanban.allow_project_delete', true) = 'on' THEN
+        RETURN OLD;
+    END IF;
+
+    IF OLD.state_group IN ('completed', 'cancelled') THEN
+        SELECT count(*)
+          INTO v_remaining
+          FROM workflow_states
+         WHERE project_id = OLD.project_id
+           AND state_group = OLD.state_group
+           AND id <> OLD.id;
+
+        IF v_remaining = 0 THEN
+            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'LAST_TERMINAL_STATE_REQUIRED';
+        END IF;
+    END IF;
+    RETURN OLD;
+END;
+$$;

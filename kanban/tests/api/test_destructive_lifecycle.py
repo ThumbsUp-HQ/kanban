@@ -4,9 +4,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
 import uuid
+from typing import TYPE_CHECKING
 
 import pytest
 from sqlalchemy import select, text
@@ -19,10 +18,8 @@ from database.models import (
     ObjectLink,
     ObjectRecord,
 )
-from database.models.destructive_token import DestructiveConfirmationToken
 from database.models.knowledge import Doc, Page
 from database.models.projects import Module
-from kanban.services.destructive_lifecycle import compute_object_blast_radius
 from kanban.tests.security.helpers import (
     add_role_binding,
     create_registered_object,
@@ -197,8 +194,10 @@ async def test_case_1_positive_issue_trash_and_restore(  # noqa: PLR0915
     # Check sub-issues unparented
     c1_row = await api_env.seed.get(Issue, c1_id)
     c2_row = await api_env.seed.get(Issue, c2_id)
-    assert c1_row is not None and c1_row.parent_issue_id is None
-    assert c2_row is not None and c2_row.parent_issue_id is None
+    assert c1_row is not None
+    assert c1_row.parent_issue_id is None
+    assert c2_row is not None
+    assert c2_row.parent_issue_id is None
 
     # 4. Restore: restore_object
     rest_resp = await client.post(
@@ -218,7 +217,7 @@ async def test_case_1_positive_issue_trash_and_restore(  # noqa: PLR0915
     assert obj_row.deleted_at is None
 
 
-async def test_case_1b_positive_permanent_purge(  # noqa: PLR0915
+async def test_case_1b_positive_permanent_purge(
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
@@ -320,15 +319,13 @@ async def test_case_1b_positive_permanent_purge(  # noqa: PLR0915
 
     # Verify activity record DESTRUCTIVE_LIFECYCLE_EXECUTED
     act_res = await api_env.seed.execute(
-        select(ActivityRecord).where(
-            ActivityRecord.event_type == "DESTRUCTIVE_LIFECYCLE_EXECUTED"
-        )
+        select(ActivityRecord).where(ActivityRecord.event_type == "DESTRUCTIVE_LIFECYCLE_EXECUTED")
     )
     records = list(act_res.scalars().all())
     assert len(records) >= 2
 
 
-async def test_case_1c_page_subtree_and_module(  # noqa: PLR0915
+async def test_case_1c_page_subtree_and_module(
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
@@ -433,8 +430,10 @@ async def test_case_1c_page_subtree_and_module(  # noqa: PLR0915
     # Verify both parent and child page are soft-deleted
     p_obj = await api_env.seed.get(ObjectRecord, parent_page_id)
     c_obj = await api_env.seed.get(ObjectRecord, child_page_id)
-    assert p_obj is not None and p_obj.deleted_at is not None
-    assert c_obj is not None and c_obj.deleted_at is not None
+    assert p_obj is not None
+    assert p_obj.deleted_at is not None
+    assert c_obj is not None
+    assert c_obj.deleted_at is not None
 
     # 2. Module two-stage permanent purge
     mod_id = await create_registered_object(
@@ -489,7 +488,9 @@ async def test_case_2_replay_expiry_and_binding_security(  # noqa: PLR0915
     admin_b = await make_user("admin_b", workspace_role="WORKSPACE_ADMIN")
     await _enroll_totp(api_env.seed, admin_a.id)
     await _enroll_totp(api_env.seed, admin_b.id)
-    await make_project("SEC", created_by=admin_a, roles={admin_a: "PROJECT_ADMIN", admin_b: "PROJECT_ADMIN"})
+    await make_project(
+        "SEC", created_by=admin_a, roles={admin_a: "PROJECT_ADMIN", admin_b: "PROJECT_ADMIN"}
+    )
     await rebuild_era(api_env.seed, api_env.workspace_id)
     await api_env.seed.commit()
 
@@ -526,7 +527,8 @@ async def test_case_2_replay_expiry_and_binding_security(  # noqa: PLR0915
     assert res_b.status_code == 403
     assert res_b.json()["code"] == "TOKEN_CALLER_MISMATCH"
 
-    # Token must now be burned! Admin A retrying same token -> 409 CONFIRMATION_TOKEN_INVALID_OR_EXPIRED
+    # Token must now be burned! Admin A retrying same token ->
+    # 409 CONFIRMATION_TOKEN_INVALID_OR_EXPIRED
     as_principal(admin_a, aal_level=2)
     res_burned = await api_env.client.post(
         "/api/v1/admin/destructive:execute",
@@ -636,7 +638,11 @@ async def test_case_2_replay_expiry_and_binding_security(  # noqa: PLR0915
         text(
             "UPDATE destructive_confirmation_tokens "
             "SET expires_at = clock_timestamp() - interval '10 seconds' "
-            "WHERE target_object_id = (SELECT id FROM issues WHERE project_id = (SELECT id FROM projects WHERE identifier = 'SEC') AND sequence_id = 2)"
+            "WHERE target_object_id = ("
+            "  SELECT id FROM issues WHERE project_id = ("
+            "    SELECT id FROM projects WHERE identifier = 'SEC'"
+            "  ) AND sequence_id = 2"
+            ")"
         )
     )
     await api_env.seed.commit()
@@ -656,13 +662,13 @@ async def test_case_2_replay_expiry_and_binding_security(  # noqa: PLR0915
     assert res_expired.json()["code"] == "CONFIRMATION_TOKEN_INVALID_OR_EXPIRED"
 
 
-async def test_case_3_blast_hash_toctou_protection(  # noqa: PLR0915
+async def test_case_3_blast_hash_toctou_protection(
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
     as_principal: Callable[..., httpx.AsyncClient],
 ) -> None:
-    """Case 3: Concurrently attaching a new child issue or link triggers 412 BLAST_RADIUS_CHANGED."""
+    """Case 3: Concurrently attaching a child issue or link triggers 412 BLAST_RADIUS_CHANGED."""
     admin = await make_user("toctou_admin", workspace_role="WORKSPACE_ADMIN")
     await _enroll_totp(api_env.seed, admin.id)
     await make_project("TOCT", created_by=admin, roles={admin: "PROJECT_ADMIN"})
@@ -711,7 +717,7 @@ async def test_case_3_blast_hash_toctou_protection(  # noqa: PLR0915
     assert obj_row.deleted_at is None
 
 
-async def test_case_4_role_and_scope_gates(  # noqa: PLR0915
+async def test_case_4_role_and_scope_gates(
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
@@ -726,7 +732,9 @@ async def test_case_4_role_and_scope_gates(  # noqa: PLR0915
 
     # Create active issue in GATE
     as_principal(admin, aal_level=2)
-    r_iss = await api_env.client.post("/api/v1/projects/GATE/issues", json={"summary": "Gate Issue"})
+    r_iss = await api_env.client.post(
+        "/api/v1/projects/GATE/issues", json={"summary": "Gate Issue"}
+    )
     assert r_iss.status_code == 201
     gate_key = r_iss.json()["key"]
 
@@ -740,7 +748,7 @@ async def test_case_4_role_and_scope_gates(  # noqa: PLR0915
 
     as_principal(admin, aal_level=2)
 
-    # 2. Permanent purge requested by WORKSPACE_ADMIN (not SERVER_ADMIN) -> 403 SERVER_ADMIN_REQUIRED
+    # 2. Permanent purge requested by WORKSPACE_ADMIN -> 403 SERVER_ADMIN_REQUIRED
     res_srv = await api_env.client.post(
         "/api/v1/admin/destructive:request",
         json={"target_kind": "issue", "target": gate_key, "mode": "permanent_purge"},

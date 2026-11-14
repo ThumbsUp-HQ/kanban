@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Final
 
-from mcp.context import current_internal_client, current_subject_token
+from mcp.context import current_internal_client, current_subject_token, get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.registry import Surface, ToolSpec
 
@@ -15,15 +15,22 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ALLOWED_TARGET_KINDS",
+    "DESTRUCTIVE_LIFECYCLE_SCHEMA",
     "create_destructive_lifecycle_tool",
+    "destructive_lifecycle",
     "destructive_lifecycle_handler",
 ]
 
 _TOOL_NAME: Final[str] = "destructive_lifecycle"
 _DESCRIPTION: Final[str] = (
-    "Two-stage destructive confirmation gate for soft-trashing, permanent purging, and restoring "
-    "Universal Object Graph entities (issues, projects, docs, pages, stickies, cycles, modules, views)."
+    "Two-stage destructive confirmation gate for soft-trashing, permanent purging, "
+    "and restoring Universal Object Graph entities (issues, projects, docs, pages, "
+    "stickies, cycles, modules, views)."
 )
+_REQUIRED_AAL: Final[int] = 2
+_TARGET_MAX_LEN: Final[int] = 200
+_REASON_MIN_LEN: Final[int] = 10
+_REASON_MAX_LEN: Final[int] = 500
 
 ALLOWED_TARGET_KINDS: Final[frozenset[str]] = frozenset(
     {"issue", "project", "doc", "page", "sticky", "cycle", "module", "view"}
@@ -71,6 +78,8 @@ _INPUT_SCHEMA: Final[dict[str, Any]] = {
     "additionalProperties": False,
 }
 
+DESTRUCTIVE_LIFECYCLE_SCHEMA: Final[dict[str, Any]] = _INPUT_SCHEMA
+
 _ALLOWED_KEYS: Final[frozenset[str]] = frozenset(_INPUT_SCHEMA["properties"].keys())
 
 
@@ -81,10 +90,10 @@ def _build_help_payload() -> dict[str, Any]:
         "description": _DESCRIPTION,
         "actions": {
             "request_delete": (
-                "Stage 1: Computes recursive blast radius and issues a single-use 5m confirmation token."
+                "Stage 1: Computes recursive blast radius and issues a single-use 5m token."
             ),
             "execute_delete": (
-                "Stage 2: Atomically claims token, verifies caller/target/blast-hash, and executes delete."
+                "Stage 2: Atomically claims token, verifies blast-hash, and executes delete."
             ),
             "restore": "Restores a soft-deleted object from trash back to active state.",
             "help": "Show usage instructions and schema details.",
@@ -114,23 +123,36 @@ async def destructive_lifecycle_handler(  # noqa: C901, PLR0912, PLR0915
 
     action = arguments.get("action")
     if not action or action not in ("request_delete", "execute_delete", "restore", "help"):
-        msg = f"Invalid or missing action '{action}'. Must be request_delete, execute_delete, restore, or help."
+        msg = (
+            f"Invalid or missing action '{action}'. "
+            "Must be request_delete, execute_delete, restore, or help."
+        )
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
     if action == "help":
         return _build_help_payload()
 
+    ctx = get_current_mcp_context()
+    if ctx is not None and ctx.aal_level < _REQUIRED_AAL:
+        raise KbMcpError(
+            McpErrorCode.AAL2_REQUIRED,
+            "destructive_lifecycle requires Authenticator Assurance Level 2 (AAL2)",
+        )
+
     target_kind = arguments.get("target_kind")
     if not target_kind or target_kind not in ALLOWED_TARGET_KINDS:
-        msg = f"Invalid or missing target_kind '{target_kind}'. Must be one of {sorted(ALLOWED_TARGET_KINDS)}."
+        msg = (
+            f"Invalid or missing target_kind '{target_kind}'. "
+            f"Must be one of {sorted(ALLOWED_TARGET_KINDS)}."
+        )
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
     target = arguments.get("target")
     if not target or not isinstance(target, str) or not target.strip():
         msg = "Parameter 'target' must be a non-empty string."
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
-    if len(target) > 200:
-        msg = f"Parameter 'target' length ({len(target)}) exceeds maximum of 200."
+    if len(target) > _TARGET_MAX_LEN:
+        msg = f"Parameter 'target' length ({len(target)}) exceeds maximum of {_TARGET_MAX_LEN}."
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
     mode = arguments.get("mode", "trash")
@@ -138,17 +160,17 @@ async def destructive_lifecycle_handler(  # noqa: C901, PLR0912, PLR0915
         msg = f"Invalid mode '{mode}'. Must be 'trash' or 'permanent_purge'."
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
-    active_client = client or current_internal_client()
+    active_client = client or current_internal_client.get()
     if active_client is None:
         raise KbMcpError(McpErrorCode.INTERNAL, "Kanban internal client is unavailable.")
-    active_token = subject_token or current_subject_token()
+    active_token = subject_token or current_subject_token.get()
 
     if action == "request_delete":
         res = await active_client.request(
             "POST",
             "/api/v1/admin/destructive:request",
             subject_token=active_token,
-            json={
+            json_data={
                 "target_kind": target_kind,
                 "target": target.strip(),
                 "mode": mode,
@@ -181,15 +203,23 @@ async def destructive_lifecycle_handler(  # noqa: C901, PLR0912, PLR0915
             raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
         reason = arguments.get("reason")
-        if not reason or not isinstance(reason, str) or len(reason.strip()) < 10 or len(reason.strip()) > 500:
-            msg = "Parameter 'reason' must be between 10 and 500 characters."
+        if (
+            not reason
+            or not isinstance(reason, str)
+            or len(reason.strip()) < _REASON_MIN_LEN
+            or len(reason.strip()) > _REASON_MAX_LEN
+        ):
+            msg = (
+                f"Parameter 'reason' must be between {_REASON_MIN_LEN} and "
+                f"{_REASON_MAX_LEN} characters."
+            )
             raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
         res = await active_client.request(
             "POST",
             "/api/v1/admin/destructive:execute",
             subject_token=active_token,
-            json={
+            json_data={
                 "target_kind": target_kind,
                 "target": target.strip(),
                 "mode": mode,
@@ -210,17 +240,25 @@ async def destructive_lifecycle_handler(  # noqa: C901, PLR0912, PLR0915
             "blast_hash": res.get("blast_hash", ""),
         }
 
-    # action == "restore"
+    # Handle restore action
     reason = arguments.get("reason")
-    if not reason or not isinstance(reason, str) or len(reason.strip()) < 10 or len(reason.strip()) > 500:
-        msg = "Parameter 'reason' must be between 10 and 500 characters."
+    if (
+        not reason
+        or not isinstance(reason, str)
+        or len(reason.strip()) < _REASON_MIN_LEN
+        or len(reason.strip()) > _REASON_MAX_LEN
+    ):
+        msg = (
+            f"Parameter 'reason' must be between {_REASON_MIN_LEN} and "
+            f"{_REASON_MAX_LEN} characters."
+        )
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
     res = await active_client.request(
         "POST",
         "/api/v1/admin/destructive:restore",
         subject_token=active_token,
-        json={
+        json_data={
             "target_kind": target_kind,
             "target": target.strip(),
             "reason": reason.strip(),
@@ -258,3 +296,6 @@ def create_destructive_lifecycle_tool(client: KanbanApiClient | None = None) -> 
         surface=Surface.ADMIN,
         handler=_handler,
     )
+
+
+destructive_lifecycle = destructive_lifecycle_handler

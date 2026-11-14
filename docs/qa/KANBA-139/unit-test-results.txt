@@ -1,0 +1,43 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-139/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-139
+configfile: pyproject.toml
+plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, platformdirs-4.14.5, anyio-4.16.0, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 23 items
+
+kanban/tests/api/test_destructive_lifecycle.py::test_case_1_positive_issue_trash_and_restore PASSED [  4%]
+kanban/tests/api/test_destructive_lifecycle.py::test_case_1b_positive_permanent_purge PASSED [  8%]
+kanban/tests/api/test_destructive_lifecycle.py::test_case_1c_page_subtree_and_module PASSED [ 13%]
+kanban/tests/api/test_destructive_lifecycle.py::test_case_2_replay_expiry_and_binding_security PASSED [ 17%]
+kanban/tests/api/test_destructive_lifecycle.py::test_case_3_blast_hash_toctou_protection PASSED [ 21%]
+kanban/tests/api/test_destructive_lifecycle.py::test_case_4_role_and_scope_gates PASSED [ 26%]
+kanban/tests/api/test_destructive_lifecycle_coverage.py::test_project_full_lifecycle PASSED [ 30%]
+kanban/tests/api/test_destructive_lifecycle_coverage.py::test_doc_and_sticky_lifecycles PASSED [ 34%]
+kanban/tests/api/test_destructive_lifecycle_coverage.py::test_cycle_and_view_permanent_purge PASSED [ 39%]
+kanban/tests/api/test_destructive_lifecycle_coverage.py::test_error_and_edge_branches PASSED [ 43%]
+kanban/tests/api/test_destructive_lifecycle_coverage.py::test_pages_modules_and_purges_deep PASSED [ 47%]
+kanban/tests/api/test_destructive_lifecycle_coverage.py::test_service_edge_branches PASSED [ 52%]
+mcp/tests/admin/test_destructive_lifecycle.py::test_admin_surface_tools_list PASSED [ 56%]
+mcp/tests/admin/test_destructive_lifecycle.py::test_destructive_lifecycle_help_action PASSED [ 60%]
+mcp/tests/admin/test_destructive_lifecycle.py::test_destructive_lifecycle_positive_issue_trash_and_restore PASSED [ 65%]
+mcp/tests/admin/test_destructive_lifecycle.py::test_destructive_lifecycle_positive_permanent_purge PASSED [ 69%]
+mcp/tests/admin/test_destructive_lifecycle.py::test_destructive_lifecycle_page_subtree_and_module PASSED [ 73%]
+mcp/tests/admin/test_destructive_lifecycle.py::test_destructive_lifecycle_replay_and_caller_binding PASSED [ 78%]
+mcp/tests/admin/test_destructive_lifecycle.py::test_destructive_lifecycle_wrong_phrase_and_target_mismatch PASSED [ 82%]
+mcp/tests/admin/test_destructive_lifecycle.py::test_destructive_lifecycle_blast_hash_changed_toctou PASSED [ 86%]
+mcp/tests/admin/test_destructive_lifecycle.py::test_destructive_lifecycle_validation_and_scope_failures PASSED [ 91%]
+mcp/tests/admin/test_destructive_lifecycle.py::test_mcp_handler_unit_validations PASSED [ 95%]
+database/tests/migrations/test_p4_12_migration.py::test_p4_12_destructive_tokens_migration_lifecycle PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                          Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------------------
+kanban/api/v1/admin/destructive.py               72      0      0      0   100%
+kanban/services/destructive_lifecycle.py        461     13    188     20    95%   357, 572->577, 620, 628, 720, 728, 887, 965-966, 972->979, 1001->1116, 1007->1029, 1038-1042, 1045->1050, 1054->1061, 1065->1072, 1076->1089, 1093->1100, 1154, 1162, 1215->1233
+mcp/surfaces/admin/destructive_lifecycle.py      90      0     38      0   100%
+-----------------------------------------------------------------------------------------
+TOTAL                                           623     13    226     20    96%
+============================= 23 passed in 19.22s ==============================

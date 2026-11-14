@@ -305,7 +305,9 @@ class KanbanApiClient:
             "KEY_SCOPE_VIOLATION": McpErrorCode.KEY_SCOPE_VIOLATION,
             "CONNECTION_SCOPE_VIOLATION": McpErrorCode.CONNECTION_SCOPE_VIOLATION,
             "CONFLICTING_SCOPE_HEADERS": McpErrorCode.CONFLICTING_SCOPE_HEADERS,
-            "CONFIRMATION_TOKEN_INVALID_OR_EXPIRED": McpErrorCode.CONFIRMATION_TOKEN_INVALID_OR_EXPIRED,
+            "CONFIRMATION_TOKEN_INVALID_OR_EXPIRED": (
+                McpErrorCode.CONFIRMATION_TOKEN_INVALID_OR_EXPIRED
+            ),
             "TOKEN_CALLER_MISMATCH": McpErrorCode.TOKEN_CALLER_MISMATCH,
             "TOKEN_TARGET_MISMATCH": McpErrorCode.TOKEN_TARGET_MISMATCH,
             "BLAST_RADIUS_CHANGED": McpErrorCode.BLAST_RADIUS_CHANGED,
@@ -328,7 +330,9 @@ class KanbanApiClient:
             "not-archived": McpErrorCode.NOT_ARCHIVED,
             "confirm-phrase-mismatch": McpErrorCode.CONFIRM_PHRASE_MISMATCH,
             "lockout-prevented": McpErrorCode.LOCKOUT_PREVENTED,
-            "confirmation-token-invalid-or-expired": McpErrorCode.CONFIRMATION_TOKEN_INVALID_OR_EXPIRED,
+            "confirmation-token-invalid-or-expired": (
+                McpErrorCode.CONFIRMATION_TOKEN_INVALID_OR_EXPIRED
+            ),
             "token-caller-mismatch": McpErrorCode.TOKEN_CALLER_MISMATCH,
             "token-target-mismatch": McpErrorCode.TOKEN_TARGET_MISMATCH,
             "blast-radius-changed": McpErrorCode.BLAST_RADIUS_CHANGED,

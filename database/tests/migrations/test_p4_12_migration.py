@@ -9,10 +9,10 @@ from database.tests.migration_harness import MigrationHarness
 
 @pytest.mark.migration
 async def test_p4_12_destructive_tokens_migration_lifecycle() -> None:
-    """Verify p4_12 upgrade applies destructive_confirmation_tokens with FORCE RLS, and downgrade reverts."""
+    """Verify p4_12 upgrade applies destructive_confirmation_tokens, downgrade reverts."""
     async with MigrationHarness() as harness:
         prev_rev = harness.previous_of("p4_12_destructive_tokens")
-        assert prev_rev == "p4_13_mcp_ephemeral_tokens"
+        assert prev_rev == "p5_05a_ai_providers_and_ledgers"
 
         # 1. Upgrade to p4_12_destructive_tokens
         await harness.upgrade("p4_12_destructive_tokens")

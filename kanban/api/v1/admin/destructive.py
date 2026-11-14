@@ -33,9 +33,7 @@ router = APIRouter(tags=["admin-destructive"], dependencies=[Depends(require_adm
 Caller = Annotated[PrincipalContext, Depends(require_admin_aal2)]
 Session = Annotated[AsyncSession, Depends(get_rls_session)]
 
-TargetKindLiteral = Literal[
-    "issue", "project", "doc", "page", "sticky", "cycle", "module", "view"
-]
+TargetKindLiteral = Literal["issue", "project", "doc", "page", "sticky", "cycle", "module", "view"]
 ModeLiteral = Literal["trash", "permanent_purge"]
 
 

@@ -22,7 +22,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.models.base import Base, ObjectKind, object_kind_pg_enum
-from database.models.spine import ObjectKind, object_kind_pg_enum
 
 
 class DestructiveConfirmationToken(Base):

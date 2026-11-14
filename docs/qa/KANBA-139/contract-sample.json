@@ -1,0 +1,255 @@
+{
+  "ticket": "KANBA-139",
+  "exchanges": [
+    {
+      "name": "destructive_request_trash_issue_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/destructive:request",
+        "headers": {
+          "host": "kanban.local",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "cookie": "<redacted>",
+          "x-csrf-token": "<redacted>"
+        },
+        "body": {
+          "target_kind": "issue",
+          "target": "SEC-1",
+          "mode": "trash"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "stage": "confirmation_required",
+          "target": "SEC-1",
+          "target_kind": "issue",
+          "target_id": "019329ec-4581-791b-8531-5231c5188f5a",
+          "mode": "trash",
+          "blast_summary": "2 sub-issues unparented, 0 inbound object_links flagged",
+          "blast_hash": "a4d3f572834b6e51c890123ef61789ab526718c901e23f4567890abcdef12345",
+          "confirm_phrase": "TRASH ISSUE SEC-1",
+          "confirmation_token": "kb_del_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789_-abcdef",
+          "expires_in_sec": 300
+        }
+      }
+    },
+    {
+      "name": "destructive_execute_trash_issue_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/destructive:execute",
+        "headers": {
+          "host": "kanban.local",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "cookie": "<redacted>",
+          "x-csrf-token": "<redacted>"
+        },
+        "body": {
+          "target_kind": "issue",
+          "target": "SEC-1",
+          "mode": "trash",
+          "confirmation_token": "kb_del_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789_-abcdef",
+          "confirm_phrase": "TRASH ISSUE SEC-1",
+          "reason": "Decommissioning issue SEC-1 after security review"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "status": "trashed",
+          "target": "SEC-1",
+          "target_kind": "issue",
+          "target_id": "019329ec-4581-791b-8531-5231c5188f5a",
+          "mode": "trash",
+          "reason": "Decommissioning issue SEC-1 after security review",
+          "blast_hash": "a4d3f572834b6e51c890123ef61789ab526718c901e23f4567890abcdef12345"
+        }
+      }
+    },
+    {
+      "name": "destructive_restore_issue_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/destructive:restore",
+        "headers": {
+          "host": "kanban.local",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "cookie": "<redacted>",
+          "x-csrf-token": "<redacted>"
+        },
+        "body": {
+          "target_kind": "issue",
+          "target": "SEC-1",
+          "reason": "Restoring mistakenly trashed security incident ticket"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "status": "restored",
+          "target": "SEC-1",
+          "target_kind": "issue",
+          "target_id": "019329ec-4581-791b-8531-5231c5188f5a",
+          "reason": "Restoring mistakenly trashed security incident ticket"
+        }
+      }
+    },
+    {
+      "name": "destructive_execute_confirm_phrase_mismatch_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/destructive:execute",
+        "headers": {
+          "host": "kanban.local",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "cookie": "<redacted>",
+          "x-csrf-token": "<redacted>"
+        },
+        "body": {
+          "target_kind": "issue",
+          "target": "SEC-1",
+          "mode": "trash",
+          "confirmation_token": "kb_del_test_token_phrase_mismatch",
+          "confirm_phrase": "DELETE ISSUE SEC-1",
+          "reason": "Attempting delete with mismatched phrase"
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "content-type": "application/problem+json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "type": "urn:kanban:problem:CONFIRM_PHRASE_MISMATCH",
+          "title": "Confirmation Phrase Mismatch",
+          "status": 422,
+          "code": "CONFIRM_PHRASE_MISMATCH",
+          "detail": "Confirmation phrase mismatch. Expected 'TRASH ISSUE SEC-1'. Token has been burned."
+        }
+      }
+    },
+    {
+      "name": "destructive_execute_token_caller_mismatch_403",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/destructive:execute",
+        "headers": {
+          "host": "kanban.local",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "cookie": "<redacted>",
+          "x-csrf-token": "<redacted>"
+        },
+        "body": {
+          "target_kind": "issue",
+          "target": "SEC-1",
+          "mode": "trash",
+          "confirmation_token": "kb_del_token_minted_by_admin_a",
+          "confirm_phrase": "TRASH ISSUE SEC-1",
+          "reason": "Attempt by non-authorized caller to consume token"
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-type": "application/problem+json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "type": "urn:kanban:problem:TOKEN_CALLER_MISMATCH",
+          "title": "Token Caller Mismatch",
+          "status": 403,
+          "code": "TOKEN_CALLER_MISMATCH",
+          "detail": "Confirmation token was issued to a different principal. Token has been burned."
+        }
+      }
+    },
+    {
+      "name": "destructive_execute_blast_radius_changed_412",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/destructive:execute",
+        "headers": {
+          "host": "kanban.local",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "cookie": "<redacted>",
+          "x-csrf-token": "<redacted>"
+        },
+        "body": {
+          "target_kind": "issue",
+          "target": "SEC-1",
+          "mode": "trash",
+          "confirmation_token": "kb_del_token_stale_blast",
+          "confirm_phrase": "TRASH ISSUE SEC-1",
+          "reason": "Attempting execution after concurrent child attached"
+        }
+      },
+      "response": {
+        "status": 412,
+        "headers": {
+          "content-type": "application/problem+json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "type": "urn:kanban:problem:BLAST_RADIUS_CHANGED",
+          "title": "Blast Radius Changed",
+          "status": 412,
+          "code": "BLAST_RADIUS_CHANGED",
+          "detail": "Target object or child relationships changed since confirmation token was issued. Fresh blast preview required."
+        }
+      }
+    },
+    {
+      "name": "destructive_request_permanent_purge_server_admin_required_403",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/destructive:request",
+        "headers": {
+          "host": "kanban.local",
+          "content-type": "application/json",
+          "accept": "application/json",
+          "cookie": "<redacted>",
+          "x-csrf-token": "<redacted>"
+        },
+        "body": {
+          "target_kind": "issue",
+          "target": "SEC-1",
+          "mode": "permanent_purge"
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-type": "application/problem+json",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "type": "urn:kanban:problem:SERVER_ADMIN_REQUIRED",
+          "title": "Server Admin Required",
+          "status": 403,
+          "code": "SERVER_ADMIN_REQUIRED",
+          "detail": "Permanent purge requires Server Administrator privileges."
+        }
+      }
+    }
+  ]
+}
