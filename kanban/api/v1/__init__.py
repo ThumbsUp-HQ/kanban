@@ -46,6 +46,10 @@ from kanban.api.v1.resolve import router as resolve_router
 from kanban.api.v1.search import router as search_router
 from kanban.api.v1.stickies import router as stickies_router
 from kanban.api.v1.subscriptions import router as subscriptions_router
+from kanban.api.v1.system_status import (
+    admin_standalone_router,
+    system_router,
+)
 from kanban.api.v1.views import router as views_router
 
 
@@ -93,4 +97,6 @@ def build_v1_router() -> APIRouter:
     v1.include_router(notifications_router)
     v1.include_router(search_router)
     v1.include_router(custom_field_approvals_router)
+    v1.include_router(system_router)
+    v1.include_router(admin_standalone_router)
     return v1

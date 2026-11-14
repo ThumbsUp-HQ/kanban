@@ -1,0 +1,6 @@
+{
+  "filename": "docker-compose.yml",
+  "compose_yaml": "services:\n  kanban:\n    image: kanban:latest\n    networks:\n      - edge_net\n      - app_net\nnetworks:\n  edge_net:\n  app_net:\n  data_net:\n    internal: true\n  sandbox_net:\n    internal: true\n  egress_llm_net:\n",
+  "env_template": "KB_SECRET_PEPPER=change_me_to_random_hex_pepper\nKB_SECRET_HMAC=change_me_to_random_hex_hmac\nKB_MASTER_KEK_B64=change_me_to_base64_master_kek\n",
+  "migration_steps_markdown": "# Production Promotion Runbook\n\n1. Generate secrets\n2. Download encrypted backup (.kbkp)\n3. docker compose up -d postgres\n4. kanban-ctl restore / pg_restore into external PostgreSQL 16\n"
+}
