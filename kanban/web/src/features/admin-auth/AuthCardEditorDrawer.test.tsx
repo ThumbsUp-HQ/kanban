@@ -1,0 +1,849 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import React from 'react';
+import { AuthCardEditorDrawer } from './AuthCardEditorDrawer';
+import type { AdminAuthCard } from './adminAuthApi';
+
+describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const existingOidcCard: AdminAuthCard = {
+    id: 'c-oidc',
+    provider_kind: 'OIDC',
+    slug: 'okta-workforce',
+    display_name: 'Okta SSO',
+    button_subtext: 'Workforce IDP',
+    icon_preset: 'shield',
+    is_enabled: true,
+    sort_rank: '1',
+    auto_provision_users: true,
+    allowed_email_domains: ['corp.example.com'],
+    has_secret: true,
+    dek_kid: 'dek-oidc-99',
+    last_health_status: 'HEALTHY',
+    last_handshake_at: '2026-11-13T20:00:00Z',
+    check_summary: 'OK',
+    latency_ms: 38,
+    public_config: {
+      issuer_url: 'https://okta.corp.example.com',
+      client_id: 'client-abc-123',
+      scopes: ['openid', 'profile', 'email'],
+      pkce_method: 'S256',
+      token_auth_method: 'client_secret_basic',
+    },
+  };
+
+  it('renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2)', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onClose = vi.fn();
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={existingOidcCard}
+        onClose={onClose}
+        onSave={onSave}
+      />,
+    );
+
+    const secretInput = screen.getByLabelText<HTMLInputElement>(/Client Secret/i);
+    // Write-only: value is empty, disabled, placeholder has dek_kid
+    expect(secretInput.value).toBe('');
+    expect(secretInput.hasAttribute('disabled')).toBe(true);
+    expect(secretInput.getAttribute('placeholder')).toContain('dek-oidc-99');
+
+    // 1. Submit without checking Replace Stored Secret -> secret_input is omitted
+    const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          display_name: 'Okta SSO',
+        }),
+        true,
+      );
+    });
+
+    const payload = onSave.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload).toBeDefined();
+    expect('secret_input' in payload).toBe(false);
+
+    // 2. Check Replace Stored Secret -> unlocks input and sends new secret
+    const replaceBox = screen.getByLabelText<HTMLInputElement>(/Replace Stored Secret/i);
+    fireEvent.click(replaceBox);
+    expect(secretInput.hasAttribute('disabled')).toBe(false);
+
+    fireEvent.change(secretInput, { target: { value: 'NewSecretValue12345!' } });
+    expect(secretInput.value).toBe('NewSecretValue12345!');
+
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          secret_input: 'NewSecretValue12345!',
+        }),
+        true,
+      );
+    });
+
+    // Password value in DOM input must be cleared
+    expect(secretInput.value).toBe('');
+  });
+
+  it('rejects OIDC with http:// URL and invalid slug before network call (Mandatory Test Case 3)', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    const slugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i);
+    const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i);
+    const issuerInput = screen.getByLabelText<HTMLInputElement>(/Issuer URL/i);
+    const clientIdInput = screen.getByLabelText<HTMLInputElement>(/Client ID/i);
+
+    // Invalid slug (uppercase & underscore)
+    fireEvent.change(slugInput, { target: { value: 'Bad_Slug' } });
+    fireEvent.change(nameInput, { target: { value: 'Insecure IDP' } });
+    // Insecure HTTP URL
+    fireEvent.change(issuerInput, { target: { value: 'http://idp.example.com' } });
+    fireEvent.change(clientIdInput, { target: { value: 'client-1' } });
+
+    const createBtn = screen.getByRole('button', { name: /Create Card/i });
+    fireEvent.click(createBtn);
+
+    expect(screen.getByText(/Slug must be 3-48 lowercase alphanumeric/i)).toBeDefined();
+    expect(screen.getByText(/Issuer URL must use HTTPS/i)).toBeDefined();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    // Select LDAP
+    const kindSelect = screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i);
+    fireEvent.change(kindSelect, { target: { value: 'LDAP' } });
+
+    const serverInput = screen.getByLabelText<HTMLInputElement>(/Server URL/i);
+    const startTlsBox = screen.getByLabelText<HTMLInputElement>(/StartTLS/i);
+
+    // Enter ldap://
+    fireEvent.change(serverInput, { target: { value: 'ldap://dc01.corp.example.com' } });
+    expect(startTlsBox.checked).toBe(true);
+    expect(startTlsBox.hasAttribute('disabled')).toBe(true);
+
+    // Test invalid SPKI pin (63 hex chars, should be 64)
+    const spkiInput = screen.getByLabelText<HTMLInputElement>(/SPKI SHA-256 Pin/i);
+    fireEvent.change(spkiInput, { target: { value: 'a'.repeat(63) } });
+
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
+      target: { value: 'corp-ad' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+      target: { value: 'Corp AD' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i), {
+      target: { value: 'cn=admin,dc=corp' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Base DN/i), {
+      target: { value: 'dc=corp' },
+    });
+
+    const createBtn = screen.getByRole('button', { name: /Create Card/i });
+    fireEvent.click(createBtn);
+
+    expect(
+      screen.getByText(/SPKI pin must be exactly 64 hexadecimal characters/i),
+    ).toBeDefined();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('closes drawer on Escape key press', () => {
+    const onClose = vi.fn();
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={onClose}
+        onSave={vi.fn()}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    // Non-Escape keys do not trigger onClose
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders null when isOpen is false and handles close button click', () => {
+    const onClose = vi.fn();
+    const { rerender, container } = render(
+      <AuthCardEditorDrawer
+        isOpen={false}
+        card={null}
+        onClose={onClose}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(container.firstChild).toBeNull();
+
+    rerender(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={onClose}
+        onSave={vi.fn()}
+      />,
+    );
+    const closeBtn = screen.getByRole('button', { name: /Close drawer/i });
+    fireEvent.click(closeBtn);
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
+    fireEvent.click(cancelBtn);
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('supports OAuth2 provider configuration with issuer_url', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i), {
+      target: { value: 'OAUTH2' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
+      target: { value: 'github-oauth' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+      target: { value: 'GitHub' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i), {
+      target: { value: 'https://github.com' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i), {
+      target: { value: 'gh-client-id' },
+    });
+
+    const createBtn = screen.getByRole('button', { name: /Create Card/i });
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider_kind: 'OAUTH2',
+          slug: 'github-oauth',
+          display_name: 'GitHub',
+        }),
+        false,
+      );
+    });
+  });
+
+  it('renders LOCAL_ADMIN policy view when editing local-admin card', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const localAdminCard: AdminAuthCard = {
+      ...existingOidcCard,
+      id: 'c-local',
+      provider_kind: 'LOCAL_ADMIN',
+      slug: 'local-admin',
+      display_name: 'Local Administrator',
+    };
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={localAdminCard}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    expect(screen.getByText('Local Administrator Security Policy')).toBeDefined();
+    expect(screen.getByText(/Argon2id hashing/i)).toBeDefined();
+
+    const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          display_name: 'Local Administrator',
+        }),
+        true,
+      );
+    });
+  });
+
+  it('validates required LDAP fields: empty serverUrl, wrong protocol, missing DNs', () => {
+    const onSave = vi.fn();
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i), {
+      target: { value: 'LDAP' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
+      target: { value: 'ldap-test' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+      target: { value: 'LDAP Test' },
+    });
+
+    const createBtn = screen.getByRole('button', { name: /Create Card/i });
+    fireEvent.click(createBtn);
+
+    expect(screen.getByText('Server URL is required.')).toBeDefined();
+    expect(screen.getByText('Bind DN is required.')).toBeDefined();
+    expect(screen.getByText('Base DN is required.')).toBeDefined();
+
+    // Invalid protocol
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Server URL/i), {
+      target: { value: 'http://ldap.example.com' },
+    });
+    fireEvent.click(createBtn);
+    expect(screen.getByText('Server URL must start with ldaps:// or ldap://')).toBeDefined();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('displays form error when onSave throws an error', async () => {
+    const onSave = vi.fn().mockRejectedValue(new Error('Slug already exists'));
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
+      target: { value: 'valid-slug' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+      target: { value: 'Valid Name' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i), {
+      target: { value: 'https://issuer.example.com' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i), {
+      target: { value: 'client-id' },
+    });
+
+    const createBtn = screen.getByRole('button', { name: /Create Card/i });
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Slug already exists')).toBeDefined();
+    });
+  });
+
+  it('edits an LDAP card with CA PEM, user filter, and replaces bind DN password', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const ldapCard: AdminAuthCard = {
+      id: 'c-ldap',
+      provider_kind: 'LDAP',
+      slug: 'corp-ldap',
+      display_name: 'Corp Directory',
+      button_subtext: 'Domain login',
+      icon_preset: 'lock',
+      is_enabled: true,
+      sort_rank: '2',
+      auto_provision_users: false,
+      allowed_email_domains: ['example.com'],
+      has_secret: true,
+      dek_kid: 'dek-ldap-1',
+      last_health_status: 'HEALTHY',
+      last_handshake_at: '2026-11-13T20:00:00Z',
+      check_summary: 'OK',
+      latency_ms: 50,
+      public_config: {
+        server_url: 'ldaps://ldap.example.com',
+        start_tls: false,
+        bind_dn: 'cn=admin,dc=example,dc=com',
+        base_dn: 'ou=users,dc=example,dc=com',
+        user_filter: '(mail={username})',
+        ca_pem: '-----BEGIN CERTIFICATE-----TEST-----END CERTIFICATE-----',
+        spki_sha256_pin: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      },
+    };
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={ldapCard}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    const userFilterInput = screen.getByLabelText<HTMLInputElement>(/User Filter/i);
+    expect(userFilterInput.value).toBe('(mail={username})');
+    fireEvent.change(userFilterInput, { target: { value: '(uid={username})' } });
+
+    const caPemInput = screen.getByLabelText<HTMLTextAreaElement>(/CA Certificate/i);
+    expect(caPemInput.value).toContain('TEST');
+    fireEvent.change(caPemInput, { target: { value: '-----BEGIN CERTIFICATE-----UPDATED-----END CERTIFICATE-----' } });
+
+    const replaceSecretBox = screen.getByLabelText<HTMLInputElement>(/Replace Stored Secret/i);
+    fireEvent.click(replaceSecretBox);
+
+    const bindPwdInput = screen.getByLabelText<HTMLInputElement>(/Bind DN Password/i);
+    fireEvent.change(bindPwdInput, { target: { value: 'new-bind-password-secret' } });
+
+    const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          display_name: 'Corp Directory',
+          secret_input: 'new-bind-password-secret',
+          public_config: expect.objectContaining({
+            user_filter: '(uid={username})',
+            ca_pem: '-----BEGIN CERTIFICATE-----UPDATED-----END CERTIFICATE-----',
+          }) as unknown,
+        }),
+        true,
+      );
+    });
+  });
+
+  it('updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
+      target: { value: 'full-test' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+      target: { value: 'Full Test' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Button Subtext/i), {
+      target: { value: 'Custom subtext' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Icon Preset/i), {
+      target: { value: 'globe' },
+    });
+    fireEvent.click(screen.getByLabelText<HTMLInputElement>(/Auto-provision Users/i));
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Allowed Email Domains/i), {
+      target: { value: 'corp.com, partner.org' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i), {
+      target: { value: 'https://idp.fulltest.com' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i), {
+      target: { value: 'full-client-id' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Scopes/i), {
+      target: { value: 'openid, email' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Token Auth Method/i), {
+      target: { value: 'private_key_jwt' },
+    });
+
+    const createBtn = screen.getByRole('button', { name: /Create Card/i });
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slug: 'full-test',
+          display_name: 'Full Test',
+          button_subtext: 'Custom subtext',
+          icon_preset: 'globe',
+          auto_provision_users: false,
+          allowed_email_domains: ['corp.com', 'partner.org'],
+          public_config: expect.objectContaining({
+            scopes: ['openid', 'email'],
+            token_auth_method: 'private_key_jwt',
+          }) as unknown,
+        }),
+        false,
+      );
+    });
+  });
+
+  it('validates maximum lengths for display name and button subtext', () => {
+    const onSave = vi.fn();
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
+      target: { value: 'valid-slug' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+      target: { value: 'a'.repeat(81) },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Button Subtext/i), {
+      target: { value: 'b'.repeat(121) },
+    });
+
+    const createBtn = screen.getByRole('button', { name: /Create Card/i });
+    fireEvent.click(createBtn);
+
+    expect(
+      screen.getByText('Display name must be between 1 and 80 characters.'),
+    ).toBeDefined();
+    expect(screen.getByText('Subtext must not exceed 120 characters.')).toBeDefined();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('closes when clicking backdrop, but not when clicking inside dialog', () => {
+    const onClose = vi.fn();
+
+    const { container } = render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={onClose}
+        onSave={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(dialog);
+    expect(onClose).not.toHaveBeenCalled();
+
+    const backdrop = container.querySelector('.auth-drawer-backdrop');
+    if (backdrop) {
+      fireEvent.click(backdrop);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('validates empty slug on create and allows typing secret on create', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    // Empty slug submit
+    const createBtn = screen.getByRole('button', { name: /Create Card/i });
+    fireEvent.click(createBtn);
+    expect(screen.getByText('Slug is required.')).toBeDefined();
+
+    // Fill valid fields and secret
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
+      target: { value: 'secret-card' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+      target: { value: 'Secret Card' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i), {
+      target: { value: 'https://issuer.com' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i), {
+      target: { value: 'client-1' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client Secret/i), {
+      target: { value: 'super-create-secret' },
+    });
+
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slug: 'secret-card',
+          secret_input: 'super-create-secret',
+        }),
+        false,
+      );
+    });
+  });
+
+  it('handles non-Error rejection and toggles StartTLS on ldaps://', async () => {
+    const onSave = vi.fn().mockRejectedValue('Generic error string');
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    // Switch to LDAP with ldaps://
+    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i), {
+      target: { value: 'LDAP' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Server URL/i), {
+      target: { value: 'ldaps://secure-ldap.example.com' },
+    });
+    const startTlsBox = screen.getByLabelText<HTMLInputElement>(/StartTLS/i);
+    expect(startTlsBox.checked).toBe(false);
+    fireEvent.click(startTlsBox);
+    expect(startTlsBox.checked).toBe(true);
+
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
+      target: { value: 'secure-ldap' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+      target: { value: 'Secure LDAP' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i), {
+      target: { value: 'cn=admin' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Base DN/i), {
+      target: { value: 'dc=example' },
+    });
+
+    const createBtn = screen.getByRole('button', { name: /Create Card/i });
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to save authentication card.')).toBeDefined();
+    });
+  });
+
+  it('loads card with string scopes, private_key_jwt, and null dek_kid', () => {
+    const customCard: AdminAuthCard = {
+      ...existingOidcCard,
+      button_subtext: null,
+      dek_kid: null,
+      public_config: {
+        issuer_url: 'https://jwt.example.com',
+        client_id: 'jwt-client',
+        scopes: 'openid email',
+        token_auth_method: 'private_key_jwt',
+      },
+    };
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={customCard}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText<HTMLSelectElement>(/Token Auth Method/i).value).toBe(
+      'private_key_jwt',
+    );
+    expect(screen.getByLabelText<HTMLInputElement>(/Scopes/i).value).toBe('openid email');
+  });
+
+  it('creates an LDAP card with ldap:// scheme forcing start_tls true', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i), {
+      target: { value: 'LDAP' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
+      target: { value: 'insecure-ldap' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+      target: { value: 'Insecure LDAP' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Server URL/i), {
+      target: { value: 'ldap://plain.example.com' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i), {
+      target: { value: 'cn=admin' },
+    });
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Base DN/i), {
+      target: { value: 'dc=plain' },
+    });
+
+    const createBtn = screen.getByRole('button', { name: /Create Card/i });
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slug: 'insecure-ldap',
+          public_config: expect.objectContaining({
+            start_tls: true,
+          }) as unknown,
+        }),
+        false,
+      );
+    });
+  });
+
+  it('rejects ldap:// without StartTLS when editing an existing LDAP card with start_tls false', () => {
+    const onSave = vi.fn();
+    const insecureCard: AdminAuthCard = {
+      ...existingOidcCard,
+      id: 'c-insecure',
+      provider_kind: 'LDAP',
+      slug: 'insecure-ldap-card',
+      display_name: 'Insecure LDAP',
+      public_config: {
+        server_url: 'ldap://legacy.corp.internal',
+        start_tls: false,
+        bind_dn: 'cn=bind',
+        base_dn: 'dc=corp',
+      },
+    };
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={insecureCard}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+    fireEvent.click(saveBtn);
+
+    expect(
+      screen.getByText('ldap:// requires StartTLS to be enabled.'),
+    ).toBeDefined();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('handles empty public_config gracefully when loading OIDC and LDAP cards', () => {
+    const emptyOidcCard: AdminAuthCard = {
+      ...existingOidcCard,
+      display_name: '',
+      public_config: {},
+    };
+
+    const { rerender } = render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={emptyOidcCard}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i).value).toBe('');
+    expect(screen.getByLabelText<HTMLInputElement>(/Client ID/i).value).toBe('');
+
+    const emptyLdapCard: AdminAuthCard = {
+      ...existingOidcCard,
+      provider_kind: 'LDAP',
+      public_config: {},
+    };
+
+    rerender(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={emptyLdapCard}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i).value).toBe('');
+    expect(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i).value).toBe('');
+
+    rerender(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={existingOidcCard}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('okta-workforce');
+
+    const ldapCard: AdminAuthCard = {
+      ...existingOidcCard,
+      id: 'c-ldap-test',
+      provider_kind: 'LDAP',
+      slug: 'corp-ad',
+      public_config: {
+        server_url: 'ldaps://ad.corp.com:636',
+        start_tls: false,
+        bind_dn: 'cn=admin,dc=corp',
+        base_dn: 'dc=corp',
+        user_filter: '(sAMAccountName={username})',
+        ca_pem: '-----BEGIN CERT-----',
+        spki_sha256_pin: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      },
+    };
+
+    rerender(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={ldapCard}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('corp-ad');
+
+    rerender(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('');
+  });
+});

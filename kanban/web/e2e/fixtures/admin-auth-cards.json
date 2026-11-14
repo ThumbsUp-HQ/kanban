@@ -1,0 +1,96 @@
+{
+  "cards": [
+    {
+      "id": "card-okta-1",
+      "provider_kind": "OIDC",
+      "slug": "okta",
+      "display_name": "Okta SSO",
+      "button_subtext": "Corporate Identity",
+      "icon_preset": "shield",
+      "is_enabled": true,
+      "sort_rank": "1",
+      "auto_provision_users": true,
+      "allowed_email_domains": ["corp.example.com"],
+      "has_secret": true,
+      "dek_kid": "dek-oidc-42",
+      "last_health_status": "HEALTHY",
+      "last_handshake_at": "2026-11-13T20:00:00Z",
+      "check_summary": "OK",
+      "latency_ms": 42,
+      "public_config": {
+        "issuer_url": "https://okta.corp.example.com",
+        "client_id": "client-okta-prod",
+        "scopes": ["openid", "profile", "email"],
+        "pkce_method": "S256",
+        "token_auth_method": "client_secret_basic"
+      }
+    },
+    {
+      "id": "card-github-2",
+      "provider_kind": "OAUTH2",
+      "slug": "github",
+      "display_name": "GitHub Enterprise",
+      "button_subtext": "Developer accounts",
+      "icon_preset": "globe",
+      "is_enabled": true,
+      "sort_rank": "2",
+      "auto_provision_users": true,
+      "allowed_email_domains": ["github.com"],
+      "has_secret": true,
+      "dek_kid": "dek-gh-18",
+      "last_health_status": "HEALTHY",
+      "last_handshake_at": "2026-11-13T20:10:00Z",
+      "check_summary": "OK",
+      "latency_ms": 68,
+      "public_config": {
+        "issuer_url": "https://github.corp.example.com",
+        "client_id": "client-gh-corp",
+        "scopes": ["read:user", "user:email"]
+      }
+    },
+    {
+      "id": "card-ldap-3",
+      "provider_kind": "LDAP",
+      "slug": "corp-ad",
+      "display_name": "Corporate Active Directory",
+      "button_subtext": "LDAPS directory",
+      "icon_preset": "lock",
+      "is_enabled": true,
+      "sort_rank": "3",
+      "auto_provision_users": false,
+      "allowed_email_domains": [],
+      "has_secret": true,
+      "dek_kid": "dek-ldap-77",
+      "last_health_status": "FAILED",
+      "last_handshake_at": "2026-11-13T20:15:00Z",
+      "check_summary": "Connection timeout to ldaps://dc01.corp:636",
+      "latency_ms": null,
+      "public_config": {
+        "server_url": "ldaps://dc01.corp.example.com",
+        "start_tls": false,
+        "bind_dn": "cn=read-only,dc=corp,dc=example,dc=com",
+        "base_dn": "ou=Users,dc=corp,dc=example,dc=com",
+        "user_filter": "(sAMAccountName={username})"
+      }
+    },
+    {
+      "id": "card-local-4",
+      "provider_kind": "LOCAL_ADMIN",
+      "slug": "local-admin",
+      "display_name": "Local Administrator",
+      "button_subtext": "Break-glass access",
+      "icon_preset": "lock",
+      "is_enabled": true,
+      "sort_rank": "z",
+      "auto_provision_users": false,
+      "allowed_email_domains": [],
+      "has_secret": false,
+      "dek_kid": null,
+      "last_health_status": "HEALTHY",
+      "last_handshake_at": null,
+      "check_summary": null,
+      "latency_ms": null,
+      "public_config": {}
+    }
+  ]
+}

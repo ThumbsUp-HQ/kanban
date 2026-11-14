@@ -34,6 +34,7 @@ import { apiClient } from '../api/client';
 import type { IssueDetail } from '../features/drawer/slots';
 import { LoginPage } from '../features/auth/LoginPage';
 import { SetupClaimPage } from '../features/auth/SetupClaimPage';
+import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
 
 export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
 
@@ -238,7 +239,7 @@ export const appRoutes: RouteObject[] = [
           },
           {
             path: 'admin/auth',
-            element: <RoutePlaceholder route="/admin/auth" />,
+            element: <AuthStudioPage />,
           },
           {
             path: '__dev/*',
