@@ -27,6 +27,7 @@ from kanban.api.problems import (
 from kanban.api.request_id import RequestIdMiddleware
 from kanban.api.sse import handle_sse_endpoint
 from kanban.api.v1 import build_v1_router
+from kanban.api.v1.oauth import OAuth2Error, oauth_root_router
 from kanban.api.ws import handle_ws_connection
 from kanban.auth.sessions.csrf import CsrfMiddleware
 from kanban.auth.setup import mint_setup_token_if_uninitialized
@@ -111,9 +112,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_exception_handler(StarletteHTTPException, starlette_http_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
+    @app.exception_handler(OAuth2Error)
+    async def oauth2_error_handler(request: Request, exc: OAuth2Error) -> JSONResponse:
+        del request
+        return JSONResponse(
+            {"error": exc.error, "error_description": exc.description},
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
+
     # Mount canonical /api/v1 router tree
     app.include_router(build_v1_router(), prefix="/api/v1")
     app.include_router(mcp_introspect_router)
+    app.include_router(oauth_root_router)
 
     # Register activity listener for notifications and auto-subscriptions
     register_notifications_listener()

@@ -1,0 +1,79 @@
+{
+  "oauth_authorization_server_metadata": {
+    "issuer": "http://test",
+    "authorization_endpoint": "http://test/oauth/authorize",
+    "token_endpoint": "http://test/oauth/token",
+    "revocation_endpoint": "http://test/oauth/revoke",
+    "registration_endpoint": "http://test/oauth/register",
+    "jwks_uri": "http://test/oauth/jwks.json",
+    "code_challenge_methods_supported": [
+      "S256"
+    ],
+    "grant_types_supported": [
+      "authorization_code",
+      "refresh_token"
+    ],
+    "response_types_supported": [
+      "code"
+    ],
+    "token_endpoint_auth_methods_supported": [
+      "none",
+      "private_key_jwt"
+    ]
+  },
+  "jwks": {
+    "keys": [
+      {
+        "crv": "P-256",
+        "x": "qP17b3-mPKbMfZeDdGAiFbKtUfnu2YXqX4uqoJoi5ds",
+        "y": "x-WXOn83Q1wBa379d0IhGvR336JR57VOIdF9BpnOgPk",
+        "kty": "EC",
+        "use": "sig",
+        "alg": "ES256",
+        "kid": "oauth-test-kid-1"
+      }
+    ]
+  },
+  "protected_resource_metadata": {
+    "agent": {
+      "resource": "http://test/mcp/agent",
+      "authorization_servers": [
+        "http://test"
+      ],
+      "scopes_supported": [
+        "agent:read",
+        "agent:write"
+      ],
+      "bearer_methods_supported": [
+        "header"
+      ]
+    },
+    "docs": {
+      "resource": "http://test/mcp/docs",
+      "authorization_servers": [
+        "http://test"
+      ],
+      "scopes_supported": [
+        "docs:read",
+        "docs:write"
+      ],
+      "bearer_methods_supported": [
+        "header"
+      ]
+    },
+    "admin": {
+      "resource": "http://test/mcp/admin",
+      "authorization_servers": [
+        "http://test"
+      ],
+      "scopes_supported": [
+        "admin:read",
+        "admin:write",
+        "admin:destructive"
+      ],
+      "bearer_methods_supported": [
+        "header"
+      ]
+    }
+  }
+}

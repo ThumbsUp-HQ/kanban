@@ -32,6 +32,7 @@ from kanban.api.v1.links import router as links_router
 from kanban.api.v1.media_proxy import router as media_proxy_router
 from kanban.api.v1.modules import router as modules_router
 from kanban.api.v1.notifications import router as notifications_router
+from kanban.api.v1.oauth import oauth_v1_router
 from kanban.api.v1.objects_access import router as objects_access_router
 from kanban.api.v1.project_config import router as project_config_router
 from kanban.api.v1.projects import router as projects_router
@@ -77,6 +78,7 @@ def build_v1_router() -> APIRouter:
     v1.include_router(issue_delete_router)
     v1.include_router(custom_fields_router)
     v1.include_router(admin_mcp_keys_router)
+    v1.include_router(oauth_v1_router)
     v1.include_router(mcp_introspect_router)
     v1.include_router(subscriptions_router)
     v1.include_router(notifications_router)

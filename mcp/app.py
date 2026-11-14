@@ -10,6 +10,7 @@ from starlette.routing import Mount, Route
 
 from mcp.auth import McpAuthMiddleware
 from mcp.internal_client import KanbanApiClient
+from mcp.metadata import protected_resource_metadata_endpoint
 from mcp.protocol import InMemorySessionStore, McpProtocolHandler
 from mcp.registry import Surface, ToolRegistry, create_placeholder_tool
 from mcp.settings import McpSettings
@@ -117,6 +118,12 @@ def create_mcp_app(
     admin_app = _build_surface_sub_app(admin_handler)
 
     routes = [
+        # RFC 9728 Protected-Resource Metadata
+        Route(
+            "/.well-known/oauth-protected-resource/mcp/{surface}",
+            protected_resource_metadata_endpoint,
+            methods=["GET"],
+        ),
         # Explicit direct routes for /mcp/<surface>
         Route("/mcp/agent", agent_handler.handle_request, methods=["GET", "POST", "DELETE"]),
         Route("/mcp/docs", docs_handler.handle_request, methods=["GET", "POST", "DELETE"]),

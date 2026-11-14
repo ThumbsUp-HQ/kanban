@@ -155,6 +155,8 @@ class ActivityEventType(StrEnum):
     CUSTOM_FIELD_DELETED = "CUSTOM_FIELD_DELETED"
     EMERGENCY_BREAK_GLASS_INVOKED = "EMERGENCY_BREAK_GLASS_INVOKED"
     FIRST_BOOT_SETUP_CLAIMED = "FIRST_BOOT_SETUP_CLAIMED"
+    MCP_OAUTH_GRANT_REVOKED = "MCP_OAUTH_GRANT_REVOKED"
+    OAUTH_REFRESH_REUSE_DETECTED = "OAUTH_REFRESH_REUSE_DETECTED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -255,6 +257,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.CUSTOM_FIELD_DELETED: ActivityCategory.HISTORY,
         ActivityEventType.EMERGENCY_BREAK_GLASS_INVOKED: ActivityCategory.SYSTEM,
         ActivityEventType.FIRST_BOOT_SETUP_CLAIMED: ActivityCategory.SYSTEM,
+        ActivityEventType.MCP_OAUTH_GRANT_REVOKED: ActivityCategory.SYSTEM,
+        ActivityEventType.OAUTH_REFRESH_REUSE_DETECTED: ActivityCategory.SYSTEM,
     }
 )
 

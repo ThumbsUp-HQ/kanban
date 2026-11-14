@@ -1,0 +1,125 @@
+=== 1. MCP Unauthorized Challenge (RFC 9728 Section 5.1) ===
+POST /mcp/agent HTTP/1.1
+Host: kanban.local
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list"
+}
+
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer realm="kanban-mcp", resource_metadata="https://kanban.local/.well-known/oauth-protected-resource/mcp/agent"
+Content-Type: application/json
+
+{
+  "error": "unauthorized",
+  "message": "Bearer authentication required"
+}
+
+============================================================
+
+=== 2. Fetch RFC 9728 Protected-Resource Metadata ===
+GET /.well-known/oauth-protected-resource/mcp/agent HTTP/1.1
+Host: kanban.local
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "resource": "https://kanban.local/mcp/agent",
+  "authorization_servers": [
+    "https://kanban.local"
+  ],
+  "scopes_supported": [
+    "agent:read",
+    "agent:write"
+  ],
+  "bearer_methods_supported": [
+    "header"
+  ],
+  "resource_documentation": "https://kanban.local/docs/mcp/agent"
+}
+
+============================================================
+
+=== 3. MCP Protocol Initialization with Bearer Access Token ===
+POST /mcp/agent HTTP/1.1
+Host: kanban.local
+Authorization: Bearer <REDACTED_ES256_JWT_ACCESS_TOKEN>
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {},
+    "clientInfo": {
+      "name": "Claude Code",
+      "version": "1.0"
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+Mcp-Session-Id: <REDACTED_MCP_SESSION_ID>
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "serverInfo": {
+      "name": "kanban-mcp-agent",
+      "version": "0.1.0"
+    }
+  }
+}
+
+============================================================
+
+=== 4. MCP tools/list Execution ===
+POST /mcp/agent HTTP/1.1
+Host: kanban.local
+Authorization: Bearer <REDACTED_ES256_JWT_ACCESS_TOKEN>
+Mcp-Session-Id: <REDACTED_MCP_SESSION_ID>
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list"
+}
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [
+      {
+        "name": "ping_agent",
+        "description": "Health ping tool for agent surface"
+      },
+      {
+        "name": "search_tickets",
+        "description": "Search issues with natural language or keyword query"
+      },
+      {
+        "name": "read_ticket",
+        "description": "Read issue details and activity ledger by key or UUID"
+      }
+    ]
+  }
+}
