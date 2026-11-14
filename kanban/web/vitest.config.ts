@@ -6,6 +6,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Coverage instrumentation on a shared CI runner makes the heaviest jsdom route tests
+    // exceed the 5s default (observed 5.1s alone, 13s under load); 15s avoids flaky reds.
+    testTimeout: 15000,
     include: [
       'src/**/*.{test,spec}.{ts,tsx}',
       'build/**/*.{test,spec}.ts',

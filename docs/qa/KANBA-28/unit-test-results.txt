@@ -1,24 +1,17 @@
-$ uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py -q
-.....................                                                    [100%]
-21 passed in 0.10s
+$ uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py scripts/tests/test_upload_dash_log.py -q
+.................................                                        [100%]
+33 passed in 2.74s
 exit: 0
 
-$ ... --cov=scripts.ci --cov-fail-under=95   (orchestrator command)
-...................../home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/inorout.py:560: CoverageWarning: Module scripts.ci was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-imported
-  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
-/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/control.py:967: CoverageWarning: No data was collected. (no-data-collected); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-no-data-collected
-  self._warn("No data was collected.", slug="no-data-collected")
-/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/pytest_cov/plugin.py:366: CovReportWarning: Failed to generate report: No data to report.
+$ uv run pytest -q -n auto -m "not container" --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts --cov-branch --cov-fail-under=95   (full suite, run locally, under heavy shared-host load)
+TOTAL                                                                88409   1498  12920   1104    97%
+Required test coverage of 95% reached. Total coverage: 97.31%
+2 failed, 2468 passed, 37 warnings, 5 errors in 188.13s (0:03:08)
+NOTE: that run was made before test_upload_dash_log.py had its socket fixture (5 errors there, fixed since: 33/33 pass above). 2 failures (kanban/tests/sandbox/test_nsjail_runner.py::test_default_launcher_caps_stdout_and_kills_on_overflow, kanban/tests/realtime/test_sse_resume.py::test_sse_headers_and_anti_enumeration_filtering) occurred while the host load average was ~13 on 20 cores; both pass when rerun alone (22 passed).
 
-  warnings.warn(CovReportWarning(message), stacklevel=1)
-
-WARNING: Failed to generate report: No data to report.
-
-
-ERROR: Coverage failure: total of 0 is less than fail-under=95
-                                                                         [100%]
-================================ tests coverage ================================
-FAIL Required test coverage of 95% not reached. Total coverage: 0.00%
-21 passed in 0.21s
-exit: 1
-NOTE: scripts/ci contains only run_and_log.sh (bash); coverage.py measures Python only, so --cov=scripts.ci reports no data and cannot reach 95%. Behavior of the shell script is covered by test_run_and_log.py (8 tests: success, failure, tee, traversal, charset, usage, no-eval, default dir).
+$ pnpm --dir kanban/web test:unit --coverage
+ Test Files  163 passed (163)
+      Tests  1691 passed (1691)
+All files          |   97.99 |    95.32 |   97.03 |   98.44 |                   
+web_exit=0
+NOTE: kanban/web/vitest.config.ts testTimeout raised 5000 -> 15000: the heaviest jsdom route test measured 5.1s alone with coverage (13s under load) and timed out.

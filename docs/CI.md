@@ -1,50 +1,62 @@
 # CI Pipeline (KB-P0-06)
 
-CI runs on the project Forgejo runner `inferrence1` (workflow
-`.forgejo/workflows/ci.yml`, mirrored byte-for-byte at `.github/workflows/ci.yml`; a unit
-test fails if the two drift). It is a single job, `build-test-push`.
+CI runs on the project Forgejo runner `inferrence1`. The workflow lives at
+`.forgejo/workflows/ci.yml` and is mirrored byte-for-byte at `.github/workflows/ci.yml`
+(a unit test fails if the two drift). Triggers: `push` (all branches) and `pull_request`
+(never `pull_request_target`). Concurrent runs on the same ref are cancelled. The token
+permissions are `contents: read` only, every job has `timeout-minutes: 20`, and every
+`uses:` is pinned to a full 40-character commit SHA with a trailing `# vX.Y.Z` comment.
 
 ## Jobs
 
-| Job id | Step | Command (wrapped by `scripts/ci/run_and_log.sh`) | Log name |
-| :--- | :--- | :--- | :--- |
-| `build-test-push` | Run lint and checks | `uv sync --locked && make check && make license` | `lint-type-license` |
-| `build-test-push` | Start test database | `make testdb-up` | `testdb-up` |
-| `build-test-push` | Run tests | `uv run pytest -q -m "not container"` | `unit-tests` |
-| `build-test-push` | Stop test database (`if: always()`) | `make testdb-down` | `testdb-down` |
-| `build-test-push` | Docker Buildx build and push | `docker/build-push-action` | (not captured) |
-| `build-test-push` | Upload logs to Dash (`if: always()`, last step) | `curl` POST of all step logs | n/a |
+| Job id | Commands (each wrapped by `scripts/ci/run_and_log.sh`) |
+| :--- | :--- |
+| `lint-type` | `uv sync --locked && make check` |
+| `python-tests` | `make testdb-up`; `uv run pytest -n auto -m "not container" --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-fail-under=95 --junitxml=reports/pytest.xml`; `make testdb-down` (`if: always()`) |
+| `web-tests` | `pnpm install --frozen-lockfile --ignore-scripts`; `pnpm --dir kanban/web typecheck`; `lint`; `test:unit --coverage`; `build` |
+| `license-gate` | `uv sync --locked && pnpm install --frozen-lockfile --ignore-scripts && make license` |
+| `docker-build` | `docker buildx build --target runtime-slim -t kanban:runtime-slim --load .`; same for `--target standalone`; `docker image ls kanban` |
 
-The workflow triggers on `push` to `main` and on `pull_request`. It never uses
-`pull_request_target`. The only secrets referenced are `DOCKERHUB_USERNAME`,
-`DOCKERHUB_TOKEN` and `DASH_TOKEN`; `DASH_TOKEN` is passed through `env:` and never
-interpolated into the script body.
+Deviations from the original ticket text, kept deliberately because they are what works on
+the `inferrence1` act_runner:
+
+- `python-tests` starts the database with `make testdb-up` (sibling container sharing the
+  workspace volume) instead of `docker compose`, and runs `-m "not container"` because the
+  runner has no nested Docker for container-marked tests.
+- `docker-build` builds both image targets locally and does not push. The previous workflow
+  pushed `thumbs-up-kanban:latest` to Docker Hub; that publish step was removed with the
+  "no secrets except Dash" requirement. Re-adding a publish job is a separate decision.
 
 ## Reading Logs
 
 `scripts/ci/run_and_log.sh <logname> -- <command...>` runs the command as an argv vector
 (no `eval`), tees combined stdout and stderr, and exits with the command's exit code.
-Log names must match `^[a-z0-9-]+$` (otherwise exit `64`, nothing written).
+Log names must match `^[a-z0-9-]+$` (otherwise exit `64`, nothing written). Per wrapped step
+it writes under `ci-logs/<job-id>/`: `<logname>.log` (output) and `<logname>.exit` (exit code).
 
-For each wrapped step it writes, under `ci-logs/build-test-push/`:
+Every job ends with two `if: always()` steps:
 
-- `<logname>.log`: combined stdout and stderr
-- `<logname>.exit`: the exit code
+1. `scripts/ci/upload_dash_log.sh <job-id>` POSTs the job's logs to Dash
+   (`/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban&sha=<sha>`), prefixing any log
+   already stored for that SHA because the five jobs share one Dash log slot. Certificate
+   verification is on. A missing `DASH_TOKEN` or a Dash outage never fails the job. The
+   token is passed through `env:` and never printed.
+2. `actions/upload-artifact` uploads `ci-logs/` as `ci-logs-<job-id>` (14 days). `python-tests`
+   also uploads `reports/` (`coverage.xml`, `pytest.xml`) as `ci-reports-python-tests`. Artifact
+   uploads use `continue-on-error: true` because upload-artifact v4 is not universally
+   supported by Forgejo runners; the Dash upload is the reliable channel.
 
-The final `Upload logs to Dash` step concatenates every `ci-logs/*/*.log` (each prefixed
-with a `=== <path> (exit <n>) ===` header) into `build.log` and POSTs it to
-`https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban`.
-A missing `DASH_TOKEN` or an upload error never fails the job. Retrieve the uploaded log
-with the Dash `logs` tool (see below).
+Artifact names: `ci-logs-lint-type`, `ci-logs-python-tests`, `ci-logs-web-tests`,
+`ci-logs-license-gate`, `ci-logs-docker-build`, `ci-reports-python-tests`.
 
 ## Dash Verification
 
 Follow the flow from <https://dash.hackedyour.info/llms.txt> with the Dash MCP tools:
 
-1. After `git push`, call Dash `status` for the repo to see the run for the pushed SHA.
+1. After `git push`, call Dash `status` for the repo (pin to the pushed SHA).
 2. Call Dash `wait` until the run completes. Never poll with manual `sleep` loops.
-3. On failure, call Dash `logs` and read the uploaded `build.log` (look for the failing
-   `=== ci-logs/... (exit N) ===` section) before changing code.
+3. On failure, call Dash `logs` and read the uploaded log (look for the failing
+   `=== ci-logs/<job>/<step>.log (exit N) ===` section) before changing code.
 
 A red `main` is an emergency: halt all other work and fix it before anything else
 (AGENTS.md, Broken Build Taboo).
@@ -52,7 +64,8 @@ A red `main` is an emergency: halt all other work and fix it before anything els
 ## Local validation
 
 ```bash
-uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py -q
+uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py \
+  scripts/tests/test_upload_dash_log.py -q
 docker run --rm -v "$PWD:/repo" -w /repo \
   rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 \
   -no-color .github/workflows/ci.yml .forgejo/workflows/ci.yml
@@ -60,8 +73,8 @@ docker run --rm -v "$PWD:/repo" -w /repo \
 
 The runner label `inferrence1` is declared in `.github/actionlint.yaml`.
 
-## Known gaps (follow-ups)
+## Updating pinned actions
 
-- `uses:` references are tag-pinned (`@v4`), not 40-char SHA-pinned.
-- The Dash upload uses `curl -k` (certificate verification off), inherited from the original workflow.
-- The workflow is single-job; the multi-job split (web tests, docker build matrix) is not done.
+Resolve the new tag to a commit SHA (peel annotated tags: use the `^{}` line from
+`git ls-remote --tags https://github.com/<owner>/<repo>.git`), update every occurrence in
+both workflow files together, keep the `# vX.Y.Z` comment, and re-run the tests above.

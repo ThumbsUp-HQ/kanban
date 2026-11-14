@@ -1,38 +1,43 @@
-# KANBA-28 (KB-P0-06) Handoff to reality-checker
+# KANBA-28 (KB-P0-06) Handoff to reality-checker (Option B, full scope)
 
-Commit under audit: `dc1dcc5` (pushed to origin/main). Ticket: `docs/tickets/KB-P0-06.md`.
+Supersedes the earlier minimal single-job handoff (commit 52e14f9). User decision: implement the
+full ticket scope.
 
-## Scope actually delivered (minimal, single-job)
+## Delivered
 
-Per coordinator and orchestrator instruction, the existing Forgejo `build-test-push` workflow
-on runner `inferrence1` was REUSED, not replaced by the ticket's 5-job design. Delivered:
-
-- `scripts/ci/run_and_log.sh`: argv-only wrapper, logs to `ci-logs/<job>/<name>.log|.exit`,
-  rejects names outside `^[a-z0-9-]+$` with exit 64.
 - `.forgejo/workflows/ci.yml` and `.github/workflows/ci.yml` (byte-identical, enforced by test):
-  lint, test-DB and test steps wrapped by `run_and_log.sh`; final `if: always()` step uploads all
-  step logs to Dash `/api/logs`, token via `env:`.
-- `docs/CI.md` (`## Jobs`, `## Reading Logs`, `## Dash Verification`), `.github/actionlint.yaml`.
-- Tests: `scripts/tests/test_ci_workflow.py`, `scripts/tests/test_run_and_log.py` (21 pass).
+  jobs `lint-type`, `python-tests`, `web-tests`, `license-gate`, `docker-build` on `inferrence1`;
+  `on: push` (all branches) and `pull_request`; `concurrency` cancel-in-progress; top-level
+  `permissions: {contents: read}`; `timeout-minutes: 20` on every job; every `uses:` pinned to a
+  40-char commit SHA with a `# vX.Y.Z` comment (SHAs peeled from `git ls-remote` tags).
+- Every command step runs through `scripts/ci/run_and_log.sh` (unchanged). Each job ends with an
+  `if: always()` Dash upload (`scripts/ci/upload_dash_log.sh`, new, best effort, token via `env:`,
+  TLS verification on) followed by an `if: always()` `actions/upload-artifact` of `ci-logs/`
+  (`ci-logs-<job>`); `python-tests` also uploads `reports/` (`coverage.xml`, `pytest.xml`).
+- `pyyaml==6.0.3` explicit in the dev group and `uv.lock` (see `dependency-evaluation.md`).
+- `docs/CI.md` rewritten for the 5-job layout; `.github/actionlint.yaml` declares `inferrence1`.
+- Tests: `scripts/tests/test_ci_workflow.py` (22), `test_run_and_log.py` (8),
+  `test_upload_dash_log.py` (6, loopback fake Dash server).
 
-## Ticket items intentionally NOT met (do not grade as done)
+## Deviations from ticket text (deliberate, please grade knowingly)
 
-| Ticket requirement | Status |
-| :--- | :--- |
-| 5 jobs (`lint-type`, `python-tests`, `web-tests`, `license-gate`, `docker-build`) | NOT DONE: single job retained |
-| Every `uses:` pinned to 40-char SHA | NOT DONE: tags (`@v4`) retained |
-| Top-level `permissions: contents: read`, per-job `timeout-minutes <= 20` | NOT DONE |
-| `upload-artifact` of `ci-logs/` and `reports/`; `ci-artifact-listing.txt`, `ci-logs/` copies | N/A: logs go to Dash, not artifacts |
-| `pyyaml` explicit dev dependency in `pyproject.toml`/`uv.lock` | NOT DONE: already locked transitively; no manifest change (see `dependency-evaluation.md`) |
-| `--cov=scripts.ci --cov-fail-under=95` | CANNOT PASS: `scripts/ci` is bash; documented in `unit-test-results.txt` |
-| `actionlint -color=never` | Flag invalid in 1.7.7; `-no-color` used, digest pinned, exit 0 |
-| "Never reference secrets" | Workflow still references `DOCKERHUB_*` (pre-existing) and `DASH_TOKEN` (required for upload) |
-| Remote CI green (Dash `wait`) | See `dash-status.txt` (written by orchestrator worker 4); builder could not produce it |
+| Ticket text | What was done | Why |
+| :--- | :--- | :--- |
+| `docker compose -f docker-compose.test.yml up -d --wait` | `make testdb-up` / `make testdb-down` | act_runner needs the sibling-container + shared-volume path in `scripts/testdb_up.sh` (proven on run 24) |
+| pytest without marker filter | `-m "not container"` | runner has no nested Docker for container-marked tests (as before) |
+| "No secrets referenced in any job" | `DASH_TOKEN` only, via step `env:` | Dash upload requires it; orchestrator requirement |
+| `docker-build` build only | no Docker Hub push anymore | ticket says `--load`; the previous workflow pushed `thumbs-up-kanban:latest` using `DOCKERHUB_*` secrets. This publish step is REMOVED; re-adding it is a separate decision |
+| `actionlint -color=never` | `-no-color` | `-color=never` is rejected by actionlint 1.7.7 |
+| `upload-artifact` must succeed | `continue-on-error: true` on both artifact uploads | v4 artifacts are not universally supported by Forgejo runners (Dash llms.txt); Dash upload is the reliable channel |
+| (not in ticket) | `kanban/web/vitest.config.ts` `testTimeout` 5s -> 15s | heaviest jsdom route test measured 5.1s alone with coverage, 13s under load, and timed out |
+| (not in ticket) | `.gitignore` adds `reports/` | pytest/coverage report output dir |
 
-Known gaps are also listed in `docs/CI.md`. Follow-up tickets are recommended for the
-multi-job split, SHA pinning, least-privilege `permissions`, and removing `curl -k`.
+## Known limitations
 
-## Artifacts
-
-`git-diff.patch`, `unit-test-results.txt`, `build-check.txt` (make check exit 0, actionlint exit 0),
-`dependency-evaluation.md`, `dash-status.txt`, this file.
+- Dash keeps one log per (repo, sha); the five parallel jobs read-then-append before POST, so a
+  rare race can drop one job's section. A per-job artifact still holds every log.
+- The run on the Forgejo runner for this commit has not happened yet at the time of writing;
+  `dash-status.txt` holds the run-24 evidence for the previous single-job commit until the
+  orchestrator appends the new run (if present, the newest section is authoritative).
+- Local full-suite runs hit 2 load-induced flakes (`test_nsjail_runner`, `test_sse_resume`) when
+  the shared host load average was ~13; both pass alone. Not changed.

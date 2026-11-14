@@ -1,14 +1,13 @@
 """Structural and security tests for the CI workflow (KB-P0-06 / KANBA-28).
 
-The project CI runs on the Forgejo runner ``inferrence1`` as a single
-``build-test-push`` job. These tests pin the invariants that keep failed runs
-diagnosable: every verification command is wrapped by ``run_and_log.sh``, the
-Dash log upload always runs last, and the workflow never widens its trigger or
-permission surface.
+The project CI runs on the Forgejo runner ``inferrence1`` as five jobs. These tests pin the
+invariants that keep failed runs diagnosable and the pipeline hardened: SHA-pinned actions,
+least-privilege permissions, bounded jobs, and always-run log upload as the final step.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, cast
 
@@ -18,7 +17,9 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GITHUB_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 FORGEJO_WORKFLOW = REPO_ROOT / ".forgejo" / "workflows" / "ci.yml"
-JOB_ID = "build-test-push"
+JOB_IDS = ["lint-type", "python-tests", "web-tests", "license-gate", "docker-build"]
+USES_PATTERN = re.compile(r"^[^@]+@[0-9a-f]{40}$")
+ALLOWED_SECRETS = {"DASH_TOKEN"}
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -33,28 +34,44 @@ def workflow() -> dict[str, Any]:
 
 
 @pytest.fixture(scope="module")
-def steps(workflow: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return the ordered steps of the single CI job."""
-    return cast("list[dict[str, Any]]", workflow["jobs"][JOB_ID]["steps"])
+def jobs(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return the job mapping."""
+    return cast("dict[str, dict[str, Any]]", workflow["jobs"])
 
 
-def _step(steps: list[dict[str, Any]], name: str) -> dict[str, Any]:
-    matches = [s for s in steps if s.get("name") == name]
-    assert len(matches) == 1, f"expected exactly one step named {name!r}"
-    return matches[0]
+def _run_text(job: dict[str, Any]) -> str:
+    return "\n".join(str(s.get("run", "")) for s in job["steps"])
 
 
 def test_workflow_copies_are_identical() -> None:
     """Positive: the GitHub and Forgejo workflow files must not drift."""
-    assert GITHUB_WORKFLOW.read_text(encoding="utf-8") == FORGEJO_WORKFLOW.read_text(
-        encoding="utf-8"
-    )
+    assert GITHUB_WORKFLOW.read_bytes() == FORGEJO_WORKFLOW.read_bytes()
 
 
-def test_job_runs_on_inferrence1(workflow: dict[str, Any]) -> None:
-    """Positive: the single job targets the project Forgejo runner."""
-    assert list(workflow["jobs"]) == [JOB_ID]
-    assert workflow["jobs"][JOB_ID]["runs-on"] == ["inferrence1"]
+def test_five_jobs_exist_on_inferrence1(jobs: dict[str, dict[str, Any]]) -> None:
+    """Positive: exactly the five ticket jobs, all on the project runner."""
+    assert list(jobs) == JOB_IDS
+    for job in jobs.values():
+        assert job["runs-on"] == ["inferrence1"]
+
+
+def test_permissions_are_read_only(workflow: dict[str, Any]) -> None:
+    """Security: top-level token permissions are contents: read only."""
+    assert workflow["permissions"] == {"contents": "read"}
+
+
+def test_every_job_has_bounded_timeout(jobs: dict[str, dict[str, Any]]) -> None:
+    """Boundary: every job has timeout-minutes <= 20."""
+    for name, job in jobs.items():
+        assert 0 < job["timeout-minutes"] <= 20, name
+
+
+def test_concurrency_cancels_superseded_runs(workflow: dict[str, Any]) -> None:
+    """Positive: superseded runs on the same ref are cancelled."""
+    assert workflow["concurrency"] == {
+        "group": "ci-${{ github.ref }}",
+        "cancel-in-progress": True,
+    }
 
 
 def test_triggers_exclude_pull_request_target(workflow: dict[str, Any]) -> None:
@@ -68,73 +85,114 @@ def test_triggers_exclude_pull_request_target(workflow: dict[str, Any]) -> None:
     assert "pull_request" in triggers
 
 
-def test_verification_steps_use_run_and_log(steps: list[dict[str, Any]]) -> None:
-    """Positive: lint, DB start/stop and tests are wrapped for log capture."""
-    expected = {
-        "Run lint and checks": "run_and_log.sh lint-type-license --",
-        "Start test database": "run_and_log.sh testdb-up --",
-        "Run tests": "run_and_log.sh unit-tests --",
-        "Stop test database": "run_and_log.sh testdb-down --",
-    }
-    for name, needle in expected.items():
-        assert needle in _step(steps, name)["run"]
+def test_every_uses_is_pinned_to_a_full_commit_sha(jobs: dict[str, dict[str, Any]]) -> None:
+    """Security: every `uses:` is owner/repo@<40 hex> with a trailing version comment."""
+    text = FORGEJO_WORKFLOW.read_text(encoding="utf-8")
+    for job in jobs.values():
+        for step in job["steps"]:
+            if "uses" in step:
+                assert USES_PATTERN.match(step["uses"]), step["uses"]
+    for line in text.splitlines():
+        if "uses:" in line:
+            assert re.search(r"@[0-9a-f]{40} # v\d+\.\d+\.\d+$", line.strip()), line
 
 
-def test_unit_test_command_excludes_container_marker(steps: list[dict[str, Any]]) -> None:
-    """Boundary: the runner has no nested docker for container-marked tests."""
-    assert 'pytest -q -m "not container"' in _step(steps, "Run tests")["run"]
-
-
-def test_lint_step_runs_make_check_and_license(steps: list[dict[str, Any]]) -> None:
-    """Positive: the Shift-Left gates stay in the pipeline."""
-    run = _step(steps, "Run lint and checks")["run"]
-    assert "make check" in run
-    assert "make license" in run
-    assert "uv sync --locked" in run
-
-
-def test_testdb_teardown_always_runs(steps: list[dict[str, Any]]) -> None:
-    """Positive: DB teardown runs on failure too."""
-    assert _step(steps, "Stop test database")["if"] == "always()"
-
-
-def test_dash_upload_is_last_and_always(steps: list[dict[str, Any]]) -> None:
-    """Positive: logs are uploaded to Dash with if: always(), as the final step."""
-    last = steps[-1]
-    assert last["name"] == "Upload logs to Dash"
-    assert last["if"] == "always()"
-    assert "https://dash.hackedyour.info/api/logs" in last["run"]
-    assert "ci-logs/*/*.log" in last["run"]
-
-
-def test_dash_token_passed_via_env_not_inlined(steps: list[dict[str, Any]]) -> None:
-    """Security: the Dash token is an env var, never interpolated into the script."""
-    last = steps[-1]
-    assert last["env"] == {"DASH_TOKEN": "${{ secrets.DASH_TOKEN }}"}
-    assert "secrets." not in last["run"]
-
-
-def test_dash_upload_tolerates_missing_token(steps: list[dict[str, Any]]) -> None:
-    """Negative: a missing token skips the upload instead of failing the job."""
-    run = steps[-1]["run"]
-    assert 'if [ -z "${DASH_TOKEN:-}" ]' in run
-    assert "exit 0" in run
-
-
-def test_job_log_dir_env_is_set(workflow: dict[str, Any]) -> None:
-    """Positive: CI_JOB_NAME places logs under ci-logs/build-test-push/."""
-    assert workflow["env"] == {"CI_JOB_NAME": JOB_ID}
-
-
-def test_only_expected_secrets_referenced() -> None:
-    """Security: only the registry and Dash secrets are ever referenced."""
+def test_only_dash_secret_is_referenced() -> None:
+    """Security: the only secret is DASH_TOKEN, and only through a step env block."""
     text = FORGEJO_WORKFLOW.read_text(encoding="utf-8")
     refs = {part.split("}}")[0].strip() for part in text.split("secrets.")[1:]}
-    assert refs <= {
-        "DOCKERHUB_USERNAME",
-        "DOCKERHUB_TOKEN",
-        "DASH_TOKEN",
-    }
+    assert refs == ALLOWED_SECRETS
+    workflow = _load(FORGEJO_WORKFLOW)
+    for job in workflow["jobs"].values():
+        for step in job["steps"]:
+            assert "secrets." not in str(step.get("run", ""))
+
+
+def test_last_step_uploads_logs_artifact_always(jobs: dict[str, dict[str, Any]]) -> None:
+    """Positive: each job ends with an always() upload-artifact of ci-logs/."""
+    for name, job in jobs.items():
+        last = job["steps"][-1]
+        assert last["if"] == "always()", name
+        assert last["uses"].startswith("actions/upload-artifact@"), name
+        assert last["with"]["name"] == "ci-logs-${{ github.job }}", name
+        assert last["with"]["path"] == "ci-logs/", name
+        assert last["with"]["retention-days"] == 14, name
+        assert last["with"]["if-no-files-found"] == "error", name
+
+
+def test_dash_upload_runs_always_before_artifact(jobs: dict[str, dict[str, Any]]) -> None:
+    """Positive: each job uploads to Dash with always(), token via env, before the artifact."""
+    for name, job in jobs.items():
+        dash = next(s for s in job["steps"] if s.get("name") == "Upload logs to Dash")
+        assert dash["if"] == "always()", name
+        assert dash["env"] == {"DASH_TOKEN": "${{ secrets.DASH_TOKEN }}"}, name
+        assert dash["run"] == f"scripts/ci/upload_dash_log.sh {name}", name
+        assert job["steps"].index(dash) < len(job["steps"]) - 1
+
+
+def test_python_tests_reports_uploaded_always(jobs: dict[str, dict[str, Any]]) -> None:
+    """Positive: coverage.xml and pytest.xml are uploaded with always()."""
+    step = next(s for s in jobs["python-tests"]["steps"] if "reports/" in str(s.get("with", {})))
+    assert step["if"] == "always()"
+    assert step["with"]["path"] == "reports/"
+
+
+def test_job_log_dir_env_matches_job_id(jobs: dict[str, dict[str, Any]]) -> None:
+    """Positive: CI_JOB_NAME places logs under ci-logs/<job-id>/."""
+    for name, job in jobs.items():
+        assert job["env"] == {"CI_JOB_NAME": name}
+
+
+def test_python_tests_enforce_coverage_threshold(jobs: dict[str, dict[str, Any]]) -> None:
+    """Boundary: python-tests fails below 95% branch coverage."""
+    run = _run_text(jobs["python-tests"])
+    assert "--cov-fail-under=95" in run
+    assert "--cov-branch" in run
+    assert "make testdb-up" in run
+    assert "make testdb-down" in run
+
+
+def test_testdb_teardown_always_runs(jobs: dict[str, dict[str, Any]]) -> None:
+    """Positive: DB teardown runs on failure too."""
+    step = next(s for s in jobs["python-tests"]["steps"] if s.get("name") == "Stop test database")
+    assert step["if"] == "always()"
+
+
+def test_web_tests_commands(jobs: dict[str, dict[str, Any]]) -> None:
+    """Boundary: web-tests runs frozen install, typecheck, lint, coverage and build."""
+    run = _run_text(jobs["web-tests"])
+    assert "pnpm install --frozen-lockfile --ignore-scripts" in run
+    assert "typecheck" in run
+    assert "lint" in run
+    assert "test:unit --coverage" in run
+    assert "kanban/web build" in run
+
+
+def test_lint_type_and_license_commands(jobs: dict[str, dict[str, Any]]) -> None:
+    """Positive: Shift-Left gates stay in the pipeline."""
+    assert "uv sync --locked && make check" in _run_text(jobs["lint-type"])
+    license_run = _run_text(jobs["license-gate"])
+    assert "make license" in license_run
+    assert "uv sync --locked" in license_run
+    assert "pnpm install --frozen-lockfile --ignore-scripts" in license_run
+
+
+def test_docker_build_builds_both_targets(jobs: dict[str, dict[str, Any]]) -> None:
+    """Positive: both image targets are built locally (no push) and listed."""
+    run = _run_text(jobs["docker-build"])
+    assert "--target runtime-slim -t kanban:runtime-slim --load ." in run
+    assert "--target standalone -t kanban:standalone --load ." in run
+    assert "docker image ls kanban" in run
+    assert "push" not in run
+
+
+def test_every_command_step_runs_through_run_and_log(jobs: dict[str, dict[str, Any]]) -> None:
+    """Positive: only setup, apt and Dash/upload steps may bypass run_and_log.sh."""
+    exempt = {"Install system dependencies", "Upload logs to Dash"}
+    for job in jobs.values():
+        for step in job["steps"]:
+            if "run" in step and step["name"] not in exempt:
+                assert "scripts/ci/run_and_log.sh" in step["run"], step["name"]
 
 
 def test_ci_doc_has_required_sections() -> None:
