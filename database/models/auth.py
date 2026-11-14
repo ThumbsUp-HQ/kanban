@@ -355,3 +355,68 @@ class WebauthnChallenge(Base):
     def __str__(self) -> str:
         """Sanitized string representation matching repr."""
         return self.__repr__()
+
+
+class UserIdentity(Base):
+    """External IdP identity mapping strictly bound by (auth_card_id, immutable_subject_id)."""
+
+    __tablename__ = "user_identities"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), nullable=False
+    )
+    auth_card_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("auth_provider_cards.id", ondelete="RESTRICT"), nullable=False
+    )
+    immutable_subject_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject_email_at_link: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self) -> str:
+        """Sanitized representation showing non-secret identity binding metadata."""
+        return (
+            f"<UserIdentity id={self.id} principal_id={self.principal_id} "
+            f"auth_card_id={self.auth_card_id} last_login_at={self.last_login_at}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()
+
+
+class IdentityLinkIntent(Base):
+    """Ephemeral single-use intent for explicit AAL2 identity linking (KB-P2-08)."""
+
+    __tablename__ = "identity_link_intents"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), nullable=False
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    target_card_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("auth_provider_cards.id", ondelete="CASCADE"), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self) -> str:
+        """Sanitized representation of linking intent."""
+        return (
+            f"<IdentityLinkIntent id={self.id} principal_id={self.principal_id} "
+            f"target_card_id={self.target_card_id} expires_at={self.expires_at} "
+            f"consumed={self.consumed_at is not None}>"
+        )
+
+    def __str__(self) -> str:
+        """Sanitized string representation matching repr."""
+        return self.__repr__()

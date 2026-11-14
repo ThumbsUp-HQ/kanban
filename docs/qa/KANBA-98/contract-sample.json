@@ -1,0 +1,43 @@
+{
+  "409_IDENTITY_LINK_REQUIRED": {
+    "type": "about:blank",
+    "title": "Identity Link Required",
+    "status": 409,
+    "detail": "An account with this email already exists. Sign in with your existing credentials, elevate to AAL2, and link this provider in settings.",
+    "code": "IDENTITY_LINK_REQUIRED"
+  },
+  "403_AAL2_REQUIRED": {
+    "type": "urn:kanban:problem:AAL2_REQUIRED",
+    "title": "AAL2 Authentication Required",
+    "status": 403,
+    "code": "AAL2_REQUIRED",
+    "detail": "This operation requires multi-factor authentication (AAL2).",
+    "request_id": "3d5bad9d8ee64cfda418266e7c514f7f"
+  },
+  "200_POST_identities_link_start": {
+    "mode": "ldap_credentials",
+    "link_intent_id": "01a1d76d-573d-7063-9392-c47d1a75632e"
+  },
+  "200_GET_api_v1_auth_identities": {
+    "identities": [
+      {
+        "id": "98f05ec3-e0b6-46fa-85f2-7709a126386a",
+        "card_slug": "github-bb439b",
+        "card_display_name": "GitHub OAuth",
+        "provider_kind": "OIDC",
+        "subject_email_at_link": "u1@github.example",
+        "created_at": "2026-11-14T00:20:29.632306+00:00",
+        "last_login_at": null,
+        "immutable_subject_id": "gh-u1"
+      }
+    ]
+  },
+  "409_LAST_AUTH_METHOD": {
+    "type": "urn:kanban:problem:LAST_AUTH_METHOD",
+    "title": "Last Auth Method",
+    "status": 409,
+    "code": "LAST_AUTH_METHOD",
+    "detail": "Cannot unlink last remaining authentication method",
+    "request_id": "ce6daac4fbff4572865ed36e434e1b86"
+  }
+}
