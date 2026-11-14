@@ -23,6 +23,7 @@ import { type SystemStatus } from './useSystemStatus';
 import { IssueSurface } from '../features/drawer/IssueSurface';
 import { IssueSurfaceSlotsContext } from '../features/drawer/slots';
 import { issueSurfaceSlots } from '../features/drawer/slotRegistry';
+import { AccessInspectorHost } from '../features/access/useAccessInspector';
 import './AppShell.css';
 
 export interface AppShellProps {
@@ -128,6 +129,9 @@ export function AppShell({
 
         {/* Stable Semantic Emoji Hint Portal Anchor for KB-P3-31 */}
         <div id="kb-hint-root" />
+
+        {/* Global Effective Access Inspector Popover Host (KB-P3-49) */}
+        <AccessInspectorHost />
 
         {/* Non-blocking Realtime Network & SSE Status Chip */}
         <RealtimeStatus />

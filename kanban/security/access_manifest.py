@@ -29,6 +29,7 @@ from kanban.api.problems import not_found
 from kanban.security.permissions import (
     Capability,
     capabilities_to_names,
+    evaluate_capabilities,
     require_capability,
 )
 
@@ -143,6 +144,15 @@ class AccessManifest(BaseModel):
     )
     redacted_count: int = Field(
         default=0, description="Total count of redacted out-of-boundary principals"
+    )
+    caller_capabilities: list[str] = Field(
+        default_factory=list, description="Effective capability names granted to calling principal"
+    )
+    canonical_key: str | None = Field(
+        default=None, description="Canonical display key (e.g. KAN-142)"
+    )
+    object_type: str | None = Field(
+        default=None, description="Type of object (e.g. issue, project)"
     )
 
 
@@ -545,6 +555,19 @@ async def build_access_manifest(
             )
         )
 
+    caller_caps = await evaluate_capabilities(session, caller, object_id)
+    caller_capabilities = capabilities_to_names(caller_caps)
+    canonical_key = object_rec.canonical_key or (
+        f"{inherited_scope.project_key}"
+        if inherited_scope.project_key
+        else str(object_rec.id)[:8]
+    )
+    object_type = (
+        object_rec.object_type.value
+        if hasattr(object_rec.object_type, "value")
+        else str(object_rec.object_type)
+    )
+
     return AccessManifest(
         pill_label=pill_label,
         explicit_grant_count=explicit_grant_count,
@@ -555,4 +578,7 @@ async def build_access_manifest(
         deny_overrides=deny_overrides,
         redacted_entries=redacted_entries,
         redacted_count=total_redacted,
+        caller_capabilities=caller_capabilities,
+        canonical_key=canonical_key,
+        object_type=object_type,
     )
