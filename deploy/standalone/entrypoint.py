@@ -200,20 +200,20 @@ def bootstrap_database(
       END IF;
     END
     $$;
-    ALTER ROLE kanban_migrator NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS;
+    ALTER ROLE kanban_migrator NOSUPERUSER NOCREATEDB CREATEROLE NOREPLICATION BYPASSRLS;
     ALTER ROLE kanban_app      NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
     ALTER ROLE app_rls_reader  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
     ALTER ROLE app_rls_reader  SET default_transaction_read_only = on;
     ALTER ROLE kb_infra_owner  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
-    GRANT kb_infra_owner TO kanban_migrator;
+    GRANT kb_infra_owner TO kanban_migrator WITH ADMIN OPTION, INHERIT TRUE, SET TRUE;
     GRANT USAGE, CREATE ON SCHEMA public TO kb_infra_owner;
     """
     run_psql_script(role_sql, dbname="postgres", run_dir=run_dir)
 
     # 2. Apply role passwords if keyring is provided
     if keyring is not None:
-        app_scram = compute_scram_sha256_verifier(keyring.kanban_app_password)
-        mig_scram = compute_scram_sha256_verifier(keyring.kanban_migrator_password)
+        app_scram = compute_scram_sha256_verifier(keyring.kanban_app_password_str)
+        mig_scram = compute_scram_sha256_verifier(keyring.kanban_migrator_password_str)
         pw_sql = generate_role_passwords_sql(app_scram, mig_scram)
         run_psql_script(pw_sql, dbname="postgres", run_dir=run_dir)
 
@@ -246,8 +246,10 @@ def bootstrap_database(
     CREATE EXTENSION IF NOT EXISTS btree_gist;
     CREATE EXTENSION IF NOT EXISTS vector;
     REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-    GRANT USAGE, CREATE ON SCHEMA public TO kanban_migrator;
+    GRANT USAGE, CREATE ON SCHEMA public TO kanban_migrator WITH GRANT OPTION;
+    GRANT USAGE, CREATE ON SCHEMA public TO kb_infra_owner;
     GRANT USAGE ON SCHEMA public TO kanban_app, app_rls_reader;
+    GRANT CREATE, TEMPORARY ON DATABASE kanban TO kanban_migrator;
     ALTER ROLE kanban_migrator LOGIN;
     """
     run_psql_script(ext_sql, dbname="kanban", run_dir=run_dir)
@@ -314,6 +316,21 @@ def resolve_status_path() -> Path:
     return DEFAULT_STATUS_PATH
 
 
+_PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
+    "KB_STANDALONE_CLEARTEXT_HOSTS",
+    "KB_PUBLIC_ORIGIN",
+    "KANBAN_PUBLIC_ORIGIN",
+    "KB_PUBLIC_BASE_URL",
+    "KANBAN_PUBLIC_BASE_URL",
+    "KB_WEBAUTHN_RP_ID",
+    "KANBAN_WEBAUTHN_RP_ID",
+    "KB_WEBAUTHN_RP_NAME",
+    "KANBAN_WEBAUTHN_RP_NAME",
+    "KB_AIR_GAP_MODE",
+    "KB_TRASH_RETENTION_DAYS",
+)
+
+
 def build_child_env(
     keyring: Keyring | None = None,
     db_url: str | None = None,
@@ -338,6 +355,10 @@ def build_child_env(
         "LANG": "C.UTF-8",
         "KB_STANDALONE_STATUS_PATH": str(resolve_status_path()),
     }
+
+    for var_name in _PASSTHROUGH_ENV_VARS:
+        if var_name in os.environ:
+            env[var_name] = os.environ[var_name]
 
     if keyring is not None:
         env["KB_MASTER_KEK_B64"] = keyring.master_kek_b64

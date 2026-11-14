@@ -4,13 +4,14 @@
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Final, Literal, Self
+from typing import Annotated, Final, Literal, Self
 from urllib.parse import urlparse
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 __all__ = ["MAX_TRASH_RETENTION_DAYS", "Settings", "get_settings"]
 
@@ -35,7 +36,9 @@ class Settings(BaseSettings):
         ),
     )
     web_dist: Path = Path("kanban/web/dist")
-    standalone_cleartext_hosts: frozenset[str] = frozenset({"localhost", "127.0.0.1", "[::1]"})
+    standalone_cleartext_hosts: Annotated[frozenset[str], NoDecode] = frozenset(
+        {"localhost", "127.0.0.1", "[::1]"}
+    )
     hsts_max_age: int = 63072000
     public_base_url: str = Field(
         default="https://kanban.example",
@@ -105,7 +108,16 @@ class Settings(BaseSettings):
         if v is None:
             return frozenset(defaults)
         if isinstance(v, str):
-            entries = {s.strip().lower() for s in v.replace(",", " ").split() if s.strip()}
+            raw = v.strip()
+            if raw.startswith("["):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        entries = {str(s).strip().lower() for s in parsed if str(s).strip()}
+                        return frozenset(defaults | entries)
+                except ValueError:
+                    pass
+            entries = {s.strip().lower() for s in raw.replace(",", " ").split() if s.strip()}
             return frozenset(defaults | entries)
         if isinstance(v, (set, frozenset, list, tuple)):
             entries = {str(s).strip().lower() for s in v if str(s).strip()}

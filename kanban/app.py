@@ -13,8 +13,10 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, FastAPI, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from database.session import RLSSessionFactory
 from kanban.api.deps import DenyAllResolver
 from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
 from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
@@ -33,11 +35,15 @@ from kanban.api.v1.oauth import OAuth2Error, oauth_root_router
 from kanban.api.ws import handle_ws_connection
 from kanban.auth.identity_service import DatabaseIdentityResolver
 from kanban.auth.sessions.csrf import CsrfMiddleware
+from kanban.auth.sessions.resolver import SessionCookieResolver
+from kanban.auth.sessions.service import SessionService
 from kanban.auth.setup import mint_setup_token_if_uninitialized
 from kanban.jobs import JobScheduler
 from kanban.jobs import registry as jobs_registry
 from kanban.sandbox.nsjail_runner import TierBNsjailRunner
+from kanban.security.envelope import StaticKekProvider
 from kanban.security.headers import SecurityHeadersMiddleware
+from kanban.security.keys import load_key_material
 from kanban.services.notifications import register_notifications_listener
 from kanban.settings import Settings
 from kanban.web_static import PrecompressedSPAStaticApp
@@ -47,7 +53,48 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from sqlalchemy.ext.asyncio import AsyncEngine
     from starlette.responses import Response
+
+
+def _bootstrap_runtime_state(app: FastAPI) -> AsyncEngine | None:
+    """Initialize RLSSessionFactory and auth state from settings when not pre-configured."""
+    app_settings = getattr(app.state, "settings", None)
+    if (
+        getattr(app.state, "session_factory", None) is not None
+        or app_settings is None
+        or not app_settings.database_url
+    ):
+        return None
+
+    try:
+        km = getattr(app.state, "key_material", None) or load_key_material()
+        engine = create_async_engine(
+            app_settings.database_url,
+            pool_size=10,
+            max_overflow=10,
+        )
+        session_factory = RLSSessionFactory(engine)
+        app.state.engine = engine
+        app.state.session_factory = session_factory
+        app.state.key_material = km
+        if getattr(app.state, "kek_provider", None) is None:
+            app.state.kek_provider = StaticKekProvider(
+                {km.master_kek_kid: km.master_kek},
+                km.master_kek_kid,
+            )
+        if getattr(app.state, "session_service", None) is None:
+            app.state.session_service = SessionService(session_hmac_key=km.session_hmac_key)
+        if isinstance(getattr(app.state, "principal_resolver", None), DenyAllResolver):
+            app.state.principal_resolver = SessionCookieResolver(
+                app.state.session_service,
+                session_factory,
+            )
+    except Exception:
+        logger.debug("Automatic runtime database/auth wiring skipped", exc_info=True)
+        return None
+    else:
+        return engine
 
 
 @asynccontextmanager
@@ -61,6 +108,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.job_scheduler = scheduler
     app.state.job_registry = jobs_registry
 
+    owned_engine = _bootstrap_runtime_state(app)
     session_target = getattr(app.state, "session_factory", None)
     should_run = getattr(app.state, "enable_background_jobs", False)
 
@@ -87,6 +135,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         hub = getattr(app.state, "realtime_hub", None)
         if hub is not None:
             await hub.drain(timeout_seconds=3.0)
+        if owned_engine is not None:
+            await owned_engine.dispose()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

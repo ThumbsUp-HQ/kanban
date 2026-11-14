@@ -127,9 +127,11 @@ def _load_from_keyring_file(target_path: Path) -> KeyMaterial:
 
 def _load_from_env() -> KeyMaterial | None:
     """Load key material from direct environment variables, or None if absent."""
-    env_master = os.environ.get("KANBAN_MASTER_KEK")
-    env_pepper = os.environ.get("KANBAN_AUTH_PEPPER")
-    env_session = os.environ.get("KANBAN_SESSION_HMAC_KEY")
+    env_master = os.environ.get("KANBAN_MASTER_KEK") or os.environ.get("KB_MASTER_KEK_B64")
+    env_pepper = os.environ.get("KANBAN_AUTH_PEPPER") or os.environ.get("KB_AUTH_PEPPER_B64")
+    env_session = os.environ.get("KANBAN_SESSION_HMAC_KEY") or os.environ.get(
+        "KB_SESSION_HMAC_KEY_B64"
+    )
 
     if env_master and env_pepper and env_session:
         master_kek = _decode_b64url_key(env_master, "KANBAN_MASTER_KEK")
