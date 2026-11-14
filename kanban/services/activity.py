@@ -193,6 +193,7 @@ class ActivityEventType(StrEnum):
     ROLE_UNBOUND = "ROLE_UNBOUND"
     ACL_ENTRY_GRANTED = "ACL_ENTRY_GRANTED"
     ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
+    DESTRUCTIVE_LIFECYCLE_EXECUTED = "DESTRUCTIVE_LIFECYCLE_EXECUTED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -310,6 +311,8 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.AUTH_CARD_DELETED: ActivityCategory.SYSTEM,
         ActivityEventType.AUTH_CARD_HANDSHAKE_TESTED: ActivityCategory.SYSTEM,
         ActivityEventType.STANDALONE_BACKUP_EXPORTED: ActivityCategory.SYSTEM,
+        ActivityEventType.PLANE_IMPORT_COMPLETED: ActivityCategory.SYSTEM,
+        ActivityEventType.DESTRUCTIVE_LIFECYCLE_EXECUTED: ActivityCategory.HISTORY,
         ActivityEventType.WORK_COMPLETED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVAL_REQUESTED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVED_PRIMARY: ActivityCategory.HISTORY,

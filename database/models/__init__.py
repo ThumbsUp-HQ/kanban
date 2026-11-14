@@ -29,6 +29,7 @@ from database.models.base import (
 )
 from database.models.custom_field import CustomFieldDefinition, CustomFieldValue
 from database.models.custom_field_approval import CustomFieldApproval
+from database.models.destructive_token import DestructiveConfirmationToken
 from database.models.embeddings import ObjectEmbedding
 from database.models.import_mapping import ImportEntityMapping
 from database.models.issues import (
@@ -97,6 +98,7 @@ __all__ = [
     "CustomFieldDefinition",
     "CustomFieldValue",
     "Cycle",
+    "DestructiveConfirmationToken",
     "Doc",
     "EffectiveResourceAccess",
     "Group",

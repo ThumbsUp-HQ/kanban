@@ -1,10 +1,10 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Admin surface tool registry and definitions (KB-P4-09a..11, KB-P5-05b / S11.4)."""
+"""Admin surface tool registry and definitions (KB-P4-09a..12, KB-P5-05b / S11.4)."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from mcp.registry import Surface, ToolRegistry, ToolSpec
 from mcp.surfaces.admin.architect_project import (
@@ -20,6 +20,11 @@ from mcp.surfaces.admin.configure_workspace import (
     CONFIGURE_WORKSPACE_SCHEMA,
     configure_workspace,
     create_configure_workspace_tool,
+)
+from mcp.surfaces.admin.destructive_lifecycle import (
+    DESTRUCTIVE_LIFECYCLE_SCHEMA,
+    create_destructive_lifecycle_tool,
+    destructive_lifecycle,
 )
 from mcp.surfaces.admin.manage_access_policies import (
     MANAGE_ACCESS_POLICIES_SCHEMA,
@@ -58,6 +63,7 @@ __all__ = [
     "ARCHITECT_PROJECT_SCHEMA",
     "AUDIT_AND_PURGE_OBJECT_LINKS_SCHEMA",
     "CONFIGURE_WORKSPACE_SCHEMA",
+    "DESTRUCTIVE_LIFECYCLE_SCHEMA",
     "MANAGE_ACCESS_POLICIES_SCHEMA",
     "MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA",
     "MANAGE_AUTH_CARDS_SCHEMA",
@@ -69,8 +75,10 @@ __all__ = [
     "build_admin_registry",
     "configure_workspace",
     "create_admin_registry",
+    "create_destructive_lifecycle_tool",
     "create_manage_access_policies_tool",
     "create_manage_principals_and_groups_tool",
+    "destructive_lifecycle",
     "manage_access_policies_tool",
     "manage_ai_and_agent_runners",
     "manage_auth_cards",
@@ -79,8 +87,21 @@ __all__ = [
     "override_ticket_provenance",
 ]
 
+ADMIN_TOOL_NAMES: Final[tuple[str, ...]] = (
+    "configure_workspace",
+    "manage_auth_cards",
+    "manage_principals_and_groups",
+    "manage_access_policies",
+    "architect_project",
+    "manage_cycles_and_modules",
+    "manage_ai_and_agent_runners",
+    "override_ticket_provenance",
+    "audit_and_purge_object_links",
+    "destructive_lifecycle",
+)
 
-def build_admin_registry(client: KanbanApiClient | None = None) -> ToolRegistry:  # noqa: ARG001
+
+def build_admin_registry(client: KanbanApiClient | None = None) -> ToolRegistry:
     """Construct and return the admin surface ToolRegistry with official tools."""
     registry = ToolRegistry(Surface.ADMIN)
     registry.register(create_configure_workspace_tool())
@@ -114,6 +135,7 @@ def build_admin_registry(client: KanbanApiClient | None = None) -> ToolRegistry:
             handler=audit_and_purge_object_links,
         )
     )
+    registry.register(create_destructive_lifecycle_tool(client))
     return registry
 
 

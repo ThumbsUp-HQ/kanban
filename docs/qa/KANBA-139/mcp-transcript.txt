@@ -1,0 +1,1234 @@
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: jBMsBGTp4edUgHydk3Ke_w.zFk93UqIAuvDPFkj2XU69jdMK5HNfjhZX-os94KpxuY
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=jBMsBGTp4edUgHydk3Ke_w.zFk93UqIAuvDPFkj2XU69jdMK5HNfjhZX-os94KpxuY
+Content-Length: 157
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 4qvwpVO34TnS2F7GSJazbp99l_nLOI7Lh05EfOC0fyI
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: jBMsBGTp4edUgHydk3Ke_w.zFk93UqIAuvDPFkj2XU69jdMK5HNfjhZX-os94KpxuY
+mcp-session-id: 4qvwpVO34TnS2F7GSJazbp99l_nLOI7Lh05EfOC0fyI
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=jBMsBGTp4edUgHydk3Ke_w.zFk93UqIAuvDPFkj2XU69jdMK5HNfjhZX-os94KpxuY
+Content-Length: 58
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+
+HTTP/1.1 200 OK
+content-length: 7263
+content-type: application/json
+
+{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"configure_workspace","description":"Read and update workspace branding, security defaults, retention windows, and air_gap_mode.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["get","update","help"],"description":"Operation to perform: 'get', 'update', or 'help'"},"settings":{"type":"object","properties":{"display_name":{"type":"string","description":"Workspace display name (1..80 characters)"},"default_project_visibility":{"type":"string","enum":["private","workspace"],"description":"Default visibility for newly created projects"},"session_idle_timeout_min":{"type":"integer","minimum":5,"maximum":720,"description":"Session idle timeout in minutes (5..720)"},"session_absolute_timeout_min":{"type":"integer","minimum":60,"maximum":10080,"description":"Session absolute timeout in minutes (60..10080)"},"trash_retention_days":{"type":"integer","minimum":1,"maximum":365,"description":"Retention window for soft-deleted items in days (1..365)"},"mcp_key_max_ttl_days":{"type":"integer","minimum":1,"maximum":365,"description":"Maximum TTL cap for newly minted MCP keys in days (1..365)"},"air_gap_mode":{"type":"boolean","description":"Air-gap mode disabling outbound network egress (requires AAL2)"}},"additionalProperties":false,"description":"Settings fields to update (required for action 'update')"},"lod":{"type":"string","enum":["summary","standard","full"],"default":"summary","description":"Level of detail projection ('summary', 'standard', 'full')"}},"required":["action"],"additionalProperties":false}},{"name":"manage_auth_cards","description":"Manage authentication provider cards, ordering, health, and anti-lockout safeguards.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["list","get","create","update","enable","disable","reorder","test_handshake","delete","help"],"description":"Card operation to perform"},"card":{"type":"string","description":"Card slug or UUID (required for non-list/create actions)"},"slug":{"type":"string","description":"Card slug (for create)"},"provider_kind":{"type":"string","enum":["OIDC","OAUTH2","LDAP","LOCAL_ADMIN"],"description":"Provider type (required for create)"},"display_name":{"type":"string","description":"User-facing title on login card"},"button_subtext":{"type":"string","description":"Subtitle on login button"},"icon_preset":{"type":"string","description":"Icon key preset (e.g. 'key', 'shield', 'lock')"},"public_config":{"type":"object","description":"Provider-specific public configuration object"},"secret":{"type":"object","writeOnly":true,"description":"Write-only provider credentials (client_secret or bind_dn_password); never echoed"},"allowed_email_domains":{"type":"array","items":{"type":"string"},"maxItems":50,"description":"Email domain allowlist (max 50 entries)"},"auto_provision_users":{"type":"boolean","description":"Auto-provision users on first successful authentication"},"after":{"type":"string","description":"Card slug to place after during reorder (empty string '' = first)"},"confirm_slug":{"type":"string","description":"Card slug confirmation phrase required for permanent deletion"},"lod":{"type":"string","enum":["summary","standard","full"],"default":"summary","description":"Level of detail projection ('summary', 'standard', 'full')"}},"required":["action"],"additionalProperties":false}},{"name":"override_ticket_provenance","description":"Perform audited 'Created by' overrides, Hard WIP limit overrides, and unarchivals with a mandatory justification under PROJECT_ADMIN or SERVER_ADMIN.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["override_creator","override_hard_wip_move","unarchive_issue","help"],"description":"Administrative provenance override action to execute"},"issue":{"type":"string","description":"Target issue key (e.g. 'KAN-142') or UUID (required except for help)"},"new_creator":{"type":"string","description":"UUID or @handle of the new creator (required for override_creator)"},"target_state":{"type":"string","description":"Target workflow state name or UUID (required for override_hard_wip_move)"},"after_issue":{"type":"string","description":"Optional rank anchor issue preceding target position"},"before_issue":{"type":"string","description":"Optional rank anchor issue following target position"},"reason":{"type":"string","minLength":10,"maxLength":500,"description":"Mandatory administrative justification (10 to 500 characters)"}},"required":["action"],"additionalProperties":false}},{"name":"audit_and_purge_object_links","description":"Execute the 6-class Universal Object Graph Auditor, inspect flagged link snapshots, and purge audited entries with an immutable activity ledger record.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["run_audit","list_flagged","purge_audited","help"],"description":"Administrative link auditor action to execute"},"reason_filter":{"type":"string","enum":["DANGLING_SOURCE","DANGLING_TARGET","SOFT_DELETED_ENDPOINT","ARCHIVED_POLICY_VIOLATION","TYPE_MATRIX_VIOLATION","CROSS_WORKSPACE_LEAK","PERMISSION_SEVERED"],"description":"Optional invalid link classification filter"},"audit_ids":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":200,"description":"Flagged audit record UUIDs to purge (required for purge_audited)"},"reason":{"type":"string","minLength":10,"maxLength":500,"description":"Mandatory administrative justification for purge (10 to 500 characters)"},"lod":{"type":"string","enum":["summary","standard","full"],"default":"summary","description":"Level of detail for list_flagged action"},"limit":{"type":"integer","minimum":1,"maximum":100,"default":50,"description":"Maximum number of audit records to return in list_flagged"},"cursor":{"type":"string","description":"Pagination cursor for list_flagged"}},"required":["action"],"additionalProperties":false}},{"name":"destructive_lifecycle","description":"Two-stage destructive confirmation gate for soft-trashing, permanent purging, and restoring Universal Object Graph entities (issues, projects, docs, pages, stickies, cycles, modules, views).","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["request_delete","execute_delete","restore","help"],"description":"Destructive lifecycle action to perform"},"target_kind":{"type":"string","enum":["issue","project","doc","page","sticky","cycle","module","view"],"description":"Universal Object Graph entity kind (required except for help)"},"target":{"type":"string","description":"Human-readable key, identifier, or UUID (required except for help)"},"mode":{"type":"string","enum":["trash","permanent_purge"],"default":"trash","description":"Deletion mode: soft-delete to trash or permanent purge"},"confirmation_token":{"type":"string","description":"Single-use 5-minute confirmation token (required for execute_delete)"},"confirm_phrase":{"type":"string","description":"Literal uppercase confirmation phrase matching Stage 1 blast preview"},"reason":{"type":"string","minLength":10,"maxLength":500,"description":"Mandatory audit reason (required for execute_delete and restore)"}},"required":["action"],"additionalProperties":false}}]}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ijShUyzqQOw84kf5vn2izg.fcFLdK__cQns0rGTbIeHF4CSleG6EQqihYscT-ZGX4s
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=ijShUyzqQOw84kf5vn2izg.fcFLdK__cQns0rGTbIeHF4CSleG6EQqihYscT-ZGX4s
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 9V0TUED62om-XZtUaFsj2pJwPC5oK_Wiki-NMTKI3no
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ijShUyzqQOw84kf5vn2izg.fcFLdK__cQns0rGTbIeHF4CSleG6EQqihYscT-ZGX4s
+mcp-session-id: 9V0TUED62om-XZtUaFsj2pJwPC5oK_Wiki-NMTKI3no
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=ijShUyzqQOw84kf5vn2izg.fcFLdK__cQns0rGTbIeHF4CSleG6EQqihYscT-ZGX4s
+Content-Length: 118
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"help"}}}
+
+HTTP/1.1 200 OK
+content-length: 392
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"tool: destructive_lifecycle\nparams:\n  action: request_delete | execute_delete | restore | help\n  target_kind: issue | project | doc | page | sticky | cycle | module | view\n  target: identifier | uuid\n  mode: trash | permanent_purge\n  confirmation_token: str\n  confirm_phrase: str\n  reason: str\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: OHXp_5ddT8vRw1IYsFv57BK2AHFomOFNyvMKx6u7Gcw
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+mcp-session-id: OHXp_5ddT8vRw1IYsFv57BK2AHFomOFNyvMKx6u7Gcw
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+Content-Length: 186
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"issue","target":"MCPTEST-1","mode":"trash"}}}
+
+HTTP/1.1 200 OK
+content-length: 502
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"stage: confirmation_required\ntarget: MCPTEST-1\ntarget_kind: issue\ntarget_id: 01a1d870-eefe-7905-a92e-49dd7f2340b0\nmode: trash\nblast_summary: 0 sub-issues unparented, 0 inbound object_links flagged\nblast_hash: 1939015790a5b7e9d0ac01f02aac850c2a03c7782626d16a01cacb3e6c2f5975\nconfirm_phrase: TRASH ISSUE MCPTEST-1\nconfirmation_token: kb_del_***REDACTED***\nexpires_in_sec: 300\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: MVoOCRiyNtbB-ZVcUIpuL9sn_MM3n6QMi6iGWFKQPl8
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+mcp-session-id: MVoOCRiyNtbB-ZVcUIpuL9sn_MM3n6QMi6iGWFKQPl8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+Content-Length: 348
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"execute_delete","target_kind":"issue","target":"MCPTEST-1","mode":"trash","confirmation_token":"kb_del_***REDACTED***","confirm_phrase":"TRASH ISSUE MCPTEST-1","reason":"Audited decommission of MCP issue 1"}}}
+
+HTTP/1.1 200 OK
+content-length: 331
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"status: executed\ntarget: MCPTEST-1\ntarget_kind: issue\ntarget_id: 01a1d870-eefe-7905-a92e-49dd7f2340b0\nmode: trash\nreason: Audited decommission of MCP issue 1\nblast_hash: 1939015790a5b7e9d0ac01f02aac850c2a03c7782626d16a01cacb3e6c2f5975\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: rsBwPHGPs3woDwwD2fIVRqrnqngHCm6PdNUaXHxaykw
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+mcp-session-id: rsBwPHGPs3woDwwD2fIVRqrnqngHCm6PdNUaXHxaykw
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=JYNzvE_aN1NJ8bvgE36AQw.eEklDgMyHSD1CgFmrkdOJuH7K8VIuyWupoSKZKGMkW0
+Content-Length: 210
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"restore","target_kind":"issue","target":"MCPTEST-1","reason":"Restoring mistakenly trashed issue"}}}
+
+HTTP/1.1 200 OK
+content-length: 239
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"status: restored\ntarget: MCPTEST-1\ntarget_kind: issue\ntarget_id: 01a1d870-eefe-7905-a92e-49dd7f2340b0\nreason: Restoring mistakenly trashed issue\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: erts8PIFoZ3h5FYWyChQDbOYt0j1VhIyou4fdIma658
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+mcp-session-id: erts8PIFoZ3h5FYWyChQDbOYt0j1VhIyou4fdIma658
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+Content-Length: 186
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"issue","target":"MCPPURG-1","mode":"trash"}}}
+
+HTTP/1.1 200 OK
+content-length: 502
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"stage: confirmation_required\ntarget: MCPPURG-1\ntarget_kind: issue\ntarget_id: 01a1d870-f0dd-7307-914c-0c28f1729705\nmode: trash\nblast_summary: 0 sub-issues unparented, 0 inbound object_links flagged\nblast_hash: 65001d6a8041e6f10b32a92cf528358a56738eaf601988fd1abcb5df06167fe2\nconfirm_phrase: TRASH ISSUE MCPPURG-1\nconfirmation_token: kb_del_***REDACTED***\nexpires_in_sec: 300\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: oiufNMaM7fshZzEmbx_cSWmQik2xZsCJIUnAbXUTEqo
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+mcp-session-id: oiufNMaM7fshZzEmbx_cSWmQik2xZsCJIUnAbXUTEqo
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+Content-Length: 347
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"execute_delete","target_kind":"issue","target":"MCPPURG-1","mode":"trash","confirmation_token":"kb_del_***REDACTED***","confirm_phrase":"TRASH ISSUE MCPPURG-1","reason":"Initial move to trash before purge"}}}
+
+HTTP/1.1 200 OK
+content-length: 330
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"status: executed\ntarget: MCPPURG-1\ntarget_kind: issue\ntarget_id: 01a1d870-f0dd-7307-914c-0c28f1729705\nmode: trash\nreason: Initial move to trash before purge\nblast_hash: 65001d6a8041e6f10b32a92cf528358a56738eaf601988fd1abcb5df06167fe2\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: _LCqjoLhBldOPFEuzC8EgHiSCuNEAiFgVUNd3j9QpIY
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+mcp-session-id: _LCqjoLhBldOPFEuzC8EgHiSCuNEAiFgVUNd3j9QpIY
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+Content-Length: 196
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"issue","target":"MCPPURG-1","mode":"permanent_purge"}}}
+
+HTTP/1.1 200 OK
+content-length: 512
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"stage: confirmation_required\ntarget: MCPPURG-1\ntarget_kind: issue\ntarget_id: 01a1d870-f0dd-7307-914c-0c28f1729705\nmode: permanent_purge\nblast_summary: 0 sub-issues unparented, 0 inbound object_links flagged\nblast_hash: d040581dfe69600bffb80b6987a46c2a50b4b32e787d03e6521028a91b2f578c\nconfirm_phrase: PURGE ISSUE MCPPURG-1\nconfirmation_token: kb_del_***REDACTED***\nexpires_in_sec: 300\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: x58l-1Xnqgh6F0hE4IXG7Rmm_HQ3Us951jzwkCocpnU
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+mcp-session-id: x58l-1Xnqgh6F0hE4IXG7Rmm_HQ3Us951jzwkCocpnU
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=HT0QCPmFM1BQkBmQT4CcWA.kOwGFR00hU3wH-J6DDQpRP59UxBZWwhQhNMSPRIIqBA
+Content-Length: 359
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"execute_delete","target_kind":"issue","target":"MCPPURG-1","mode":"permanent_purge","confirmation_token":"kb_del_***REDACTED***","confirm_phrase":"PURGE ISSUE MCPPURG-1","reason":"Permanent audited purge of MCP issue"}}}
+
+HTTP/1.1 200 OK
+content-length: 342
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"status: executed\ntarget: MCPPURG-1\ntarget_kind: issue\ntarget_id: 01a1d870-f0dd-7307-914c-0c28f1729705\nmode: permanent_purge\nreason: Permanent audited purge of MCP issue\nblast_hash: d040581dfe69600bffb80b6987a46c2a50b4b32e787d03e6521028a91b2f578c\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: sEvcd8vICfjafdOQjAOdYTsCmhKMJYv6VZUR02pxCBc
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+mcp-session-id: sEvcd8vICfjafdOQjAOdYTsCmhKMJYv6VZUR02pxCBc
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+Content-Length: 212
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"page","target":"01a1d870-f2a6-7c24-a0c3-4e9dccafd14c","mode":"trash"}}}
+
+HTTP/1.1 200 OK
+content-length: 498
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"stage: confirmation_required\ntarget: Parent Page\ntarget_kind: page\ntarget_id: 01a1d870-f2a6-7c24-a0c3-4e9dccafd14c\nmode: trash\nblast_summary: 1 descendant pages, 0 page versions to be removed\nblast_hash: 143c68f08a5747f6bd523dbcb55776818b0fdcf32011f3465ab5781c5f425663\nconfirm_phrase: TRASH PAGE Parent Page\nconfirmation_token: kb_del_***REDACTED***\nexpires_in_sec: 300\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: Fko2HI2pef5er1wdHJrgwJ5E9-9yc0OHAn5f7shvqEU
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+mcp-session-id: Fko2HI2pef5er1wdHJrgwJ5E9-9yc0OHAn5f7shvqEU
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+Content-Length: 373
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"execute_delete","target_kind":"page","target":"01a1d870-f2a6-7c24-a0c3-4e9dccafd14c","mode":"trash","confirmation_token":"kb_del_***REDACTED***","confirm_phrase":"TRASH PAGE Parent Page","reason":"Soft-trashing parent page subtree"}}}
+
+HTTP/1.1 200 OK
+content-length: 330
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"status: executed\ntarget: Parent Page\ntarget_kind: page\ntarget_id: 01a1d870-f2a6-7c24-a0c3-4e9dccafd14c\nmode: trash\nreason: Soft-trashing parent page subtree\nblast_hash: 143c68f08a5747f6bd523dbcb55776818b0fdcf32011f3465ab5781c5f425663\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: WdvV0zBzbajHUEurmrINcboY9ljO3yM4hmQxfVxM-IE
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+mcp-session-id: WdvV0zBzbajHUEurmrINcboY9ljO3yM4hmQxfVxM-IE
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+Content-Length: 224
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"module","target":"01a1d870-f2a7-758a-a968-7426f2850865","mode":"permanent_purge"}}}
+
+HTTP/1.1 200 OK
+content-length: 495
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"stage: confirmation_required\ntarget: MCP Module\ntarget_kind: module\ntarget_id: 01a1d870-f2a7-758a-a968-7426f2850865\nmode: permanent_purge\nblast_summary: 0 assigned issues to be unassigned\nblast_hash: aa846ea8371e9a0c0f96c7c020cb88e2f9c2d58c119b1740aad6e193eb453922\nconfirm_phrase: PURGE MODULE MCP Module\nconfirmation_token: kb_del_***REDACTED***\nexpires_in_sec: 300\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: FQ0IlzthxIzzNDAlM9eIPTkV9y5HFpJZmQ1onmTeOMM
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+mcp-session-id: FQ0IlzthxIzzNDAlM9eIPTkV9y5HFpJZmQ1onmTeOMM
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=ZhuSV6OZ57aHMgdVpm_jPg.cPbvhM02eqispk3RYOB531Vo7BI6Snkrn3Yvem7JHwg
+Content-Length: 396
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"execute_delete","target_kind":"module","target":"01a1d870-f2a7-758a-a968-7426f2850865","mode":"permanent_purge","confirmation_token":"kb_del_***REDACTED***","confirm_phrase":"PURGE MODULE MCP Module","reason":"Permanent deletion of decommissioned module"}}}
+
+HTTP/1.1 200 OK
+content-length: 351
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"status: executed\ntarget: MCP Module\ntarget_kind: module\ntarget_id: 01a1d870-f2a7-758a-a968-7426f2850865\nmode: permanent_purge\nreason: Permanent deletion of decommissioned module\nblast_hash: aa846ea8371e9a0c0f96c7c020cb88e2f9c2d58c119b1740aad6e193eb453922\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: YE9pgtaCzDoqGfgWtgmCGQ.aayGYKZ1TwBi1h0StCRnqLtBoECET_1keqXLo939rek
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=YE9pgtaCzDoqGfgWtgmCGQ.aayGYKZ1TwBi1h0StCRnqLtBoECET_1keqXLo939rek
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: CKxcKh1OuBuAfcaIU6Mfbvwi9KsjLS79IhEO7QzDk_Q
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: YE9pgtaCzDoqGfgWtgmCGQ.aayGYKZ1TwBi1h0StCRnqLtBoECET_1keqXLo939rek
+mcp-session-id: CKxcKh1OuBuAfcaIU6Mfbvwi9KsjLS79IhEO7QzDk_Q
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=YE9pgtaCzDoqGfgWtgmCGQ.aayGYKZ1TwBi1h0StCRnqLtBoECET_1keqXLo939rek
+Content-Length: 183
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"issue","target":"BIND-1","mode":"trash"}}}
+
+HTTP/1.1 200 OK
+content-length: 496
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"stage: confirmation_required\ntarget: BIND-1\ntarget_kind: issue\ntarget_id: 01a1d870-f555-7a23-ae9e-2662be372f6b\nmode: trash\nblast_summary: 0 sub-issues unparented, 0 inbound object_links flagged\nblast_hash: 8098acc22374ffcc6edf952af469279b882503ea45e22a28295a7f82dbbccbf8\nconfirm_phrase: TRASH ISSUE BIND-1\nconfirmation_token: kb_del_***REDACTED***\nexpires_in_sec: 300\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: YE9pgtaCzDoqGfgWtgmCGQ.aayGYKZ1TwBi1h0StCRnqLtBoECET_1keqXLo939rek
+X-KB-Subject-Token: kb_adm_wsadm_***REDACTED***
+Cookie: __Host-kb_csrf=YE9pgtaCzDoqGfgWtgmCGQ.aayGYKZ1TwBi1h0StCRnqLtBoECET_1keqXLo939rek
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: QN_bqVm1YNafPAWNL9WZbdcXCEg2qQzHBa1ByN8ztZs
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: YE9pgtaCzDoqGfgWtgmCGQ.aayGYKZ1TwBi1h0StCRnqLtBoECET_1keqXLo939rek
+mcp-session-id: QN_bqVm1YNafPAWNL9WZbdcXCEg2qQzHBa1ByN8ztZs
+X-KB-Subject-Token: kb_adm_wsadm_***REDACTED***
+Cookie: __Host-kb_csrf=YE9pgtaCzDoqGfgWtgmCGQ.aayGYKZ1TwBi1h0StCRnqLtBoECET_1keqXLo939rek
+Content-Length: 355
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"execute_delete","target_kind":"issue","target":"BIND-1","mode":"trash","confirmation_token":"kb_del_***REDACTED***","confirm_phrase":"TRASH ISSUE BIND-1","reason":"Attempting execution from unauthorized principal"}}}
+
+HTTP/1.1 200 OK
+content-length: 191
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: TOKEN_CALLER_MISMATCH, message: Confirmation token was issued to a different principal}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: NUjTV9hSalIVbQuYrAwk3E8kfvFG48UszQbkKTs19rk
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+mcp-session-id: NUjTV9hSalIVbQuYrAwk3E8kfvFG48UszQbkKTs19rk
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+Content-Length: 182
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"issue","target":"PHR-1","mode":"trash"}}}
+
+HTTP/1.1 200 OK
+content-length: 494
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"stage: confirmation_required\ntarget: PHR-1\ntarget_kind: issue\ntarget_id: 01a1d870-f6e5-7e07-ae4e-884f6477c667\nmode: trash\nblast_summary: 0 sub-issues unparented, 0 inbound object_links flagged\nblast_hash: 5f76899bb3add9a37d9bd60b2689cc82e9faf8f1717d472d9f5d870b1d7efb30\nconfirm_phrase: TRASH ISSUE PHR-1\nconfirmation_token: kb_del_***REDACTED***\nexpires_in_sec: 300\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: oyRcOahQUy4cHvKNSAFB0X6LmoYU_U7Xy_yLoHTdzqQ
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+mcp-session-id: oyRcOahQUy4cHvKNSAFB0X6LmoYU_U7Xy_yLoHTdzqQ
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+Content-Length: 336
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"execute_delete","target_kind":"issue","target":"PHR-1","mode":"trash","confirmation_token":"kb_del_***REDACTED***","confirm_phrase":"DELETE ISSUE PHR-1","reason":"Wrong phrase execution attempt"}}}
+
+HTTP/1.1 200 OK
+content-length: 187
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: CONFIRM_PHRASE_MISMATCH, message: 'Required confirm phrase: ''TRASH ISSUE PHR-1'''}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 8eDA8fh1ZW80mUGu7_JVyvMyUOpfbHsq5eFRMNh4YHQ
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+mcp-session-id: 8eDA8fh1ZW80mUGu7_JVyvMyUOpfbHsq5eFRMNh4YHQ
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+Content-Length: 182
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"issue","target":"PHR-1","mode":"trash"}}}
+
+HTTP/1.1 200 OK
+content-length: 494
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"stage: confirmation_required\ntarget: PHR-1\ntarget_kind: issue\ntarget_id: 01a1d870-f6e5-7e07-ae4e-884f6477c667\nmode: trash\nblast_summary: 0 sub-issues unparented, 0 inbound object_links flagged\nblast_hash: 5f76899bb3add9a37d9bd60b2689cc82e9faf8f1717d472d9f5d870b1d7efb30\nconfirm_phrase: TRASH ISSUE PHR-1\nconfirmation_token: kb_del_***REDACTED***\nexpires_in_sec: 300\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: iSj1uTh5zgCAFHsknMb4U5VF_-iG4hT-4OFK5RDCEoo
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+mcp-session-id: iSj1uTh5zgCAFHsknMb4U5VF_-iG4hT-4OFK5RDCEoo
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=B1nrWmDtKaRLIJPQOKrT_g.szdb_JkJFfvjKIdcR417pNovJLJdBk5YyUPjyUjcwWQ
+Content-Length: 338
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"execute_delete","target_kind":"issue","target":"PHR-2","mode":"trash","confirmation_token":"kb_del_***REDACTED***","confirm_phrase":"TRASH ISSUE PHR-1","reason":"Target mismatch execution attempt"}}}
+
+HTTP/1.1 200 OK
+content-length: 203
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: TOKEN_TARGET_MISMATCH, message: Confirmation token target or mode does not match execution request}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: fk2PpXYSquHCJplxJhMBNg.5e8SIGKKvJImsOluN0CfpWAc78rGYgdRJ0y_sgQmBc8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=fk2PpXYSquHCJplxJhMBNg.5e8SIGKKvJImsOluN0CfpWAc78rGYgdRJ0y_sgQmBc8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: _YTmuxa_D_FkW6avOu2xANEZzp2Y5U2ieutBfT5SAl0
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: fk2PpXYSquHCJplxJhMBNg.5e8SIGKKvJImsOluN0CfpWAc78rGYgdRJ0y_sgQmBc8
+mcp-session-id: _YTmuxa_D_FkW6avOu2xANEZzp2Y5U2ieutBfT5SAl0
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=fk2PpXYSquHCJplxJhMBNg.5e8SIGKKvJImsOluN0CfpWAc78rGYgdRJ0y_sgQmBc8
+Content-Length: 185
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"issue","target":"TOCTOU-1","mode":"trash"}}}
+
+HTTP/1.1 200 OK
+content-length: 500
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"stage: confirmation_required\ntarget: TOCTOU-1\ntarget_kind: issue\ntarget_id: 01a1d870-f900-7cfa-b186-836486db4570\nmode: trash\nblast_summary: 0 sub-issues unparented, 0 inbound object_links flagged\nblast_hash: a2177cb34f66055bda2606a16acf2a2541d2e22c3db3ebe179105842cf622f9a\nconfirm_phrase: TRASH ISSUE TOCTOU-1\nconfirmation_token: kb_del_***REDACTED***\nexpires_in_sec: 300\n"}],"isError":false}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: fk2PpXYSquHCJplxJhMBNg.5e8SIGKKvJImsOluN0CfpWAc78rGYgdRJ0y_sgQmBc8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=fk2PpXYSquHCJplxJhMBNg.5e8SIGKKvJImsOluN0CfpWAc78rGYgdRJ0y_sgQmBc8
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: yRn9iESJWjs5F8_Fb763jaZrbVSlt8OEfvVJ8H4sUoY
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: fk2PpXYSquHCJplxJhMBNg.5e8SIGKKvJImsOluN0CfpWAc78rGYgdRJ0y_sgQmBc8
+mcp-session-id: yRn9iESJWjs5F8_Fb763jaZrbVSlt8OEfvVJ8H4sUoY
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=fk2PpXYSquHCJplxJhMBNg.5e8SIGKKvJImsOluN0CfpWAc78rGYgdRJ0y_sgQmBc8
+Content-Length: 357
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"execute_delete","target_kind":"issue","target":"TOCTOU-1","mode":"trash","confirmation_token":"kb_del_***REDACTED***","confirm_phrase":"TRASH ISSUE TOCTOU-1","reason":"Attempting execution after children were added"}}}
+
+HTTP/1.1 200 OK
+content-length: 207
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: BLAST_RADIUS_CHANGED, message: The target blast radius has changed since confirmation token was minted}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: LcoTrQveOj9MCDVHpvA7VRSAolSBmej6FhWkKm8s01Q
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+mcp-session-id: LcoTrQveOj9MCDVHpvA7VRSAolSBmej6FhWkKm8s01Q
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 103
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{}}}
+
+HTTP/1.1 200 OK
+content-length: 233
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: 'Invalid or missing action ''None''. Must be request_delete, execute_delete, restore,\n    or help.'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: oqPsRVjMOP7VHMWrSdR9ENmGwtWLMZ1FA4tEP7tsYsQ
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+mcp-session-id: oqPsRVjMOP7VHMWrSdR9ENmGwtWLMZ1FA4tEP7tsYsQ
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 118
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"nuke"}}}
+
+HTTP/1.1 200 OK
+content-length: 233
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: 'Invalid or missing action ''nuke''. Must be request_delete, execute_delete, restore,\n    or help.'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: zS9ZEe8Z0QsdjLCcyxSjQGAeYMOVzQpGSVP_eFDDe-c
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+mcp-session-id: zS9ZEe8Z0QsdjLCcyxSjQGAeYMOVzQpGSVP_eFDDe-c
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 143
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target":"K-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 285
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: 'Invalid or missing target_kind ''None''. Must be one of [''cycle'', ''doc'', ''issue'',\n    ''module'', ''page'', ''project'', ''sticky'', ''view''].'}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: tlmx2NJwpl5CRt_mvBRyX11m0UVqrzJ0rXwf2VhuSO8
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+mcp-session-id: tlmx2NJwpl5CRt_mvBRyX11m0UVqrzJ0rXwf2VhuSO8
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 175
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"restore","target_kind":"issue","target":"K-1","reason":"short"}}}
+
+HTTP/1.1 200 OK
+content-length: 190
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: Parameter 'reason' must be between 10 and 500 characters.}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: uAPrPJXjvR0EXcrbZ-SmEDvF0qylUm2iO1Sh5ak2kKA
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+mcp-session-id: uAPrPJXjvR0EXcrbZ-SmEDvF0qylUm2iO1Sh5ak2kKA
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 238
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"execute_delete","target_kind":"issue","target":"K-1","confirm_phrase":"TRASH ISSUE K-1","reason":"Valid reason for execution"}}}
+
+HTTP/1.1 200 OK
+content-length: 200
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: VALIDATION_FAILED, message: Missing required parameter 'confirmation_token' for execute_delete.}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: 8HrwHsDneJ08T8PSs6JPshCiqOwzAaXQj36ujjs-M8Y
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+mcp-session-id: 8HrwHsDneJ08T8PSs6JPshCiqOwzAaXQj36ujjs-M8Y
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-Scopes: admin:write
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 165
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"issue","target":"K-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 225
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: INSUFFICIENT_SCOPE, message: 'Caller lacks required scope(s) [''admin:destructive''] for tool ''destructive_lifecycle'''}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 159
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":999,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-admin","version":"1.0"}}}
+
+HTTP/1.1 200 OK
+mcp-session-id: xueXYE72pWqJHXX8JaJlsX7F-aiWq3GdP2H3is3zGio
+content-length: 174
+content-type: application/json
+
+{"jsonrpc":"2.0","id":999,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-admin","version":"0.0.0"}}}
+
+--------------------------------------------------------------------------------
+POST /mcp/admin HTTP/1.1
+Host: test
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+X-CSRF-Token: OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+mcp-session-id: xueXYE72pWqJHXX8JaJlsX7F-aiWq3GdP2H3is3zGio
+X-KB-Subject-Token: kb_adm_full_***REDACTED***
+X-KB-AAL-Level: 1
+Cookie: __Host-kb_csrf=OhHqEicsFocVYEl3n2z0OQ.qRspvvYpPTSK1gEfBMtiW0oCzjdzLXuF0UktVWGZMKU
+Content-Length: 165
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"destructive_lifecycle","arguments":{"action":"request_delete","target_kind":"issue","target":"K-1"}}}
+
+HTTP/1.1 200 OK
+content-length: 198
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"error: {code: AAL2_REQUIRED, message: destructive_lifecycle requires Authenticator Assurance Level 2 (AAL2)}\n"}],"isError":true}}
+
+--------------------------------------------------------------------------------

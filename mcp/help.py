@@ -37,6 +37,15 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
         ),
         "card": "slug | uuid",
     },
+    "destructive_lifecycle": {
+        "action": "request_delete | execute_delete | restore | help",
+        "target_kind": "issue | project | doc | page | sticky | cycle | module | view",
+        "target": "identifier | uuid",
+        "mode": "trash | permanent_purge",
+        "confirmation_token": "str",
+        "confirm_phrase": "str",
+        "reason": "str",
+    },
     "architect_project": {
         "action": "get | plan | apply | help",
         "project": "str",

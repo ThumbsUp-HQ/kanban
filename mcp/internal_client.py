@@ -334,6 +334,14 @@ class KanbanApiClient:
             "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
             "GROUP_CYCLE_REJECTED": McpErrorCode.GROUP_CYCLE_REJECTED,
             "GROUP_DEPTH_EXCEEDED": McpErrorCode.GROUP_DEPTH_EXCEEDED,
+            "CONFIRMATION_TOKEN_INVALID_OR_EXPIRED": (
+                McpErrorCode.CONFIRMATION_TOKEN_INVALID_OR_EXPIRED
+            ),
+            "TOKEN_CALLER_MISMATCH": McpErrorCode.TOKEN_CALLER_MISMATCH,
+            "TOKEN_TARGET_MISMATCH": McpErrorCode.TOKEN_TARGET_MISMATCH,
+            "BLAST_RADIUS_CHANGED": McpErrorCode.BLAST_RADIUS_CHANGED,
+            "SOFT_TRASH_REQUIRED_FIRST": McpErrorCode.SOFT_TRASH_REQUIRED_FIRST,
+            "SERVER_ADMIN_REQUIRED": McpErrorCode.SERVER_ADMIN_REQUIRED,
         }
         if prob_code in code_map:
             return code_map[prob_code]
@@ -360,6 +368,14 @@ class KanbanApiClient:
             "transition-held": McpErrorCode.TRANSITION_HELD,
             "group-cycle-rejected": McpErrorCode.GROUP_CYCLE_REJECTED,
             "group-depth-exceeded": McpErrorCode.GROUP_DEPTH_EXCEEDED,
+            "confirmation-token-invalid-or-expired": (
+                McpErrorCode.CONFIRMATION_TOKEN_INVALID_OR_EXPIRED
+            ),
+            "token-caller-mismatch": McpErrorCode.TOKEN_CALLER_MISMATCH,
+            "token-target-mismatch": McpErrorCode.TOKEN_TARGET_MISMATCH,
+            "blast-radius-changed": McpErrorCode.BLAST_RADIUS_CHANGED,
+            "soft-trash-required-first": McpErrorCode.SOFT_TRASH_REQUIRED_FIRST,
+            "server-admin-required": McpErrorCode.SERVER_ADMIN_REQUIRED,
         }
         for suffix, err_code in suffix_map.items():
             if prob_type.endswith(suffix):
