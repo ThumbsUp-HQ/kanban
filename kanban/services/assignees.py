@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Final, NoReturn
 from sqlalchemy import delete, func, select, text
 
 from database.models.issues import IssueAssignee
-from database.models.principals import Principal
+from database.models.principals import Principal, User
 from database.models.spine import ObjectRecord
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.v1.schemas.assignees import (
@@ -86,9 +86,40 @@ async def _add_principal_assignee(
                     )
                 )
             ).first()
-            if obj_row is None:
-                _assignee_not_eligible()
-            target_id = obj_row[0]
+            if obj_row is not None:
+                target_id = obj_row[0]
+            else:
+                compact_name = func.lower(func.replace(Principal.display_name, " ", ""))
+                p_user = (
+                    (
+                        await session.execute(
+                            select(Principal.id)
+                            .join(User, User.id == Principal.id)
+                            .where(
+                                Principal.workspace_id == caller.workspace_id,
+                                Principal.status == "ACTIVE",
+                                (
+                                    (compact_name == clean_handle.lower())
+                                    | (func.lower(Principal.display_name) == clean_handle.lower())
+                                    | (func.lower(User.email) == raw_str.lower())
+                                    | (
+                                        func.lower(User.email)
+                                        == f"{clean_handle.lower()}@example.com"
+                                    )
+                                    | (
+                                        func.split_part(func.lower(User.email), "@", 1)
+                                        == clean_handle.lower()
+                                    )
+                                ),
+                            )
+                        )
+                    )
+                    .scalars()
+                    .first()
+                )
+                if p_user is None:
+                    _assignee_not_eligible()
+                target_id = p_user
 
     # Verify principal exists, is in same workspace, active, and USER or AGENT
     p_row = (

@@ -1,0 +1,28 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 18 tests using 10 workers
+
+  ✓   3 [desktop] › e2e/auth/admin-auth-studio.spec.ts:373:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 06-non-admin-not-found: non-server-admin renders uniform Not found or no access empty state (1.5s)
+  ✓   5 [tablet] › e2e/auth/admin-auth-studio.spec.ts:120:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 02-card-reordered: reorders card via keyboard Move Up control into slot 2 (1.8s)
+  ✓   6 [desktop] › e2e/auth/admin-auth-studio.spec.ts:328:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 05-handshake-failed-hint: shows failure summary tooltip on failed LDAP card (1.9s)
+  ✓   9 [desktop] › e2e/auth/admin-auth-studio.spec.ts:120:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 02-card-reordered: reorders card via keyboard Move Up control into slot 2 (1.8s)
+  ✓   1 [desktop] › e2e/auth/admin-auth-studio.spec.ts:39:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 01-auth-studio-list: renders 4 cards in sort_rank order with Primary badge and healthy chip (2.3s)
+  ✓   4 [desktop] › e2e/auth/admin-auth-studio.spec.ts:261:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 04-lockout-prevented-banner: disabling Local Administrator triggers 409 alert banner and switch rollback (2.2s)
+  ✓   7 [tablet] › e2e/auth/admin-auth-studio.spec.ts:184:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 03-edit-drawer-write-only: editing Okta OIDC shows PKCE badge and empty secret input with dek_kid placeholder (2.1s)
+  ✓   8 [tablet] › e2e/auth/admin-auth-studio.spec.ts:39:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 01-auth-studio-list: renders 4 cards in sort_rank order with Primary badge and healthy chip (2.2s)
+  ✓   2 [desktop] › e2e/auth/admin-auth-studio.spec.ts:184:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 03-edit-drawer-write-only: editing Okta OIDC shows PKCE badge and empty secret input with dek_kid placeholder (2.5s)
+  ✓  10 [tablet] › e2e/auth/admin-auth-studio.spec.ts:261:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 04-lockout-prevented-banner: disabling Local Administrator triggers 409 alert banner and switch rollback (2.0s)
+  ✓  11 [tablet] › e2e/auth/admin-auth-studio.spec.ts:373:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 06-non-admin-not-found: non-server-admin renders uniform Not found or no access empty state (729ms)
+  ✓  12 [tablet] › e2e/auth/admin-auth-studio.spec.ts:328:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 05-handshake-failed-hint: shows failure summary tooltip on failed LDAP card (1.2s)
+  ✓  17 [mobile] › e2e/auth/admin-auth-studio.spec.ts:373:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 06-non-admin-not-found: non-server-admin renders uniform Not found or no access empty state (1.1s)
+  ✓  15 [mobile] › e2e/auth/admin-auth-studio.spec.ts:328:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 05-handshake-failed-hint: shows failure summary tooltip on failed LDAP card (1.3s)
+  ✓  13 [mobile] › e2e/auth/admin-auth-studio.spec.ts:184:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 03-edit-drawer-write-only: editing Okta OIDC shows PKCE badge and empty secret input with dek_kid placeholder (1.6s)
+  ✓  18 [mobile] › e2e/auth/admin-auth-studio.spec.ts:120:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 02-card-reordered: reorders card via keyboard Move Up control into slot 2 (1.4s)
+  ✓  16 [mobile] › e2e/auth/admin-auth-studio.spec.ts:39:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 01-auth-studio-list: renders 4 cards in sort_rank order with Primary badge and healthy chip (1.5s)
+  ✓  14 [mobile] › e2e/auth/admin-auth-studio.spec.ts:261:3 › Admin Auth Studio E2E Specifications (KB-P3-36) › 04-lockout-prevented-banner: disabling Local Administrator triggers 409 alert banner and switch rollback (1.5s)
+
+  18 passed (21.5s)

@@ -303,7 +303,7 @@ export function SetupClaimPage({
   };
 
   return (
-    <main className="auth-container" aria-labelledby="setup-title">
+    <main className="auth-container" data-testid="setup-claim-page" aria-labelledby="setup-title">
       {/* Test helper line rendering current pathname for E2E validation (Proof 6 #07) */}
       <div data-testid="current-url" className="auth-debug-url">
         {window.location.pathname}

@@ -1,0 +1,77 @@
+{
+  "request_201": {
+    "summary": "Root Epic Feature",
+    "description_markdown": "High-level feature specification.",
+    "priority": "high",
+    "assignees": [
+      "@adam",
+      "Vendor QA"
+    ],
+    "children": [
+      {
+        "summary": "Sub-task A",
+        "description_markdown": "Sub-task A notes.",
+        "priority": "medium",
+        "assignees": [
+          "@adam"
+        ]
+      },
+      {
+        "summary": "Sub-task B",
+        "description_markdown": "Sub-task B notes.",
+        "priority": "low",
+        "assignees": [
+          "Vendor QA"
+        ]
+      }
+    ]
+  },
+  "response_201": {
+    "created": 3,
+    "root": {
+      "id": "01a1d82e-8702-7f67-9e43-d1f7b828128c",
+      "key": "TRE-1",
+      "summary": "Root Epic Feature",
+      "state": "Backlog",
+      "priority": "high",
+      "parent": null
+    },
+    "children": [
+      {
+        "id": "01a1d82e-8732-799f-9dd8-1441f00ee5fe",
+        "key": "TRE-2",
+        "summary": "Sub-task A",
+        "parent": "TRE-1"
+      },
+      {
+        "id": "01a1d82e-8753-78dd-944f-5b6d9d30d2ac",
+        "key": "TRE-3",
+        "summary": "Sub-task B",
+        "parent": "TRE-1"
+      }
+    ]
+  },
+  "request_422_rollback": {
+    "summary": "Valid Root",
+    "children": [
+      {
+        "summary": "Valid Child 1"
+      },
+      {
+        "summary": "Valid Child 2"
+      },
+      {
+        "summary": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    ]
+  },
+  "response_422_rollback": {
+    "type": "urn:kanban:problem:SUMMARY_LENGTH",
+    "title": "Summary Length",
+    "status": 422,
+    "code": "SUMMARY_LENGTH",
+    "detail": "Summary must be between 1 and 500 characters",
+    "request_id": "d288b148a7b746aab7a6410835856029",
+    "field": "summary"
+  }
+}

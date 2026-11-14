@@ -269,56 +269,75 @@ class KanbanApiClient:
     def _resolve_conflict_code(prob_type: str, prob_code: str) -> McpErrorCode:
         if prob_type.endswith("etag-mismatch"):
             return McpErrorCode.CONFLICT_ETAG
-        if prob_type.endswith("ambiguous-identifier") or prob_code == "AMBIGUOUS_IDENTIFIER":
-            return McpErrorCode.AMBIGUOUS_IDENTIFIER
-        if prob_type.endswith("already-promoted") or prob_code == "ALREADY_PROMOTED":
-            return McpErrorCode.ALREADY_PROMOTED
-        if prob_type.endswith("link-type-not-allowed") or prob_code == "LINK_TYPE_NOT_ALLOWED":
-            return McpErrorCode.LINK_TYPE_NOT_ALLOWED
-        if prob_type.endswith("lockout-prevented") or prob_code == "LOCKOUT_PREVENTED":
-            return McpErrorCode.LOCKOUT_PREVENTED
+        conflict_map: dict[str, McpErrorCode] = {
+            "AMBIGUOUS_IDENTIFIER": McpErrorCode.AMBIGUOUS_IDENTIFIER,
+            "ALREADY_PROMOTED": McpErrorCode.ALREADY_PROMOTED,
+            "LINK_TYPE_NOT_ALLOWED": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
+            "LINK_NOT_FLAGGED": McpErrorCode.LINK_NOT_FLAGGED,
+            "CREATOR_UNCHANGED": McpErrorCode.CREATOR_UNCHANGED,
+            "NOT_ARCHIVED": McpErrorCode.NOT_ARCHIVED,
+            "LOCKOUT_PREVENTED": McpErrorCode.LOCKOUT_PREVENTED,
+        }
+        if prob_code in conflict_map:
+            return conflict_map[prob_code]
+        for name, code in conflict_map.items():
+            if prob_type.endswith(name.lower().replace("_", "-")):
+                return code
         return McpErrorCode.VALIDATION_FAILED
 
     @staticmethod
-    def _resolve_error_code(  # noqa: C901, PLR0911
-        status_code: int,
-        prob_type: str,
-        prob_code: str = "",
-    ) -> McpErrorCode:
+    def _resolve_error_code(status_code: int, prob_type: str, prob_code: str = "") -> McpErrorCode:
         """Determine McpErrorCode from HTTP status and problem type."""
-        if prob_code in (
-            "KEY_SCOPE_VIOLATION",
-            "CONNECTION_SCOPE_VIOLATION",
-            "CONFLICTING_SCOPE_HEADERS",
-            "MODULES_DISABLED",
-        ):
-            return McpErrorCode(prob_code)
-        if prob_type.endswith("modules-disabled"):
-            return McpErrorCode.MODULES_DISABLED
-        if prob_code == "SECTION_NOT_FOUND" or prob_type.endswith("section-not-found"):
-            return McpErrorCode.SECTION_NOT_FOUND
-        if prob_code == "ALREADY_PROMOTED" or prob_type.endswith("already-promoted"):
-            return McpErrorCode.ALREADY_PROMOTED
-        if prob_code == "LINK_TYPE_NOT_ALLOWED" or prob_type.endswith("link-type-not-allowed"):
-            return McpErrorCode.LINK_TYPE_NOT_ALLOWED
-        if prob_code == "CONFIRM_PHRASE_MISMATCH" or prob_type.endswith("confirm-phrase-mismatch"):
-            return McpErrorCode.CONFIRM_PHRASE_MISMATCH
-        if prob_code == "AAL2_REQUIRED" or prob_type.endswith("aal2-required"):
-            return McpErrorCode.AAL2_REQUIRED
-        if prob_code == "LOCKOUT_PREVENTED" or prob_type.endswith("lockout-prevented"):
-            return McpErrorCode.LOCKOUT_PREVENTED
-        if prob_code == "CONFIRMATION_TOKEN_INVALID_OR_EXPIRED":
-            return McpErrorCode.CONFIRMATION_TOKEN_INVALID_OR_EXPIRED
-        if prob_code == "TOKEN_CALLER_MISMATCH":
-            return McpErrorCode.TOKEN_CALLER_MISMATCH
-        if prob_code == "TOKEN_TARGET_MISMATCH":
-            return McpErrorCode.TOKEN_TARGET_MISMATCH
-        if prob_code == "BLAST_RADIUS_CHANGED":
-            return McpErrorCode.BLAST_RADIUS_CHANGED
-        if prob_code == "SOFT_TRASH_REQUIRED_FIRST":
-            return McpErrorCode.SOFT_TRASH_REQUIRED_FIRST
-        if prob_code == "SERVER_ADMIN_REQUIRED":
-            return McpErrorCode.SERVER_ADMIN_REQUIRED
+        code_map: dict[str, McpErrorCode] = {
+            "AAL2_REQUIRED": McpErrorCode.AAL2_REQUIRED,
+            "INSUFFICIENT_PERMISSION": McpErrorCode.INSUFFICIENT_PERMISSION,
+            "INSUFFICIENT_CAPABILITY": McpErrorCode.INSUFFICIENT_PERMISSION,
+            "MODULES_DISABLED": McpErrorCode.MODULES_DISABLED,
+            "SECTION_NOT_FOUND": McpErrorCode.SECTION_NOT_FOUND,
+            "ALREADY_PROMOTED": McpErrorCode.ALREADY_PROMOTED,
+            "LINK_TYPE_NOT_ALLOWED": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
+            "CREATOR_NOT_ELIGIBLE": McpErrorCode.CREATOR_NOT_ELIGIBLE,
+            "LINK_NOT_FLAGGED": McpErrorCode.LINK_NOT_FLAGGED,
+            "CREATOR_UNCHANGED": McpErrorCode.CREATOR_UNCHANGED,
+            "NOT_ARCHIVED": McpErrorCode.NOT_ARCHIVED,
+            "CONFIRM_PHRASE_MISMATCH": McpErrorCode.CONFIRM_PHRASE_MISMATCH,
+            "LOCKOUT_PREVENTED": McpErrorCode.LOCKOUT_PREVENTED,
+            "KEY_SCOPE_VIOLATION": McpErrorCode.KEY_SCOPE_VIOLATION,
+            "CONNECTION_SCOPE_VIOLATION": McpErrorCode.CONNECTION_SCOPE_VIOLATION,
+            "CONFLICTING_SCOPE_HEADERS": McpErrorCode.CONFLICTING_SCOPE_HEADERS,
+            "CONFIRMATION_TOKEN_INVALID_OR_EXPIRED": McpErrorCode.CONFIRMATION_TOKEN_INVALID_OR_EXPIRED,
+            "TOKEN_CALLER_MISMATCH": McpErrorCode.TOKEN_CALLER_MISMATCH,
+            "TOKEN_TARGET_MISMATCH": McpErrorCode.TOKEN_TARGET_MISMATCH,
+            "BLAST_RADIUS_CHANGED": McpErrorCode.BLAST_RADIUS_CHANGED,
+            "SOFT_TRASH_REQUIRED_FIRST": McpErrorCode.SOFT_TRASH_REQUIRED_FIRST,
+            "SERVER_ADMIN_REQUIRED": McpErrorCode.SERVER_ADMIN_REQUIRED,
+        }
+        if prob_code in code_map:
+            return code_map[prob_code]
+
+        suffix_map: dict[str, McpErrorCode] = {
+            "aal2-required": McpErrorCode.AAL2_REQUIRED,
+            "insufficient-capability": McpErrorCode.INSUFFICIENT_PERMISSION,
+            "modules-disabled": McpErrorCode.MODULES_DISABLED,
+            "section-not-found": McpErrorCode.SECTION_NOT_FOUND,
+            "already-promoted": McpErrorCode.ALREADY_PROMOTED,
+            "link-type-not-allowed": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
+            "creator-not-eligible": McpErrorCode.CREATOR_NOT_ELIGIBLE,
+            "link-not-flagged": McpErrorCode.LINK_NOT_FLAGGED,
+            "creator-unchanged": McpErrorCode.CREATOR_UNCHANGED,
+            "not-archived": McpErrorCode.NOT_ARCHIVED,
+            "confirm-phrase-mismatch": McpErrorCode.CONFIRM_PHRASE_MISMATCH,
+            "lockout-prevented": McpErrorCode.LOCKOUT_PREVENTED,
+            "confirmation-token-invalid-or-expired": McpErrorCode.CONFIRMATION_TOKEN_INVALID_OR_EXPIRED,
+            "token-caller-mismatch": McpErrorCode.TOKEN_CALLER_MISMATCH,
+            "token-target-mismatch": McpErrorCode.TOKEN_TARGET_MISMATCH,
+            "blast-radius-changed": McpErrorCode.BLAST_RADIUS_CHANGED,
+            "soft-trash-required-first": McpErrorCode.SOFT_TRASH_REQUIRED_FIRST,
+            "server-admin-required": McpErrorCode.SERVER_ADMIN_REQUIRED,
+        }
+        for suffix, err_code in suffix_map.items():
+            if prob_type.endswith(suffix):
+                return err_code
 
         direct_map = {
             _HTTP_NOT_FOUND: McpErrorCode.NOT_FOUND,

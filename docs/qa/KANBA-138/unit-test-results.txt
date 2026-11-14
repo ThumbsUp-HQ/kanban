@@ -1,0 +1,45 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-138/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-138
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 23 items
+
+kanban/tests/api/test_admin_link_auditor.py::test_admin_link_auditor_security_gates PASSED [  4%]
+kanban/tests/api/test_admin_link_auditor.py::test_admin_link_auditor_scan_and_list PASSED [  8%]
+kanban/tests/api/test_admin_link_auditor.py::test_admin_link_auditor_purge_lifecycle PASSED [ 13%]
+kanban/tests/api/test_admin_link_auditor.py::test_admin_link_auditor_service_direct_edge_cases PASSED [ 17%]
+mcp/tests/admin/test_override_ticket_provenance.py::test_tool_help PASSED [ 21%]
+mcp/tests/admin/test_override_ticket_provenance.py::test_override_creator_positive PASSED [ 26%]
+mcp/tests/admin/test_override_ticket_provenance.py::test_override_hard_wip_move_positive PASSED [ 30%]
+mcp/tests/admin/test_override_ticket_provenance.py::test_unarchive_issue_positive PASSED [ 34%]
+mcp/tests/admin/test_override_ticket_provenance.py::test_unarchive_issue_not_archived_conflict PASSED [ 39%]
+mcp/tests/admin/test_override_ticket_provenance.py::test_security_gates_aal2_and_permissions PASSED [ 43%]
+mcp/tests/admin/test_override_ticket_provenance.py::test_creator_override_errors PASSED [ 47%]
+mcp/tests/admin/test_override_ticket_provenance.py::test_input_validations PASSED [ 52%]
+mcp/tests/admin/test_override_ticket_provenance.py::test_mcp_protocol_http_and_transcript_integration PASSED [ 56%]
+mcp/tests/admin/test_override_ticket_provenance.py::test_override_ticket_provenance_edge_cases_and_branches PASSED [ 60%]
+mcp/tests/admin/test_audit_and_purge_links.py::test_tool_help PASSED     [ 65%]
+mcp/tests/admin/test_audit_and_purge_links.py::test_run_audit_positive PASSED [ 69%]
+mcp/tests/admin/test_audit_and_purge_links.py::test_list_flagged_lods_and_filters PASSED [ 73%]
+mcp/tests/admin/test_audit_and_purge_links.py::test_purge_audited_positive PASSED [ 78%]
+mcp/tests/admin/test_audit_and_purge_links.py::test_purge_audited_conflict_link_not_flagged PASSED [ 82%]
+mcp/tests/admin/test_audit_and_purge_links.py::test_security_gates_aal2_and_permissions PASSED [ 86%]
+mcp/tests/admin/test_audit_and_purge_links.py::test_input_validations PASSED [ 91%]
+mcp/tests/admin/test_audit_and_purge_links.py::test_mcp_protocol_http_and_transcript_integration PASSED [ 95%]
+mcp/tests/admin/test_audit_and_purge_links.py::test_audit_and_purge_edge_cases_and_branches PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                                 Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------------------------
+kanban/api/v1/admin/link_auditor.py                     32      0      2      0   100%
+kanban/services/link_auditor_admin.py                   81      0     24      0   100%
+mcp/surfaces/admin/audit_and_purge_object_links.py      71      2     42      3    96%   192, 249->248, 281
+mcp/surfaces/admin/override_ticket_provenance.py        99      2     60      2    97%   149, 156
+------------------------------------------------------------------------------------------------
+TOTAL                                                  283      4    128      5    98%
+Required test coverage of 95% reached. Total coverage: 97.81%
+============================== 23 passed in 3.48s ==============================

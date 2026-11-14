@@ -30,6 +30,7 @@ import { RealtimeStory } from '../dev/RealtimeStory';
 import { DrawerStory } from '../dev/DrawerStory';
 import { RailStory } from '../dev/RailStory';
 import { DrawerActionsStory } from '../dev/DrawerActionsStory';
+import { DocsWorkspaceView } from '../features/docs/DocsWorkspaceView';
 import { StickiesStory } from '../dev/StickiesStory';
 import { ProjectOverviewView } from '../features/stickies/ProjectOverviewView';
 import { WorkspaceStickiesView } from '../features/stickies/WorkspaceStickiesView';
@@ -37,6 +38,7 @@ import { apiClient } from '../api/client';
 import type { IssueDetail } from '../features/drawer/slots';
 import { LoginPage } from '../features/auth/LoginPage';
 import { SetupClaimPage } from '../features/auth/SetupClaimPage';
+import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
 
 export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
 
@@ -121,11 +123,11 @@ export function ProjectOverviewRoute(): JSX.Element {
 }
 
 export function ProjectDocsRoute(): JSX.Element {
-  return <RoutePlaceholder route="/projects/:projectKey/docs" />;
+  return <DocsWorkspaceView />;
 }
 
 export function ProjectDocPageRoute(): JSX.Element {
-  return <RoutePlaceholder route="/projects/:projectKey/docs/:pageId" />;
+  return <DocsWorkspaceView />;
 }
 
 export function DevStoryRoute(): JSX.Element {
@@ -242,7 +244,7 @@ export const appRoutes: RouteObject[] = [
           },
           {
             path: 'admin/auth',
-            element: <RoutePlaceholder route="/admin/auth" />,
+            element: <AuthStudioPage />,
           },
           {
             path: '__dev/*',

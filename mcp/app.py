@@ -14,7 +14,7 @@ from mcp.metadata import protected_resource_metadata_endpoint
 from mcp.protocol import InMemorySessionStore, McpProtocolHandler
 from mcp.registry import Surface, ToolRegistry
 from mcp.settings import McpSettings
-from mcp.surfaces.admin import create_admin_registry
+from mcp.surfaces.admin import build_admin_registry
 from mcp.surfaces.agent import create_agent_registry
 from mcp.surfaces.docs import build_docs_registry
 
@@ -102,7 +102,7 @@ def create_mcp_app(  # noqa: PLR0913
 
     active_admin_reg = admin_registry
     if active_admin_reg is None:
-        active_admin_reg = create_admin_registry(active_internal_client)
+        active_admin_reg = build_admin_registry(active_internal_client)
     if not active_admin_reg.is_frozen:
         active_admin_reg.freeze()
 
