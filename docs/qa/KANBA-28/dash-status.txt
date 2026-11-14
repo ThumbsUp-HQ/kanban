@@ -1,10 +1,377 @@
-NOT AVAILABLE: no remote CI run exists for this change yet.
+=== Dash CI Status (GET https://dash.hackedyour.info/api/status) ===
+Commit Tested: dc1dcc5b8f3f5998bc18825f4af6959606473be0 (HEAD at 52e14f97ba54297d3d50dfb58861d68e871dba2d)
+Forgejo Run ID: 24 (Dash Run ID: 839)
+Status: success
+Action URL: https://git.adamoutler.com/AI/thumbs-up-kanban/actions/runs/24/jobs/0/attempt/1
+Log URL: http://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban
+Started At: 2026-11-14T09:59:03-05:00
+Updated At: 2026-11-14T10:05:13-05:00
 
-- The implementer does not push to origin (coordinator verifies and pushes) and has no Dash MCP tool
-  in this session, so no Dash `status` / `wait` / `logs` output was captured.
-- Remote is Forgejo (ssh://git@192.168.1.100:2223/AI/thumbs-up-kanban.git), not GitHub; the ticket's
-  "BLOCKED: no GitHub remote" clause (item 7) was superseded by the coordinator/orchestrator
-  instruction to reuse the existing Forgejo workflow on runner inferrence1.
-- Required follow-up after the coordinator pushes: run Dash `status`, `wait`, and `logs` for the
-  pushed SHA and append the raw output here. ci-artifact-listing.txt and ci-logs/ (GitHub artifact
-  upload) are N/A: logs go to Dash /api/logs, not upload-artifact.
+=== Raw JSON Status Object ===
+{
+  "provider": "forgejo",
+  "owner": "AI",
+  "repo": "thumbs-up-kanban",
+  "status": "success",
+  "url": "https://git.adamoutler.com/AI/thumbs-up-kanban/actions/runs/24/jobs/0/attempt/1",
+  "repo_url": "https://git.adamoutler.com/AI/thumbs-up-kanban",
+  "updated_at": "2026-11-14T10:05:13-05:00",
+  "commit_message": "docs(qa): KANBA-28 handoff note documenting minimal single-job scope",
+  "started_at": "2026-11-14T09:59:03-05:00",
+  "expected_duration_sec": 321.2,
+  "workflow_name": "Any Workflow",
+  "run_id": "839",
+  "head_sha": "",
+  "custom_links": [],
+  "workflow_id": "any",
+  "branch": null,
+  "log_url": "http://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban"
+}
+
+=== Dash Uploaded Build Logs (GET https://dash.hackedyour.info/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban) ===
+=== ci-logs/build-test-push/lint-type-license.log (exit 0) ===
+Using CPython 3.12.16 interpreter at: /opt/hostedtoolcache/Python/3.12.16/arm64/bin/python3.12
+Creating virtual environment at: .venv
+Resolved 123 packages in 3ms
+   Building kanban-database @ file:///workspace/AI/thumbs-up-kanban/database
+   Building kanban-agent @ file:///workspace/AI/thumbs-up-kanban/agent
+   Building kanban-core @ file:///workspace/AI/thumbs-up-kanban/kanban
+   Building kanban-mcp @ file:///workspace/AI/thumbs-up-kanban/mcp
+Downloading wasmtime (8.1MiB)
+Downloading sqlalchemy (3.1MiB)
+Downloading hf-xet (3.9MiB)
+Downloading cryptography (4.5MiB)
+Downloading ast-serialize (1.2MiB)
+Downloading mypy (13.8MiB)
+Downloading uvloop (4.2MiB)
+Downloading tokenizers (3.4MiB)
+Downloading grimp (2.2MiB)
+Downloading asyncpg (3.3MiB)
+Downloading google-genai (1.3MiB)
+Downloading numpy (15.0MiB)
+Downloading onnxruntime (20.4MiB)
+Downloading pygments (1.2MiB)
+Downloading pydantic-core (2.0MiB)
+Downloading pillow (6.2MiB)
+Downloading virtualenv (5.4MiB)
+Downloading ruff (9.7MiB)
+Downloading openai (2.3MiB)
+ Downloaded pygments
+ Downloaded ast-serialize
+ Downloaded google-genai
+ Downloaded pydantic-core
+ Downloaded grimp
+ Downloaded openai
+      Built kanban-core @ file:///workspace/AI/thumbs-up-kanban/kanban
+      Built kanban-agent @ file:///workspace/AI/thumbs-up-kanban/agent
+      Built kanban-database @ file:///workspace/AI/thumbs-up-kanban/database
+      Built kanban-mcp @ file:///workspace/AI/thumbs-up-kanban/mcp
+ Downloaded sqlalchemy
+ Downloaded asyncpg
+ Downloaded tokenizers
+ Downloaded hf-xet
+ Downloaded uvloop
+ Downloaded cryptography
+ Downloaded virtualenv
+ Downloaded pillow
+ Downloaded wasmtime
+ Downloaded ruff
+ Downloaded mypy
+ Downloaded numpy
+ Downloaded onnxruntime
+Prepared 120 packages in 1.64s
+warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+         If the cache and target directories are on different filesystems, hardlinking may not be supported.
+         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+Installed 120 packages in 146ms
+ + alembic==1.20.1
+ + annotated-doc==0.0.6
+ + annotated-types==0.8.0
+ + anyio==4.16.0
+ + argon2-cffi==25.1.0
+ + argon2-cffi-bindings==26.1.0
+ + ast-serialize==0.13.1
+ + asyncpg==0.30.0
+ + attrs==26.1.0
+ + cbor2==6.2.1
+ + certifi==2026.10.23
+ + cffi==2.1.1
+ + cfgv==3.5.0
+ + charset-normalizer==3.5.2
+ + click==8.5.1
+ + coverage==7.17.2
+ + cryptography==50.0.2
+ + defusedxml==0.7.1
+ + distlib==0.4.4
+ + distro==1.9.0
+ + execnet==2.1.2
+ + fastapi==0.162.5
+ + filelock==4.2.10
+ + flatbuffers==25.12.19
+ + fsspec==2026.9.0
+ + google-auth==2.62.2
+ + google-genai==3.2.0
+ + greenlet==3.5.6
+ + grimp==3.19
+ + h11==0.16.0
+ + h2==4.4.1
+ + hatchling==1.33.0
+ + hf-xet==1.8.0
+ + hpack==4.2.0
+ + httpcore==1.0.9
+ + httpcore2==2.16.0
+ + httptools==0.9.0
+ + httpx==0.28.1
+ + httpx2==2.16.0
+ + huggingface-hub==2.4.0
+ + hyperframe==6.1.0
+ + identify==2.6.20
+ + idna==3.20
+ + import-linter==2.16
+ + iniconfig==2.3.1
+ + jiter==0.19.0
+ + joserfc==1.8.0
+ + jsonschema==4.26.0
+ + jsonschema-specifications==2025.9.1
+ + kanban-agent==0.0.0 (from file:///workspace/AI/thumbs-up-kanban/agent)
+ + kanban-core==0.0.0 (from file:///workspace/AI/thumbs-up-kanban/kanban)
+ + kanban-database==0.0.0 (from file:///workspace/AI/thumbs-up-kanban/database)
+ + kanban-mcp==0.0.0 (from file:///workspace/AI/thumbs-up-kanban/mcp)
+ + librt==0.16.0
+ + mako==1.4.3
+ + markdown-it-py==4.3.0
+ + markupsafe==3.0.4
+ + mdurl==0.1.2
+ + mypy==2.4.1
+ + mypy-extensions==1.2.0
+ + nh3==0.3.7
+ + nodeenv==1.12.0
+ + numpy==2.5.4
+ + onnxruntime==1.31.1
+ + openai==3.49.0
+ + opentelemetry-api==1.45.2
+ + packaging==26.3
+ + pathspec==1.1.1
+ + pgvector==0.5.1
+ + pillow==13.0.0
+ + pip-licenses==5.5.5
+ + platformdirs==4.14.5
+ + pluggy==1.7.0
+ + pre-commit==4.7.0
+ + prettytable==3.18.0
+ + protobuf==7.36.2
+ + pyasn1==0.6.5
+ + pyasn1-modules==0.4.2
+ + pycparser==3.12
+ + pydantic==2.14.3
+ + pydantic-core==2.50.4
+ + pydantic-settings==2.16.2
+ + pygments==2.21.0
+ + pyopenssl==26.4.0
+ + pytest==9.2.0
+ + pytest-asyncio==1.4.1.post1
+ + pytest-cov==7.1.0
+ + pytest-socket==0.8.1
+ + pytest-xdist==3.8.0
+ + python-discovery==1.9.5
+ + python-dotenv==1.2.4
+ + pyyaml==6.0.3
+ + referencing==0.37.0
+ + requests==2.34.2
+ + rich==15.0.0
+ + rpds-py==2026.9.1
+ + ruff==0.17.4
+ + sniffio==1.3.1
+ + sqlalchemy==2.0.38
+ + starlette==1.10.0
+ + tenacity==9.1.4
+ + tokenizers==0.23.3
+ + tomlkit==0.15.2
+ + tqdm==4.70.1
+ + trove-classifiers==2026.9.21.13
+ + truststore==0.10.5
+ + types-defusedxml==0.7.0.20260504
+ + types-jsonschema==4.26.0.20261006
+ + types-pyyaml==6.0.12.20261111
+ + typing-extensions==4.16.0
+ + typing-inspection==0.4.5
+ + urllib3==2.8.0
+ + uvicorn==0.54.0
+ + uvloop==0.23.0
+ + virtualenv==21.15.6
+ + wasmtime==50.0.1
+ + watchfiles==1.3.0
+ + wcwidth==0.9.4
+ + webauthn==3.0.1
+ + websockets==17.4
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+1357 files already formatted
+uv run mypy
+Success: no issues found in 893 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 802 files, 2672 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT (44 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+uv run python -m scripts.license_gate
+WARNING: pnpm not found in PATH; skipping Node license checks
+SUMMARY python=116 node=0 violations=0
+=== ci-logs/build-test-push/testdb-down.log (exit 0) ===
+./scripts/testdb_down.sh
+kanban-pg-test-1
+=== ci-logs/build-test-push/testdb-up.log (exit 0) ===
+./scripts/testdb_up.sh
+kanban-pg-test-1
+14865390ea0371ab5a0ef9138c3be39f905ac0c37f77a6c6d0927b6ccfe066e3
+PostgreSQL test container is healthy at /workspace/AI/thumbs-up-kanban/.kb-pgsock
+=== ci-logs/build-test-push/unit-tests.log (exit 0) ===
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
+INFO  [alembic.runtime.migration] Running upgrade p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
+INFO  [alembic.runtime.migration] Running upgrade p1_02_objects_spine -> p1_03_principals, Principals, users, groups, and cycle-safe principal_group_closure.
+INFO  [alembic.runtime.migration] Running upgrade p1_03_principals -> p1_04_projects, Projects, workflow_states, project_priorities, and project_labels.
+INFO  [alembic.runtime.migration] Running upgrade p1_04_projects -> p1_11_object_links, Object links, link_kind enum, and link_type_matrix allowlist.
+INFO  [alembic.runtime.migration] Running upgrade p1_11_object_links -> p1_10_views, Views table, view_layout enum, and filter/WIP JSON validators.
+INFO  [alembic.runtime.migration] Running upgrade p1_10_views -> p1_05_issues, Issues table, atomic sequence allocation, and build_markdown_tsvector.
+INFO  [alembic.runtime.migration] Running upgrade p1_05_issues -> p1_12_activity_ledger, Partitioned SHA-256 hash-chained activity_records, append_activity & verify_activity_chain.
+INFO  [alembic.runtime.migration] Running upgrade p1_12_activity_ledger -> p1_13_access_control, Role bindings, resource ACL entries, and effective_resource_access.
+INFO  [alembic.runtime.migration] Running upgrade p1_13_access_control -> p1_08_planning_joins, Cycles, modules, assignees, labels, and subscriptions join tables.
+INFO  [alembic.runtime.migration] Running upgrade p1_08_planning_joins -> p1_06_parent_dag, Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry.
+INFO  [alembic.runtime.migration] Running upgrade p1_06_parent_dag -> p1_09_prose_tables, Prose tables: issue_comments, docs, pages, page_versions, and stickies.
+INFO  [alembic.runtime.migration] Running upgrade p1_09_prose_tables -> p1_07_creator_provenance, Created-by provenance trigger with admin-only override and CREATOR_OVERRIDDEN ledger entry.
+INFO  [alembic.runtime.migration] Running upgrade p1_07_creator_provenance -> p1_14_force_rls, FORCE ROW LEVEL SECURITY policies, session context helpers, and schema-wide RLS catalog gate.
+INFO  [alembic.runtime.migration] Running upgrade p1_14_force_rls -> p1_15_link_auditor, audit_object_links() 6-reason detector, invalid_object_link_audits & incremental triggers.
+INFO  [alembic.runtime.migration] Running upgrade p1_15_link_auditor -> p1_16_link_purger, purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger.
+INFO  [alembic.runtime.migration] Running upgrade p1_16_link_purger -> p1_18_outbox, Transactional outbox_events, OutboxRelay (SKIP LOCKED) and RealtimeBroker.
+INFO  [alembic.runtime.migration] Running upgrade p1_18_outbox -> p5_06_object_embeddings, object_embeddings (pgvector HNSW + FORCE RLS).
+INFO  [alembic.runtime.migration] Running upgrade p5_06_object_embeddings -> p2_03_auth_provider_cards, auth_provider_cards DDL, kb_auth data boundary and envelope encryption (KB-P2-03).
+INFO  [alembic.runtime.migration] Running upgrade p2_03_auth_provider_cards -> p2_18_rate_limit_buckets, Rate limit buckets (PG-backed + Valkey-backed sliding window).
+INFO  [alembic.runtime.migration] Running upgrade p2_18_rate_limit_buckets -> p2_02_sessions, Server-side sessions, HMAC-signed __Host- cookies, rotation, timeouts and CSRF (KB-P2-02).
+INFO  [alembic.runtime.migration] Running upgrade p2_02_sessions -> p5_16_agent_definitions, agent_definitions registry (KB-P5-16).
+INFO  [alembic.runtime.migration] Running upgrade p5_16_agent_definitions -> p3_01b_workflow_state_wip_limits, Workflow states WIP limits (KB-P3-01b).
+INFO  [alembic.runtime.migration] Running upgrade p3_01b_workflow_state_wip_limits -> p2_15_attachments, attachments (FORCE RLS, metadata guards, content-addressed storage keys).
+INFO  [alembic.runtime.migration] Running upgrade p2_15_attachments -> p2_04_local_admin_credentials, Local Admin credentials and kb_auth functions (KB-P2-04).
+INFO  [alembic.runtime.migration] Running upgrade p2_04_local_admin_credentials -> p2_06_oidc_auth_requests, OIDC and OAuth2 authentication requests and state tracking (KB-P2-06).
+INFO  [alembic.runtime.migration] Running upgrade p2_06_oidc_auth_requests -> p3_05_comment_threads_reactions, Threaded comments, reactions, permalinks and access-checked mentions (KB-P3-05).
+INFO  [alembic.runtime.migration] Running upgrade p3_05_comment_threads_reactions -> p2_05a_mfa_totp_recovery, RFC 6238 TOTP, recovery codes, and kb_auth functions (KB-P2-05a).
+INFO  [alembic.runtime.migration] Running upgrade p2_05a_mfa_totp_recovery -> p3_10b_modules, Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
+INFO  [alembic.runtime.migration] Running upgrade p3_10b_modules -> p3_04_creator_override_reason, Add reason and old/new creator IDs to CREATOR_OVERRIDDEN activity payload (KB-P3-04).
+INFO  [alembic.runtime.migration] Running upgrade p3_04_creator_override_reason -> p4_02a_mcp_api_keys, Scoped kb_* API keys, surface binding, scopes & token introspection (KB-P4-02a).
+INFO  [alembic.runtime.migration] Running upgrade p4_02a_mcp_api_keys -> p2_07_ldap_group_mappings, LDAP group mappings table with FORCE RLS (KB-P2-07).
+INFO  [alembic.runtime.migration] Running upgrade p2_07_ldap_group_mappings -> p3_06_notifications, Issue subscriptions, auto-subscribe rules, per-event mute & notifications (KB-P3-06).
+INFO  [alembic.runtime.migration] Running upgrade p3_06_notifications -> p2_05b_webauthn_credentials, WebAuthn and Passkeys registration, assertion, credentials, and challenges (KB-P2-05b).
+INFO  [alembic.runtime.migration] Running upgrade p2_05b_webauthn_credentials -> p3_08_issue_copy, Make a copy issue subtree collector function (KB-P3-08).
+INFO  [alembic.runtime.migration] Running upgrade p3_08_issue_copy -> p3_09b_issue_delete_blast_radius, Security Definer helpers for issue blast radius calculation.
+INFO  [alembic.runtime.migration] Running upgrade p3_09b_issue_delete_blast_radius -> p5_11_custom_fields, Custom field definitions, Admin-only RBAC/RLS WITH CHECK gate & 7-format schema (KB-P5-11).
+INFO  [alembic.runtime.migration] Running upgrade p5_11_custom_fields -> p2_09_lockout_prevented, Add LOCKOUT_PREVENTED 3-layer safeguards and emergency unlock (KB-P2-09).
+INFO  [alembic.runtime.migration] Running upgrade p2_09_lockout_prevented -> p2_12_setup_claim_tokens, First-boot setup claim tokens and kb_auth functions (KB-P2-12).
+INFO  [alembic.runtime.migration] Running upgrade p2_12_setup_claim_tokens -> p3_17_search_indexes, Add search_tsv generated columns and GIN indexes for search (KB-P3-17).
+INFO  [alembic.runtime.migration] Running upgrade p3_17_search_indexes -> p4_02b_oauth_clients_codes, OAuth 2.1 authorization server, clients, codes, grants & tokens (KB-P4-02b).
+INFO  [alembic.runtime.migration] Running upgrade p4_02b_oauth_clients_codes -> p2_08_user_identities, Identity linking without email auto-merge: user_identities and identity_link_intents (KB-P2-08).
+INFO  [alembic.runtime.migration] Running upgrade p2_08_user_identities -> p2_10_auth_card_admin_ops, Auth card admin ops and public enabled projection (KB-P2-10).
+INFO  [alembic.runtime.migration] Running upgrade p2_10_auth_card_admin_ops -> p5_12_custom_field_approvals, Cryptographic manifest_sha256 escalation approvals (KB-P5-12, S13.2, S4.2, S3.2).
+INFO  [alembic.runtime.migration] Running upgrade p5_12_custom_field_approvals -> p6_01_import_entity_mappings, Lossless Plane importer entity mappings table (KB-P6-01, S1.3, S15.5).
+INFO  [alembic.runtime.migration] Running upgrade p6_01_import_entity_mappings -> p4_13_mcp_ephemeral_tokens, Ephemeral kb_agt_eph_* read-only MCP tokens (KB-P4-13).
+INFO  [alembic.runtime.migration] Running upgrade p4_13_mcp_ephemeral_tokens -> p4_09a_workspace_settings, DDL workspace_settings table, FORCE RLS, defaults & triggers (KB-P4-09a).
+INFO  [alembic.runtime.migration] Running upgrade p4_09a_workspace_settings -> p5_05a_ai_providers_and_ledgers, ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
+INFO  [alembic.runtime.migration] Running upgrade p5_05a_ai_providers_and_ledgers -> p4_16_oauth_device_codes, RFC 8628 Headless CLI Device Authorization Codes (KB-P4-16).
+INFO  [alembic.runtime.migration] Running upgrade p4_16_oauth_device_codes -> p4_12_destructive_tokens, Destructive confirmation tokens table (KB-P4-12, S11.4, S7.2, S12.3).
+INFO  [alembic.runtime.migration] Running upgrade p4_12_destructive_tokens -> p5_13_approved_wasm_modules, approved_wasm_modules table for sandboxed custom fields and sync hooks (KB-P5-13).
+........................................................................ [  2%]
+........................................................................ [  5%]
+........................................................................ [  8%]
+........................................................................ [ 11%]
+........................................................................ [ 14%]
+........................................................................ [ 17%]
+........................................................................ [ 20%]
+........................................................................ [ 23%]
+........................................................................ [ 26%]
+........................................................................ [ 29%]
+........................................................................ [ 32%]
+........................................................................ [ 35%]
+........................................................................ [ 38%]
+........................................................................ [ 40%]
+........................................................................ [ 43%]
+........................................................................ [ 46%]
+........................................................................ [ 49%]
+........................................................................ [ 52%]
+........................................................................ [ 55%]
+........................................................................ [ 58%]
+........................................................................ [ 61%]
+........................................................................ [ 64%]
+........................................................................ [ 67%]
+........................................................................ [ 70%]
+........................................................................ [ 73%]
+........................................................................ [ 76%]
+........................................................................ [ 78%]
+........................................................................ [ 81%]
+........................................................................ [ 84%]
+........................................................................ [ 87%]
+........................................................................ [ 90%]
+........................................................................ [ 93%]
+........................................................................ [ 96%]
+........................................................................ [ 99%]
+...............                                                          [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/google/genai/types.py:18270
+  /workspace/AI/thumbs-up-kanban/.venv/lib/python3.12/site-packages/google/genai/types.py:18270: SyntaxWarning: invalid escape sequence '\/'
+    description="""Output only. The original name of the uploaded file, taken from the `Content-Disposition` header on upload. Between 1 and 255 characters. Control characters and the characters `<>:"|?*\/` are not accepted.""",
+
+.venv/lib/python3.12/site-packages/google/genai/types.py:18308
+  /workspace/AI/thumbs-up-kanban/.venv/lib/python3.12/site-packages/google/genai/types.py:18308: SyntaxWarning: invalid escape sequence '\/'
+    """Output only. The original name of the uploaded file, taken from the `Content-Disposition` header on upload. Between 1 and 255 characters. Control characters and the characters `<>:"|?*\/` are not accepted."""
+
+agent/tests/cli/test_validate_sparkle.py::test_case_6_fault_ttft_timeout_and_db_unreachable
+database/tests/test_pg_harness.py::test_04_negative_security_socket_and_dsn_rejections
+  /workspace/AI/thumbs-up-kanban/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+agent/tests/sparkle/test_router_endpoint.py: 2 warnings
+kanban/tests/api/test_admin_imports.py: 1 warning
+kanban/tests/auth/test_csrf.py: 9 warnings
+kanban/tests/auth/test_local_login.py: 9 warnings
+kanban/tests/auth/test_sessions.py: 1 warning
+kanban/tests/test_app.py: 1 warning
+  /workspace/AI/thumbs-up-kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+kanban/tests/auth/test_local_login.py::test_case_1_positive_login
+kanban/tests/auth/test_local_login.py::test_case_1_positive_login
+kanban/tests/auth/test_sessions.py::test_case_1_positive_login_and_cookie_attributes
+kanban/tests/auth/test_sessions.py::test_case_9_security_logout
+kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
+kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
+  /workspace/AI/thumbs-up-kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+kanban/tests/importer/test_plane_client.py::test_fetch_snapshot_rate_limit_backoff
+  /opt/hostedtoolcache/Python/3.12.16/arm64/lib/python3.12/pathlib.py:551: RuntimeWarning: coroutine '_execute_verify' was never awaited
+    @property
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2463 passed, 1 deselected, 34 warnings in 269.05s (0:04:29)
+
