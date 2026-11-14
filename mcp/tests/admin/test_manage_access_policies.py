@@ -10,11 +10,15 @@ from typing import TYPE_CHECKING, Any, cast
 import pytest
 import yaml
 
+from database.models import ResourceAclEntry
+from kanban.security.permissions import Capability
 from kanban.tests.security.helpers import (
+    add_role_binding,
     create_group,
     create_project,
     create_registered_object,
     create_user,
+    rebuild_era,
 )
 from mcp.context import reset_current_mcp_context, set_current_mcp_context
 from mcp.errors import KbMcpError
@@ -367,3 +371,53 @@ async def test_manage_access_policies_tool_context_and_spec() -> None:
         assert exc_info.value.code.value == "INTERNAL"
     finally:
         reset_current_mcp_context(token)
+
+
+@pytest.mark.asyncio
+async def test_manage_access_policies_inspect_redaction(admin_env: AdminTestEnv) -> None:
+    """Test inspect on an object with an external collaborator triggers S3.4 redaction."""
+    test_obj = await _setup_issue_with_object(admin_env, "KAN-145")
+    # Provision a guest user
+    guest_user_id = await create_user(
+        admin_env.seed_session,
+        admin_env.workspace_id,
+        handle="@external_contractor",
+        display_name="External Contractor",
+        email="guest@contractor.example.com",
+    )
+    await add_role_binding(
+        admin_env.seed_session,
+        admin_env.workspace_id,
+        guest_user_id,
+        role="WORKSPACE_GUEST",
+        scope_type="workspace",
+    )
+    # Grant VIEW to guest_user on test_obj.id
+    acl = ResourceAclEntry(
+        workspace_id=admin_env.workspace_id,
+        object_id=test_obj.id,
+        principal_id=guest_user_id,
+        effect="ALLOW",
+        capability_mask=Capability.VIEW.value,
+        created_by_id=admin_env.server_admin.id,
+    )
+    admin_env.seed_session.add(acl)
+    await rebuild_era(admin_env.seed_session, admin_env.workspace_id)
+    await admin_env.seed_session.commit()
+
+    res_inspect = await _call_manage_access_policies(
+        admin_env,
+        {
+            "action": "inspect",
+            "object": "KAN-145",
+        },
+        scopes="admin:read",
+    )
+    assert res_inspect["result"]["isError"] is False
+    content = yaml.safe_load(res_inspect["result"]["content"][0]["text"])
+    assert "external" in content
+    assert content["external"] == "1 External Collaborator"
+    # Ensure guest handle or email is not present in output
+    raw_text = res_inspect["result"]["content"][0]["text"]
+    assert "external_contractor" not in raw_text
+    assert "contractor.example.com" not in raw_text

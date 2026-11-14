@@ -238,13 +238,14 @@ async def manage_access_policies_tool(  # noqa: C901
                 "capabilities": capabilities,
             },
         )
+        res_dict = res if isinstance(res, dict) else {}
         return {
             "status": "granted",
             "object": object_ref,
             "principal": str(principal_ref),
             "effect": effect,
-            "capabilities": res.get("capabilities", capabilities),
-            "effective_capabilities": res.get("effective_capabilities", []),
+            "capabilities": res_dict.get("capabilities", capabilities),
+            "effective_capabilities": res_dict.get("effective_capabilities", []),
         }
 
     if action == "revoke":
@@ -257,12 +258,13 @@ async def manage_access_policies_tool(  # noqa: C901
                 "effect": effect,
             },
         )
+        res_dict = res if isinstance(res, dict) else {}
         return {
             "status": "revoked",
             "object": object_ref,
             "principal": str(principal_ref),
             "effect": effect,
-            "effective_capabilities": res.get("effective_capabilities", []),
+            "effective_capabilities": res_dict.get("effective_capabilities", []),
         }
 
     return {}

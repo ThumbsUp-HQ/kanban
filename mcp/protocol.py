@@ -268,7 +268,7 @@ class McpProtocolHandler:
 
         return await self._process_valid_payload(payload, request)
 
-    async def _process_valid_payload(  # noqa: C901, PLR0911
+    async def _process_valid_payload(  # noqa: C901, PLR0911, PLR0912
         self,
         payload: dict[str, Any],
         request: Request,

@@ -226,11 +226,12 @@ async def manage_principals_and_groups_tool(  # noqa: C901, PLR0911, PLR0912, PL
                 "email": email,
             },
         )
+        res_dict = res if isinstance(res, dict) else {}
         return {
             "status": "provisioned",
-            "principal": res.get("principal", f"@{handle.lstrip('@')}"),
+            "principal": res_dict.get("principal", f"@{handle.lstrip('@')}"),
             "type": "USER",
-            "email": res.get("email", email),
+            "email": res_dict.get("email", email),
         }
 
     # 4. provision_group
@@ -249,9 +250,10 @@ async def manage_principals_and_groups_tool(  # noqa: C901, PLR0911, PLR0912, PL
                 "display_name": display_name,
             },
         )
+        res_dict = res if isinstance(res, dict) else {}
         return {
             "status": "provisioned",
-            "principal": res.get("principal", display_name),
+            "principal": res_dict.get("principal", display_name),
             "type": "GROUP",
         }
 
@@ -273,9 +275,10 @@ async def manage_principals_and_groups_tool(  # noqa: C901, PLR0911, PLR0912, PL
                 "display_name": display_name,
             },
         )
+        res_dict = res if isinstance(res, dict) else {}
         return {
             "status": "provisioned",
-            "principal": res.get("principal", f"@{handle.lstrip('@')}"),
+            "principal": res_dict.get("principal", f"@{handle.lstrip('@')}"),
             "type": "AGENT",
         }
 
@@ -289,7 +292,8 @@ async def manage_principals_and_groups_tool(  # noqa: C901, PLR0911, PLR0912, PL
             )
         # First resolve principal to UUID if needed
         p_detail = await client.request("GET", f"/api/v1/admin/principals/{principal_ref}")
-        p_id = p_detail.get("id") if isinstance(p_detail, dict) else principal_ref
+        p_dict = p_detail if isinstance(p_detail, dict) else {}
+        p_id = p_dict.get("id") or principal_ref
 
         target_status = "deactivated" if action == "deactivate" else "active"
         res = await client.request(
@@ -297,10 +301,11 @@ async def manage_principals_and_groups_tool(  # noqa: C901, PLR0911, PLR0912, PL
             f"/api/v1/admin/principals/{p_id}",
             json_data={"status": target_status},
         )
+        res_dict = res if isinstance(res, dict) else {}
         return {
             "status": "deactivated" if action == "deactivate" else "activated",
-            "principal": res.get("principal", principal_ref),
-            "type": res.get("type"),
+            "principal": res_dict.get("principal", principal_ref),
+            "type": res_dict.get("type"),
         }
 
     # 7. add_member / remove_member
@@ -315,15 +320,18 @@ async def manage_principals_and_groups_tool(  # noqa: C901, PLR0911, PLR0912, PL
         g_detail = await client.request("GET", f"/api/v1/admin/principals/{group_ref}")
         m_detail = await client.request("GET", f"/api/v1/admin/principals/{member_ref}")
 
-        g_id = g_detail.get("id") if isinstance(g_detail, dict) else group_ref
-        m_id = m_detail.get("id") if isinstance(m_detail, dict) else member_ref
+        g_dict = g_detail if isinstance(g_detail, dict) else {}
+        m_dict = m_detail if isinstance(m_detail, dict) else {}
+
+        g_id = g_dict.get("id") or group_ref
+        m_id = m_dict.get("id") or member_ref
 
         method = "POST" if action == "add_member" else "DELETE"
         await client.request(method, f"/api/v1/admin/groups/{g_id}/members/{m_id}")
         return {
             "status": "member_added" if action == "add_member" else "member_removed",
-            "group": g_detail.get("principal", group_ref),
-            "member": m_detail.get("principal", member_ref),
+            "group": g_dict.get("principal", group_ref),
+            "member": m_dict.get("principal", member_ref),
         }
 
     # 8. bind_role / unbind_role
@@ -337,7 +345,8 @@ async def manage_principals_and_groups_tool(  # noqa: C901, PLR0911, PLR0912, PL
                 message=f"principal and role are required for action='{action}'",
             )
         p_detail = await client.request("GET", f"/api/v1/admin/principals/{principal_ref}")
-        p_id = p_detail.get("id") if isinstance(p_detail, dict) else principal_ref
+        p_dict = p_detail if isinstance(p_detail, dict) else {}
+        p_id = p_dict.get("id") or principal_ref
 
         # Determine scope_type and scope_id
         scope_str = str(scope).strip()
@@ -366,7 +375,7 @@ async def manage_principals_and_groups_tool(  # noqa: C901, PLR0911, PLR0912, PL
         )
         return {
             "status": "role_bound" if action == "bind_role" else "role_unbound",
-            "principal": p_detail.get("principal", principal_ref),
+            "principal": p_dict.get("principal", principal_ref),
             "role": role,
             "scope": scope_str,
         }
