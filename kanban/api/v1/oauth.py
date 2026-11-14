@@ -1083,9 +1083,7 @@ async def get_device_info(
             "surface": info.surface,
             "requested_scopes": info.requested_scopes,
             "allowed_projects": (
-                [str(p) for p in info.allowed_projects]
-                if info.allowed_projects
-                else None
+                [str(p) for p in info.allowed_projects] if info.allowed_projects else None
             ),
             "expires_at": info.expires_at.isoformat(),
         }
