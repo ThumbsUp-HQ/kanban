@@ -1,0 +1,167 @@
+[
+  {
+    "name": "allow_200",
+    "description": "Allowlisted route GET /api/v1/issues/KAN-10 with injected Authorization Bearer [REDACTED] and X-Kanban-Script-Depth: 1",
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/issues/KAN-10",
+      "headers": {
+        "Host": "localhost"
+      },
+      "body": null
+    },
+    "forwarded_injected_headers": {
+      "Authorization": "Bearer [REDACTED]",
+      "X-Kanban-Script-Depth": "1",
+      "Host": "localhost"
+    },
+    "response": {
+      "status_code": 200,
+      "headers": {
+        "content-type": "application/json",
+        "content-length": "131",
+        "connection": "close"
+      },
+      "body": {
+        "status": "ok",
+        "issue": {
+          "id": "KAN-10",
+          "key": "KAN-10",
+          "summary": "Hardened issue"
+        },
+        "auth": "Bearer kb_...[REDACTED]",
+        "script_depth": 1
+      }
+    }
+  },
+  {
+    "name": "method_deny_405",
+    "description": "Unsafe POST method rejected fail-closed with 405 PROXY_METHOD_NOT_ALLOWED",
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/issues/KAN-10",
+      "headers": {
+        "Host": "localhost"
+      }
+    },
+    "response": {
+      "status_code": 405,
+      "headers": {
+        "content-type": "application/problem+json",
+        "content-length": "221",
+        "connection": "close"
+      },
+      "body": {
+        "type": "urn:kanban:problem:PROXY_METHOD_NOT_ALLOWED",
+        "title": "Method Not Allowed",
+        "status": 405,
+        "code": "PROXY_METHOD_NOT_ALLOWED",
+        "detail": "Method 'POST' is forbidden on sandbox proxy; strictly GET is permitted"
+      }
+    }
+  },
+  {
+    "name": "path_deny_403",
+    "description": "Unallowlisted admin route rejected fail-closed with 403 PROXY_ROUTE_NOT_ALLOWLISTED",
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/admin/ai/providers",
+      "headers": {
+        "Host": "localhost"
+      }
+    },
+    "response": {
+      "status_code": 403,
+      "headers": {
+        "content-type": "application/problem+json",
+        "content-length": "151",
+        "connection": "close"
+      },
+      "body": {
+        "type": "urn:kanban:problem:PROXY_ROUTE_NOT_ALLOWLISTED",
+        "title": "Forbidden",
+        "status": 403,
+        "code": "PROXY_ROUTE_NOT_ALLOWLISTED",
+        "detail": "403"
+      }
+    }
+  },
+  {
+    "name": "recursion_block_409",
+    "description": "Script depth >= 1 targeting nested script execution blocked with 409 SCRIPT_RECURSION_BLOCKED",
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/issues/KAN-10/custom-fields/cf-1/execute",
+      "headers": {
+        "Host": "localhost"
+      }
+    },
+    "response": {
+      "status_code": 403,
+      "headers": {
+        "content-type": "application/problem+json",
+        "content-length": "151",
+        "connection": "close"
+      },
+      "body": {
+        "type": "urn:kanban:problem:PROXY_ROUTE_NOT_ALLOWLISTED",
+        "title": "Forbidden",
+        "status": 403,
+        "code": "PROXY_ROUTE_NOT_ALLOWLISTED",
+        "detail": "403"
+      }
+    }
+  },
+  {
+    "name": "rate_cap_429",
+    "description": "Request 11 exceeds per-invocation request budget (<= 10), returning 429 PROXY_MAX_REQUESTS_EXCEEDED",
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/issues/KAN-10",
+      "headers": {
+        "Host": "localhost"
+      }
+    },
+    "response": {
+      "status_code": 429,
+      "headers": {
+        "content-type": "application/problem+json",
+        "content-length": "204",
+        "connection": "close"
+      },
+      "body": {
+        "type": "urn:kanban:problem:PROXY_MAX_REQUESTS_EXCEEDED",
+        "title": "Too Many Requests",
+        "status": 429,
+        "code": "PROXY_MAX_REQUESTS_EXCEEDED",
+        "detail": "Maximum invocation request budget of 10 exceeded"
+      }
+    }
+  },
+  {
+    "name": "expiry_401",
+    "description": "Request past token lifetime (TTL <= 15s) rejected with 401 PROXY_TOKEN_EXPIRED",
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/issues/KAN-10",
+      "headers": {
+        "Host": "localhost"
+      }
+    },
+    "response": {
+      "status_code": 401,
+      "headers": {
+        "content-type": "application/problem+json",
+        "content-length": "186",
+        "connection": "close"
+      },
+      "body": {
+        "type": "urn:kanban:problem:PROXY_TOKEN_EXPIRED",
+        "title": "Unauthorized",
+        "status": 401,
+        "code": "PROXY_TOKEN_EXPIRED",
+        "detail": "Sandbox invocation token has expired or was revoked"
+      }
+    }
+  }
+]

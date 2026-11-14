@@ -1,0 +1,94 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "defaultErrnoRet": 1,
+  "architectures": [
+    "SCMP_ARCH_X86_64",
+    "SCMP_ARCH_AARCH64"
+  ],
+  "syscalls": [
+    {
+      "names": [
+        "read",
+        "write",
+        "openat",
+        "close",
+        "fstat",
+        "newfstatat",
+        "mmap",
+        "mprotect",
+        "munmap",
+        "brk",
+        "rt_sigaction",
+        "rt_sigprocmask",
+        "rt_sigreturn",
+        "pread64",
+        "readv",
+        "writev",
+        "pipe2",
+        "dup",
+        "dup2",
+        "dup3",
+        "fcntl",
+        "nanosleep",
+        "clock_gettime",
+        "getpid",
+        "gettid",
+        "getuid",
+        "geteuid",
+        "getgid",
+        "getegid",
+        "execve",
+        "exit",
+        "exit_group",
+        "wait4",
+        "futex",
+        "set_tid_address",
+        "set_robust_list",
+        "rseq",
+        "prlimit64",
+        "getrandom",
+        "poll",
+        "ppoll",
+        "epoll_create1",
+        "epoll_ctl",
+        "epoll_pwait",
+        "getcwd",
+        "readlinkat",
+        "getdents64",
+        "connect",
+        "sendto",
+        "recvfrom",
+        "shutdown"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "ioctl"
+      ],
+      "action": "SCMP_ACT_ALLOW",
+      "args": [
+        {
+          "index": 0,
+          "value": 2,
+          "valueTwo": 0,
+          "op": "SCMP_CMP_LE"
+        }
+      ]
+    },
+    {
+      "names": [
+        "socket"
+      ],
+      "action": "SCMP_ACT_ALLOW",
+      "args": [
+        {
+          "index": 0,
+          "value": 1,
+          "valueTwo": 0,
+          "op": "SCMP_CMP_EQ"
+        }
+      ]
+    }
+  ]
+}

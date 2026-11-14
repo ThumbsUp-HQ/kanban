@@ -42,6 +42,8 @@ class StandaloneStatus:
     data_mount_point: str
     data_mount_fstype: str
     generated_at: str  # ISO-8601 UTC
+    tier_b_sandbox_available: bool = False
+    tier_b_unavailable_reason: str | None = None
 
 
 def decode_octal_escapes(raw: str) -> str:
@@ -114,11 +116,14 @@ def _is_anon_volume(effective_mountinfo: str, target_mount: str) -> bool:
     return False
 
 
-def probe(
+def probe(  # noqa: PLR0913
     data_dir: Path,
     mounts_text: str | None = None,
     mountinfo_text: str | None = None,
     mode: Literal["standalone_embedded_pg", "external_db"] = "standalone_embedded_pg",
+    *,
+    tier_b_sandbox_available: bool = False,
+    tier_b_unavailable_reason: str | None = None,
 ) -> StandaloneStatus:
     """Probe /proc/mounts to determine if data_dir is backed by persistent storage.
 
@@ -145,6 +150,8 @@ def probe(
             data_mount_point="",
             data_mount_fstype="",
             generated_at=generated_at,
+            tier_b_sandbox_available=tier_b_sandbox_available,
+            tier_b_unavailable_reason=tier_b_unavailable_reason,
         )
 
     # Pick the longest mount point prefix
@@ -164,6 +171,8 @@ def probe(
         data_mount_point=best_mp,
         data_mount_fstype=best_fstype,
         generated_at=generated_at,
+        tier_b_sandbox_available=tier_b_sandbox_available,
+        tier_b_unavailable_reason=tier_b_unavailable_reason,
     )
 
 
@@ -171,6 +180,9 @@ def emit_ephemeral_warning() -> None:
     """Print the exact Section 2.2 item 1 ephemeral storage warning to stderr."""
     sys.stderr.write(EPHEMERAL_WARNING)
     sys.stderr.flush()
+
+
+probe_storage = probe
 
 
 def write_standalone_status(

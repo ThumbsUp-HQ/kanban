@@ -21,6 +21,10 @@ Core web application, static asset server, and API service layer for the Kanban 
 - Custom field cryptographic escalation approvals (`kanban.custom_fields.approvals`, `kanban.api.v1.custom_field_approvals`): S13.2 Scope x Principal matrix enforcement, AAL2 freshness gate (<= 900s), dual-control `SERVER_ADMIN` distinct approvals, HKDF-derived HMAC-SHA256 signatures, single-byte tamper auto-revocation trigger, and fail-closed `assert_execution_authorized` gate.
 - Typed object links API and canonical URL helper (`kanban.api.v1.links`, `kanban.services.links`, `kanban.api.v1.schemas.links`, `kanban.services.object_ref`): create/list/delete typed links between registered objects with restricted-target masking and server-authoritative canonical URLs.
 - Sticky to Doc AI promotion preview and confirm contracts (`kanban.api.v1.sticky_promo_ai`, `kanban.services.stickies`, `kanban.api.v1.schemas.stickies`): `POST /api/v1/stickies/{id}/promote-preview` returns zero-write AI structured proposal, canonical markdown, original sha256, and access manifest preview; `POST /api/v1/stickies/{id}/promote-to-doc` supports optional `structured_body_markdown` and `expected_sticky_sha256` TOCTOU protection (`409 STICKY_MODIFIED_SINCE_PREVIEW`), copying direct ACL entries verbatim to the new Doc and Pages.
+- Tier B nsjail sandbox runner (`kanban.sandbox.nsjail_runner.TierBNsjailRunner`, `NsjailCommandBuilder`, `SubprocessLauncher`) enforcing cgroup v2 RAM limits (<= 128 MiB), execution timeouts (<= 3,000ms), isolated netns (`--disable_clone_newnet=false`), seccomp-BPF profile (`deploy/seccomp/sandbox-profile.json`), stdout capped at 64 KiB, and zero raw token exposure inside sandbox.
+- Out-of-sandbox Unix-socket token-injecting egress proxy (`kanban.sandbox.egress_proxy.TokenInjectingEgressProxy`, `EgressProxyPolicy`) over 0600 stream socket in 0700 runtime directory, enforcing TTL <= 15s, <= 10 GET requests, allowlisted `/api/v1/...` routes, header scrubbing, and mutable bytearray zeroing in finally.
+- Script recursion depth guard middleware (`kanban.api.middleware.script_depth.ScriptDepthGuardMiddleware`) rejecting `X-Kanban-Script-Depth` >= 1 on custom field execution, transitions, and MCP endpoints with HTTP 409 `SCRIPT_RECURSION_BLOCKED`.
+- Startup Linux user namespace isolation probe (`kanban.sandbox.probe.probe_nsjail_userns`, `SandboxProbeResult`, `SandboxUnavailableError`) verifying nsjail binary UID 0 ownership, non-writable permissions, and dry self-test, failing closed with `SANDBOX_UNAVAILABLE_IN_STANDALONE`.
 - Test harness: `kanban.tests.contract.ContractRecorder` (`KB_CONTRACT_OUT`, `KB_TICKET_ID`, credential header redaction) and `kanban/tests/api/conftest.py` fixtures `api_env`, `as_principal`, `make_user`, `make_project`, `make_module`, `contract_recorder`.
 
 ## Depends On
@@ -62,3 +66,11 @@ Core web application, static asset server, and API service layer for the Kanban 
 - Unhandled server exceptions return HTTP 500 `INTERNAL_ERROR` with server-side correlation logging and zero trace leakage.
 - WebSocket access to `/ws` returns policy violation closure code 1008.
 - Placeholder routes `/sse` and `/mcp/*` return HTTP 501 Not Implemented problem JSON.
+- Tier B sandbox execution without functional Linux user namespaces fails closed with HTTP 503 `SANDBOX_UNAVAILABLE_IN_STANDALONE`.
+- Script recursion depth header violations return HTTP 409 `SCRIPT_RECURSION_BLOCKED`.
+- Sandbox execution exceeding 3,000ms returns `SCRIPT_TIMEOUT` with process group SIGKILL.
+- Sandbox stdout exceeding 64 KiB fails closed with `SCRIPT_OUTPUT_TOO_LARGE`.
+- Egress proxy method outside GET returns HTTP 405 `PROXY_METHOD_NOT_ALLOWED`.
+- Egress proxy unlisted route or traversal returns HTTP 403 `PROXY_ROUTE_NOT_ALLOWLISTED`.
+- Egress proxy request budget exceeding 10 returns HTTP 429 `PROXY_MAX_REQUESTS_EXCEEDED`.
+- Egress proxy token expiration returns HTTP 401 `PROXY_TOKEN_EXPIRED`.
