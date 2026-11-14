@@ -3,8 +3,14 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { RouterProvider } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createAppRouter, PROJECT_KEY_REGEX, ISSUE_KEY_REGEX } from './routes';
+import {
+  createAppRouter,
+  PROJECT_KEY_REGEX,
+  ISSUE_KEY_REGEX,
+  IssuesWorkspaceRoute,
+} from './routes';
 import { ThemeProvider } from '../theme/ThemeProvider';
+import { FIXTURE_12_ISSUES } from '../features/views/fixtures';
 
 describe('routes and AppShell integration', () => {
   let queryClient: QueryClient;
@@ -254,5 +260,37 @@ describe('routes and AppShell integration', () => {
     );
 
     expect(await screen.findByRole('button', { name: 'Project: kanban' })).toBeDefined();
+  });
+});
+
+describe('IssuesWorkspaceRoute', () => {
+  beforeEach(() => {
+    window.history.pushState({}, '', '/projects/KAN/issues');
+  });
+
+  it('mounts and renders default ListView', () => {
+    render(
+      <IssuesWorkspaceRoute
+        projectKey="KAN"
+        modulesEnabled={true}
+        initialIssues={FIXTURE_12_ISSUES}
+      />,
+    );
+
+    expect(screen.getByText('Backlog')).toBeDefined();
+  });
+
+  it('renders TableView when layout=table in search params', () => {
+    window.history.pushState({}, '', '/projects/KAN/issues?layout=table');
+
+    render(
+      <IssuesWorkspaceRoute
+        projectKey="KAN"
+        modulesEnabled={true}
+        initialIssues={FIXTURE_12_ISSUES}
+      />,
+    );
+
+    expect(screen.getByRole('table')).toBeDefined();
   });
 });

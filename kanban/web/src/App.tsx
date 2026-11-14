@@ -5,7 +5,8 @@ import { EmojiStory } from './dev/EmojiStory';
 import { EditorStory } from './dev/EditorStory';
 import { MediaStory } from './dev/MediaStory';
 import { RealtimeStory } from './dev/RealtimeStory';
-import { createAppRouter, AppRoutes } from './app/routes';
+import { createAppRouter, AppRoutes, IssuesWorkspaceRoute } from './app/routes';
+import { FIXTURE_12_ISSUES } from './features/views/fixtures';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ShellPanelsProvider } from './app/shellPanels';
 import './App.css';
@@ -45,6 +46,18 @@ export function App(): JSX.Element {
     }
     if (window.location.pathname === '/__dev/realtime') {
       return <RealtimeStory />;
+    }
+    if (window.location.pathname === '/__dev/views') {
+      const isNoModules =
+        window.location.pathname.includes('nomodules') ||
+        window.location.search.includes('nomodules=1');
+      return (
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          modulesEnabled={!isNoModules}
+          initialIssues={FIXTURE_12_ISSUES}
+        />
+      );
     }
   }
 

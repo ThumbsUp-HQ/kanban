@@ -1,0 +1,46 @@
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/table/tableColumns.test.ts (7 tests) 19ms
+ ✓ src/features/views/viewsApi.test.ts (2 tests) 16ms
+ ✓ src/features/list/ListRow.test.tsx (2 tests) 244ms
+ ✓ src/features/table/ColumnConfigurator.test.tsx (5 tests) 611ms
+   ✓ ColumnConfigurator (5)
+     ✓ renders trigger button with count and opens/closes dialog 317ms
+Not implemented: navigation to another Document
+ ✓ src/features/views/viewRegistry.test.tsx (8 tests) 761ms
+   ✓ viewRegistry and IssuesWorkspaceRoute (4)
+     ✓ handles row selection and select-all inside IssuesWorkspaceRoute 436ms
+ ✓ src/features/list/ListView.test.tsx (9 tests) 917ms
+   ✓ ListView (9)
+     ✓ renders external assignee with literal hint and links KAN-142 to peek 337ms
+ ✓ src/features/table/TableView.test.tsx (9 tests) 1868ms
+   ✓ TableView (9)
+     ✓ renders default columns and cycles aria-sort ascending -> descending -> none on Priority click 432ms
+     ✓ sorts by other sortable columns (Key, Summary, State, Due date) 545ms
+     ✓ toggles Start date on, Cycle off, reorders Due date before Assignees, and persists to localStorage 532ms
+
+ Test Files  7 passed (7)
+      Tests  42 passed (42)
+   Start at  20:20:20
+   Duration  3.22s (environment 49%, tests 38%, import 8%, worker 3%, transform 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.86 |    96.42 |     100 |   98.77 |                   
+ list              |     100 |      100 |     100 |     100 |                   
+  ListRow.tsx      |     100 |      100 |     100 |     100 |                   
+  ListView.tsx     |     100 |      100 |     100 |     100 |                   
+ table             |   98.19 |    95.43 |     100 |   98.12 |                   
+  ...figurator.tsx |     100 |      100 |     100 |     100 |                   
+  TableView.tsx    |   97.43 |    93.61 |     100 |   97.32 | 44,121,241        
+  tableColumns.ts  |   98.48 |    98.36 |     100 |   98.43 | 191               
+ views             |     100 |    94.73 |     100 |     100 |                   
+  fixtures.ts      |     100 |      100 |     100 |     100 |                   
+  viewRegistry.tsx |     100 |     91.3 |     100 |     100 | 118               
+  viewsApi.ts      |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
+EXIT_CODE=0

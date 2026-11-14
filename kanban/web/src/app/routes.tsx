@@ -6,7 +6,11 @@
 import React, { useEffect, type JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
-import { IssuesWorkspaceRoute } from '../features/views/viewRegistry.tsx';
+import {
+  IssuesWorkspaceRoute,
+  type IssuesWorkspaceRouteProps,
+} from '../features/views/viewRegistry.tsx';
+import { FIXTURE_12_ISSUES } from '../features/views/fixtures';
 import {
   createBrowserRouter,
   createMemoryRouter,
@@ -22,6 +26,8 @@ import { EmojiStory } from '../dev/EmojiStory';
 import { EditorStory } from '../dev/EditorStory';
 import { MediaStory } from '../dev/MediaStory';
 import { RealtimeStory } from '../dev/RealtimeStory';
+
+export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
 
 export const PROJECT_KEY_REGEX = /^[A-Z][A-Z0-9]{1,9}$/;
 export const ISSUE_KEY_REGEX = /^[A-Z][A-Z0-9]{1,9}-[0-9]{1,9}$/;
@@ -225,7 +231,7 @@ export function createAppRouter(
 }
 
 /**
- * Client router matching /projects/:projectKey/issues (KB-P3-37, KB-P3-34).
+ * Client router matching /projects/:projectKey/issues (KB-P3-37, KB-P3-34, KB-P3-38).
  */
 export function AppRoutes(): JSX.Element | null {
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -233,7 +239,16 @@ export function AppRoutes(): JSX.Element | null {
 
   if (match?.[1]) {
     const projectKey = decodeURIComponent(match[1]);
-    return <IssuesWorkspaceRoute projectKey={projectKey} />;
+    const isNoModules =
+      pathname.includes('nomodules') ||
+      (typeof window !== 'undefined' && window.location.search.includes('nomodules=1'));
+    return (
+      <IssuesWorkspaceRoute
+        projectKey={projectKey}
+        modulesEnabled={!isNoModules}
+        initialIssues={FIXTURE_12_ISSUES}
+      />
+    );
   }
 
   return null;

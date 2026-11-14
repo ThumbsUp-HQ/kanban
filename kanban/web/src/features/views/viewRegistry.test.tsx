@@ -1,8 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import React from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { IssuesWorkspaceRoute, viewRegistry } from './viewRegistry.tsx';
+import {
+  IssuesWorkspaceRoute,
+  viewRegistry,
+  ViewHost,
+  VIEW_REGISTRY,
+} from './viewRegistry.tsx';
+import { FIXTURE_12_ISSUES } from './fixtures';
 
 function renderWithClient(ui: ReactNode) {
   const client = new QueryClient({
@@ -57,5 +64,81 @@ describe('viewRegistry and IssuesWorkspaceRoute', () => {
     } finally {
       window.history.pushState({}, '', originalSearch || '/');
     }
+  });
+
+  it('handles row selection and select-all inside IssuesWorkspaceRoute', () => {
+    renderWithClient(
+      <IssuesWorkspaceRoute
+        projectKey="KAN"
+        initialLayout="table"
+        initialIssues={FIXTURE_12_ISSUES}
+      />,
+    );
+
+    // Select all checkbox
+    const selectAllCheckbox = screen.getByRole<HTMLInputElement>('checkbox', { name: /Select all issues/i });
+    fireEvent.click(selectAllCheckbox);
+    expect(selectAllCheckbox.checked).toBe(true);
+
+    // Deselect all
+    fireEvent.click(selectAllCheckbox);
+    expect(selectAllCheckbox.checked).toBe(false);
+
+    // Single item toggle
+    const firstKey = FIXTURE_12_ISSUES[0]?.key ?? 'KAN-1';
+    const rowCheckbox = screen.getByRole<HTMLInputElement>('checkbox', { name: `Select ${firstKey}` });
+    fireEvent.click(rowCheckbox);
+    expect(rowCheckbox.checked).toBe(true);
+
+    fireEvent.click(rowCheckbox);
+    expect(rowCheckbox.checked).toBe(false);
+  });
+});
+
+describe('VIEW_REGISTRY and ViewHost', () => {
+  it('registers list and table views', () => {
+    expect(VIEW_REGISTRY.list).toBeDefined();
+    expect(VIEW_REGISTRY.table).toBeDefined();
+  });
+
+  it('renders ListView when layout is list or unspecified', () => {
+    render(
+      <ViewHost
+        layout="list"
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        modulesEnabled={true}
+      />,
+    );
+
+    // List section header
+    expect(screen.getByText('Backlog')).toBeDefined();
+  });
+
+  it('renders TableView when layout is table', () => {
+    render(
+      <ViewHost
+        layout="table"
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        modulesEnabled={true}
+      />,
+    );
+
+    expect(screen.getByRole('table')).toBeDefined();
+    expect(screen.getByRole('columnheader', { name: /Key/i })).toBeDefined();
+  });
+
+  it('falls back to ListView on unknown layout', () => {
+    render(
+      <ViewHost
+        layout="unknown_layout"
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        modulesEnabled={true}
+      />,
+    );
+
+    expect(screen.getByText('Backlog')).toBeDefined();
   });
 });
