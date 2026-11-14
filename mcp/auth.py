@@ -63,8 +63,13 @@ SCOPE_REQUIREMENTS: Final[dict[str, frozenset[str]]] = {
     "test_agent_write": frozenset({"agent:write"}),
     # Docs surface tools
     "ping_docs": frozenset({"docs:read"}),
-    "search_docs": frozenset({"docs:read"}),
+    "search_knowledge": frozenset({"docs:read"}),
     "read_doc": frozenset({"docs:read"}),
+    "upsert_doc": frozenset({"docs:write"}),
+    "manage_stickies": frozenset({"docs:write"}),
+    "promote_sticky_to_doc": frozenset({"docs:write"}),
+    "link_knowledge": frozenset({"docs:write"}),
+    "search_docs": frozenset({"docs:read"}),
     "create_doc": frozenset({"docs:write"}),
     "update_doc": frozenset({"docs:write"}),
     # Admin surface tools
