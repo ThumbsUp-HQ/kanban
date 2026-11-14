@@ -1,0 +1,586 @@
+{
+  "ticket": "KANBA-144",
+  "exchanges": [
+    {
+      "name": "create_ai_provider_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/ai/providers",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "236",
+          "content-type": "application/json"
+        },
+        "body": {
+          "provider_kind": "ollama",
+          "display_name": "Local Ollama Llama3",
+          "base_url": "http://127.0.0.1:11434",
+          "model_allowlist": [
+            "llama3:8b",
+            "codellama:7b"
+          ],
+          "residency_tier": "default",
+          "priority": 10,
+          "settings": {
+            "temperature": 0.2
+          },
+          "is_enabled": true
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "318",
+          "content-type": "application/json",
+          "location": "/api/v1/admin/ai/providers/a9ebefa7-75dd-4f28-b8cc-783b40b4be63",
+          "x-request-id": "67bea5c941b24c2a9d0a37974650ea52",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "a9ebefa7-75dd-4f28-b8cc-783b40b4be63",
+          "provider_kind": "ollama",
+          "display_name": "Local Ollama Llama3",
+          "base_url": "http://127.0.0.1:11434",
+          "model_allowlist": [
+            "llama3:8b",
+            "codellama:7b"
+          ],
+          "residency_tier": "default",
+          "priority": 10,
+          "settings": {
+            "temperature": 0.2
+          },
+          "api_key_set": false,
+          "is_enabled": true,
+          "project_id": null
+        }
+      }
+    },
+    {
+      "name": "get_ai_provider_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/admin/ai/providers/a9ebefa7-75dd-4f28-b8cc-783b40b4be63",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "318",
+          "content-type": "application/json",
+          "x-request-id": "b40520f327ed42e9a5fab65e7d1b517c",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "a9ebefa7-75dd-4f28-b8cc-783b40b4be63",
+          "provider_kind": "ollama",
+          "display_name": "Local Ollama Llama3",
+          "base_url": "http://127.0.0.1:11434",
+          "model_allowlist": [
+            "llama3:8b",
+            "codellama:7b"
+          ],
+          "residency_tier": "default",
+          "priority": 10,
+          "settings": {
+            "temperature": 0.2
+          },
+          "api_key_set": false,
+          "is_enabled": true,
+          "project_id": null
+        }
+      }
+    },
+    {
+      "name": "list_ai_providers_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/admin/ai/providers",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "320",
+          "content-type": "application/json",
+          "x-request-id": "34d084fb63af4742a9c0546c68e86b6f",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": [
+          {
+            "id": "a9ebefa7-75dd-4f28-b8cc-783b40b4be63",
+            "provider_kind": "ollama",
+            "display_name": "Local Ollama Llama3",
+            "base_url": "http://127.0.0.1:11434",
+            "model_allowlist": [
+              "llama3:8b",
+              "codellama:7b"
+            ],
+            "residency_tier": "default",
+            "priority": 10,
+            "settings": {
+              "temperature": 0.2
+            },
+            "api_key_set": false,
+            "is_enabled": true,
+            "project_id": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "set_ai_budget_200",
+      "request": {
+        "method": "PUT",
+        "path": "/api/v1/admin/ai/budgets",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "102",
+          "content-type": "application/json"
+        },
+        "body": {
+          "provider_config_id": "a9ebefa7-75dd-4f28-b8cc-783b40b4be63",
+          "period_kind": "daily",
+          "token_cap": 100000
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "106",
+          "content-type": "application/json",
+          "x-request-id": "6e82968b127b4215b96d701a49298fa4",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "period_kind": "daily",
+          "period_start": "2026-11-14",
+          "token_cap": 100000,
+          "tokens_used": 0,
+          "tokens_reserved": 0
+        }
+      }
+    },
+    {
+      "name": "get_ai_budgets_200",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/admin/ai/budgets?provider_config_id=a9ebefa7-75dd-4f28-b8cc-783b40b4be63",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "109",
+          "content-type": "application/json",
+          "x-request-id": "96cae6891eef44c981bf6dea19a8aab1",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": [
+          {
+            "period_kind": "daily",
+            "period_start": "2026-11-14",
+            "token_cap": 100000,
+            "tokens_used": 48,
+            "tokens_reserved": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "create_openai_with_secret_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/ai/providers",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "160",
+          "content-type": "application/json"
+        },
+        "body": {
+          "provider_kind": "openai",
+          "display_name": "OpenAI Production",
+          "model_allowlist": [
+            "gpt-4o",
+            "gpt-4o-mini"
+          ],
+          "api_key": "<redacted>"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "275",
+          "content-type": "application/json",
+          "location": "/api/v1/admin/ai/providers/e947c96c-a5a7-42b7-8c69-b8c1e6591683",
+          "x-request-id": "a6b3d7b1379547a0be979c2f4cd9af68",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "e947c96c-a5a7-42b7-8c69-b8c1e6591683",
+          "provider_kind": "openai",
+          "display_name": "OpenAI Production",
+          "base_url": null,
+          "model_allowlist": [
+            "gpt-4o",
+            "gpt-4o-mini"
+          ],
+          "residency_tier": "default",
+          "priority": 100,
+          "settings": {},
+          "api_key_set": true,
+          "is_enabled": true,
+          "project_id": null
+        }
+      }
+    },
+    {
+      "name": "create_gemini_air_gap_denied_409",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/ai/providers",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "95",
+          "content-type": "application/json"
+        },
+        "body": {
+          "provider_kind": "gemini",
+          "display_name": "Cloud Gemini",
+          "model_allowlist": [
+            "gemini-1.5-flash"
+          ]
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "x-request-id": "303c849061704d0990d10f8caf170c9a",
+          "content-length": "276",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:AIR_GAP_EGRESS_DENIED",
+          "title": "Air Gap Egress Denied",
+          "status": 409,
+          "code": "AIR_GAP_EGRESS_DENIED",
+          "detail": "Air-gap mode is active: outbound cloud egress to provider 'gemini' is strictly prohibited",
+          "request_id": "303c849061704d0990d10f8caf170c9a"
+        }
+      }
+    },
+    {
+      "name": "create_provider_ssrf_422",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/ai/providers",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "120",
+          "content-type": "application/json"
+        },
+        "body": {
+          "provider_kind": "ollama",
+          "display_name": "IMDS Ollama",
+          "base_url": "http://169.254.169.254",
+          "model_allowlist": [
+            "llama3"
+          ]
+        }
+      },
+      "response": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "63a770c90d454e11a910b6158e2d4670",
+          "content-length": "249",
+          "content-type": "application/problem+json",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "type": "urn:kanban:problem:INVALID_BASE_URL",
+          "title": "Validation Error",
+          "status": 422,
+          "code": "INVALID_BASE_URL",
+          "detail": "base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost)",
+          "request_id": "63a770c90d454e11a910b6158e2d4670"
+        }
+      }
+    },
+    {
+      "name": "create_key_512_201",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/admin/ai/providers",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "608",
+          "content-type": "application/json"
+        },
+        "body": {
+          "provider_kind": "openai",
+          "display_name": "OpenAI 512",
+          "model_allowlist": [
+            "gpt-4o"
+          ],
+          "api_key": "<redacted>"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-length": "254",
+          "content-type": "application/json",
+          "location": "/api/v1/admin/ai/providers/4285b755-3dce-40ef-b124-cb28712e9a22",
+          "x-request-id": "4e1696f8b5b046bdac4ef1df65b2efd0",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "4285b755-3dce-40ef-b124-cb28712e9a22",
+          "provider_kind": "openai",
+          "display_name": "OpenAI 512",
+          "base_url": null,
+          "model_allowlist": [
+            "gpt-4o"
+          ],
+          "residency_tier": "default",
+          "priority": 100,
+          "settings": {},
+          "api_key_set": true,
+          "is_enabled": true,
+          "project_id": null
+        }
+      }
+    },
+    {
+      "name": "patch_provider_keep_key_200",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/admin/ai/providers/4285b755-3dce-40ef-b124-cb28712e9a22",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "33",
+          "content-type": "application/json"
+        },
+        "body": {
+          "display_name": "OpenAI Renamed"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "258",
+          "content-type": "application/json",
+          "x-request-id": "51abfbdf63ef498c83a9c50a7375a5de",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "4285b755-3dce-40ef-b124-cb28712e9a22",
+          "provider_kind": "openai",
+          "display_name": "OpenAI Renamed",
+          "base_url": null,
+          "model_allowlist": [
+            "gpt-4o"
+          ],
+          "residency_tier": "default",
+          "priority": 100,
+          "settings": {},
+          "api_key_set": true,
+          "is_enabled": true,
+          "project_id": null
+        }
+      }
+    },
+    {
+      "name": "patch_provider_clear_key_200",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/admin/ai/providers/4285b755-3dce-40ef-b124-cb28712e9a22",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>",
+          "content-length": "16",
+          "content-type": "application/json"
+        },
+        "body": {
+          "api_key": "<redacted>"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "259",
+          "content-type": "application/json",
+          "x-request-id": "3bf046688591418da11245808c3d1866",
+          "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "strict-transport-security": "max-age=63072000; includeSubDomains"
+        },
+        "body": {
+          "id": "4285b755-3dce-40ef-b124-cb28712e9a22",
+          "provider_kind": "openai",
+          "display_name": "OpenAI Renamed",
+          "base_url": null,
+          "model_allowlist": [
+            "gpt-4o"
+          ],
+          "residency_tier": "default",
+          "priority": 100,
+          "settings": {},
+          "api_key_set": false,
+          "is_enabled": true,
+          "project_id": null
+        }
+      }
+    }
+  ]
+}

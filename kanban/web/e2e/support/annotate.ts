@@ -6,6 +6,10 @@ export interface Annotation {
   selector: string;
   label: string;
   note?: string | undefined;
+  /** Shifts the numbered badge (px) so it can sit outside the annotated box and not occlude text. */
+  badgeOffset?: { dx: number; dy: number } | undefined;
+  /** 'right' places the badge just outside the right edge of the box. Default 'left' (top-left corner). */
+  badgeAnchor?: 'left' | 'right' | undefined;
 }
 
 /**
@@ -122,7 +126,12 @@ export async function annotatedScreenshot(
       throw new Error(`Annotation element has zero dimensions: selector "${ann.selector}"`);
     }
 
-    const badgePos = computeBadgePosition(box.x, box.y, viewport.width, viewport.height);
+    const badgePos = computeBadgePosition(
+      (ann.badgeAnchor === 'right' ? box.x + box.width + 4 : box.x) + (ann.badgeOffset?.dx ?? 0),
+      box.y + (ann.badgeOffset?.dy ?? 0),
+      viewport.width,
+      viewport.height,
+    );
     evaluatedBoxes.push({
       x: box.x,
       y: box.y,

@@ -61,6 +61,7 @@ class ActivityEventType(StrEnum):
 
     PROJECT_CREATED = "PROJECT_CREATED"
     PROJECT_UPDATED = "PROJECT_UPDATED"
+    PROJECT_BLUEPRINT_APPLIED = "PROJECT_BLUEPRINT_APPLIED"
     MODULE_DEFAULTS_CHANGED = "MODULE_DEFAULTS_CHANGED"
     DOC_CREATED = "DOC_CREATED"
     DOC_UPDATED = "DOC_UPDATED"
@@ -177,12 +178,18 @@ class ActivityEventType(StrEnum):
     PLANE_IMPORT_COMPLETED = "PLANE_IMPORT_COMPLETED"
     WORKSPACE_SETTINGS_CHANGED = "WORKSPACE_SETTINGS_CHANGED"
     AIR_GAP_MODE_CHANGED = "AIR_GAP_MODE_CHANGED"
+    WORK_COMPLETED = "WORK_COMPLETED"
+    AI_PROVIDER_CONFIG_CREATED = "AI_PROVIDER_CONFIG_CREATED"
+    AI_PROVIDER_CONFIG_UPDATED = "AI_PROVIDER_CONFIG_UPDATED"
+    AI_PROVIDER_CONFIG_DISABLED = "AI_PROVIDER_CONFIG_DISABLED"
+    AI_BUDGET_SET = "AI_BUDGET_SET"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
     {
         ActivityEventType.PROJECT_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.PROJECT_UPDATED: ActivityCategory.HISTORY,
+        ActivityEventType.PROJECT_BLUEPRINT_APPLIED: ActivityCategory.SYSTEM,
         ActivityEventType.MODULE_DEFAULTS_CHANGED: ActivityCategory.HISTORY,
         ActivityEventType.DOC_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.DOC_UPDATED: ActivityCategory.HISTORY,
@@ -293,12 +300,17 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.AUTH_CARD_DELETED: ActivityCategory.SYSTEM,
         ActivityEventType.AUTH_CARD_HANDSHAKE_TESTED: ActivityCategory.SYSTEM,
         ActivityEventType.STANDALONE_BACKUP_EXPORTED: ActivityCategory.SYSTEM,
+        ActivityEventType.WORK_COMPLETED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVAL_REQUESTED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVED_PRIMARY: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVAL_REVOKED: ActivityCategory.HISTORY,
         ActivityEventType.WORKSPACE_SETTINGS_CHANGED: ActivityCategory.SYSTEM,
         ActivityEventType.AIR_GAP_MODE_CHANGED: ActivityCategory.SYSTEM,
+        ActivityEventType.AI_PROVIDER_CONFIG_CREATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AI_PROVIDER_CONFIG_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.AI_PROVIDER_CONFIG_DISABLED: ActivityCategory.SYSTEM,
+        ActivityEventType.AI_BUDGET_SET: ActivityCategory.SYSTEM,
     }
 )
 

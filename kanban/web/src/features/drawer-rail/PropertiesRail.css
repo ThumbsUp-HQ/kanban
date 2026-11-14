@@ -35,9 +35,10 @@
 
 .prop-row__value {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--card-gap, 12px);
+  min-height: var(--prop-row-h, 38px);
   min-width: 0;
 }
 
@@ -567,4 +568,12 @@
     border-top: 1px solid var(--border-subtle, #334155);
     padding: var(--space-4, 16px);
   }
+}
+
+.prop-row__value > .gate-status-pill,
+.prop-row__value > [data-testid^='drawer-gate-'] {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-width: 24px;
+  min-height: 24px;
 }

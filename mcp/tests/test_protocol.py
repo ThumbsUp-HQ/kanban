@@ -30,7 +30,15 @@ async def test_case_1_positive_initialize_and_tools_list(
         (
             "/mcp/agent",
             "kanban-mcp-agent",
-            ["search_tickets", "read_ticket", "create_ticket", "update_ticket"],
+            [
+                "search_tickets",
+                "read_ticket",
+                "create_ticket",
+                "update_ticket",
+                "begin_work",
+                "transition_ticket",
+                "complete_work",
+            ],
             "search_tickets",
             {"gate_status": "approved"},
             "gate history available",
@@ -49,6 +57,8 @@ async def test_case_1_positive_initialize_and_tools_list(
             [
                 "configure_workspace",
                 "manage_auth_cards",
+                "architect_project",
+                "manage_cycles_and_modules",
                 "override_ticket_provenance",
                 "audit_and_purge_object_links",
             ],

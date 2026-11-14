@@ -7,10 +7,14 @@ from fastapi import APIRouter
 from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
 from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
 from kanban.api.v1.activity import router as activity_router
+from kanban.api.v1.admin.ai_providers import router as admin_ai_router
 from kanban.api.v1.admin.auth_cards import router as admin_auth_cards_router
 from kanban.api.v1.admin.imports import router as admin_imports_router
 from kanban.api.v1.admin.link_auditor import router as admin_link_auditor_router
 from kanban.api.v1.admin.mcp_keys import router as admin_mcp_keys_router
+from kanban.api.v1.admin.project_blueprint import (
+    router as admin_project_blueprint_router,
+)
 from kanban.api.v1.admin.workspace_settings import (
     router as admin_workspace_settings_router,
 )
@@ -40,6 +44,7 @@ from kanban.api.v1.issue_delete import router as issue_delete_router
 from kanban.api.v1.issue_move import router as issue_move_router
 from kanban.api.v1.issue_provenance import router as issue_provenance_router
 from kanban.api.v1.issue_trees import router as issue_trees_router
+from kanban.api.v1.issue_workflow import router as issue_workflow_router
 from kanban.api.v1.issues import router as issues_router
 from kanban.api.v1.links import router as links_router
 from kanban.api.v1.media_proxy import router as media_proxy_router
@@ -72,6 +77,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(modules_router)
     v1.include_router(issues_router)
     v1.include_router(issue_trees_router)
+    v1.include_router(issue_workflow_router)
     v1.include_router(issue_copy_router)
     v1.include_router(assignees_router)
     v1.include_router(links_router)
@@ -100,10 +106,12 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(custom_fields_router)
     v1.include_router(auth_cards_public_router)
     v1.include_router(admin_auth_cards_router)
+    v1.include_router(admin_ai_router)
     v1.include_router(admin_imports_router)
     v1.include_router(admin_link_auditor_router)
     v1.include_router(admin_mcp_keys_router)
     v1.include_router(admin_workspace_settings_router)
+    v1.include_router(admin_project_blueprint_router)
     v1.include_router(oauth_v1_router)
     v1.include_router(mcp_introspect_router)
     v1.include_router(mcp_ephemeral_router)

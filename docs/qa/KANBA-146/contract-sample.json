@@ -1,0 +1,188 @@
+{
+  "ticket": "KANBA-146",
+  "exchanges": [
+    {
+      "name": "execute_custom_field_success_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/issues/KAN-142/custom-fields/f-cvss/execute",
+        "headers": {
+          "host": "kanban.hackedyour.info",
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req-cf-exec-001",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "field_id": "f-cvss",
+          "field_slug": "cvss-score",
+          "field_name": "CVSS Score",
+          "output_format": "severity_pill",
+          "output_format_metadata": {},
+          "value": {
+            "score": 8.8,
+            "level": "high",
+            "label": "High"
+          },
+          "status": "SUCCESS",
+          "tier": "Wasmtime",
+          "token_scope": "PROJECT",
+          "credential_mode": "INVOKING_USER",
+          "last_latency_ms": 14,
+          "computed_at": "2026-11-13T23:50:00Z"
+        }
+      }
+    },
+    {
+      "name": "approval_request_post_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/custom-fields/f-env/approval-requests",
+        "headers": {
+          "host": "kanban.hackedyour.info",
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": {
+          "manifest_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+          "justification": "Required for external production deployment sync"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req-cf-appr-req-002",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "id": "appr-env-001",
+          "field_id": "f-env",
+          "status": "PENDING",
+          "target_scope": "WORKSPACE",
+          "credential_mode": "PROJECT_ADMIN_SP",
+          "manifest_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+          "primary_approver_id": null,
+          "secondary_approver_id": null,
+          "justification": "Required for external production deployment sync",
+          "sp_warning_acknowledged": true,
+          "revoked_reason": null,
+          "created_at": "2026-11-13T23:51:00Z",
+          "updated_at": "2026-11-13T23:51:00Z"
+        }
+      }
+    },
+    {
+      "name": "approve_escalation_aal2_required_403",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/custom-field-approvals/appr-env-001/approve",
+        "headers": {
+          "host": "kanban.hackedyour.info",
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": {
+          "manifest_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+          "sp_warning_acknowledged": true
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req-cf-appr-403-aal2",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "code": "AAL2_REQUIRED",
+          "detail": "Elevated privilege escalation requires AAL2 step-up verification."
+        }
+      }
+    },
+    {
+      "name": "approve_escalation_success_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/custom-field-approvals/appr-env-001/approve",
+        "headers": {
+          "host": "kanban.hackedyour.info",
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": {
+          "manifest_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+          "sp_warning_acknowledged": true
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req-cf-appr-success-200",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "id": "appr-env-001",
+          "field_id": "f-env",
+          "status": "APPROVED",
+          "target_scope": "WORKSPACE",
+          "credential_mode": "PROJECT_ADMIN_SP",
+          "manifest_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+          "primary_approver_id": "user-admin-01",
+          "secondary_approver_id": null,
+          "justification": "Required for external production deployment sync",
+          "sp_warning_acknowledged": true,
+          "revoked_reason": null,
+          "created_at": "2026-11-13T23:51:00Z",
+          "updated_at": "2026-11-13T23:52:00Z"
+        }
+      }
+    },
+    {
+      "name": "approve_escalation_manifest_mismatch_409",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/custom-field-approvals/appr-env-001/approve",
+        "headers": {
+          "host": "kanban.hackedyour.info",
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-csrf-token": "<redacted>",
+          "cookie": "<redacted>"
+        },
+        "body": {
+          "manifest_sha256": "stale00000000000000000000000000000000000000000000000000000000000",
+          "sp_warning_acknowledged": true
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req-cf-appr-409-mismatch",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "code": "MANIFEST_MISMATCH",
+          "detail": "Field script or metadata was modified since escalation request. Re-request required."
+        }
+      }
+    }
+  ]
+}

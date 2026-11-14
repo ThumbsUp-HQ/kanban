@@ -46,6 +46,16 @@ class McpErrorCode(StrEnum):
     CREATOR_NOT_ELIGIBLE = "CREATOR_NOT_ELIGIBLE"
     CREATOR_UNCHANGED = "CREATOR_UNCHANGED"
     NOT_ARCHIVED = "NOT_ARCHIVED"
+    PLAN_STALE = "PLAN_STALE"
+    STATE_IN_USE = "STATE_IN_USE"
+    PRIORITY_IN_USE = "PRIORITY_IN_USE"
+    INVALID_TRANSITION = "INVALID_TRANSITION"
+    NO_STARTED_STATE = "NO_STARTED_STATE"
+    USE_COMPLETE_WORK = "USE_COMPLETE_WORK"
+    OPEN_CHILD_BLOCKERS = "OPEN_CHILD_BLOCKERS"
+    QA_VERDICT_NOT_READY = "QA_VERDICT_NOT_READY"
+    TRANSITION_HELD = "TRANSITION_HELD"
+    ACTION_NOT_AVAILABLE = "ACTION_NOT_AVAILABLE"
 
 
 class KbMcpError(Exception):
@@ -61,8 +71,9 @@ class KbMcpError(Exception):
         allowed_tools: list[str] | None = None,
         budget: dict[str, int] | None = None,
         extra: dict[str, Any] | None = None,
+        blockers: list[str] | None = None,
     ) -> None:
-        """Initialize KbMcpError with code, message, optional hint, candidates, budget."""
+        """Initialize KbMcpError with code, message, optional hint, candidates, budget, blockers."""
         enum_code = McpErrorCode(code)
         super().__init__(f"[{enum_code.value}] {message}")
         self.code: Final[McpErrorCode] = enum_code
@@ -72,9 +83,10 @@ class KbMcpError(Exception):
         self.allowed_tools: Final[list[str] | None] = allowed_tools
         self.budget: Final[dict[str, int] | None] = budget
         self.extra: Final[dict[str, Any] | None] = extra
+        self.blockers: Final[list[str] | None] = blockers
 
     def to_yaml(self) -> str:
-        """Serialize error payload containing code, message, optional hint and extra details."""
+        """Serialize error payload containing code, message, optional hint, candidates, blockers."""
         payload: dict[str, Any] = {
             "code": self.code.value,
             "message": self.message,
@@ -89,4 +101,6 @@ class KbMcpError(Exception):
             payload["hint"] = self.hint
         if self.candidates:
             payload["candidates"] = self.candidates
+        if self.blockers:
+            payload["blockers"] = self.blockers
         return dump_yaml({"error": payload}, strip_nulls=True)

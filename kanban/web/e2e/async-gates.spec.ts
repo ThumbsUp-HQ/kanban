@@ -193,7 +193,11 @@ function getCommonMocks() {
 }
 
 test.describe('Async Workflow Gates E2E Verification & Design Proofs (KB-P5-25)', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    // Ticket KB-P5-25 mandates tablet proof at 834x1112.
+    if (testInfo.project.name === 'tablet') {
+      await page.setViewportSize({ width: 834, height: 1112 });
+    }
     await page.addInitScript(() => {
       document.cookie = '__Host-kb_csrf=csrf-test-token-123; path=/; SameSite=Lax';
     });
@@ -249,14 +253,17 @@ test.describe('Async Workflow Gates E2E Verification & Design Proofs (KB-P5-25)'
         },
         {
           selector: '[data-testid="gate-pending-KAN-8"]',
+          badgeOffset: { dx: -26, dy: 0 },
           label: '⏳🤖 Live Gate Status Pill',
         },
         {
           selector: '.gate-popover',
+          badgeAnchor: 'right',
           label: 'Live Elapsed Timer + Hook Name + RO Mount + Cancel Action',
         },
         {
           selector: '[data-testid="board-column-gate-count-state-in-review"]',
+          badgeOffset: { dx: 0, dy: -22 },
           label: 'Column Header Pending Gate Counter (⏳🤖 1)',
         },
       ],
@@ -344,10 +351,12 @@ test.describe('Async Workflow Gates E2E Verification & Design Proofs (KB-P5-25)'
         },
         {
           selector: '[data-testid="gate-vetoed-KAN-8"]',
+          badgeOffset: { dx: -26, dy: 0 },
           label: '🛑🤖 Veto Pill with Red Border Tone',
         },
         {
           selector: '[data-testid="gate-veto-reason"]',
+          badgeAnchor: 'right',
           label: 'Sanitized 2-Line Reason Preview (plain text)',
         },
         {
@@ -382,6 +391,8 @@ test.describe('Async Workflow Gates E2E Verification & Design Proofs (KB-P5-25)'
         };
       },
       'GET /api/v1/issues/KAN-8/comments': { json: commentsResponse },
+      'GET /api/v1/projects/KAN/custom-fields': { json: [] },
+      'GET /api/v1/issues/KAN-8/custom-fields': { json: [] },
     });
 
     const response = await page.goto('/__dev/drawer?peek=KAN-8');
@@ -424,14 +435,17 @@ test.describe('Async Workflow Gates E2E Verification & Design Proofs (KB-P5-25)'
         },
         {
           selector: '[data-testid="gate-activity-approved-gate-act-1"]',
+          badgeOffset: { dx: -26, dy: 0 },
           label: '✅🤖 Approved Gate Row with Latency (1420 ms)',
         },
         {
-          selector: '[data-testid="activity-verdict-hash"]',
-          label: 'Deterministic Verdict SHA256 Hex Hash',
+          selector: '.gate-popover',
+          badgeAnchor: 'right',
+          label: 'Popover: hook, latency and selectable verdict SHA256 hex',
         },
         {
           selector: '[data-testid="gate-activity-rejected-gate-act-2"]',
+          badgeOffset: { dx: -26, dy: 0 },
           label: '🛑🤖 Veto Gate Row with 1-Click Jump to Audit Comment',
         },
       ],
