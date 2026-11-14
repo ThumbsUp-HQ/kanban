@@ -8,6 +8,9 @@ from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
 from kanban.api.v1.activity import router as activity_router
 from kanban.api.v1.admin.auth_cards import router as admin_auth_cards_router
 from kanban.api.v1.admin.mcp_keys import router as admin_mcp_keys_router
+from kanban.api.v1.admin.workspace_settings import (
+    router as admin_workspace_settings_router,
+)
 from kanban.api.v1.agent_definitions import router as agent_definitions_router
 from kanban.api.v1.assignees import router as assignees_router
 from kanban.api.v1.attachments import router as attachments_router
@@ -87,6 +90,7 @@ def build_v1_router() -> APIRouter:
     v1.include_router(auth_cards_public_router)
     v1.include_router(admin_auth_cards_router)
     v1.include_router(admin_mcp_keys_router)
+    v1.include_router(admin_workspace_settings_router)
     v1.include_router(oauth_v1_router)
     v1.include_router(mcp_introspect_router)
     v1.include_router(subscriptions_router)

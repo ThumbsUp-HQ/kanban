@@ -20,11 +20,17 @@ if TYPE_CHECKING:
     from starlette.applications import Starlette
 
 _TOKEN_PATTERN: Final[re.Pattern[str]] = re.compile(r"\b(kb_[a-z_]+_)[A-Za-z0-9_-]{20,}\b")
+_SECRET_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r'(?i)("(?:client_secret|bind_dn_password|secret|encrypted_secret_blob|wrapped_dek)"\s*:\s*)"[^"]+"'
+)
+_CANARY_PATTERN: Final[re.Pattern[str]] = re.compile(r"s3cr3t-[a-z0-9_-]+")
 
 
 def redact_transcript_text(text: str) -> str:
-    """Redact sensitive authorization tokens and subject keys from recorded transcripts."""
-    return _TOKEN_PATTERN.sub(r"\1***REDACTED***", text)
+    """Redact sensitive authorization tokens, subject keys, and secrets from transcripts."""
+    text = _TOKEN_PATTERN.sub(r"\1***REDACTED***", text)
+    text = _SECRET_VALUE_PATTERN.sub(r'\1"***REDACTED***"', text)
+    return _CANARY_PATTERN.sub("***REDACTED_SECRET***", text)
 
 
 def format_redacted_headers(headers: httpx.Headers) -> list[str]:

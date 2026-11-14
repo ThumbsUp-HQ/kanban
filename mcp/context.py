@@ -29,6 +29,8 @@ class McpRequestContext:
     subject_token: str | None = None
     session_id: str | None = None
     caller_scopes: frozenset[str] | None = None
+    aal_level: int = 2
+    token_kind: str | None = "api_key"  # noqa: S105
 
 
 _CURRENT_CONTEXT: Final[ContextVar[McpRequestContext | None]] = ContextVar(

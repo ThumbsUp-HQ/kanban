@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import json
 import logging
@@ -301,6 +302,17 @@ class McpProtocolHandler:
             return Response("Session bound to different token", status_code=404)
 
         caller_scopes = getattr(request.state, "mcp_scopes", None)
+        if caller_scopes is None and "x-kb-scopes" in request.headers:
+            caller_scopes = frozenset(
+                s.strip() for s in request.headers["x-kb-scopes"].split(",") if s.strip()
+            )
+
+        mcp_auth = getattr(request.state, "mcp_auth", None)
+        aal_level = getattr(mcp_auth, "aal_level", 2) if mcp_auth else 2
+        if "x-kb-aal-level" in request.headers:
+            with contextlib.suppress(ValueError):
+                aal_level = int(request.headers["x-kb-aal-level"])
+        token_kind = getattr(mcp_auth, "token_kind", "api_key") if mcp_auth else "api_key"
 
         return await self._dispatch_method(
             method,
@@ -309,6 +321,8 @@ class McpProtocolHandler:
             session_id=session_id,
             subject_token=subject_token,
             caller_scopes=caller_scopes,
+            aal_level=aal_level,
+            token_kind=token_kind,
         )
 
     def _handle_delete_session(self, request: Request) -> Response:
@@ -362,6 +376,8 @@ class McpProtocolHandler:
         session_id: str | None = None,
         subject_token: str | None = None,
         caller_scopes: frozenset[str] | None = None,
+        aal_level: int = 2,
+        token_kind: str | None = "api_key",  # noqa: S107
     ) -> Response:
         # Notifications (no id)
         if req_id is None:
@@ -380,6 +396,8 @@ class McpProtocolHandler:
                 session_id=session_id,
                 subject_token=subject_token,
                 caller_scopes=caller_scopes,
+                aal_level=aal_level,
+                token_kind=token_kind,
             )
 
         # Unknown method
@@ -452,7 +470,7 @@ class McpProtocolHandler:
             )
         return str(params["name"]), arguments
 
-    async def _handle_tools_call(  # noqa: C901, PLR0911, PLR0912
+    async def _handle_tools_call(  # noqa: C901, PLR0911, PLR0912, PLR0913
         self,
         req_id: object,
         params: object,
@@ -460,6 +478,8 @@ class McpProtocolHandler:
         session_id: str | None = None,
         subject_token: str | None = None,
         caller_scopes: frozenset[str] | None = None,
+        aal_level: int = 2,
+        token_kind: str | None = "api_key",  # noqa: S107
     ) -> JSONResponse:
         validated = self._validate_tools_call_params(req_id, params)
         if isinstance(validated, JSONResponse):
@@ -521,6 +541,8 @@ class McpProtocolHandler:
             subject_token=subject_token,
             session_id=session_id,
             caller_scopes=caller_scopes,
+            aal_level=aal_level,
+            token_kind=token_kind,
         )
         ctx_token = set_current_mcp_context(ctx)
         try:

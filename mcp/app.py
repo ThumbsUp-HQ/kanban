@@ -14,6 +14,7 @@ from mcp.metadata import protected_resource_metadata_endpoint
 from mcp.protocol import InMemorySessionStore, McpProtocolHandler
 from mcp.registry import Surface, ToolRegistry, create_placeholder_tool
 from mcp.settings import McpSettings
+from mcp.surfaces.admin import create_admin_registry
 from mcp.surfaces.agent import create_agent_registry
 
 if TYPE_CHECKING:
@@ -68,8 +69,7 @@ def create_mcp_app(
 
     active_admin_reg = admin_registry
     if active_admin_reg is None:
-        active_admin_reg = ToolRegistry(Surface.ADMIN)
-        active_admin_reg.register(create_placeholder_tool(Surface.ADMIN))
+        active_admin_reg = create_admin_registry()
     if not active_admin_reg.is_frozen:
         active_admin_reg.freeze()
 

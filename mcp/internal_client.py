@@ -207,6 +207,13 @@ class KanbanApiClient:
 
         mapped_code = self._resolve_error_code(status_code, prob_type, prob_code)
         hint_str = str(prob_hint) if prob_hint is not None else None
+        extra_layer = problem.get("layer") or (
+            problem["extra"].get("layer") if isinstance(problem.get("extra"), dict) else None
+        )
+        if extra_layer:
+            layer_text = f"layer: {extra_layer}"
+            hint_str = f"{hint_str} ({layer_text})" if hint_str else layer_text
+
         candidates_list = (
             [dict(c) for c in prob_candidates] if isinstance(prob_candidates, list) else None
         )
@@ -218,13 +225,25 @@ class KanbanApiClient:
             return McpErrorCode.CONFLICT_ETAG
         if prob_type.endswith("ambiguous-identifier") or prob_code == "AMBIGUOUS_IDENTIFIER":
             return McpErrorCode.AMBIGUOUS_IDENTIFIER
+        if prob_type.endswith("lockout-prevented") or prob_code == "LOCKOUT_PREVENTED":
+            return McpErrorCode.LOCKOUT_PREVENTED
         return McpErrorCode.VALIDATION_FAILED
 
     @staticmethod
-    def _resolve_error_code(status_code: int, prob_type: str, prob_code: str = "") -> McpErrorCode:
+    def _resolve_error_code(  # noqa: PLR0911
+        status_code: int,
+        prob_type: str,
+        prob_code: str = "",
+    ) -> McpErrorCode:
         """Determine McpErrorCode from HTTP status and problem type."""
         if prob_code == "MODULES_DISABLED" or prob_type.endswith("modules-disabled"):
             return McpErrorCode.MODULES_DISABLED
+        if prob_code == "CONFIRM_PHRASE_MISMATCH" or prob_type.endswith("confirm-phrase-mismatch"):
+            return McpErrorCode.CONFIRM_PHRASE_MISMATCH
+        if prob_code == "AAL2_REQUIRED" or prob_type.endswith("aal2-required"):
+            return McpErrorCode.AAL2_REQUIRED
+        if prob_code == "LOCKOUT_PREVENTED" or prob_type.endswith("lockout-prevented"):
+            return McpErrorCode.LOCKOUT_PREVENTED
 
         direct_map = {
             _HTTP_NOT_FOUND: McpErrorCode.NOT_FOUND,

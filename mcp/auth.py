@@ -68,7 +68,6 @@ SCOPE_REQUIREMENTS: Final[dict[str, frozenset[str]]] = {
     "create_doc": frozenset({"docs:write"}),
     "update_doc": frozenset({"docs:write"}),
     # Admin surface tools
-    "ping_admin": frozenset({"admin:read"}),
     "audit_links": frozenset({"admin:read"}),
     "override_ticket_provenance": frozenset({"admin:write"}),
     "audit_and_purge_object_links": frozenset({"admin:destructive"}),
@@ -97,6 +96,7 @@ class McpAuthContext:
     principal_id: str | None = None
     workspace_id: str | None = None
     token_kind: str | None = "api_key"  # noqa: S105
+    aal_level: int = 2
 
 
 class IntrospectionCache:
@@ -329,6 +329,7 @@ class McpAuthMiddleware:
         scope["headers"] = filtered_headers
 
         scopes_list = intro_result.get("scopes") or []
+        aal = int(intro_result.get("aal_level", 2))
         auth_context = McpAuthContext(
             token=token,
             token_sha256=digest,
@@ -337,6 +338,7 @@ class McpAuthMiddleware:
             principal_id=intro_result.get("principal_id"),
             workspace_id=intro_result.get("workspace_id"),
             token_kind=intro_result.get("token_kind", "api_key"),
+            aal_level=aal,
         )
 
         state = scope.setdefault("state", {})

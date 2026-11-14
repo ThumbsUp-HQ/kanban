@@ -1,0 +1,45 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /tmp/kb-wt-KANBA-131/.venv/bin/python
+rootdir: /tmp/kb-wt-KANBA-131
+configfile: pyproject.toml
+plugins: socket-0.8.1, cov-7.1.0, asyncio-1.4.1.post1, anyio-4.16.0, platformdirs-4.14.5, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 24 items
+
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_get_default PASSED [  4%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_patch_and_activity PASSED [  8%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_air_gap_toggle_and_aal2 PASSED [ 12%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_validation_boundaries PASSED [ 16%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_authz_and_admin_protection PASSED [ 20%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_rls_isolation PASSED [ 25%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_project_admin_rejected PASSED [ 29%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_fallback_creation PASSED [ 33%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_direct_aal2_enforcement PASSED [ 37%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_trash_retention_sync PASSED [ 41%]
+mcp/tests/admin/test_configure_workspace.py::test_configure_workspace_get_defaults PASSED [ 45%]
+mcp/tests/admin/test_configure_workspace.py::test_configure_workspace_update_persists_and_emits_activity PASSED [ 50%]
+mcp/tests/admin/test_configure_workspace.py::test_configure_workspace_validation_boundaries PASSED [ 54%]
+mcp/tests/admin/test_configure_workspace.py::test_configure_workspace_air_gap_toggle_and_aal2 PASSED [ 58%]
+mcp/tests/admin/test_configure_workspace.py::test_configure_workspace_scope_enforcement PASSED [ 62%]
+mcp/tests/admin/test_configure_workspace.py::test_configure_workspace_help_and_full_lod PASSED [ 66%]
+mcp/tests/admin/test_configure_workspace.py::test_configure_workspace_rls_isolation PASSED [ 70%]
+mcp/tests/admin/test_configure_workspace.py::test_configure_workspace_tool_spec_and_direct_invocation PASSED [ 75%]
+mcp/tests/admin/test_manage_auth_cards.py::test_manage_auth_cards_lifecycle_and_secret_redaction PASSED [ 79%]
+mcp/tests/admin/test_manage_auth_cards.py::test_manage_auth_cards_lockout_layers_db_trigger_and_probe PASSED [ 83%]
+mcp/tests/admin/test_manage_auth_cards.py::test_manage_auth_cards_delete_and_confirmation_phrase PASSED [ 87%]
+mcp/tests/admin/test_manage_auth_cards.py::test_manage_auth_cards_boundary_validations PASSED [ 91%]
+mcp/tests/admin/test_manage_auth_cards.py::test_manage_auth_cards_surface_key_mismatch_and_middleware PASSED [ 95%]
+mcp/tests/admin/test_manage_auth_cards.py::test_manage_auth_cards_tool_spec_and_direct_invocation PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                        Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------
+kanban/api/v1/admin/workspace_settings.py     111      0     28      2    99%   224->227, 239->270
+mcp/surfaces/admin/__init__.py                 10      0      0      0   100%
+mcp/surfaces/admin/configure_workspace.py     105      0     60      4    98%   117->121, 123->127, 176->187, 221->232
+mcp/surfaces/admin/manage_auth_cards.py       141      4     78      6    95%   165-166, 219-220, 230->232, 291->294, 314->317, 318->321
+---------------------------------------------------------------------------------------
+TOTAL                                         367      4    166     12    97%
+============================= 24 passed in 17.28s ==============================
