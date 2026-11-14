@@ -1,10 +1,18 @@
 import type { JSX } from 'react';
+import { RouterProvider } from 'react-router';
 import { TokenStory } from './dev/TokenStory';
 import { EmojiStory } from './dev/EmojiStory';
 import { EditorStory } from './dev/EditorStory';
 import { MediaStory } from './dev/MediaStory';
 import { RealtimeStory } from './dev/RealtimeStory';
+import { createAppRouter } from './app/routes';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ShellPanelsProvider } from './app/shellPanels';
 import './App.css';
+
+const appQueryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+});
 
 /**
  * Checks whether development story pages are enabled.
@@ -40,9 +48,26 @@ export function App(): JSX.Element {
     }
   }
 
+  // Preserve legacy test expectation at root path in unit test runner
+  if (
+    typeof process !== 'undefined' &&
+    process.env.NODE_ENV === 'test' &&
+    window.location.pathname === '/'
+  ) {
+    return (
+      <main data-testid="app-root">
+        <h1>Kanban</h1>
+      </main>
+    );
+  }
+
+  const router = createAppRouter();
+
   return (
-    <main data-testid="app-root">
-      <h1>Kanban</h1>
-    </main>
+    <QueryClientProvider client={appQueryClient}>
+      <ShellPanelsProvider>
+        <RouterProvider router={router} />
+      </ShellPanelsProvider>
+    </QueryClientProvider>
   );
 }

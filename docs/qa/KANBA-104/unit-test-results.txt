@@ -1,0 +1,61 @@
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/app/shortcuts.test.ts (7 tests) 48ms
+ ✓ src/app/useSystemStatus.test.tsx (3 tests) 121ms
+ ✓ src/app/Breadcrumb.test.tsx (5 tests) 534ms
+   ✓ Breadcrumb (5)
+     ✓ renders project icon, project name, and current section with count badge 324ms
+ ✓ src/app/shellPanels.test.tsx (4 tests) 344ms
+ ✓ src/app/HeaderPills.test.tsx (8 tests) 443ms
+ ✓ src/app/Topbar.test.tsx (5 tests) 586ms
+   ✓ Topbar (5)
+     ✓ renders breadcrumb, search trigger, header pills, and avatar menu 393ms
+ ✓ src/app/LayoutSwitcher.test.tsx (7 tests) 753ms
+   ✓ LayoutSwitcher (7)
+     ✓ renders radiogroup with all 5 layout options 392ms
+ ✓ src/app/CommandPalette.test.tsx (15 tests) 912ms
+ ✓ src/app/AppShell.test.tsx (3 tests) 862ms
+   ✓ AppShell (3)
+     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 472ms
+ ✓ src/App.test.tsx (9 tests) 467ms
+ ✓ src/app/Sidebar.test.tsx (10 tests) 1268ms
+   ✓ Sidebar (10)
+     ✓ renders sidebar navigation items in the specified order with [👍] 👍kanban branding 489ms
+     ✓ sets aria-current on active workspace and project subitem links 364ms
+ ✓ src/app/routes.test.tsx (10 tests) 1502ms
+   ✓ routes and AppShell integration (10)
+     ✓ renders AppShell with sidebar items, breadcrumb, and layout=board selection 525ms
+     ✓ renders various project routes, auth routes, and dev story routes 446ms
+
+ Test Files  12 passed (12)
+      Tests  86 passed (86)
+   Start at  19:26:12
+   Duration  3.79s (environment 50%, tests 31%, import 14%, worker 4%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.78 |    95.12 |   99.14 |   98.72 |                   
+ src               |      85 |    89.47 |     100 |      85 |                   
+  App.tsx          |      85 |    89.47 |     100 |      85 | 44,64-66          
+ src/app           |   99.36 |    95.38 |   99.13 |   99.33 |                   
+  AppShell.css     |       0 |        0 |       0 |       0 |                   
+  AppShell.tsx     |     100 |      100 |     100 |     100 |                   
+  Breadcrumb.css   |       0 |        0 |       0 |       0 |                   
+  Breadcrumb.tsx   |     100 |      100 |     100 |     100 |                   
+  ...ndPalette.css |       0 |        0 |       0 |       0 |                   
+  ...ndPalette.tsx |    97.9 |    91.95 |   97.05 |   97.79 | 102-104           
+  HeaderPills.tsx  |     100 |    97.61 |     100 |     100 | 51                
+  ...tSwitcher.tsx |     100 |    92.68 |     100 |     100 | 96-104            
+  Sidebar.css      |       0 |        0 |       0 |       0 |                   
+  Sidebar.tsx      |     100 |    95.94 |     100 |     100 | 120-126,139       
+  Topbar.css       |       0 |        0 |       0 |       0 |                   
+  Topbar.tsx       |     100 |    94.73 |     100 |     100 | 66                
+  routes.tsx       |     100 |    94.73 |     100 |     100 | 114-116           
+  shellPanels.tsx  |     100 |      100 |     100 |     100 |                   
+  shortcuts.ts     |     100 |     97.4 |     100 |     100 | 75,101            
+  ...stemStatus.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

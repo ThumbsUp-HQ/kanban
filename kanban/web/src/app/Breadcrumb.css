@@ -1,0 +1,30 @@
+.kb-breadcrumb {
+  display: flex;
+  align-items: center;
+}
+
+.kb-breadcrumb-desktop {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--fg-secondary, #94a3b8);
+}
+
+.kb-breadcrumb-mobile {
+  display: none;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 767px) {
+  .kb-breadcrumb-desktop {
+    display: none;
+  }
+  .kb-breadcrumb-mobile {
+    display: flex;
+  }
+}
