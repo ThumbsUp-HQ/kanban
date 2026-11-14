@@ -1,0 +1,27 @@
+=== 1. Ruff Linter Check ===
+All checks passed!
+exit_code=0
+
+=== 2. Ruff Formatter Check ===
+1352 files already formatted
+exit_code=0
+
+=== 3. Mypy Typecheck ===
+Success: no issues found in 715 source files
+exit_code=0
+
+=== 4. lint-imports ===
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT (44 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+exit_code=0
+
+=== 5. License Gate ===
+SUMMARY python=116 node=1 violations=0
+exit_code=0
+
+=== 6. No Dashes ===
+exit_code=0

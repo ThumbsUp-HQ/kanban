@@ -37,6 +37,9 @@ from kanban.api.v1.comments import router as comments_router
 from kanban.api.v1.custom_field_approvals import (
     router as custom_field_approvals_router,
 )
+from kanban.api.v1.custom_field_execution import (
+    router as custom_field_execution_router,
+)
 from kanban.api.v1.custom_fields import router as custom_fields_router
 from kanban.api.v1.cycles import router as cycles_router
 from kanban.api.v1.docs import router as docs_router
@@ -107,6 +110,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(archive_router)
     v1.include_router(issue_delete_router)
     v1.include_router(custom_fields_router)
+    v1.include_router(custom_field_execution_router)
     v1.include_router(auth_cards_public_router)
     v1.include_router(admin_auth_cards_router)
     v1.include_router(admin_ai_router)

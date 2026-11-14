@@ -1,0 +1,96 @@
+# /mcp/admin tool 7 (manage_custom_fields_and_scripts) execution transcript
+# Ticket: KANBA-143 (Phase 5 / Sandbox + API + MCP)
+
+transcript:
+  - call: 1
+    action: help
+    arguments:
+      action: help
+    response:
+      tool: manage_custom_fields_and_scripts
+      description: Manage custom fields, script definitions, Wasm module uploads, escalation approvals, and field executions
+      params:
+        action: list_fields | get_field | upsert_field | delete_field | upload_wasm_module | request_escalation | approve_escalation | execute_field | help
+        project: Project slug or identifier (required for field operations)
+        field: Field slug or UUID (required for get, update, delete, approve, execute)
+        issue: Issue key (e.g. KAN-142) required for execute_field
+        force_refresh: Boolean to bypass cache on execute_field
+        wasm_base64: Base64-encoded Wasm binary for upload_wasm_module
+        sp_warning_acknowledged: Boolean required for approving Service Principal escalation
+
+  - call: 2
+    action: upsert_field
+    arguments:
+      action: upsert_field
+      project: KAN
+      name: CVSS Calculator
+      slug: cvss-calculator
+      tier: wasm
+      output_format: severity_pill
+      script_source: 01932e6a72cb77b38cb97c130386d38e...
+      target_scope: PROJECT
+      credential_mode: INVOKING_USER
+    response:
+      status: created
+      field:
+        id: 01932e6a-72cb-77b3-8cb9-7c130386d38e
+        project_id: 01932e6a-72cb-77b3-8cb9-000000000001
+        name: CVSS Calculator
+        slug: cvss-calculator
+        tier: wasm
+        output_format: severity_pill
+        target_scope: PROJECT
+        credential_mode: INVOKING_USER
+        is_enabled: true
+
+  - call: 3
+    action: approve_escalation
+    arguments:
+      action: approve_escalation
+      project: KAN
+      field: cvss-calculator
+      manifest_sha256: 4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+      sp_warning_acknowledged: true
+    response:
+      status: approved
+      approval:
+        id: 01932e6a-72cb-77b3-8cb9-appr00000001
+        field_id: 01932e6a-72cb-77b3-8cb9-7c130386d38e
+        status: APPROVED
+        signature_hmac: a1b2c3d4e5f6...
+        approved_by_id: 01932e6a-72cb-77b3-8cb9-admin0000001
+        approved_at: "2026-11-14T05:31:00.000000+00:00"
+
+  - call: 4
+    action: execute_field
+    arguments:
+      action: execute_field
+      issue: KAN-142
+      field: cvss-calculator
+      force_refresh: false
+    response:
+      status: computed
+      result:
+        field_id: 01932e6a-72cb-77b3-8cb9-7c130386d38e
+        slug: cvss-calculator
+        name: CVSS Calculator
+        output_format: severity_pill
+        value:
+          level: high
+          score: 8.8
+          label: 8.8 High
+        computed_at: "2026-11-14T05:31:02.123456+00:00"
+        last_latency_ms: 1
+        tier: wasm
+        token_scope: PROJECT
+        credential_mode: INVOKING_USER
+
+  - call: 5
+    action: delete_field
+    arguments:
+      action: delete_field
+      project: KAN
+      field: cvss-calculator
+    response:
+      status: deleted
+      field_id: 01932e6a-72cb-77b3-8cb9-7c130386d38e

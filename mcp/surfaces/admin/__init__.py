@@ -41,6 +41,11 @@ from mcp.surfaces.admin.manage_auth_cards import (
     create_manage_auth_cards_tool,
     manage_auth_cards,
 )
+from mcp.surfaces.admin.manage_custom_fields_and_scripts import (
+    MANAGE_CUSTOM_FIELDS_AND_SCRIPTS_SCHEMA,
+    create_manage_custom_fields_and_scripts_tool,
+    manage_custom_fields_and_scripts,
+)
 from mcp.surfaces.admin.manage_cycles_and_modules import (
     MANAGE_CYCLES_AND_MODULES_SCHEMA,
     create_manage_cycles_and_modules_tool,
@@ -60,6 +65,7 @@ if TYPE_CHECKING:
     from mcp.internal_client import KanbanApiClient
 
 __all__ = [
+    "ADMIN_TOOL_NAMES",
     "ARCHITECT_PROJECT_SCHEMA",
     "AUDIT_AND_PURGE_OBJECT_LINKS_SCHEMA",
     "CONFIGURE_WORKSPACE_SCHEMA",
@@ -67,6 +73,7 @@ __all__ = [
     "MANAGE_ACCESS_POLICIES_SCHEMA",
     "MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA",
     "MANAGE_AUTH_CARDS_SCHEMA",
+    "MANAGE_CUSTOM_FIELDS_AND_SCRIPTS_SCHEMA",
     "MANAGE_CYCLES_AND_MODULES_SCHEMA",
     "MANAGE_PRINCIPALS_AND_GROUPS_SCHEMA",
     "OVERRIDE_TICKET_PROVENANCE_SCHEMA",
@@ -75,13 +82,20 @@ __all__ = [
     "build_admin_registry",
     "configure_workspace",
     "create_admin_registry",
+    "create_architect_project_tool",
+    "create_configure_workspace_tool",
     "create_destructive_lifecycle_tool",
     "create_manage_access_policies_tool",
+    "create_manage_ai_and_agent_runners_tool",
+    "create_manage_auth_cards_tool",
+    "create_manage_custom_fields_and_scripts_tool",
+    "create_manage_cycles_and_modules_tool",
     "create_manage_principals_and_groups_tool",
     "destructive_lifecycle",
     "manage_access_policies_tool",
     "manage_ai_and_agent_runners",
     "manage_auth_cards",
+    "manage_custom_fields_and_scripts",
     "manage_cycles_and_modules",
     "manage_principals_and_groups_tool",
     "override_ticket_provenance",
@@ -94,6 +108,7 @@ ADMIN_TOOL_NAMES: Final[tuple[str, ...]] = (
     "manage_access_policies",
     "architect_project",
     "manage_cycles_and_modules",
+    "manage_custom_fields_and_scripts",
     "manage_ai_and_agent_runners",
     "override_ticket_provenance",
     "audit_and_purge_object_links",
@@ -110,6 +125,7 @@ def build_admin_registry(client: KanbanApiClient | None = None) -> ToolRegistry:
     registry.register(create_manage_access_policies_tool())
     registry.register(create_architect_project_tool())
     registry.register(create_manage_cycles_and_modules_tool())
+    registry.register(create_manage_custom_fields_and_scripts_tool())
     registry.register(create_manage_ai_and_agent_runners_tool())
     registry.register(
         ToolSpec(
