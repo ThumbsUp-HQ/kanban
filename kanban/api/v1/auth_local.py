@@ -130,9 +130,9 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
         response.raw_headers.append(
             (
                 b"set-cookie",
-                build_set_fallback_cookie_header(
-                    issued.cookie_val, issued.idle_expires_at
-                ).encode("latin-1"),
+                build_set_fallback_cookie_header(issued.cookie_val, issued.idle_expires_at).encode(
+                    "latin-1"
+                ),
             )
         )
         response.raw_headers.append(

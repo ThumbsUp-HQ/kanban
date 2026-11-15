@@ -228,9 +228,7 @@ async def register_options(
         try:
             async with session.begin_nested():
                 user_res = await session.execute(
-                    text(
-                        "SELECT username FROM local_admin_credentials WHERE principal_id = :p_id"
-                    ),
+                    text("SELECT username FROM local_admin_credentials WHERE principal_id = :p_id"),
                     {"p_id": principal.principal_id},
                 )
                 username = user_res.scalar_one_or_none()

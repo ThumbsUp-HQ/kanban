@@ -298,9 +298,9 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
       END IF;
     END
     $$;
-    ALTER ROLE kanban_migrator NOLOGIN;
     """
     run_psql_script(post_mig_sql, dbname="kanban", run_dir=run_dir)
+    run_psql_script("ALTER ROLE kanban_migrator NOLOGIN;", dbname="kanban", run_dir=run_dir)
     log_phase("migrations", "privilege dropped: kanban_migrator set to NOLOGIN")
 
 

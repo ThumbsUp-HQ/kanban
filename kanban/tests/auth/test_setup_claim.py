@@ -981,9 +981,7 @@ async def test_browser_setup_wizard_and_login_flow_over_plain_http(  # noqa: PLR
             )
         )
         has_table_sel = await db_sess.scalar(
-            text(
-                "SELECT has_table_privilege('kanban_app', 'local_admin_credentials', 'SELECT')"
-            )
+            text("SELECT has_table_privilege('kanban_app', 'local_admin_credentials', 'SELECT')")
         )
         assert has_username is True
         assert has_principal_id is True
