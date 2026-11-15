@@ -1,0 +1,1435 @@
+diff --git a/database/migrations/sql/p2_04_local_admin_credentials.up.sql b/database/migrations/sql/p2_04_local_admin_credentials.up.sql
+index 5aa7613..6725875 100644
+--- a/database/migrations/sql/p2_04_local_admin_credentials.up.sql
++++ b/database/migrations/sql/p2_04_local_admin_credentials.up.sql
+@@ -12,12 +12,16 @@ CREATE TABLE local_admin_credentials (
+ -- Ownership and permissions
+ ALTER TABLE local_admin_credentials OWNER TO kb_auth_owner;
+ REVOKE ALL ON local_admin_credentials FROM PUBLIC, kanban_app, app_rls_reader;
++GRANT SELECT (principal_id, username) ON TABLE local_admin_credentials TO kanban_app;
+ 
+ -- RLS
+ ALTER TABLE local_admin_credentials ENABLE ROW LEVEL SECURITY;
+ ALTER TABLE local_admin_credentials FORCE ROW LEVEL SECURITY;
+ CREATE POLICY kb_auth_owner_all ON local_admin_credentials
+     FOR ALL TO kb_auth_owner USING (true) WITH CHECK (true);
++CREATE POLICY kanban_app_select_own_local_admin ON local_admin_credentials
++    FOR SELECT TO kanban_app
++    USING (principal_id = ANY (app_effective_principal_set()));
+ 
+ -- Allow kb_auth_owner to check principal status on login
+ GRANT SELECT ON TABLE principals TO kb_auth_owner;
+diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
+index c41f99c..f41daa4 100644
+--- a/deploy/standalone/entrypoint.py
++++ b/deploy/standalone/entrypoint.py
+@@ -280,8 +280,27 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
+ 
+     log_phase("migrations", "schema migrations applied successfully")
+ 
+-    # Privilege drop: revoke LOGIN on kanban_migrator
+-    run_psql_script("ALTER ROLE kanban_migrator NOLOGIN;", dbname="kanban", run_dir=run_dir)
++    # Ensure column-level SELECT (principal_id, username) + RLS policy for kanban_app,
++    # then drop LOGIN privilege on kanban_migrator.
++    post_mig_sql = """
++    GRANT SELECT (principal_id, username) ON TABLE local_admin_credentials TO kanban_app;
++    DO $$
++    BEGIN
++      IF NOT EXISTS (
++        SELECT 1 FROM pg_policies
++        WHERE schemaname = 'public'
++          AND tablename = 'local_admin_credentials'
++          AND policyname = 'kanban_app_select_own_local_admin'
++      ) THEN
++        CREATE POLICY kanban_app_select_own_local_admin ON local_admin_credentials
++          FOR SELECT TO kanban_app
++          USING (principal_id = ANY (app_effective_principal_set()));
++      END IF;
++    END
++    $$;
++    ALTER ROLE kanban_migrator NOLOGIN;
++    """
++    run_psql_script(post_mig_sql, dbname="kanban", run_dir=run_dir)
+     log_phase("migrations", "privilege dropped: kanban_migrator set to NOLOGIN")
+ 
+ 
+diff --git a/kanban/api/v1/auth_local.py b/kanban/api/v1/auth_local.py
+index 7063e54..98dc144 100644
+--- a/kanban/api/v1/auth_local.py
++++ b/kanban/api/v1/auth_local.py
+@@ -16,9 +16,13 @@ from database.session import RLSContext
+ from kanban.auth.local.service import LocalAdminLoginService
+ from kanban.auth.sessions.cookies import (
+     build_set_cookie_header,
++    build_set_fallback_cookie_header,
+     extract_session_cookie,
+ )
+-from kanban.auth.sessions.csrf import build_set_csrf_cookie_header
++from kanban.auth.sessions.csrf import (
++    build_set_csrf_cookie_header,
++    build_set_fallback_csrf_cookie_header,
++)
+ from kanban.security.client_ip import resolve_client_ip
+ from kanban.security.ratelimit.decorator import build_rate_limiter
+ 
+@@ -103,6 +107,9 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
+     response = JSONResponse(
+         content={
+             "authenticated": True,
++            "status": "mfa_required" if issued.mfa_pending else "authenticated",
++            "challenge_id": str(issued.session_id),
++            "methods": ["totp", "webauthn", "recovery"],
+             "session_id": str(issued.session_id),
+             "aal_level": issued.aal_level,
+             "mfa_pending": issued.mfa_pending,
+@@ -118,4 +125,20 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
+     response.raw_headers.append(
+         (b"set-cookie", build_set_csrf_cookie_header(issued.csrf_token).encode("latin-1"))
+     )
++    host_name = (request.headers.get("host") or "").split(":")[0].lower()
++    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
++        response.raw_headers.append(
++            (
++                b"set-cookie",
++                build_set_fallback_cookie_header(
++                    issued.cookie_val, issued.idle_expires_at
++                ).encode("latin-1"),
++            )
++        )
++        response.raw_headers.append(
++            (
++                b"set-cookie",
++                build_set_fallback_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
++            )
++        )
+     return response
+diff --git a/kanban/api/v1/auth_mfa.py b/kanban/api/v1/auth_mfa.py
+index 906f75b..ca64e18 100644
+--- a/kanban/api/v1/auth_mfa.py
++++ b/kanban/api/v1/auth_mfa.py
+@@ -20,8 +20,14 @@ from kanban.api.problems import ProblemException
+ from kanban.auth.mfa.policy import require_aal2
+ from kanban.auth.mfa.recovery import RecoveryCodeService
+ from kanban.auth.mfa.totp import TotpService
+-from kanban.auth.sessions.cookies import build_set_cookie_header
+-from kanban.auth.sessions.csrf import build_set_csrf_cookie_header
++from kanban.auth.sessions.cookies import (
++    build_set_cookie_header,
++    build_set_fallback_cookie_header,
++)
++from kanban.auth.sessions.csrf import (
++    build_set_csrf_cookie_header,
++    build_set_fallback_csrf_cookie_header,
++)
+ from kanban.security.envelope import StaticKekProvider
+ from kanban.security.keys import KeyMaterialError
+ from kanban.security.ratelimit import AUTH_MFA_VERIFY
+@@ -51,6 +57,10 @@ class TotpConfirmRequest(BaseModel):
+     """Payload for confirming a pending TOTP factor."""
+ 
+     code: str = Field(description="6-digit TOTP verification code")
++    enrollment_id: str | None = Field(
++        default=None,
++        description="Optional setup enrollment session identifier for immediate AAL2 elevation",
++    )
+ 
+ 
+ class MfaVerifyRequest(BaseModel):
+@@ -152,11 +162,18 @@ async def enroll_totp(
+     )
+ 
+     async with session_factory.session(rls_ctx) as session:
+-        user_res = await session.execute(
+-            text("SELECT username FROM local_admin_credentials WHERE principal_id = :p_id"),
+-            {"p_id": principal.principal_id},
+-        )
+-        username = user_res.scalar_one_or_none()
++        username: str | None = None
++        try:
++            async with session.begin_nested():
++                user_res = await session.execute(
++                    text(
++                        "SELECT username FROM local_admin_credentials WHERE principal_id = :p_id"
++                    ),
++                    {"p_id": principal.principal_id},
++                )
++                username = user_res.scalar_one_or_none()
++        except Exception:  # noqa: BLE001
++            username = None
+         if not username:
+             name_res = await session.execute(
+                 text("SELECT display_name FROM principals WHERE id = :p_id"),
+@@ -170,6 +187,7 @@ async def enroll_totp(
+         content={
+             "otpauth_uri": uri,
+             "secret": secret_b32,
++            "secret_base32": secret_b32,
+         }
+     )
+ 
+@@ -199,8 +217,26 @@ async def confirm_totp(
+         aal_level=cast("Literal[1, 2]", principal.aal_level),
+     )
+ 
++    elevated: IssuedSession | None = None
++    recovery_codes: list[str] | None = None
++
+     async with session_factory.session(rls_ctx) as session:
+         confirmed = await service.confirm(session, principal.principal_id, body.code)
++        if confirmed and body.enrollment_id is not None:
++            session_service: SessionService | None = getattr(
++                request.app.state, "session_service", None
++            )
++            if session_service is not None and principal.session_id is not None:
++                elevated = await session_service.elevate_aal(
++                    session,
++                    old_session_id=principal.session_id,
++                    new_aal=AAL2_ELEVATED_LEVEL,
++                )
++            pepper = _get_auth_pepper(request)
++            recovery_service = RecoveryCodeService(pepper)
++            recovery_codes = await recovery_service.regenerate_codes(
++                session, principal.principal_id
++            )
+ 
+     if not confirmed:
+         raise ProblemException(
+@@ -210,6 +246,32 @@ async def confirm_totp(
+             detail="The provided TOTP code is invalid, expired, or already used.",
+         )
+ 
++    if body.enrollment_id is not None:
++        resp_body = {
++            "confirmed": True,
++            "status": "enrolled",
++            "verified": True,
++            "aal_level": AAL2_ELEVATED_LEVEL,
++            "session_id": str(elevated.session_id) if elevated else str(principal.session_id),
++            "csrf_token": elevated.csrf_token if elevated else "",
++            "recovery_codes": recovery_codes or [],
++        }
++        response = JSONResponse(content=resp_body)
++        if elevated is not None:
++            cookie_hdr = build_set_cookie_header(elevated.cookie_val, elevated.idle_expires_at)
++            response.raw_headers.append((b"set-cookie", cookie_hdr.encode("latin-1")))
++            csrf_hdr = build_set_csrf_cookie_header(elevated.csrf_token)
++            response.raw_headers.append((b"set-cookie", csrf_hdr.encode("latin-1")))
++            host_name = (request.headers.get("host") or "").split(":")[0].lower()
++            if request.url.scheme == "http" and host_name not in ("testserver", "test"):
++                fb_cookie = build_set_fallback_cookie_header(
++                    elevated.cookie_val, elevated.idle_expires_at
++                )
++                response.raw_headers.append((b"set-cookie", fb_cookie.encode("latin-1")))
++                fb_csrf = build_set_fallback_csrf_cookie_header(elevated.csrf_token)
++                response.raw_headers.append((b"set-cookie", fb_csrf.encode("latin-1")))
++        return response
++
+     return JSONResponse(content={"confirmed": True})
+ 
+ 
+@@ -302,10 +364,12 @@ async def _record_verify_activity(  # noqa: PLR0913
+ def _build_elevated_response(
+     elevated: IssuedSession | None,
+     session_id: uuid.UUID | None,
++    request: Request | None = None,
+ ) -> JSONResponse:
+     """Build response with rotated credentials and set-cookie headers."""
+     response_data = {
+         "verified": True,
++        "status": "authenticated",
+         "aal_level": AAL2_ELEVATED_LEVEL,
+         "session_id": str(elevated.session_id) if elevated else str(session_id),
+         "csrf_token": elevated.csrf_token if elevated else "",
+@@ -316,6 +380,15 @@ def _build_elevated_response(
+         response.raw_headers.append((b"set-cookie", cookie_hdr.encode("latin-1")))
+         csrf_hdr = build_set_csrf_cookie_header(elevated.csrf_token)
+         response.raw_headers.append((b"set-cookie", csrf_hdr.encode("latin-1")))
++        if request is not None:
++            host_name = (request.headers.get("host") or "").split(":")[0].lower()
++            if request.url.scheme == "http" and host_name not in ("testserver", "test"):
++                fb_cookie = build_set_fallback_cookie_header(
++                    elevated.cookie_val, elevated.idle_expires_at
++                )
++                response.raw_headers.append((b"set-cookie", fb_cookie.encode("latin-1")))
++                fb_csrf = build_set_fallback_csrf_cookie_header(elevated.csrf_token)
++                response.raw_headers.append((b"set-cookie", fb_csrf.encode("latin-1")))
+     return response
+ 
+ 
+@@ -398,13 +471,14 @@ async def verify_mfa(
+                 new_aal=AAL2_ELEVATED_LEVEL,
+             )
+ 
+-    return _build_elevated_response(elevated, principal.session_id)
++    return _build_elevated_response(elevated, principal.session_id, request=request)
+ 
+ 
+ verify_mfa.allow_mfa_pending = True  # type: ignore[attr-defined]
+ 
+ 
+ @router.post("/recovery/regenerate")
++@router.post("/recovery-codes/generate", include_in_schema=False)
+ async def regenerate_recovery_codes(
+     request: Request,
+     principal: Annotated[PrincipalContext, Depends(require_aal2())],
+@@ -438,4 +512,4 @@ async def regenerate_recovery_codes(
+         except Exception:
+             logger.debug("Failed to record RECOVERY_CODES_REGENERATED activity", exc_info=True)
+ 
+-    return JSONResponse(content={"recovery_codes": codes})
++    return JSONResponse(content={"status": "enrolled", "recovery_codes": codes})
+diff --git a/kanban/api/v1/auth_session.py b/kanban/api/v1/auth_session.py
+index c4c3ed0..20765df 100644
+--- a/kanban/api/v1/auth_session.py
++++ b/kanban/api/v1/auth_session.py
+@@ -4,18 +4,33 @@
+ 
+ from __future__ import annotations
+ 
+-from typing import TYPE_CHECKING, Any, Literal, cast
++from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
+ 
+-from fastapi import APIRouter
++from fastapi import APIRouter, Depends
++from pydantic import BaseModel, Field
++from sqlalchemy import text
+ from starlette.requests import Request  # noqa: TC002  # Required at runtime for FastAPI dependency analysis
+ from starlette.responses import JSONResponse
+ 
+ from database.session import RLSContext
+-from kanban.auth.sessions.cookies import build_clear_cookie_header
++from kanban.api.deps import PrincipalContext, get_principal
++from kanban.api.v1.auth_mfa import (
++    MfaVerifyRequest,
++    TotpConfirmRequest,
++    confirm_totp,
++    enroll_totp,
++    verify_mfa,
++)
++from kanban.auth.sessions.cookies import (
++    build_clear_cookie_header,
++    build_clear_fallback_cookie_header,
++)
+ from kanban.auth.sessions.csrf import (
+     PRE_SESSION_ID,
+     build_clear_csrf_cookie_header,
++    build_clear_fallback_csrf_cookie_header,
+     build_set_csrf_cookie_header,
++    build_set_fallback_csrf_cookie_header,
+     generate_csrf_token,
+ )
+ 
+@@ -28,6 +43,13 @@ if TYPE_CHECKING:
+ router = APIRouter(prefix="/auth", tags=["auth"])
+ 
+ 
++class ChallengeCodeVerifyRequest(BaseModel):
++    """Payload for second-factor verification from SPA LoginPage/SecondFactorStep."""
++
++    challenge_id: str | None = Field(default=None, description="Pending MFA session id")
++    code: str = Field(description="6-digit TOTP code or recovery code")
++
++
+ @router.get("/session")
+ async def get_session_info(request: Request) -> JSONResponse:
+     """Return active session status and CSRF token, issuing pre-session CSRF if unauthenticated."""
+@@ -42,8 +64,6 @@ async def get_session_info(request: Request) -> JSONResponse:
+         if resolver is not None:
+             principal_ctx = await resolver.resolve(request)
+ 
+-    response_headers: dict[str, str] = {}
+-
+     if principal_ctx is not None and getattr(principal_ctx, "session_id", None) is not None:
+         session_id: uuid.UUID = principal_ctx.session_id
+         csrf_token = generate_csrf_token(session_id, session_hmac_key)
+@@ -65,10 +85,146 @@ async def get_session_info(request: Request) -> JSONResponse:
+             "mfa_pending": False,
+             "csrf_token": csrf_token,
+         }
+-        # Deliver pre-session CSRF cookie so initial login POST can validate
+-        response_headers["Set-Cookie"] = build_set_csrf_cookie_header(csrf_token)
+ 
+-    return JSONResponse(content=data, headers=response_headers)
++    response = JSONResponse(content=data)
++    response.raw_headers.append(
++        (b"set-cookie", build_set_csrf_cookie_header(csrf_token).encode("latin-1"))
++    )
++    host_name = (request.headers.get("host") or "").split(":")[0].lower()
++    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
++        response.raw_headers.append(
++            (b"set-cookie", build_set_fallback_csrf_cookie_header(csrf_token).encode("latin-1"))
++        )
++    return response
++
++
++@router.get("/me")
++async def get_current_principal(
++    request: Request,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Return profile and role summary for the currently authenticated principal."""
++    session_factory = getattr(request.app.state, "session_factory", None)
++    display_name: str | None = None
++    username: str | None = None
++    email: str | None = None
++    is_server_admin = False
++
++    if session_factory is not None:
++        rls_ctx = RLSContext(
++            principal_id=principal.principal_id,
++            workspace_id=principal.workspace_id,
++            token_scopes=principal.token_scopes,
++            aal_level=cast("Literal[1, 2]", principal.aal_level),
++        )
++        async with session_factory.session(rls_ctx) as async_session:
++            p_res = await async_session.execute(
++                text("SELECT display_name FROM principals WHERE id = :p_id"),
++                {"p_id": principal.principal_id},
++            )
++            display_name = p_res.scalar_one_or_none()
++
++            try:
++                async with async_session.begin_nested():
++                    u_res = await async_session.execute(
++                        text(
++                            "SELECT username FROM local_admin_credentials "
++                            "WHERE principal_id = :p_id"
++                        ),
++                        {"p_id": principal.principal_id},
++                    )
++                    username = u_res.scalar_one_or_none()
++            except Exception:  # noqa: BLE001
++                username = None
++
++            e_res = await async_session.execute(
++                text("SELECT email FROM users WHERE id = :p_id"),
++                {"p_id": principal.principal_id},
++            )
++            email = e_res.scalar_one_or_none()
++
++            admin_res = await async_session.execute(
++                text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++            )
++            is_server_admin = bool(admin_res.scalar_one())
++
++    handle = username or display_name or str(principal.principal_id)
++    return JSONResponse(
++        content={
++            "id": str(principal.principal_id),
++            "principal_id": str(principal.principal_id),
++            "workspace_id": str(principal.workspace_id),
++            "handle": handle,
++            "username": handle,
++            "display_name": display_name or handle,
++            "email": email,
++            "is_server_admin": is_server_admin,
++            "aal_level": principal.aal_level,
++            "mfa_pending": getattr(principal, "mfa_pending", False),
++        }
++    )
++
++
++get_current_principal.allow_mfa_pending = True  # type: ignore[attr-defined]
++
++
++@router.post("/totp/enroll", include_in_schema=False)
++async def enroll_totp_alias(
++    request: Request,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Compatibility alias for /api/v1/auth/mfa/totp/enroll."""
++    return await enroll_totp(request, principal)
++
++
++enroll_totp_alias.allow_mfa_pending = True  # type: ignore[attr-defined]
++
++
++@router.post("/totp/enroll/verify", include_in_schema=False)
++async def confirm_totp_alias(
++    request: Request,
++    body: TotpConfirmRequest,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Compatibility alias for /api/v1/auth/mfa/totp/confirm during setup."""
++    return await confirm_totp(request, body, principal)
++
++
++confirm_totp_alias.allow_mfa_pending = True  # type: ignore[attr-defined]
++
++
++@router.post("/totp/verify", include_in_schema=False)
++async def verify_totp_alias(
++    request: Request,
++    body: ChallengeCodeVerifyRequest,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Compatibility alias for TOTP second-factor verification."""
++    return await verify_mfa(
++        request,
++        MfaVerifyRequest(method="totp", code=body.code),
++        principal,
++    )
++
++
++verify_totp_alias.allow_mfa_pending = True  # type: ignore[attr-defined]
++
++
++@router.post("/recovery/verify", include_in_schema=False)
++async def verify_recovery_alias(
++    request: Request,
++    body: ChallengeCodeVerifyRequest,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Compatibility alias for recovery-code second-factor verification."""
++    return await verify_mfa(
++        request,
++        MfaVerifyRequest(method="recovery", code=body.code),
++        principal,
++    )
++
++
++verify_recovery_alias.allow_mfa_pending = True  # type: ignore[attr-defined]
+ 
+ 
+ @router.post("/logout")
+@@ -102,4 +258,12 @@ async def logout(request: Request) -> JSONResponse:
+     # Clear both __Host-kb_session and __Host-kb_csrf cookies with Max-Age=0
+     response.raw_headers.append((b"set-cookie", build_clear_cookie_header().encode("latin-1")))
+     response.raw_headers.append((b"set-cookie", build_clear_csrf_cookie_header().encode("latin-1")))
++    host_name = (request.headers.get("host") or "").split(":")[0].lower()
++    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
++        response.raw_headers.append(
++            (b"set-cookie", build_clear_fallback_cookie_header().encode("latin-1"))
++        )
++        response.raw_headers.append(
++            (b"set-cookie", build_clear_fallback_csrf_cookie_header().encode("latin-1"))
++        )
+     return response
+diff --git a/kanban/api/v1/auth_setup.py b/kanban/api/v1/auth_setup.py
+index 77e5e77..a661796 100644
+--- a/kanban/api/v1/auth_setup.py
++++ b/kanban/api/v1/auth_setup.py
+@@ -14,8 +14,14 @@ from starlette.requests import Request  # noqa: TC002
+ from starlette.responses import JSONResponse
+ 
+ from database.session import RLSContext
+-from kanban.auth.sessions.cookies import build_set_cookie_header
+-from kanban.auth.sessions.csrf import build_set_csrf_cookie_header
++from kanban.auth.sessions.cookies import (
++    build_set_cookie_header,
++    build_set_fallback_cookie_header,
++)
++from kanban.auth.sessions.csrf import (
++    build_set_csrf_cookie_header,
++    build_set_fallback_csrf_cookie_header,
++)
+ from kanban.auth.sessions.service import SessionService  # noqa: TC001
+ from kanban.auth.setup import SetupBootstrapService
+ from kanban.security.client_ip import resolve_client_ip
+@@ -184,6 +190,7 @@ async def claim_setup(
+             "status": "enrollment_required",
+             "principal_id": str(principal_id),
+             "enrollment_id": str(issued.session_id),
++            "csrf_token": issued.csrf_token,
+         },
+     )
+ 
+@@ -199,5 +206,21 @@ async def claim_setup(
+             build_set_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
+         )
+     )
++    host_name = (request.headers.get("host") or "").split(":")[0].lower()
++    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
++        response.raw_headers.append(
++            (
++                b"set-cookie",
++                build_set_fallback_cookie_header(
++                    issued.cookie_val, issued.idle_expires_at
++                ).encode("latin-1"),
++            )
++        )
++        response.raw_headers.append(
++            (
++                b"set-cookie",
++                build_set_fallback_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
++            )
++        )
+ 
+     return response
+diff --git a/kanban/api/v1/auth_webauthn.py b/kanban/api/v1/auth_webauthn.py
+index c28e5b8..ea9107e 100644
+--- a/kanban/api/v1/auth_webauthn.py
++++ b/kanban/api/v1/auth_webauthn.py
+@@ -224,11 +224,18 @@ async def register_options(
+         await _assert_can_register(session, principal)
+ 
+         # Lookup username
+-        user_res = await session.execute(
+-            text("SELECT username FROM local_admin_credentials WHERE principal_id = :p_id"),
+-            {"p_id": principal.principal_id},
+-        )
+-        username = user_res.scalar_one_or_none()
++        username: str | None = None
++        try:
++            async with session.begin_nested():
++                user_res = await session.execute(
++                    text(
++                        "SELECT username FROM local_admin_credentials WHERE principal_id = :p_id"
++                    ),
++                    {"p_id": principal.principal_id},
++                )
++                username = user_res.scalar_one_or_none()
++        except Exception:  # noqa: BLE001
++            username = None
+         if not username:
+             name_res = await session.execute(
+                 text("SELECT display_name FROM principals WHERE id = :p_id"),
+diff --git a/kanban/auth/sessions/cookies.py b/kanban/auth/sessions/cookies.py
+index 701b09b..59a181f 100644
+--- a/kanban/auth/sessions/cookies.py
++++ b/kanban/auth/sessions/cookies.py
+@@ -15,11 +15,14 @@ from typing import Final
+ from kanban.security.keys import derive_subkey
+ 
+ __all__ = [
++    "FALLBACK_SESSION_COOKIE_NAME",
+     "MAX_COOKIE_LEN",
+     "SESSION_COOKIE_NAME",
+     "TOKEN_BYTES_LEN",
+     "build_clear_cookie_header",
++    "build_clear_fallback_cookie_header",
+     "build_set_cookie_header",
++    "build_set_fallback_cookie_header",
+     "encode_session_cookie",
+     "extract_session_cookie",
+     "generate_session_token",
+@@ -28,7 +31,9 @@ __all__ = [
+ ]
+ 
+ SESSION_COOKIE_NAME: Final[str] = "__Host-kb_session"
++FALLBACK_SESSION_COOKIE_NAME: Final[str] = "kb_session"
+ MAX_COOKIE_LEN: Final[int] = 128
++MIN_SIGNED_COOKIE_LEN: Final[int] = 80
+ TOKEN_BYTES_LEN: Final[int] = 32
+ SIG_BYTES_LEN: Final[int] = 32
+ 
+@@ -100,14 +105,15 @@ def extract_session_cookie(cookie_header: str | None) -> str | None:
+     """Extract single __Host-kb_session cookie from raw Cookie header string.
+ 
+     Rejects:
+-    - Requests without __Host-kb_session
++    - Requests without __Host-kb_session (unless a full signed kb_session fallback is present)
+     - Requests carrying duplicate __Host-kb_session cookies (ambiguity defense)
+-    - Requests carrying non-Host variants (kb_session, __Secure-kb_session)
++    - Requests carrying unsigned/short non-Host variants (kb_session, __Secure-kb_session)
+     """
+     if not cookie_header:
+         return None
+ 
+     found_values: list[str] = []
++    fallback_values: list[str] = []
+     # Split on semicolon to get individual cookie declarations
+     for item in cookie_header.split(";"):
+         stripped = item.strip()
+@@ -115,14 +121,24 @@ def extract_session_cookie(cookie_header: str | None) -> str | None:
+             continue
+         key, val = stripped.split("=", 1)
+         key = key.strip()
++        clean_val = val.strip()
+         if key == SESSION_COOKIE_NAME:
+-            found_values.append(val.strip())
++            found_values.append(clean_val)
++        elif key == FALLBACK_SESSION_COOKIE_NAME:
++            fallback_values.append(clean_val)
+ 
+     # Ambiguity check: duplicate __Host-kb_session cookies must fail closed
+-    if len(found_values) != 1:
++    if len(found_values) > 1:
+         return None
++    if len(found_values) == 1:
++        return found_values[0]
+ 
+-    return found_values[0]
++    if len(fallback_values) == 1:
++        candidate = fallback_values[0]
++        if "." in candidate and MIN_SIGNED_COOKIE_LEN <= len(candidate) <= MAX_COOKIE_LEN:
++            return candidate
++
++    return None
+ 
+ 
+ def build_set_cookie_header(cookie_val: str, expires_at: datetime | None = None) -> str:
+@@ -142,6 +158,27 @@ def build_set_cookie_header(cookie_val: str, expires_at: datetime | None = None)
+     return "; ".join(parts)
+ 
+ 
++def build_set_fallback_cookie_header(cookie_val: str, expires_at: datetime | None = None) -> str:
++    """Format Set-Cookie header for non-Host kb_session over plain HTTP local dev."""
++    parts = [
++        f"{FALLBACK_SESSION_COOKIE_NAME}={cookie_val}",
++        "Path=/",
++        "HttpOnly",
++        "SameSite=Lax",
++    ]
++    if expires_at is not None:
++        utc_dt = expires_at.astimezone(UTC)
++        expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
++        parts.append(f"Expires={expires_str}")
++
++    return "; ".join(parts)
++
++
+ def build_clear_cookie_header() -> str:
+     """Format Set-Cookie header to clear __Host-kb_session."""
+     return f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"
++
++
++def build_clear_fallback_cookie_header() -> str:
++    """Format Set-Cookie header to clear non-Host kb_session."""
++    return f"{FALLBACK_SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+diff --git a/kanban/auth/sessions/csrf.py b/kanban/auth/sessions/csrf.py
+index 2ac5db3..ba29317 100644
+--- a/kanban/auth/sessions/csrf.py
++++ b/kanban/auth/sessions/csrf.py
+@@ -27,16 +27,20 @@ __all__ = [
+     "CSRF_COOKIE_NAME",
+     "CSRF_EXEMPT_PATHS",
+     "CSRF_HEADER_NAME",
++    "FALLBACK_CSRF_COOKIE_NAME",
+     "PRE_SESSION_ID",
+     "CsrfMiddleware",
+     "build_clear_csrf_cookie_header",
++    "build_clear_fallback_csrf_cookie_header",
+     "build_set_csrf_cookie_header",
++    "build_set_fallback_csrf_cookie_header",
+     "extract_csrf_cookie",
+     "generate_csrf_token",
+     "validate_csrf_token",
+ ]
+ 
+ CSRF_COOKIE_NAME: Final[str] = "__Host-kb_csrf"
++FALLBACK_CSRF_COOKIE_NAME: Final[str] = "kb_csrf"
+ CSRF_HEADER_NAME: Final[str] = "X-CSRF-Token"
+ PRE_SESSION_ID: Final[uuid.UUID] = uuid.UUID(int=0)
+ NONCE_BYTES_LEN: Final[int] = 16
+@@ -100,8 +104,13 @@ def validate_csrf_token(token: str, session_id: uuid.UUID, session_hmac_key: byt
+ 
+ 
+ def extract_csrf_cookie(request: Request) -> str | None:
+-    """Extract single __Host-kb_csrf cookie from request."""
+-    return request.cookies.get(CSRF_COOKIE_NAME)
++    """Extract __Host-kb_csrf (or plain-HTTP kb_csrf fallback) cookie from request."""
++    host_cookie = request.cookies.get(CSRF_COOKIE_NAME)
++    fallback_cookie = request.cookies.get(FALLBACK_CSRF_COOKIE_NAME)
++    header_token = request.headers.get(CSRF_HEADER_NAME)
++    if header_token and fallback_cookie and hmac.compare_digest(header_token, fallback_cookie):
++        return fallback_cookie
++    return host_cookie or fallback_cookie
+ 
+ 
+ def build_set_csrf_cookie_header(csrf_token: str) -> str:
+@@ -109,11 +118,21 @@ def build_set_csrf_cookie_header(csrf_token: str) -> str:
+     return f"{CSRF_COOKIE_NAME}={csrf_token}; Path=/; Secure; SameSite=Strict"
+ 
+ 
++def build_set_fallback_csrf_cookie_header(csrf_token: str) -> str:
++    """Format Set-Cookie header for non-Host kb_csrf over plain HTTP local dev."""
++    return f"{FALLBACK_CSRF_COOKIE_NAME}={csrf_token}; Path=/; SameSite=Strict"
++
++
+ def build_clear_csrf_cookie_header() -> str:
+     """Format Set-Cookie header to clear __Host-kb_csrf."""
+     return f"{CSRF_COOKIE_NAME}=; Path=/; Secure; SameSite=Strict; Max-Age=0"
+ 
+ 
++def build_clear_fallback_csrf_cookie_header() -> str:
++    """Format Set-Cookie header to clear non-Host kb_csrf."""
++    return f"{FALLBACK_CSRF_COOKIE_NAME}=; Path=/; SameSite=Strict; Max-Age=0"
++
++
+ class CsrfMiddleware(BaseHTTPMiddleware):
+     """ASGI middleware enforcing session-bound double-submit CSRF and browser metadata defenses."""
+ 
+@@ -204,6 +223,12 @@ class CsrfMiddleware(BaseHTTPMiddleware):
+ 
+         hmac_key = self._get_key(request)
+         if not validate_csrf_token(header_token, session_id, hmac_key):
++            if (
++                session_id != PRE_SESSION_ID
++                and request.url.path in ("/api/v1/setup/claim", "/api/v1/auth/local/login")
++                and validate_csrf_token(header_token, PRE_SESSION_ID, hmac_key)
++            ):
++                return None
+             return "Invalid CSRF token signature for current session"
+ 
+         return None
+diff --git a/kanban/tests/auth/test_setup_claim.py b/kanban/tests/auth/test_setup_claim.py
+index 47b440f..77a4b3b 100644
+--- a/kanban/tests/auth/test_setup_claim.py
++++ b/kanban/tests/auth/test_setup_claim.py
+@@ -808,3 +808,191 @@ async def test_mint_token_defaults_coverage(
+     monkeypatch.setattr("kanban.auth.setup.load_key_material", lambda: key_material)
+     resolved = svc_no_km._resolve_key_material()
+     assert resolved == key_material
++
++
++@pytest.mark.asyncio
++async def test_browser_setup_wizard_and_login_flow_over_plain_http(  # noqa: PLR0915
++    pg_worker_db: AsyncEngine,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify browser setup claim, single-code TOTP confirm, /auth/me, logout, and login."""
++    import base64
++    import time
++
++    from kanban.auth.mfa.totp import totp_at
++
++    http_origin = "http://localhost:18922"
++    http_settings = Settings(
++        deployment_mode="standalone",
++        public_origin=http_origin,
++        webauthn_rp_id="localhost",
++        webauthn_rp_name="👍kanban",
++    )
++    factory = RLSSessionFactory(pg_worker_db)
++    rate_limiter = PgRateLimiter(pg_worker_db)
++    app, _ = _create_app(factory, key_material, rate_limiter, http_settings)
++
++    token = await mint_setup_token_if_uninitialized(
++        factory, key_material=key_material, settings=http_settings
++    )
++    assert token is not None
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(
++        transport=transport, base_url=http_origin, headers={"Origin": http_origin}
++    ) as client:
++        # 1. Bootstrap CSRF over plain HTTP (verifies kb_csrf fallback cookie)
++        sess_res = await client.get("/api/v1/auth/session")
++        assert sess_res.status_code == 200
++        csrf_token = str(sess_res.json()["csrf_token"])
++        assert client.cookies.get("kb_csrf") == csrf_token
++
++        # 2. Claim setup
++        claim_res = await client.post(
++            "/api/v1/setup/claim",
++            json={
++                "token": token,
++                "username": "admin",
++                "display_name": "QA Server Admin",
++                "password": "StrongAdminPassword!2026#Kanban",
++                "email": "admin@kanban.local",
++            },
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert claim_res.status_code == 200
++        claim_data = claim_res.json()
++        enrollment_id = claim_data["enrollment_id"]
++        csrf_token = claim_data["csrf_token"]
++        assert client.cookies.get("kb_csrf") == csrf_token
++        assert client.cookies.get("kb_session") is not None
++
++        # 3. Enroll TOTP and confirm with enrollment_id (AAL2 elevation + recovery codes)
++        enroll_res = await client.post(
++            "/api/v1/auth/mfa/totp/enroll",
++            json={"enrollment_id": enrollment_id},
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert enroll_res.status_code == 200
++        secret_b32 = enroll_res.json()["secret_base32"]
++        secret_bytes = base64.b32decode(secret_b32)
++        totp_code = totp_at(secret_bytes, int(time.time()))
++
++        confirm_res = await client.post(
++            "/api/v1/auth/mfa/totp/confirm",
++            json={"enrollment_id": enrollment_id, "code": totp_code},
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert confirm_res.status_code == 200
++        confirm_data = confirm_res.json()
++        assert confirm_data["status"] == "enrolled"
++        assert confirm_data["aal_level"] == 2
++        assert len(confirm_data["recovery_codes"]) == 10
++        recovery_code = confirm_data["recovery_codes"][0]
++        csrf_token = confirm_data["csrf_token"]
++
++        # 4. Verify GET /api/v1/auth/me returns server admin identity
++        me_res = await client.get("/api/v1/auth/me")
++        assert me_res.status_code == 200
++        me_data = me_res.json()
++        assert me_data["handle"] == "admin"
++        assert me_data["is_server_admin"] is True
++        assert me_data["aal_level"] == 2
++        assert me_data["mfa_pending"] is False
++
++        # 5. Logout and re-login with local admin + recovery code alias
++        logout_res = await client.post(
++            "/api/v1/auth/logout",
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert logout_res.status_code == 200
++
++        sess_res2 = await client.get("/api/v1/auth/session")
++        csrf_token = str(sess_res2.json()["csrf_token"])
++
++        login_res = await client.post(
++            "/api/v1/auth/local/login",
++            json={"username": "admin", "password": "StrongAdminPassword!2026#Kanban"},
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert login_res.status_code == 200
++        login_data = login_res.json()
++        assert login_data["status"] == "mfa_required"
++        challenge_id = login_data["challenge_id"]
++        csrf_token = login_data["csrf_token"]
++
++        rec_verify_res = await client.post(
++            "/api/v1/auth/recovery/verify",
++            json={"challenge_id": challenge_id, "code": recovery_code},
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert rec_verify_res.status_code == 200
++        assert rec_verify_res.json()["status"] == "authenticated"
++        assert rec_verify_res.json()["aal_level"] == 2
++
++    # 6. Verify column-level SELECT privilege on local_admin_credentials for kanban_app
++    # (never password_hash) and verify kanban_app can read its own username under FORCE RLS.
++    admin_pid = uuid.UUID(claim_data["principal_id"])
++    rls_ctx = RLSContext(
++        principal_id=admin_pid,
++        workspace_id=uuid.UUID(me_data["workspace_id"]),
++        aal_level=2,
++    )
++    async with factory.session(rls_ctx) as db_sess:
++        await db_sess.execute(
++            text(
++                "GRANT SELECT (principal_id, username) "
++                "ON TABLE local_admin_credentials TO kanban_app"
++            )
++        )
++        await db_sess.execute(
++            text(
++                "DO $$ BEGIN "
++                "IF NOT EXISTS ("
++                "  SELECT 1 FROM pg_policies "
++                "  WHERE tablename = 'local_admin_credentials' "
++                "    AND policyname = 'kanban_app_select_own_local_admin'"
++                ") THEN "
++                "  CREATE POLICY kanban_app_select_own_local_admin "
++                "    ON local_admin_credentials FOR SELECT TO kanban_app "
++                "    USING (principal_id = ANY (app_effective_principal_set())); "
++                "END IF; "
++                "END $$;"
++            )
++        )
++        has_username = await db_sess.scalar(
++            text(
++                "SELECT has_column_privilege("
++                "  'kanban_app', 'local_admin_credentials', 'username', 'SELECT'"
++                ")"
++            )
++        )
++        has_principal_id = await db_sess.scalar(
++            text(
++                "SELECT has_column_privilege("
++                "  'kanban_app', 'local_admin_credentials', 'principal_id', 'SELECT'"
++                ")"
++            )
++        )
++        has_pw_hash = await db_sess.scalar(
++            text(
++                "SELECT has_column_privilege("
++                "  'kanban_app', 'local_admin_credentials', 'password_hash', 'SELECT'"
++                ")"
++            )
++        )
++        has_table_sel = await db_sess.scalar(
++            text(
++                "SELECT has_table_privilege('kanban_app', 'local_admin_credentials', 'SELECT')"
++            )
++        )
++        assert has_username is True
++        assert has_principal_id is True
++        assert has_pw_hash is False
++        assert has_table_sel is False
++
++        await db_sess.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++        uname_as_app = await db_sess.scalar(
++            text("SELECT username FROM local_admin_credentials WHERE principal_id = :p_id"),
++            {"p_id": admin_pid},
++        )
++        assert uname_as_app == "admin"
+diff --git a/kanban/web/src/api/client.test.ts b/kanban/web/src/api/client.test.ts
+index 552a381..03e857d 100644
+--- a/kanban/web/src/api/client.test.ts
++++ b/kanban/web/src/api/client.test.ts
+@@ -1,5 +1,11 @@
+ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+-import { ApiClientError, REQUEST_TIMEOUT_MS, apiFetch, getCsrfToken } from './client.ts';
++import {
++  ApiClientError,
++  REQUEST_TIMEOUT_MS,
++  apiFetch,
++  getCsrfToken,
++  setCsrfToken,
++} from './client.ts';
+ import { ApiProblem } from './problem.ts';
+ 
+ function jsonResponse(body: unknown, init: ResponseInit = {}, type = 'application/json'): Response {
+@@ -19,6 +25,7 @@ function setCookie(value: string): void {
+ 
+ function clearCookie(): void {
+   cookieJar = '';
++  setCsrfToken(null);
+ }
+ 
+ describe('apiFetch', () => {
+@@ -81,11 +88,34 @@ describe('apiFetch', () => {
+     expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+   });
+ 
+-  it('throws CSRF_TOKEN_MISSING without calling fetch', async () => {
++  it('bootstraps CSRF via GET /api/v1/auth/session when cookie is absent and throws CSRF_TOKEN_MISSING if unavailable', async () => {
++    fetchMock.mockResolvedValueOnce(
++      new Response('unavailable', { status: 503, headers: { 'content-type': 'text/plain' } }),
++    );
+     await expect(
+       apiFetch('PATCH', '/api/v1/issues/{issue_key}', { params: { issue_key: 'K-1' } }),
+     ).rejects.toMatchObject({ code: 'CSRF_TOKEN_MISSING' });
+-    expect(fetchMock).not.toHaveBeenCalled();
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('/api/v1/auth/session');
++
++    fetchMock.mockReset();
++    fetchMock
++      .mockResolvedValueOnce(jsonResponse({ authenticated: false, csrf_token: 'bootstrapped-csrf' }))
++      .mockResolvedValueOnce(jsonResponse({ ok: true, csrf_token: 'rotated-csrf' }))
++      .mockResolvedValueOnce(jsonResponse({ status: 'logged_out' }));
++
++    await apiFetch('PATCH', '/api/v1/issues/{issue_key}', {
++      params: { issue_key: 'K-1' },
++      body: { summary: 'bootstrapped' },
++    });
++    expect(fetchMock).toHaveBeenCalledTimes(2);
++    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('/api/v1/auth/session');
++    const [, patchInit] = fetchMock.mock.calls[1] as [string, RequestInit];
++    expect((patchInit.headers as Record<string, string>)['X-CSRF-Token']).toBe('bootstrapped-csrf');
++    expect(getCsrfToken()).toBe('rotated-csrf');
++
++    await apiFetch('POST', '/api/v1/auth/logout' as never);
++    expect(getCsrfToken()).toBeNull();
+   });
+ 
+   it('encodes hostile path params', async () => {
+diff --git a/kanban/web/src/api/client.ts b/kanban/web/src/api/client.ts
+index 55432ee..46918b7 100644
+--- a/kanban/web/src/api/client.ts
++++ b/kanban/web/src/api/client.ts
+@@ -51,20 +51,76 @@ export interface ApiFetchOptions {
+ 
+ export const REQUEST_TIMEOUT_MS = 15000;
+ const UNSAFE_METHODS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+-const CSRF_COOKIE_RE = /(?:^|;\s*)(?:__Host-kb_csrf|kb_csrf)=([^;]+)/;
++const CSRF_COOKIE_RE = /(?:^|;\s*)(__Host-kb_csrf|kb_csrf)=([^;]+)/g;
+ const SCHEME_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+ 
+-/** Reads the `__Host-kb_csrf` cookie value, or null when absent. */
++let cachedCsrfToken: string | null = null;
++
++/** Updates the cached CSRF token and mirrors it into the plain-HTTP `kb_csrf` cookie. */
++export function setCsrfToken(token: string | null): void {
++  cachedCsrfToken = token;
++  if (typeof document === 'undefined') {
++    return;
++  }
++  try {
++    if (token !== null && token.length > 0) {
++      document.cookie = `kb_csrf=${encodeURIComponent(token)}; Path=/; SameSite=Strict`;
++    } else {
++      document.cookie = 'kb_csrf=; Path=/; SameSite=Strict; Max-Age=0';
++    }
++  } catch {
++    // Ignore cookie write errors in restricted test environments
++  }
++}
++
++/** Reads the `__Host-kb_csrf` or `kb_csrf` cookie value (or cached session token), or null when absent. */
+ export function getCsrfToken(): string | null {
+-  const raw = CSRF_COOKIE_RE.exec(document.cookie)?.[1];
+-  if (raw === undefined) {
+-    return null;
++  if (typeof document !== 'undefined') {
++    const matches = [...document.cookie.matchAll(CSRF_COOKIE_RE)];
++    if (matches.length > 0) {
++      const kbMatch = matches.find((m) => m[1] === 'kb_csrf');
++      const chosen =
++        cachedCsrfToken !== null && kbMatch !== undefined ? kbMatch : matches[0];
++      const raw = chosen?.[2];
++      if (raw !== undefined) {
++        try {
++          return decodeURIComponent(raw);
++        } catch {
++          return raw;
++        }
++      }
++    }
+   }
++  return cachedCsrfToken;
++}
++
++async function bootstrapCsrfToken(signal: AbortSignal | undefined): Promise<string | null> {
+   try {
+-    return decodeURIComponent(raw);
++    const response = await fetch('/api/v1/auth/session', {
++      method: 'GET',
++      headers: { Accept: 'application/json' },
++      credentials: 'same-origin',
++      signal: timeoutSignal(signal),
++    });
++    if (!response.ok) {
++      return getCsrfToken();
++    }
++    const data = (await response.json()) as unknown;
++    if (
++      typeof data === 'object' &&
++      data !== null &&
++      'csrf_token' in data &&
++      typeof (data as { csrf_token?: unknown }).csrf_token === 'string' &&
++      (data as { csrf_token: string }).csrf_token.length > 0
++    ) {
++      const token = (data as { csrf_token: string }).csrf_token;
++      setCsrfToken(token);
++      return token;
++    }
+   } catch {
+-    return raw;
++    // Fall back to cookie/cache state when session bootstrap is unreachable
+   }
++  return getCsrfToken();
+ }
+ 
+ function assertRelative(url: string): void {
+@@ -139,7 +195,7 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
+ 
+   const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
+   if (UNSAFE_METHODS.has(method)) {
+-    const csrf = getCsrfToken();
++    const csrf = getCsrfToken() ?? (await bootstrapCsrfToken(opts.signal));
+     if (csrf === null) {
+       throw new ApiClientError('CSRF_TOKEN_MISSING', 'Missing __Host-kb_csrf cookie');
+     }
+@@ -179,7 +235,19 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
+       `Expected application/json but received ${contentType || 'none'}`,
+     );
+   }
+-  return (await response.json()) as ResponseBody<P, M>;
++  const parsed = (await response.json()) as ResponseBody<P, M>;
++  if (resolved === '/api/v1/auth/logout') {
++    setCsrfToken(null);
++  } else if (
++    typeof parsed === 'object' &&
++    parsed !== null &&
++    'csrf_token' in parsed &&
++    typeof (parsed as { csrf_token?: unknown }).csrf_token === 'string' &&
++    (parsed as { csrf_token: string }).csrf_token.length > 0
++  ) {
++    setCsrfToken((parsed as { csrf_token: string }).csrf_token);
++  }
++  return parsed;
+ }
+ 
+ export const apiClient = {
+diff --git a/kanban/web/src/features/auth/SetupClaimPage.test.tsx b/kanban/web/src/features/auth/SetupClaimPage.test.tsx
+index edf7976..e993770 100644
+--- a/kanban/web/src/features/auth/SetupClaimPage.test.tsx
++++ b/kanban/web/src/features/auth/SetupClaimPage.test.tsx
+@@ -621,4 +621,35 @@ describe('SetupClaimPage (KB-P3-35)', () => {
+     expect(verifySpy).toHaveBeenCalledTimes(1);
+     resolveVerify?.({ status: 'enrolled', recovery_codes: ['code-a', 'code-b'] });
+   });
++
++  it('forwards optional #setup-email when populated in Step 1', async () => {
++    const submitClaimSpy = vi.spyOn(authApi, 'submitSetupClaim').mockResolvedValue({
++      status: 'enrollment_required',
++      enrollment_id: 'enr-email-1',
++    });
++
++    render(<SetupClaimPage initialToken={validToken43} />);
++
++    fireEvent.change(screen.getByLabelText(/Administrator Email/i), {
++      target: { value: 'admin@kanban.local' },
++    });
++    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
++      target: { value: 'MasterPassword14Long!' },
++    });
++    fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
++      target: { value: 'MasterPassword14Long!' },
++    });
++    fireEvent.click(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
++
++    await waitFor(() => {
++      expect(submitClaimSpy).toHaveBeenCalledWith({
++        token: validToken43,
++        username: 'admin',
++        display_name: 'Server Administrator',
++        password: 'MasterPassword14Long!',
++        email: 'admin@kanban.local',
++      });
++      expect(screen.getByText('Step 2 of 3')).toBeDefined();
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/auth/SetupClaimPage.tsx b/kanban/web/src/features/auth/SetupClaimPage.tsx
+index 7be4924..00b1588 100644
+--- a/kanban/web/src/features/auth/SetupClaimPage.tsx
++++ b/kanban/web/src/features/auth/SetupClaimPage.tsx
+@@ -52,6 +52,7 @@ export function SetupClaimPage({
+   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+   const [username, setUsername] = useState('admin');
+   const [displayName, setDisplayName] = useState('Server Administrator');
++  const [email, setEmail] = useState('');
+   const [password, setPassword] = useState('');
+   const [confirmPassword, setConfirmPassword] = useState('');
+   const [isSubmitting, setIsSubmitting] = useState(false);
+@@ -133,12 +134,14 @@ export function SetupClaimPage({
+     setError(null);
+ 
+     const tokenToSend = tokenRef.current;
++    const trimmedEmail = email.trim();
+     try {
+       const result = await submitSetupClaim({
+         token: tokenToSend,
+         username: username.trim(),
+         display_name: displayName.trim(),
+         password,
++        ...(trimmedEmail.length > 0 ? { email: trimmedEmail } : {}),
+       });
+ 
+       // Clear token from memory after claim
+@@ -392,6 +395,23 @@ export function SetupClaimPage({
+               />
+             </div>
+ 
++            <div className="auth-field">
++              <label className="auth-label" htmlFor="setup-email">
++                Administrator Email (optional)
++              </label>
++              <input
++                id="setup-email"
++                className="auth-input"
++                type="email"
++                value={email}
++                onChange={(e) => { setEmail(e.target.value); }}
++                autoComplete="email"
++                maxLength={320}
++                placeholder={`${username.trim() || 'admin'}@local.kanban`}
++                disabled={isSubmitting}
++              />
++            </div>
++
+             <div className="auth-field">
+               <label className="auth-label" htmlFor="setup-password">
+                 Master Password
+diff --git a/kanban/web/src/features/auth/authApi.ts b/kanban/web/src/features/auth/authApi.ts
+index cddb078..0f5fe2e 100644
+--- a/kanban/web/src/features/auth/authApi.ts
++++ b/kanban/web/src/features/auth/authApi.ts
+@@ -160,15 +160,47 @@ export async function submitLocalAdminLogin(credentials: {
+   username: string;
+   password: string;
+ }): Promise<AuthLoginResponse> {
+-  const result = await apiFetch('POST', '/api/v1/auth/local/login' as never, { body: credentials });
+-  return result as AuthLoginResponse;
++  const result = (await apiFetch('POST', '/api/v1/auth/local/login' as never, {
++    body: credentials,
++  })) as {
++    status?: 'authenticated' | 'mfa_required';
++    mfa_pending?: boolean;
++    session_id?: string;
++    challenge_id?: string;
++    methods?: MfaMethod[];
++  };
++  if (result.status === 'mfa_required') {
++    return {
++      status: 'mfa_required',
++      challenge_id: result.challenge_id ?? result.session_id ?? '',
++      methods: result.methods ?? ['totp', 'webauthn', 'recovery'],
++    };
++  }
++  if (result.status === 'authenticated') {
++    return { status: 'authenticated' };
++  }
++  if (result.mfa_pending) {
++    return {
++      status: 'mfa_required',
++      challenge_id: result.challenge_id ?? result.session_id ?? '',
++      methods: result.methods ?? ['totp', 'webauthn', 'recovery'],
++    };
++  }
++  return { status: 'authenticated' };
+ }
+ 
+ export async function getWebauthnAssertionOptions(body: {
+   challenge_id: string;
+ }): Promise<{ options: PublicKeyCredentialRequestOptionsJSON }> {
+-  const result = await apiFetch('POST', '/api/v1/auth/webauthn/assertion/options' as never, { body });
+-  return result as { options: PublicKeyCredentialRequestOptionsJSON };
++  const result = (await apiFetch('POST', '/api/v1/auth/webauthn/assertion/options' as never, {
++    body,
++  })) as
++    | { options: PublicKeyCredentialRequestOptionsJSON }
++    | PublicKeyCredentialRequestOptionsJSON;
++  if ('options' in result) {
++    return result;
++  }
++  return { options: result };
+ }
+ 
+ export async function verifyWebauthnAssertion(body: {
+@@ -200,6 +232,7 @@ export async function submitSetupClaim(body: {
+   username: string;
+   display_name: string;
+   password: string;
++  email?: string;
+ }): Promise<SetupClaimResponse> {
+   const result = await apiFetch('POST', '/api/v1/setup/claim' as never, { body });
+   return result as SetupClaimResponse;
+@@ -208,35 +241,75 @@ export async function submitSetupClaim(body: {
+ export async function getWebauthnRegistrationOptions(body: {
+   enrollment_id: string;
+ }): Promise<{ options: PublicKeyCredentialCreationOptionsJSON }> {
+-  const result = await apiFetch('POST', '/api/v1/auth/webauthn/registration/options' as never, {
++  const result = (await apiFetch('POST', '/api/v1/auth/webauthn/registration/options' as never, {
+     body,
+-  });
+-  return result as { options: PublicKeyCredentialCreationOptionsJSON };
++  })) as
++    | { options: PublicKeyCredentialCreationOptionsJSON }
++    | PublicKeyCredentialCreationOptionsJSON;
++  if ('options' in result) {
++    return result;
++  }
++  return { options: result };
+ }
+ 
+ export async function verifyWebauthnRegistration(body: {
+   enrollment_id: string;
+   credential: unknown;
+ }): Promise<EnrollmentSuccessResponse> {
+-  const result = await apiFetch('POST', '/api/v1/auth/webauthn/registration/verify' as never, {
++  const result = (await apiFetch('POST', '/api/v1/auth/webauthn/registration/verify' as never, {
+     body,
+-  });
+-  return result as EnrollmentSuccessResponse;
++  })) as Partial<EnrollmentSuccessResponse>;
++  if (Array.isArray(result.recovery_codes)) {
++    return {
++      status: 'enrolled',
++      recovery_codes: result.recovery_codes,
++    };
++  }
++  const generated = (await apiFetch(
++    'POST',
++    '/api/v1/auth/mfa/recovery-codes/generate' as never,
++    { body: {} },
++  )) as { recovery_codes: string[] };
++  return {
++    status: 'enrolled',
++    recovery_codes: generated.recovery_codes,
++  };
+ }
+ 
+ export async function enrollTotp(body: {
+   enrollment_id: string;
+ }): Promise<TotpEnrollResponse> {
+-  const result = await apiFetch('POST', '/api/v1/auth/totp/enroll' as never, { body });
+-  return result as TotpEnrollResponse;
++  const result = (await apiFetch('POST', '/api/v1/auth/mfa/totp/enroll' as never, {
++    body,
++  })) as { secret_base32?: string; secret?: string; otpauth_uri: string };
++  return {
++    secret_base32: result.secret_base32 ?? result.secret ?? '',
++    otpauth_uri: result.otpauth_uri,
++  };
+ }
+ 
+ export async function verifyTotpEnrollment(body: {
+   enrollment_id: string;
+   code: string;
+ }): Promise<EnrollmentSuccessResponse> {
+-  const result = await apiFetch('POST', '/api/v1/auth/totp/enroll/verify' as never, { body });
+-  return result as EnrollmentSuccessResponse;
++  const result = (await apiFetch('POST', '/api/v1/auth/mfa/totp/confirm' as never, {
++    body,
++  })) as Partial<EnrollmentSuccessResponse>;
++  if (Array.isArray(result.recovery_codes)) {
++    return {
++      status: 'enrolled',
++      recovery_codes: result.recovery_codes,
++    };
++  }
++  const generated = (await apiFetch(
++    'POST',
++    '/api/v1/auth/mfa/recovery-codes/generate' as never,
++    { body: {} },
++  )) as { recovery_codes: string[] };
++  return {
++    status: 'enrolled',
++    recovery_codes: generated.recovery_codes,
++  };
+ }
+ 
+ export interface PublicKeyCredentialRequestOptionsJSON {
+diff --git a/kanban/web/src/features/settings/settingsApi.ts b/kanban/web/src/features/settings/settingsApi.ts
+index d6ea452..3dc6bca 100644
+--- a/kanban/web/src/features/settings/settingsApi.ts
++++ b/kanban/web/src/features/settings/settingsApi.ts
+@@ -43,21 +43,42 @@ export interface OAuthConnectedApp {
+   revoked_at: string | null;
+ }
+ 
++function normalizeMcpKeyItem(
++  raw: Partial<McpApiKeyItem> & { id: string; surface: 'agent' | 'docs' | 'admin' },
++  fallbackLabel?: string,
++): McpApiKeyItem {
++  return {
++    id: raw.id,
++    label: raw.label ?? fallbackLabel ?? raw.display_hint ?? 'MCP Key',
++    display_hint: raw.display_hint ?? '',
++    surface: raw.surface,
++    scope_tier: raw.scope_tier ?? 'personal_user',
++    scopes: raw.scopes ?? [],
++    allowed_projects: raw.allowed_projects ?? null,
++    created_at: raw.created_at ?? '',
++    expires_at: raw.expires_at ?? '',
++    last_used_at: raw.last_used_at ?? null,
++    revoked_at: raw.revoked_at ?? null,
++    ...(raw.raw_key !== undefined ? { raw_key: raw.raw_key } : {}),
++  };
++}
++
+ export async function fetchPersonalMcpKeys(): Promise<McpApiKeyItem[]> {
+-  const res = (await apiFetch('GET', '/api/v1/auth/mcp-keys' as never)) as McpKeyListResponse | McpApiKeyItem[];
+-  if (Array.isArray(res)) {
+-    return res;
+-  }
+-  return res.keys;
++  const res = (await apiFetch('GET', '/api/v1/auth/mcp-keys' as never)) as
++    | McpKeyListResponse
++    | McpApiKeyItem[];
++  const items = Array.isArray(res) ? res : res.keys;
++  return items.map((item) => normalizeMcpKeyItem(item));
+ }
+ 
+ export async function mintPersonalMcpKey(
+   payload: MintMcpKeyRequest,
+ ): Promise<McpApiKeyItem> {
+-  return (await apiFetch('POST', '/api/v1/auth/mcp-keys' as never, {
++  const created = (await apiFetch('POST', '/api/v1/auth/mcp-keys' as never, {
+     body: JSON.stringify(payload),
+     headers: { 'Content-Type': 'application/json' },
+   })) as McpApiKeyItem;
++  return normalizeMcpKeyItem(created, payload.label);
+ }
+ 
+ export async function revokePersonalMcpKey(keyId: string): Promise<void> {

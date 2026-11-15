@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { StickiesGrid } from './StickiesGrid';
 import {
   fetchWorkspaceStickies,
+  createSticky,
   updateSticky,
   deleteSticky,
   promoteStickyToDoc,
@@ -20,12 +21,27 @@ import type { StickyColorToken } from './stickyHeuristic';
 
 export const WORKSPACE_STICKIES_QUERY_KEY = ['stickies', 'workspace'] as const;
 
-export function WorkspaceStickiesView(): JSX.Element {
+export function WorkspaceStickiesView({
+  defaultProjectKey = 'KAN',
+}: {
+  defaultProjectKey?: string | undefined;
+} = {}): JSX.Element {
   const queryClient = useQueryClient();
 
   const { data: stickies = [], isLoading } = useQuery<StickyItem[]>({
     queryKey: WORKSPACE_STICKIES_QUERY_KEY,
     queryFn: ({ signal }) => fetchWorkspaceStickies(signal),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createSticky(defaultProjectKey, { body_markdown: '', color_token: 'amber' }),
+    onSuccess: (newSticky) => {
+      queryClient.setQueryData<StickyItem[]>(WORKSPACE_STICKIES_QUERY_KEY, (old = []) => [
+        newSticky,
+        ...old,
+      ]);
+    },
   });
 
   const updateMutation = useMutation({
@@ -83,6 +99,9 @@ export function WorkspaceStickiesView(): JSX.Element {
         stickies={stickies}
         title="Workspace Stickies"
         isLoading={isLoading}
+        onCreateSticky={() => {
+          createMutation.mutate();
+        }}
         onUpdateSticky={async (id, payload, etag) => {
           await updateMutation.mutateAsync({ stickyId: id, payload, etag });
         }}

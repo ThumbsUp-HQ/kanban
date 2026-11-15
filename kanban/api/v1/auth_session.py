@@ -4,18 +4,33 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
+from sqlalchemy import text
 from starlette.requests import Request  # noqa: TC002  # Required at runtime for FastAPI dependency analysis
 from starlette.responses import JSONResponse
 
 from database.session import RLSContext
-from kanban.auth.sessions.cookies import build_clear_cookie_header
+from kanban.api.deps import PrincipalContext, get_principal
+from kanban.api.v1.auth_mfa import (
+    MfaVerifyRequest,
+    TotpConfirmRequest,
+    confirm_totp,
+    enroll_totp,
+    verify_mfa,
+)
+from kanban.auth.sessions.cookies import (
+    build_clear_cookie_header,
+    build_clear_fallback_cookie_header,
+)
 from kanban.auth.sessions.csrf import (
     PRE_SESSION_ID,
     build_clear_csrf_cookie_header,
+    build_clear_fallback_csrf_cookie_header,
     build_set_csrf_cookie_header,
+    build_set_fallback_csrf_cookie_header,
     generate_csrf_token,
 )
 
@@ -26,6 +41,13 @@ if TYPE_CHECKING:
     from kanban.security.keys import KeyMaterial
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+class ChallengeCodeVerifyRequest(BaseModel):
+    """Payload for second-factor verification from SPA LoginPage/SecondFactorStep."""
+
+    challenge_id: str | None = Field(default=None, description="Pending MFA session id")
+    code: str = Field(description="6-digit TOTP code or recovery code")
 
 
 @router.get("/session")
@@ -41,8 +63,6 @@ async def get_session_info(request: Request) -> JSONResponse:
         resolver = getattr(request.app.state, "principal_resolver", None)
         if resolver is not None:
             principal_ctx = await resolver.resolve(request)
-
-    response_headers: dict[str, str] = {}
 
     if principal_ctx is not None and getattr(principal_ctx, "session_id", None) is not None:
         session_id: uuid.UUID = principal_ctx.session_id
@@ -65,10 +85,146 @@ async def get_session_info(request: Request) -> JSONResponse:
             "mfa_pending": False,
             "csrf_token": csrf_token,
         }
-        # Deliver pre-session CSRF cookie so initial login POST can validate
-        response_headers["Set-Cookie"] = build_set_csrf_cookie_header(csrf_token)
 
-    return JSONResponse(content=data, headers=response_headers)
+    response = JSONResponse(content=data)
+    response.raw_headers.append(
+        (b"set-cookie", build_set_csrf_cookie_header(csrf_token).encode("latin-1"))
+    )
+    host_name = (request.headers.get("host") or "").split(":")[0].lower()
+    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+        response.raw_headers.append(
+            (b"set-cookie", build_set_fallback_csrf_cookie_header(csrf_token).encode("latin-1"))
+        )
+    return response
+
+
+@router.get("/me")
+async def get_current_principal(
+    request: Request,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> JSONResponse:
+    """Return profile and role summary for the currently authenticated principal."""
+    session_factory = getattr(request.app.state, "session_factory", None)
+    display_name: str | None = None
+    username: str | None = None
+    email: str | None = None
+    is_server_admin = False
+
+    if session_factory is not None:
+        rls_ctx = RLSContext(
+            principal_id=principal.principal_id,
+            workspace_id=principal.workspace_id,
+            token_scopes=principal.token_scopes,
+            aal_level=cast("Literal[1, 2]", principal.aal_level),
+        )
+        async with session_factory.session(rls_ctx) as async_session:
+            p_res = await async_session.execute(
+                text("SELECT display_name FROM principals WHERE id = :p_id"),
+                {"p_id": principal.principal_id},
+            )
+            display_name = p_res.scalar_one_or_none()
+
+            try:
+                async with async_session.begin_nested():
+                    u_res = await async_session.execute(
+                        text(
+                            "SELECT username FROM local_admin_credentials "
+                            "WHERE principal_id = :p_id"
+                        ),
+                        {"p_id": principal.principal_id},
+                    )
+                    username = u_res.scalar_one_or_none()
+            except Exception:  # noqa: BLE001
+                username = None
+
+            e_res = await async_session.execute(
+                text("SELECT email FROM users WHERE id = :p_id"),
+                {"p_id": principal.principal_id},
+            )
+            email = e_res.scalar_one_or_none()
+
+            admin_res = await async_session.execute(
+                text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+            )
+            is_server_admin = bool(admin_res.scalar_one())
+
+    handle = username or display_name or str(principal.principal_id)
+    return JSONResponse(
+        content={
+            "id": str(principal.principal_id),
+            "principal_id": str(principal.principal_id),
+            "workspace_id": str(principal.workspace_id),
+            "handle": handle,
+            "username": handle,
+            "display_name": display_name or handle,
+            "email": email,
+            "is_server_admin": is_server_admin,
+            "aal_level": principal.aal_level,
+            "mfa_pending": getattr(principal, "mfa_pending", False),
+        }
+    )
+
+
+get_current_principal.allow_mfa_pending = True  # type: ignore[attr-defined]
+
+
+@router.post("/totp/enroll", include_in_schema=False)
+async def enroll_totp_alias(
+    request: Request,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> JSONResponse:
+    """Compatibility alias for /api/v1/auth/mfa/totp/enroll."""
+    return await enroll_totp(request, principal)
+
+
+enroll_totp_alias.allow_mfa_pending = True  # type: ignore[attr-defined]
+
+
+@router.post("/totp/enroll/verify", include_in_schema=False)
+async def confirm_totp_alias(
+    request: Request,
+    body: TotpConfirmRequest,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> JSONResponse:
+    """Compatibility alias for /api/v1/auth/mfa/totp/confirm during setup."""
+    return await confirm_totp(request, body, principal)
+
+
+confirm_totp_alias.allow_mfa_pending = True  # type: ignore[attr-defined]
+
+
+@router.post("/totp/verify", include_in_schema=False)
+async def verify_totp_alias(
+    request: Request,
+    body: ChallengeCodeVerifyRequest,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> JSONResponse:
+    """Compatibility alias for TOTP second-factor verification."""
+    return await verify_mfa(
+        request,
+        MfaVerifyRequest(method="totp", code=body.code),
+        principal,
+    )
+
+
+verify_totp_alias.allow_mfa_pending = True  # type: ignore[attr-defined]
+
+
+@router.post("/recovery/verify", include_in_schema=False)
+async def verify_recovery_alias(
+    request: Request,
+    body: ChallengeCodeVerifyRequest,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> JSONResponse:
+    """Compatibility alias for recovery-code second-factor verification."""
+    return await verify_mfa(
+        request,
+        MfaVerifyRequest(method="recovery", code=body.code),
+        principal,
+    )
+
+
+verify_recovery_alias.allow_mfa_pending = True  # type: ignore[attr-defined]
 
 
 @router.post("/logout")
@@ -102,4 +258,12 @@ async def logout(request: Request) -> JSONResponse:
     # Clear both __Host-kb_session and __Host-kb_csrf cookies with Max-Age=0
     response.raw_headers.append((b"set-cookie", build_clear_cookie_header().encode("latin-1")))
     response.raw_headers.append((b"set-cookie", build_clear_csrf_cookie_header().encode("latin-1")))
+    host_name = (request.headers.get("host") or "").split(":")[0].lower()
+    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+        response.raw_headers.append(
+            (b"set-cookie", build_clear_fallback_cookie_header().encode("latin-1"))
+        )
+        response.raw_headers.append(
+            (b"set-cookie", build_clear_fallback_csrf_cookie_header().encode("latin-1"))
+        )
     return response

@@ -22,7 +22,7 @@ CSP_POLICY: Final[str] = (
     "script-src 'self'; "
     "worker-src 'self'; "
     "style-src 'self'; "
-    "img-src 'self' blob: data:image/png data:image/webp; "
+    "img-src 'self' blob: data:; "
     "font-src 'self'; "
     "connect-src 'self' wss:; "
     "media-src 'self'; "

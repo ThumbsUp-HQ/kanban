@@ -291,7 +291,25 @@ describe('ActivitySection', () => {
       expect(await screen.findByText('No agent or workflow gates recorded yet.')).toBeDefined();
     });
 
-    it('triggers handleRefresh on comment update and submit', async () => {
+    it('triggers handleRefresh on comment update and submit and attaches X-CSRF-Token header', async () => {
+      activityApi.resetActivityCsrfCache();
+      document.cookie = 'kb_csrf=csrf-activity-token-123; Path=/';
+
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: () =>
+          Promise.resolve({
+            id: 'c2222222-2222-2222-2222-222222222222',
+            issue_id: 'iss-1',
+            author: { id: 'u1', handle: 'alice', display_name: 'Alice' },
+            body_markdown: 'New test comment',
+            reactions: [],
+            created_at: '2026-11-12T09:45:00Z',
+            deleted: false,
+          }),
+      } as unknown as Response);
+
       const Wrapper = createWrapper();
       render(<ActivitySection issue={mockIssue} currentUserId="u1" />, { wrapper: Wrapper });
 
@@ -304,6 +322,79 @@ describe('ActivitySection', () => {
 
       const submitBtn = screen.getByRole('button', { name: 'Comment' });
       fireEvent.click(submitBtn);
+
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith(
+          '/api/v1/issues/KAN-142/comments',
+          expect.objectContaining({
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: expect.objectContaining({
+              'X-CSRF-Token': 'csrf-activity-token-123',
+            }) as unknown as Record<string, string>,
+          }),
+        );
+      });
+
+      document.cookie = 'kb_csrf=; Max-Age=0; Path=/';
+      activityApi.resetActivityCsrfCache();
+      fetchSpy.mockRestore();
+    });
+
+    it('bootstraps X-CSRF-Token from /api/v1/auth/session when cookie is absent on comment submit', async () => {
+      document.cookie = 'kb_csrf=; Max-Age=0; Path=/';
+      activityApi.resetActivityCsrfCache();
+      expect(activityApi.getActivityCsrfToken()).toBeNull();
+
+      const fetchSpy = vi
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ csrf_token: 'bootstrapped-csrf-456' }),
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 201,
+          json: () =>
+            Promise.resolve({
+              id: 'c3333333-3333-3333-3333-333333333333',
+              issue_id: 'iss-1',
+              author: { id: 'u1', handle: 'alice', display_name: 'Alice' },
+              body_markdown: 'Bootstrapped CSRF comment',
+              reactions: [],
+              created_at: '2026-11-12T09:50:00Z',
+              deleted: false,
+            }),
+        } as unknown as Response);
+
+      const created = await activityApi.createComment('KAN-142', {
+        body_markdown: 'Bootstrapped CSRF comment',
+      });
+      expect(created.id).toBe('c3333333-3333-3333-3333-333333333333');
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        1,
+        '/api/v1/auth/session',
+        expect.objectContaining({
+          method: 'GET',
+          credentials: 'same-origin',
+        }),
+      );
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        2,
+        '/api/v1/issues/KAN-142/comments',
+        expect.objectContaining({
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: expect.objectContaining({
+            'X-CSRF-Token': 'bootstrapped-csrf-456',
+          }) as unknown as Record<string, string>,
+        }),
+      );
+
+      document.cookie = 'kb_csrf=; Max-Age=0; Path=/';
+      activityApi.resetActivityCsrfCache();
+      fetchSpy.mockRestore();
     });
   });
 });

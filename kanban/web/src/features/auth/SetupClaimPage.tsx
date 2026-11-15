@@ -52,6 +52,7 @@ export function SetupClaimPage({
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [username, setUsername] = useState('admin');
   const [displayName, setDisplayName] = useState('Server Administrator');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -133,12 +134,14 @@ export function SetupClaimPage({
     setError(null);
 
     const tokenToSend = tokenRef.current;
+    const trimmedEmail = email.trim();
     try {
       const result = await submitSetupClaim({
         token: tokenToSend,
         username: username.trim(),
         display_name: displayName.trim(),
         password,
+        ...(trimmedEmail.length > 0 ? { email: trimmedEmail } : {}),
       });
 
       // Clear token from memory after claim
@@ -388,6 +391,23 @@ export function SetupClaimPage({
                 onChange={(e) => { setDisplayName(e.target.value); }}
                 maxLength={120}
                 required
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="setup-email">
+                Administrator Email (optional)
+              </label>
+              <input
+                id="setup-email"
+                className="auth-input"
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); }}
+                autoComplete="email"
+                maxLength={320}
+                placeholder={`${username.trim() || 'admin'}@local.kanban`}
                 disabled={isSubmitting}
               />
             </div>

@@ -66,3 +66,126 @@
     padding: 16px;
   }
 }
+
+/* Workspace Home & Section Views */
+.kb-workspace-home {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.kb-workspace-home-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.kb-workspace-home-title {
+  margin: 0 0 6px 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.kb-workspace-home-subtitle {
+  margin: 0;
+  color: var(--fg-muted, #94a3b8);
+  font-size: 14px;
+}
+
+.kb-workspace-home-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.kb-home-secondary-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #333842);
+  background: var(--bg-surface-raised, #24272f);
+  color: var(--fg-primary, #f8fafc);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kb-home-primary-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: none;
+  background: var(--color-brand-primary, #3b82f6);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kb-workspace-projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.kb-project-card {
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: 8px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.kb-project-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.kb-project-card-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.kb-project-card-key {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-surface-raised, #24272f);
+  color: var(--fg-muted, #94a3b8);
+}
+
+.kb-project-card-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-secondary, #cbd5e1);
+}
+
+.kb-project-card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kb-project-card-primary-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-brand-primary, #3b82f6);
+  text-decoration: none;
+}
+
+.kb-project-card-secondary-link {
+  font-size: 12px;
+  color: var(--fg-secondary, #cbd5e1);
+  text-decoration: none;
+}
+
+.kb-views-links-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}

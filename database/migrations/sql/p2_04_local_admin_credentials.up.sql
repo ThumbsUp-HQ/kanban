@@ -12,12 +12,16 @@ CREATE TABLE local_admin_credentials (
 -- Ownership and permissions
 ALTER TABLE local_admin_credentials OWNER TO kb_auth_owner;
 REVOKE ALL ON local_admin_credentials FROM PUBLIC, kanban_app, app_rls_reader;
+GRANT SELECT (principal_id, username) ON TABLE local_admin_credentials TO kanban_app;
 
 -- RLS
 ALTER TABLE local_admin_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE local_admin_credentials FORCE ROW LEVEL SECURITY;
 CREATE POLICY kb_auth_owner_all ON local_admin_credentials
     FOR ALL TO kb_auth_owner USING (true) WITH CHECK (true);
+CREATE POLICY kanban_app_select_own_local_admin ON local_admin_credentials
+    FOR SELECT TO kanban_app
+    USING (principal_id = ANY (app_effective_principal_set()));
 
 -- Allow kb_auth_owner to check principal status on login
 GRANT SELECT ON TABLE principals TO kb_auth_owner;

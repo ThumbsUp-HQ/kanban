@@ -15,11 +15,14 @@ from typing import Final
 from kanban.security.keys import derive_subkey
 
 __all__ = [
+    "FALLBACK_SESSION_COOKIE_NAME",
     "MAX_COOKIE_LEN",
     "SESSION_COOKIE_NAME",
     "TOKEN_BYTES_LEN",
     "build_clear_cookie_header",
+    "build_clear_fallback_cookie_header",
     "build_set_cookie_header",
+    "build_set_fallback_cookie_header",
     "encode_session_cookie",
     "extract_session_cookie",
     "generate_session_token",
@@ -28,7 +31,9 @@ __all__ = [
 ]
 
 SESSION_COOKIE_NAME: Final[str] = "__Host-kb_session"
+FALLBACK_SESSION_COOKIE_NAME: Final[str] = "kb_session"
 MAX_COOKIE_LEN: Final[int] = 128
+MIN_SIGNED_COOKIE_LEN: Final[int] = 80
 TOKEN_BYTES_LEN: Final[int] = 32
 SIG_BYTES_LEN: Final[int] = 32
 
@@ -100,14 +105,15 @@ def extract_session_cookie(cookie_header: str | None) -> str | None:
     """Extract single __Host-kb_session cookie from raw Cookie header string.
 
     Rejects:
-    - Requests without __Host-kb_session
+    - Requests without __Host-kb_session (unless a full signed kb_session fallback is present)
     - Requests carrying duplicate __Host-kb_session cookies (ambiguity defense)
-    - Requests carrying non-Host variants (kb_session, __Secure-kb_session)
+    - Requests carrying unsigned/short non-Host variants (kb_session, __Secure-kb_session)
     """
     if not cookie_header:
         return None
 
     found_values: list[str] = []
+    fallback_values: list[str] = []
     # Split on semicolon to get individual cookie declarations
     for item in cookie_header.split(";"):
         stripped = item.strip()
@@ -115,14 +121,24 @@ def extract_session_cookie(cookie_header: str | None) -> str | None:
             continue
         key, val = stripped.split("=", 1)
         key = key.strip()
+        clean_val = val.strip()
         if key == SESSION_COOKIE_NAME:
-            found_values.append(val.strip())
+            found_values.append(clean_val)
+        elif key == FALLBACK_SESSION_COOKIE_NAME:
+            fallback_values.append(clean_val)
 
     # Ambiguity check: duplicate __Host-kb_session cookies must fail closed
-    if len(found_values) != 1:
+    if len(found_values) > 1:
         return None
+    if len(found_values) == 1:
+        return found_values[0]
 
-    return found_values[0]
+    if len(fallback_values) == 1:
+        candidate = fallback_values[0]
+        if "." in candidate and MIN_SIGNED_COOKIE_LEN <= len(candidate) <= MAX_COOKIE_LEN:
+            return candidate
+
+    return None
 
 
 def build_set_cookie_header(cookie_val: str, expires_at: datetime | None = None) -> str:
@@ -142,6 +158,27 @@ def build_set_cookie_header(cookie_val: str, expires_at: datetime | None = None)
     return "; ".join(parts)
 
 
+def build_set_fallback_cookie_header(cookie_val: str, expires_at: datetime | None = None) -> str:
+    """Format Set-Cookie header for non-Host kb_session over plain HTTP local dev."""
+    parts = [
+        f"{FALLBACK_SESSION_COOKIE_NAME}={cookie_val}",
+        "Path=/",
+        "HttpOnly",
+        "SameSite=Lax",
+    ]
+    if expires_at is not None:
+        utc_dt = expires_at.astimezone(UTC)
+        expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        parts.append(f"Expires={expires_str}")
+
+    return "; ".join(parts)
+
+
 def build_clear_cookie_header() -> str:
     """Format Set-Cookie header to clear __Host-kb_session."""
     return f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"
+
+
+def build_clear_fallback_cookie_header() -> str:
+    """Format Set-Cookie header to clear non-Host kb_session."""
+    return f"{FALLBACK_SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"

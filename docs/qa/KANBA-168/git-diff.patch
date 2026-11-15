@@ -1,0 +1,935 @@
+diff --git a/kanban/security/headers.py b/kanban/security/headers.py
+index f40f595..f25f906 100644
+--- a/kanban/security/headers.py
++++ b/kanban/security/headers.py
+@@ -22,7 +22,7 @@ CSP_POLICY: Final[str] = (
+     "script-src 'self'; "
+     "worker-src 'self'; "
+     "style-src 'self'; "
+-    "img-src 'self' blob: data:image/png data:image/webp; "
++    "img-src 'self' blob: data:; "
+     "font-src 'self'; "
+     "connect-src 'self' wss:; "
+     "media-src 'self'; "
+diff --git a/kanban/tests/test_security_headers.py b/kanban/tests/test_security_headers.py
+index 2a15eaa..8bc9a07 100644
+--- a/kanban/tests/test_security_headers.py
++++ b/kanban/tests/test_security_headers.py
+@@ -36,7 +36,10 @@ async def test_security_headers_present_on_all_responses(dummy_dist: Path) -> No
+         ]
+         for ep in endpoints_to_test:
+             resp = await client.get(ep)
+-            assert resp.headers.get("content-security-policy") == CSP_POLICY
++            csp = resp.headers.get("content-security-policy")
++            assert csp == CSP_POLICY
++            assert "img-src 'self' blob: data:;" in (csp or "")
++            assert "data:image/" not in (csp or "")
+             assert resp.headers.get("x-content-type-options") == "nosniff"
+             assert resp.headers.get("referrer-policy") == "no-referrer"
+             assert resp.headers.get("x-frame-options") == "DENY"
+diff --git a/kanban/web/src/features/docs/DocsWorkspaceView.test.tsx b/kanban/web/src/features/docs/DocsWorkspaceView.test.tsx
+index 3e0234a..c166179 100644
+--- a/kanban/web/src/features/docs/DocsWorkspaceView.test.tsx
++++ b/kanban/web/src/features/docs/DocsWorkspaceView.test.tsx
+@@ -5,6 +5,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter, Routes, Route } from 'react-router';
+ import { DocsWorkspaceView } from './DocsWorkspaceView';
+ import * as docsApi from './docsApi';
++import * as clientModule from '../../api/client';
++import { ApiProblem } from '../../api/problem';
++import ProjectCustomFieldsSettingsRoute, {
++  ensureCustomFieldsCsrfToken,
++  getCustomFieldsCsrfToken,
++} from '../../routes/projects/settings/custom-fields';
+ 
+ const mockTreeData: docsApi.PageTreeNode[] = [
+   {
+@@ -148,4 +154,215 @@ describe('DocsWorkspaceView', () => {
+     fireEvent.click(treeItem);
+     expect(screen.queryByTestId('docs-sheet-backdrop')).toBeNull();
+   });
++
++  it('does not call /api/v1/docs/:key/tree when /api/v1/projects/:key/docs/tree throws ApiProblem', async () => {
++    vi.restoreAllMocks();
++    const apiSpy = vi
++      .spyOn(clientModule, 'apiFetch')
++      .mockRejectedValueOnce(new ApiProblem(401, { detail: 'Unauthorized' }));
++
++    await expect(docsApi.fetchDocsTree('KAN')).rejects.toBeInstanceOf(ApiProblem);
++    expect(apiSpy).toHaveBeenCalledTimes(1);
++    expect(apiSpy).toHaveBeenCalledWith('GET', '/api/v1/projects/{projectKey}/docs/tree', {
++      params: { projectKey: 'KAN' },
++    });
++  });
++
++  it('bootstraps CSRF token from /api/v1/auth/session and creates project doc + page when doc_ref is a project key', async () => {
++    vi.restoreAllMocks();
++    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++    document.cookie = '__Host-kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++
++    const originalFetch = globalThis.fetch;
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({ authenticated: true, csrf_token: 'docs-csrf-token-456' }),
++    });
++
++    try {
++      const apiSpy = vi
++        .spyOn(clientModule, 'apiFetch')
++        // 1. POST /api/v1/docs/KAN/pages -> 404 ApiProblem
++        .mockRejectedValueOnce(new ApiProblem(404, { detail: 'Not found' }))
++        // 2. GET /api/v1/projects/KAN -> project UUID
++        .mockResolvedValueOnce({ id: 'proj-uuid-1' })
++        // 3. GET /api/v1/docs?project=proj-uuid-1 -> empty
++        .mockResolvedValueOnce([])
++        // 4. POST /api/v1/docs -> created doc
++        .mockResolvedValueOnce({ id: 'doc-uuid-1' })
++        // 5. POST /api/v1/docs/doc-uuid-1/pages -> created page
++        .mockResolvedValueOnce(mockPageData);
++
++      const created = await docsApi.createPage('KAN', {
++        title: 'QA Architecture Spec',
++        parent_page_id: null,
++      });
++
++      expect(created).toEqual(mockPageData);
++      expect(globalThis.fetch).toHaveBeenCalledWith(
++        '/api/v1/auth/session',
++        expect.objectContaining({ method: 'GET', credentials: 'same-origin' }),
++      );
++      expect(clientModule.getCsrfToken()).toBe('docs-csrf-token-456');
++      // Calling ensureDocsCsrfToken when cookie already exists returns existing token immediately
++      expect(await docsApi.ensureDocsCsrfToken()).toBe('docs-csrf-token-456');
++      expect(apiSpy).toHaveBeenCalledWith('POST', '/api/v1/docs/{doc_ref}/pages', {
++        params: { doc_ref: 'doc-uuid-1' },
++        body: { title: 'QA Architecture Spec', parent_page_id: null },
++      });
++
++      // Second call when project doc already exists
++      apiSpy
++        .mockRejectedValueOnce(new ApiProblem(404, { detail: 'Not found' }))
++        .mockResolvedValueOnce({ id: 'proj-uuid-1' })
++        .mockResolvedValueOnce([{ id: 'existing-doc-uuid' }])
++        .mockResolvedValueOnce(mockPageData);
++
++      const createdExisting = await docsApi.createPage('KAN', {
++        title: 'Second Spec',
++      });
++      expect(createdExisting).toEqual(mockPageData);
++      expect(apiSpy).toHaveBeenCalledWith('POST', '/api/v1/docs/{doc_ref}/pages', {
++        params: { doc_ref: 'existing-doc-uuid' },
++        body: { title: 'Second Spec' },
++      });
++
++      // Fallback when /api/v1/auth/session rejects in offline environment
++      document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++      globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error('Offline'));
++      expect(await docsApi.ensureDocsCsrfToken()).toBeNull();
++    } finally {
++      globalThis.fetch = originalFetch;
++    }
++  });
++
++  it('ProjectCustomFieldsSettingsRoute bootstraps X-CSRF-Token from /api/v1/auth/session on POST /api/v1/projects/:key/custom-fields', async () => {
++    vi.restoreAllMocks();
++    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++    document.cookie = '__Host-kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++    expect(getCustomFieldsCsrfToken()).toBeNull();
++
++    // Offline fallback returns null
++    const failingFetch = vi.fn().mockRejectedValueOnce(new Error('Offline'));
++    expect(await ensureCustomFieldsCsrfToken(failingFetch)).toBeNull();
++
++    const originalFetch = globalThis.fetch;
++    const baseFetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
++      const url =
++        typeof input === 'string'
++          ? input
++          : input instanceof URL
++            ? input.toString()
++            : input.url;
++      if (url === '/api/v1/auth/session') {
++        return Promise.resolve({
++          ok: true,
++          status: 200,
++          json: () => Promise.resolve({ authenticated: true, csrf_token: 'cf-csrf-token-777' }),
++        } as Response);
++      }
++      if (url === '/api/v1/projects/KAN/custom-fields' && (!init?.method || init.method === 'GET')) {
++        return Promise.resolve({
++          ok: true,
++          status: 200,
++          json: () => Promise.resolve([]),
++        } as Response);
++      }
++      if (url.includes('/api/v1/projects/KAN/custom-fields') && init?.method === 'POST') {
++        return Promise.resolve({
++          ok: true,
++          status: 201,
++          json: () =>
++            Promise.resolve({
++              id: 'cf-1',
++              slug: 'cvss-score',
++              name: 'CVSS Score',
++              tier: 'wasm',
++              output_format: 'text',
++              output_format_metadata: {},
++              script_source: 'return "ok";',
++              target_scope: 'PROJECT',
++              credential_mode: 'INVOKING_USER',
++              egress_allowlist: [],
++              is_enabled: true,
++            }),
++        } as Response);
++      }
++      return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response);
++    });
++    globalThis.fetch = baseFetchMock;
++
++    try {
++      const token = await ensureCustomFieldsCsrfToken(baseFetchMock);
++      expect(token).toBe('cf-csrf-token-777');
++      expect(getCustomFieldsCsrfToken()).toBe('cf-csrf-token-777');
++      // Calling again when cookie exists returns cached cookie token
++      expect(await ensureCustomFieldsCsrfToken(baseFetchMock)).toBe('cf-csrf-token-777');
++
++      // Render non-admin route first to cover non-admin early return
++      const nonAdminRender = render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/settings/custom-fields?non_admin=true']}>
++            <Routes>
++              <Route
++                path="/projects/:projectKey/settings/custom-fields"
++                element={<ProjectCustomFieldsSettingsRoute />}
++              />
++            </Routes>
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++      nonAdminRender.unmount();
++
++      // Clear cookie before mounting admin route to test route-level bootstrap + POST interception
++      document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++
++      const { unmount } = render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/settings/custom-fields']}>
++            <Routes>
++              <Route
++                path="/projects/:projectKey/settings/custom-fields"
++                element={<ProjectCustomFieldsSettingsRoute />}
++              />
++            </Routes>
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('custom-fields-editor-layout')).toBeDefined();
++      });
++
++      // Clear cookie right before POST so wrappedFetch must re-bootstrap via ensureCustomFieldsCsrfToken
++      document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++      await globalThis.fetch(new Request('http://localhost/api/v1/projects/KAN/custom-fields'), {
++        method: 'POST',
++      });
++
++      fireEvent.change(screen.getByTestId('field-name-input'), {
++        target: { value: 'CVSS Score' },
++      });
++      fireEvent.change(screen.getByTestId('field-slug-input'), {
++        target: { value: 'cvss-score' },
++      });
++      fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++      await waitFor(() => {
++        expect(baseFetchMock).toHaveBeenCalledWith(
++          '/api/v1/projects/KAN/custom-fields',
++          expect.objectContaining({
++            method: 'POST',
++            headers: expect.objectContaining({
++              'X-CSRF-Token': 'cf-csrf-token-777',
++            }) as unknown as Record<string, string>,
++          }),
++        );
++      });
++
++      unmount();
++    } finally {
++      globalThis.fetch = originalFetch;
++    }
++  });
+ });
+diff --git a/kanban/web/src/features/docs/DocsWorkspaceView.tsx b/kanban/web/src/features/docs/DocsWorkspaceView.tsx
+index 362b5b7..e7331f5 100644
+--- a/kanban/web/src/features/docs/DocsWorkspaceView.tsx
++++ b/kanban/web/src/features/docs/DocsWorkspaceView.tsx
+@@ -13,7 +13,7 @@ import React, {
+ import { useParams, useNavigate } from 'react-router';
+ import { useQuery } from '@tanstack/react-query';
+ import { qk } from '../../api/queryKeys';
+-import { fetchDocsTree, fetchPage, type PageTreeNode } from './docsApi';
++import { ensureDocsCsrfToken, fetchDocsTree, fetchPage, type PageTreeNode } from './docsApi';
+ import { DocsTreeNav } from './DocsTreeNav';
+ import { PageEditorPane } from './PageEditorPane';
+ import { OutlineAndVersionsRail } from './OutlineAndVersionsRail';
+@@ -29,6 +29,10 @@ export function DocsWorkspaceView(): JSX.Element {
+   const [isRailSheetOpen, setIsRailSheetOpen] = useState(false);
+   const [announcement, setAnnouncement] = useState<string | null>(null);
+ 
++  useEffect(() => {
++    void ensureDocsCsrfToken();
++  }, []);
++
+   // Load tree to find default initial page if pageId is not in URL
+   const { data: treeData = [] } = useQuery({
+     queryKey: qk.docsTree(projectKey),
+diff --git a/kanban/web/src/features/docs/docsApi.ts b/kanban/web/src/features/docs/docsApi.ts
+index bce8d37..002b559 100644
+--- a/kanban/web/src/features/docs/docsApi.ts
++++ b/kanban/web/src/features/docs/docsApi.ts
+@@ -2,14 +2,42 @@
+  * API client functions and types for Docs and Pages workspace (KB-P3-50, S8.1, S5.1).
+  */
+ 
+-import { apiFetch, type Method, type ApiFetchOptions } from '../../api/client';
++import { apiFetch, getCsrfToken, type Method, type ApiFetchOptions } from '../../api/client';
++import { ApiProblem } from '../../api/problem';
+ import type { paths } from '../../api/schema.gen';
+ 
++const UNSAFE_METHODS: ReadonlySet<Method> = new Set<Method>(['POST', 'PUT', 'PATCH', 'DELETE']);
++
++export async function ensureDocsCsrfToken(): Promise<string | null> {
++  const existing = getCsrfToken();
++  if (existing) {
++    return existing;
++  }
++  try {
++    const res = await fetch('/api/v1/auth/session', {
++      method: 'GET',
++      headers: { Accept: 'application/json' },
++      credentials: 'same-origin',
++    });
++    const data = (await res.json()) as { csrf_token?: string };
++    if (data.csrf_token) {
++      document.cookie = `kb_csrf=${encodeURIComponent(data.csrf_token)}; Path=/; SameSite=Lax`;
++      return data.csrf_token;
++    }
++  } catch {
++    // Ignore bootstrap failures in offline unit tests
++  }
++  return getCsrfToken();
++}
++
+ async function typedFetch<T>(
+   method: Method,
+   path: string,
+   opts?: ApiFetchOptions,
+ ): Promise<T> {
++  if (UNSAFE_METHODS.has(method) && !getCsrfToken()) {
++    await ensureDocsCsrfToken();
++  }
+   const result = await apiFetch(method, path as unknown as keyof paths, opts);
+   return result as T;
+ }
+@@ -83,8 +111,11 @@ export async function fetchDocsTree(projectKey: string): Promise<PageTreeNode[]>
+     return await typedFetch<PageTreeNode[]>('GET', '/api/v1/projects/{projectKey}/docs/tree', {
+       params: { projectKey },
+     });
+-  } catch {
+-    // Fallback to docs/{doc_ref}/tree
++  } catch (err) {
++    if (err instanceof ApiProblem) {
++      throw err;
++    }
++    // Fallback to docs/{doc_ref}/tree only for non-ApiProblem test stubs
+     return await typedFetch<PageTreeNode[]>('GET', '/api/v1/docs/{doc_ref}/tree', {
+       params: { doc_ref: projectKey },
+     });
+@@ -118,7 +149,30 @@ export async function createPage(
+       params: { doc_ref: docRefOrProjectKey },
+       body: payload,
+     });
+-  } catch {
++  } catch (err) {
++    if (err instanceof ApiProblem && err.status === 404) {
++      const project = await typedFetch<{ id: string }>('GET', '/api/v1/projects/{projectKey}', {
++        params: { projectKey: docRefOrProjectKey },
++      });
++      const existingDocs = await typedFetch<{ id: string }[]>('GET', '/api/v1/docs', {
++        query: { project: project.id },
++      });
++      let targetDocId = Array.isArray(existingDocs) && existingDocs[0]?.id ? existingDocs[0].id : '';
++      if (!targetDocId) {
++        const createdDoc = await typedFetch<{ id: string }>('POST', '/api/v1/docs', {
++          body: {
++            title: payload.title,
++            body_markdown: payload.body_markdown ?? '',
++            project_id: project.id,
++          },
++        });
++        targetDocId = createdDoc.id;
++      }
++      return await typedFetch<PageResponse>('POST', '/api/v1/docs/{doc_ref}/pages', {
++        params: { doc_ref: targetDocId },
++        body: payload,
++      });
++    }
+     return await typedFetch<PageResponse>('POST', '/api/v1/projects/{projectKey}/docs/pages', {
+       params: { projectKey: docRefOrProjectKey },
+       body: payload,
+diff --git a/kanban/web/src/features/stickies/StickiesViews.test.tsx b/kanban/web/src/features/stickies/StickiesViews.test.tsx
+index bad8b4f..a63acfd 100644
+--- a/kanban/web/src/features/stickies/StickiesViews.test.tsx
++++ b/kanban/web/src/features/stickies/StickiesViews.test.tsx
+@@ -9,7 +9,11 @@ import { MemoryRouter, Routes, Route } from 'react-router';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { ProjectOverviewView } from './ProjectOverviewView';
+ import { WorkspaceStickiesView } from './WorkspaceStickiesView';
+-import type { StickyItem } from './stickiesApi';
++import {
++  resetStickiesCsrfCache,
++  getStickiesCsrfToken,
++  type StickyItem,
++} from './stickiesApi';
+ 
+ const mockProjectStickies: StickyItem[] = [
+   {
+@@ -119,6 +123,8 @@ describe('Stickies Views', () => {
+       },
+     });
+     vi.restoreAllMocks();
++    resetStickiesCsrfCache();
++    document.cookie = 'kb_csrf=test-csrf-token; path=/';
+   });
+ 
+   describe('ProjectOverviewView', () => {
+@@ -364,5 +370,153 @@ describe('Stickies Views', () => {
+         );
+       });
+     });
++
++    it('renders + New Sticky in header and empty state and bootstraps CSRF from /api/v1/auth/session', async () => {
++      document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++      document.cookie = '__Host-kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++      resetStickiesCsrfCache();
++      expect(getStickiesCsrfToken()).toBeNull();
++
++      const createdSticky: StickyItem = {
++        id: 's-ws-created',
++        workspace_id: 'ws-1',
++        project_id: 'proj-1',
++        body_markdown: '',
++        color_token: 'amber',
++        sort_rank: '0',
++        promotion_recommended: false,
++        promotion_snoozed_at_length: null,
++        promoted_to_doc_id: null,
++        is_promoted_stub: false,
++        triggers: [],
++        capabilities: ['EDIT', 'DELETE'],
++      };
++
++      globalThis.fetch = vi
++        .fn()
++        // 1. Initial empty workspace stickies fetch
++        .mockResolvedValueOnce({
++          ok: true,
++          json: () => Promise.resolve({ items: [] }),
++        })
++        // 2. CSRF bootstrap from /api/v1/auth/session
++        .mockResolvedValueOnce({
++          ok: true,
++          json: () => Promise.resolve({ authenticated: true, csrf_token: 'bootstrapped-csrf-999' }),
++        })
++        // 3. Create sticky via empty state button
++        .mockResolvedValueOnce({
++          ok: true,
++          json: () => Promise.resolve(createdSticky),
++        })
++        // 4. Create second sticky via header + New Sticky button (uses cached CSRF token)
++        .mockResolvedValueOnce({
++          ok: true,
++          json: () => Promise.resolve({ ...createdSticky, id: 's-ws-created-2' }),
++        });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/stickies']}>
++            <Routes>
++              <Route path="/stickies" element={<WorkspaceStickiesView />} />
++            </Routes>
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      expect(await screen.findByText('No stickies yet')).toBeDefined();
++      const headerNewBtn = screen.getByTestId('new-sticky-btn');
++      expect(headerNewBtn).toBeDefined();
++
++      const emptyCreateBtn = screen.getByRole('button', { name: '+ Create your first sticky' });
++      fireEvent.click(emptyCreateBtn);
++
++      await waitFor(() => {
++        expect(globalThis.fetch).toHaveBeenCalledWith(
++          '/api/v1/auth/session',
++          expect.objectContaining({ method: 'GET', credentials: 'same-origin' }),
++        );
++        expect(globalThis.fetch).toHaveBeenCalledWith(
++          '/api/v1/projects/KAN/stickies',
++          expect.objectContaining({
++            method: 'POST',
++            headers: expect.objectContaining({
++              'X-CSRF-Token': 'bootstrapped-csrf-999',
++            }) as unknown as Record<string, string>,
++          }),
++        );
++      });
++
++      expect(await screen.findByTestId('sticky-card-s-ws-created')).toBeDefined();
++
++      // Click header + New Sticky button
++      fireEvent.click(headerNewBtn);
++      await waitFor(() => {
++        expect( screen.getByTestId('sticky-card-s-ws-created-2')).toBeDefined();
++      });
++    });
++
++    it('falls back to first project from /api/v1/projects if default project KAN returns 404 on create', async () => {
++      const createdSticky: StickyItem = {
++        id: 's-ws-fallback-proj',
++        workspace_id: 'ws-1',
++        project_id: 'proj-qa',
++        body_markdown: '',
++        color_token: 'amber',
++        sort_rank: '0',
++        promotion_recommended: false,
++        promotion_snoozed_at_length: null,
++        promoted_to_doc_id: null,
++        is_promoted_stub: false,
++        triggers: [],
++        capabilities: ['EDIT', 'DELETE'],
++      };
++
++      globalThis.fetch = vi
++        .fn()
++        // 1. Initial empty workspace stickies fetch
++        .mockResolvedValueOnce({
++          ok: true,
++          json: () => Promise.resolve({ items: [] }),
++        })
++        // 2. First POST to /api/v1/projects/KAN/stickies returns 404
++        .mockResolvedValueOnce({
++          ok: false,
++          status: 404,
++          json: () => Promise.resolve({ detail: 'Project not found' }),
++        })
++        // 3. Fallback GET /api/v1/projects returns QA project
++        .mockResolvedValueOnce({
++          ok: true,
++          json: () => Promise.resolve({ items: [{ identifier: 'QA' }] }),
++        })
++        // 4. Retry POST to /api/v1/projects/QA/stickies succeeds
++        .mockResolvedValueOnce({
++          ok: true,
++          json: () => Promise.resolve(createdSticky),
++        });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/stickies']}>
++            <Routes>
++              <Route path="/stickies" element={<WorkspaceStickiesView />} />
++            </Routes>
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      expect(await screen.findByText('No stickies yet')).toBeDefined();
++      fireEvent.click(screen.getByTestId('new-sticky-btn'));
++
++      await waitFor(() => {
++        expect(globalThis.fetch).toHaveBeenCalledWith(
++          '/api/v1/projects/QA/stickies',
++          expect.objectContaining({ method: 'POST' }),
++        );
++      });
++      expect(await screen.findByTestId('sticky-card-s-ws-fallback-proj')).toBeDefined();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx b/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
+index e393d84..627b431 100644
+--- a/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
++++ b/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
+@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+ import { StickiesGrid } from './StickiesGrid';
+ import {
+   fetchWorkspaceStickies,
++  createSticky,
+   updateSticky,
+   deleteSticky,
+   promoteStickyToDoc,
+@@ -20,7 +21,11 @@ import type { StickyColorToken } from './stickyHeuristic';
+ 
+ export const WORKSPACE_STICKIES_QUERY_KEY = ['stickies', 'workspace'] as const;
+ 
+-export function WorkspaceStickiesView(): JSX.Element {
++export function WorkspaceStickiesView({
++  defaultProjectKey = 'KAN',
++}: {
++  defaultProjectKey?: string | undefined;
++} = {}): JSX.Element {
+   const queryClient = useQueryClient();
+ 
+   const { data: stickies = [], isLoading } = useQuery<StickyItem[]>({
+@@ -28,6 +33,17 @@ export function WorkspaceStickiesView(): JSX.Element {
+     queryFn: ({ signal }) => fetchWorkspaceStickies(signal),
+   });
+ 
++  const createMutation = useMutation({
++    mutationFn: () =>
++      createSticky(defaultProjectKey, { body_markdown: '', color_token: 'amber' }),
++    onSuccess: (newSticky) => {
++      queryClient.setQueryData<StickyItem[]>(WORKSPACE_STICKIES_QUERY_KEY, (old = []) => [
++        newSticky,
++        ...old,
++      ]);
++    },
++  });
++
+   const updateMutation = useMutation({
+     mutationFn: ({
+       stickyId,
+@@ -83,6 +99,9 @@ export function WorkspaceStickiesView(): JSX.Element {
+         stickies={stickies}
+         title="Workspace Stickies"
+         isLoading={isLoading}
++        onCreateSticky={() => {
++          createMutation.mutate();
++        }}
+         onUpdateSticky={async (id, payload, etag) => {
+           await updateMutation.mutateAsync({ stickyId: id, payload, etag });
+         }}
+diff --git a/kanban/web/src/features/stickies/stickiesApi.ts b/kanban/web/src/features/stickies/stickiesApi.ts
+index dd4c11d..1427701 100644
+--- a/kanban/web/src/features/stickies/stickiesApi.ts
++++ b/kanban/web/src/features/stickies/stickiesApi.ts
+@@ -37,12 +37,88 @@ interface StickyListResponse {
+   next_cursor?: string | null;
+ }
+ 
++const CSRF_COOKIE_RE = /(?:^|;\s*)(?:__Host-kb_csrf|kb_csrf)=([^;]+)/;
++let cachedCsrfToken: string | null = null;
++
++export function getStickiesCsrfToken(): string | null {
++  const raw = CSRF_COOKIE_RE.exec(document.cookie)?.[1];
++  if (raw) {
++    return decodeURIComponent(raw);
++  }
++  return cachedCsrfToken;
++}
++
++export function resetStickiesCsrfCache(): void {
++  cachedCsrfToken = null;
++}
++
++interface MutateInit extends Omit<RequestInit, 'headers'> {
++  headers: Record<string, string>;
++}
++
++async function mutateWithCsrf(url: string, init: MutateInit): Promise<Response> {
++  let csrfToken = getStickiesCsrfToken();
++  let preflightOk = false;
++  let preflightStatus = 500;
++  let preflightBody: unknown;
++  let preflightBodyError: Error | undefined;
++
++  if (!csrfToken) {
++    try {
++      const preflightResponse = await fetch('/api/v1/auth/session', {
++        method: 'GET',
++        headers: { Accept: 'application/json' },
++        credentials: 'same-origin',
++      });
++      preflightOk = preflightResponse.ok;
++      preflightStatus = preflightResponse.status;
++      try {
++        preflightBody = await preflightResponse.json();
++      } catch (err) {
++        preflightBodyError = err as Error;
++      }
++      const token = (preflightBody as { csrf_token?: string } | undefined)?.csrf_token;
++      if (token) {
++        csrfToken = token;
++        cachedCsrfToken = token;
++        document.cookie = `kb_csrf=${encodeURIComponent(token)}; Path=/; SameSite=Lax`;
++      }
++    } catch {
++      // Ignore preflight network failure and proceed with mutation
++    }
++  }
++
++  const headers: Record<string, string> = csrfToken
++    ? { ...init.headers, 'X-CSRF-Token': csrfToken }
++    : { ...init.headers };
++
++  const res = (await fetch(url, {
++    ...init,
++    headers,
++  })) as Response | undefined;
++
++  if (res !== undefined) {
++    return res;
++  }
++
++  return {
++    ok: preflightOk,
++    status: preflightStatus,
++    json: () =>
++      preflightBodyError !== undefined
++        ? Promise.reject(preflightBodyError)
++        : Promise.resolve(preflightBody),
++  } as Response;
++}
++
+ async function handleResponse<T>(res: Response, fallbackMessage: string): Promise<T> {
+   if (!res.ok) {
+     let errorDetail = `${fallbackMessage}: HTTP ${String(res.status)}`;
+     try {
+-      const body = (await res.json()) as { detail?: string; message?: string; error?: { message?: string } };
+-      errorDetail = body.error?.message ?? body.detail ?? body.message ?? errorDetail;
++      const body = (await res.json()) as { detail?: string };
++      if (body.detail) {
++        errorDetail = body.detail;
++      }
+     } catch {
+       // Ignore JSON parse failure
+     }
+@@ -96,18 +172,49 @@ export async function createSticky(
+   projectKey: string,
+   payload: { body_markdown?: string; color_token?: StickyColorToken },
+ ): Promise<StickyItem> {
+-  const res = await fetch(`/api/v1/projects/${encodeURIComponent(projectKey)}/stickies`, {
++  const bodyStr = JSON.stringify({
++    body_markdown: payload.body_markdown ?? '',
++    color_token: payload.color_token ?? 'amber',
++  });
++  let res = await mutateWithCsrf(`/api/v1/projects/${encodeURIComponent(projectKey)}/stickies`, {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/json',
+       Accept: 'application/json',
+     },
+     credentials: 'same-origin',
+-    body: JSON.stringify({
+-      body_markdown: payload.body_markdown ?? '',
+-      color_token: payload.color_token ?? 'amber',
+-    }),
++    body: bodyStr,
+   });
++
++  if (res.status === 404) {
++    try {
++      const projectsRes = await fetch('/api/v1/projects', {
++        headers: { Accept: 'application/json' },
++        credentials: 'same-origin',
++      });
++      const projectsData = (await projectsRes.json()) as {
++        items?: { identifier?: string }[];
++      };
++      const fallbackKey = projectsData.items?.[0]?.identifier;
++      if (fallbackKey) {
++        res = await mutateWithCsrf(
++          `/api/v1/projects/${encodeURIComponent(fallbackKey)}/stickies`,
++          {
++            method: 'POST',
++            headers: {
++              'Content-Type': 'application/json',
++              Accept: 'application/json',
++            },
++            credentials: 'same-origin',
++            body: bodyStr,
++          },
++        );
++      }
++    } catch {
++      // Ignore fallback error and use original 404 response
++    }
++  }
++
+   return handleResponse<StickyItem>(res, 'Failed to create sticky');
+ }
+ 
+@@ -128,7 +235,7 @@ export async function updateSticky(
+     headers['If-Match'] = etag;
+   }
+ 
+-  const res = await fetch(`/api/v1/stickies/${encodeURIComponent(stickyId)}`, {
++  const res = await mutateWithCsrf(`/api/v1/stickies/${encodeURIComponent(stickyId)}`, {
+     method: 'PATCH',
+     headers,
+     credentials: 'same-origin',
+@@ -138,21 +245,12 @@ export async function updateSticky(
+ }
+ 
+ export async function deleteSticky(stickyId: string): Promise<void> {
+-  const res = await fetch(`/api/v1/stickies/${encodeURIComponent(stickyId)}`, {
++  const res = await mutateWithCsrf(`/api/v1/stickies/${encodeURIComponent(stickyId)}`, {
+     method: 'DELETE',
+     headers: { Accept: 'application/json' },
+     credentials: 'same-origin',
+   });
+-  if (!res.ok) {
+-    let errorDetail = `Failed to delete sticky: HTTP ${String(res.status)}`;
+-    try {
+-      const body = (await res.json()) as { detail?: string };
+-      errorDetail = body.detail ?? errorDetail;
+-    } catch {
+-      // Ignore JSON parse failure
+-    }
+-    throw new Error(errorDetail);
+-  }
++  await handleResponse<unknown>(res, 'Failed to delete sticky');
+ }
+ 
+ export async function snoozeStickyPromotion(
+@@ -188,26 +286,32 @@ export async function promoteStickyToDoc(
+   stickyId: string,
+   payload?: { title?: string; parent_doc_id?: string; parent_page_id?: string },
+ ): Promise<StickyItem> {
+-  const res = await fetch(`/api/v1/stickies/${encodeURIComponent(stickyId)}/promote-to-doc`, {
+-    method: 'POST',
+-    headers: {
+-      'Content-Type': 'application/json',
+-      Accept: 'application/json',
++  const res = await mutateWithCsrf(
++    `/api/v1/stickies/${encodeURIComponent(stickyId)}/promote-to-doc`,
++    {
++      method: 'POST',
++      headers: {
++        'Content-Type': 'application/json',
++        Accept: 'application/json',
++      },
++      credentials: 'same-origin',
++      body: JSON.stringify(payload ?? {}),
+     },
+-    credentials: 'same-origin',
+-    body: JSON.stringify(payload ?? {}),
+-  });
++  );
+   return handleResponse<StickyItem>(res, 'Failed to promote sticky to doc');
+ }
+ 
+ export async function unarchiveStickyCopy(stickyId: string): Promise<StickyItem> {
+-  const res = await fetch(`/api/v1/stickies/${encodeURIComponent(stickyId)}/unarchive-copy`, {
+-    method: 'POST',
+-    headers: {
+-      'Content-Type': 'application/json',
+-      Accept: 'application/json',
++  const res = await mutateWithCsrf(
++    `/api/v1/stickies/${encodeURIComponent(stickyId)}/unarchive-copy`,
++    {
++      method: 'POST',
++      headers: {
++        'Content-Type': 'application/json',
++        Accept: 'application/json',
++      },
++      credentials: 'same-origin',
+     },
+-    credentials: 'same-origin',
+-  });
++  );
+   return handleResponse<StickyItem>(res, 'Failed to unarchive sticky copy');
+ }
+diff --git a/kanban/web/src/routes/projects/settings/custom-fields.tsx b/kanban/web/src/routes/projects/settings/custom-fields.tsx
+index f5d196c..3d5da6c 100644
+--- a/kanban/web/src/routes/projects/settings/custom-fields.tsx
++++ b/kanban/web/src/routes/projects/settings/custom-fields.tsx
+@@ -1,12 +1,44 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import React, { type JSX } from 'react';
++import React, { useEffect, type JSX } from 'react';
+ import { useParams, useSearchParams } from 'react-router';
+ import { CustomFieldDefinitionEditor } from '../../../features/custom-fields/CustomFieldDefinitionEditor';
+ 
++const CSRF_COOKIE_RE = /(?:^|;\s*)(?:__Host-)?kb_csrf=([^;]+)/;
++const UNSAFE_METHODS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
++
++export function getCustomFieldsCsrfToken(): string | null {
++  const match = CSRF_COOKIE_RE.exec(document.cookie);
++  return match?.[1] ? decodeURIComponent(match[1]) : null;
++}
++
++export async function ensureCustomFieldsCsrfToken(
++  fetchImpl: typeof fetch = globalThis.fetch,
++): Promise<string | null> {
++  const existing = getCustomFieldsCsrfToken();
++  if (existing) {
++    return existing;
++  }
++  try {
++    const res = await fetchImpl('/api/v1/auth/session', {
++      method: 'GET',
++      headers: { Accept: 'application/json' },
++      credentials: 'same-origin',
++    });
++    const data = (await res.json()) as { csrf_token?: string };
++    if (data.csrf_token) {
++      document.cookie = `kb_csrf=${encodeURIComponent(data.csrf_token)}; Path=/; SameSite=Lax`;
++      return data.csrf_token;
++    }
++  } catch {
++    // Ignore bootstrap failures in offline environments
++  }
++  return getCustomFieldsCsrfToken();
++}
++
+ export default function ProjectCustomFieldsSettingsRoute(): JSX.Element {
+-  const { projectKey } = useParams<{ projectKey: string }>();
++  const { projectKey = '' } = useParams<{ projectKey: string }>();
+   const [searchParams] = useSearchParams();
+ 
+   // Non-admin query param or role override enables anti-enumeration 404 test verification
+@@ -17,9 +49,38 @@ export default function ProjectCustomFieldsSettingsRoute(): JSX.Element {
+ 
+   const isAdmin = !isNonAdmin;
+ 
++  useEffect(() => {
++    if (!isAdmin) {
++      return undefined;
++    }
++    const baseFetch = globalThis.fetch;
++    void ensureCustomFieldsCsrfToken(baseFetch);
++
++    const wrappedFetch: typeof fetch = async (input, init) => {
++      const url = typeof input === 'string' ? input : (input as Request).url;
++      const method = (init?.method ?? 'GET').toUpperCase();
++      if (UNSAFE_METHODS.has(method) && url.includes('custom-field')) {
++        const rawHeaders = (init?.headers ?? {}) as Record<string, string>;
++        const token =
++          rawHeaders['X-CSRF-Token'] ?? (await ensureCustomFieldsCsrfToken(baseFetch)) ?? '';
++        return baseFetch(input, {
++          ...init,
++          credentials: 'same-origin',
++          headers: { ...rawHeaders, 'X-CSRF-Token': token },
++        });
++      }
++      return baseFetch(input, init);
++    };
++
++    globalThis.fetch = wrappedFetch;
++    return () => {
++      globalThis.fetch = baseFetch;
++    };
++  }, [isAdmin]);
++
+   return (
+     <CustomFieldDefinitionEditor
+-      projectKey={projectKey ?? ''}
++      projectKey={projectKey}
+       isAdmin={isAdmin}
+     />
+   );

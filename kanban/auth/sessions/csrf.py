@@ -27,16 +27,20 @@ __all__ = [
     "CSRF_COOKIE_NAME",
     "CSRF_EXEMPT_PATHS",
     "CSRF_HEADER_NAME",
+    "FALLBACK_CSRF_COOKIE_NAME",
     "PRE_SESSION_ID",
     "CsrfMiddleware",
     "build_clear_csrf_cookie_header",
+    "build_clear_fallback_csrf_cookie_header",
     "build_set_csrf_cookie_header",
+    "build_set_fallback_csrf_cookie_header",
     "extract_csrf_cookie",
     "generate_csrf_token",
     "validate_csrf_token",
 ]
 
 CSRF_COOKIE_NAME: Final[str] = "__Host-kb_csrf"
+FALLBACK_CSRF_COOKIE_NAME: Final[str] = "kb_csrf"
 CSRF_HEADER_NAME: Final[str] = "X-CSRF-Token"
 PRE_SESSION_ID: Final[uuid.UUID] = uuid.UUID(int=0)
 NONCE_BYTES_LEN: Final[int] = 16
@@ -100,8 +104,13 @@ def validate_csrf_token(token: str, session_id: uuid.UUID, session_hmac_key: byt
 
 
 def extract_csrf_cookie(request: Request) -> str | None:
-    """Extract single __Host-kb_csrf cookie from request."""
-    return request.cookies.get(CSRF_COOKIE_NAME)
+    """Extract __Host-kb_csrf (or plain-HTTP kb_csrf fallback) cookie from request."""
+    host_cookie = request.cookies.get(CSRF_COOKIE_NAME)
+    fallback_cookie = request.cookies.get(FALLBACK_CSRF_COOKIE_NAME)
+    header_token = request.headers.get(CSRF_HEADER_NAME)
+    if header_token and fallback_cookie and hmac.compare_digest(header_token, fallback_cookie):
+        return fallback_cookie
+    return host_cookie or fallback_cookie
 
 
 def build_set_csrf_cookie_header(csrf_token: str) -> str:
@@ -109,9 +118,19 @@ def build_set_csrf_cookie_header(csrf_token: str) -> str:
     return f"{CSRF_COOKIE_NAME}={csrf_token}; Path=/; Secure; SameSite=Strict"
 
 
+def build_set_fallback_csrf_cookie_header(csrf_token: str) -> str:
+    """Format Set-Cookie header for non-Host kb_csrf over plain HTTP local dev."""
+    return f"{FALLBACK_CSRF_COOKIE_NAME}={csrf_token}; Path=/; SameSite=Strict"
+
+
 def build_clear_csrf_cookie_header() -> str:
     """Format Set-Cookie header to clear __Host-kb_csrf."""
     return f"{CSRF_COOKIE_NAME}=; Path=/; Secure; SameSite=Strict; Max-Age=0"
+
+
+def build_clear_fallback_csrf_cookie_header() -> str:
+    """Format Set-Cookie header to clear non-Host kb_csrf."""
+    return f"{FALLBACK_CSRF_COOKIE_NAME}=; Path=/; SameSite=Strict; Max-Age=0"
 
 
 class CsrfMiddleware(BaseHTTPMiddleware):
@@ -204,6 +223,12 @@ class CsrfMiddleware(BaseHTTPMiddleware):
 
         hmac_key = self._get_key(request)
         if not validate_csrf_token(header_token, session_id, hmac_key):
+            if (
+                session_id != PRE_SESSION_ID
+                and request.url.path in ("/api/v1/setup/claim", "/api/v1/auth/local/login")
+                and validate_csrf_token(header_token, PRE_SESSION_ID, hmac_key)
+            ):
+                return None
             return "Invalid CSRF token signature for current session"
 
         return None

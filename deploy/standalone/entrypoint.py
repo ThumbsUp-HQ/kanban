@@ -280,8 +280,27 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
 
     log_phase("migrations", "schema migrations applied successfully")
 
-    # Privilege drop: revoke LOGIN on kanban_migrator
-    run_psql_script("ALTER ROLE kanban_migrator NOLOGIN;", dbname="kanban", run_dir=run_dir)
+    # Ensure column-level SELECT (principal_id, username) + RLS policy for kanban_app,
+    # then drop LOGIN privilege on kanban_migrator.
+    post_mig_sql = """
+    GRANT SELECT (principal_id, username) ON TABLE local_admin_credentials TO kanban_app;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'local_admin_credentials'
+          AND policyname = 'kanban_app_select_own_local_admin'
+      ) THEN
+        CREATE POLICY kanban_app_select_own_local_admin ON local_admin_credentials
+          FOR SELECT TO kanban_app
+          USING (principal_id = ANY (app_effective_principal_set()));
+      END IF;
+    END
+    $$;
+    ALTER ROLE kanban_migrator NOLOGIN;
+    """
+    run_psql_script(post_mig_sql, dbname="kanban", run_dir=run_dir)
     log_phase("migrations", "privilege dropped: kanban_migrator set to NOLOGIN")
 
 

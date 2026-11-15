@@ -222,6 +222,47 @@ export function CommandPalette({
               new CustomEvent('kb:create-issue', { bubbles: true }),
             );
           }
+          void navigate(`/projects/${projectKey}/issues?create=1`);
+        },
+      },
+      {
+        id: 'act-create-project',
+        title: 'Create project',
+        icon: '📁',
+        category: 'actions',
+        onSelect: () => {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('kb:open-create-project', { bubbles: true }),
+            );
+          }
+        },
+      },
+      {
+        id: 'nav-auth-studio',
+        title: 'Go to Auth Studio',
+        icon: '🛡️',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate('/admin/auth');
+        },
+      },
+      {
+        id: 'nav-mcp-keys',
+        title: 'Go to Personal MCP Keys',
+        icon: '🔑',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate('/settings/mcp');
+        },
+      },
+      {
+        id: 'nav-standalone-status',
+        title: 'Go to Standalone Status',
+        icon: '💾',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate('/admin/standalone');
         },
       },
       {

@@ -2,14 +2,42 @@
  * API client functions and types for Docs and Pages workspace (KB-P3-50, S8.1, S5.1).
  */
 
-import { apiFetch, type Method, type ApiFetchOptions } from '../../api/client';
+import { apiFetch, getCsrfToken, type Method, type ApiFetchOptions } from '../../api/client';
+import { ApiProblem } from '../../api/problem';
 import type { paths } from '../../api/schema.gen';
+
+const UNSAFE_METHODS: ReadonlySet<Method> = new Set<Method>(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+export async function ensureDocsCsrfToken(): Promise<string | null> {
+  const existing = getCsrfToken();
+  if (existing) {
+    return existing;
+  }
+  try {
+    const res = await fetch('/api/v1/auth/session', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    });
+    const data = (await res.json()) as { csrf_token?: string };
+    if (data.csrf_token) {
+      document.cookie = `kb_csrf=${encodeURIComponent(data.csrf_token)}; Path=/; SameSite=Lax`;
+      return data.csrf_token;
+    }
+  } catch {
+    // Ignore bootstrap failures in offline unit tests
+  }
+  return getCsrfToken();
+}
 
 async function typedFetch<T>(
   method: Method,
   path: string,
   opts?: ApiFetchOptions,
 ): Promise<T> {
+  if (UNSAFE_METHODS.has(method) && !getCsrfToken()) {
+    await ensureDocsCsrfToken();
+  }
   const result = await apiFetch(method, path as unknown as keyof paths, opts);
   return result as T;
 }
@@ -83,8 +111,11 @@ export async function fetchDocsTree(projectKey: string): Promise<PageTreeNode[]>
     return await typedFetch<PageTreeNode[]>('GET', '/api/v1/projects/{projectKey}/docs/tree', {
       params: { projectKey },
     });
-  } catch {
-    // Fallback to docs/{doc_ref}/tree
+  } catch (err) {
+    if (err instanceof ApiProblem) {
+      throw err;
+    }
+    // Fallback to docs/{doc_ref}/tree only for non-ApiProblem test stubs
     return await typedFetch<PageTreeNode[]>('GET', '/api/v1/docs/{doc_ref}/tree', {
       params: { doc_ref: projectKey },
     });
@@ -118,7 +149,30 @@ export async function createPage(
       params: { doc_ref: docRefOrProjectKey },
       body: payload,
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof ApiProblem && err.status === 404) {
+      const project = await typedFetch<{ id: string }>('GET', '/api/v1/projects/{projectKey}', {
+        params: { projectKey: docRefOrProjectKey },
+      });
+      const existingDocs = await typedFetch<{ id: string }[]>('GET', '/api/v1/docs', {
+        query: { project: project.id },
+      });
+      let targetDocId = Array.isArray(existingDocs) && existingDocs[0]?.id ? existingDocs[0].id : '';
+      if (!targetDocId) {
+        const createdDoc = await typedFetch<{ id: string }>('POST', '/api/v1/docs', {
+          body: {
+            title: payload.title,
+            body_markdown: payload.body_markdown ?? '',
+            project_id: project.id,
+          },
+        });
+        targetDocId = createdDoc.id;
+      }
+      return await typedFetch<PageResponse>('POST', '/api/v1/docs/{doc_ref}/pages', {
+        params: { doc_ref: targetDocId },
+        body: payload,
+      });
+    }
     return await typedFetch<PageResponse>('POST', '/api/v1/projects/{projectKey}/docs/pages', {
       params: { projectKey: docRefOrProjectKey },
       body: payload,

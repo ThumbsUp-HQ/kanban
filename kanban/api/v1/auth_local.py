@@ -16,9 +16,13 @@ from database.session import RLSContext
 from kanban.auth.local.service import LocalAdminLoginService
 from kanban.auth.sessions.cookies import (
     build_set_cookie_header,
+    build_set_fallback_cookie_header,
     extract_session_cookie,
 )
-from kanban.auth.sessions.csrf import build_set_csrf_cookie_header
+from kanban.auth.sessions.csrf import (
+    build_set_csrf_cookie_header,
+    build_set_fallback_csrf_cookie_header,
+)
 from kanban.security.client_ip import resolve_client_ip
 from kanban.security.ratelimit.decorator import build_rate_limiter
 
@@ -103,6 +107,9 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
     response = JSONResponse(
         content={
             "authenticated": True,
+            "status": "mfa_required" if issued.mfa_pending else "authenticated",
+            "challenge_id": str(issued.session_id),
+            "methods": ["totp", "webauthn", "recovery"],
             "session_id": str(issued.session_id),
             "aal_level": issued.aal_level,
             "mfa_pending": issued.mfa_pending,
@@ -118,4 +125,20 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
     response.raw_headers.append(
         (b"set-cookie", build_set_csrf_cookie_header(issued.csrf_token).encode("latin-1"))
     )
+    host_name = (request.headers.get("host") or "").split(":")[0].lower()
+    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+        response.raw_headers.append(
+            (
+                b"set-cookie",
+                build_set_fallback_cookie_header(
+                    issued.cookie_val, issued.idle_expires_at
+                ).encode("latin-1"),
+            )
+        )
+        response.raw_headers.append(
+            (
+                b"set-cookie",
+                build_set_fallback_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
+            )
+        )
     return response

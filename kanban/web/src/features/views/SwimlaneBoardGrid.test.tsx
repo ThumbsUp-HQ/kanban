@@ -340,4 +340,47 @@ describe('SwimlaneBoardGrid (KB-P3-40, S6.4 item 2)', () => {
     );
     expect(screen.getByText('All Work Items')).toBeDefined();
   });
+
+  it('normalizes "To Do" and "Todo" states and group fallbacks into the same board column (KANBA-164)', () => {
+    const base = FIXTURE_12_ISSUES[0];
+    if (!base) throw new Error('missing fixture');
+    const toDoIssue: IssueItem = {
+      ...base,
+      key: 'KAN-401',
+      summary: 'Spaced To Do Card',
+      state: { id: 'state-1', name: 'To Do', group: 'unstarted' },
+      priority: { slug: 'high', label: 'High', emoji: '⚡' },
+    };
+    const todoIssue: IssueItem = {
+      ...base,
+      key: 'KAN-402',
+      summary: 'Single Word Todo Card',
+      state: { id: 'state-2', name: 'Todo', group: 'unstarted' },
+      priority: { slug: 'high', label: 'High', emoji: '⚡' },
+    };
+    const groupFallbackIssues: IssueItem[] = [
+      { ...base, key: 'KAN-403', state: { id: 's-b', name: 'Queued', group: 'backlog' } },
+      { ...base, key: 'KAN-404', state: { id: 's-u', name: 'Ready', group: 'unstarted' } },
+      { ...base, key: 'KAN-405', state: { id: 's-s', name: 'Active', group: 'started' } },
+      { ...base, key: 'KAN-406', state: { id: 's-c', name: 'Shipped', group: 'completed' } },
+      { ...base, key: 'KAN-407', state: { id: 's-x', name: 'Dropped', group: 'cancelled' } },
+    ];
+
+    render(
+      <SwimlaneBoardGrid
+        issues={[toDoIssue, todoIssue, ...groupFallbackIssues]}
+        projectKey="KAN"
+        groupBy="state"
+        subGroupBy="priority"
+        modulesEnabled={true}
+      />
+    );
+
+    const todoColumn = document.querySelector(
+      '[data-swimlane-id="high"][data-column-id="todo"]'
+    );
+    expect(todoColumn).not.toBeNull();
+    expect(todoColumn?.querySelector('[data-issue-key="KAN-401"]')).not.toBeNull();
+    expect(todoColumn?.querySelector('[data-issue-key="KAN-402"]')).not.toBeNull();
+  });
 });

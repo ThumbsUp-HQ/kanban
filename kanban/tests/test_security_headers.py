@@ -36,7 +36,10 @@ async def test_security_headers_present_on_all_responses(dummy_dist: Path) -> No
         ]
         for ep in endpoints_to_test:
             resp = await client.get(ep)
-            assert resp.headers.get("content-security-policy") == CSP_POLICY
+            csp = resp.headers.get("content-security-policy")
+            assert csp == CSP_POLICY
+            assert "img-src 'self' blob: data:;" in (csp or "")
+            assert "data:image/" not in (csp or "")
             assert resp.headers.get("x-content-type-options") == "nosniff"
             assert resp.headers.get("referrer-policy") == "no-referrer"
             assert resp.headers.get("x-frame-options") == "DENY"

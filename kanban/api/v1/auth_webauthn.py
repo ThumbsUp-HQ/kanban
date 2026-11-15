@@ -224,11 +224,18 @@ async def register_options(
         await _assert_can_register(session, principal)
 
         # Lookup username
-        user_res = await session.execute(
-            text("SELECT username FROM local_admin_credentials WHERE principal_id = :p_id"),
-            {"p_id": principal.principal_id},
-        )
-        username = user_res.scalar_one_or_none()
+        username: str | None = None
+        try:
+            async with session.begin_nested():
+                user_res = await session.execute(
+                    text(
+                        "SELECT username FROM local_admin_credentials WHERE principal_id = :p_id"
+                    ),
+                    {"p_id": principal.principal_id},
+                )
+                username = user_res.scalar_one_or_none()
+        except Exception:  # noqa: BLE001
+            username = None
         if not username:
             name_res = await session.execute(
                 text("SELECT display_name FROM principals WHERE id = :p_id"),

@@ -160,15 +160,47 @@ export async function submitLocalAdminLogin(credentials: {
   username: string;
   password: string;
 }): Promise<AuthLoginResponse> {
-  const result = await apiFetch('POST', '/api/v1/auth/local/login' as never, { body: credentials });
-  return result as AuthLoginResponse;
+  const result = (await apiFetch('POST', '/api/v1/auth/local/login' as never, {
+    body: credentials,
+  })) as {
+    status?: 'authenticated' | 'mfa_required';
+    mfa_pending?: boolean;
+    session_id?: string;
+    challenge_id?: string;
+    methods?: MfaMethod[];
+  };
+  if (result.status === 'mfa_required') {
+    return {
+      status: 'mfa_required',
+      challenge_id: result.challenge_id ?? result.session_id ?? '',
+      methods: result.methods ?? ['totp', 'webauthn', 'recovery'],
+    };
+  }
+  if (result.status === 'authenticated') {
+    return { status: 'authenticated' };
+  }
+  if (result.mfa_pending) {
+    return {
+      status: 'mfa_required',
+      challenge_id: result.challenge_id ?? result.session_id ?? '',
+      methods: result.methods ?? ['totp', 'webauthn', 'recovery'],
+    };
+  }
+  return { status: 'authenticated' };
 }
 
 export async function getWebauthnAssertionOptions(body: {
   challenge_id: string;
 }): Promise<{ options: PublicKeyCredentialRequestOptionsJSON }> {
-  const result = await apiFetch('POST', '/api/v1/auth/webauthn/assertion/options' as never, { body });
-  return result as { options: PublicKeyCredentialRequestOptionsJSON };
+  const result = (await apiFetch('POST', '/api/v1/auth/webauthn/assertion/options' as never, {
+    body,
+  })) as
+    | { options: PublicKeyCredentialRequestOptionsJSON }
+    | PublicKeyCredentialRequestOptionsJSON;
+  if ('options' in result) {
+    return result;
+  }
+  return { options: result };
 }
 
 export async function verifyWebauthnAssertion(body: {
@@ -200,6 +232,7 @@ export async function submitSetupClaim(body: {
   username: string;
   display_name: string;
   password: string;
+  email?: string;
 }): Promise<SetupClaimResponse> {
   const result = await apiFetch('POST', '/api/v1/setup/claim' as never, { body });
   return result as SetupClaimResponse;
@@ -208,35 +241,75 @@ export async function submitSetupClaim(body: {
 export async function getWebauthnRegistrationOptions(body: {
   enrollment_id: string;
 }): Promise<{ options: PublicKeyCredentialCreationOptionsJSON }> {
-  const result = await apiFetch('POST', '/api/v1/auth/webauthn/registration/options' as never, {
+  const result = (await apiFetch('POST', '/api/v1/auth/webauthn/registration/options' as never, {
     body,
-  });
-  return result as { options: PublicKeyCredentialCreationOptionsJSON };
+  })) as
+    | { options: PublicKeyCredentialCreationOptionsJSON }
+    | PublicKeyCredentialCreationOptionsJSON;
+  if ('options' in result) {
+    return result;
+  }
+  return { options: result };
 }
 
 export async function verifyWebauthnRegistration(body: {
   enrollment_id: string;
   credential: unknown;
 }): Promise<EnrollmentSuccessResponse> {
-  const result = await apiFetch('POST', '/api/v1/auth/webauthn/registration/verify' as never, {
+  const result = (await apiFetch('POST', '/api/v1/auth/webauthn/registration/verify' as never, {
     body,
-  });
-  return result as EnrollmentSuccessResponse;
+  })) as Partial<EnrollmentSuccessResponse>;
+  if (Array.isArray(result.recovery_codes)) {
+    return {
+      status: 'enrolled',
+      recovery_codes: result.recovery_codes,
+    };
+  }
+  const generated = (await apiFetch(
+    'POST',
+    '/api/v1/auth/mfa/recovery-codes/generate' as never,
+    { body: {} },
+  )) as { recovery_codes: string[] };
+  return {
+    status: 'enrolled',
+    recovery_codes: generated.recovery_codes,
+  };
 }
 
 export async function enrollTotp(body: {
   enrollment_id: string;
 }): Promise<TotpEnrollResponse> {
-  const result = await apiFetch('POST', '/api/v1/auth/totp/enroll' as never, { body });
-  return result as TotpEnrollResponse;
+  const result = (await apiFetch('POST', '/api/v1/auth/mfa/totp/enroll' as never, {
+    body,
+  })) as { secret_base32?: string; secret?: string; otpauth_uri: string };
+  return {
+    secret_base32: result.secret_base32 ?? result.secret ?? '',
+    otpauth_uri: result.otpauth_uri,
+  };
 }
 
 export async function verifyTotpEnrollment(body: {
   enrollment_id: string;
   code: string;
 }): Promise<EnrollmentSuccessResponse> {
-  const result = await apiFetch('POST', '/api/v1/auth/totp/enroll/verify' as never, { body });
-  return result as EnrollmentSuccessResponse;
+  const result = (await apiFetch('POST', '/api/v1/auth/mfa/totp/confirm' as never, {
+    body,
+  })) as Partial<EnrollmentSuccessResponse>;
+  if (Array.isArray(result.recovery_codes)) {
+    return {
+      status: 'enrolled',
+      recovery_codes: result.recovery_codes,
+    };
+  }
+  const generated = (await apiFetch(
+    'POST',
+    '/api/v1/auth/mfa/recovery-codes/generate' as never,
+    { body: {} },
+  )) as { recovery_codes: string[] };
+  return {
+    status: 'enrolled',
+    recovery_codes: generated.recovery_codes,
+  };
 }
 
 export interface PublicKeyCredentialRequestOptionsJSON {

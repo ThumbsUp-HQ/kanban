@@ -1,6 +1,6 @@
 import React, { useState, useMemo, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
-import type { IssueItem, GroupAxis } from './viewsApi';
+import { normalizeStateKey, type IssueItem, type GroupAxis } from './viewsApi';
 import './filterBulk.css';
 
 export interface SwimlaneBoardGridProps {
@@ -34,13 +34,18 @@ function getIssueColId(issue: IssueItem, groupBy: GroupAxis): string {
   if (groupBy === 'priority') {
     return issue.priority.slug.toLowerCase();
   }
-  const sName = issue.state.name.toLowerCase();
+  const sName = normalizeStateKey(issue.state.name);
   if (sName.includes('backlog')) return 'backlog';
   if (sName.includes('todo')) return 'todo';
   if (sName.includes('progress')) return 'in-progress';
   if (sName.includes('review')) return 'in-review';
   if (sName.includes('done')) return 'done';
   if (sName.includes('cancel')) return 'cancelled';
+  if (issue.state.group === 'backlog') return 'backlog';
+  if (issue.state.group === 'unstarted') return 'todo';
+  if (issue.state.group === 'started') return 'in-progress';
+  if (issue.state.group === 'completed') return 'done';
+  if (issue.state.group === 'cancelled') return 'cancelled';
   return issue.state.id;
 }
 

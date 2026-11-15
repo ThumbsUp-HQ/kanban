@@ -25,6 +25,7 @@ import { IssueSurfaceSlotsContext } from '../features/drawer/slots';
 import { issueSurfaceSlots } from '../features/drawer/slotRegistry';
 import { AccessInspectorHost } from '../features/access/useAccessInspector';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+import { useSessionGuard } from '../features/auth/useSessionGuard';
 import './AppShell.css';
 
 registerShellPanel('standalone', StandaloneStatusPanel);
@@ -52,6 +53,7 @@ export function AppShell({
   systemStatus,
   cachedIssues,
 }: AppShellProps): JSX.Element {
+  useSessionGuard();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);

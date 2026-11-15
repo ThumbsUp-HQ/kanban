@@ -81,6 +81,7 @@ export function BulkActionBar({
         <button
           type="button"
           className="bulk-btn"
+          data-action="state"
           onClick={() => onBatchUpdateState?.('done')}
         >
           State
@@ -89,6 +90,7 @@ export function BulkActionBar({
         <button
           type="button"
           className="bulk-btn"
+          data-action="priority"
           onClick={() => onBatchUpdatePriority?.('urgent')}
         >
           Priority

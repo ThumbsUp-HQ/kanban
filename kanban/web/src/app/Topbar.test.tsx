@@ -172,4 +172,55 @@ describe('Topbar', () => {
     const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
     expect(avatarBtn).toBeDefined();
   });
+
+  it('renders Settings & Admin links and executes Log out action in avatar menu', async () => {
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/auth/session')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ csrf_token: 'csrf-logout-1' }), { status: 200 }),
+        );
+      }
+      if (url.includes('/api/v1/auth/logout')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: 'logged_out' }), { status: 200 }),
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ShellPanelsProvider>
+            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+              <Topbar />
+            </MemoryRouter>
+          </ShellPanelsProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+    act(() => {
+      avatarBtn.click();
+    });
+
+    expect(screen.getByRole('menuitem', { name: /Personal MCP Keys/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /Admin Auth Studio/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /Admin MCP Keys/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /Standalone Status & Backup/ })).toBeDefined();
+
+    const logoutBtn = screen.getByTestId('logout-button');
+    await act(async () => {
+      logoutBtn.click();
+      await Promise.resolve();
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/v1/auth/logout',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
 });

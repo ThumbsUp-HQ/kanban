@@ -85,6 +85,40 @@ describe('App component', () => {
     }
   });
 
+  it('renders MediaStory, IssuesWorkspaceRoute, and DrawerStory on /__dev routes', () => {
+    const originalPathname = window.location.pathname;
+    try {
+      window.history.pushState({}, '', '/__dev/media');
+      const { unmount: u1 } = render(
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>,
+      );
+      expect(screen.getByTestId('media-story')).toBeDefined();
+      u1();
+
+      window.history.pushState({}, '', '/__dev/views?nomodules=1');
+      const { unmount: u2 } = render(
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>,
+      );
+      expect(screen.getByTestId('issues-workspace')).toBeDefined();
+      u2();
+
+      window.history.pushState({}, '', '/__dev/drawer');
+      const { unmount: u3 } = render(
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>,
+      );
+      expect(screen.getByTestId('drawer-story')).toBeDefined();
+      u3();
+    } finally {
+      window.history.pushState({}, '', originalPathname);
+    }
+  });
+
   describe('isStoryEnabled helper logic', () => {
     it('renders standard app root when stories are disabled', () => {
       vi.stubEnv('DEV', false);

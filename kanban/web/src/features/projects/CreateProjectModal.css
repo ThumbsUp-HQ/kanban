@@ -1,0 +1,141 @@
+.kb-create-project-scrim {
+  position: fixed;
+  inset: 0;
+  background-color: var(--scrim-bg, rgba(0, 0, 0, 0.65));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
+
+.kb-create-project-dialog {
+  background: var(--bg-surface-raised, #24272f);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-lg, 8px);
+  width: 100%;
+  max-width: 480px;
+  padding: 24px;
+  color: var(--fg-primary, #f8fafc);
+  box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.6));
+  box-sizing: border-box;
+}
+
+.kb-create-project-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.kb-create-project-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.kb-create-project-close {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted, #94a3b8);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.kb-create-project-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.kb-create-project-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kb-create-project-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kb-create-project-input {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #333842);
+  background: var(--bg-surface, #1e2025);
+  color: var(--fg-primary, #f8fafc);
+  font-size: 14px;
+}
+
+.kb-create-project-input-mono {
+  font-family: var(--font-mono, monospace);
+}
+
+.kb-create-project-hint {
+  font-size: 11px;
+  color: var(--fg-muted, #94a3b8);
+}
+
+.kb-create-project-textarea {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #333842);
+  background: var(--bg-surface, #1e2025);
+  color: var(--fg-primary, #f8fafc);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.kb-create-project-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.kb-create-project-error {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid #ef4444;
+  color: var(--danger-fg, #dc2626);
+  font-size: 13px;
+}
+
+[data-theme="dark"] .kb-create-project-error {
+  color: #fca5a5;
+}
+
+.kb-create-project-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.kb-create-project-cancel-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #333842);
+  background: transparent;
+  color: var(--fg-secondary, #cbd5e1);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.kb-create-project-submit-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  background: var(--color-brand-primary, #3b82f6);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kb-create-project-submit-btn:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}

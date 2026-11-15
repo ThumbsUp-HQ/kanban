@@ -1,6 +1,7 @@
-import React, { useState, useMemo, type ComponentType, type JSX } from 'react';
+import React, { useState, useMemo, useEffect, type ComponentType, type JSX } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
+import type { BoardIssue, BoardWorkflowState } from '../board/boardApi.ts';
 import { ListView } from '../list/ListView';
 import { TableView } from '../table/TableView';
 import { CalendarView } from '../calendar/CalendarView';
@@ -11,7 +12,18 @@ import { BulkActionBar } from './BulkActionBar';
 import { QuickCreateIssueModal } from './QuickCreateIssueModal';
 import { QuickFieldPopover, type QuickFieldType } from './QuickFieldPopover';
 import { useIssueKeyboardMap } from './useIssueKeyboardMap';
-import type { IssueItem, GroupAxis } from './viewsApi';
+import {
+  fetchProjectIssues,
+  fetchProjectStates,
+  createProjectIssue,
+  patchProjectIssue,
+  deleteProjectIssue,
+  normalizeStateKey,
+  resolveStateUuid,
+  type IssueItem,
+  type StateSummary,
+  type GroupAxis,
+} from './viewsApi';
 import './filterBulk.css';
 
 // Export all KB-P3-40 components per Scoped Definition of Done
@@ -131,10 +143,12 @@ export interface IssuesWorkspaceRouteProps {
 export function IssuesWorkspaceRoute({
   projectKey,
   modulesEnabled = true,
-  initialIssues = [],
+  initialIssues,
   initialLayout,
   queryClient = defaultQueryClient,
 }: IssuesWorkspaceRouteProps): JSX.Element {
+  const isLiveMode = initialIssues === undefined;
+
   const searchParams = useMemo(() => {
     return new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   }, []);
@@ -159,8 +173,38 @@ export function IssuesWorkspaceRoute({
     return 'none';
   });
 
-  const [issues, setIssues] = useState<IssueItem[]>(initialIssues);
+  const [issues, setIssues] = useState<IssueItem[]>(() => initialIssues ?? []);
+  const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!isLiveMode || !projectKey) {
+      return;
+    }
+    let active = true;
+    const refreshLive = (): void => {
+      void Promise.all([
+        fetchProjectIssues(projectKey),
+        fetchProjectStates(projectKey).catch((): StateSummary[] => []),
+      ])
+        .then(([issuesRes, statesRes]) => {
+          if (!active) return;
+          setIssues(issuesRes.items);
+          if (statesRes.length > 0) {
+            setProjectStates(statesRes);
+          }
+        })
+        .catch(() => {
+          // Preserve existing state on offline/transient error
+        });
+    };
+    refreshLive();
+    window.addEventListener('kb:issue-updated', refreshLive);
+    return () => {
+      active = false;
+      window.removeEventListener('kb:issue-updated', refreshLive);
+    };
+  }, [isLiveMode, projectKey]);
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(() => {
     const filters: ActiveFilters = {};
     const stateParam = searchParams.get('filter_state');
@@ -184,6 +228,16 @@ export function IssuesWorkspaceRoute({
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpenCreate = (): void => {
+      setIsCreateModalOpen(true);
+    };
+    window.addEventListener('kb:create-issue', handleOpenCreate);
+    return () => {
+      window.removeEventListener('kb:create-issue', handleOpenCreate);
+    };
+  }, []);
   const [popoverState, setPopoverState] = useState<{
     isOpen: boolean;
     field: QuickFieldType | null;
@@ -369,8 +423,9 @@ export function IssuesWorkspaceRoute({
 
   const handleCreateIssue = (newIssue: Partial<IssueItem>) => {
     const nextNum = issues.length + 140;
+    const optimisticId = `01931234-new-${String(Date.now())}`;
     const item: IssueItem = {
-      id: `01931234-new-${String(Date.now())}`,
+      id: optimisticId,
       key: `${projectKey}-${String(nextNum)}`,
       summary: newIssue.summary ?? 'Untitled work item',
       state: newIssue.state ?? { id: 'state-todo', name: 'Todo', group: 'unstarted' },
@@ -383,6 +438,22 @@ export function IssuesWorkspaceRoute({
       item.module_ids = newIssue.module_ids;
     }
     setIssues((prev) => [item, ...prev]);
+
+    if (isLiveMode) {
+      void createProjectIssue(projectKey, newIssue, projectStates)
+        .then((persisted) => {
+          setIssues((prev) => {
+            const replaced = prev.map((existing) =>
+              existing.id === optimisticId ? persisted : existing
+            );
+            const hasPersisted = replaced.some((existing) => existing.key === persisted.key);
+            return hasPersisted ? replaced : [persisted, ...replaced];
+          });
+        })
+        .catch(() => {
+          // Keep optimistic item if network fails in offline mode
+        });
+    }
   };
 
   const handleFieldSelect = (field: QuickFieldType, value: unknown) => {
@@ -405,19 +476,110 @@ export function IssuesWorkspaceRoute({
         }
         if (field === 'state') {
           const sId = String(value);
+          const nextState: StateSummary = {
+            id: sId,
+            name: sId.includes('progress') ? 'In Progress' : sId.includes('todo') ? 'Todo' : sId.includes('done') ? 'Done' : 'Backlog',
+            group: sId.includes('progress') ? 'started' : sId.includes('todo') ? 'unstarted' : sId.includes('done') ? 'completed' : 'backlog',
+          };
           return {
             ...i,
-            state: {
-              id: sId,
-              name: sId.includes('progress') ? 'In Progress' : sId.includes('todo') ? 'Todo' : sId.includes('done') ? 'Done' : 'Backlog',
-              group: sId.includes('progress') ? 'started' : sId.includes('todo') ? 'unstarted' : sId.includes('done') ? 'completed' : 'backlog',
-            },
+            state: nextState,
           };
         }
         return i;
       })
     );
+
+    if (isLiveMode) {
+      if (field === 'priority') {
+        void patchProjectIssue(targetKey, { priority: String(value) }).catch(() => undefined);
+      } else if (field === 'state') {
+        const sId = String(value);
+        const desired: StateSummary = {
+          id: sId,
+          name: sId.includes('progress') ? 'In Progress' : sId.includes('todo') ? 'Todo' : sId.includes('done') ? 'Done' : 'Backlog',
+          group: sId.includes('progress') ? 'started' : sId.includes('todo') ? 'unstarted' : sId.includes('done') ? 'completed' : 'backlog',
+        };
+        const resolvedUuid = resolveStateUuid(desired, projectStates);
+        if (resolvedUuid) {
+          void patchProjectIssue(targetKey, { state_id: resolvedUuid }).catch(() => undefined);
+        }
+      }
+    }
   };
+
+  // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
+  const boardStates: BoardWorkflowState[] = useMemo(() => {
+    if (projectStates.length > 0) {
+      return projectStates.map((s, idx) => ({
+        id: s.id,
+        name: normalizeStateKey(s.name) === 'todo' ? 'Todo' : s.name,
+        group: (['backlog', 'unstarted', 'started', 'completed', 'cancelled'].includes(s.group)
+          ? s.group
+          : 'unstarted') as BoardWorkflowState['group'],
+        sort_order: s.sort_order ?? idx + 1,
+      }));
+    }
+    return [
+      { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
+      { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2 },
+      { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 3, wip_soft_limit: 3 },
+      { id: 'state-in-review', name: 'In Review', group: 'started', sort_order: 4, wip_hard_limit: 3 },
+      { id: 'state-done', name: 'Done', group: 'completed', sort_order: 5 },
+      { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled', sort_order: 6 },
+    ];
+  }, [projectStates]);
+
+  const boardIssues: BoardIssue[] = useMemo(() => {
+    const fallbackStateId = boardStates[0]?.id ?? 'state-todo';
+    return filteredIssues.map((issue, idx) => {
+      const exactMatch = boardStates.find((s) => s.id === issue.state.id);
+      const nameMatch = boardStates.find(
+        (s) => normalizeStateKey(s.name) === normalizeStateKey(issue.state.name)
+      );
+      const groupMatch = boardStates.find((s) => s.group === issue.state.group);
+      const resolvedStateId =
+        exactMatch?.id ?? nameMatch?.id ?? groupMatch?.id ?? fallbackStateId;
+
+      const boardAssignees = (issue.assignees ?? []).map((asg) => {
+        if (asg.kind === 'principal') {
+          return {
+            id: asg.principal.id,
+            name: asg.principal.display_name,
+            display_name: asg.principal.display_name,
+            handle: asg.principal.handle,
+            is_agent: asg.principal.type.toUpperCase() === 'AGENT',
+          };
+        }
+        return {
+          id: asg.id,
+          free_text: asg.free_text,
+        };
+      });
+
+      const gateStatus: BoardIssue['gate_status'] =
+        issue.gate_status === 'vetoed'
+          ? 'rejected'
+          : issue.gate_status ?? null;
+
+      return {
+        id: issue.id,
+        key: issue.key,
+        summary: issue.summary,
+        state_id: resolvedStateId,
+        priority: {
+          id: issue.priority.slug,
+          slug: issue.priority.slug,
+          label: issue.priority.label,
+        },
+        board_rank: issue.board_rank ?? String(idx + 1).padStart(6, '0'),
+        assignees: boardAssignees,
+        due_date: issue.due_date ?? null,
+        gate_status: gateStatus,
+        has_explicit_acl: Boolean(issue.has_explicit_acl),
+      };
+    });
+  }, [filteredIssues, boardStates]);
 
   // 2D Swimlane condition: layout === 'board' && subGroupBy !== 'none'
   const is2DSwimlane = layout === 'board' && subGroupBy !== 'none';
@@ -457,7 +619,14 @@ export function IssuesWorkspaceRoute({
           onCardClick={handleRowClick}
         />
       ) : layout === 'board' ? (
-        <BoardView projectKey={projectKey} />
+        <BoardView
+          projectKey={projectKey}
+          states={boardStates}
+          issues={boardIssues}
+          onNewItem={() => {
+            setIsCreateModalOpen(true);
+          }}
+        />
       ) : (
         <ViewHost
           layout={layout}
@@ -467,6 +636,9 @@ export function IssuesWorkspaceRoute({
           selectedIds={selectedIds}
           onToggleSelect={handleToggleSelect}
           onSelectAll={handleSelectAll}
+          onCreateIssue={() => {
+            setIsCreateModalOpen(true);
+          }}
           focusedKey={focusedKey}
         />
       )}
@@ -477,6 +649,51 @@ export function IssuesWorkspaceRoute({
         issues={filteredIssues}
         onClearSelection={() => { setSelectedIds([]); }}
         modulesEnabled={modulesEnabled}
+        onBatchUpdateState={(targetStateSlug) => {
+          const desiredState: StateSummary = {
+            id: `state-${targetStateSlug}`,
+            name: targetStateSlug === 'done' ? 'Done' : 'Todo',
+            group: targetStateSlug === 'done' ? 'completed' : 'unstarted',
+          };
+          setIssues((prev) =>
+            prev.map((i) =>
+              selectedIds.includes(i.key) ? { ...i, state: desiredState } : i
+            )
+          );
+          if (isLiveMode) {
+            const resolvedUuid = resolveStateUuid(desiredState, projectStates);
+            if (resolvedUuid) {
+              for (const key of selectedIds) {
+                void patchProjectIssue(key, { state_id: resolvedUuid }).catch(() => undefined);
+              }
+            }
+          }
+          setSelectedIds([]);
+        }}
+        onBatchUpdatePriority={(prioritySlug) => {
+          const label = prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1);
+          const emoji =
+            prioritySlug === 'urgent'
+              ? '🔥'
+              : prioritySlug === 'high'
+                ? '⚡'
+                : prioritySlug === 'low'
+                  ? '💤'
+                  : '🔹';
+          setIssues((prev) =>
+            prev.map((i) =>
+              selectedIds.includes(i.key)
+                ? { ...i, priority: { slug: prioritySlug, label, emoji } }
+                : i
+            )
+          );
+          if (isLiveMode) {
+            for (const key of selectedIds) {
+              void patchProjectIssue(key, { priority: prioritySlug }).catch(() => undefined);
+            }
+          }
+          setSelectedIds([]);
+        }}
         onBatchArchive={() => {
           setIssues((prev) =>
             prev.map((i) =>
@@ -486,7 +703,13 @@ export function IssuesWorkspaceRoute({
           setSelectedIds([]);
         }}
         onBatchDelete={() => {
-          setIssues((prev) => prev.filter((i) => !selectedIds.includes(i.key)));
+          const toDelete = [...selectedIds];
+          setIssues((prev) => prev.filter((i) => !toDelete.includes(i.key)));
+          if (isLiveMode) {
+            for (const key of toDelete) {
+              void deleteProjectIssue(key).catch(() => undefined);
+            }
+          }
           setSelectedIds([]);
         }}
       />

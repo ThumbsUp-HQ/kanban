@@ -3,11 +3,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { IssueSurface } from './IssueSurface';
+import { IssueSurface, normalizeIssueDetail } from './IssueSurface';
 import { setOpenerElement } from './IssueKeyLink';
 import { apiClient } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
-import type { IssueDetail } from './slots';
+import { IssueSurfaceSlotsContext, type IssueDetail } from './slots';
 import * as breakpoints from '../../styles/breakpoints';
 
 const validIssue: IssueDetail = {
@@ -320,6 +320,127 @@ describe('IssueSurface', () => {
         expect(getSpy).toHaveBeenCalledTimes(2);
         expect(screen.getByText('Harden Multi-Card OIDC & LDAPS Auth Studio')).toBeDefined();
       });
+    });
+  });
+
+  describe('Live Persistence & Backend Normalization (KANBA-165)', () => {
+    it('normalizes raw backend IssueResponse payloads and preserves complete fixtures', () => {
+      expect(normalizeIssueDetail(validIssue, 'KAN')).toBe(validIssue);
+      expect(normalizeIssueDetail(null, 'KAN')).toBeNull();
+
+      const rawBackend = {
+        id: '01931234-5678-7000-8000-000000000555',
+        key: 'KANBA-55',
+        summary: 'Backend Issue',
+        description_markdown: '```mermaid\ngraph TD\nA-->B\n```',
+        description_sha256: 'deadbeef12345678',
+        labels: [{ id: 'lbl-1', name: 'Security' }, 'lbl-2'],
+      } as unknown as IssueDetail;
+
+      const normalized = normalizeIssueDetail(rawBackend, null);
+      expect(normalized.project_key).toBe('KANBA');
+      expect(normalized.object_id).toBe('01931234-5678-7000-8000-000000000555');
+      expect(normalized.etag).toBe('"deadbeef12345678"');
+      expect(normalized.label_ids).toEqual(['lbl-1', 'lbl-2']);
+      expect(normalized.capabilities).toEqual(['EDIT', 'TRANSITION', 'COMMENT']);
+    });
+
+    it('edits and saves Markdown + Mermaid description via PATCH /api/v1/issues/{issue_key}', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const patchSpy = vi.spyOn(apiClient, 'patch').mockResolvedValue({
+        ...validIssue,
+        description_markdown: 'Updated markdown\n```mermaid\nflowchart LR\nX-->Y\n```',
+      });
+
+      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Detailed description of the auth hardening task.')).toBeDefined();
+      });
+
+      // Click Edit description and then Cancel
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea = screen.getByRole('textbox', { name: 'Description' });
+      fireEvent.change(textarea, { target: { value: 'Draft cancelled' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel description edit' }));
+      expect(screen.getByText('Detailed description of the auth hardening task.')).toBeDefined();
+
+      // Click Edit description, enter Markdown + Mermaid, and Save
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea2 = screen.getByRole('textbox', { name: 'Description' });
+      fireEvent.change(textarea2, {
+        target: { value: 'Updated markdown\n```mermaid\nflowchart LR\nX-->Y\n```' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
+
+      await waitFor(() => {
+        expect(patchSpy).toHaveBeenCalledWith(
+          '/api/v1/issues/{issue_key}',
+          expect.objectContaining({
+            ifMatch: '"etag-kan-142"',
+            params: { issue_key: 'KAN-142' },
+            body: { description_markdown: 'Updated markdown\n```mermaid\nflowchart LR\nX-->Y\n```' },
+          }),
+        );
+        expect(screen.getByTestId('issue-mermaid-diagram')).toBeDefined();
+      });
+    });
+
+    it('loads project workflow states and forwards onIssueUpdate when RailSlot is mounted', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            items: [{ id: '01931234-5678-7000-8000-000000000001', name: 'Todo', group: 'unstarted' }],
+          }),
+      });
+
+      const MockRail = ({
+        issue,
+        onIssueUpdate,
+      }: {
+        issue: IssueDetail;
+        onIssueUpdate?: (u: IssueDetail) => void;
+      }) => (
+        <button
+          type="button"
+          data-testid="mock-rail-update"
+          onClick={() => onIssueUpdate?.({ ...issue, summary: 'Rail Updated Summary' })}
+        >
+          Rail {issue.summary}
+        </button>
+      );
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
+            <IssueSurfaceSlotsContext.Provider value={{ rail: MockRail }}>
+              <div id="main-content">
+                <main id="kb-main" tabIndex={-1}>
+                  Main
+                </main>
+                <div id="kb-issue-surface-host">
+                  <IssueSurface />
+                </div>
+              </div>
+            </IssueSurfaceSlotsContext.Provider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mock-rail-update')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('mock-rail-update'));
+      await waitFor(() => {
+        expect(screen.getByText('Rail Updated Summary')).toBeDefined();
+      });
+
+      globalThis.fetch = originalFetch;
     });
   });
 });

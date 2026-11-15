@@ -1,6 +1,7 @@
 /**
- * Topbar Component (KB-P3-34, S6.3).
- * 52px calm header with breadcrumb, Cmd+K trigger, emoji pills, layout switcher, and avatar theme menu.
+ * Topbar Component (KB-P3-34, S6.3, KANBA-167).
+ * 52px calm header with breadcrumb, Cmd+K trigger, emoji pills, layout switcher,
+ * and avatar menu with Theme selector, Settings/Admin navigation links, and Log out.
  */
 
 import React, {
@@ -9,12 +10,13 @@ import React, {
   useState,
   type JSX,
 } from 'react';
-import { useLocation } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { Breadcrumb } from './Breadcrumb';
 import { HeaderPills, type AccessManifestData } from './HeaderPills';
 import { LayoutSwitcher } from './LayoutSwitcher';
 import { useTheme, type Theme } from '../theme/ThemeProvider';
 import { type SystemStatus } from './useSystemStatus';
+import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
 import './Topbar.css';
 
 export interface TopbarProps {
@@ -36,6 +38,14 @@ const THEME_OPTIONS: readonly { id: Theme; label: string; icon: string }[] = [
   { id: 'system', label: 'System', icon: '💻' },
 ] as const;
 
+const AVATAR_NAV_LINKS: readonly { to: string; label: string; icon: string }[] = [
+  { to: '/settings/mcp', label: 'Personal MCP Keys', icon: '🔑' },
+  { to: '/workspaces/settings/mcp', label: 'Workspace MCP Keys', icon: '🏢' },
+  { to: '/admin/auth', label: 'Admin Auth Studio', icon: '🛡️' },
+  { to: '/admin/mcp', label: 'Admin MCP Keys', icon: '🤖' },
+  { to: '/admin/standalone', label: 'Standalone Status & Backup', icon: '💾' },
+] as const;
+
 export function Topbar({
   isSidebarOpen = true,
   onToggleSidebar,
@@ -49,11 +59,13 @@ export function Topbar({
   systemStatus,
 }: TopbarProps): JSX.Element {
   const loc = useLocation();
+  const navigate = useNavigate();
   const locationPathname = loc.pathname;
 
   const isIssuesRoute =
     showLayoutOverride ??
-    (locationPathname.includes('/issues') && !(/\/issues\/[A-Z0-9]+-[0-9]+/.exec(locationPathname)));
+    (locationPathname.includes('/issues') &&
+      !/\/issues\/[A-Z0-9]+-[0-9]+/.exec(locationPathname));
 
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
@@ -68,8 +80,32 @@ export function Topbar({
       }
     };
     document.addEventListener('mousedown', handleOutside);
-    return () => { document.removeEventListener('mousedown', handleOutside); };
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+    };
   }, [avatarMenuOpen]);
+
+  const handleLogout = async (): Promise<void> => {
+    try {
+      const csrfToken = await ensureSessionCsrfToken();
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+      };
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+      });
+    } catch {
+      // Proceed to login redirect even if network request fails
+    } finally {
+      setAvatarMenuOpen(false);
+      void navigate('/login', { replace: true });
+    }
+  };
 
   const activeTheme = themeContext.theme;
 
@@ -129,7 +165,9 @@ export function Topbar({
             aria-label="User profile and settings"
             aria-haspopup="menu"
             aria-expanded={avatarMenuOpen}
-            onClick={() => { setAvatarMenuOpen(!avatarMenuOpen); }}
+            onClick={() => {
+              setAvatarMenuOpen(!avatarMenuOpen);
+            }}
           >
             A
           </button>
@@ -161,7 +199,7 @@ export function Topbar({
                       }}
                     >
                       <span>
-                        <span aria-hidden="true" style={{ marginRight: '8px' }}>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
                           {opt.icon}
                         </span>
                         {opt.label}
@@ -171,6 +209,49 @@ export function Topbar({
                   );
                 })}
               </div>
+
+              <div className="kb-avatar-menu-divider" />
+
+              <div className="kb-theme-menu-title">Settings & Admin</div>
+              <div className="kb-avatar-menu-list">
+                {AVATAR_NAV_LINKS.map((link) => (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    role="menuitem"
+                    className="kb-theme-radio kb-avatar-menu-link"
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                    }}
+                  >
+                    <span>
+                      <span aria-hidden="true" className="kb-avatar-menu-icon">
+                        {link.icon}
+                      </span>
+                      {link.label}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+
+              <div className="kb-avatar-menu-divider" />
+
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="logout-button"
+                className="kb-theme-radio kb-avatar-logout"
+                onClick={() => {
+                  void handleLogout();
+                }}
+              >
+                <span>
+                  <span aria-hidden="true" className="kb-avatar-menu-icon">
+                    🚪
+                  </span>
+                  Log out
+                </span>
+              </button>
             </div>
           )}
         </div>

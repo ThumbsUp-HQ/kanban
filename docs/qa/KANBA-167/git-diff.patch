@@ -1,0 +1,2842 @@
+diff --git a/kanban/web/src/App.test.tsx b/kanban/web/src/App.test.tsx
+index f2920cf..aa1dac6 100644
+--- a/kanban/web/src/App.test.tsx
++++ b/kanban/web/src/App.test.tsx
+@@ -85,6 +85,40 @@ describe('App component', () => {
+     }
+   });
+ 
++  it('renders MediaStory, IssuesWorkspaceRoute, and DrawerStory on /__dev routes', () => {
++    const originalPathname = window.location.pathname;
++    try {
++      window.history.pushState({}, '', '/__dev/media');
++      const { unmount: u1 } = render(
++        <ThemeProvider>
++          <App />
++        </ThemeProvider>,
++      );
++      expect(screen.getByTestId('media-story')).toBeDefined();
++      u1();
++
++      window.history.pushState({}, '', '/__dev/views?nomodules=1');
++      const { unmount: u2 } = render(
++        <ThemeProvider>
++          <App />
++        </ThemeProvider>,
++      );
++      expect(screen.getByTestId('issues-workspace')).toBeDefined();
++      u2();
++
++      window.history.pushState({}, '', '/__dev/drawer');
++      const { unmount: u3 } = render(
++        <ThemeProvider>
++          <App />
++        </ThemeProvider>,
++      );
++      expect(screen.getByTestId('drawer-story')).toBeDefined();
++      u3();
++    } finally {
++      window.history.pushState({}, '', originalPathname);
++    }
++  });
++
+   describe('isStoryEnabled helper logic', () => {
+     it('renders standard app root when stories are disabled', () => {
+       vi.stubEnv('DEV', false);
+diff --git a/kanban/web/src/App.tsx b/kanban/web/src/App.tsx
+index 152886c..e66aecf 100644
+--- a/kanban/web/src/App.tsx
++++ b/kanban/web/src/App.tsx
+@@ -5,7 +5,7 @@ import { EmojiStory } from './dev/EmojiStory';
+ import { EditorStory } from './dev/EditorStory';
+ import { MediaStory } from './dev/MediaStory';
+ import { RealtimeStory } from './dev/RealtimeStory';
+-import { createAppRouter, AppRoutes, IssuesWorkspaceRoute } from './app/routes';
++import { createAppRouter, IssuesWorkspaceRoute } from './app/routes';
+ import { FIXTURE_12_ISSUES } from './features/views/fixtures';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { ShellPanelsProvider } from './app/shellPanels';
+@@ -84,11 +84,6 @@ export function App(): JSX.Element {
+     );
+   }
+ 
+-  const route = AppRoutes();
+-  if (route) {
+-    return route;
+-  }
+-
+   const router = createAppRouter();
+   return (
+     <QueryClientProvider client={appQueryClient}>
+diff --git a/kanban/web/src/app/AppShell.css b/kanban/web/src/app/AppShell.css
+index 1880340..08bd472 100644
+--- a/kanban/web/src/app/AppShell.css
++++ b/kanban/web/src/app/AppShell.css
+@@ -66,3 +66,126 @@
+     padding: 16px;
+   }
+ }
++
++/* Workspace Home & Section Views */
++.kb-workspace-home {
++  display: flex;
++  flex-direction: column;
++  gap: 24px;
++}
++
++.kb-workspace-home-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  flex-wrap: wrap;
++  gap: 16px;
++}
++
++.kb-workspace-home-title {
++  margin: 0 0 6px 0;
++  font-size: 22px;
++  font-weight: 700;
++}
++
++.kb-workspace-home-subtitle {
++  margin: 0;
++  color: var(--fg-muted, #94a3b8);
++  font-size: 14px;
++}
++
++.kb-workspace-home-actions {
++  display: flex;
++  gap: 10px;
++}
++
++.kb-home-secondary-btn {
++  padding: 8px 14px;
++  border-radius: 6px;
++  border: 1px solid var(--border-subtle, #333842);
++  background: var(--bg-surface-raised, #24272f);
++  color: var(--fg-primary, #f8fafc);
++  font-size: 13px;
++  font-weight: 600;
++  cursor: pointer;
++}
++
++.kb-home-primary-btn {
++  padding: 8px 14px;
++  border-radius: 6px;
++  border: none;
++  background: var(--color-brand-primary, #3b82f6);
++  color: #ffffff;
++  font-size: 13px;
++  font-weight: 600;
++  cursor: pointer;
++}
++
++.kb-workspace-projects-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
++  gap: 16px;
++}
++
++.kb-project-card {
++  background: var(--bg-surface, #1e2025);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: 8px;
++  padding: 18px;
++  display: flex;
++  flex-direction: column;
++  justify-content: space-between;
++  gap: 14px;
++}
++
++.kb-project-card-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 8px;
++}
++
++.kb-project-card-name {
++  font-size: 16px;
++  font-weight: 600;
++}
++
++.kb-project-card-key {
++  font-size: 11px;
++  font-family: var(--font-mono, monospace);
++  padding: 2px 6px;
++  border-radius: 4px;
++  background: var(--bg-surface-raised, #24272f);
++  color: var(--fg-muted, #94a3b8);
++}
++
++.kb-project-card-desc {
++  margin: 0;
++  font-size: 13px;
++  color: var(--fg-secondary, #cbd5e1);
++}
++
++.kb-project-card-links {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 8px;
++}
++
++.kb-project-card-primary-link {
++  font-size: 12px;
++  font-weight: 600;
++  color: var(--color-brand-primary, #3b82f6);
++  text-decoration: none;
++}
++
++.kb-project-card-secondary-link {
++  font-size: 12px;
++  color: var(--fg-secondary, #cbd5e1);
++  text-decoration: none;
++}
++
++.kb-views-links-row {
++  display: flex;
++  gap: 12px;
++  margin-top: 12px;
++}
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index 19f29f3..6751d23 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -25,6 +25,7 @@ import { IssueSurfaceSlotsContext } from '../features/drawer/slots';
+ import { issueSurfaceSlots } from '../features/drawer/slotRegistry';
+ import { AccessInspectorHost } from '../features/access/useAccessInspector';
+ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
++import { useSessionGuard } from '../features/auth/useSessionGuard';
+ import './AppShell.css';
+ 
+ registerShellPanel('standalone', StandaloneStatusPanel);
+@@ -52,6 +53,7 @@ export function AppShell({
+   systemStatus,
+   cachedIssues,
+ }: AppShellProps): JSX.Element {
++  useSessionGuard();
+   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+   const [paletteOpen, setPaletteOpen] = useState(false);
+   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
+diff --git a/kanban/web/src/app/CommandPalette.test.tsx b/kanban/web/src/app/CommandPalette.test.tsx
+index 22dbf92..5be7a79 100644
+--- a/kanban/web/src/app/CommandPalette.test.tsx
++++ b/kanban/web/src/app/CommandPalette.test.tsx
+@@ -349,4 +349,35 @@ describe('CommandPalette', () => {
+ 
+     expect(onClose).toHaveBeenCalled();
+   });
++
++  it('executes Create project and admin/settings navigation commands', () => {
++    const projectModalListener = vi.fn();
++    window.addEventListener('kb:open-create-project', projectModalListener);
++
++    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
++
++    const input = screen.getByRole('combobox');
++    fireEvent.change(input, { target: { value: 'Create project' } });
++    act(() => {
++      screen.getByRole('option', { name: /Create project/ }).click();
++    });
++    expect(projectModalListener).toHaveBeenCalled();
++
++    fireEvent.change(input, { target: { value: 'Go to Auth Studio' } });
++    act(() => {
++      screen.getByRole('option', { name: /Go to Auth Studio/ }).click();
++    });
++
++    fireEvent.change(input, { target: { value: 'Go to Personal MCP Keys' } });
++    act(() => {
++      screen.getByRole('option', { name: /Go to Personal MCP Keys/ }).click();
++    });
++
++    fireEvent.change(input, { target: { value: 'Go to Standalone Status' } });
++    act(() => {
++      screen.getByRole('option', { name: /Go to Standalone Status/ }).click();
++    });
++
++    window.removeEventListener('kb:open-create-project', projectModalListener);
++  });
+ });
+diff --git a/kanban/web/src/app/CommandPalette.tsx b/kanban/web/src/app/CommandPalette.tsx
+index d107222..c740c2b 100644
+--- a/kanban/web/src/app/CommandPalette.tsx
++++ b/kanban/web/src/app/CommandPalette.tsx
+@@ -222,6 +222,47 @@ export function CommandPalette({
+               new CustomEvent('kb:create-issue', { bubbles: true }),
+             );
+           }
++          void navigate(`/projects/${projectKey}/issues?create=1`);
++        },
++      },
++      {
++        id: 'act-create-project',
++        title: 'Create project',
++        icon: '📁',
++        category: 'actions',
++        onSelect: () => {
++          if (typeof window !== 'undefined') {
++            window.dispatchEvent(
++              new CustomEvent('kb:open-create-project', { bubbles: true }),
++            );
++          }
++        },
++      },
++      {
++        id: 'nav-auth-studio',
++        title: 'Go to Auth Studio',
++        icon: '🛡️',
++        category: 'navigation',
++        onSelect: () => {
++          void navigate('/admin/auth');
++        },
++      },
++      {
++        id: 'nav-mcp-keys',
++        title: 'Go to Personal MCP Keys',
++        icon: '🔑',
++        category: 'navigation',
++        onSelect: () => {
++          void navigate('/settings/mcp');
++        },
++      },
++      {
++        id: 'nav-standalone-status',
++        title: 'Go to Standalone Status',
++        icon: '💾',
++        category: 'navigation',
++        onSelect: () => {
++          void navigate('/admin/standalone');
+         },
+       },
+       {
+diff --git a/kanban/web/src/app/Sidebar.css b/kanban/web/src/app/Sidebar.css
+index 05429e7..1ddb294 100644
+--- a/kanban/web/src/app/Sidebar.css
++++ b/kanban/web/src/app/Sidebar.css
+@@ -102,6 +102,44 @@
+   user-select: none;
+ }
+ 
++.kb-sidebar-heading-row {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  padding: 0 var(--space-3, 12px) 8px var(--space-3, 12px);
++}
++
++.kb-sidebar-heading-row .kb-sidebar-heading {
++  padding: 0;
++}
++
++.kb-sidebar-add-project-btn {
++  background: transparent;
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: 4px;
++  color: var(--fg-secondary, #cbd5e1);
++  font-size: 11px;
++  font-weight: 600;
++  padding: 2px 6px;
++  cursor: pointer;
++}
++
++.kb-sidebar-add-project-btn:hover {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
++}
++
++.kb-project-expand-label {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
++.kb-sidebar-collapse-kbd {
++  font-size: 10px;
++  opacity: 0.7;
++}
++
+ .kb-sidebar-nav-list {
+   list-style: none;
+   margin: 0;
+diff --git a/kanban/web/src/app/Sidebar.test.tsx b/kanban/web/src/app/Sidebar.test.tsx
+index ace8365..ea2b033 100644
+--- a/kanban/web/src/app/Sidebar.test.tsx
++++ b/kanban/web/src/app/Sidebar.test.tsx
+@@ -247,4 +247,52 @@ describe('Sidebar', () => {
+       unmount();
+     }
+   });
++
++  it('fetches dynamic projects from /api/v1/projects and opens CreateProjectModal via + Project button or custom event', async () => {
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/projects')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              items: [
++                { identifier: 'KAN', name: 'kanban', modules_enabled: true },
++                { identifier: 'SEC', name: 'Security', modules_enabled: true },
++              ],
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    render(
++      <MemoryRouter initialEntries={['/']}>
++        <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
++      </MemoryRouter>,
++    );
++
++    expect(await screen.findByRole('button', { name: 'Project: Security' })).toBeDefined();
++
++    const createBtn = screen.getByRole('button', { name: 'Create project' });
++    act(() => {
++      createBtn.click();
++    });
++    expect(screen.getByTestId('create-project-modal')).toBeDefined();
++
++    act(() => {
++      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
++    });
++    expect(screen.queryByTestId('create-project-modal')).toBeNull();
++
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:open-create-project'));
++    });
++    expect(screen.getByTestId('create-project-modal')).toBeDefined();
++
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:project-created'));
++    });
++  });
+ });
+diff --git a/kanban/web/src/app/Sidebar.tsx b/kanban/web/src/app/Sidebar.tsx
+index 7336a86..612e5ba 100644
+--- a/kanban/web/src/app/Sidebar.tsx
++++ b/kanban/web/src/app/Sidebar.tsx
+@@ -1,18 +1,21 @@
+ /**
+- * Sidebar Navigation Rail (KB-P3-34, S6.3).
+- * 256px collapsible navigation rail with Plane parity, [👍] 👍kanban branding, and accessible keyboard focus trapping.
++ * Sidebar Navigation Rail (KB-P3-34, S6.3, KANBA-166, KANBA-167).
++ * 256px collapsible navigation rail with Plane parity, [👍] 👍kanban branding,
++ * dynamic project list, project creation modal, and accessible keyboard focus trapping.
+  */
+ 
+ import React, {
+   useCallback,
+   useEffect,
++  useMemo,
+   useRef,
+   useState,
+   type JSX,
+   type KeyboardEvent,
+ } from 'react';
+-import { NavLink, useLocation } from 'react-router';
++import { NavLink, useLocation, useNavigate } from 'react-router';
+ import { registerShortcut } from './shortcuts';
++import { CreateProjectModal } from '../features/projects/CreateProjectModal';
+ import './Sidebar.css';
+ 
+ export interface ProjectNavData {
+@@ -59,6 +62,16 @@ export function Sidebar({
+     // Outside Router
+   }
+ 
++  let navigateFn: ((to: string) => void) | null = null;
++  try {
++    const nav = useNavigate();
++    navigateFn = (to: string) => {
++      void nav(to);
++    };
++  } catch {
++    // Outside Router
++  }
++
+   const currentPath = activePathProp ?? locationPathname;
+ 
+   // Stored desktop collapse state
+@@ -72,9 +85,103 @@ export function Sidebar({
+   });
+ 
+   const [projectExpanded, setProjectExpanded] = useState(true);
++  const [fetchedProjects, setFetchedProjects] = useState<ProjectNavData[]>([]);
++  const [createProjectOpen, setCreateProjectOpen] = useState(false);
++
+   const sidebarRef = useRef<HTMLElement>(null);
+   const firstItemRef = useRef<HTMLButtonElement>(null);
+ 
++  useEffect(() => {
++    let active = true;
++
++    async function loadProjects(): Promise<void> {
++      try {
++        const res = await fetch('/api/v1/projects', {
++          method: 'GET',
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++        });
++        if (!res.ok || !active) {
++          return;
++        }
++        const data = (await res.json()) as
++          | {
++              items?: {
++                identifier?: string;
++                key?: string;
++                name?: string;
++                modules_enabled?: boolean;
++              }[];
++            }
++          | {
++              identifier?: string;
++              key?: string;
++              name?: string;
++              modules_enabled?: boolean;
++            }[];
++        const rawItems = Array.isArray(data) ? data : (data.items ?? []);
++        const parsed: ProjectNavData[] = [];
++        for (const item of rawItems) {
++          const key = item.identifier ?? item.key;
++          if (typeof key === 'string' && key.length > 0 && typeof item.name === 'string') {
++            parsed.push({
++              key,
++              name: item.name,
++              modules_enabled: item.modules_enabled ?? true,
++            });
++          }
++        }
++        if (parsed.length > 0) {
++          setFetchedProjects(parsed);
++        }
++      } catch {
++        // Offline or unmocked unit test environment
++      }
++    }
++
++    void loadProjects();
++
++    const handleProjectCreated = (): void => {
++      void loadProjects();
++    };
++    const handleOpenCreateProject = (): void => {
++      setCreateProjectOpen(true);
++    };
++
++    window.addEventListener('kb:project-created', handleProjectCreated);
++    window.addEventListener('kb:open-create-project', handleOpenCreateProject);
++    return () => {
++      active = false;
++      window.removeEventListener('kb:project-created', handleProjectCreated);
++      window.removeEventListener('kb:open-create-project', handleOpenCreateProject);
++    };
++  }, []);
++
++  const projectList = useMemo<ProjectNavData[]>(() => {
++    const primary: ProjectNavData = {
++      key: projectKey,
++      name: projectName,
++      modules_enabled: modulesEnabled,
++    };
++    if (fetchedProjects.length === 0) {
++      return [primary];
++    }
++    const hasPrimaryInFetched = fetchedProjects.some((p) => p.key === projectKey);
++    if (hasPrimaryInFetched) {
++      return fetchedProjects.map((p) =>
++        p.key === projectKey && projectName !== 'kanban'
++          ? { key: p.key, name: projectName, modules_enabled: modulesEnabled }
++          : p,
++      );
++    }
++    if (projectName !== 'kanban' || currentPath.startsWith(`/projects/${projectKey}`)) {
++      return [primary, ...fetchedProjects];
++    }
++    return fetchedProjects;
++  }, [fetchedProjects, projectKey, projectName, modulesEnabled, currentPath]);
++
++  const activeProjectKey = projectList[0]?.key ?? projectKey;
++
+   // Toggle desktop collapsed state
+   const toggleCollapsed = useCallback(() => {
+     setCollapsed((prev) => {
+@@ -106,7 +213,9 @@ export function Sidebar({
+       firstItemRef.current?.focus();
+     }, 0);
+ 
+-    return () => { clearTimeout(timer); };
++    return () => {
++      clearTimeout(timer);
++    };
+   }, [isOpen]);
+ 
+   const handleMobileKeyDown = (e: KeyboardEvent<HTMLElement>): void => {
+@@ -141,6 +250,9 @@ export function Sidebar({
+         new CustomEvent('kb:create-issue', { bubbles: true }),
+       );
+     }
++    if (navigateFn && !currentPath.startsWith(`/projects/${activeProjectKey}/issues`)) {
++      navigateFn(`/projects/${activeProjectKey}/issues?create=1`);
++    }
+   };
+ 
+   const isDesktopCollapsed = collapsed === 'collapsed';
+@@ -158,8 +270,16 @@ export function Sidebar({
+ 
+       <aside
+         ref={sidebarRef}
+-        role={isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279 ? 'dialog' : undefined}
+-        aria-modal={isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279 ? 'true' : undefined}
++        role={
++          isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279
++            ? 'dialog'
++            : undefined
++        }
++        aria-modal={
++          isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279
++            ? 'true'
++            : undefined
++        }
+         aria-label="Sidebar navigation"
+         className={`kb-sidebar ${isDesktopCollapsed ? 'kb-sidebar-collapsed' : ''} ${
+           isOpen ? 'kb-sidebar-overlay' : ''
+@@ -250,111 +370,153 @@ export function Sidebar({
+ 
+         {/* Projects Section */}
+         <div className="kb-sidebar-section">
+-          <div className="kb-sidebar-heading">Projects</div>
+-          <nav aria-label="Projects navigation">
++          <div className="kb-sidebar-heading-row">
++            <div className="kb-sidebar-heading">
++              Projects
++            </div>
+             <button
+               type="button"
+-              className="kb-project-expand-row"
+-              aria-label={`Project: ${projectName}`}
+-              aria-expanded={projectExpanded}
+-              onClick={() => { setProjectExpanded(!projectExpanded); }}
++              className="kb-sidebar-add-project-btn"
++              aria-label="Create project"
++              title="Create project"
++              onClick={() => {
++                setCreateProjectOpen(true);
++              }}
+             >
+-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+-                <span aria-hidden="true">⚡</span>
+-                <span>{projectName}</span>
+-              </span>
+-              <span aria-hidden="true">{projectExpanded ? '▾' : '▸'}</span>
++              + Project
+             </button>
+-
+-            {projectExpanded && (
+-              <ul className="kb-project-subitems">
+-                <li>
+-                  <NavLink
+-                    to={`/projects/${projectKey}/issues`}
+-                    className="kb-sidebar-nav-item"
+-                    aria-current={
+-                      currentPath.startsWith(`/projects/${projectKey}/issues`)
+-                        ? 'page'
+-                        : undefined
+-                    }
+-                  >
+-                    <span className="kb-sidebar-icon" aria-hidden="true">
+-                      📋
+-                    </span>
+-                    <span>Work Items</span>
+-                  </NavLink>
+-                </li>
+-                <li>
+-                  <NavLink
+-                    to={`/projects/${projectKey}/cycles`}
+-                    className="kb-sidebar-nav-item"
+-                    aria-current={
+-                      currentPath.startsWith(`/projects/${projectKey}/cycles`)
+-                        ? 'page'
+-                        : undefined
+-                    }
+-                  >
+-                    <span className="kb-sidebar-icon" aria-hidden="true">
+-                      🔄
+-                    </span>
+-                    <span>Cycles</span>
+-                  </NavLink>
+-                </li>
+-
+-                {/* Modules: ABSENT from DOM when modulesEnabled === false */}
+-                {modulesEnabled && (
+-                  <li>
+-                    <NavLink
+-                      to={`/projects/${projectKey}/modules`}
+-                      className="kb-sidebar-nav-item"
+-                      aria-current={
+-                        currentPath.startsWith(`/projects/${projectKey}/modules`)
+-                          ? 'page'
+-                          : undefined
+-                      }
+-                    >
+-                      <span className="kb-sidebar-icon" aria-hidden="true">
+-                        🧩
+-                      </span>
+-                      <span>Modules</span>
+-                    </NavLink>
+-                  </li>
+-                )}
+-
+-                <li>
+-                  <NavLink
+-                    to={`/projects/${projectKey}/views`}
+-                    className="kb-sidebar-nav-item"
+-                    aria-current={
+-                      currentPath.startsWith(`/projects/${projectKey}/views`)
+-                        ? 'page'
+-                        : undefined
+-                    }
+-                  >
+-                    <span className="kb-sidebar-icon" aria-hidden="true">
+-                      🎛️
+-                    </span>
+-                    <span>Views</span>
+-                  </NavLink>
+-                </li>
+-                <li>
+-                  <NavLink
+-                    to={`/projects/${projectKey}/docs`}
+-                    className="kb-sidebar-nav-item"
+-                    aria-current={
+-                      currentPath.startsWith(`/projects/${projectKey}/docs`)
+-                        ? 'page'
+-                        : undefined
+-                    }
++          </div>
++          <nav aria-label="Projects navigation">
++            {projectList.map((proj) => {
++              const projModulesEnabled = proj.modules_enabled ?? modulesEnabled;
++              return (
++                <div key={proj.key}>
++                  <button
++                    type="button"
++                    className="kb-project-expand-row"
++                    aria-label={`Project: ${proj.name}`}
++                    aria-expanded={projectExpanded}
++                    onClick={() => {
++                      setProjectExpanded(!projectExpanded);
++                    }}
+                   >
+-                    <span className="kb-sidebar-icon" aria-hidden="true">
+-                      📄
++                    <span className="kb-project-expand-label">
++                      <span aria-hidden="true">⚡</span>
++                      <span>{proj.name}</span>
+                     </span>
+-                    <span>Docs (Pages)</span>
+-                  </NavLink>
+-                </li>
+-              </ul>
+-            )}
++                    <span aria-hidden="true">{projectExpanded ? '▾' : '▸'}</span>
++                  </button>
++
++                  {projectExpanded && (
++                    <ul className="kb-project-subitems">
++                      <li>
++                        <NavLink
++                          to={`/projects/${proj.key}/issues`}
++                          className="kb-sidebar-nav-item"
++                          aria-current={
++                            currentPath.startsWith(`/projects/${proj.key}/issues`)
++                              ? 'page'
++                              : undefined
++                          }
++                        >
++                          <span className="kb-sidebar-icon" aria-hidden="true">
++                            📋
++                          </span>
++                          <span>Work Items</span>
++                        </NavLink>
++                      </li>
++                      <li>
++                        <NavLink
++                          to={`/projects/${proj.key}/cycles`}
++                          className="kb-sidebar-nav-item"
++                          aria-current={
++                            currentPath.startsWith(`/projects/${proj.key}/cycles`)
++                              ? 'page'
++                              : undefined
++                          }
++                        >
++                          <span className="kb-sidebar-icon" aria-hidden="true">
++                            🔄
++                          </span>
++                          <span>Cycles</span>
++                        </NavLink>
++                      </li>
++
++                      {/* Modules: ABSENT from DOM when projModulesEnabled === false */}
++                      {projModulesEnabled && (
++                        <li>
++                          <NavLink
++                            to={`/projects/${proj.key}/modules`}
++                            className="kb-sidebar-nav-item"
++                            aria-current={
++                              currentPath.startsWith(`/projects/${proj.key}/modules`)
++                                ? 'page'
++                                : undefined
++                            }
++                          >
++                            <span className="kb-sidebar-icon" aria-hidden="true">
++                              🧩
++                            </span>
++                            <span>Modules</span>
++                          </NavLink>
++                        </li>
++                      )}
++
++                      <li>
++                        <NavLink
++                          to={`/projects/${proj.key}/views`}
++                          className="kb-sidebar-nav-item"
++                          aria-current={
++                            currentPath.startsWith(`/projects/${proj.key}/views`)
++                              ? 'page'
++                              : undefined
++                          }
++                        >
++                          <span className="kb-sidebar-icon" aria-hidden="true">
++                            🎛️
++                          </span>
++                          <span>Views</span>
++                        </NavLink>
++                      </li>
++                      <li>
++                        <NavLink
++                          to={`/projects/${proj.key}/docs`}
++                          className="kb-sidebar-nav-item"
++                          aria-current={
++                            currentPath.startsWith(`/projects/${proj.key}/docs`)
++                              ? 'page'
++                              : undefined
++                          }
++                        >
++                          <span className="kb-sidebar-icon" aria-hidden="true">
++                            📄
++                          </span>
++                          <span>Docs (Pages)</span>
++                        </NavLink>
++                      </li>
++                      <li>
++                        <NavLink
++                          to={`/projects/${proj.key}/settings/custom-fields`}
++                          className="kb-sidebar-nav-item"
++                          aria-current={
++                            currentPath.startsWith(
++                              `/projects/${proj.key}/settings/custom-fields`,
++                            )
++                              ? 'page'
++                              : undefined
++                          }
++                        >
++                          <span className="kb-sidebar-icon" aria-hidden="true">
++                            ⚙️
++                          </span>
++                          <span>Custom Fields</span>
++                        </NavLink>
++                      </li>
++                    </ul>
++                  )}
++                </div>
++              );
++            })}
+           </nav>
+         </div>
+ 
+@@ -368,10 +530,31 @@ export function Sidebar({
+           >
+             <span aria-hidden="true">◀</span>
+             <span>Collapse</span>
+-            <kbd style={{ fontSize: '10px', opacity: 0.7 }}>[</kbd>
++            <kbd className="kb-sidebar-collapse-kbd">[</kbd>
+           </button>
+         </div>
+       </aside>
++
++      <CreateProjectModal
++        isOpen={createProjectOpen}
++        onClose={() => {
++          setCreateProjectOpen(false);
++        }}
++        onCreated={(created) => {
++          setFetchedProjects((prev) => {
++            const exists = prev.some((p) => p.key === created.identifier);
++            if (exists) return prev;
++            return [
++              ...prev,
++              {
++                key: created.identifier,
++                name: created.name,
++                modules_enabled: created.modules_enabled ?? true,
++              },
++            ];
++          });
++        }}
++      />
+     </>
+   );
+ }
+diff --git a/kanban/web/src/app/Topbar.css b/kanban/web/src/app/Topbar.css
+index 83e2e56..7096a11 100644
+--- a/kanban/web/src/app/Topbar.css
++++ b/kanban/web/src/app/Topbar.css
+@@ -123,11 +123,38 @@
+   border: 1px solid var(--border-subtle, #333842);
+   border-radius: var(--radius-md, 6px);
+   box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.5));
+-  min-width: 180px;
++  min-width: 220px;
+   padding: var(--space-2, 8px);
+   z-index: 100;
+ }
+ 
++.kb-avatar-menu-divider {
++  border-top: 1px solid var(--border-subtle, #333842);
++  margin: 6px 0;
++}
++
++.kb-avatar-menu-list {
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.kb-avatar-menu-link {
++  text-decoration: none;
++}
++
++.kb-avatar-menu-icon {
++  margin-right: 8px;
++}
++
++.kb-avatar-logout {
++  color: var(--danger-fg, #dc2626);
++}
++
++[data-theme="dark"] .kb-avatar-logout {
++  color: #fca5a5;
++}
++
+ .kb-theme-menu-title {
+   font-size: 11px;
+   text-transform: uppercase;
+diff --git a/kanban/web/src/app/Topbar.test.tsx b/kanban/web/src/app/Topbar.test.tsx
+index 0046b23..ce201f0 100644
+--- a/kanban/web/src/app/Topbar.test.tsx
++++ b/kanban/web/src/app/Topbar.test.tsx
+@@ -172,4 +172,55 @@ describe('Topbar', () => {
+     const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+     expect(avatarBtn).toBeDefined();
+   });
++
++  it('renders Settings & Admin links and executes Log out action in avatar menu', async () => {
++    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(
++          new Response(JSON.stringify({ csrf_token: 'csrf-logout-1' }), { status: 200 }),
++        );
++      }
++      if (url.includes('/api/v1/auth/logout')) {
++        return Promise.resolve(
++          new Response(JSON.stringify({ status: 'logged_out' }), { status: 200 }),
++        );
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <ShellPanelsProvider>
++            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++              <Topbar />
++            </MemoryRouter>
++          </ShellPanelsProvider>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
++    act(() => {
++      avatarBtn.click();
++    });
++
++    expect(screen.getByRole('menuitem', { name: /Personal MCP Keys/ })).toBeDefined();
++    expect(screen.getByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeDefined();
++    expect(screen.getByRole('menuitem', { name: /Admin Auth Studio/ })).toBeDefined();
++    expect(screen.getByRole('menuitem', { name: /Admin MCP Keys/ })).toBeDefined();
++    expect(screen.getByRole('menuitem', { name: /Standalone Status & Backup/ })).toBeDefined();
++
++    const logoutBtn = screen.getByTestId('logout-button');
++    await act(async () => {
++      logoutBtn.click();
++      await Promise.resolve();
++    });
++
++    expect(fetchSpy).toHaveBeenCalledWith(
++      '/api/v1/auth/logout',
++      expect.objectContaining({ method: 'POST' }),
++    );
++  });
+ });
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index cd42e71..af94d25 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -1,6 +1,7 @@
+ /**
+- * Topbar Component (KB-P3-34, S6.3).
+- * 52px calm header with breadcrumb, Cmd+K trigger, emoji pills, layout switcher, and avatar theme menu.
++ * Topbar Component (KB-P3-34, S6.3, KANBA-167).
++ * 52px calm header with breadcrumb, Cmd+K trigger, emoji pills, layout switcher,
++ * and avatar menu with Theme selector, Settings/Admin navigation links, and Log out.
+  */
+ 
+ import React, {
+@@ -9,12 +10,13 @@ import React, {
+   useState,
+   type JSX,
+ } from 'react';
+-import { useLocation } from 'react-router';
++import { Link, useLocation, useNavigate } from 'react-router';
+ import { Breadcrumb } from './Breadcrumb';
+ import { HeaderPills, type AccessManifestData } from './HeaderPills';
+ import { LayoutSwitcher } from './LayoutSwitcher';
+ import { useTheme, type Theme } from '../theme/ThemeProvider';
+ import { type SystemStatus } from './useSystemStatus';
++import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
+ import './Topbar.css';
+ 
+ export interface TopbarProps {
+@@ -36,6 +38,14 @@ const THEME_OPTIONS: readonly { id: Theme; label: string; icon: string }[] = [
+   { id: 'system', label: 'System', icon: '💻' },
+ ] as const;
+ 
++const AVATAR_NAV_LINKS: readonly { to: string; label: string; icon: string }[] = [
++  { to: '/settings/mcp', label: 'Personal MCP Keys', icon: '🔑' },
++  { to: '/workspaces/settings/mcp', label: 'Workspace MCP Keys', icon: '🏢' },
++  { to: '/admin/auth', label: 'Admin Auth Studio', icon: '🛡️' },
++  { to: '/admin/mcp', label: 'Admin MCP Keys', icon: '🤖' },
++  { to: '/admin/standalone', label: 'Standalone Status & Backup', icon: '💾' },
++] as const;
++
+ export function Topbar({
+   isSidebarOpen = true,
+   onToggleSidebar,
+@@ -49,11 +59,13 @@ export function Topbar({
+   systemStatus,
+ }: TopbarProps): JSX.Element {
+   const loc = useLocation();
++  const navigate = useNavigate();
+   const locationPathname = loc.pathname;
+ 
+   const isIssuesRoute =
+     showLayoutOverride ??
+-    (locationPathname.includes('/issues') && !(/\/issues\/[A-Z0-9]+-[0-9]+/.exec(locationPathname)));
++    (locationPathname.includes('/issues') &&
++      !/\/issues\/[A-Z0-9]+-[0-9]+/.exec(locationPathname));
+ 
+   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+   const avatarRef = useRef<HTMLDivElement>(null);
+@@ -68,9 +80,33 @@ export function Topbar({
+       }
+     };
+     document.addEventListener('mousedown', handleOutside);
+-    return () => { document.removeEventListener('mousedown', handleOutside); };
++    return () => {
++      document.removeEventListener('mousedown', handleOutside);
++    };
+   }, [avatarMenuOpen]);
+ 
++  const handleLogout = async (): Promise<void> => {
++    try {
++      const csrfToken = await ensureSessionCsrfToken();
++      const headers: Record<string, string> = {
++        Accept: 'application/json',
++      };
++      if (csrfToken) {
++        headers['X-CSRF-Token'] = csrfToken;
++      }
++      await fetch('/api/v1/auth/logout', {
++        method: 'POST',
++        headers,
++        credentials: 'same-origin',
++      });
++    } catch {
++      // Proceed to login redirect even if network request fails
++    } finally {
++      setAvatarMenuOpen(false);
++      void navigate('/login', { replace: true });
++    }
++  };
++
+   const activeTheme = themeContext.theme;
+ 
+   return (
+@@ -129,7 +165,9 @@ export function Topbar({
+             aria-label="User profile and settings"
+             aria-haspopup="menu"
+             aria-expanded={avatarMenuOpen}
+-            onClick={() => { setAvatarMenuOpen(!avatarMenuOpen); }}
++            onClick={() => {
++              setAvatarMenuOpen(!avatarMenuOpen);
++            }}
+           >
+             A
+           </button>
+@@ -161,7 +199,7 @@ export function Topbar({
+                       }}
+                     >
+                       <span>
+-                        <span aria-hidden="true" style={{ marginRight: '8px' }}>
++                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                           {opt.icon}
+                         </span>
+                         {opt.label}
+@@ -171,6 +209,49 @@ export function Topbar({
+                   );
+                 })}
+               </div>
++
++              <div className="kb-avatar-menu-divider" />
++
++              <div className="kb-theme-menu-title">Settings & Admin</div>
++              <div className="kb-avatar-menu-list">
++                {AVATAR_NAV_LINKS.map((link) => (
++                  <Link
++                    key={link.to}
++                    to={link.to}
++                    role="menuitem"
++                    className="kb-theme-radio kb-avatar-menu-link"
++                    onClick={() => {
++                      setAvatarMenuOpen(false);
++                    }}
++                  >
++                    <span>
++                      <span aria-hidden="true" className="kb-avatar-menu-icon">
++                        {link.icon}
++                      </span>
++                      {link.label}
++                    </span>
++                  </Link>
++                ))}
++              </div>
++
++              <div className="kb-avatar-menu-divider" />
++
++              <button
++                type="button"
++                role="menuitem"
++                data-testid="logout-button"
++                className="kb-theme-radio kb-avatar-logout"
++                onClick={() => {
++                  void handleLogout();
++                }}
++              >
++                <span>
++                  <span aria-hidden="true" className="kb-avatar-menu-icon">
++                    🚪
++                  </span>
++                  Log out
++                </span>
++              </button>
+             </div>
+           )}
+         </div>
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index d78d683..cd08379 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -1,5 +1,5 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent } from '@testing-library/react';
++import { render, screen, fireEvent, act } from '@testing-library/react';
+ import React from 'react';
+ import { RouterProvider } from 'react-router';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+@@ -8,6 +8,8 @@ import {
+   PROJECT_KEY_REGEX,
+   ISSUE_KEY_REGEX,
+   IssuesWorkspaceRoute,
++  RoutePlaceholder,
++  AppRoutes,
+ } from './routes';
+ import { ThemeProvider } from '../theme/ThemeProvider';
+ import { FIXTURE_12_ISSUES } from '../features/views/fixtures';
+@@ -171,6 +173,12 @@ describe('routes and AppShell integration', () => {
+       { path: '/login', expected: 'login-page' },
+       { path: '/setup', expected: 'setup-claim-page' },
+       { path: '/admin/auth', expected: 'auth-studio-page' },
++      { path: '/admin/standalone', expected: 'standalone-status-route' },
++      { path: '/drafts', expected: 'drafts-view' },
++      { path: '/your-work', expected: 'your-work-view' },
++      { path: '/projects/KAN/cycles', expected: 'project-cycles-view' },
++      { path: '/projects/KAN/modules', expected: 'project-modules-view' },
++      { path: '/projects/KAN/views', expected: 'project-views-view' },
+       { path: '/__dev/tokens', expected: 'token-story' },
+       { path: '/__dev/emoji', expected: 'emoji-story' },
+       { path: '/__dev/editor', expected: 'editor-story' },
+@@ -262,6 +270,90 @@ describe('routes and AppShell integration', () => {
+ 
+     expect(await screen.findByRole('button', { name: 'Project: kanban' })).toBeDefined();
+   });
++
++  it('renders WorkspaceHomeView projects from /api/v1/projects and opens CreateProjectModal', async () => {
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/projects')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              items: [
++                {
++                  id: 'p-1',
++                  identifier: 'OPS',
++                  name: 'Operations',
++                  description_markdown: 'Ops project',
++                  modules_enabled: true,
++                },
++              ],
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    const router = createAppRouter(['/']);
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <RouterProvider router={router} />
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    expect(await screen.findByTestId('project-card-OPS')).toBeDefined();
++
++    fireEvent.click(screen.getByTestId('home-create-project-btn'));
++    expect(screen.getByTestId('create-project-modal')).toBeDefined();
++
++    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
++    expect(screen.queryByTestId('create-project-modal')).toBeNull();
++
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:project-created'));
++    });
++
++    fireEvent.click(screen.getByTestId('home-create-issue-btn'));
++  });
++
++  it('preserves IssuesWorkspaceRoute in background when ?peek= is set and triggers create modal on ?create=1', () => {
++    const router = createAppRouter(['/projects/KAN/issues?layout=list&peek=KAN-101&create=1']);
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <RouterProvider router={router} />
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    expect(screen.getByTestId('issues-workspace')).toBeDefined();
++
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:create-issue'));
++    });
++
++    // Verify RoutePlaceholder and AppRoutes helpers
++    expect(AppRoutes()).toBeNull();
++    render(<RoutePlaceholder route="/custom" />);
++    expect(screen.getByText('Route: /custom')).toBeDefined();
++  });
++
++  it('closes StandaloneStatusRoute and navigates back on Close click', () => {
++    const router = createAppRouter(['/admin/standalone']);
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <RouterProvider router={router} />
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    const closeBtn = screen.getByRole('button', { name: 'Close' });
++    fireEvent.click(closeBtn);
++  });
+ });
+ 
+ describe('IssuesWorkspaceRoute', () => {
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index df7a377..6deb83c 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -1,20 +1,27 @@
+ /**
+- * Application Routes & Router Table (KB-P3-34, S6.3, KB-P3-41).
++ * Application Routes & Router Table (KB-P3-34, S6.3, KB-P3-41, KANBA-170, KANBA-166, KANBA-167).
+  * react-router v7 data router with layout parameter normalization, regex key validation, S3.4 uniform error view,
+- * and zero-remount ticket drawer & full-screen surface routing.
++ * zero-remount ticket drawer & full-screen surface routing, WorkspaceHomeView, and StandaloneStatusPanel route.
+  */
+ 
+-import React, { useEffect, type JSX } from 'react';
+-import { useQuery } from '@tanstack/react-query';
++import React, {
++  createContext,
++  useContext,
++  useEffect,
++  useState,
++  type JSX,
++} from 'react';
++import { useQuery, useQueryClient } from '@tanstack/react-query';
+ import { qk } from '../api/queryKeys';
+ import {
+   IssuesWorkspaceRoute,
+   type IssuesWorkspaceRouteProps,
++  type ViewLayout,
+ } from '../features/views/viewRegistry.tsx';
+-import { FIXTURE_12_ISSUES } from '../features/views/fixtures';
+ import {
+   createBrowserRouter,
+   createMemoryRouter,
++  Link,
+   useLocation,
+   useNavigate,
+   useParams,
+@@ -42,6 +49,9 @@ import { SetupClaimPage } from '../features/auth/SetupClaimPage';
+ import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
+ import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
+ import { McpAccessStudio } from '../features/settings/McpAccessStudio';
++import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
++import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
++import { useSessionGuard } from '../features/auth/useSessionGuard';
+ 
+ export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
+ 
+@@ -56,6 +66,18 @@ export const VALID_LAYOUTS = new Set([
+   'timeline',
+ ]);
+ 
++interface ProjectRouteContextValue {
++  readonly projectKey: string;
++  readonly projectName: string;
++  readonly modulesEnabled: boolean;
++}
++
++const ProjectRouteContext = createContext<ProjectRouteContextValue>({
++  projectKey: 'KAN',
++  projectName: 'kanban',
++  modulesEnabled: true,
++});
++
+ /**
+  * Uniform 403 / 404 view preventing principal & object enumeration (S3.4).
+  */
+@@ -77,13 +99,20 @@ export function RoutePlaceholder({ route }: { route: string }): JSX.Element {
+ }
+ 
+ /**
+- * Validated Project Issues route with layout search parameter normalization.
++ * Validated Project Issues route with layout search parameter normalization
++ * and persistent background rendering when `?peek=` drawer is open (KANBA-170, KANBA-164).
+  */
+ export function ProjectIssuesRoute(): JSX.Element {
++  const { projectKey: paramKey } = useParams<{ projectKey: string }>();
++  const ctx = useContext(ProjectRouteContext);
++  const queryClient = useQueryClient();
+   const [searchParams] = useSearchParams();
+   const navigate = useNavigate();
+ 
++  const resolvedProjectKey = paramKey ?? ctx.projectKey;
+   const rawLayout = searchParams.get('layout');
++  const createTrigger = searchParams.get('create');
++
+   useEffect(() => {
+     if (rawLayout && !VALID_LAYOUTS.has(rawLayout.toLowerCase())) {
+       const next = new URLSearchParams(searchParams);
+@@ -92,7 +121,303 @@ export function ProjectIssuesRoute(): JSX.Element {
+     }
+   }, [rawLayout, searchParams, navigate]);
+ 
+-  return <RoutePlaceholder route="/projects/:projectKey/issues" />;
++  useEffect(() => {
++    if (createTrigger === '1') {
++      const next = new URLSearchParams(searchParams);
++      next.delete('create');
++      const qs = next.toString();
++      void navigate(qs ? `?${qs}` : '.', { replace: true });
++      const timer = setTimeout(() => {
++        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
++      }, 0);
++      return () => {
++        clearTimeout(timer);
++      };
++    }
++  }, [createTrigger, searchParams, navigate]);
++
++  useEffect(() => {
++    const handleCreateIssueEvent = (): void => {
++      setTimeout(() => {
++        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
++      }, 0);
++    };
++    window.addEventListener('kb:create-issue', handleCreateIssueEvent);
++    return () => {
++      window.removeEventListener('kb:create-issue', handleCreateIssueEvent);
++    };
++  }, []);
++
++  const normalizedLayout: ViewLayout = (
++    rawLayout && VALID_LAYOUTS.has(rawLayout.toLowerCase())
++      ? rawLayout.toLowerCase()
++      : 'list'
++  ) as ViewLayout;
++
++  const isNoModules = searchParams.get('nomodules') === '1';
++  const modulesEnabled = isNoModules ? false : ctx.modulesEnabled;
++
++  return (
++    <div data-testid="route-placeholder" data-route="/projects/:projectKey/issues">
++      <IssuesWorkspaceRoute
++        key={`${resolvedProjectKey}-${normalizedLayout}`}
++        projectKey={resolvedProjectKey}
++        modulesEnabled={modulesEnabled}
++        initialLayout={normalizedLayout}
++        queryClient={queryClient}
++      />
++    </div>
++  );
++}
++
++/**
++ * Workspace Root Home View (`/` — KANBA-170, KANBA-166).
++ * Verifies initialization/authentication via `useSessionGuard`, loads projects from
++ * `GET /api/v1/projects`, and provides 1-click project & work item creation.
++ */
++export function WorkspaceHomeView(): JSX.Element {
++  useSessionGuard();
++  const navigate = useNavigate();
++  const [projects, setProjects] = useState<CreatedProject[]>([]);
++  const [createOpen, setCreateOpen] = useState(false);
++
++  useEffect(() => {
++    let active = true;
++
++    async function loadProjects(): Promise<void> {
++      try {
++        const res = await fetch('/api/v1/projects', {
++          method: 'GET',
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++        });
++        if (!res.ok || !active) {
++          return;
++        }
++        const data = (await res.json()) as
++          | { items?: CreatedProject[] }
++          | CreatedProject[];
++        const items = Array.isArray(data) ? data : (data.items ?? []);
++        setProjects(items);
++      } catch {
++        // Offline or unmocked test environment
++      }
++    }
++
++    void loadProjects();
++    const handleCreated = (): void => {
++      void loadProjects();
++    };
++    window.addEventListener('kb:project-created', handleCreated);
++    return () => {
++      active = false;
++      window.removeEventListener('kb:project-created', handleCreated);
++    };
++  }, []);
++
++  const displayProjects: readonly CreatedProject[] =
++    projects.length > 0
++      ? projects
++      : [
++          {
++            id: 'default-kan',
++            identifier: 'KAN',
++            name: 'kanban',
++            description_markdown: 'Default workspace project for tracking issues, stickies, and docs.',
++            modules_enabled: true,
++          },
++        ];
++
++  const primaryKey = displayProjects[0]?.identifier ?? 'KAN';
++
++  return (
++    <section
++      data-testid="route-placeholder"
++      data-route="/"
++      className="kb-workspace-home"
++    >
++      <div className="kb-workspace-home-header">
++        <div>
++          <h1 className="kb-workspace-home-title">
++            Workspace Home
++          </h1>
++          <p className="kb-workspace-home-subtitle">
++            Select a project to manage work items, stickies, and documentation, or create a new project.
++          </p>
++        </div>
++
++        <div className="kb-workspace-home-actions">
++          <button
++            type="button"
++            data-testid="home-create-project-btn"
++            className="kb-home-secondary-btn"
++            onClick={() => {
++              setCreateOpen(true);
++            }}
++          >
++            + Create Project
++          </button>
++          <button
++            type="button"
++            data-testid="home-create-issue-btn"
++            className="kb-home-primary-btn"
++            onClick={() => {
++              void navigate(`/projects/${primaryKey}/issues?create=1`);
++            }}
++          >
++            + New Work Item
++          </button>
++        </div>
++      </div>
++
++      <div
++        data-testid="workspace-projects-grid"
++        className="kb-workspace-projects-grid"
++      >
++        {displayProjects.map((proj) => (
++          <div
++            key={proj.identifier}
++            data-testid={`project-card-${proj.identifier}`}
++            className="kb-project-card"
++          >
++            <div>
++              <div className="kb-project-card-header">
++                <span className="kb-project-card-name">
++                  ⚡ {proj.name}
++                </span>
++                <span className="kb-project-card-key">
++                  {proj.identifier}
++                </span>
++              </div>
++              <p className="kb-project-card-desc">
++                {proj.description_markdown && proj.description_markdown.length > 0
++                  ? proj.description_markdown
++                  : 'Project workspace for issues, cycles, and docs.'}
++              </p>
++            </div>
++
++            <div className="kb-project-card-links">
++              <Link
++                to={`/projects/${proj.identifier}/issues`}
++                className="kb-project-card-primary-link"
++              >
++                Work Items →
++              </Link>
++              <Link
++                to={`/projects/${proj.identifier}/issues?layout=board`}
++                className="kb-project-card-secondary-link"
++              >
++                Board
++              </Link>
++              <Link
++                to={`/projects/${proj.identifier}/overview`}
++                className="kb-project-card-secondary-link"
++              >
++                Stickies
++              </Link>
++              <Link
++                to={`/projects/${proj.identifier}/docs`}
++                className="kb-project-card-secondary-link"
++              >
++                Docs
++              </Link>
++              <Link
++                to={`/projects/${proj.identifier}/settings/custom-fields`}
++                className="kb-project-card-secondary-link"
++              >
++                Custom Fields
++              </Link>
++            </div>
++          </div>
++        ))}
++      </div>
++
++      <CreateProjectModal
++        isOpen={createOpen}
++        onClose={() => {
++          setCreateOpen(false);
++        }}
++        onCreated={(created) => {
++          setProjects((prev) => [...prev, created]);
++        }}
++      />
++    </section>
++  );
++}
++
++export function DraftsWorkspaceView(): JSX.Element {
++  return (
++    <section data-testid="drafts-view" className="kb-workspace-section">
++      <h1>Drafts</h1>
++      <p>Work item drafts saved before publishing to a project.</p>
++      <Link to="/projects/KAN/issues?create=1">Create a new work item →</Link>
++    </section>
++  );
++}
++
++export function YourWorkView(): JSX.Element {
++  return (
++    <section data-testid="your-work-view" className="kb-workspace-section">
++      <h1>Your work</h1>
++      <p>Assigned and subscribed work items across your workspace projects.</p>
++      <Link to="/projects/KAN/issues">View project work items →</Link>
++    </section>
++  );
++}
++
++export function ProjectCyclesView(): JSX.Element {
++  const { projectKey } = useParams<{ projectKey: string }>();
++  const key = projectKey ?? 'KAN';
++  return (
++    <section data-testid="project-cycles-view" className="kb-workspace-section">
++      <h1>Cycles ({key})</h1>
++      <p>Time-boxed sprint cycles for grouping and tracking project velocity.</p>
++      <Link to={`/projects/${key}/issues`}>Filter work items by cycle →</Link>
++    </section>
++  );
++}
++
++export function ProjectModulesView(): JSX.Element {
++  const { projectKey } = useParams<{ projectKey: string }>();
++  const key = projectKey ?? 'KAN';
++  return (
++    <section data-testid="project-modules-view" className="kb-workspace-section">
++      <h1>Modules ({key})</h1>
++      <p>Feature modules and sub-project groupings for {key}.</p>
++      <Link to={`/projects/${key}/issues`}>View module work items →</Link>
++    </section>
++  );
++}
++
++export function ProjectSavedViewsView(): JSX.Element {
++  const { projectKey } = useParams<{ projectKey: string }>();
++  const key = projectKey ?? 'KAN';
++  return (
++    <section data-testid="project-views-view" className="kb-workspace-section">
++      <h1>Views ({key})</h1>
++      <p>Switch between saved layouts and filter presets for {key}:</p>
++      <div className="kb-views-links-row">
++        <Link to={`/projects/${key}/issues?layout=list`}>List View</Link>
++        <Link to={`/projects/${key}/issues?layout=board`}>Board View</Link>
++        <Link to={`/projects/${key}/issues?layout=table`}>Table View</Link>
++        <Link to={`/projects/${key}/issues?layout=calendar`}>Calendar View</Link>
++        <Link to={`/projects/${key}/issues?layout=timeline`}>Timeline View</Link>
++      </div>
++    </section>
++  );
++}
++
++export function StandaloneStatusRoute(): JSX.Element {
++  const navigate = useNavigate();
++  return (
++    <div data-testid="standalone-status-route">
++      <StandaloneStatusPanel
++        onClose={() => {
++          void navigate('/');
++        }}
++      />
++    </div>
++  );
+ }
+ 
+ export function FullScreenIssueRoute(): JSX.Element {
+@@ -182,13 +507,22 @@ export function ProjectRouteContainer(): JSX.Element {
+ 
+   const modulesEnabled = projectQuery.data?.modules_enabled ?? true;
+   const projectName = projectQuery.data?.name ?? 'kanban';
++  const resolvedKey = projectKey ?? 'KAN';
+ 
+   return (
+-    <AppShell
+-      projectKey={projectKey}
+-      projectName={projectName}
+-      modulesEnabled={modulesEnabled}
+-    />
++    <ProjectRouteContext.Provider
++      value={{
++        projectKey: resolvedKey,
++        projectName,
++        modulesEnabled,
++      }}
++    >
++      <AppShell
++        projectKey={resolvedKey}
++        projectName={projectName}
++        modulesEnabled={modulesEnabled}
++      />
++    </ProjectRouteContext.Provider>
+   );
+ }
+ 
+@@ -212,6 +546,18 @@ export const appRoutes: RouteObject[] = [
+             path: 'issues/:issueKey',
+             element: <ProjectIssueDetailRoute />,
+           },
++          {
++            path: 'cycles',
++            element: <ProjectCyclesView />,
++          },
++          {
++            path: 'modules',
++            element: <ProjectModulesView />,
++          },
++          {
++            path: 'views',
++            element: <ProjectSavedViewsView />,
++          },
+           {
+             path: 'overview',
+             element: <ProjectOverviewRoute />,
+@@ -251,7 +597,15 @@ export const appRoutes: RouteObject[] = [
+         children: [
+           {
+             index: true,
+-            element: <RoutePlaceholder route="/" />,
++            element: <WorkspaceHomeView />,
++          },
++          {
++            path: 'drafts',
++            element: <DraftsWorkspaceView />,
++          },
++          {
++            path: 'your-work',
++            element: <YourWorkView />,
+           },
+           {
+             path: 'stickies',
+@@ -273,6 +627,10 @@ export const appRoutes: RouteObject[] = [
+             path: 'admin/auth',
+             element: <AuthStudioPage />,
+           },
++          {
++            path: 'admin/standalone',
++            element: <StandaloneStatusRoute />,
++          },
+           {
+             path: '__dev/*',
+             element: <DevStoryRoute />,
+@@ -297,32 +655,9 @@ export function createAppRouter(
+ }
+ 
+ /**
+- * Client router matching /projects/:projectKey/issues (KB-P3-37, KB-P3-34, KB-P3-38).
++ * Legacy helper kept for API surface compatibility; `/projects/:projectKey/issues`
++ * now routes directly through `AppShell` -> `ProjectIssuesRoute`.
+  */
+ export function AppRoutes(): JSX.Element | null {
+-  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+-  const search = typeof window !== 'undefined' ? window.location.search : '';
+-
+-  // If opening ticket drawer (?peek=), let AppShell with IssueSurface handle it
+-  if (search.includes('peek=')) {
+-    return null;
+-  }
+-
+-  const match = /^\/projects\/([^/]+)\/issues\/?$/.exec(pathname);
+-
+-  if (match?.[1]) {
+-    const projectKey = decodeURIComponent(match[1]);
+-    const isNoModules =
+-      pathname.includes('nomodules') ||
+-      (typeof window !== 'undefined' && window.location.search.includes('nomodules=1'));
+-    return (
+-      <IssuesWorkspaceRoute
+-        projectKey={projectKey}
+-        modulesEnabled={!isNoModules}
+-        initialIssues={FIXTURE_12_ISSUES}
+-      />
+-    );
+-  }
+-
+   return null;
+ }
+diff --git a/kanban/web/src/features/auth/useSessionGuard.ts b/kanban/web/src/features/auth/useSessionGuard.ts
+new file mode 100644
+index 0000000..74bd5a6
+--- /dev/null
++++ b/kanban/web/src/features/auth/useSessionGuard.ts
+@@ -0,0 +1,204 @@
++/**
++ * Browser Session & Initialization Guard Hook (KANBA-170 / KB-QA-02).
++ *
++ * Checks `/api/v1/setup/status` and `/api/v1/auth/session` on protected shell routes:
++ * - Redirects to `/setup` when `initialized === false` or `mfa_pending === true`.
++ * - Redirects to `/login` when `authenticated === false`.
++ * - Degrades gracefully in offline unit test environments where endpoints are unmocked.
++ */
++
++import { useEffect, useState } from 'react';
++import { useLocation, useNavigate } from 'react-router';
++
++export interface SetupStatusPayload {
++  readonly initialized?: boolean;
++}
++
++export interface SessionStatusPayload {
++  readonly authenticated?: boolean;
++  readonly principal_id?: string | null;
++  readonly workspace_id?: string | null;
++  readonly aal_level?: number;
++  readonly mfa_pending?: boolean;
++  readonly csrf_token?: string | null;
++}
++
++export interface SessionGuardState {
++  readonly status: 'checking' | 'authenticated' | 'redirecting';
++  readonly initialized: boolean | null;
++  readonly authenticated: boolean | null;
++  readonly csrfToken: string | null;
++  readonly principalId: string | null;
++  readonly workspaceId: string | null;
++  readonly aalLevel: number;
++  readonly mfaPending: boolean;
++}
++
++const PUBLIC_PATH_PREFIXES: readonly string[] = [
++  '/login',
++  '/setup',
++  '/activate',
++  '/__dev',
++];
++
++function isPublicPath(pathname: string): boolean {
++  return PUBLIC_PATH_PREFIXES.some(
++    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
++  );
++}
++
++/**
++ * Ensures a valid CSRF token is available before state-changing requests by reading
++ * `document.cookie` or bootstrapping from `GET /api/v1/auth/session`.
++ */
++export async function ensureSessionCsrfToken(): Promise<string | null> {
++  if (typeof document !== 'undefined') {
++    const match = /(?:^|;\s*)(?:__Host-kb_csrf|kb_csrf)=([^;]+)/.exec(document.cookie);
++    if (match?.[1]) {
++      try {
++        return decodeURIComponent(match[1]);
++      } catch {
++        return match[1];
++      }
++    }
++  }
++
++  try {
++    const res = await fetch('/api/v1/auth/session', {
++      method: 'GET',
++      headers: { Accept: 'application/json' },
++      credentials: 'same-origin',
++    });
++    if (!res.ok) {
++      return null;
++    }
++    const data = (await res.json()) as SessionStatusPayload;
++    if (typeof data.csrf_token === 'string' && data.csrf_token.length > 0) {
++      if (typeof document !== 'undefined') {
++        document.cookie = `kb_csrf=${encodeURIComponent(data.csrf_token)}; path=/; SameSite=Lax`;
++      }
++      return data.csrf_token;
++    }
++  } catch {
++    // Offline or unmocked test environment
++  }
++  return null;
++}
++
++export function useSessionGuard(enabled = true): SessionGuardState {
++  const loc = useLocation();
++  const navFn = useNavigate();
++  const pathname = loc.pathname;
++
++  const [state, setState] = useState<SessionGuardState>({
++    status: 'authenticated',
++    initialized: null,
++    authenticated: null,
++    csrfToken: null,
++    principalId: null,
++    workspaceId: null,
++    aalLevel: 0,
++    mfaPending: false,
++  });
++
++  useEffect(() => {
++    if (!enabled || isPublicPath(pathname)) {
++      return;
++    }
++
++    const controller = new AbortController();
++
++    async function verifySession(): Promise<void> {
++      try {
++        const setupRes = await fetch('/api/v1/setup/status', {
++          method: 'GET',
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++          signal: controller.signal,
++        });
++
++        if (setupRes.ok) {
++          const setupData = (await setupRes.json()) as SetupStatusPayload;
++          if (setupData.initialized === false) {
++            setState((prev) => ({
++              ...prev,
++              status: 'redirecting',
++              initialized: false,
++            }));
++            void navFn('/setup', { replace: true });
++            return;
++          }
++        }
++
++        const sessionRes = await fetch('/api/v1/auth/session', {
++          method: 'GET',
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++          signal: controller.signal,
++        });
++
++        if (sessionRes.ok) {
++          const sessionData = (await sessionRes.json()) as SessionStatusPayload;
++          if (
++            typeof sessionData.csrf_token === 'string' &&
++            sessionData.csrf_token.length > 0 &&
++            typeof document !== 'undefined'
++          ) {
++            document.cookie = `kb_csrf=${encodeURIComponent(sessionData.csrf_token)}; path=/; SameSite=Lax`;
++          }
++
++          if (sessionData.authenticated === false) {
++            setState({
++              status: 'redirecting',
++              initialized: true,
++              authenticated: false,
++              csrfToken: sessionData.csrf_token ?? null,
++              principalId: null,
++              workspaceId: null,
++              aalLevel: 0,
++              mfaPending: false,
++            });
++            void navFn('/login', { replace: true });
++            return;
++          }
++
++          if (sessionData.authenticated === true && sessionData.mfa_pending === true) {
++            setState({
++              status: 'redirecting',
++              initialized: true,
++              authenticated: true,
++              csrfToken: sessionData.csrf_token ?? null,
++              principalId: sessionData.principal_id ?? null,
++              workspaceId: sessionData.workspace_id ?? null,
++              aalLevel: sessionData.aal_level ?? 1,
++              mfaPending: true,
++            });
++            void navFn('/setup', { replace: true });
++            return;
++          }
++
++          setState({
++            status: 'authenticated',
++            initialized: true,
++            authenticated: true,
++            csrfToken: sessionData.csrf_token ?? null,
++            principalId: sessionData.principal_id ?? null,
++            workspaceId: sessionData.workspace_id ?? null,
++            aalLevel: sessionData.aal_level ?? 1,
++            mfaPending: false,
++          });
++        }
++      } catch {
++        // Aborted, offline, or unit-test environment without mocked session endpoints
++      }
++    }
++
++    void verifySession();
++
++    return () => {
++      controller.abort();
++    };
++  }, [enabled, pathname, navFn]);
++
++  return state;
++}
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.css b/kanban/web/src/features/projects/CreateProjectModal.css
+new file mode 100644
+index 0000000..4711822
+--- /dev/null
++++ b/kanban/web/src/features/projects/CreateProjectModal.css
+@@ -0,0 +1,141 @@
++.kb-create-project-scrim {
++  position: fixed;
++  inset: 0;
++  background-color: var(--scrim-bg, rgba(0, 0, 0, 0.65));
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 1200;
++}
++
++.kb-create-project-dialog {
++  background: var(--bg-surface-raised, #24272f);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: var(--radius-lg, 8px);
++  width: 100%;
++  max-width: 480px;
++  padding: 24px;
++  color: var(--fg-primary, #f8fafc);
++  box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.6));
++  box-sizing: border-box;
++}
++
++.kb-create-project-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 16px;
++}
++
++.kb-create-project-title {
++  margin: 0;
++  font-size: 18px;
++  font-weight: 600;
++}
++
++.kb-create-project-close {
++  background: transparent;
++  border: none;
++  color: var(--fg-muted, #94a3b8);
++  font-size: 18px;
++  cursor: pointer;
++}
++
++.kb-create-project-form {
++  display: flex;
++  flex-direction: column;
++  gap: 14px;
++}
++
++.kb-create-project-field {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++.kb-create-project-label {
++  font-size: 13px;
++  font-weight: 600;
++}
++
++.kb-create-project-input {
++  padding: 8px 12px;
++  border-radius: 6px;
++  border: 1px solid var(--border-subtle, #333842);
++  background: var(--bg-surface, #1e2025);
++  color: var(--fg-primary, #f8fafc);
++  font-size: 14px;
++}
++
++.kb-create-project-input-mono {
++  font-family: var(--font-mono, monospace);
++}
++
++.kb-create-project-hint {
++  font-size: 11px;
++  color: var(--fg-muted, #94a3b8);
++}
++
++.kb-create-project-textarea {
++  padding: 8px 12px;
++  border-radius: 6px;
++  border: 1px solid var(--border-subtle, #333842);
++  background: var(--bg-surface, #1e2025);
++  color: var(--fg-primary, #f8fafc);
++  font-size: 13px;
++  resize: vertical;
++}
++
++.kb-create-project-checkbox-row {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  font-size: 13px;
++  cursor: pointer;
++}
++
++.kb-create-project-error {
++  padding: 8px 12px;
++  border-radius: 6px;
++  background: rgba(239, 68, 68, 0.15);
++  border: 1px solid #ef4444;
++  color: var(--danger-fg, #dc2626);
++  font-size: 13px;
++}
++
++[data-theme="dark"] .kb-create-project-error {
++  color: #fca5a5;
++}
++
++.kb-create-project-actions {
++  display: flex;
++  justify-content: flex-end;
++  gap: 8px;
++  margin-top: 8px;
++}
++
++.kb-create-project-cancel-btn {
++  padding: 8px 14px;
++  border-radius: 6px;
++  border: 1px solid var(--border-subtle, #333842);
++  background: transparent;
++  color: var(--fg-secondary, #cbd5e1);
++  font-size: 13px;
++  cursor: pointer;
++}
++
++.kb-create-project-submit-btn {
++  padding: 8px 16px;
++  border-radius: 6px;
++  border: none;
++  background: var(--color-brand-primary, #3b82f6);
++  color: #ffffff;
++  font-size: 13px;
++  font-weight: 600;
++  cursor: pointer;
++}
++
++.kb-create-project-submit-btn:disabled {
++  cursor: wait;
++  opacity: 0.75;
++}
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.test.tsx b/kanban/web/src/features/projects/CreateProjectModal.test.tsx
+new file mode 100644
+index 0000000..720375c
+--- /dev/null
++++ b/kanban/web/src/features/projects/CreateProjectModal.test.tsx
+@@ -0,0 +1,314 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import React from 'react';
++import { MemoryRouter } from 'react-router';
++import {
++  CreateProjectModal,
++  suggestProjectIdentifier,
++} from './CreateProjectModal';
++import {
++  ensureSessionCsrfToken,
++  useSessionGuard,
++} from '../auth/useSessionGuard';
++
++function GuardProbe({ enabled = true }: { enabled?: boolean }) {
++  const state = useSessionGuard(enabled);
++  return <div data-testid="guard-status">{state.status}</div>;
++}
++
++describe('CreateProjectModal & useSessionGuard', () => {
++  beforeEach(() => {
++    document.cookie = '__Host-kb_csrf=; Max-Age=0; path=/';
++    document.cookie = 'kb_csrf=; Max-Age=0; path=/';
++    vi.restoreAllMocks();
++  });
++
++  it('suggestProjectIdentifier generates valid uppercase 2-10 char keys', () => {
++    expect(suggestProjectIdentifier('')).toBe('');
++    expect(suggestProjectIdentifier('Platform Security')).toBe('PLSE');
++    expect(suggestProjectIdentifier('Ops')).toBe('OPS');
++    expect(suggestProjectIdentifier('A')).toBe('A1');
++    expect(suggestProjectIdentifier('123')).toBe('PRJ');
++  });
++
++  it('renders nothing when isOpen is false', () => {
++    const { container } = render(
++      <MemoryRouter>
++        <CreateProjectModal isOpen={false} onClose={vi.fn()} />
++      </MemoryRouter>,
++    );
++    expect(container.firstChild).toBeNull();
++  });
++
++  it('validates name and identifier, bootstraps CSRF token, posts to /api/v1/projects, and calls onCreated', async () => {
++    const onClose = vi.fn();
++    const onCreated = vi.fn();
++
++    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              authenticated: true,
++              csrf_token: 'csrf-tok-123',
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      if (url.includes('/api/v1/projects') && init?.method === 'POST') {
++        const headers = init.headers as Record<string, string>;
++        expect(headers['X-CSRF-Token']).toBe('csrf-tok-123');
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              id: 'proj-1',
++              identifier: 'SECOPS',
++              name: 'Security Operations',
++              description_markdown: 'Hardened project',
++              modules_enabled: true,
++            }),
++            { status: 201, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    render(
++      <MemoryRouter>
++        <CreateProjectModal
++          isOpen={true}
++          onClose={onClose}
++          onCreated={onCreated}
++        />
++      </MemoryRouter>,
++    );
++
++    const nameInput = screen.getByLabelText('Project Name');
++    const idInput = screen.getByLabelText('Identifier (Key)');
++    const descInput = screen.getByLabelText('Description (Markdown)');
++
++    // Auto-derived identifier from name
++    fireEvent.change(nameInput, { target: { value: 'Security Operations' } });
++    expect((idInput as HTMLInputElement).value).toBe('SEOP');
++
++    // Manual identifier override
++    fireEvent.change(idInput, { target: { value: 'secops' } });
++    expect((idInput as HTMLInputElement).value).toBe('SECOPS');
++
++    fireEvent.change(descInput, { target: { value: 'Hardened project' } });
++
++    fireEvent.click(screen.getByTestId('create-project-submit'));
++
++    await waitFor(() => {
++      expect(onCreated).toHaveBeenCalledWith(
++        expect.objectContaining({
++          identifier: 'SECOPS',
++          name: 'Security Operations',
++        }),
++      );
++    });
++    expect(onClose).toHaveBeenCalled();
++  });
++
++  it('shows validation errors and API error details cleanly', async () => {
++    const onClose = vi.fn();
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(
++          new Response(JSON.stringify({ csrf_token: 'tok-999' }), { status: 200 }),
++        );
++      }
++      return Promise.resolve(
++        new Response(
++          JSON.stringify({ detail: 'Project identifier already exists' }),
++          { status: 409, headers: { 'Content-Type': 'application/json' } },
++        ),
++      );
++    });
++
++    render(
++      <MemoryRouter>
++        <CreateProjectModal isOpen={true} onClose={onClose} />
++      </MemoryRouter>,
++    );
++
++    const form = screen.getByTestId('create-project-submit').closest('form');
++    expect(form).not.toBeNull();
++    if (form) {
++      fireEvent.submit(form);
++    }
++    expect(screen.getByTestId('create-project-error').textContent).toContain(
++      'Project name is required.',
++    );
++
++    const nameInput = screen.getByLabelText('Project Name');
++    const idInput = screen.getByLabelText('Identifier (Key)');
++    fireEvent.change(nameInput, { target: { value: 'Valid Name' } });
++    fireEvent.change(idInput, { target: { value: '1' } });
++    if (form) {
++      fireEvent.submit(form);
++    }
++    expect(screen.getByTestId('create-project-error').textContent).toContain(
++      'Identifier must be 2-10 uppercase characters',
++    );
++
++    fireEvent.change(idInput, { target: { value: 'DUPE' } });
++    if (form) {
++      fireEvent.submit(form);
++    }
++
++    await waitFor(() => {
++      expect(screen.getByTestId('create-project-error').textContent).toContain(
++        'Project identifier already exists',
++      );
++    });
++
++    // Close on Escape and scrim click
++    fireEvent.keyDown(window, { key: 'Escape' });
++    expect(onClose).toHaveBeenCalledTimes(1);
++
++    fireEvent.click(screen.getByTestId('create-project-scrim'));
++    expect(onClose).toHaveBeenCalledTimes(2);
++  });
++
++  it('ensureSessionCsrfToken reads existing cookie when present and handles 404/network error gracefully', async () => {
++    document.cookie = 'kb_csrf=existing-cookie-token; path=/';
++    const token = await ensureSessionCsrfToken();
++    expect(token).toBe('existing-cookie-token');
++
++    document.cookie = 'kb_csrf=; Max-Age=0; path=/';
++    vi.spyOn(window, 'fetch').mockResolvedValueOnce(new Response(null, { status: 404 }));
++    expect(await ensureSessionCsrfToken()).toBeNull();
++
++    vi.spyOn(window, 'fetch').mockRejectedValueOnce(new Error('Offline'));
++    expect(await ensureSessionCsrfToken()).toBeNull();
++  });
++
++  it('useSessionGuard redirects to /setup when initialized is false and /login when authenticated is false', async () => {
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/setup/status')) {
++        return Promise.resolve(
++          new Response(JSON.stringify({ initialized: false }), { status: 200 }),
++        );
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    const { unmount } = render(
++      <MemoryRouter initialEntries={['/']}>
++        <GuardProbe />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('guard-status').textContent).toBe('redirecting');
++    });
++    unmount();
++
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/setup/status')) {
++        return Promise.resolve(
++          new Response(JSON.stringify({ initialized: true }), { status: 200 }),
++        );
++      }
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({ authenticated: false, csrf_token: 'pre-csrf' }),
++            { status: 200 },
++          ),
++        );
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    render(
++      <MemoryRouter initialEntries={['/']}>
++        <GuardProbe />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('guard-status').textContent).toBe('redirecting');
++    });
++  });
++
++  it('useSessionGuard sets authenticated when session is active and redirects when mfa_pending is true', async () => {
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/setup/status')) {
++        return Promise.resolve(
++          new Response(JSON.stringify({ initialized: true }), { status: 200 }),
++        );
++      }
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              authenticated: true,
++              mfa_pending: true,
++              principal_id: 'p-1',
++              workspace_id: 'w-1',
++              aal_level: 1,
++              csrf_token: 'tok-mfa',
++            }),
++            { status: 200 },
++          ),
++        );
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    const { unmount } = render(
++      <MemoryRouter initialEntries={['/']}>
++        <GuardProbe />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('guard-status').textContent).toBe('redirecting');
++    });
++    unmount();
++
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/setup/status')) {
++        return Promise.resolve(
++          new Response(JSON.stringify({ initialized: true }), { status: 200 }),
++        );
++      }
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              authenticated: true,
++              mfa_pending: false,
++              principal_id: 'p-1',
++              workspace_id: 'w-1',
++              aal_level: 2,
++              csrf_token: 'tok-ok',
++            }),
++            { status: 200 },
++          ),
++        );
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    render(
++      <MemoryRouter initialEntries={['/']}>
++        <GuardProbe />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('guard-status').textContent).toBe('authenticated');
++    });
++  });
++});
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.tsx b/kanban/web/src/features/projects/CreateProjectModal.tsx
+new file mode 100644
+index 0000000..6aa645e
+--- /dev/null
++++ b/kanban/web/src/features/projects/CreateProjectModal.tsx
+@@ -0,0 +1,369 @@
++/**
++ * Create Project Modal (KANBA-166 / KB-QA-05).
++ *
++ * Accessible modal dialog for creating a new Project via `POST /api/v1/projects`,
++ * bootstrapping `X-CSRF-Token` from `/api/v1/auth/session` when needed and
++ * navigating to `/projects/:identifier/issues`.
++ */
++
++import React, { useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
++import { useNavigate } from 'react-router';
++import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
++import './CreateProjectModal.css';
++
++export interface CreatedProject {
++  readonly id: string;
++  readonly identifier: string;
++  readonly name: string;
++  readonly description_markdown?: string;
++  readonly modules_enabled?: boolean;
++}
++
++export interface CreateProjectModalProps {
++  readonly isOpen: boolean;
++  readonly onClose: () => void;
++  readonly onCreated?: (project: CreatedProject) => void;
++}
++
++export const PROJECT_IDENTIFIER_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/;
++
++/**
++ * Derives a valid uppercase 2..10 char project identifier from a display name.
++ */
++export function suggestProjectIdentifier(name: string): string {
++  const cleaned = name
++    .toUpperCase()
++    .replace(/[^A-Z0-9\s]+/g, ' ')
++    .trim();
++  if (!cleaned) {
++    return '';
++  }
++
++  const words = cleaned.split(/\s+/).filter(Boolean);
++  let candidate = '';
++  if (words.length >= 2) {
++    candidate = words
++      .map((w) => w.slice(0, 2))
++      .join('')
++      .slice(0, 6);
++  } else {
++    candidate = (words[0] ?? '').slice(0, 5);
++  }
++
++  // Ensure leading character is A-Z
++  candidate = candidate.replace(/^[^A-Z]+/, '');
++  if (!candidate) {
++    candidate = 'PRJ';
++  }
++  if (candidate.length < 2) {
++    candidate = `${candidate}1`;
++  }
++  return candidate.slice(0, 10);
++}
++
++export function CreateProjectModal({
++  isOpen,
++  onClose,
++  onCreated,
++}: CreateProjectModalProps): JSX.Element | null {
++  const [name, setName] = useState('');
++  const [identifier, setIdentifier] = useState('');
++  const [identifierTouched, setIdentifierTouched] = useState(false);
++  const [description, setDescription] = useState('');
++  const [modulesEnabled, setModulesEnabled] = useState(true);
++  const [errorMessage, setErrorMessage] = useState<string | null>(null);
++  const [isSubmitting, setIsSubmitting] = useState(false);
++
++  const nameInputRef = useRef<HTMLInputElement | null>(null);
++
++  let navigateFn: ((to: string) => void) | null = null;
++  try {
++    const nav = useNavigate();
++    navigateFn = (to: string) => {
++      void nav(to);
++    };
++  } catch {
++    // Rendered outside Router context
++  }
++
++  const resetForm = (): void => {
++    setName('');
++    setIdentifier('');
++    setIdentifierTouched(false);
++    setDescription('');
++    setModulesEnabled(true);
++    setErrorMessage(null);
++    setIsSubmitting(false);
++  };
++
++  const handleClose = (): void => {
++    resetForm();
++    onClose();
++  };
++
++  useEffect(() => {
++    if (!isOpen) {
++      return;
++    }
++
++    const timer = setTimeout(() => {
++      nameInputRef.current?.focus();
++    }, 0);
++
++    const handleKeyDown = (e: KeyboardEvent): void => {
++      if (e.key === 'Escape') {
++        e.preventDefault();
++        resetForm();
++        onClose();
++      }
++    };
++
++    window.addEventListener('keydown', handleKeyDown);
++    return () => {
++      clearTimeout(timer);
++      window.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [isOpen, onClose]);
++
++  if (!isOpen) {
++    return null;
++  }
++
++  const handleNameChange = (value: string): void => {
++    setName(value);
++    if (!identifierTouched) {
++      setIdentifier(suggestProjectIdentifier(value));
++    }
++    if (errorMessage) {
++      setErrorMessage(null);
++    }
++  };
++
++  const handleIdentifierChange = (value: string): void => {
++    setIdentifierTouched(true);
++    setIdentifier(value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
++    if (errorMessage) {
++      setErrorMessage(null);
++    }
++  };
++
++  const handleSubmit = async (e: SyntheticEvent): Promise<void> => {
++    e.preventDefault();
++    const trimmedName = name.trim();
++    const cleanId = identifier.trim().toUpperCase();
++
++    if (!trimmedName) {
++      setErrorMessage('Project name is required.');
++      return;
++    }
++    if (!PROJECT_IDENTIFIER_PATTERN.test(cleanId)) {
++      setErrorMessage(
++        'Identifier must be 2-10 uppercase characters starting with a letter (A-Z, 0-9).',
++      );
++      return;
++    }
++
++    setErrorMessage(null);
++    setIsSubmitting(true);
++
++    try {
++      const csrfToken = await ensureSessionCsrfToken();
++      const headers: Record<string, string> = {
++        'Content-Type': 'application/json',
++        Accept: 'application/json',
++      };
++      if (csrfToken) {
++        headers['X-CSRF-Token'] = csrfToken;
++      }
++
++      const res = await fetch('/api/v1/projects', {
++        method: 'POST',
++        headers,
++        credentials: 'same-origin',
++        body: JSON.stringify({
++          name: trimmedName,
++          identifier: cleanId,
++          description_markdown: description.trim(),
++          modules_enabled: modulesEnabled,
++        }),
++      });
++
++      if (!res.ok) {
++        const body = (await res.json().catch(() => ({}))) as {
++          detail?: string | { detail?: string };
++        };
++        const detail = body.detail;
++        const msg =
++          typeof detail === 'string'
++            ? detail
++            : typeof detail === 'object' && 'detail' in detail && typeof detail.detail === 'string'
++              ? detail.detail
++              : `Failed to create project (HTTP ${String(res.status)})`;
++        throw new Error(msg);
++      }
++
++      const created = (await res.json()) as CreatedProject;
++      if (typeof window !== 'undefined') {
++        window.dispatchEvent(
++          new CustomEvent('kb:project-created', { detail: created }),
++        );
++      }
++      onCreated?.(created);
++      resetForm();
++      onClose();
++      navigateFn?.(`/projects/${created.identifier}/issues`);
++    } catch (err) {
++      const msg = err instanceof Error ? err.message : 'Could not create project.';
++      setErrorMessage(msg);
++    } finally {
++      setIsSubmitting(false);
++    }
++  };
++
++  return (
++    <div
++      className="kb-palette-scrim kb-create-project-scrim"
++      data-testid="create-project-scrim"
++      onClick={(e) => {
++        if (e.target === e.currentTarget) {
++          handleClose();
++        }
++      }}
++    >
++      <div
++        role="dialog"
++        aria-modal="true"
++        aria-label="Create project"
++        data-testid="create-project-modal"
++        className="kb-create-project-dialog"
++      >
++        <div className="kb-create-project-header">
++          <h2 className="kb-create-project-title">Create Project</h2>
++          <button
++            type="button"
++            aria-label="Close create project modal"
++            className="kb-create-project-close"
++            onClick={handleClose}
++          >
++            ✕
++          </button>
++        </div>
++
++        <form
++          onSubmit={(e) => {
++            void handleSubmit(e);
++          }}
++          className="kb-create-project-form"
++        >
++          <div className="kb-create-project-field">
++            <label
++              htmlFor="create-project-name"
++              className="kb-create-project-label"
++            >
++              Project Name
++            </label>
++            <input
++              ref={nameInputRef}
++              id="create-project-name"
++              type="text"
++              required
++              maxLength={120}
++              placeholder="e.g. Platform Security"
++              value={name}
++              onChange={(e) => {
++                handleNameChange(e.target.value);
++              }}
++              className="kb-create-project-input"
++            />
++          </div>
++
++          <div className="kb-create-project-field">
++            <label
++              htmlFor="create-project-identifier"
++              className="kb-create-project-label"
++            >
++              Identifier (Key)
++            </label>
++            <input
++              id="create-project-identifier"
++              type="text"
++              required
++              maxLength={10}
++              placeholder="e.g. SEC"
++              value={identifier}
++              onChange={(e) => {
++                handleIdentifierChange(e.target.value);
++              }}
++              className="kb-create-project-input kb-create-project-input-mono"
++            />
++            <span className="kb-create-project-hint">
++              2-10 uppercase characters starting with a letter (used for issue keys like {identifier || 'SEC'}-1).
++            </span>
++          </div>
++
++          <div className="kb-create-project-field">
++            <label
++              htmlFor="create-project-description"
++              className="kb-create-project-label"
++            >
++              Description (Markdown)
++            </label>
++            <textarea
++              id="create-project-description"
++              rows={3}
++              placeholder="Project goals, scope, and notes..."
++              value={description}
++              onChange={(e) => {
++                setDescription(e.target.value);
++              }}
++              className="kb-create-project-textarea"
++            />
++          </div>
++
++          <label
++            htmlFor="create-project-modules"
++            className="kb-create-project-checkbox-row"
++          >
++            <input
++              id="create-project-modules"
++              type="checkbox"
++              checked={modulesEnabled}
++              onChange={(e) => {
++                setModulesEnabled(e.target.checked);
++              }}
++            />
++            <span>Enable project modules</span>
++          </label>
++
++          {errorMessage && (
++            <div
++              role="alert"
++              data-testid="create-project-error"
++              className="kb-create-project-error"
++            >
++              {errorMessage}
++            </div>
++          )}
++
++          <div className="kb-create-project-actions">
++            <button
++              type="button"
++              className="kb-create-project-cancel-btn"
++              onClick={handleClose}
++            >
++              Cancel
++            </button>
++            <button
++              type="submit"
++              disabled={isSubmitting}
++              data-testid="create-project-submit"
++              className="kb-create-project-submit-btn"
++            >
++              {isSubmitting ? 'Creating...' : 'Create Project'}
++            </button>
++          </div>
++        </form>
++      </div>
++    </div>
++  );
++}

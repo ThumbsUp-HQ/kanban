@@ -51,20 +51,76 @@ export interface ApiFetchOptions {
 
 export const REQUEST_TIMEOUT_MS = 15000;
 const UNSAFE_METHODS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const CSRF_COOKIE_RE = /(?:^|;\s*)(?:__Host-kb_csrf|kb_csrf)=([^;]+)/;
+const CSRF_COOKIE_RE = /(?:^|;\s*)(__Host-kb_csrf|kb_csrf)=([^;]+)/g;
 const SCHEME_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
 
-/** Reads the `__Host-kb_csrf` cookie value, or null when absent. */
-export function getCsrfToken(): string | null {
-  const raw = CSRF_COOKIE_RE.exec(document.cookie)?.[1];
-  if (raw === undefined) {
-    return null;
+let cachedCsrfToken: string | null = null;
+
+/** Updates the cached CSRF token and mirrors it into the plain-HTTP `kb_csrf` cookie. */
+export function setCsrfToken(token: string | null): void {
+  cachedCsrfToken = token;
+  if (typeof document === 'undefined') {
+    return;
   }
   try {
-    return decodeURIComponent(raw);
+    if (token !== null && token.length > 0) {
+      document.cookie = `kb_csrf=${encodeURIComponent(token)}; Path=/; SameSite=Strict`;
+    } else {
+      document.cookie = 'kb_csrf=; Path=/; SameSite=Strict; Max-Age=0';
+    }
   } catch {
-    return raw;
+    // Ignore cookie write errors in restricted test environments
   }
+}
+
+/** Reads the `__Host-kb_csrf` or `kb_csrf` cookie value (or cached session token), or null when absent. */
+export function getCsrfToken(): string | null {
+  if (typeof document !== 'undefined') {
+    const matches = [...document.cookie.matchAll(CSRF_COOKIE_RE)];
+    if (matches.length > 0) {
+      const kbMatch = matches.find((m) => m[1] === 'kb_csrf');
+      const chosen =
+        cachedCsrfToken !== null && kbMatch !== undefined ? kbMatch : matches[0];
+      const raw = chosen?.[2];
+      if (raw !== undefined) {
+        try {
+          return decodeURIComponent(raw);
+        } catch {
+          return raw;
+        }
+      }
+    }
+  }
+  return cachedCsrfToken;
+}
+
+async function bootstrapCsrfToken(signal: AbortSignal | undefined): Promise<string | null> {
+  try {
+    const response = await fetch('/api/v1/auth/session', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+      signal: timeoutSignal(signal),
+    });
+    if (!response.ok) {
+      return getCsrfToken();
+    }
+    const data = (await response.json()) as unknown;
+    if (
+      typeof data === 'object' &&
+      data !== null &&
+      'csrf_token' in data &&
+      typeof (data as { csrf_token?: unknown }).csrf_token === 'string' &&
+      (data as { csrf_token: string }).csrf_token.length > 0
+    ) {
+      const token = (data as { csrf_token: string }).csrf_token;
+      setCsrfToken(token);
+      return token;
+    }
+  } catch {
+    // Fall back to cookie/cache state when session bootstrap is unreachable
+  }
+  return getCsrfToken();
 }
 
 function assertRelative(url: string): void {
@@ -139,7 +195,7 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
 
   const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
   if (UNSAFE_METHODS.has(method)) {
-    const csrf = getCsrfToken();
+    const csrf = getCsrfToken() ?? (await bootstrapCsrfToken(opts.signal));
     if (csrf === null) {
       throw new ApiClientError('CSRF_TOKEN_MISSING', 'Missing __Host-kb_csrf cookie');
     }
@@ -179,7 +235,19 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
       `Expected application/json but received ${contentType || 'none'}`,
     );
   }
-  return (await response.json()) as ResponseBody<P, M>;
+  const parsed = (await response.json()) as ResponseBody<P, M>;
+  if (resolved === '/api/v1/auth/logout') {
+    setCsrfToken(null);
+  } else if (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    'csrf_token' in parsed &&
+    typeof (parsed as { csrf_token?: unknown }).csrf_token === 'string' &&
+    (parsed as { csrf_token: string }).csrf_token.length > 0
+  ) {
+    setCsrfToken((parsed as { csrf_token: string }).csrf_token);
+  }
+  return parsed;
 }
 
 export const apiClient = {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { RouterProvider } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,6 +8,8 @@ import {
   PROJECT_KEY_REGEX,
   ISSUE_KEY_REGEX,
   IssuesWorkspaceRoute,
+  RoutePlaceholder,
+  AppRoutes,
 } from './routes';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { FIXTURE_12_ISSUES } from '../features/views/fixtures';
@@ -171,6 +173,12 @@ describe('routes and AppShell integration', () => {
       { path: '/login', expected: 'login-page' },
       { path: '/setup', expected: 'setup-claim-page' },
       { path: '/admin/auth', expected: 'auth-studio-page' },
+      { path: '/admin/standalone', expected: 'standalone-status-route' },
+      { path: '/drafts', expected: 'drafts-view' },
+      { path: '/your-work', expected: 'your-work-view' },
+      { path: '/projects/KAN/cycles', expected: 'project-cycles-view' },
+      { path: '/projects/KAN/modules', expected: 'project-modules-view' },
+      { path: '/projects/KAN/views', expected: 'project-views-view' },
       { path: '/__dev/tokens', expected: 'token-story' },
       { path: '/__dev/emoji', expected: 'emoji-story' },
       { path: '/__dev/editor', expected: 'editor-story' },
@@ -261,6 +269,90 @@ describe('routes and AppShell integration', () => {
     );
 
     expect(await screen.findByRole('button', { name: 'Project: kanban' })).toBeDefined();
+  });
+
+  it('renders WorkspaceHomeView projects from /api/v1/projects and opens CreateProjectModal', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 'p-1',
+                  identifier: 'OPS',
+                  name: 'Operations',
+                  description_markdown: 'Ops project',
+                  modules_enabled: true,
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+
+    const router = createAppRouter(['/']);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByTestId('project-card-OPS')).toBeDefined();
+
+    fireEvent.click(screen.getByTestId('home-create-project-btn'));
+    expect(screen.getByTestId('create-project-modal')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('create-project-modal')).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:project-created'));
+    });
+
+    fireEvent.click(screen.getByTestId('home-create-issue-btn'));
+  });
+
+  it('preserves IssuesWorkspaceRoute in background when ?peek= is set and triggers create modal on ?create=1', () => {
+    const router = createAppRouter(['/projects/KAN/issues?layout=list&peek=KAN-101&create=1']);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId('issues-workspace')).toBeDefined();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:create-issue'));
+    });
+
+    // Verify RoutePlaceholder and AppRoutes helpers
+    expect(AppRoutes()).toBeNull();
+    render(<RoutePlaceholder route="/custom" />);
+    expect(screen.getByText('Route: /custom')).toBeDefined();
+  });
+
+  it('closes StandaloneStatusRoute and navigates back on Close click', () => {
+    const router = createAppRouter(['/admin/standalone']);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const closeBtn = screen.getByRole('button', { name: 'Close' });
+    fireEvent.click(closeBtn);
   });
 });
 

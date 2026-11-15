@@ -349,4 +349,35 @@ describe('CommandPalette', () => {
 
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('executes Create project and admin/settings navigation commands', () => {
+    const projectModalListener = vi.fn();
+    window.addEventListener('kb:open-create-project', projectModalListener);
+
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'Create project' } });
+    act(() => {
+      screen.getByRole('option', { name: /Create project/ }).click();
+    });
+    expect(projectModalListener).toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: 'Go to Auth Studio' } });
+    act(() => {
+      screen.getByRole('option', { name: /Go to Auth Studio/ }).click();
+    });
+
+    fireEvent.change(input, { target: { value: 'Go to Personal MCP Keys' } });
+    act(() => {
+      screen.getByRole('option', { name: /Go to Personal MCP Keys/ }).click();
+    });
+
+    fireEvent.change(input, { target: { value: 'Go to Standalone Status' } });
+    act(() => {
+      screen.getByRole('option', { name: /Go to Standalone Status/ }).click();
+    });
+
+    window.removeEventListener('kb:open-create-project', projectModalListener);
+  });
 });

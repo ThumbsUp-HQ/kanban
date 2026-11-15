@@ -5,7 +5,7 @@ import { EmojiStory } from './dev/EmojiStory';
 import { EditorStory } from './dev/EditorStory';
 import { MediaStory } from './dev/MediaStory';
 import { RealtimeStory } from './dev/RealtimeStory';
-import { createAppRouter, AppRoutes, IssuesWorkspaceRoute } from './app/routes';
+import { createAppRouter, IssuesWorkspaceRoute } from './app/routes';
 import { FIXTURE_12_ISSUES } from './features/views/fixtures';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ShellPanelsProvider } from './app/shellPanels';
@@ -82,11 +82,6 @@ export function App(): JSX.Element {
         <h1>Kanban</h1>
       </main>
     );
-  }
-
-  const route = AppRoutes();
-  if (route) {
-    return route;
   }
 
   const router = createAppRouter();

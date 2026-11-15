@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { ApiClientError, REQUEST_TIMEOUT_MS, apiFetch, getCsrfToken } from './client.ts';
+import {
+  ApiClientError,
+  REQUEST_TIMEOUT_MS,
+  apiFetch,
+  getCsrfToken,
+  setCsrfToken,
+} from './client.ts';
 import { ApiProblem } from './problem.ts';
 
 function jsonResponse(body: unknown, init: ResponseInit = {}, type = 'application/json'): Response {
@@ -19,6 +25,7 @@ function setCookie(value: string): void {
 
 function clearCookie(): void {
   cookieJar = '';
+  setCsrfToken(null);
 }
 
 describe('apiFetch', () => {
@@ -81,11 +88,34 @@ describe('apiFetch', () => {
     expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined();
   });
 
-  it('throws CSRF_TOKEN_MISSING without calling fetch', async () => {
+  it('bootstraps CSRF via GET /api/v1/auth/session when cookie is absent and throws CSRF_TOKEN_MISSING if unavailable', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('unavailable', { status: 503, headers: { 'content-type': 'text/plain' } }),
+    );
     await expect(
       apiFetch('PATCH', '/api/v1/issues/{issue_key}', { params: { issue_key: 'K-1' } }),
     ).rejects.toMatchObject({ code: 'CSRF_TOKEN_MISSING' });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('/api/v1/auth/session');
+
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: false, csrf_token: 'bootstrapped-csrf' }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, csrf_token: 'rotated-csrf' }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'logged_out' }));
+
+    await apiFetch('PATCH', '/api/v1/issues/{issue_key}', {
+      params: { issue_key: 'K-1' },
+      body: { summary: 'bootstrapped' },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('/api/v1/auth/session');
+    const [, patchInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect((patchInit.headers as Record<string, string>)['X-CSRF-Token']).toBe('bootstrapped-csrf');
+    expect(getCsrfToken()).toBe('rotated-csrf');
+
+    await apiFetch('POST', '/api/v1/auth/logout' as never);
+    expect(getCsrfToken()).toBeNull();
   });
 
   it('encodes hostile path params', async () => {

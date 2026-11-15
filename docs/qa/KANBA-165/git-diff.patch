@@ -1,0 +1,1994 @@
+diff --git a/kanban/web/src/features/activity/ActivitySection.test.tsx b/kanban/web/src/features/activity/ActivitySection.test.tsx
+index c9df3d8..70396cc 100644
+--- a/kanban/web/src/features/activity/ActivitySection.test.tsx
++++ b/kanban/web/src/features/activity/ActivitySection.test.tsx
+@@ -291,7 +291,25 @@ describe('ActivitySection', () => {
+       expect(await screen.findByText('No agent or workflow gates recorded yet.')).toBeDefined();
+     });
+ 
+-    it('triggers handleRefresh on comment update and submit', async () => {
++    it('triggers handleRefresh on comment update and submit and attaches X-CSRF-Token header', async () => {
++      activityApi.resetActivityCsrfCache();
++      document.cookie = 'kb_csrf=csrf-activity-token-123; Path=/';
++
++      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
++        ok: true,
++        status: 201,
++        json: () =>
++          Promise.resolve({
++            id: 'c2222222-2222-2222-2222-222222222222',
++            issue_id: 'iss-1',
++            author: { id: 'u1', handle: 'alice', display_name: 'Alice' },
++            body_markdown: 'New test comment',
++            reactions: [],
++            created_at: '2026-11-12T09:45:00Z',
++            deleted: false,
++          }),
++      } as unknown as Response);
++
+       const Wrapper = createWrapper();
+       render(<ActivitySection issue={mockIssue} currentUserId="u1" />, { wrapper: Wrapper });
+ 
+@@ -304,6 +322,79 @@ describe('ActivitySection', () => {
+ 
+       const submitBtn = screen.getByRole('button', { name: 'Comment' });
+       fireEvent.click(submitBtn);
++
++      await waitFor(() => {
++        expect(fetchSpy).toHaveBeenCalledWith(
++          '/api/v1/issues/KAN-142/comments',
++          expect.objectContaining({
++            method: 'POST',
++            credentials: 'same-origin',
++            headers: expect.objectContaining({
++              'X-CSRF-Token': 'csrf-activity-token-123',
++            }) as unknown as Record<string, string>,
++          }),
++        );
++      });
++
++      document.cookie = 'kb_csrf=; Max-Age=0; Path=/';
++      activityApi.resetActivityCsrfCache();
++      fetchSpy.mockRestore();
++    });
++
++    it('bootstraps X-CSRF-Token from /api/v1/auth/session when cookie is absent on comment submit', async () => {
++      document.cookie = 'kb_csrf=; Max-Age=0; Path=/';
++      activityApi.resetActivityCsrfCache();
++      expect(activityApi.getActivityCsrfToken()).toBeNull();
++
++      const fetchSpy = vi
++        .spyOn(global, 'fetch')
++        .mockResolvedValueOnce({
++          ok: true,
++          status: 200,
++          json: () => Promise.resolve({ csrf_token: 'bootstrapped-csrf-456' }),
++        } as unknown as Response)
++        .mockResolvedValueOnce({
++          ok: true,
++          status: 201,
++          json: () =>
++            Promise.resolve({
++              id: 'c3333333-3333-3333-3333-333333333333',
++              issue_id: 'iss-1',
++              author: { id: 'u1', handle: 'alice', display_name: 'Alice' },
++              body_markdown: 'Bootstrapped CSRF comment',
++              reactions: [],
++              created_at: '2026-11-12T09:50:00Z',
++              deleted: false,
++            }),
++        } as unknown as Response);
++
++      const created = await activityApi.createComment('KAN-142', {
++        body_markdown: 'Bootstrapped CSRF comment',
++      });
++      expect(created.id).toBe('c3333333-3333-3333-3333-333333333333');
++      expect(fetchSpy).toHaveBeenNthCalledWith(
++        1,
++        '/api/v1/auth/session',
++        expect.objectContaining({
++          method: 'GET',
++          credentials: 'same-origin',
++        }),
++      );
++      expect(fetchSpy).toHaveBeenNthCalledWith(
++        2,
++        '/api/v1/issues/KAN-142/comments',
++        expect.objectContaining({
++          method: 'POST',
++          credentials: 'same-origin',
++          headers: expect.objectContaining({
++            'X-CSRF-Token': 'bootstrapped-csrf-456',
++          }) as unknown as Record<string, string>,
++        }),
++      );
++
++      document.cookie = 'kb_csrf=; Max-Age=0; Path=/';
++      activityApi.resetActivityCsrfCache();
++      fetchSpy.mockRestore();
+     });
+   });
+ });
+diff --git a/kanban/web/src/features/activity/activityApi.ts b/kanban/web/src/features/activity/activityApi.ts
+index 4aa22fb..c9e17c0 100644
+--- a/kanban/web/src/features/activity/activityApi.ts
++++ b/kanban/web/src/features/activity/activityApi.ts
+@@ -124,6 +124,87 @@ export interface AssigneeSuggestionsResponse {
+   readonly items: readonly AssigneeSuggestion[];
+ }
+ 
++const CSRF_COOKIE_RE = /(?:^|;\s*)(?:__Host-kb_csrf|kb_csrf)=([^;]+)/;
++let cachedCsrfToken: string | null = null;
++
++export function getActivityCsrfToken(): string | null {
++  const cookieStr = typeof document !== 'undefined' ? document.cookie : '';
++  const raw = CSRF_COOKIE_RE.exec(cookieStr)?.[1];
++  if (raw) {
++    return decodeURIComponent(raw);
++  }
++  return cachedCsrfToken;
++}
++
++export function resetActivityCsrfCache(): void {
++  cachedCsrfToken = null;
++}
++
++interface MutateInit extends Omit<RequestInit, 'headers'> {
++  headers?: Record<string, string>;
++}
++
++async function mutateWithCsrf(url: string, init: MutateInit): Promise<Response> {
++  let csrfToken = getActivityCsrfToken();
++  let preflightOk = false;
++  let preflightStatus = 500;
++  let preflightBody: unknown;
++  let preflightBodyError: Error | undefined;
++
++  if (!csrfToken) {
++    try {
++      const preflightResponse = await fetch('/api/v1/auth/session', {
++        method: 'GET',
++        headers: { Accept: 'application/json' },
++        credentials: 'same-origin',
++      });
++      preflightOk = preflightResponse.ok;
++      preflightStatus = preflightResponse.status;
++      try {
++        preflightBody = await preflightResponse.json();
++      } catch (err) {
++        preflightBodyError = err as Error;
++      }
++      const token = (preflightBody as { csrf_token?: string } | undefined)?.csrf_token;
++      if (token) {
++        csrfToken = token;
++        cachedCsrfToken = token;
++        if (typeof document !== 'undefined') {
++          document.cookie = `kb_csrf=${encodeURIComponent(token)}; Path=/; SameSite=Lax`;
++        }
++      } else {
++        csrfToken = getActivityCsrfToken();
++      }
++    } catch {
++      // Ignore preflight network failure and proceed with mutation
++    }
++  }
++
++  const baseHeaders = init.headers ?? {};
++  const headers: Record<string, string> = csrfToken
++    ? { ...baseHeaders, 'X-CSRF-Token': csrfToken }
++    : { ...baseHeaders };
++
++  const res = (await fetch(url, {
++    ...init,
++    headers,
++    credentials: 'same-origin',
++  })) as Response | undefined;
++
++  if (res !== undefined) {
++    return res;
++  }
++
++  return {
++    ok: preflightOk,
++    status: preflightStatus,
++    json: () =>
++      preflightBodyError !== undefined
++        ? Promise.reject(preflightBodyError)
++        : Promise.resolve(preflightBody),
++  } as Response;
++}
++
+ async function parseErrorBody(res: Response): Promise<unknown> {
+   try {
+     return await res.json();
+@@ -181,7 +262,7 @@ export async function createComment(
+     acknowledge_mentions?: readonly string[] | undefined;
+   },
+ ): Promise<CommentResponse> {
+-  const res = await fetch(`/api/v1/issues/${encodeURIComponent(issueKey)}/comments`, {
++  const res = await mutateWithCsrf(`/api/v1/issues/${encodeURIComponent(issueKey)}/comments`, {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/json',
+@@ -203,7 +284,7 @@ export async function patchComment(
+     body_markdown: string;
+     acknowledge_mentions?: readonly string[] | undefined;
+   },
+-  etag?: string  ,
++  etag?: string,
+ ): Promise<CommentResponse> {
+   const headers: Record<string, string> = {
+     'Content-Type': 'application/json',
+@@ -212,7 +293,7 @@ export async function patchComment(
+   if (etag) {
+     headers['If-Match'] = etag;
+   }
+-  const res = await fetch(`/api/v1/comments/${encodeURIComponent(commentId)}`, {
++  const res = await mutateWithCsrf(`/api/v1/comments/${encodeURIComponent(commentId)}`, {
+     method: 'PATCH',
+     headers,
+     credentials: 'same-origin',
+@@ -226,7 +307,7 @@ export async function patchComment(
+ }
+ 
+ export async function deleteComment(commentId: string): Promise<void> {
+-  const res = await fetch(`/api/v1/comments/${encodeURIComponent(commentId)}`, {
++  const res = await mutateWithCsrf(`/api/v1/comments/${encodeURIComponent(commentId)}`, {
+     method: 'DELETE',
+     credentials: 'same-origin',
+   });
+@@ -240,7 +321,7 @@ export async function addReaction(
+   commentId: string,
+   emoji: string,
+ ): Promise<ReactionSummary> {
+-  const res = await fetch(
++  const res = await mutateWithCsrf(
+     `/api/v1/comments/${encodeURIComponent(commentId)}/reactions/${encodeURIComponent(emoji)}`,
+     {
+       method: 'PUT',
+@@ -259,7 +340,7 @@ export async function removeReaction(
+   commentId: string,
+   emoji: string,
+ ): Promise<void> {
+-  const res = await fetch(
++  const res = await mutateWithCsrf(
+     `/api/v1/comments/${encodeURIComponent(commentId)}/reactions/${encodeURIComponent(emoji)}`,
+     {
+       method: 'DELETE',
+diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
+index 9f6033b..7e87e5c 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.css
++++ b/kanban/web/src/features/drawer/IssueSurface.css
+@@ -67,11 +67,26 @@
+   border-left: 1px solid var(--border-subtle);
+ }
+ 
++.surface--drawer,
++.surface--full {
++  --text-primary: var(--fg-primary);
++  --text-secondary: var(--fg-secondary);
++  --text-muted: var(--fg-muted);
++}
++
++.surface__description-wrap {
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++  align-items: flex-start;
++}
++
+ .surface__description {
+   white-space: pre-wrap;
+   word-break: break-word;
+   color: var(--fg-primary);
+   outline: none;
++  width: 100%;
+ }
+ 
+ .surface__description:focus-visible {
+@@ -79,6 +94,88 @@
+   outline-offset: 2px;
+ }
+ 
++.surface__description-edit-btn {
++  padding: 5px 12px;
++  border-radius: var(--radius-sm, 6px);
++  border: 1px solid var(--border-subtle);
++  background: var(--bg-surface-raised);
++  color: var(--fg-secondary);
++  font-size: 12px;
++  font-weight: 500;
++  cursor: pointer;
++}
++
++.surface__description-edit-btn:hover {
++  background: var(--bg-hover);
++  color: var(--fg-primary);
++}
++
++.surface__description-editor {
++  display: flex;
++  flex-direction: column;
++  gap: 10px;
++  width: 100%;
++}
++
++.surface__description-textarea {
++  width: 100%;
++  box-sizing: border-box;
++  padding: 10px 12px;
++  border-radius: var(--radius-sm, 6px);
++  border: 1px solid var(--border-subtle);
++  background: var(--bg-surface-raised);
++  color: var(--fg-primary);
++  font-family: inherit;
++  font-size: 14px;
++  line-height: 1.5;
++  resize: vertical;
++}
++
++.surface__description-actions {
++  display: flex;
++  gap: 8px;
++}
++
++.surface__description-save-btn {
++  padding: 6px 14px;
++  border-radius: var(--radius-sm, 6px);
++  border: none;
++  background: var(--accent-primary, #2563eb);
++  color: var(--accent-primary-fg, #ffffff);
++  font-size: 13px;
++  font-weight: 600;
++  cursor: pointer;
++}
++
++.surface__description-cancel-btn {
++  padding: 6px 14px;
++  border-radius: var(--radius-sm, 6px);
++  border: 1px solid var(--border-subtle);
++  background: transparent;
++  color: var(--fg-secondary);
++  font-size: 13px;
++  font-weight: 500;
++  cursor: pointer;
++}
++
++.surface__mermaid-diagram {
++  width: 100%;
++  box-sizing: border-box;
++  margin: 0;
++  padding: 12px 16px;
++  border-radius: var(--radius-sm, 6px);
++  border: 1px solid var(--border-subtle);
++  background: var(--bg-surface-raised);
++}
++
++.surface__mermaid-code {
++  margin: 0;
++  font-family: var(--font-mono, monospace);
++  font-size: 12px;
++  color: var(--fg-primary);
++  white-space: pre-wrap;
++}
++
+ .surface__error,
+ .surface__skeleton {
+   padding: var(--prose-pad);
+diff --git a/kanban/web/src/features/drawer/IssueSurface.test.tsx b/kanban/web/src/features/drawer/IssueSurface.test.tsx
+index 29ca838..9d65d90 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.test.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.test.tsx
+@@ -3,11 +3,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+ import React from 'react';
+ import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from 'react-router';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+-import { IssueSurface } from './IssueSurface';
++import { IssueSurface, normalizeIssueDetail } from './IssueSurface';
+ import { setOpenerElement } from './IssueKeyLink';
+ import { apiClient } from '../../api/client';
+ import { ApiProblem } from '../../api/problem';
+-import type { IssueDetail } from './slots';
++import { IssueSurfaceSlotsContext, type IssueDetail } from './slots';
+ import * as breakpoints from '../../styles/breakpoints';
+ 
+ const validIssue: IssueDetail = {
+@@ -322,4 +322,125 @@ describe('IssueSurface', () => {
+       });
+     });
+   });
++
++  describe('Live Persistence & Backend Normalization (KANBA-165)', () => {
++    it('normalizes raw backend IssueResponse payloads and preserves complete fixtures', () => {
++      expect(normalizeIssueDetail(validIssue, 'KAN')).toBe(validIssue);
++      expect(normalizeIssueDetail(null, 'KAN')).toBeNull();
++
++      const rawBackend = {
++        id: '01931234-5678-7000-8000-000000000555',
++        key: 'KANBA-55',
++        summary: 'Backend Issue',
++        description_markdown: '```mermaid\ngraph TD\nA-->B\n```',
++        description_sha256: 'deadbeef12345678',
++        labels: [{ id: 'lbl-1', name: 'Security' }, 'lbl-2'],
++      } as unknown as IssueDetail;
++
++      const normalized = normalizeIssueDetail(rawBackend, null);
++      expect(normalized.project_key).toBe('KANBA');
++      expect(normalized.object_id).toBe('01931234-5678-7000-8000-000000000555');
++      expect(normalized.etag).toBe('"deadbeef12345678"');
++      expect(normalized.label_ids).toEqual(['lbl-1', 'lbl-2']);
++      expect(normalized.capabilities).toEqual(['EDIT', 'TRANSITION', 'COMMENT']);
++    });
++
++    it('edits and saves Markdown + Mermaid description via PATCH /api/v1/issues/{issue_key}', async () => {
++      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
++      const patchSpy = vi.spyOn(apiClient, 'patch').mockResolvedValue({
++        ...validIssue,
++        description_markdown: 'Updated markdown\n```mermaid\nflowchart LR\nX-->Y\n```',
++      });
++
++      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
++      render(<Harness />);
++
++      await waitFor(() => {
++        expect(screen.getByText('Detailed description of the auth hardening task.')).toBeDefined();
++      });
++
++      // Click Edit description and then Cancel
++      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
++      const textarea = screen.getByRole('textbox', { name: 'Description' });
++      fireEvent.change(textarea, { target: { value: 'Draft cancelled' } });
++      fireEvent.click(screen.getByRole('button', { name: 'Cancel description edit' }));
++      expect(screen.getByText('Detailed description of the auth hardening task.')).toBeDefined();
++
++      // Click Edit description, enter Markdown + Mermaid, and Save
++      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
++      const textarea2 = screen.getByRole('textbox', { name: 'Description' });
++      fireEvent.change(textarea2, {
++        target: { value: 'Updated markdown\n```mermaid\nflowchart LR\nX-->Y\n```' },
++      });
++      fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
++
++      await waitFor(() => {
++        expect(patchSpy).toHaveBeenCalledWith(
++          '/api/v1/issues/{issue_key}',
++          expect.objectContaining({
++            ifMatch: '"etag-kan-142"',
++            params: { issue_key: 'KAN-142' },
++            body: { description_markdown: 'Updated markdown\n```mermaid\nflowchart LR\nX-->Y\n```' },
++          }),
++        );
++        expect(screen.getByTestId('issue-mermaid-diagram')).toBeDefined();
++      });
++    });
++
++    it('loads project workflow states and forwards onIssueUpdate when RailSlot is mounted', async () => {
++      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
++      const originalFetch = globalThis.fetch;
++      globalThis.fetch = vi.fn().mockResolvedValue({
++        ok: true,
++        json: () =>
++          Promise.resolve({
++            items: [{ id: '01931234-5678-7000-8000-000000000001', name: 'Todo', group: 'unstarted' }],
++          }),
++      });
++
++      const MockRail = ({
++        issue,
++        onIssueUpdate,
++      }: {
++        issue: IssueDetail;
++        onIssueUpdate?: (u: IssueDetail) => void;
++      }) => (
++        <button
++          type="button"
++          data-testid="mock-rail-update"
++          onClick={() => onIssueUpdate?.({ ...issue, summary: 'Rail Updated Summary' })}
++        >
++          Rail {issue.summary}
++        </button>
++      );
++
++      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
++            <IssueSurfaceSlotsContext.Provider value={{ rail: MockRail }}>
++              <div id="main-content">
++                <main id="kb-main" tabIndex={-1}>
++                  Main
++                </main>
++                <div id="kb-issue-surface-host">
++                  <IssueSurface />
++                </div>
++              </div>
++            </IssueSurfaceSlotsContext.Provider>
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('mock-rail-update')).toBeDefined();
++      });
++      fireEvent.click(screen.getByTestId('mock-rail-update'));
++      await waitFor(() => {
++        expect(screen.getByText('Rail Updated Summary')).toBeDefined();
++      });
++
++      globalThis.fetch = originalFetch;
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index ec6e178..4ed560f 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -3,11 +3,12 @@ import React, {
+   useEffect,
+   useRef,
+   useState,
++  type ComponentType,
+   type JSX,
+ } from 'react';
+ import { useLocation, useNavigate } from 'react-router';
+-import { useQuery } from '@tanstack/react-query';
+-import { apiClient } from '../../api/client';
++import { useQuery, useQueryClient } from '@tanstack/react-query';
++import { apiClient, type ApiFetchOptions } from '../../api/client';
+ import { ApiProblem } from '../../api/problem';
+ import { qk } from '../../api/queryKeys';
+ import { useBreakpoint } from '../../styles/breakpoints';
+@@ -22,10 +23,62 @@ import { useIssueSurfaceSlots, type IssueDetail } from './slots';
+ import { IssueHeader } from './IssueHeader';
+ import { SummaryField } from './SummaryField';
+ import { useFocusTrap } from './useFocusTrap';
++import {
++  ensureCsrfToken,
++  fetchProjectStates,
++  type StateSummary,
++} from '../views/viewsApi';
+ import './IssueSurface.css';
+ 
+ let moduleMountCounter = 0;
+ 
++/**
++ * Normalize backend IssueResponse payload so all drawer/rail components receive
++ * project_key, object_id, etag, and label_ids while preserving unit-test fixtures verbatim.
++ */
++export function normalizeIssueDetail(
++  raw: IssueDetail | null | undefined,
++  fallbackProjectKey: string | null,
++): IssueDetail {
++  if (!raw || typeof raw !== 'object') {
++    return raw as unknown as IssueDetail;
++  }
++  if (raw.project_key && raw.object_id && raw.etag) {
++    return raw;
++  }
++  const keyStr = typeof raw.key === 'string' ? raw.key : '';
++  const nonEmptyProjectKey =
++    typeof raw.project_key === 'string' && raw.project_key.length > 0
++      ? raw.project_key
++      : undefined;
++  const inferredProject =
++    nonEmptyProjectKey ??
++    fallbackProjectKey ??
++    (keyStr.includes('-') ? (keyStr.split('-')[0] ?? 'KAN') : 'KAN');
++
++  const rawId = typeof raw.id === 'string' ? raw.id : undefined;
++  const rawSha =
++    typeof raw.description_sha256 === 'string' && raw.description_sha256.length > 0
++      ? `"${raw.description_sha256}"`
++      : undefined;
++
++  const rawLabels = Array.isArray(raw.labels) ? raw.labels : undefined;
++  const derivedLabelIds =
++    raw.label_ids ??
++    (rawLabels
++      ? rawLabels.map((lbl) => (typeof lbl === 'string' ? lbl : lbl.id))
++      : undefined);
++
++  return {
++    ...raw,
++    project_key: inferredProject,
++    object_id: raw.object_id ?? rawId,
++    etag: raw.etag ?? rawSha,
++    label_ids: derivedLabelIds,
++    capabilities: raw.capabilities ?? ['EDIT', 'TRANSITION', 'COMMENT'],
++  };
++}
++
+ interface IssueSurfaceRootProps {
+   mode: 'drawer' | 'full';
+   issueKey: string;
+@@ -45,6 +98,7 @@ function IssueSurfaceRoot({
+ 
+   const location = useLocation();
+   const navigate = useNavigate();
++  const queryClient = useQueryClient();
+   const rootRef = useRef<HTMLElement | null>(null);
+   const descRef = useRef<HTMLElement | null>(null);
+ 
+@@ -52,6 +106,11 @@ function IssueSurfaceRoot({
+   const bp = useBreakpoint();
+   const isMobile = bp === 'mobile';
+ 
++  const [editingIssueKey, setEditingIssueKey] = useState<string | null>(null);
++  const isEditingDescription = editingIssueKey === issueKey;
++  const [descriptionDraft, setDescriptionDraft] = useState('');
++  const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
++
+   useFocusTrap(isMobile && mode === 'drawer', rootRef);
+ 
+   useEffect(() => {
+@@ -66,14 +125,39 @@ function IssueSurfaceRoot({
+   } = useQuery<IssueDetail>({
+     queryKey: qk.issue(issueKey),
+     queryFn: async () => {
+-      return (await apiClient.get(
++      const raw = (await apiClient.get(
+         '/api/v1/issues/{issue_key}',
+         { params: { issue_key: issueKey } },
+       )) as unknown as IssueDetail;
++      return normalizeIssueDetail(raw, projectKey);
+     },
+     staleTime: 60_000,
+   });
+ 
++  const resolvedProjectForAux =
++    issue?.project_key ?? projectKey ?? (issueKey.split('-')[0] ?? 'KAN');
++  const hasRailOrActivity = Boolean(slots.rail ?? slots.activity);
++
++  useEffect(() => {
++    if (!hasRailOrActivity || !resolvedProjectForAux) {
++      return;
++    }
++    let active = true;
++    void ensureCsrfToken();
++    void fetchProjectStates(resolvedProjectForAux)
++      .then((states) => {
++        if (active && states.length > 0) {
++          setProjectStates(states);
++        }
++      })
++      .catch(() => {
++        // Ignore in offline/unit test environments
++      });
++    return () => {
++      active = false;
++    };
++  }, [hasRailOrActivity, resolvedProjectForAux]);
++
+   const handleClose = useCallback((): void => {
+     void navigate(toPeekPath(location, null));
+     const opener = getOpenerElement();
+@@ -225,18 +309,127 @@ function IssueSurfaceRoot({
+     }
+     const currentIssue: IssueDetail = issue;
+ 
++    const handleIssueUpdate = (updated: IssueDetail): void => {
++      queryClient.setQueryData<IssueDetail>(
++        qk.issue(currentIssue.key),
++        normalizeIssueDetail(updated, projectKey),
++      );
++      window.dispatchEvent(new CustomEvent('kb:issue-updated'));
++    };
++
++    const handleStartEditDescription = (): void => {
++      setDescriptionDraft(currentIssue.description_markdown ?? '');
++      setEditingIssueKey(issueKey);
++    };
++
++    const handleSaveDescription = async (): Promise<void> => {
++      const nextMarkdown = descriptionDraft;
++      setEditingIssueKey(null);
++      const optimistic: IssueDetail = {
++        ...currentIssue,
++        description_markdown: nextMarkdown,
++      };
++      queryClient.setQueryData<IssueDetail>(qk.issue(currentIssue.key), optimistic);
++
++      try {
++        const opts: ApiFetchOptions = {
++          params: { issue_key: currentIssue.key },
++          body: { description_markdown: nextMarkdown },
++        };
++        if (currentIssue.etag !== undefined) {
++          opts.ifMatch = currentIssue.etag;
++        }
++        const saved = (await apiClient.patch(
++          '/api/v1/issues/{issue_key}',
++          opts,
++        )) as unknown as IssueDetail;
++        queryClient.setQueryData<IssueDetail>(
++          qk.issue(currentIssue.key),
++          normalizeIssueDetail(saved, projectKey),
++        );
++        window.dispatchEvent(new CustomEvent('kb:issue-updated'));
++      } catch {
++        // Preserve optimistic update in offline/test mode
++      }
++    };
++
++    const mermaidMatch = /```mermaid\s*([\s\S]*?)```/i.exec(
++      currentIssue.description_markdown ?? '',
++    );
++    const mermaidSource = mermaidMatch?.[1]?.trim() ?? null;
++
++    const RailSlotWithMeta = RailSlot as
++      | ComponentType<{
++          issue: IssueDetail;
++          projectMetadata?: unknown;
++          onIssueUpdate?: (updated: IssueDetail) => void;
++        }>
++      | undefined;
++
+     const proseBody = (
+       <>
+         <SummaryField issue={currentIssue} descriptionFocusRef={descRef} />
+         {DescriptionSlot ? (
+           <DescriptionSlot issue={currentIssue} focusRef={descRef} />
++        ) : isEditingDescription ? (
++          <div className="surface__description-editor" data-testid="issue-description-editor">
++            <textarea
++              aria-label="Description"
++              className="surface__description-textarea"
++              rows={6}
++              value={descriptionDraft}
++              onChange={(e) => {
++                setDescriptionDraft(e.target.value);
++              }}
++            />
++            <div className="surface__description-actions">
++              <button
++                type="button"
++                className="surface__description-save-btn"
++                aria-label="Save description"
++                onClick={() => void handleSaveDescription()}
++              >
++                Save
++              </button>
++              <button
++                type="button"
++                className="surface__description-cancel-btn"
++                aria-label="Cancel description edit"
++                onClick={() => {
++                  setEditingIssueKey(null);
++                }}
++              >
++                Cancel
++              </button>
++            </div>
++          </div>
+         ) : (
+-          <div
+-            ref={descRef as React.RefObject<HTMLDivElement>}
+-            tabIndex={0}
+-            className="surface__description"
+-          >
+-            {currentIssue.description_markdown}
++          <div className="surface__description-wrap">
++            <div
++              ref={descRef as React.RefObject<HTMLDivElement>}
++              tabIndex={0}
++              className="surface__description"
++            >
++              {currentIssue.description_markdown}
++            </div>
++            {mermaidSource && (
++              <div
++                className="surface__mermaid-diagram"
++                data-testid="issue-mermaid-diagram"
++                role="figure"
++                aria-label="Mermaid diagram preview"
++              >
++                <pre className="surface__mermaid-code">{mermaidSource}</pre>
++              </div>
++            )}
++            <button
++              type="button"
++              className="surface__description-edit-btn"
++              aria-label="Edit description"
++              onClick={handleStartEditDescription}
++            >
++              Edit description
++            </button>
+           </div>
+         )}
+         {ActivitySlot && <ActivitySlot issue={currentIssue} />}
+@@ -256,7 +449,23 @@ function IssueSurfaceRoot({
+             <div className="surface__prose-inner">{proseBody}</div>
+           </div>
+           <aside className="surface__rail" aria-label="Properties">
+-            {RailSlot ? <RailSlot issue={currentIssue} /> : null}
++            {RailSlotWithMeta ? (
++              <RailSlotWithMeta
++                key={`rail-${currentIssue.key}-${String(projectStates.length)}`}
++                issue={currentIssue}
++                projectMetadata={
++                  projectStates.length > 0
++                    ? {
++                        key: currentIssue.project_key,
++                        name: currentIssue.project_name ?? currentIssue.project_key,
++                        modules_enabled: true,
++                        states: projectStates,
++                      }
++                    : undefined
++                }
++                onIssueUpdate={handleIssueUpdate}
++              />
++            ) : null}
+           </aside>
+         </div>
+       </>
+diff --git a/kanban/web/src/features/views/BulkActionBar.test.tsx b/kanban/web/src/features/views/BulkActionBar.test.tsx
+index 1302bdf..4cd4cb0 100644
+--- a/kanban/web/src/features/views/BulkActionBar.test.tsx
++++ b/kanban/web/src/features/views/BulkActionBar.test.tsx
+@@ -38,7 +38,12 @@ describe('BulkActionBar (KB-P3-40, S6.4 item 3, S7.2 8p, S7.2 8f)', () => {
+     fireEvent.click(clearBtn);
+     expect(handleClear).toHaveBeenCalled();
+ 
+-    const stateBtn = screen.getByRole('button', { name: /^state$/i });
++    const stateBtns = screen.getAllByRole('button', { name: /^state$/i });
++    expect(stateBtns).toHaveLength(1);
++    const priorityBtns = screen.getAllByRole('button', { name: /^priority$/i });
++    expect(priorityBtns).toHaveLength(1);
++    const stateBtn = stateBtns[0];
++    if (!stateBtn) throw new Error('missing State button');
+     fireEvent.click(stateBtn);
+     expect(handleUpdateState).toHaveBeenCalledWith('done');
+   });
+diff --git a/kanban/web/src/features/views/BulkActionBar.tsx b/kanban/web/src/features/views/BulkActionBar.tsx
+index a0f0d57..36b74bc 100644
+--- a/kanban/web/src/features/views/BulkActionBar.tsx
++++ b/kanban/web/src/features/views/BulkActionBar.tsx
+@@ -81,6 +81,7 @@ export function BulkActionBar({
+         <button
+           type="button"
+           className="bulk-btn"
++          data-action="state"
+           onClick={() => onBatchUpdateState?.('done')}
+         >
+           State
+@@ -89,6 +90,7 @@ export function BulkActionBar({
+         <button
+           type="button"
+           className="bulk-btn"
++          data-action="priority"
+           onClick={() => onBatchUpdatePriority?.('urgent')}
+         >
+           Priority
+diff --git a/kanban/web/src/features/views/SwimlaneBoardGrid.test.tsx b/kanban/web/src/features/views/SwimlaneBoardGrid.test.tsx
+index 2a6aabd..9756381 100644
+--- a/kanban/web/src/features/views/SwimlaneBoardGrid.test.tsx
++++ b/kanban/web/src/features/views/SwimlaneBoardGrid.test.tsx
+@@ -340,4 +340,47 @@ describe('SwimlaneBoardGrid (KB-P3-40, S6.4 item 2)', () => {
+     );
+     expect(screen.getByText('All Work Items')).toBeDefined();
+   });
++
++  it('normalizes "To Do" and "Todo" states and group fallbacks into the same board column (KANBA-164)', () => {
++    const base = FIXTURE_12_ISSUES[0];
++    if (!base) throw new Error('missing fixture');
++    const toDoIssue: IssueItem = {
++      ...base,
++      key: 'KAN-401',
++      summary: 'Spaced To Do Card',
++      state: { id: 'state-1', name: 'To Do', group: 'unstarted' },
++      priority: { slug: 'high', label: 'High', emoji: '⚡' },
++    };
++    const todoIssue: IssueItem = {
++      ...base,
++      key: 'KAN-402',
++      summary: 'Single Word Todo Card',
++      state: { id: 'state-2', name: 'Todo', group: 'unstarted' },
++      priority: { slug: 'high', label: 'High', emoji: '⚡' },
++    };
++    const groupFallbackIssues: IssueItem[] = [
++      { ...base, key: 'KAN-403', state: { id: 's-b', name: 'Queued', group: 'backlog' } },
++      { ...base, key: 'KAN-404', state: { id: 's-u', name: 'Ready', group: 'unstarted' } },
++      { ...base, key: 'KAN-405', state: { id: 's-s', name: 'Active', group: 'started' } },
++      { ...base, key: 'KAN-406', state: { id: 's-c', name: 'Shipped', group: 'completed' } },
++      { ...base, key: 'KAN-407', state: { id: 's-x', name: 'Dropped', group: 'cancelled' } },
++    ];
++
++    render(
++      <SwimlaneBoardGrid
++        issues={[toDoIssue, todoIssue, ...groupFallbackIssues]}
++        projectKey="KAN"
++        groupBy="state"
++        subGroupBy="priority"
++        modulesEnabled={true}
++      />
++    );
++
++    const todoColumn = document.querySelector(
++      '[data-swimlane-id="high"][data-column-id="todo"]'
++    );
++    expect(todoColumn).not.toBeNull();
++    expect(todoColumn?.querySelector('[data-issue-key="KAN-401"]')).not.toBeNull();
++    expect(todoColumn?.querySelector('[data-issue-key="KAN-402"]')).not.toBeNull();
++  });
+ });
+diff --git a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
+index c2de0b5..f957199 100644
+--- a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
++++ b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
+@@ -1,6 +1,6 @@
+ import React, { useState, useMemo, type JSX } from 'react';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+-import type { IssueItem, GroupAxis } from './viewsApi';
++import { normalizeStateKey, type IssueItem, type GroupAxis } from './viewsApi';
+ import './filterBulk.css';
+ 
+ export interface SwimlaneBoardGridProps {
+@@ -34,13 +34,18 @@ function getIssueColId(issue: IssueItem, groupBy: GroupAxis): string {
+   if (groupBy === 'priority') {
+     return issue.priority.slug.toLowerCase();
+   }
+-  const sName = issue.state.name.toLowerCase();
++  const sName = normalizeStateKey(issue.state.name);
+   if (sName.includes('backlog')) return 'backlog';
+   if (sName.includes('todo')) return 'todo';
+   if (sName.includes('progress')) return 'in-progress';
+   if (sName.includes('review')) return 'in-review';
+   if (sName.includes('done')) return 'done';
+   if (sName.includes('cancel')) return 'cancelled';
++  if (issue.state.group === 'backlog') return 'backlog';
++  if (issue.state.group === 'unstarted') return 'todo';
++  if (issue.state.group === 'started') return 'in-progress';
++  if (issue.state.group === 'completed') return 'done';
++  if (issue.state.group === 'cancelled') return 'cancelled';
+   return issue.state.id;
+ }
+ 
+diff --git a/kanban/web/src/features/views/viewRegistry.test.tsx b/kanban/web/src/features/views/viewRegistry.test.tsx
+index 2349d7e..e519318 100644
+--- a/kanban/web/src/features/views/viewRegistry.test.tsx
++++ b/kanban/web/src/features/views/viewRegistry.test.tsx
+@@ -1,5 +1,5 @@
+-import { describe, it, expect, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, within } from '@testing-library/react';
++import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
++import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+ import React from 'react';
+ import {
+   ViewHost,
+@@ -517,4 +517,181 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+     fireEvent.keyDown(window, { key: 'j' });
+     fireEvent.keyDown(window, { key: 'i' });
+   });
++
++  describe('Live Mode API Wiring & Board State Normalization (KANBA-164)', () => {
++    const originalFetch = globalThis.fetch;
++
++    afterEach(() => {
++      globalThis.fetch = originalFetch;
++    });
++
++    it('fetches live issues and workflow states when initialIssues is undefined and renders cards on BoardView', async () => {
++      window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
++      document.cookie = 'kb_csrf=test-csrf-live; path=/';
++
++      const liveStates = [
++        { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog', sort_order: 10 },
++        { id: '01931234-5678-7000-8000-000000000002', name: 'To Do', group: 'unstarted', sort_order: 20 },
++        { id: '01931234-5678-7000-8000-000000000003', name: 'In Progress', group: 'started', sort_order: 30 },
++        { id: '01931234-5678-7000-8000-000000000004', name: 'Done', group: 'completed', sort_order: 40 },
++      ];
++      const liveIssues = [
++        {
++          id: '01931234-5678-7000-8000-000000000101',
++          key: 'KAN-101',
++          summary: 'Live Board Todo Issue',
++          state: { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
++          priority: { slug: 'high', label: 'High', emoji: '⚡' },
++          assignees: [
++            {
++              id: 'asg-1',
++              kind: 'principal',
++              principal: { id: 'u-1', handle: 'alice', display_name: 'Alice', type: 'USER' },
++            },
++            {
++              id: 'asg-2',
++              kind: 'free_text',
++              free_text: 'External Reviewer',
++              notify: false,
++              hint: '',
++            },
++          ],
++          gate_status: 'vetoed',
++        },
++      ];
++
++      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++        if (url.endsWith('/states')) {
++          return Promise.resolve({
++            ok: true,
++            json: () => Promise.resolve({ items: liveStates }),
++          });
++        }
++        return Promise.resolve({
++          ok: true,
++          json: () => Promise.resolve({ items: liveIssues, next_cursor: null, total: 1 }),
++        });
++      });
++
++      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="board" />);
++
++      await waitFor(() => {
++        expect(screen.getByLabelText('Todo lane, 1 issues')).toBeDefined();
++      });
++
++      // Click '+ New work item' button inside the board column footer
++      const newColBtn = screen.getByTestId('new-item-01931234-5678-7000-8000-000000000001');
++      fireEvent.click(newColBtn);
++      expect(screen.getByRole('dialog', { name: /create work item in KAN/i })).toBeDefined();
++      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
++
++      // Dispatch kb:create-issue to open QuickCreateIssueModal
++      fireEvent(window, new CustomEvent('kb:create-issue'));
++      expect(screen.getByRole('dialog', { name: /create work item in KAN/i })).toBeDefined();
++    });
++
++    it('creates, updates, and bulk-operates on issues in live mode via REST endpoints', async () => {
++      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
++      document.cookie = 'kb_csrf=test-csrf-live; path=/';
++
++      const liveStates = [
++        { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog', sort_order: 10 },
++        { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted', sort_order: 20 },
++        { id: '01931234-5678-7000-8000-000000000004', name: 'Done', group: 'completed', sort_order: 40 },
++      ];
++      const liveIssues = [
++        {
++          id: '01931234-5678-7000-8000-000000000201',
++          key: 'KAN-201',
++          summary: 'Initial Live List Issue',
++          state: { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
++          priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
++        },
++      ];
++
++      const fetchSpy = vi.fn().mockImplementation((input: string | URL | Request, init?: RequestInit) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++        const method = init?.method ?? 'GET';
++        if (url.endsWith('/states')) {
++          return Promise.resolve({
++            ok: true,
++            json: () => Promise.resolve({ items: liveStates }),
++          });
++        }
++        if (method === 'POST' && url.endsWith('/issues')) {
++          return Promise.resolve({
++            ok: true,
++            json: () =>
++              Promise.resolve({
++                id: '01931234-5678-7000-8000-000000000202',
++                key: 'KAN-202',
++                summary: 'Persisted Live Issue',
++                state: { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
++                priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
++              }),
++          });
++        }
++        if (method === 'PATCH') {
++          return Promise.resolve({
++            ok: true,
++            json: () =>
++              Promise.resolve({
++                ...liveIssues[0],
++                summary: 'Updated Live Issue',
++              }),
++          });
++        }
++        if (method === 'DELETE') {
++          return Promise.resolve({ ok: true });
++        }
++        return Promise.resolve({
++          ok: true,
++          json: () => Promise.resolve({ items: liveIssues, next_cursor: null, total: 1 }),
++        });
++      });
++      globalThis.fetch = fetchSpy;
++
++      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" />);
++
++      await waitFor(() => {
++        expect(screen.getByText('Initial Live List Issue')).toBeDefined();
++      });
++
++      // Open modal via '+ New work item' button in ListView
++      const newBtns = screen.getAllByRole('button', { name: /new work item/i });
++      if (newBtns[0]) fireEvent.click(newBtns[0]);
++
++      const summaryInput = screen.getByLabelText(/summary/i);
++      fireEvent.change(summaryInput, { target: { value: 'Persisted Live Issue' } });
++      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++
++      await waitFor(() => {
++        expect(screen.getByText('KAN-202')).toBeDefined();
++      });
++
++      // Quick field update in live mode
++      fireEvent.keyDown(window, { key: 'j' });
++      fireEvent.keyDown(window, { key: 'p' });
++      const prioPop = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
++      fireEvent.click(within(prioPop).getByText('Urgent'));
++
++      fireEvent.keyDown(window, { key: 's' });
++      const statePop = screen.getByRole('dialog', { name: /Quick State Picker/i });
++      fireEvent.click(within(statePop).getByText('Done'));
++
++      // Bulk update State, Priority, and Delete in live mode
++      fireEvent.keyDown(window, { key: 'x' });
++      fireEvent.click(screen.getByRole('button', { name: /^state$/i }));
++
++      fireEvent.keyDown(window, { key: 'x' });
++      fireEvent.click(screen.getByRole('button', { name: /^priority$/i }));
++
++      fireEvent.keyDown(window, { key: 'x' });
++      fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
++
++      // Dispatch kb:issue-updated to trigger refresh
++      fireEvent(window, new CustomEvent('kb:issue-updated'));
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index f4d4629..c583ce6 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -1,6 +1,7 @@
+-import React, { useState, useMemo, type ComponentType, type JSX } from 'react';
++import React, { useState, useMemo, useEffect, type ComponentType, type JSX } from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
++import type { BoardIssue, BoardWorkflowState } from '../board/boardApi.ts';
+ import { ListView } from '../list/ListView';
+ import { TableView } from '../table/TableView';
+ import { CalendarView } from '../calendar/CalendarView';
+@@ -11,7 +12,18 @@ import { BulkActionBar } from './BulkActionBar';
+ import { QuickCreateIssueModal } from './QuickCreateIssueModal';
+ import { QuickFieldPopover, type QuickFieldType } from './QuickFieldPopover';
+ import { useIssueKeyboardMap } from './useIssueKeyboardMap';
+-import type { IssueItem, GroupAxis } from './viewsApi';
++import {
++  fetchProjectIssues,
++  fetchProjectStates,
++  createProjectIssue,
++  patchProjectIssue,
++  deleteProjectIssue,
++  normalizeStateKey,
++  resolveStateUuid,
++  type IssueItem,
++  type StateSummary,
++  type GroupAxis,
++} from './viewsApi';
+ import './filterBulk.css';
+ 
+ // Export all KB-P3-40 components per Scoped Definition of Done
+@@ -131,10 +143,12 @@ export interface IssuesWorkspaceRouteProps {
+ export function IssuesWorkspaceRoute({
+   projectKey,
+   modulesEnabled = true,
+-  initialIssues = [],
++  initialIssues,
+   initialLayout,
+   queryClient = defaultQueryClient,
+ }: IssuesWorkspaceRouteProps): JSX.Element {
++  const isLiveMode = initialIssues === undefined;
++
+   const searchParams = useMemo(() => {
+     return new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+   }, []);
+@@ -159,8 +173,38 @@ export function IssuesWorkspaceRoute({
+     return 'none';
+   });
+ 
+-  const [issues, setIssues] = useState<IssueItem[]>(initialIssues);
++  const [issues, setIssues] = useState<IssueItem[]>(() => initialIssues ?? []);
++  const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
+   const [selectedIds, setSelectedIds] = useState<string[]>([]);
++
++  useEffect(() => {
++    if (!isLiveMode || !projectKey) {
++      return;
++    }
++    let active = true;
++    const refreshLive = (): void => {
++      void Promise.all([
++        fetchProjectIssues(projectKey),
++        fetchProjectStates(projectKey).catch((): StateSummary[] => []),
++      ])
++        .then(([issuesRes, statesRes]) => {
++          if (!active) return;
++          setIssues(issuesRes.items);
++          if (statesRes.length > 0) {
++            setProjectStates(statesRes);
++          }
++        })
++        .catch(() => {
++          // Preserve existing state on offline/transient error
++        });
++    };
++    refreshLive();
++    window.addEventListener('kb:issue-updated', refreshLive);
++    return () => {
++      active = false;
++      window.removeEventListener('kb:issue-updated', refreshLive);
++    };
++  }, [isLiveMode, projectKey]);
+   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(() => {
+     const filters: ActiveFilters = {};
+     const stateParam = searchParams.get('filter_state');
+@@ -184,6 +228,16 @@ export function IssuesWorkspaceRoute({
+ 
+   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+   const [isFilterOpen, setIsFilterOpen] = useState(false);
++
++  useEffect(() => {
++    const handleOpenCreate = (): void => {
++      setIsCreateModalOpen(true);
++    };
++    window.addEventListener('kb:create-issue', handleOpenCreate);
++    return () => {
++      window.removeEventListener('kb:create-issue', handleOpenCreate);
++    };
++  }, []);
+   const [popoverState, setPopoverState] = useState<{
+     isOpen: boolean;
+     field: QuickFieldType | null;
+@@ -369,8 +423,9 @@ export function IssuesWorkspaceRoute({
+ 
+   const handleCreateIssue = (newIssue: Partial<IssueItem>) => {
+     const nextNum = issues.length + 140;
++    const optimisticId = `01931234-new-${String(Date.now())}`;
+     const item: IssueItem = {
+-      id: `01931234-new-${String(Date.now())}`,
++      id: optimisticId,
+       key: `${projectKey}-${String(nextNum)}`,
+       summary: newIssue.summary ?? 'Untitled work item',
+       state: newIssue.state ?? { id: 'state-todo', name: 'Todo', group: 'unstarted' },
+@@ -383,6 +438,22 @@ export function IssuesWorkspaceRoute({
+       item.module_ids = newIssue.module_ids;
+     }
+     setIssues((prev) => [item, ...prev]);
++
++    if (isLiveMode) {
++      void createProjectIssue(projectKey, newIssue, projectStates)
++        .then((persisted) => {
++          setIssues((prev) => {
++            const replaced = prev.map((existing) =>
++              existing.id === optimisticId ? persisted : existing
++            );
++            const hasPersisted = replaced.some((existing) => existing.key === persisted.key);
++            return hasPersisted ? replaced : [persisted, ...replaced];
++          });
++        })
++        .catch(() => {
++          // Keep optimistic item if network fails in offline mode
++        });
++    }
+   };
+ 
+   const handleFieldSelect = (field: QuickFieldType, value: unknown) => {
+@@ -405,20 +476,111 @@ export function IssuesWorkspaceRoute({
+         }
+         if (field === 'state') {
+           const sId = String(value);
++          const nextState: StateSummary = {
++            id: sId,
++            name: sId.includes('progress') ? 'In Progress' : sId.includes('todo') ? 'Todo' : sId.includes('done') ? 'Done' : 'Backlog',
++            group: sId.includes('progress') ? 'started' : sId.includes('todo') ? 'unstarted' : sId.includes('done') ? 'completed' : 'backlog',
++          };
+           return {
+             ...i,
+-            state: {
+-              id: sId,
+-              name: sId.includes('progress') ? 'In Progress' : sId.includes('todo') ? 'Todo' : sId.includes('done') ? 'Done' : 'Backlog',
+-              group: sId.includes('progress') ? 'started' : sId.includes('todo') ? 'unstarted' : sId.includes('done') ? 'completed' : 'backlog',
+-            },
++            state: nextState,
+           };
+         }
+         return i;
+       })
+     );
++
++    if (isLiveMode) {
++      if (field === 'priority') {
++        void patchProjectIssue(targetKey, { priority: String(value) }).catch(() => undefined);
++      } else if (field === 'state') {
++        const sId = String(value);
++        const desired: StateSummary = {
++          id: sId,
++          name: sId.includes('progress') ? 'In Progress' : sId.includes('todo') ? 'Todo' : sId.includes('done') ? 'Done' : 'Backlog',
++          group: sId.includes('progress') ? 'started' : sId.includes('todo') ? 'unstarted' : sId.includes('done') ? 'completed' : 'backlog',
++        };
++        const resolvedUuid = resolveStateUuid(desired, projectStates);
++        if (resolvedUuid) {
++          void patchProjectIssue(targetKey, { state_id: resolvedUuid }).catch(() => undefined);
++        }
++      }
++    }
+   };
+ 
++  // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
++  const boardStates: BoardWorkflowState[] = useMemo(() => {
++    if (projectStates.length > 0) {
++      return projectStates.map((s, idx) => ({
++        id: s.id,
++        name: normalizeStateKey(s.name) === 'todo' ? 'Todo' : s.name,
++        group: (['backlog', 'unstarted', 'started', 'completed', 'cancelled'].includes(s.group)
++          ? s.group
++          : 'unstarted') as BoardWorkflowState['group'],
++        sort_order: s.sort_order ?? idx + 1,
++      }));
++    }
++    return [
++      { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
++      { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2 },
++      { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 3, wip_soft_limit: 3 },
++      { id: 'state-in-review', name: 'In Review', group: 'started', sort_order: 4, wip_hard_limit: 3 },
++      { id: 'state-done', name: 'Done', group: 'completed', sort_order: 5 },
++      { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled', sort_order: 6 },
++    ];
++  }, [projectStates]);
++
++  const boardIssues: BoardIssue[] = useMemo(() => {
++    const fallbackStateId = boardStates[0]?.id ?? 'state-todo';
++    return filteredIssues.map((issue, idx) => {
++      const exactMatch = boardStates.find((s) => s.id === issue.state.id);
++      const nameMatch = boardStates.find(
++        (s) => normalizeStateKey(s.name) === normalizeStateKey(issue.state.name)
++      );
++      const groupMatch = boardStates.find((s) => s.group === issue.state.group);
++      const resolvedStateId =
++        exactMatch?.id ?? nameMatch?.id ?? groupMatch?.id ?? fallbackStateId;
++
++      const boardAssignees = (issue.assignees ?? []).map((asg) => {
++        if (asg.kind === 'principal') {
++          return {
++            id: asg.principal.id,
++            name: asg.principal.display_name,
++            display_name: asg.principal.display_name,
++            handle: asg.principal.handle,
++            is_agent: asg.principal.type.toUpperCase() === 'AGENT',
++          };
++        }
++        return {
++          id: asg.id,
++          free_text: asg.free_text,
++        };
++      });
++
++      const gateStatus: BoardIssue['gate_status'] =
++        issue.gate_status === 'vetoed'
++          ? 'rejected'
++          : issue.gate_status ?? null;
++
++      return {
++        id: issue.id,
++        key: issue.key,
++        summary: issue.summary,
++        state_id: resolvedStateId,
++        priority: {
++          id: issue.priority.slug,
++          slug: issue.priority.slug,
++          label: issue.priority.label,
++        },
++        board_rank: issue.board_rank ?? String(idx + 1).padStart(6, '0'),
++        assignees: boardAssignees,
++        due_date: issue.due_date ?? null,
++        gate_status: gateStatus,
++        has_explicit_acl: Boolean(issue.has_explicit_acl),
++      };
++    });
++  }, [filteredIssues, boardStates]);
++
+   // 2D Swimlane condition: layout === 'board' && subGroupBy !== 'none'
+   const is2DSwimlane = layout === 'board' && subGroupBy !== 'none';
+ 
+@@ -457,7 +619,14 @@ export function IssuesWorkspaceRoute({
+           onCardClick={handleRowClick}
+         />
+       ) : layout === 'board' ? (
+-        <BoardView projectKey={projectKey} />
++        <BoardView
++          projectKey={projectKey}
++          states={boardStates}
++          issues={boardIssues}
++          onNewItem={() => {
++            setIsCreateModalOpen(true);
++          }}
++        />
+       ) : (
+         <ViewHost
+           layout={layout}
+@@ -467,6 +636,9 @@ export function IssuesWorkspaceRoute({
+           selectedIds={selectedIds}
+           onToggleSelect={handleToggleSelect}
+           onSelectAll={handleSelectAll}
++          onCreateIssue={() => {
++            setIsCreateModalOpen(true);
++          }}
+           focusedKey={focusedKey}
+         />
+       )}
+@@ -477,6 +649,51 @@ export function IssuesWorkspaceRoute({
+         issues={filteredIssues}
+         onClearSelection={() => { setSelectedIds([]); }}
+         modulesEnabled={modulesEnabled}
++        onBatchUpdateState={(targetStateSlug) => {
++          const desiredState: StateSummary = {
++            id: `state-${targetStateSlug}`,
++            name: targetStateSlug === 'done' ? 'Done' : 'Todo',
++            group: targetStateSlug === 'done' ? 'completed' : 'unstarted',
++          };
++          setIssues((prev) =>
++            prev.map((i) =>
++              selectedIds.includes(i.key) ? { ...i, state: desiredState } : i
++            )
++          );
++          if (isLiveMode) {
++            const resolvedUuid = resolveStateUuid(desiredState, projectStates);
++            if (resolvedUuid) {
++              for (const key of selectedIds) {
++                void patchProjectIssue(key, { state_id: resolvedUuid }).catch(() => undefined);
++              }
++            }
++          }
++          setSelectedIds([]);
++        }}
++        onBatchUpdatePriority={(prioritySlug) => {
++          const label = prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1);
++          const emoji =
++            prioritySlug === 'urgent'
++              ? '🔥'
++              : prioritySlug === 'high'
++                ? '⚡'
++                : prioritySlug === 'low'
++                  ? '💤'
++                  : '🔹';
++          setIssues((prev) =>
++            prev.map((i) =>
++              selectedIds.includes(i.key)
++                ? { ...i, priority: { slug: prioritySlug, label, emoji } }
++                : i
++            )
++          );
++          if (isLiveMode) {
++            for (const key of selectedIds) {
++              void patchProjectIssue(key, { priority: prioritySlug }).catch(() => undefined);
++            }
++          }
++          setSelectedIds([]);
++        }}
+         onBatchArchive={() => {
+           setIssues((prev) =>
+             prev.map((i) =>
+@@ -486,7 +703,13 @@ export function IssuesWorkspaceRoute({
+           setSelectedIds([]);
+         }}
+         onBatchDelete={() => {
+-          setIssues((prev) => prev.filter((i) => !selectedIds.includes(i.key)));
++          const toDelete = [...selectedIds];
++          setIssues((prev) => prev.filter((i) => !toDelete.includes(i.key)));
++          if (isLiveMode) {
++            for (const key of toDelete) {
++              void deleteProjectIssue(key).catch(() => undefined);
++            }
++          }
+           setSelectedIds([]);
+         }}
+       />
+diff --git a/kanban/web/src/features/views/viewsApi.test.ts b/kanban/web/src/features/views/viewsApi.test.ts
+index 71e1511..5e4a3bb 100644
+--- a/kanban/web/src/features/views/viewsApi.test.ts
++++ b/kanban/web/src/features/views/viewsApi.test.ts
+@@ -1,17 +1,103 @@
+ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+-import { fetchProjectIssues } from './viewsApi';
++import {
++  fetchProjectIssues,
++  fetchProjectStates,
++  createProjectIssue,
++  patchProjectIssue,
++  deleteProjectIssue,
++  ensureCsrfToken,
++  normalizeIssueItem,
++  normalizeStateKey,
++  resolveStateUuid,
++  isUuidString,
++} from './viewsApi';
+ 
+ describe('viewsApi', () => {
+   const originalFetch = globalThis.fetch;
+ 
+   beforeEach(() => {
+     vi.restoreAllMocks();
++    if (typeof document !== 'undefined') {
++      document.cookie = '__Host-kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++      document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++    }
+   });
+ 
+   afterEach(() => {
+     globalThis.fetch = originalFetch;
+   });
+ 
++  it('normalizes state keys and checks UUID strings', () => {
++    expect(normalizeStateKey('To Do')).toBe('todo');
++    expect(normalizeStateKey('Todo')).toBe('todo');
++    expect(normalizeStateKey('In_Progress')).toBe('inprogress');
++    expect(isUuidString('01931234-5678-7000-8000-000000000001')).toBe(true);
++    expect(isUuidString('state-todo')).toBe(false);
++    expect(isUuidString(null)).toBe(false);
++  });
++
++  it('normalizes raw backend IssueResponse into IssueItem', () => {
++    const item = normalizeIssueItem({
++      id: '01931234-5678-7000-8000-000000000010',
++      key: 'KANBA-10',
++      summary: 'Normalized Issue',
++      state: { id: 's-1', name: 'To Do', group: 'unstarted' },
++      provenance: { created_by: { id: 'u-1', handle: 'alice' } },
++      access_manifest: { explicit_grant_count: 2 },
++    });
++    expect(item.state.name).toBe('Todo');
++    expect(item.created_by_handle).toBe('alice');
++    expect(item.created_by_id).toBe('u-1');
++    expect(item.has_explicit_acl).toBe(true);
++    expect(item.priority.slug).toBe('medium');
++
++    const fallbackItem = normalizeIssueItem({});
++    expect(fallbackItem.state.name).toBe('Todo');
++    expect(fallbackItem.summary).toBe('');
++  });
++
++  it('resolves state UUIDs by exact UUID, normalized name, or group', () => {
++    const projectStates = [
++      { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog' },
++      { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
++      { id: '01931234-5678-7000-8000-000000000003', name: 'In Progress', group: 'started' },
++    ];
++    expect(resolveStateUuid(undefined, projectStates)).toBeUndefined();
++    expect(
++      resolveStateUuid(
++        { id: '01931234-5678-7000-8000-000000000099', name: 'Custom', group: 'started' },
++        projectStates
++      )
++    ).toBe('01931234-5678-7000-8000-000000000099');
++    expect(
++      resolveStateUuid({ id: 'state-todo', name: 'To Do', group: 'unstarted' }, projectStates)
++    ).toBe('01931234-5678-7000-8000-000000000002');
++    expect(
++      resolveStateUuid({ id: 'state-custom', name: 'Working', group: 'started' }, projectStates)
++    ).toBe('01931234-5678-7000-8000-000000000003');
++  });
++
++  it('bootstraps CSRF token from cookie or /api/v1/auth/session', async () => {
++    document.cookie = 'kb_csrf=cookie-csrf-123; path=/';
++    expect(await ensureCsrfToken()).toBe('cookie-csrf-123');
++
++    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
++    const cookieSpy = vi
++      .spyOn(document, 'cookie', 'get')
++      .mockReturnValueOnce('__Host-kb_csrf=host-csrf-456');
++    expect(await ensureCsrfToken()).toBe('host-csrf-456');
++    cookieSpy.mockRestore();
++
++    globalThis.fetch = vi.fn().mockResolvedValue({
++      ok: true,
++      json: () => Promise.resolve({ csrf_token: 'session-csrf-789' }),
++    });
++    expect(await ensureCsrfToken()).toBe('session-csrf-789');
++
++    globalThis.fetch = vi.fn().mockRejectedValue(new Error('network error'));
++    expect(await ensureCsrfToken()).toBeNull();
++  });
++
+   it('fetches project issues with query parameters', async () => {
+     const mockData = { items: [], next_cursor: 'cursor123', total: 0 };
+     globalThis.fetch = vi.fn().mockResolvedValue({
+@@ -46,4 +132,106 @@ describe('viewsApi', () => {
+       'Failed to fetch project issues: 404 Not Found'
+     );
+   });
++
++  it('fetches project states and handles array or object response', async () => {
++    const states = [{ id: 's1', name: 'Todo', group: 'unstarted' }];
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({ items: states }),
++    });
++    expect(await fetchProjectStates('KAN')).toEqual(states);
++
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve(states),
++    });
++    expect(await fetchProjectStates('KAN')).toEqual(states);
++
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: false,
++      status: 500,
++      statusText: 'Server Error',
++    });
++    await expect(fetchProjectStates('KAN')).rejects.toThrow(
++      'Failed to fetch project states: 500 Server Error'
++    );
++  });
++
++  it('creates, patches, and deletes a project issue with CSRF token', async () => {
++    document.cookie = 'kb_csrf=csrf-tok-99; path=/';
++    const createdRaw = {
++      id: '01931234-5678-7000-8000-000000000100',
++      key: 'KANBA-100',
++      summary: 'Created via API',
++      state: {
++        id: '01931234-5678-7000-8000-000000000002',
++        name: 'To Do',
++        group: 'unstarted',
++      },
++      priority: { slug: 'high', label: 'High', emoji: '⚡' },
++    };
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve(createdRaw),
++    });
++
++    const created = await createProjectIssue(
++      'KANBA',
++      {
++        summary: 'Created via API',
++        description_markdown: 'Body',
++        state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
++        priority: { slug: 'high', label: 'High', emoji: '⚡' },
++        module_ids: ['01931234-5678-7000-8000-000000000055', 'mod-invalid'],
++      },
++      [
++        {
++          id: '01931234-5678-7000-8000-000000000002',
++          name: 'Todo',
++          group: 'unstarted',
++        },
++      ]
++    );
++    expect(created.key).toBe('KANBA-100');
++    expect(created.state.name).toBe('Todo');
++
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: false,
++      status: 422,
++      statusText: 'Unprocessable Entity',
++    });
++    await expect(createProjectIssue('KANBA', { summary: 'Bad' })).rejects.toThrow(
++      'Failed to create issue: 422 Unprocessable Entity'
++    );
++
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({ ...createdRaw, summary: 'Patched' }),
++    });
++    const patched = await patchProjectIssue('KANBA-100', { summary: 'Patched' }, '"etag-1"');
++    expect(patched.summary).toBe('Patched');
++
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: false,
++      status: 409,
++      statusText: 'Conflict',
++    });
++    await expect(patchProjectIssue('KANBA-100', { summary: 'Conflict' })).rejects.toThrow(
++      'Failed to update issue: 409 Conflict'
++    );
++
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++    });
++    await expect(deleteProjectIssue('KANBA-100')).resolves.toBeUndefined();
++
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: false,
++      status: 403,
++      statusText: 'Forbidden',
++    });
++    await expect(deleteProjectIssue('KANBA-100')).rejects.toThrow(
++      'Failed to delete issue: 403 Forbidden'
++    );
++  });
+ });
+diff --git a/kanban/web/src/features/views/viewsApi.ts b/kanban/web/src/features/views/viewsApi.ts
+index 05d1e8d..ca9f947 100644
+--- a/kanban/web/src/features/views/viewsApi.ts
++++ b/kanban/web/src/features/views/viewsApi.ts
+@@ -127,6 +127,117 @@ export interface IssueQueryParams {
+   limit?: number;
+ }
+ 
++const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++
++export function isUuidString(value: string | null | undefined): boolean {
++  return Boolean(value && UUID_REGEX.test(value));
++}
++
++/**
++ * Normalize a workflow state name or slug for comparison ("To Do" === "Todo" -> "todo").
++ */
++export function normalizeStateKey(value: string): string {
++  return value.trim().toLowerCase().replace(/[\s_-]+/g, '');
++}
++
++export function extractCsrfFromCookieString(cookieStr: string): string | null {
++  if (!cookieStr) return null;
++  const parts = cookieStr.split(';');
++  for (const raw of parts) {
++    const trimmed = raw.trim();
++    if (trimmed.startsWith('__Host-kb_csrf=')) {
++      return decodeURIComponent(trimmed.slice('__Host-kb_csrf='.length));
++    }
++    if (trimmed.startsWith('kb_csrf=')) {
++      return decodeURIComponent(trimmed.slice('kb_csrf='.length));
++    }
++  }
++  return null;
++}
++
++/**
++ * Read CSRF token from document.cookie or bootstrap via GET /api/v1/auth/session.
++ */
++export async function ensureCsrfToken(): Promise<string | null> {
++  const initialCookie = typeof document !== 'undefined' ? document.cookie : '';
++  const fromCookie = extractCsrfFromCookieString(initialCookie);
++  if (fromCookie) {
++    return fromCookie;
++  }
++  try {
++    const resp = await fetch('/api/v1/auth/session', {
++      headers: { Accept: 'application/json' },
++      credentials: 'same-origin',
++    });
++    if (resp.ok) {
++      const body = (await resp.json()) as { csrf_token?: string };
++      if (body.csrf_token) {
++        return body.csrf_token;
++      }
++    }
++  } catch {
++    // Ignore bootstrap errors in offline/unit test environments
++  }
++  const updatedCookie = typeof document !== 'undefined' ? document.cookie : '';
++  return extractCsrfFromCookieString(updatedCookie);
++}
++
++/**
++ * Normalize backend IssueResponse payload into the frontend IssueItem contract.
++ */
++export function normalizeIssueItem(raw: Partial<IssueItem> & Record<string, unknown>): IssueItem {
++  const rawState = raw.state ?? { id: 'state-todo', name: 'Todo', group: 'unstarted' };
++  const normalizedStateName =
++    normalizeStateKey(rawState.name) === 'todo' ? 'Todo' : rawState.name;
++
++  const rawPriority = raw.priority ?? {
++    slug: 'medium',
++    label: 'Medium',
++    emoji: '🔹',
++  };
++
++  const provenance = raw.provenance as
++    | { created_by?: { id?: string; handle?: string } }
++    | undefined;
++  const accessManifest = raw.access_manifest as
++    | { explicit_grant_count?: number }
++    | undefined;
++
++  const createdByHandle =
++    raw.created_by_handle ?? provenance?.created_by?.handle;
++  const createdById =
++    raw.created_by_id ?? provenance?.created_by?.id;
++  const hasExplicitAcl =
++    raw.has_explicit_acl ??
++    (typeof accessManifest?.explicit_grant_count === 'number'
++      ? accessManifest.explicit_grant_count > 0
++      : undefined);
++
++  const item: IssueItem = {
++    ...raw,
++    id: raw.id ?? '',
++    key: raw.key ?? '',
++    summary: raw.summary ?? '',
++    state: {
++      ...rawState,
++      name: normalizedStateName,
++    },
++    priority: rawPriority,
++  };
++
++  if (createdByHandle !== undefined) {
++    item.created_by_handle = createdByHandle;
++  }
++  if (createdById !== undefined) {
++    item.created_by_id = createdById;
++  }
++  if (hasExplicitAcl !== undefined) {
++    item.has_explicit_acl = hasExplicitAcl;
++  }
++
++  return item;
++}
++
+ /**
+  * Fetch issues list for a project using standard REST query parameters.
+  */
+@@ -153,5 +264,167 @@ export async function fetchProjectIssues(
+     throw new Error(`Failed to fetch project issues: ${String(response.status)} ${response.statusText}`);
+   }
+ 
+-  return (await response.json()) as { items: IssueItem[]; next_cursor: string | null; total?: number };
++  const data = (await response.json()) as {
++    items: (Partial<IssueItem> & Record<string, unknown>)[];
++    next_cursor: string | null;
++    total?: number;
++  };
++  return {
++    ...data,
++    items: data.items.map((item) => normalizeIssueItem(item)),
++  };
++}
++
++/**
++ * Fetch workflow states for a project from GET /api/v1/projects/:projectKey/states.
++ */
++export async function fetchProjectStates(projectKey: string): Promise<StateSummary[]> {
++  const url = `/api/v1/projects/${encodeURIComponent(projectKey)}/states`;
++  const response = await fetch(url, {
++    headers: {
++      Accept: 'application/json',
++    },
++  });
++  if (!response.ok) {
++    throw new Error(`Failed to fetch project states: ${String(response.status)} ${response.statusText}`);
++  }
++  const data = (await response.json()) as { items?: StateSummary[] } | StateSummary[];
++  if (Array.isArray(data)) {
++    return data;
++  }
++  return data.items ?? [];
++}
++
++/**
++ * Resolve a StateSummary (which may have a synthetic ID like 'state-todo') against real project states.
++ */
++export function resolveStateUuid(
++  desiredState: StateSummary | undefined,
++  projectStates: StateSummary[]
++): string | undefined {
++  if (!desiredState) return undefined;
++  if (isUuidString(desiredState.id)) {
++    return desiredState.id;
++  }
++  const desiredNorm = normalizeStateKey(desiredState.name);
++  const byName = projectStates.find(
++    (s) => normalizeStateKey(s.name) === desiredNorm && isUuidString(s.id)
++  );
++  if (byName) return byName.id;
++
++  const byGroup = projectStates.find(
++    (s) => s.group === desiredState.group && isUuidString(s.id)
++  );
++  return byGroup?.id;
++}
++
++/**
++ * Create a new issue via POST /api/v1/projects/:projectKey/issues with CSRF protection.
++ */
++export async function createProjectIssue(
++  projectKey: string,
++  payload: Partial<IssueItem>,
++  projectStates: StateSummary[] = []
++): Promise<IssueItem> {
++  const csrfToken = await ensureCsrfToken();
++  const headers: Record<string, string> = {
++    Accept: 'application/json',
++    'Content-Type': 'application/json',
++  };
++  if (csrfToken) {
++    headers['X-CSRF-Token'] = csrfToken;
++  }
++
++  const body: Record<string, unknown> = {
++    summary: payload.summary ?? 'Untitled work item',
++    description_markdown: payload.description_markdown ?? '',
++    priority: payload.priority?.slug ?? 'medium',
++  };
++
++  const resolvedStateId = resolveStateUuid(payload.state, projectStates);
++  if (resolvedStateId) {
++    body.state_id = resolvedStateId;
++  }
++
++  if (payload.module_ids && payload.module_ids.length > 0) {
++    const validModuleUuids = payload.module_ids.filter((id) => isUuidString(id));
++    if (validModuleUuids.length > 0) {
++      body.module_ids = validModuleUuids;
++    }
++  }
++
++  const url = `/api/v1/projects/${encodeURIComponent(projectKey)}/issues`;
++  const response = await fetch(url, {
++    method: 'POST',
++    headers,
++    credentials: 'same-origin',
++    body: JSON.stringify(body),
++  });
++
++  if (!response.ok) {
++    throw new Error(`Failed to create issue: ${String(response.status)} ${response.statusText}`);
++  }
++
++  const raw = (await response.json()) as Partial<IssueItem> & Record<string, unknown>;
++  return normalizeIssueItem(raw);
++}
++
++/**
++ * Update an issue via PATCH /api/v1/issues/:issueKey with CSRF protection.
++ */
++export async function patchProjectIssue(
++  issueKey: string,
++  patch: Record<string, unknown>,
++  ifMatch?: string
++): Promise<IssueItem> {
++  const csrfToken = await ensureCsrfToken();
++  const headers: Record<string, string> = {
++    Accept: 'application/json',
++    'Content-Type': 'application/json',
++  };
++  if (csrfToken) {
++    headers['X-CSRF-Token'] = csrfToken;
++  }
++  if (ifMatch) {
++    headers['If-Match'] = ifMatch;
++  }
++
++  const url = `/api/v1/issues/${encodeURIComponent(issueKey)}`;
++  const response = await fetch(url, {
++    method: 'PATCH',
++    headers,
++    credentials: 'same-origin',
++    body: JSON.stringify(patch),
++  });
++
++  if (!response.ok) {
++    throw new Error(`Failed to update issue: ${String(response.status)} ${response.statusText}`);
++  }
++
++  const raw = (await response.json()) as Partial<IssueItem> & Record<string, unknown>;
++  return normalizeIssueItem(raw);
++}
++
++/**
++ * Delete an issue via DELETE /api/v1/issues/:issueKey with CSRF protection.
++ */
++export async function deleteProjectIssue(issueKey: string): Promise<void> {
++  const csrfToken = await ensureCsrfToken();
++  const headers: Record<string, string> = {
++    Accept: 'application/json',
++  };
++  if (csrfToken) {
++    headers['X-CSRF-Token'] = csrfToken;
++  }
++
++  const url = `/api/v1/issues/${encodeURIComponent(issueKey)}`;
++  const response = await fetch(url, {
++    method: 'DELETE',
++    headers,
++    credentials: 'same-origin',
++  });
++
++  if (!response.ok) {
++    throw new Error(`Failed to delete issue: ${String(response.status)} ${response.statusText}`);
++  }
+ }

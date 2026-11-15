@@ -13,7 +13,7 @@ import React, {
 import { useParams, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { qk } from '../../api/queryKeys';
-import { fetchDocsTree, fetchPage, type PageTreeNode } from './docsApi';
+import { ensureDocsCsrfToken, fetchDocsTree, fetchPage, type PageTreeNode } from './docsApi';
 import { DocsTreeNav } from './DocsTreeNav';
 import { PageEditorPane } from './PageEditorPane';
 import { OutlineAndVersionsRail } from './OutlineAndVersionsRail';
@@ -28,6 +28,10 @@ export function DocsWorkspaceView(): JSX.Element {
   const [isTreeSheetOpen, setIsTreeSheetOpen] = useState(false);
   const [isRailSheetOpen, setIsRailSheetOpen] = useState(false);
   const [announcement, setAnnouncement] = useState<string | null>(null);
+
+  useEffect(() => {
+    void ensureDocsCsrfToken();
+  }, []);
 
   // Load tree to find default initial page if pageId is not in URL
   const { data: treeData = [] } = useQuery({

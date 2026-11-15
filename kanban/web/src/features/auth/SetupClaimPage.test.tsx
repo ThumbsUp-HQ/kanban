@@ -621,4 +621,35 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     expect(verifySpy).toHaveBeenCalledTimes(1);
     resolveVerify?.({ status: 'enrolled', recovery_codes: ['code-a', 'code-b'] });
   });
+
+  it('forwards optional #setup-email when populated in Step 1', async () => {
+    const submitClaimSpy = vi.spyOn(authApi, 'submitSetupClaim').mockResolvedValue({
+      status: 'enrollment_required',
+      enrollment_id: 'enr-email-1',
+    });
+
+    render(<SetupClaimPage initialToken={validToken43} />);
+
+    fireEvent.change(screen.getByLabelText(/Administrator Email/i), {
+      target: { value: 'admin@kanban.local' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+      target: { value: 'MasterPassword14Long!' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
+      target: { value: 'MasterPassword14Long!' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
+
+    await waitFor(() => {
+      expect(submitClaimSpy).toHaveBeenCalledWith({
+        token: validToken43,
+        username: 'admin',
+        display_name: 'Server Administrator',
+        password: 'MasterPassword14Long!',
+        email: 'admin@kanban.local',
+      });
+      expect(screen.getByText('Step 2 of 3')).toBeDefined();
+    });
+  });
 });

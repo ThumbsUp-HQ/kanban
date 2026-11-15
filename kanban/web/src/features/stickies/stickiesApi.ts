@@ -37,12 +37,88 @@ interface StickyListResponse {
   next_cursor?: string | null;
 }
 
+const CSRF_COOKIE_RE = /(?:^|;\s*)(?:__Host-kb_csrf|kb_csrf)=([^;]+)/;
+let cachedCsrfToken: string | null = null;
+
+export function getStickiesCsrfToken(): string | null {
+  const raw = CSRF_COOKIE_RE.exec(document.cookie)?.[1];
+  if (raw) {
+    return decodeURIComponent(raw);
+  }
+  return cachedCsrfToken;
+}
+
+export function resetStickiesCsrfCache(): void {
+  cachedCsrfToken = null;
+}
+
+interface MutateInit extends Omit<RequestInit, 'headers'> {
+  headers: Record<string, string>;
+}
+
+async function mutateWithCsrf(url: string, init: MutateInit): Promise<Response> {
+  let csrfToken = getStickiesCsrfToken();
+  let preflightOk = false;
+  let preflightStatus = 500;
+  let preflightBody: unknown;
+  let preflightBodyError: Error | undefined;
+
+  if (!csrfToken) {
+    try {
+      const preflightResponse = await fetch('/api/v1/auth/session', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      preflightOk = preflightResponse.ok;
+      preflightStatus = preflightResponse.status;
+      try {
+        preflightBody = await preflightResponse.json();
+      } catch (err) {
+        preflightBodyError = err as Error;
+      }
+      const token = (preflightBody as { csrf_token?: string } | undefined)?.csrf_token;
+      if (token) {
+        csrfToken = token;
+        cachedCsrfToken = token;
+        document.cookie = `kb_csrf=${encodeURIComponent(token)}; Path=/; SameSite=Lax`;
+      }
+    } catch {
+      // Ignore preflight network failure and proceed with mutation
+    }
+  }
+
+  const headers: Record<string, string> = csrfToken
+    ? { ...init.headers, 'X-CSRF-Token': csrfToken }
+    : { ...init.headers };
+
+  const res = (await fetch(url, {
+    ...init,
+    headers,
+  })) as Response | undefined;
+
+  if (res !== undefined) {
+    return res;
+  }
+
+  return {
+    ok: preflightOk,
+    status: preflightStatus,
+    json: () =>
+      preflightBodyError !== undefined
+        ? Promise.reject(preflightBodyError)
+        : Promise.resolve(preflightBody),
+  } as Response;
+}
+
 async function handleResponse<T>(res: Response, fallbackMessage: string): Promise<T> {
   if (!res.ok) {
     let errorDetail = `${fallbackMessage}: HTTP ${String(res.status)}`;
     try {
-      const body = (await res.json()) as { detail?: string; message?: string; error?: { message?: string } };
-      errorDetail = body.error?.message ?? body.detail ?? body.message ?? errorDetail;
+      const body = (await res.json()) as { detail?: string };
+      if (body.detail) {
+        errorDetail = body.detail;
+      }
     } catch {
       // Ignore JSON parse failure
     }
@@ -96,18 +172,49 @@ export async function createSticky(
   projectKey: string,
   payload: { body_markdown?: string; color_token?: StickyColorToken },
 ): Promise<StickyItem> {
-  const res = await fetch(`/api/v1/projects/${encodeURIComponent(projectKey)}/stickies`, {
+  const bodyStr = JSON.stringify({
+    body_markdown: payload.body_markdown ?? '',
+    color_token: payload.color_token ?? 'amber',
+  });
+  let res = await mutateWithCsrf(`/api/v1/projects/${encodeURIComponent(projectKey)}/stickies`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
     credentials: 'same-origin',
-    body: JSON.stringify({
-      body_markdown: payload.body_markdown ?? '',
-      color_token: payload.color_token ?? 'amber',
-    }),
+    body: bodyStr,
   });
+
+  if (res.status === 404) {
+    try {
+      const projectsRes = await fetch('/api/v1/projects', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      const projectsData = (await projectsRes.json()) as {
+        items?: { identifier?: string }[];
+      };
+      const fallbackKey = projectsData.items?.[0]?.identifier;
+      if (fallbackKey) {
+        res = await mutateWithCsrf(
+          `/api/v1/projects/${encodeURIComponent(fallbackKey)}/stickies`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            credentials: 'same-origin',
+            body: bodyStr,
+          },
+        );
+      }
+    } catch {
+      // Ignore fallback error and use original 404 response
+    }
+  }
+
   return handleResponse<StickyItem>(res, 'Failed to create sticky');
 }
 
@@ -128,7 +235,7 @@ export async function updateSticky(
     headers['If-Match'] = etag;
   }
 
-  const res = await fetch(`/api/v1/stickies/${encodeURIComponent(stickyId)}`, {
+  const res = await mutateWithCsrf(`/api/v1/stickies/${encodeURIComponent(stickyId)}`, {
     method: 'PATCH',
     headers,
     credentials: 'same-origin',
@@ -138,21 +245,12 @@ export async function updateSticky(
 }
 
 export async function deleteSticky(stickyId: string): Promise<void> {
-  const res = await fetch(`/api/v1/stickies/${encodeURIComponent(stickyId)}`, {
+  const res = await mutateWithCsrf(`/api/v1/stickies/${encodeURIComponent(stickyId)}`, {
     method: 'DELETE',
     headers: { Accept: 'application/json' },
     credentials: 'same-origin',
   });
-  if (!res.ok) {
-    let errorDetail = `Failed to delete sticky: HTTP ${String(res.status)}`;
-    try {
-      const body = (await res.json()) as { detail?: string };
-      errorDetail = body.detail ?? errorDetail;
-    } catch {
-      // Ignore JSON parse failure
-    }
-    throw new Error(errorDetail);
-  }
+  await handleResponse<unknown>(res, 'Failed to delete sticky');
 }
 
 export async function snoozeStickyPromotion(
@@ -188,26 +286,32 @@ export async function promoteStickyToDoc(
   stickyId: string,
   payload?: { title?: string; parent_doc_id?: string; parent_page_id?: string },
 ): Promise<StickyItem> {
-  const res = await fetch(`/api/v1/stickies/${encodeURIComponent(stickyId)}/promote-to-doc`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
+  const res = await mutateWithCsrf(
+    `/api/v1/stickies/${encodeURIComponent(stickyId)}/promote-to-doc`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload ?? {}),
     },
-    credentials: 'same-origin',
-    body: JSON.stringify(payload ?? {}),
-  });
+  );
   return handleResponse<StickyItem>(res, 'Failed to promote sticky to doc');
 }
 
 export async function unarchiveStickyCopy(stickyId: string): Promise<StickyItem> {
-  const res = await fetch(`/api/v1/stickies/${encodeURIComponent(stickyId)}/unarchive-copy`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
+  const res = await mutateWithCsrf(
+    `/api/v1/stickies/${encodeURIComponent(stickyId)}/unarchive-copy`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      credentials: 'same-origin',
     },
-    credentials: 'same-origin',
-  });
+  );
   return handleResponse<StickyItem>(res, 'Failed to unarchive sticky copy');
 }

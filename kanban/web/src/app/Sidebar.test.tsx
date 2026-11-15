@@ -247,4 +247,52 @@ describe('Sidebar', () => {
       unmount();
     }
   });
+
+  it('fetches dynamic projects from /api/v1/projects and opens CreateProjectModal via + Project button or custom event', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { identifier: 'KAN', name: 'kanban', modules_enabled: true },
+                { identifier: 'SEC', name: 'Security', modules_enabled: true },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Project: Security' })).toBeDefined();
+
+    const createBtn = screen.getByRole('button', { name: 'Create project' });
+    act(() => {
+      createBtn.click();
+    });
+    expect(screen.getByTestId('create-project-modal')).toBeDefined();
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    });
+    expect(screen.queryByTestId('create-project-modal')).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:open-create-project'));
+    });
+    expect(screen.getByTestId('create-project-modal')).toBeDefined();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:project-created'));
+    });
+  });
 });

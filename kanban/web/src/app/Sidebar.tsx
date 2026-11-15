@@ -1,18 +1,21 @@
 /**
- * Sidebar Navigation Rail (KB-P3-34, S6.3).
- * 256px collapsible navigation rail with Plane parity, [👍] 👍kanban branding, and accessible keyboard focus trapping.
+ * Sidebar Navigation Rail (KB-P3-34, S6.3, KANBA-166, KANBA-167).
+ * 256px collapsible navigation rail with Plane parity, [👍] 👍kanban branding,
+ * dynamic project list, project creation modal, and accessible keyboard focus trapping.
  */
 
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type JSX,
   type KeyboardEvent,
 } from 'react';
-import { NavLink, useLocation } from 'react-router';
+import { NavLink, useLocation, useNavigate } from 'react-router';
 import { registerShortcut } from './shortcuts';
+import { CreateProjectModal } from '../features/projects/CreateProjectModal';
 import './Sidebar.css';
 
 export interface ProjectNavData {
@@ -59,6 +62,16 @@ export function Sidebar({
     // Outside Router
   }
 
+  let navigateFn: ((to: string) => void) | null = null;
+  try {
+    const nav = useNavigate();
+    navigateFn = (to: string) => {
+      void nav(to);
+    };
+  } catch {
+    // Outside Router
+  }
+
   const currentPath = activePathProp ?? locationPathname;
 
   // Stored desktop collapse state
@@ -72,8 +85,102 @@ export function Sidebar({
   });
 
   const [projectExpanded, setProjectExpanded] = useState(true);
+  const [fetchedProjects, setFetchedProjects] = useState<ProjectNavData[]>([]);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+
   const sidebarRef = useRef<HTMLElement>(null);
   const firstItemRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadProjects(): Promise<void> {
+      try {
+        const res = await fetch('/api/v1/projects', {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        });
+        if (!res.ok || !active) {
+          return;
+        }
+        const data = (await res.json()) as
+          | {
+              items?: {
+                identifier?: string;
+                key?: string;
+                name?: string;
+                modules_enabled?: boolean;
+              }[];
+            }
+          | {
+              identifier?: string;
+              key?: string;
+              name?: string;
+              modules_enabled?: boolean;
+            }[];
+        const rawItems = Array.isArray(data) ? data : (data.items ?? []);
+        const parsed: ProjectNavData[] = [];
+        for (const item of rawItems) {
+          const key = item.identifier ?? item.key;
+          if (typeof key === 'string' && key.length > 0 && typeof item.name === 'string') {
+            parsed.push({
+              key,
+              name: item.name,
+              modules_enabled: item.modules_enabled ?? true,
+            });
+          }
+        }
+        if (parsed.length > 0) {
+          setFetchedProjects(parsed);
+        }
+      } catch {
+        // Offline or unmocked unit test environment
+      }
+    }
+
+    void loadProjects();
+
+    const handleProjectCreated = (): void => {
+      void loadProjects();
+    };
+    const handleOpenCreateProject = (): void => {
+      setCreateProjectOpen(true);
+    };
+
+    window.addEventListener('kb:project-created', handleProjectCreated);
+    window.addEventListener('kb:open-create-project', handleOpenCreateProject);
+    return () => {
+      active = false;
+      window.removeEventListener('kb:project-created', handleProjectCreated);
+      window.removeEventListener('kb:open-create-project', handleOpenCreateProject);
+    };
+  }, []);
+
+  const projectList = useMemo<ProjectNavData[]>(() => {
+    const primary: ProjectNavData = {
+      key: projectKey,
+      name: projectName,
+      modules_enabled: modulesEnabled,
+    };
+    if (fetchedProjects.length === 0) {
+      return [primary];
+    }
+    const hasPrimaryInFetched = fetchedProjects.some((p) => p.key === projectKey);
+    if (hasPrimaryInFetched) {
+      return fetchedProjects.map((p) =>
+        p.key === projectKey && projectName !== 'kanban'
+          ? { key: p.key, name: projectName, modules_enabled: modulesEnabled }
+          : p,
+      );
+    }
+    if (projectName !== 'kanban' || currentPath.startsWith(`/projects/${projectKey}`)) {
+      return [primary, ...fetchedProjects];
+    }
+    return fetchedProjects;
+  }, [fetchedProjects, projectKey, projectName, modulesEnabled, currentPath]);
+
+  const activeProjectKey = projectList[0]?.key ?? projectKey;
 
   // Toggle desktop collapsed state
   const toggleCollapsed = useCallback(() => {
@@ -106,7 +213,9 @@ export function Sidebar({
       firstItemRef.current?.focus();
     }, 0);
 
-    return () => { clearTimeout(timer); };
+    return () => {
+      clearTimeout(timer);
+    };
   }, [isOpen]);
 
   const handleMobileKeyDown = (e: KeyboardEvent<HTMLElement>): void => {
@@ -141,6 +250,9 @@ export function Sidebar({
         new CustomEvent('kb:create-issue', { bubbles: true }),
       );
     }
+    if (navigateFn && !currentPath.startsWith(`/projects/${activeProjectKey}/issues`)) {
+      navigateFn(`/projects/${activeProjectKey}/issues?create=1`);
+    }
   };
 
   const isDesktopCollapsed = collapsed === 'collapsed';
@@ -158,8 +270,16 @@ export function Sidebar({
 
       <aside
         ref={sidebarRef}
-        role={isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279 ? 'dialog' : undefined}
-        aria-modal={isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279 ? 'true' : undefined}
+        role={
+          isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279
+            ? 'dialog'
+            : undefined
+        }
+        aria-modal={
+          isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279
+            ? 'true'
+            : undefined
+        }
         aria-label="Sidebar navigation"
         className={`kb-sidebar ${isDesktopCollapsed ? 'kb-sidebar-collapsed' : ''} ${
           isOpen ? 'kb-sidebar-overlay' : ''
@@ -250,111 +370,153 @@ export function Sidebar({
 
         {/* Projects Section */}
         <div className="kb-sidebar-section">
-          <div className="kb-sidebar-heading">Projects</div>
-          <nav aria-label="Projects navigation">
+          <div className="kb-sidebar-heading-row">
+            <div className="kb-sidebar-heading">
+              Projects
+            </div>
             <button
               type="button"
-              className="kb-project-expand-row"
-              aria-label={`Project: ${projectName}`}
-              aria-expanded={projectExpanded}
-              onClick={() => { setProjectExpanded(!projectExpanded); }}
+              className="kb-sidebar-add-project-btn"
+              aria-label="Create project"
+              title="Create project"
+              onClick={() => {
+                setCreateProjectOpen(true);
+              }}
             >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span aria-hidden="true">⚡</span>
-                <span>{projectName}</span>
-              </span>
-              <span aria-hidden="true">{projectExpanded ? '▾' : '▸'}</span>
+              + Project
             </button>
+          </div>
+          <nav aria-label="Projects navigation">
+            {projectList.map((proj) => {
+              const projModulesEnabled = proj.modules_enabled ?? modulesEnabled;
+              return (
+                <div key={proj.key}>
+                  <button
+                    type="button"
+                    className="kb-project-expand-row"
+                    aria-label={`Project: ${proj.name}`}
+                    aria-expanded={projectExpanded}
+                    onClick={() => {
+                      setProjectExpanded(!projectExpanded);
+                    }}
+                  >
+                    <span className="kb-project-expand-label">
+                      <span aria-hidden="true">⚡</span>
+                      <span>{proj.name}</span>
+                    </span>
+                    <span aria-hidden="true">{projectExpanded ? '▾' : '▸'}</span>
+                  </button>
 
-            {projectExpanded && (
-              <ul className="kb-project-subitems">
-                <li>
-                  <NavLink
-                    to={`/projects/${projectKey}/issues`}
-                    className="kb-sidebar-nav-item"
-                    aria-current={
-                      currentPath.startsWith(`/projects/${projectKey}/issues`)
-                        ? 'page'
-                        : undefined
-                    }
-                  >
-                    <span className="kb-sidebar-icon" aria-hidden="true">
-                      📋
-                    </span>
-                    <span>Work Items</span>
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink
-                    to={`/projects/${projectKey}/cycles`}
-                    className="kb-sidebar-nav-item"
-                    aria-current={
-                      currentPath.startsWith(`/projects/${projectKey}/cycles`)
-                        ? 'page'
-                        : undefined
-                    }
-                  >
-                    <span className="kb-sidebar-icon" aria-hidden="true">
-                      🔄
-                    </span>
-                    <span>Cycles</span>
-                  </NavLink>
-                </li>
+                  {projectExpanded && (
+                    <ul className="kb-project-subitems">
+                      <li>
+                        <NavLink
+                          to={`/projects/${proj.key}/issues`}
+                          className="kb-sidebar-nav-item"
+                          aria-current={
+                            currentPath.startsWith(`/projects/${proj.key}/issues`)
+                              ? 'page'
+                              : undefined
+                          }
+                        >
+                          <span className="kb-sidebar-icon" aria-hidden="true">
+                            📋
+                          </span>
+                          <span>Work Items</span>
+                        </NavLink>
+                      </li>
+                      <li>
+                        <NavLink
+                          to={`/projects/${proj.key}/cycles`}
+                          className="kb-sidebar-nav-item"
+                          aria-current={
+                            currentPath.startsWith(`/projects/${proj.key}/cycles`)
+                              ? 'page'
+                              : undefined
+                          }
+                        >
+                          <span className="kb-sidebar-icon" aria-hidden="true">
+                            🔄
+                          </span>
+                          <span>Cycles</span>
+                        </NavLink>
+                      </li>
 
-                {/* Modules: ABSENT from DOM when modulesEnabled === false */}
-                {modulesEnabled && (
-                  <li>
-                    <NavLink
-                      to={`/projects/${projectKey}/modules`}
-                      className="kb-sidebar-nav-item"
-                      aria-current={
-                        currentPath.startsWith(`/projects/${projectKey}/modules`)
-                          ? 'page'
-                          : undefined
-                      }
-                    >
-                      <span className="kb-sidebar-icon" aria-hidden="true">
-                        🧩
-                      </span>
-                      <span>Modules</span>
-                    </NavLink>
-                  </li>
-                )}
+                      {/* Modules: ABSENT from DOM when projModulesEnabled === false */}
+                      {projModulesEnabled && (
+                        <li>
+                          <NavLink
+                            to={`/projects/${proj.key}/modules`}
+                            className="kb-sidebar-nav-item"
+                            aria-current={
+                              currentPath.startsWith(`/projects/${proj.key}/modules`)
+                                ? 'page'
+                                : undefined
+                            }
+                          >
+                            <span className="kb-sidebar-icon" aria-hidden="true">
+                              🧩
+                            </span>
+                            <span>Modules</span>
+                          </NavLink>
+                        </li>
+                      )}
 
-                <li>
-                  <NavLink
-                    to={`/projects/${projectKey}/views`}
-                    className="kb-sidebar-nav-item"
-                    aria-current={
-                      currentPath.startsWith(`/projects/${projectKey}/views`)
-                        ? 'page'
-                        : undefined
-                    }
-                  >
-                    <span className="kb-sidebar-icon" aria-hidden="true">
-                      🎛️
-                    </span>
-                    <span>Views</span>
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink
-                    to={`/projects/${projectKey}/docs`}
-                    className="kb-sidebar-nav-item"
-                    aria-current={
-                      currentPath.startsWith(`/projects/${projectKey}/docs`)
-                        ? 'page'
-                        : undefined
-                    }
-                  >
-                    <span className="kb-sidebar-icon" aria-hidden="true">
-                      📄
-                    </span>
-                    <span>Docs (Pages)</span>
-                  </NavLink>
-                </li>
-              </ul>
-            )}
+                      <li>
+                        <NavLink
+                          to={`/projects/${proj.key}/views`}
+                          className="kb-sidebar-nav-item"
+                          aria-current={
+                            currentPath.startsWith(`/projects/${proj.key}/views`)
+                              ? 'page'
+                              : undefined
+                          }
+                        >
+                          <span className="kb-sidebar-icon" aria-hidden="true">
+                            🎛️
+                          </span>
+                          <span>Views</span>
+                        </NavLink>
+                      </li>
+                      <li>
+                        <NavLink
+                          to={`/projects/${proj.key}/docs`}
+                          className="kb-sidebar-nav-item"
+                          aria-current={
+                            currentPath.startsWith(`/projects/${proj.key}/docs`)
+                              ? 'page'
+                              : undefined
+                          }
+                        >
+                          <span className="kb-sidebar-icon" aria-hidden="true">
+                            📄
+                          </span>
+                          <span>Docs (Pages)</span>
+                        </NavLink>
+                      </li>
+                      <li>
+                        <NavLink
+                          to={`/projects/${proj.key}/settings/custom-fields`}
+                          className="kb-sidebar-nav-item"
+                          aria-current={
+                            currentPath.startsWith(
+                              `/projects/${proj.key}/settings/custom-fields`,
+                            )
+                              ? 'page'
+                              : undefined
+                          }
+                        >
+                          <span className="kb-sidebar-icon" aria-hidden="true">
+                            ⚙️
+                          </span>
+                          <span>Custom Fields</span>
+                        </NavLink>
+                      </li>
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
           </nav>
         </div>
 
@@ -368,10 +530,31 @@ export function Sidebar({
           >
             <span aria-hidden="true">◀</span>
             <span>Collapse</span>
-            <kbd style={{ fontSize: '10px', opacity: 0.7 }}>[</kbd>
+            <kbd className="kb-sidebar-collapse-kbd">[</kbd>
           </button>
         </div>
       </aside>
+
+      <CreateProjectModal
+        isOpen={createProjectOpen}
+        onClose={() => {
+          setCreateProjectOpen(false);
+        }}
+        onCreated={(created) => {
+          setFetchedProjects((prev) => {
+            const exists = prev.some((p) => p.key === created.identifier);
+            if (exists) return prev;
+            return [
+              ...prev,
+              {
+                key: created.identifier,
+                name: created.name,
+                modules_enabled: created.modules_enabled ?? true,
+              },
+            ];
+          });
+        }}
+      />
     </>
   );
 }

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import React from 'react';
 import {
   ViewHost,
@@ -516,5 +516,182 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     // Press 'J' then 'I' on issue with assignees === undefined
     fireEvent.keyDown(window, { key: 'j' });
     fireEvent.keyDown(window, { key: 'i' });
+  });
+
+  describe('Live Mode API Wiring & Board State Normalization (KANBA-164)', () => {
+    const originalFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('fetches live issues and workflow states when initialIssues is undefined and renders cards on BoardView', async () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
+      document.cookie = 'kb_csrf=test-csrf-live; path=/';
+
+      const liveStates = [
+        { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog', sort_order: 10 },
+        { id: '01931234-5678-7000-8000-000000000002', name: 'To Do', group: 'unstarted', sort_order: 20 },
+        { id: '01931234-5678-7000-8000-000000000003', name: 'In Progress', group: 'started', sort_order: 30 },
+        { id: '01931234-5678-7000-8000-000000000004', name: 'Done', group: 'completed', sort_order: 40 },
+      ];
+      const liveIssues = [
+        {
+          id: '01931234-5678-7000-8000-000000000101',
+          key: 'KAN-101',
+          summary: 'Live Board Todo Issue',
+          state: { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
+          priority: { slug: 'high', label: 'High', emoji: '⚡' },
+          assignees: [
+            {
+              id: 'asg-1',
+              kind: 'principal',
+              principal: { id: 'u-1', handle: 'alice', display_name: 'Alice', type: 'USER' },
+            },
+            {
+              id: 'asg-2',
+              kind: 'free_text',
+              free_text: 'External Reviewer',
+              notify: false,
+              hint: '',
+            },
+          ],
+          gate_status: 'vetoed',
+        },
+      ];
+
+      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.endsWith('/states')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ items: liveStates }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: liveIssues, next_cursor: null, total: 1 }),
+        });
+      });
+
+      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="board" />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Todo lane, 1 issues')).toBeDefined();
+      });
+
+      // Click '+ New work item' button inside the board column footer
+      const newColBtn = screen.getByTestId('new-item-01931234-5678-7000-8000-000000000001');
+      fireEvent.click(newColBtn);
+      expect(screen.getByRole('dialog', { name: /create work item in KAN/i })).toBeDefined();
+      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+      // Dispatch kb:create-issue to open QuickCreateIssueModal
+      fireEvent(window, new CustomEvent('kb:create-issue'));
+      expect(screen.getByRole('dialog', { name: /create work item in KAN/i })).toBeDefined();
+    });
+
+    it('creates, updates, and bulk-operates on issues in live mode via REST endpoints', async () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      document.cookie = 'kb_csrf=test-csrf-live; path=/';
+
+      const liveStates = [
+        { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog', sort_order: 10 },
+        { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted', sort_order: 20 },
+        { id: '01931234-5678-7000-8000-000000000004', name: 'Done', group: 'completed', sort_order: 40 },
+      ];
+      const liveIssues = [
+        {
+          id: '01931234-5678-7000-8000-000000000201',
+          key: 'KAN-201',
+          summary: 'Initial Live List Issue',
+          state: { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
+          priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+        },
+      ];
+
+      const fetchSpy = vi.fn().mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        const method = init?.method ?? 'GET';
+        if (url.endsWith('/states')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ items: liveStates }),
+          });
+        }
+        if (method === 'POST' && url.endsWith('/issues')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                id: '01931234-5678-7000-8000-000000000202',
+                key: 'KAN-202',
+                summary: 'Persisted Live Issue',
+                state: { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
+                priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+              }),
+          });
+        }
+        if (method === 'PATCH') {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                ...liveIssues[0],
+                summary: 'Updated Live Issue',
+              }),
+          });
+        }
+        if (method === 'DELETE') {
+          return Promise.resolve({ ok: true });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: liveIssues, next_cursor: null, total: 1 }),
+        });
+      });
+      globalThis.fetch = fetchSpy;
+
+      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Initial Live List Issue')).toBeDefined();
+      });
+
+      // Open modal via '+ New work item' button in ListView
+      const newBtns = screen.getAllByRole('button', { name: /new work item/i });
+      if (newBtns[0]) fireEvent.click(newBtns[0]);
+
+      const summaryInput = screen.getByLabelText(/summary/i);
+      fireEvent.change(summaryInput, { target: { value: 'Persisted Live Issue' } });
+      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('KAN-202')).toBeDefined();
+      });
+
+      // Quick field update in live mode
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'p' });
+      const prioPop = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
+      fireEvent.click(within(prioPop).getByText('Urgent'));
+
+      fireEvent.keyDown(window, { key: 's' });
+      const statePop = screen.getByRole('dialog', { name: /Quick State Picker/i });
+      fireEvent.click(within(statePop).getByText('Done'));
+
+      // Bulk update State, Priority, and Delete in live mode
+      fireEvent.keyDown(window, { key: 'x' });
+      fireEvent.click(screen.getByRole('button', { name: /^state$/i }));
+
+      fireEvent.keyDown(window, { key: 'x' });
+      fireEvent.click(screen.getByRole('button', { name: /^priority$/i }));
+
+      fireEvent.keyDown(window, { key: 'x' });
+      fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+
+      // Dispatch kb:issue-updated to trigger refresh
+      fireEvent(window, new CustomEvent('kb:issue-updated'));
+    });
   });
 });

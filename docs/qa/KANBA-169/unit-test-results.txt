@@ -1,0 +1,161 @@
+=== VITEST AUTH + CLIENT + SETTINGS + ADMIN-AUTH ===
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+
+ ✓ src/features/auth/webauthn.test.ts (5 tests) 21ms
+ ✓ src/api/client.test.ts (20 tests) 62ms
+ ✓ src/features/auth/authApi.test.ts (8 tests) 23ms
+ ✓ src/features/auth/AuthCardButton.test.tsx (5 tests) 238ms
+stderr | src/features/auth/LocalAdminDisclosure.test.tsx > LocalAdminDisclosure (KB-P3-35) > prevents double submission when already submitting
+An update to LocalAdminDisclosure inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to LocalAdminDisclosure inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/auth/LdapLoginForm.test.tsx > LdapLoginForm (KB-P3-35) > early returns when submit is triggered while already submitting
+An update to LdapLoginForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to LdapLoginForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/auth/LocalAdminDisclosure.test.tsx (6 tests) 453ms
+ ✓ src/features/auth/LdapLoginForm.test.tsx (5 tests) 342ms
+stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents multiple concurrent submissions when isVerifying is active
+An update to SecondFactorStep inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents concurrent recovery code submission when isVerifying is true
+An update to SecondFactorStep inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/auth/SecondFactorStep.test.tsx (16 tests) 524ms
+stderr | src/features/auth/LoginPage.test.tsx > LoginPage (KB-P3-35) > copies emergency unlock command to clipboard
+An update to LoginPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (6 tests) 611ms
+Not implemented: navigation to another Document
+stderr | src/features/auth/SetupClaimPage.test.tsx > SetupClaimPage (KB-P3-35) > prevents concurrent TOTP enrollment verification in Step 2
+An update to SetupClaimPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SetupClaimPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SetupClaimPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/auth/SetupClaimPage.test.tsx (14 tests) 1094ms
+ ✓ src/features/auth/LoginPage.test.tsx (24 tests) 1075ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (26 tests) 2926ms
+   ✓ AuthStudioPage (KB-P3-36) (26)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 328ms
+     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 396ms
+
+ Test Files  11 passed (11)
+      Tests  135 passed (135)
+   Start at  20:14:57
+   Duration  4.37s (environment 55%, tests 36%, import 7%, transform 1%, worker 1%)
+
+=== PYTEST AUTH SUITE ===
+........................................................................ [ 31%]
+........................................................................ [ 63%]
+........................................................................ [ 94%]
+............                                                             [100%]
+=============================== warnings summary ===============================
+kanban/tests/auth/test_csrf.py: 9 warnings
+kanban/tests/auth/test_local_login.py: 9 warnings
+kanban/tests/auth/test_sessions.py: 1 warning
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+kanban/tests/auth/test_local_login.py::test_case_1_positive_login
+kanban/tests/auth/test_local_login.py::test_case_1_positive_login
+kanban/tests/auth/test_sessions.py::test_case_1_positive_login_and_cookie_attributes
+kanban/tests/auth/test_sessions.py::test_case_9_security_logout
+kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
+kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+228 passed, 25 warnings in 31.81s
+EXIT_CODE=0

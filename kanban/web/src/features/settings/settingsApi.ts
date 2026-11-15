@@ -43,21 +43,42 @@ export interface OAuthConnectedApp {
   revoked_at: string | null;
 }
 
+function normalizeMcpKeyItem(
+  raw: Partial<McpApiKeyItem> & { id: string; surface: 'agent' | 'docs' | 'admin' },
+  fallbackLabel?: string,
+): McpApiKeyItem {
+  return {
+    id: raw.id,
+    label: raw.label ?? fallbackLabel ?? raw.display_hint ?? 'MCP Key',
+    display_hint: raw.display_hint ?? '',
+    surface: raw.surface,
+    scope_tier: raw.scope_tier ?? 'personal_user',
+    scopes: raw.scopes ?? [],
+    allowed_projects: raw.allowed_projects ?? null,
+    created_at: raw.created_at ?? '',
+    expires_at: raw.expires_at ?? '',
+    last_used_at: raw.last_used_at ?? null,
+    revoked_at: raw.revoked_at ?? null,
+    ...(raw.raw_key !== undefined ? { raw_key: raw.raw_key } : {}),
+  };
+}
+
 export async function fetchPersonalMcpKeys(): Promise<McpApiKeyItem[]> {
-  const res = (await apiFetch('GET', '/api/v1/auth/mcp-keys' as never)) as McpKeyListResponse | McpApiKeyItem[];
-  if (Array.isArray(res)) {
-    return res;
-  }
-  return res.keys;
+  const res = (await apiFetch('GET', '/api/v1/auth/mcp-keys' as never)) as
+    | McpKeyListResponse
+    | McpApiKeyItem[];
+  const items = Array.isArray(res) ? res : res.keys;
+  return items.map((item) => normalizeMcpKeyItem(item));
 }
 
 export async function mintPersonalMcpKey(
   payload: MintMcpKeyRequest,
 ): Promise<McpApiKeyItem> {
-  return (await apiFetch('POST', '/api/v1/auth/mcp-keys' as never, {
+  const created = (await apiFetch('POST', '/api/v1/auth/mcp-keys' as never, {
     body: JSON.stringify(payload),
     headers: { 'Content-Type': 'application/json' },
   })) as McpApiKeyItem;
+  return normalizeMcpKeyItem(created, payload.label);
 }
 
 export async function revokePersonalMcpKey(keyId: string): Promise<void> {

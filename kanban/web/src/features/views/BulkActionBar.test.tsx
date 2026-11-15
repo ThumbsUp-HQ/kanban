@@ -38,7 +38,12 @@ describe('BulkActionBar (KB-P3-40, S6.4 item 3, S7.2 8p, S7.2 8f)', () => {
     fireEvent.click(clearBtn);
     expect(handleClear).toHaveBeenCalled();
 
-    const stateBtn = screen.getByRole('button', { name: /^state$/i });
+    const stateBtns = screen.getAllByRole('button', { name: /^state$/i });
+    expect(stateBtns).toHaveLength(1);
+    const priorityBtns = screen.getAllByRole('button', { name: /^priority$/i });
+    expect(priorityBtns).toHaveLength(1);
+    const stateBtn = stateBtns[0];
+    if (!stateBtn) throw new Error('missing State button');
     fireEvent.click(stateBtn);
     expect(handleUpdateState).toHaveBeenCalledWith('done');
   });

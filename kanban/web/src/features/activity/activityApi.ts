@@ -124,6 +124,87 @@ export interface AssigneeSuggestionsResponse {
   readonly items: readonly AssigneeSuggestion[];
 }
 
+const CSRF_COOKIE_RE = /(?:^|;\s*)(?:__Host-kb_csrf|kb_csrf)=([^;]+)/;
+let cachedCsrfToken: string | null = null;
+
+export function getActivityCsrfToken(): string | null {
+  const cookieStr = typeof document !== 'undefined' ? document.cookie : '';
+  const raw = CSRF_COOKIE_RE.exec(cookieStr)?.[1];
+  if (raw) {
+    return decodeURIComponent(raw);
+  }
+  return cachedCsrfToken;
+}
+
+export function resetActivityCsrfCache(): void {
+  cachedCsrfToken = null;
+}
+
+interface MutateInit extends Omit<RequestInit, 'headers'> {
+  headers?: Record<string, string>;
+}
+
+async function mutateWithCsrf(url: string, init: MutateInit): Promise<Response> {
+  let csrfToken = getActivityCsrfToken();
+  let preflightOk = false;
+  let preflightStatus = 500;
+  let preflightBody: unknown;
+  let preflightBodyError: Error | undefined;
+
+  if (!csrfToken) {
+    try {
+      const preflightResponse = await fetch('/api/v1/auth/session', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      preflightOk = preflightResponse.ok;
+      preflightStatus = preflightResponse.status;
+      try {
+        preflightBody = await preflightResponse.json();
+      } catch (err) {
+        preflightBodyError = err as Error;
+      }
+      const token = (preflightBody as { csrf_token?: string } | undefined)?.csrf_token;
+      if (token) {
+        csrfToken = token;
+        cachedCsrfToken = token;
+        if (typeof document !== 'undefined') {
+          document.cookie = `kb_csrf=${encodeURIComponent(token)}; Path=/; SameSite=Lax`;
+        }
+      } else {
+        csrfToken = getActivityCsrfToken();
+      }
+    } catch {
+      // Ignore preflight network failure and proceed with mutation
+    }
+  }
+
+  const baseHeaders = init.headers ?? {};
+  const headers: Record<string, string> = csrfToken
+    ? { ...baseHeaders, 'X-CSRF-Token': csrfToken }
+    : { ...baseHeaders };
+
+  const res = (await fetch(url, {
+    ...init,
+    headers,
+    credentials: 'same-origin',
+  })) as Response | undefined;
+
+  if (res !== undefined) {
+    return res;
+  }
+
+  return {
+    ok: preflightOk,
+    status: preflightStatus,
+    json: () =>
+      preflightBodyError !== undefined
+        ? Promise.reject(preflightBodyError)
+        : Promise.resolve(preflightBody),
+  } as Response;
+}
+
 async function parseErrorBody(res: Response): Promise<unknown> {
   try {
     return await res.json();
@@ -181,7 +262,7 @@ export async function createComment(
     acknowledge_mentions?: readonly string[] | undefined;
   },
 ): Promise<CommentResponse> {
-  const res = await fetch(`/api/v1/issues/${encodeURIComponent(issueKey)}/comments`, {
+  const res = await mutateWithCsrf(`/api/v1/issues/${encodeURIComponent(issueKey)}/comments`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -203,7 +284,7 @@ export async function patchComment(
     body_markdown: string;
     acknowledge_mentions?: readonly string[] | undefined;
   },
-  etag?: string  ,
+  etag?: string,
 ): Promise<CommentResponse> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -212,7 +293,7 @@ export async function patchComment(
   if (etag) {
     headers['If-Match'] = etag;
   }
-  const res = await fetch(`/api/v1/comments/${encodeURIComponent(commentId)}`, {
+  const res = await mutateWithCsrf(`/api/v1/comments/${encodeURIComponent(commentId)}`, {
     method: 'PATCH',
     headers,
     credentials: 'same-origin',
@@ -226,7 +307,7 @@ export async function patchComment(
 }
 
 export async function deleteComment(commentId: string): Promise<void> {
-  const res = await fetch(`/api/v1/comments/${encodeURIComponent(commentId)}`, {
+  const res = await mutateWithCsrf(`/api/v1/comments/${encodeURIComponent(commentId)}`, {
     method: 'DELETE',
     credentials: 'same-origin',
   });
@@ -240,7 +321,7 @@ export async function addReaction(
   commentId: string,
   emoji: string,
 ): Promise<ReactionSummary> {
-  const res = await fetch(
+  const res = await mutateWithCsrf(
     `/api/v1/comments/${encodeURIComponent(commentId)}/reactions/${encodeURIComponent(emoji)}`,
     {
       method: 'PUT',
@@ -259,7 +340,7 @@ export async function removeReaction(
   commentId: string,
   emoji: string,
 ): Promise<void> {
-  const res = await fetch(
+  const res = await mutateWithCsrf(
     `/api/v1/comments/${encodeURIComponent(commentId)}/reactions/${encodeURIComponent(emoji)}`,
     {
       method: 'DELETE',

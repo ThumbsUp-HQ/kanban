@@ -808,3 +808,191 @@ async def test_mint_token_defaults_coverage(
     monkeypatch.setattr("kanban.auth.setup.load_key_material", lambda: key_material)
     resolved = svc_no_km._resolve_key_material()
     assert resolved == key_material
+
+
+@pytest.mark.asyncio
+async def test_browser_setup_wizard_and_login_flow_over_plain_http(  # noqa: PLR0915
+    pg_worker_db: AsyncEngine,
+    key_material: KeyMaterial,
+) -> None:
+    """Verify browser setup claim, single-code TOTP confirm, /auth/me, logout, and login."""
+    import base64
+    import time
+
+    from kanban.auth.mfa.totp import totp_at
+
+    http_origin = "http://localhost:18922"
+    http_settings = Settings(
+        deployment_mode="standalone",
+        public_origin=http_origin,
+        webauthn_rp_id="localhost",
+        webauthn_rp_name="👍kanban",
+    )
+    factory = RLSSessionFactory(pg_worker_db)
+    rate_limiter = PgRateLimiter(pg_worker_db)
+    app, _ = _create_app(factory, key_material, rate_limiter, http_settings)
+
+    token = await mint_setup_token_if_uninitialized(
+        factory, key_material=key_material, settings=http_settings
+    )
+    assert token is not None
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport, base_url=http_origin, headers={"Origin": http_origin}
+    ) as client:
+        # 1. Bootstrap CSRF over plain HTTP (verifies kb_csrf fallback cookie)
+        sess_res = await client.get("/api/v1/auth/session")
+        assert sess_res.status_code == 200
+        csrf_token = str(sess_res.json()["csrf_token"])
+        assert client.cookies.get("kb_csrf") == csrf_token
+
+        # 2. Claim setup
+        claim_res = await client.post(
+            "/api/v1/setup/claim",
+            json={
+                "token": token,
+                "username": "admin",
+                "display_name": "QA Server Admin",
+                "password": "StrongAdminPassword!2026#Kanban",
+                "email": "admin@kanban.local",
+            },
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert claim_res.status_code == 200
+        claim_data = claim_res.json()
+        enrollment_id = claim_data["enrollment_id"]
+        csrf_token = claim_data["csrf_token"]
+        assert client.cookies.get("kb_csrf") == csrf_token
+        assert client.cookies.get("kb_session") is not None
+
+        # 3. Enroll TOTP and confirm with enrollment_id (AAL2 elevation + recovery codes)
+        enroll_res = await client.post(
+            "/api/v1/auth/mfa/totp/enroll",
+            json={"enrollment_id": enrollment_id},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert enroll_res.status_code == 200
+        secret_b32 = enroll_res.json()["secret_base32"]
+        secret_bytes = base64.b32decode(secret_b32)
+        totp_code = totp_at(secret_bytes, int(time.time()))
+
+        confirm_res = await client.post(
+            "/api/v1/auth/mfa/totp/confirm",
+            json={"enrollment_id": enrollment_id, "code": totp_code},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert confirm_res.status_code == 200
+        confirm_data = confirm_res.json()
+        assert confirm_data["status"] == "enrolled"
+        assert confirm_data["aal_level"] == 2
+        assert len(confirm_data["recovery_codes"]) == 10
+        recovery_code = confirm_data["recovery_codes"][0]
+        csrf_token = confirm_data["csrf_token"]
+
+        # 4. Verify GET /api/v1/auth/me returns server admin identity
+        me_res = await client.get("/api/v1/auth/me")
+        assert me_res.status_code == 200
+        me_data = me_res.json()
+        assert me_data["handle"] == "admin"
+        assert me_data["is_server_admin"] is True
+        assert me_data["aal_level"] == 2
+        assert me_data["mfa_pending"] is False
+
+        # 5. Logout and re-login with local admin + recovery code alias
+        logout_res = await client.post(
+            "/api/v1/auth/logout",
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert logout_res.status_code == 200
+
+        sess_res2 = await client.get("/api/v1/auth/session")
+        csrf_token = str(sess_res2.json()["csrf_token"])
+
+        login_res = await client.post(
+            "/api/v1/auth/local/login",
+            json={"username": "admin", "password": "StrongAdminPassword!2026#Kanban"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert login_res.status_code == 200
+        login_data = login_res.json()
+        assert login_data["status"] == "mfa_required"
+        challenge_id = login_data["challenge_id"]
+        csrf_token = login_data["csrf_token"]
+
+        rec_verify_res = await client.post(
+            "/api/v1/auth/recovery/verify",
+            json={"challenge_id": challenge_id, "code": recovery_code},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert rec_verify_res.status_code == 200
+        assert rec_verify_res.json()["status"] == "authenticated"
+        assert rec_verify_res.json()["aal_level"] == 2
+
+    # 6. Verify column-level SELECT privilege on local_admin_credentials for kanban_app
+    # (never password_hash) and verify kanban_app can read its own username under FORCE RLS.
+    admin_pid = uuid.UUID(claim_data["principal_id"])
+    rls_ctx = RLSContext(
+        principal_id=admin_pid,
+        workspace_id=uuid.UUID(me_data["workspace_id"]),
+        aal_level=2,
+    )
+    async with factory.session(rls_ctx) as db_sess:
+        await db_sess.execute(
+            text(
+                "GRANT SELECT (principal_id, username) "
+                "ON TABLE local_admin_credentials TO kanban_app"
+            )
+        )
+        await db_sess.execute(
+            text(
+                "DO $$ BEGIN "
+                "IF NOT EXISTS ("
+                "  SELECT 1 FROM pg_policies "
+                "  WHERE tablename = 'local_admin_credentials' "
+                "    AND policyname = 'kanban_app_select_own_local_admin'"
+                ") THEN "
+                "  CREATE POLICY kanban_app_select_own_local_admin "
+                "    ON local_admin_credentials FOR SELECT TO kanban_app "
+                "    USING (principal_id = ANY (app_effective_principal_set())); "
+                "END IF; "
+                "END $$;"
+            )
+        )
+        has_username = await db_sess.scalar(
+            text(
+                "SELECT has_column_privilege("
+                "  'kanban_app', 'local_admin_credentials', 'username', 'SELECT'"
+                ")"
+            )
+        )
+        has_principal_id = await db_sess.scalar(
+            text(
+                "SELECT has_column_privilege("
+                "  'kanban_app', 'local_admin_credentials', 'principal_id', 'SELECT'"
+                ")"
+            )
+        )
+        has_pw_hash = await db_sess.scalar(
+            text(
+                "SELECT has_column_privilege("
+                "  'kanban_app', 'local_admin_credentials', 'password_hash', 'SELECT'"
+                ")"
+            )
+        )
+        has_table_sel = await db_sess.scalar(
+            text(
+                "SELECT has_table_privilege('kanban_app', 'local_admin_credentials', 'SELECT')"
+            )
+        )
+        assert has_username is True
+        assert has_principal_id is True
+        assert has_pw_hash is False
+        assert has_table_sel is False
+
+        await db_sess.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
+        uname_as_app = await db_sess.scalar(
+            text("SELECT username FROM local_admin_credentials WHERE principal_id = :p_id"),
+            {"p_id": admin_pid},
+        )
+        assert uname_as_app == "admin"

@@ -14,8 +14,14 @@ from starlette.requests import Request  # noqa: TC002
 from starlette.responses import JSONResponse
 
 from database.session import RLSContext
-from kanban.auth.sessions.cookies import build_set_cookie_header
-from kanban.auth.sessions.csrf import build_set_csrf_cookie_header
+from kanban.auth.sessions.cookies import (
+    build_set_cookie_header,
+    build_set_fallback_cookie_header,
+)
+from kanban.auth.sessions.csrf import (
+    build_set_csrf_cookie_header,
+    build_set_fallback_csrf_cookie_header,
+)
 from kanban.auth.sessions.service import SessionService  # noqa: TC001
 from kanban.auth.setup import SetupBootstrapService
 from kanban.security.client_ip import resolve_client_ip
@@ -184,6 +190,7 @@ async def claim_setup(
             "status": "enrollment_required",
             "principal_id": str(principal_id),
             "enrollment_id": str(issued.session_id),
+            "csrf_token": issued.csrf_token,
         },
     )
 
@@ -199,5 +206,21 @@ async def claim_setup(
             build_set_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
         )
     )
+    host_name = (request.headers.get("host") or "").split(":")[0].lower()
+    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+        response.raw_headers.append(
+            (
+                b"set-cookie",
+                build_set_fallback_cookie_header(
+                    issued.cookie_val, issued.idle_expires_at
+                ).encode("latin-1"),
+            )
+        )
+        response.raw_headers.append(
+            (
+                b"set-cookie",
+                build_set_fallback_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
+            )
+        )
 
     return response

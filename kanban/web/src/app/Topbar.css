@@ -123,9 +123,36 @@
   border: 1px solid var(--border-subtle, #333842);
   border-radius: var(--radius-md, 6px);
   box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.5));
-  min-width: 180px;
+  min-width: 220px;
   padding: var(--space-2, 8px);
   z-index: 100;
+}
+
+.kb-avatar-menu-divider {
+  border-top: 1px solid var(--border-subtle, #333842);
+  margin: 6px 0;
+}
+
+.kb-avatar-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kb-avatar-menu-link {
+  text-decoration: none;
+}
+
+.kb-avatar-menu-icon {
+  margin-right: 8px;
+}
+
+.kb-avatar-logout {
+  color: var(--danger-fg, #dc2626);
+}
+
+[data-theme="dark"] .kb-avatar-logout {
+  color: #fca5a5;
 }
 
 .kb-theme-menu-title {
