@@ -200,6 +200,8 @@ class LdapAuthService:
                 email = (
                     email_bytes.decode("utf-8", errors="replace").strip() if email_bytes else None
                 )
+                if not email:
+                    email = f"{clean_username}@ldap.local"
 
                 name_bytes = attrs.get(config.display_name_attribute.lower(), [b""])[0]
                 display_name = (
@@ -222,7 +224,7 @@ class LdapAuthService:
                 finally:
                     await user_client.unbind()
 
-                # Step 3: Compute mapped group names
+                # Step 3: Compute mapped group names and check access policies
                 canonical_map = {
                     normalize_dn(k): v.strip() for k, v in group_dn_map.items() if k.strip()
                 }
@@ -231,6 +233,46 @@ class LdapAuthService:
                     {canonical_map[d] for d in user_norm_dns if d in canonical_map}
                 )
 
+                all_user_group_identifiers = (
+                    set(matched_group_names) | set(member_of_dns) | user_norm_dns
+                )
+                for d in member_of_dns:
+                    for part in d.split(","):
+                        if part.strip().upper().startswith("CN="):
+                            all_user_group_identifiers.add(part.strip()[3:].strip())
+
+                is_admin_member = (
+                    any(
+                        any(grp.lower() == ag.strip().lower() for grp in all_user_group_identifiers)
+                        for ag in config.admin_groups
+                    )
+                    if config.admin_groups
+                    else False
+                )
+
+                is_user_member = (
+                    any(
+                        any(grp.lower() == ug.strip().lower() for grp in all_user_group_identifiers)
+                        for ug in config.user_groups
+                    )
+                    if config.user_groups
+                    else False
+                )
+
+                has_group_policy = bool(config.admin_groups or config.user_groups)
+                if has_group_policy and not is_admin_member and not is_user_member:
+                    logger.debug("LDAP user %s not in any authorized group", clean_username)
+                    raise ProblemException(
+                        code="IDENTITY_NOT_PROVISIONED",
+                        status=403,
+                        title="Access Denied",
+                        detail="User does not belong to an authorized directory group",
+                    )
+
+                assertion_groups = list(matched_group_names)
+                if is_admin_member:
+                    assertion_groups.append("SERVER_ADMIN")
+
                 # Step 4: Construct ExternalIdentityAssertion
                 assertion = ExternalIdentityAssertion(
                     card_id=card.id,
@@ -238,7 +280,7 @@ class LdapAuthService:
                     email=email,
                     email_verified=True,
                     display_name=display_name,
-                    groups=tuple(matched_group_names),
+                    groups=tuple(assertion_groups),
                 )
 
                 # Step 5: Resolve principal via IdentityResolver

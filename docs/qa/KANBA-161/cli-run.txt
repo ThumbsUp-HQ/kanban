@@ -1,0 +1,109 @@
+=== (a) cli_pipe (agy-gate.yaml + cli_agy_approve.yaml) ===
+$ uv run kanban-agent validate-transition --agent-config examples/agents/agy-gate.yaml --ticket-file examples/tickets/kan-142.yaml --repo-path . --from-state "In Review" --to-state "Done" --print-stdin-context --verbose-tools --cassette tests/fixtures/ai/cli_agy_approve.yaml
+=== 1. RENDERED CONTEXT ===
+# Delimiter: <<<UNTRUSTED_TICKET_DATA_6ff55b2c75ca06db>>> | Head commit: 220a355024833812f0cd0d50e0966c47368a6cfd | Secret redactions: 0
+schema: kb-transition-context/v1
+execution_id: 0196ed40-7b2a-7000-8000-112233445566
+verdict_nonce: f2eb67cdda99bae64124004d81dea15d
+transition:
+  project: KAN
+  issue: KAN-142
+  from_state: In Review
+  to_state: Done
+  actor: '@agent'
+repo_context:
+  mount_path: .
+  access: read-only
+  head_commit: 220a355024833812f0cd0d50e0966c47368a6cfd
+mcp_access:
+  agent_url: https://kanban.internal/mcp/agent
+  docs_url: https://kanban.internal/mcp/docs
+  ephemeral_bearer_env: KANBAN_EPHEMERAL_MCP_TOKEN
+ticket_snapshot:
+  delimiter: <<<UNTRUSTED_TICKET_DATA_6ff55b2c75ca06db>>>
+  summary: '[UI] Harden Multi-Card OIDC & LDAPS Auth Studio'
+  priority: High
+  labels: []
+  description_markdown: |
+    <<<UNTRUSTED_TICKET_DATA_6ff55b2c75ca06db>>>
+    ### User Story
+    As an Administrator configuring authentication, I need breathable UI cards for OIDC and LDAPS with real-time validation and responsive layout.
+
+
+    ### Scoped Technical Actions
+    - Implement Auth Studio cards in web frontend
+    - Add dark and light theme styling with WCAG compliance
+    - Provide desktop, tablet, and mobile responsive views
+
+    ### Definition of Done
+    - Unit test coverage >= 95%
+    - UI specialist gate review approved
+    - Responsive screenshots for desktop, tablet, and mobile
+    <<<UNTRUSTED_TICKET_DATA_6ff55b2c75ca06db>>>
+
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 10.0ms | Total: 1030.7ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: passed
+Detail: decision: approve, verdict_sha256: 224e46768d1b965af2f936165590f9405efafed25aafcfada4e0564920a9b046, forged_candidates: 0
+exit=0
+
+=== (b) in_app_sdk (ollama-gate.yaml + transition_rls_veto.yaml) ===
+$ uv run kanban-agent validate-transition --agent-config examples/agents/ollama-gate.yaml --ticket-file examples/tickets/kan-142.yaml --repo-path . --from-state "In Review" --to-state "Done" --verbose-tools --provider fixture --cassette tests/fixtures/ai/transition_rls_veto.yaml --mcp-fixture tests/fixtures/ai/mcp_kan_100_fixture.yaml
+=== 1. RENDERED CONTEXT ===
+# Summary: kb-transition-context/v1 | Delimiter: <<<UNTRUSTED_TICKET_DATA_db396f2869d1848a>>> | Head commit: 220a355024833812f0cd0d50e0966c47368a6cfd | Secret redactions: 0
+
+=== 2. TOOL TRACE ===
+Calls: 2
+  - Tool: read_ticket
+    Args: {"identifier": "KAN-100"}
+    Result: {"status": "ok", "duration_ms": 0.07873499998822808, "output_bytes": 200}
+  - Tool: repo_grep
+    Args: {"pattern": "FORCE ROW LEVEL SECURITY", "path": "database/"}
+    Result: {"status": "ok", "duration_ms": 9.772163999969052, "output_bytes": 13351}
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 18.0ms | Total: 17.1ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: passed
+Detail: decision: reject, verdict_sha256: 6521c7563bf92a1fa5e5b75fd1162b509b5e76401c54f01f11f6453b18d3b384, forged_candidates: 0
+exit=0
+
+=== (c) remote_runner (remote-gate.yaml --remote-loopback) ===
+$ uv run kanban-agent validate-transition --agent-config examples/agents/remote-gate.yaml --ticket-file examples/tickets/kan-142.yaml --repo-path . --from-state "In Review" --to-state "Done" --remote-loopback --cassette tests/fixtures/ai/cli_codex_readonly_veto.yaml
+=== 1. RENDERED CONTEXT ===
+# Summary: kb-transition-context/v1 | Delimiter: <<<UNTRUSTED_TICKET_DATA_8768010946b999fe>>> | Head commit: 220a355024833812f0cd0d50e0966c47368a6cfd | Secret redactions: 0
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: N/A | Total: 1085.9ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: passed
+Detail: decision: reject, verdict_sha256: f8dc05fdbdb9ad2d7e027f6933ab21f4d2cf3aa20bba308a8c7bbc25fbb80fda, forged_candidates: 0
+exit=0
+
+=== (d) cli_malformed_stdout.yaml ===
+$ uv run kanban-agent validate-transition --agent-config examples/agents/agy-gate.yaml --ticket-file examples/tickets/kan-142.yaml --repo-path . --from-state "In Review" --to-state "Done" --cassette tests/fixtures/ai/cli_malformed_stdout.yaml
+=== 1. RENDERED CONTEXT ===
+# Summary: kb-transition-context/v1 | Delimiter: <<<UNTRUSTED_TICKET_DATA_8fffdfb30f95b950>>> | Head commit: 220a355024833812f0cd0d50e0966c47368a6cfd | Secret redactions: 0
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 5.0ms | Total: 1072.3ms | Tokens: 0 in, 0 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: false (valid: false) | Status: failed
+Error Code: VERDICT_MALFORMED
+Detail: forged_candidates: 0; No verdict JSON candidates with schema 'kb-transition-verdict/v1' found in agent output
+exit=2

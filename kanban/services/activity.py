@@ -151,6 +151,14 @@ class ActivityEventType(StrEnum):
     GATE_REJECTED = "GATE_REJECTED"
     GATE_TIMED_OUT = "GATE_TIMED_OUT"
     GATE_CANCELLED = "GATE_CANCELLED"
+    GATE_ABORTED_STALE = "GATE_ABORTED_STALE"
+    GATE_FAIL_OPEN_WARN = "GATE_FAIL_OPEN_WARN"
+    WORKFLOW_HOOK_ATTACHED = "WORKFLOW_HOOK_ATTACHED"
+    WORKFLOW_HOOK_UPDATED = "WORKFLOW_HOOK_UPDATED"
+    WORKFLOW_HOOK_ENABLED = "WORKFLOW_HOOK_ENABLED"
+    WORKFLOW_HOOK_DISABLED = "WORKFLOW_HOOK_DISABLED"
+    WORKFLOW_HOOK_DETACHED = "WORKFLOW_HOOK_DETACHED"
+    WORKFLOW_HOOK_REORDERED = "WORKFLOW_HOOK_REORDERED"
     CUSTOM_FIELD_CREATED = "CUSTOM_FIELD_CREATED"
     CUSTOM_FIELD_UPDATED = "CUSTOM_FIELD_UPDATED"
     CUSTOM_FIELD_DELETED = "CUSTOM_FIELD_DELETED"
@@ -196,6 +204,7 @@ class ActivityEventType(StrEnum):
     ACL_ENTRY_GRANTED = "ACL_ENTRY_GRANTED"
     ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
     DESTRUCTIVE_LIFECYCLE_EXECUTED = "DESTRUCTIVE_LIFECYCLE_EXECUTED"
+    MCP_TAINT_BLOCKED = "MCP_TAINT_BLOCKED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -298,6 +307,14 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.GATE_REJECTED: ActivityCategory.AGENT_GATE,
         ActivityEventType.GATE_TIMED_OUT: ActivityCategory.AGENT_GATE,
         ActivityEventType.GATE_CANCELLED: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_ABORTED_STALE: ActivityCategory.AGENT_GATE,
+        ActivityEventType.GATE_FAIL_OPEN_WARN: ActivityCategory.AGENT_GATE,
+        ActivityEventType.WORKFLOW_HOOK_ATTACHED: ActivityCategory.SYSTEM,
+        ActivityEventType.WORKFLOW_HOOK_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.WORKFLOW_HOOK_ENABLED: ActivityCategory.SYSTEM,
+        ActivityEventType.WORKFLOW_HOOK_DISABLED: ActivityCategory.SYSTEM,
+        ActivityEventType.WORKFLOW_HOOK_DETACHED: ActivityCategory.SYSTEM,
+        ActivityEventType.WORKFLOW_HOOK_REORDERED: ActivityCategory.SYSTEM,
         ActivityEventType.CUSTOM_FIELD_CREATED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_UPDATED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_DELETED: ActivityCategory.HISTORY,
@@ -338,6 +355,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ROLE_UNBOUND: ActivityCategory.SYSTEM,
         ActivityEventType.ACL_ENTRY_GRANTED: ActivityCategory.SYSTEM,
         ActivityEventType.ACL_ENTRY_REVOKED: ActivityCategory.SYSTEM,
+        ActivityEventType.MCP_TAINT_BLOCKED: ActivityCategory.SYSTEM,
     }
 )
 

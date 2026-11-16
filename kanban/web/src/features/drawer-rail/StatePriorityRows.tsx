@@ -26,10 +26,10 @@ const DEFAULT_STATES: ProjectWorkflowState[] = [
 
 const DEFAULT_PRIORITIES: ProjectPriority[] = [
   { slug: 'urgent', name: 'Urgent', emoji: '🔥' },
-  { slug: 'high', name: 'High', emoji: '⚡' },
-  { slug: 'medium', name: 'Medium', emoji: '🔹' },
-  { slug: 'low', name: 'Low', emoji: '💤' },
-  { slug: 'none', name: 'None', emoji: '' },
+  { slug: 'high', name: 'High', emoji: '🔺' },
+  { slug: 'medium', name: 'Medium', emoji: '🔶' },
+  { slug: 'low', name: 'Low', emoji: '🔽' },
+  { slug: 'none', name: 'None', emoji: '➖' },
 ];
 
 const STATE_GROUPS: { key: ProjectWorkflowState['group']; label: string }[] = [

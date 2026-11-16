@@ -53,7 +53,21 @@ USER 65532:65532
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["uvicorn", "kanban.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
 
-# Stage 4: standalone (default final stage: extends runtime-slim + PostgreSQL 16 + pgvector)
+# Stage 4: agent-runner (extends runtime-slim + git, USER 65532:65532, zero EXPOSE directives)
+FROM runtime-slim AS agent-runner
+USER root
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        git && \
+    rm -rf /var/lib/apt/lists/*
+RUN printf '#!/bin/sh\nexec /opt/kanban/.venv/bin/python -m agent.remote_runner.cli "$@"\n' > /usr/local/bin/kanban-agent-runner && \
+    chmod 0755 /usr/local/bin/kanban-agent-runner
+USER 65532:65532
+ENTRYPOINT ["/usr/bin/tini", "--", "kanban-agent-runner"]
+CMD ["run"]
+
+# Stage 5: standalone (default final stage: extends runtime-slim + PostgreSQL 16 + pgvector)
 FROM runtime-slim AS standalone
 # The standalone stage remains USER root only because the PID-1 entrypoint (KB-P0-08)
 # must start PostgreSQL as postgres and drop Uvicorn to 65532 via setpriv.

@@ -20,8 +20,6 @@ export interface MakeCopyDialogProps {
   onClose: () => void;
 }
 
-import type { paths } from '../../api/schema.gen';
-
 function extractErrorMessage(err: unknown): string {
   if (err && typeof err === 'object') {
     const rec = err as Record<string, unknown>;
@@ -52,7 +50,7 @@ export function MakeCopyDialog({ issue, open, onClose }: MakeCopyDialogProps): J
 
   const { data: meData } = useQuery<{ handle?: string }>({
     queryKey: qk.me(),
-    queryFn: async () => (await apiFetch('GET', '/api/v1/auth/me' as unknown as keyof paths)) as { handle?: string },
+    queryFn: async () => (await apiFetch('GET', '/api/v1/auth/me')) as { handle?: string },
     staleTime: 60000,
   });
 

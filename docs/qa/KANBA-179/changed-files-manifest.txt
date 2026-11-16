@@ -1,0 +1,22 @@
+# Changed Files Manifest: KANBA-179
+# [KB-MCP-AGY] Mount Live MCP Surfaces on App Server (Fix 501 Not Implemented) & Update Antigravity (agy) Client Config Snippets
+
+## Production Backend & Application Server
+- kanban/app.py: Removed 501 placeholder, mounted live Starlette MCP app via _McpProxyApp on /.well-known/oauth-protected-resource/mcp and /mcp before SPA static fallback.
+- mcp/internal_client.py: Hardened loopback base_url to http://localhost under standalone_inprocess mode; enforced X-KB-Service-Principal header.
+- mcp/auth.py: Exempted RFC 9728 discovery endpoint from authentication requirement; trimmed Bearer token whitespace.
+- mcp/protocol.py: Hardened Authorization header parsing against multi-space and whitespace variations.
+
+## Automated Backend Tests
+- kanban/tests/test_app.py: Updated live surface response assertion from 501 to 401 unauthenticated challenge.
+- kanban/tests/mcp/test_live_mcp_mount.py: Comprehensive integration test suite verifying RFC 9728 metadata discovery, 401 challenges, in-process loopback, whitespace tolerance, and authenticated tools listing.
+- mcp/tests/test_app.py: Unit and integration tests for mcp.app creation, _build_surface_sub_app routing, kanban.app lifespan/mounting branches, and KanbanApiClient error mapping.
+- mcp/tests/test_auth.py: Auth middleware tests verifying surface routing and token handling.
+- mcp/tests/test_protocol.py: Protocol handler unit tests for JSON-RPC operations.
+
+## Production Frontend & Client Ergonomics
+- kanban/web/src/features/settings/McpConfigSnippetModal.tsx: Updated Antigravity config snippet to render streamable HTTP JSON (serverUrl + headers.Authorization) and validated agy CLI one-liner command.
+
+## Automated Frontend Tests
+- kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx: Direct unit tests for Antigravity tab snippet rendering, url scopes, and clipboard copy.
+- kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx: Integration test suite verifying snippet modal rendering and key management interactions.

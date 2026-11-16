@@ -13,6 +13,7 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.timing import timing_floor
 from kanban.api.v1.schemas.issue_trees import IssueTreeNode, IssueTreeResponse
 from kanban.issues import tree_service as svc
+from kanban.security.read_taint import TaintGuard, get_taint_guard
 
 router = APIRouter(tags=["issues"])
 
@@ -26,15 +27,17 @@ Session = Annotated[AsyncSession, Depends(get_rls_session)]
     response_model=IssueTreeResponse,
     summary="Create an issue tree atomically",
 )
-async def create_issue_tree(
+async def create_issue_tree(  # noqa: PLR0913, PLR0917
     project_ref: str,
     body: IssueTreeNode,
     caller: Caller,
     session: Session,
     response: Response,
+    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
 ) -> IssueTreeResponse:
     """Create a parent-child issue hierarchy inside a single atomic transaction."""
     async with timing_floor(floor_ms=25.0):
+        await taint_guard.check_write(project_ref, tool_name="create_ticket")
         result = await svc.create_issue_tree(session, caller, project_ref, body)
         response.headers["Location"] = f"/api/v1/issues/{result.root.key}"
         return result

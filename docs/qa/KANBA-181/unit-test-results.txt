@@ -1,0 +1,36 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 26 items
+
+kanban/tests/ci/test_github_workflows.py::test_workflow_syntax_and_runner_targets PASSED [  3%]
+kanban/tests/ci/test_github_workflows.py::test_dash_upload_graceful_fallback[env_overrides0-Notice: DASH_TOKEN or DASH_ENDPOINT missing; skipping Dash upload] PASSED [  7%]
+kanban/tests/ci/test_github_workflows.py::test_dash_upload_graceful_fallback[env_overrides1-Notice: DASH_TOKEN or DASH_ENDPOINT missing; skipping Dash upload] PASSED [ 11%]
+kanban/tests/ci/test_github_workflows.py::test_dash_upload_graceful_fallback[env_overrides2-Notice: DASH_TOKEN or DASH_ENDPOINT missing; skipping Dash upload] PASSED [ 15%]
+kanban/tests/ci/test_github_workflows.py::test_zero_private_network_leaks PASSED [ 19%]
+kanban/tests/ci/test_github_workflows.py::test_github_workflow_secrets_isolation PASSED [ 23%]
+scripts/tests/test_ci_workflow.py::test_forgejo_jobs_exist_on_inferrence1 PASSED [ 26%]
+scripts/tests/test_ci_workflow.py::test_forgejo_permissions_are_read_only PASSED [ 30%]
+scripts/tests/test_ci_workflow.py::test_forgejo_every_job_has_bounded_timeout PASSED [ 34%]
+scripts/tests/test_ci_workflow.py::test_forgejo_concurrency_cancels_superseded_runs PASSED [ 38%]
+scripts/tests/test_ci_workflow.py::test_forgejo_triggers_exclude_pull_request_target PASSED [ 42%]
+scripts/tests/test_ci_workflow.py::test_forgejo_every_uses_is_pinned_to_a_full_commit_sha PASSED [ 46%]
+scripts/tests/test_ci_workflow.py::test_forgejo_secrets_are_scoped_to_their_jobs PASSED [ 50%]
+scripts/tests/test_ci_workflow.py::test_forgejo_docker_push_gating_and_dependencies PASSED [ 53%]
+scripts/tests/test_ci_workflow.py::test_forgejo_last_step_uploads_logs_artifact_always PASSED [ 57%]
+scripts/tests/test_ci_workflow.py::test_forgejo_dash_upload_runs_always_before_artifact PASSED [ 61%]
+scripts/tests/test_ci_workflow.py::test_forgejo_python_tests_enforce_coverage_threshold PASSED [ 65%]
+scripts/tests/test_ci_workflow.py::test_forgejo_testdb_teardown_always_runs PASSED [ 69%]
+scripts/tests/test_ci_workflow.py::test_github_jobs_use_ubuntu_latest PASSED [ 73%]
+scripts/tests/test_ci_workflow.py::test_github_workflow_has_zero_dash_or_inferrence_dependencies PASSED [ 76%]
+scripts/tests/test_ci_workflow.py::test_github_permissions_are_read_only PASSED [ 80%]
+scripts/tests/test_ci_workflow.py::test_github_every_job_has_bounded_timeout PASSED [ 84%]
+scripts/tests/test_ci_workflow.py::test_github_concurrency_cancels_superseded_runs PASSED [ 88%]
+scripts/tests/test_ci_workflow.py::test_github_every_uses_is_pinned_to_a_full_commit_sha PASSED [ 92%]
+scripts/tests/test_ci_workflow.py::test_github_docker_publish_is_non_blocking_without_secrets PASSED [ 96%]
+scripts/tests/test_ci_workflow.py::test_ci_doc_has_required_sections PASSED [100%]
+
+============================== 26 passed in 0.12s ==============================

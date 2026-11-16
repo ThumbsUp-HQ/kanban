@@ -11,6 +11,7 @@ from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
 from mcp.registry import Surface, ToolSpec
+from mcp.resolver import EntityResolver
 from mcp.yaml_out import dump_yaml
 
 if TYPE_CHECKING:
@@ -35,6 +36,13 @@ _ALLOWED_TOP_LEVEL_KEYS: Final[frozenset[str]] = frozenset(
         "end_date",
         "view_spec",
         "lod",
+        "slug",
+        "remote_url",
+        "default_ref",
+        "access_mode",
+        "credential",
+        "binding",
+        "confirm",
     }
 )
 
@@ -56,9 +64,13 @@ MANAGE_CYCLES_AND_MODULES_SCHEMA: Final[dict[str, Any]] = {
                 "list_views",
                 "create_view",
                 "update_view",
+                "bind_project_repo",
+                "list_repo_bindings",
+                "refresh_repo_binding",
+                "unbind_project_repo",
                 "help",
             ],
-            "description": "Operation to perform on cycles, modules, or saved views",
+            "description": "Operation to perform on cycles, modules, saved views, or repo bindings",
         },
         "project": {
             "type": "string",
@@ -104,6 +116,36 @@ MANAGE_CYCLES_AND_MODULES_SCHEMA: Final[dict[str, Any]] = {
             "enum": ["summary", "standard", "full"],
             "default": "summary",
             "description": "Level of detail projection ('summary', 'standard', 'full')",
+        },
+        "slug": {
+            "type": "string",
+            "description": "Repository binding slug",
+        },
+        "remote_url": {
+            "type": "string",
+            "description": "Remote Git URL (https or ssh)",
+        },
+        "default_ref": {
+            "type": "string",
+            "default": "main",
+            "description": "Default branch or commit ref",
+        },
+        "access_mode": {
+            "type": "string",
+            "enum": ["bare_git_tools", "ro_vfs_mount"],
+            "description": "Agent repository mount and access mode",
+        },
+        "credential": {
+            "type": "string",
+            "description": "Optional deploy key or access token (write-only)",
+        },
+        "binding": {
+            "type": "string",
+            "description": "Repository binding slug or UUID identifier",
+        },
+        "confirm": {
+            "type": "boolean",
+            "description": "Explicit confirmation for destructive unbind operation",
         },
     },
     "required": ["action"],
@@ -236,11 +278,19 @@ async def manage_cycles_and_modules(arguments: dict[str, Any]) -> str:  # noqa: 
         )
         return dump_yaml(help_doc)
 
-    project_ref = arguments.get("project")
-    if not project_ref or not isinstance(project_ref, str) or not project_ref.strip():
+    raw_project = arguments.get("project")
+    project_ref: str = ""
+    if raw_project and isinstance(raw_project, str) and raw_project.strip():
+        project_ref = raw_project.strip()
+    elif (
+        action in ("refresh_repo_binding", "unbind_project_repo")
+        and arguments.get("binding")
+        and _is_uuid(str(arguments.get("binding")))
+    ):
+        project_ref = ""
+    else:
         msg = "project parameter is required"
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
-    project_ref = project_ref.strip()
 
     ctx = get_current_mcp_context()
     if ctx is None or ctx.client is None:
@@ -601,6 +651,138 @@ async def manage_cycles_and_modules(arguments: dict[str, Any]) -> str:  # noqa: 
             raise _map_cycle_error(exc) from exc
 
         return dump_yaml(res)
+
+    # -------------------------------------------------------------------------
+    # Repo Bindings Actions (KB-P5-19b)
+    # -------------------------------------------------------------------------
+    if action == "bind_project_repo":
+        slug = arguments.get("slug")
+        remote_url = arguments.get("remote_url")
+        access_mode = arguments.get("access_mode")
+        if not slug or not remote_url or not access_mode:
+            msg = "slug, remote_url, and access_mode parameters are required for bind_project_repo"
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+        resolver = EntityResolver(
+            ctx.client, subject_token=ctx.subject_token, mcp_session_id=ctx.session_id
+        )
+        resolved_proj = await resolver.resolve("project", project_ref)
+        proj_key = resolved_proj.key
+
+        bind_payload: dict[str, Any] = {
+            "slug": slug,
+            "remote_url": remote_url,
+            "default_ref": arguments.get("default_ref", "main"),
+            "access_mode": access_mode,
+        }
+        if arguments.get("credential"):
+            bind_payload["credential"] = arguments["credential"]
+
+        res = await ctx.client.request(
+            "POST",
+            f"/api/v1/projects/{proj_key}/repo-bindings",
+            json_data=bind_payload,
+            subject_token=ctx.subject_token,
+            mcp_session_id=ctx.session_id,
+        )
+        return dump_yaml({"status": "created", "repo_binding": res})
+
+    if action == "list_repo_bindings":
+        resolver = EntityResolver(
+            ctx.client, subject_token=ctx.subject_token, mcp_session_id=ctx.session_id
+        )
+        resolved_proj = await resolver.resolve("project", project_ref)
+        proj_key = resolved_proj.key
+
+        res = await ctx.client.request(
+            "GET",
+            f"/api/v1/projects/{proj_key}/repo-bindings",
+            subject_token=ctx.subject_token,
+            mcp_session_id=ctx.session_id,
+        )
+        if not isinstance(res, list):
+            msg = "Unexpected response from list repo bindings API"
+            raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
+
+        if lod == "full":
+            return dump_yaml({"repo_bindings": res})
+
+        summary_bindings = [
+            {
+                "id": str(b.get("id")),
+                "slug": b.get("slug"),
+                "remote_url": b.get("remote_url"),
+                "access_mode": b.get("access_mode"),
+                "default_ref": b.get("default_ref"),
+                "last_fetched_commit": b.get("last_fetched_commit"),
+            }
+            for b in res
+            if isinstance(b, dict)
+        ]
+        return dump_yaml({"repo_bindings": summary_bindings})
+
+    if action == "refresh_repo_binding":
+        binding_ref = arguments.get("binding") or arguments.get("slug")
+        if not binding_ref:
+            msg = "binding parameter is required for refresh_repo_binding"
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+        if _is_uuid(str(binding_ref)):
+            binding_id = str(binding_ref)
+        else:
+            if not project_ref:
+                msg = "project parameter is required to resolve repo binding by slug"
+                raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+            resolver = EntityResolver(
+                ctx.client, subject_token=ctx.subject_token, mcp_session_id=ctx.session_id
+            )
+            resolved = await resolver.resolve("repo_binding", str(binding_ref), project=project_ref)
+            binding_id = str(resolved.id)
+
+        res = await ctx.client.request(
+            "POST",
+            f"/api/v1/repo-bindings/{binding_id}/refresh",
+            subject_token=ctx.subject_token,
+            mcp_session_id=ctx.session_id,
+        )
+        return dump_yaml({"status": "refreshed", "repo_binding": res})
+
+    if action == "unbind_project_repo":
+        binding_ref = arguments.get("binding") or arguments.get("slug")
+        if not binding_ref:
+            msg = "binding parameter is required for unbind_project_repo"
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+        if _is_uuid(str(binding_ref)):
+            binding_id = str(binding_ref)
+        else:
+            if not project_ref:
+                msg = "project parameter is required to resolve repo binding by slug"
+                raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+            resolver = EntityResolver(
+                ctx.client, subject_token=ctx.subject_token, mcp_session_id=ctx.session_id
+            )
+            resolved = await resolver.resolve("repo_binding", str(binding_ref), project=project_ref)
+            binding_id = str(resolved.id)
+
+        confirm = arguments.get("confirm", False)
+        if not confirm:
+            return dump_yaml(
+                {
+                    "status": "confirmation_required",
+                    "warning": "Unbinding repository requires explicit confirm: true parameter",
+                    "binding_id": binding_id,
+                    "project": project_ref,
+                }
+            )
+
+        await ctx.client.request(
+            "DELETE",
+            f"/api/v1/repo-bindings/{binding_id}",
+            subject_token=ctx.subject_token,
+            mcp_session_id=ctx.session_id,
+        )
+        return dump_yaml({"status": "deleted", "binding_id": binding_id, "project": project_ref})
 
     msg = f"Unsupported action '{action}'"
     raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)

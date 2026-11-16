@@ -56,6 +56,11 @@ from mcp.surfaces.admin.manage_principals_and_groups import (
     create_manage_principals_and_groups_tool,
     manage_principals_and_groups_tool,
 )
+from mcp.surfaces.admin.manage_workflow_interceptors import (
+    MANAGE_WORKFLOW_INTERCEPTORS_SCHEMA,
+    create_manage_workflow_interceptors_tool,
+    manage_workflow_interceptors,
+)
 from mcp.surfaces.admin.override_ticket_provenance import (
     OVERRIDE_TICKET_PROVENANCE_SCHEMA,
     override_ticket_provenance,
@@ -76,6 +81,7 @@ __all__ = [
     "MANAGE_CUSTOM_FIELDS_AND_SCRIPTS_SCHEMA",
     "MANAGE_CYCLES_AND_MODULES_SCHEMA",
     "MANAGE_PRINCIPALS_AND_GROUPS_SCHEMA",
+    "MANAGE_WORKFLOW_INTERCEPTORS_SCHEMA",
     "OVERRIDE_TICKET_PROVENANCE_SCHEMA",
     "architect_project",
     "audit_and_purge_object_links",
@@ -91,6 +97,7 @@ __all__ = [
     "create_manage_custom_fields_and_scripts_tool",
     "create_manage_cycles_and_modules_tool",
     "create_manage_principals_and_groups_tool",
+    "create_manage_workflow_interceptors_tool",
     "destructive_lifecycle",
     "manage_access_policies_tool",
     "manage_ai_and_agent_runners",
@@ -98,6 +105,7 @@ __all__ = [
     "manage_custom_fields_and_scripts",
     "manage_cycles_and_modules",
     "manage_principals_and_groups_tool",
+    "manage_workflow_interceptors",
     "override_ticket_provenance",
 ]
 
@@ -109,6 +117,7 @@ ADMIN_TOOL_NAMES: Final[tuple[str, ...]] = (
     "architect_project",
     "manage_cycles_and_modules",
     "manage_custom_fields_and_scripts",
+    "manage_workflow_interceptors",
     "manage_ai_and_agent_runners",
     "override_ticket_provenance",
     "audit_and_purge_object_links",
@@ -126,6 +135,7 @@ def build_admin_registry(client: KanbanApiClient | None = None) -> ToolRegistry:
     registry.register(create_architect_project_tool())
     registry.register(create_manage_cycles_and_modules_tool())
     registry.register(create_manage_custom_fields_and_scripts_tool())
+    registry.register(create_manage_workflow_interceptors_tool())
     registry.register(create_manage_ai_and_agent_runners_tool())
     registry.register(
         ToolSpec(

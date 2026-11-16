@@ -117,6 +117,21 @@ describe('BoardCard Component', () => {
     expect(pushStateSpy).toHaveBeenCalled();
   });
 
+  it('opens peek drawer when clicking on the card container', () => {
+    const onOpenPeek = vi.fn();
+    render(
+      <BoardCard
+        issue={baseIssue}
+        stateGroup="started"
+        onOpenPeek={onOpenPeek}
+      />,
+    );
+
+    const card = screen.getByTestId('board-card-KAN-142');
+    fireEvent.click(card);
+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-142');
+  });
+
   it('renders different gate statuses, priority variants, dragging and drop edge', () => {
     const rejectedIssue: BoardIssue = {
       ...baseIssue,

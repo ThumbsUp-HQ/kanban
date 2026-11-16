@@ -177,7 +177,7 @@ async def enable_admin_card(
     session: Session,
     service: ServiceDep,
 ) -> AuthCardAdmin:
-    """Enable card sign-in for users and administrators."""
+    """Enable card sign-in for users and administrators while auditing the action."""
     return await service.set_enabled(
         session,
         card_ref,
@@ -197,7 +197,10 @@ async def disable_admin_card(
     session: Session,
     service: ServiceDep,
 ) -> AuthCardAdmin:
-    """Disable card sign-in under 3-layer anti-lockout safeguards."""
+    """Disable card sign-in under 3-layer anti-lockout safeguards.
+
+    Prevents administrative lockout.
+    """
     try:
         return await service.set_enabled(
             session,

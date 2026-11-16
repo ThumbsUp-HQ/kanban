@@ -15,37 +15,50 @@ All tickets managed under this workflow should conform to the companion [`kanban
 
 ## Core Duties of the Agent Manager
 
-1. **Assign Tickets to Implementation Sub-Agents**:
+1. **Ticket Deduplication & Creation Boundaries**:
+   - **Search Before Creating (`search_tickets`)**: Always search existing `Backlog`, `Todo`, and `In Progress` tickets before creating new ones. If an upcoming or open ticket already covers the same subsystem or feature, **update that ticket in-place (`update_ticket`)** rather than creating a duplicate ticket.
+   - **Parallel Specialist Consultation**: Before authoring tickets or designing implementations, consult relevant domain specialists (e.g., UX/Frontend Architect, Backend Architect, Security Engineer) **in parallel** to validate architecture, UX ergonomics, and security invariants.
+   - **Do Not Start Implementation Unprompted**: When the user asks to create, refine, or add tickets, stop after creating/updating the tickets and wait for explicit instruction before starting implementation (`begin_work`).
+2. **Use Small/Fast Models Instead of the Coordinator's Model**:
+   - Do **not** default all workers or sub-agents to the Coordinator's heavy flagship model. Preserve quota and reduce latency by pinning implementation builders, test-coverage agents, specialist reviewers, and `reality-checker` auditors to **smaller, faster models** (e.g., `flash`, `gemini-3.8-flash-medium`, `gemini-4-argon-low`, `claude-sonnet-5-5-medium`, `haiku`, or Codex fast tier).
+   - For **black-box human browser QA**, explicitly use a small/low-reasoning model (`gemini-4-argon-low` or `flash`) supplied only with user-level instructions so it tests the UI as a human would rather than reverse-engineering source code or working around bugs.
+3. **Reuse Persistent Sub-Agents & Swarm Workers for Context Caching**:
+   - Maintain long-lived references (`conversationId`s via `send_message`, or warm `waiting` swarm roster members such as `reality-checker`, `arch-reviewer`, `ui-specialist`, `sec-eng`, and `qa-eng` via board `@mentions`) across tickets instead of spawning fresh disposable sub-agents for every task.
+   - Reusing an existing agent conversation keeps system prompts, persona files, and codebase reads in the **cached-token tier (~1/100th input token cost)**, and `waiting` swarm workers consume zero tokens while asleep. Only `kill` temporary implementation builders after their wave is merged and certified.
+   - In Antigravity, when custom agent markdown files in `.agents/agents/*.md` declare CLI-only tool names in frontmatter, invoke sub-agents with `TypeName: "self"` (inheriting valid harness tools) and instruct them to read `.agents/agents/<specialist>.md` for their persona and rubric.
+4. **Assign Tickets to Implementation Sub-Agents**:
    - Move the target ticket to `In Progress` via `begin_work` (or `transition_ticket`).
-   - Delegate implementation to a dedicated sub-agent with the verbatim ticket text and forensic proof requirements.
-2. **Update Comments & Status on Tickets**:
+   - Delegate implementation to a dedicated sub-agent or swarm worker (on a fast/medium model) with the verbatim ticket text and forensic proof requirements.
+5. **Update Comments & Status on Tickets**:
    - Record sub-agent assignments, forensic proof locations, `reality-checker` QA reports, and remediation cycles on the ticket via Kanban MCP tools (`begin_work`, `transition_ticket`, `complete_work`, `update_ticket`). All comments are recorded under the user's identity.
-3. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
+6. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
    - When an implementing sub-agent claims a ticket is done - or **even if the sub-agent closes the ticket itself** - you **MUST keep the ticket open** (immediately reopen/transition it back to `In Progress` via `transition_ticket` if a sub-agent closed it).
-   - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after the `reality-checker` sub-agent certifies it as **grade-A `READY`**.
-4. **Run the `reality-checker` QA Gate on a Fast Model**:
-   - Invoke a dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
+   - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after required domain specialists (`ui-specialist-review.md`, `api-specialist-review.md`) and the `reality-checker` sub-agent certify it as **grade-A `READY`**.
+7. **Run the `reality-checker` QA Gate on a Fast Model**:
+   - Invoke or message the dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
    - Provide **full forensic proofs, never summaries**. `reality-checker` is a pure quality assurance auditor and **must NOT run tests manually, execute shell commands to check results, or visit websites**.
-5. **Route `reality-checker` Verdicts**:
+8. **Route `reality-checker` Verdicts**:
    - **`FAILED` or `NEEDS WORK` (`NEEDS_WORK`)**: Keep the ticket open (`In Progress`), post the verdict to the ticket, and send the full `reality-checker` critique back to the implementing sub-agent to fix the defects and regenerate the proof bundle.
    - **Grade-A `READY`**: Record the full `reality-checker` certification report in the ticket comments and complete the transition to `Done` (`complete_work`).
-6. **Delegate Post-Completion >=95% Unit Test Coverage**:
+9. **Delegate Post-Completion >=95% Unit Test Coverage**:
    - `reality-checker` does **not** audit unit test coverage percentages.
-   - Once a feature ticket is implemented (or completed), assign a dedicated testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
-7. **Continuous Gap Detection & Ticket Creation**:
-   - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - immediately create a new Kanban ticket for it using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
+   - Once a feature ticket is implemented (or completed), assign a fast testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
+10. **Continuous Gap Detection & Ticket Creation**:
+    - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - first check `search_tickets` for an existing backlog item to update, or create a new Kanban ticket using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
 
 ---
 
 ## Cross-Harness Sub-Agent Mapping (Claude, Codex, Gemini)
 
-Adapt sub-agent delegation to the active harness's native primitives while preserving identical workflow semantics:
+Adapt sub-agent delegation to the active harness's native primitives while preserving identical workflow semantics, **small/fast model selection**, and **persistent conversation reuse**:
 
 | Action | Gemini CLI / Antigravity | Claude Code | OpenAI Codex / ChatGPT |
 | :--- | :--- | :--- | :--- |
-| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, write tools enabled) | `Task` tool (general-purpose sub-agent with edit/bash access) | Spawn worker/sub-agent task with workspace write permissions |
-| **Spawn Read-Only `reality-checker`** | `define_subagent` (`EnableWriteTools: false`) + `invoke_subagent` (`Model: "flash"`) | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
-| **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
+| **Consult Specialists Before Planning/Coding** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`, reads `.agents/agents/<role>.md`) or reuse `conversationId` via `send_message` | Parallel `Task` calls (`model: "haiku"` or `"sonnet"`) with `.agents/agents/<role>.md` | Parallel specialist workers on fast model tier |
+| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`) or `swarm` `add` (`model: "gemini-3.8-flash-medium"` / `"claude-sonnet-5-5-medium"`) | `Task` tool (`model: "sonnet"` or `"haiku"`, edit/bash access) | Spawn worker/sub-agent task on fast/medium model with workspace write permissions |
+| **Spawn / Reuse Read-Only `reality-checker`** | `invoke_subagent` (`Model: "flash"`) or reuse warm `reality-checker` via `send_message` / `@reality-checker` | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Reuse or spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
+| **Black-Box Browser QA** | `invoke_subagent` or `swarm` `add` pinned to `gemini-4-argon-low` / `flash` with user-level test plan only | `Task` tool (`model: "haiku"`) with browser MCP and user-level test plan | Fast/low-reasoning worker with browser harness and user-level test plan |
+| **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` or `@mention` on swarm board | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
 
 ---
 

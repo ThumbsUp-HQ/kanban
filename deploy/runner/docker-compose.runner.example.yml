@@ -1,0 +1,29 @@
+# Copyright 2026 Kanban Platform Contributors
+# Apache-2.0 License. See LICENSE for details.
+# Reference docker-compose configuration for kanban-agent-runner daemon (KB-P5-22b, S14.2, S2.4).
+# Connects outbound over TLS 1.3 mTLS WSS with ZERO inbound listening ports.
+
+services:
+  agent-runner:
+    image: kanban:agent-runner
+    container_name: kanban-agent-runner
+    restart: unless-stopped
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      # Certificates and configuration generated via `kanban-agent-runner enroll`
+      - /etc/kanban-runner:/etc/kanban-runner:ro
+      # Read-only source code repository mounts for transition gate verification
+      - /srv/kanban/repos:/workspace/repos:ro
+      # Ephemeral tmpfs for scratch operations
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 64M
+          mode: 1777
+    command: ["run", "--config", "/etc/kanban-runner/config.yaml"]
+    # Zero ports exposed (outbound WSS only)

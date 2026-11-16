@@ -237,15 +237,34 @@ class ViewCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(min_length=1, max_length=120)
-    description_markdown: str = Field(default="", max_length=16384)
-    layout: ViewLayout = ViewLayout.BOARD
-    group_by: GroupAxis | None = None
-    sub_group_by: GroupAxis | None = None
-    filters: FilterSpec = Field(default_factory=FilterSpec)
-    wip_limits_override: dict[str, WipLimit | dict[str, Any]] = Field(default_factory=dict)
-    is_shared: bool = False
-    visibility: str | None = None
+    name: str = Field(min_length=1, max_length=120, description="Saved view display name")
+    description_markdown: str = Field(
+        default="", max_length=16384, description="Detailed Markdown description of the view"
+    )
+    layout: ViewLayout = Field(
+        default=ViewLayout.BOARD,
+        description="View layout mode: board, list, table, calendar, or timeline",
+    )
+    group_by: GroupAxis | None = Field(
+        default=None,
+        description="Group axis: none, state, priority, assignee, cycle, module, or label",
+    )
+    sub_group_by: GroupAxis | None = Field(
+        default=None, description="Secondary sub-grouping axis for 2D matrix rendering"
+    )
+    filters: FilterSpec = Field(
+        default_factory=FilterSpec, description="Hierarchical issue filtering criteria"
+    )
+    wip_limits_override: dict[str, WipLimit | dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Custom work-in-progress (WIP) soft/hard limits per bucket",
+    )
+    is_shared: bool = Field(
+        default=False, description="Whether view is shared across workspace or private to creator"
+    )
+    visibility: str | None = Field(
+        default=None, description="Explicit visibility classification token"
+    )
 
     @field_validator("name")
     @classmethod
@@ -267,15 +286,27 @@ class ViewPatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str | None = Field(default=None, min_length=1, max_length=120)
-    description_markdown: str | None = Field(default=None, max_length=16384)
-    layout: ViewLayout | None = None
-    group_by: GroupAxis | None = None
-    sub_group_by: GroupAxis | None = None
-    filters: FilterSpec | None = None
-    wip_limits_override: dict[str, WipLimit | dict[str, Any]] | None = None
-    is_shared: bool | None = None
-    visibility: str | None = None
+    name: str | None = Field(
+        default=None, min_length=1, max_length=120, description="Updated view display name"
+    )
+    description_markdown: str | None = Field(
+        default=None, max_length=16384, description="Updated Markdown description"
+    )
+    layout: ViewLayout | None = Field(
+        default=None, description="Updated layout mode: board, list, table, calendar, or timeline"
+    )
+    group_by: GroupAxis | None = Field(default=None, description="Updated primary grouping axis")
+    sub_group_by: GroupAxis | None = Field(
+        default=None, description="Updated secondary grouping axis"
+    )
+    filters: FilterSpec | None = Field(default=None, description="Updated issue filtering criteria")
+    wip_limits_override: dict[str, WipLimit | dict[str, Any]] | None = Field(
+        default=None, description="Updated custom WIP limits dictionary"
+    )
+    is_shared: bool | None = Field(default=None, description="Updated view sharing toggle")
+    visibility: str | None = Field(
+        default=None, description="Updated visibility classification token"
+    )
 
     @field_validator("name")
     @classmethod
@@ -299,20 +330,26 @@ class ViewResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: uuid.UUID
-    project_id: uuid.UUID | None
-    name: str
-    description_markdown: str
-    layout: ViewLayout
-    group_by: str
-    sub_group_by: str
-    filters: FilterSpec
-    wip_limits_override: dict[str, Any]
-    is_shared: bool
-    visibility: str
-    owner: ViewOwnerSummary
-    access_manifest: AccessManifest
-    capabilities: list[str]
+    id: uuid.UUID = Field(description="Unique saved view UUID identifier")
+    project_id: uuid.UUID | None = Field(
+        description="Owning project UUID, or null for workspace-level views"
+    )
+    name: str = Field(description="Saved view display name")
+    description_markdown: str = Field(description="Markdown description of the view")
+    layout: ViewLayout = Field(description="View layout mode format")
+    group_by: str = Field(description="Primary grouping axis slug")
+    sub_group_by: str = Field(description="Secondary sub-grouping axis slug")
+    filters: FilterSpec = Field(description="Configured issue filtering criteria")
+    wip_limits_override: dict[str, Any] = Field(description="Active WIP limits overrides")
+    is_shared: bool = Field(description="Whether the view is shared with workspace collaborators")
+    visibility: str = Field(description="Visibility classification string")
+    owner: ViewOwnerSummary = Field(description="View owner principal summary")
+    access_manifest: AccessManifest = Field(
+        description="Anti-enumeration access manifest metadata (S3.4)"
+    )
+    capabilities: list[str] = Field(
+        description="Effective capabilities held by the calling principal on this view"
+    )
 
 
 class ViewList(BaseModel):
@@ -320,7 +357,7 @@ class ViewList(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    items: list[ViewResponse]
+    items: list[ViewResponse] = Field(description="List of saved view definitions")
 
 
 class AdHocQueryRequest(BaseModel):
@@ -328,15 +365,26 @@ class AdHocQueryRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    layout: ViewLayout = ViewLayout.BOARD
-    group_by: GroupAxis = GroupAxis.STATE
-    sub_group_by: GroupAxis = GroupAxis.NONE
-    filters: FilterSpec = Field(default_factory=FilterSpec)
-    sort_by: SortField = SortField.BOARD_RANK
-    sort_dir: SortDir = SortDir.ASC
-    wip_limits_override: dict[str, Any] = Field(default_factory=dict)
-    limit: int = Field(default=50, ge=1, le=200)
-    cursor: str | None = None
+    layout: ViewLayout = Field(
+        default=ViewLayout.BOARD,
+        description="Target layout mode: board, list, table, calendar, timeline",
+    )
+    group_by: GroupAxis = Field(default=GroupAxis.STATE, description="Primary grouping axis")
+    sub_group_by: GroupAxis = Field(
+        default=GroupAxis.NONE, description="Secondary sub-grouping axis"
+    )
+    filters: FilterSpec = Field(
+        default_factory=FilterSpec, description="Ad-hoc issue filtering criteria"
+    )
+    sort_by: SortField = Field(default=SortField.BOARD_RANK, description="Sort order field")
+    sort_dir: SortDir = Field(default=SortDir.ASC, description="Sort order direction: asc or desc")
+    wip_limits_override: dict[str, Any] = Field(
+        default_factory=dict, description="Ad-hoc WIP limits overrides"
+    )
+    limit: int = Field(default=50, ge=1, le=200, description="Maximum number of issues to return")
+    cursor: str | None = Field(
+        default=None, description="Opaque keyset cursor for fetching next page"
+    )
 
 
 class WipStatus(BaseModel):

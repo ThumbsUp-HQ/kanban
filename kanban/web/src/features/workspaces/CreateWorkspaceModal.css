@@ -1,0 +1,161 @@
+/* Create Workspace Modal Styles (KB-UX-05, S1.1, S3.3, KANBA-175) */
+
+.kb-create-workspace-scrim {
+  position: fixed;
+  inset: 0;
+  background-color: var(--scrim-bg, rgba(0, 0, 0, 0.65));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
+
+.kb-create-workspace-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg-surface-raised, #24272f);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-lg, 8px);
+  width: calc(100% - 32px);
+  max-width: 480px;
+  padding: 24px;
+  color: var(--fg-primary, #f8fafc);
+  box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.6));
+  box-sizing: border-box;
+  z-index: 1201;
+}
+
+.kb-create-workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.kb-create-workspace-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg-primary, #f8fafc);
+}
+
+.kb-create-workspace-close {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted, #94a3b8);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kb-create-workspace-close:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+}
+
+.kb-create-workspace-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.kb-create-workspace-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kb-create-workspace-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-secondary, #cbd5e1);
+}
+
+.kb-create-workspace-req {
+  color: var(--color-danger, #ef4444);
+}
+
+.kb-create-workspace-input {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #333842);
+  background: var(--bg-surface, #1e2025);
+  color: var(--fg-primary, #f8fafc);
+  font-size: 14px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.kb-create-workspace-input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary, #3b82f6);
+}
+
+.kb-create-workspace-slug {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+}
+
+.kb-create-workspace-hint {
+  font-size: 11px;
+  color: var(--fg-muted, #94a3b8);
+}
+
+.kb-create-workspace-error {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid #ef4444;
+  color: #fca5a5;
+  font-size: 13px;
+}
+
+.kb-create-workspace-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.kb-create-workspace-cancel-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #333842);
+  background: transparent;
+  color: var(--fg-secondary, #cbd5e1);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.kb-create-workspace-cancel-btn:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+}
+
+.kb-create-workspace-submit-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  background: var(--color-brand-primary, #3b82f6);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.kb-create-workspace-submit-btn:hover:not(:disabled) {
+  background: var(--color-brand-hover, #2563eb);
+}
+
+.kb-create-workspace-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

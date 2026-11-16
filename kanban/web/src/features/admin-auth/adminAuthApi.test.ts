@@ -109,12 +109,12 @@ describe('adminAuthApi (KB-P3-36)', () => {
     });
 
     expect(apiSpy).toHaveBeenCalledWith('PATCH', '/api/v1/admin/auth-cards/card-1', {
-      body: { display_name: 'Updated Okta' },
+      body: { display_name: 'Updated Okta', secret: null },
     });
     expect(res.id).toBe('card-1');
   });
 
-  it('toggleAdminAuthCardEnabled calls PATCH /api/v1/admin/auth-cards/{id}/enabled', async () => {
+  it('toggleAdminAuthCardEnabled calls POST /api/v1/admin/auth-cards/{id}/disable', async () => {
     const apiSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue({
       ...rawCard,
       is_enabled: false,
@@ -122,9 +122,9 @@ describe('adminAuthApi (KB-P3-36)', () => {
     const res = await toggleAdminAuthCardEnabled('card-1', false);
 
     expect(apiSpy).toHaveBeenCalledWith(
-      'PATCH',
-      '/api/v1/admin/auth-cards/card-1/enabled',
-      { body: { is_enabled: false } },
+      'POST',
+      '/api/v1/admin/auth-cards/card-1/disable',
+      { body: {} },
     );
     expect(res.is_enabled).toBe(false);
   });
@@ -135,15 +135,13 @@ describe('adminAuthApi (KB-P3-36)', () => {
       sort_rank: '1V',
     });
     const res = await reorderAdminAuthCard('card-1', {
-      before_card_id: 'card-0',
       after_card_id: 'card-2',
-      sort_rank: '1V',
     });
 
     expect(apiSpy).toHaveBeenCalledWith(
       'POST',
       '/api/v1/admin/auth-cards/card-1/reorder',
-      { body: { before_card_id: 'card-0', after_card_id: 'card-2', sort_rank: '1V' } },
+      { body: { after: 'card-2' } },
     );
     expect(res.sort_rank).toBe('1V');
   });
@@ -172,6 +170,7 @@ describe('adminAuthApi (KB-P3-36)', () => {
     expect(apiSpy).toHaveBeenCalledWith(
       'DELETE',
       '/api/v1/admin/auth-cards/card-1',
+      { body: { confirm_slug: 'card-1' } },
     );
   });
 

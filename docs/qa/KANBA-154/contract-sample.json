@@ -1,0 +1,146 @@
+{
+  "create_repo_binding": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/projects/KANBA/repo-bindings",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": "csrf-token-sample"
+      },
+      "body": {
+        "slug": "core-repo",
+        "remote_url": "https://github.com/octocat/Hello-World.git",
+        "default_ref": "main",
+        "access_mode": "bare_git_tools",
+        "credential": "deploy-token-secret-xyz"
+      }
+    },
+    "response": {
+      "status": 201,
+      "headers": {
+        "Location": "/api/v1/projects/KANBA/repo-bindings/01a1e065-2a21-7db5-8062-a0978e1843d2"
+      },
+      "body": {
+        "id": "01a1e065-2a21-7db5-8062-a0978e1843d2",
+        "workspace_id": "01a1e065-2a21-7db5-8062-a0978e1843d1",
+        "project_id": "01a1e065-2a21-7db5-8062-a0978e1843d0",
+        "slug": "core-repo",
+        "remote_url": "https://github.com/octocat/Hello-World.git",
+        "default_ref": "main",
+        "access_mode": "bare_git_tools",
+        "last_fetched_commit": "0123456789abcdef0123456789abcdef01234567",
+        "last_fetched_at": "2026-11-15T18:00:00Z",
+        "last_fetch_error": null,
+        "created_by": "01a1e065-2a21-7db5-8062-a0978e1843df",
+        "created_at": "2026-11-15T18:00:00Z"
+      }
+    }
+  },
+  "list_repo_bindings": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/projects/KANBA/repo-bindings"
+    },
+    "response": {
+      "status": 200,
+      "body": [
+        {
+          "id": "01a1e065-2a21-7db5-8062-a0978e1843d2",
+          "workspace_id": "01a1e065-2a21-7db5-8062-a0978e1843d1",
+          "project_id": "01a1e065-2a21-7db5-8062-a0978e1843d0",
+          "slug": "core-repo",
+          "remote_url": "https://github.com/octocat/Hello-World.git",
+          "default_ref": "main",
+          "access_mode": "bare_git_tools",
+          "last_fetched_commit": "0123456789abcdef0123456789abcdef01234567",
+          "last_fetched_at": "2026-11-15T18:00:00Z",
+          "last_fetch_error": null,
+          "created_by": "01a1e065-2a21-7db5-8062-a0978e1843df",
+          "created_at": "2026-11-15T18:00:00Z"
+        }
+      ]
+    }
+  },
+  "refresh_repo_binding": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/repo-bindings/01a1e065-2a21-7db5-8062-a0978e1843d2/refresh"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "01a1e065-2a21-7db5-8062-a0978e1843d2",
+        "workspace_id": "01a1e065-2a21-7db5-8062-a0978e1843d1",
+        "project_id": "01a1e065-2a21-7db5-8062-a0978e1843d0",
+        "slug": "core-repo",
+        "remote_url": "https://github.com/octocat/Hello-World.git",
+        "default_ref": "main",
+        "access_mode": "bare_git_tools",
+        "last_fetched_commit": "abcdef0123456789abcdef0123456789abcdef01",
+        "last_fetched_at": "2026-11-15T18:05:00Z",
+        "last_fetch_error": null,
+        "created_by": "01a1e065-2a21-7db5-8062-a0978e1843df",
+        "created_at": "2026-11-15T18:00:00Z"
+      }
+    }
+  },
+  "delete_repo_binding": {
+    "request": {
+      "method": "DELETE",
+      "path": "/api/v1/repo-bindings/01a1e065-2a21-7db5-8062-a0978e1843d2"
+    },
+    "response": {
+      "status": 204
+    }
+  },
+  "error_examples": {
+    "ssrf_loopback_rejected": {
+      "status": 422,
+      "body": {
+        "code": "REPO_URL_REJECTED",
+        "title": "Repository URL Rejected",
+        "status": 422,
+        "detail": "Host '127.0.0.1' resolves to forbidden IP 127.0.0.1",
+        "reason": "LOOPBACK_ADDRESS_FORBIDDEN"
+      }
+    },
+    "ssrf_metadata_rejected": {
+      "status": 422,
+      "body": {
+        "code": "REPO_URL_REJECTED",
+        "title": "Repository URL Rejected",
+        "status": 422,
+        "detail": "Host '169.254.169.254' resolves to forbidden IP 169.254.169.254",
+        "reason": "METADATA_OR_LINK_LOCAL_ADDRESS"
+      }
+    },
+    "ssrf_disallowed_scheme": {
+      "status": 422,
+      "body": {
+        "code": "REPO_URL_REJECTED",
+        "title": "Repository URL Rejected",
+        "status": 422,
+        "detail": "File protocol URLs are forbidden",
+        "reason": "SCHEME_FILE_DISALLOWED"
+      }
+    },
+    "repo_binding_in_use_conflict": {
+      "status": 409,
+      "body": {
+        "code": "REPO_BINDING_IN_USE",
+        "title": "Repository Binding In Use",
+        "status": 409,
+        "detail": "Repository binding is currently required by active workflow transition hooks"
+      }
+    },
+    "aal2_required_forbidden": {
+      "status": 403,
+      "body": {
+        "code": "AAL2_REQUIRED",
+        "title": "Authentication Level 2 Required",
+        "status": 403,
+        "detail": "Modifying repository mirrors requires active AAL2 authentication session"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+# Copyright 2026 Kanban Platform Contributors
+# Apache-2.0 License. See LICENSE for details.
+# Offline MCP canned tool responses fixture for KAN-100
+read_ticket:
+  KAN-100:
+    identifier: "KAN-100"
+    summary: "Auth Provider Cards"
+    status: "In Review"
+    priority: "High"
+    labels:
+      - "auth"
+      - "security"
+    description_markdown: "Implementation of Auth Provider Cards."
+  default:
+    identifier: "KAN-100"
+    summary: "Auth Provider Cards"
+    status: "In Review"
+
+search_tickets:
+  default:
+    status: "ok"
+    items:
+      - identifier: "KAN-100"
+        summary: "Auth Provider Cards"
+
+search_knowledge:
+  default:
+    status: "ok"
+    items: []
+
+read_doc:
+  default:
+    slug: "security-arch"
+    title: "Security Architecture"
+    content_markdown: "Read-only security architecture document."

@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""REST API router for MCP API keys administration (KB-P4-02a, S11.1)."""
+"""REST API router for MCP API keys administration (KB-P4-02a / KB-P4-14, S11.1)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.mcp_api_key import McpApiKey
@@ -38,6 +38,17 @@ class McpApiKeyMintRequest(BaseModel):
     principal_id: uuid.UUID | None = None
     expires_in_days: int | None = Field(default=None, ge=1, le=365)
     expires_at: datetime | None = None
+    scope_tier: Literal["global", "workspace", "project"] = "workspace"
+    owner_kind: Literal["service_bot", "personal_user"] = "service_bot"
+    project_id: uuid.UUID | None = None
+    allowed_workspace_ids: list[uuid.UUID] | None = None
+    allowed_project_ids: list[uuid.UUID] | None = None
+    capability_mask: int = Field(default=7, ge=1, le=255)
+    allowed_tools: list[str] | None = None
+    disabled_tools: list[str] = Field(default_factory=list)
+    allowed_cidrs: list[str] | None = None
+    unlimited: bool = False
+    confirm_unlimited: bool = False
 
 
 class McpApiKeyMintResponse(BaseModel):
@@ -47,16 +58,25 @@ class McpApiKeyMintResponse(BaseModel):
 
     id: uuid.UUID
     token: str
-    workspace_id: uuid.UUID
+    workspace_id: uuid.UUID | None = None
     principal_id: uuid.UUID
     surface: str
     key_prefix: str
     display_hint: str
     scopes: list[str]
     created_at: datetime
-    expires_at: datetime
+    expires_at: datetime | None = None
     revoked_at: datetime | None = None
     last_used_at: datetime | None = None
+    scope_tier: str = "workspace"
+    owner_kind: str = "service_bot"
+    project_id: uuid.UUID | None = None
+    allowed_workspace_ids: list[uuid.UUID] | None = None
+    allowed_project_ids: list[uuid.UUID] | None = None
+    capability_mask: int = 7
+    allowed_tools: list[str] | None = None
+    disabled_tools: list[str] = Field(default_factory=list)
+    allowed_cidrs: list[str] | None = None
 
 
 class McpApiKeyResponse(BaseModel):
@@ -65,7 +85,7 @@ class McpApiKeyResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: uuid.UUID
-    workspace_id: uuid.UUID
+    workspace_id: uuid.UUID | None = None
     principal_id: uuid.UUID
     surface: str
     key_prefix: str
@@ -73,9 +93,18 @@ class McpApiKeyResponse(BaseModel):
     scopes: list[str]
     created_by_id: uuid.UUID
     created_at: datetime
-    expires_at: datetime
+    expires_at: datetime | None = None
     revoked_at: datetime | None = None
     last_used_at: datetime | None = None
+    scope_tier: str = "workspace"
+    owner_kind: str = "service_bot"
+    project_id: uuid.UUID | None = None
+    allowed_workspace_ids: list[uuid.UUID] | None = None
+    allowed_project_ids: list[uuid.UUID] | None = None
+    capability_mask: int = 7
+    allowed_tools: list[str] | None = None
+    disabled_tools: list[str] = Field(default_factory=list)
+    allowed_cidrs: list[str] | None = None
 
 
 @router.post(
@@ -92,16 +121,29 @@ async def mint_key(
 ) -> McpApiKeyMintResponse:
     """Mint a surface-bound MCP API key and return plaintext token once."""
     target_principal_id = body.principal_id or caller.principal_id
+    target_workspace_id = None if body.scope_tier == "global" else caller.workspace_id
 
     key_record, plaintext_token = await mint_mcp_api_key(
         session,
-        workspace_id=caller.workspace_id,
+        workspace_id=target_workspace_id,
         principal_id=target_principal_id,
         surface=body.surface,
         scopes=body.scopes,
         created_by_id=caller.principal_id,
         expires_at=body.expires_at,
         expires_in_days=body.expires_in_days,
+        scope_tier=body.scope_tier,
+        owner_kind=body.owner_kind,
+        project_id=body.project_id,
+        allowed_workspace_ids=body.allowed_workspace_ids,
+        allowed_project_ids=body.allowed_project_ids,
+        capability_mask=body.capability_mask,
+        allowed_tools=body.allowed_tools,
+        disabled_tools=body.disabled_tools,
+        allowed_cidrs=body.allowed_cidrs,
+        unlimited=body.unlimited,
+        confirm_unlimited=body.confirm_unlimited,
+        caller_aal_level=caller.aal_level,
     )
 
     response.headers["Location"] = f"/api/v1/admin/mcp-keys/{key_record.id}"
@@ -119,6 +161,17 @@ async def mint_key(
         expires_at=key_record.expires_at,
         revoked_at=key_record.revoked_at,
         last_used_at=key_record.last_used_at,
+        scope_tier=key_record.scope_tier,
+        owner_kind=key_record.owner_kind,
+        project_id=key_record.project_id,
+        allowed_workspace_ids=key_record.allowed_workspace_ids,
+        allowed_project_ids=key_record.allowed_project_ids,
+        capability_mask=key_record.capability_mask,
+        allowed_tools=key_record.allowed_tools,
+        disabled_tools=list(key_record.disabled_tools or []),
+        allowed_cidrs=(
+            [str(c) for c in key_record.allowed_cidrs] if key_record.allowed_cidrs else None
+        ),
     )
 
 
@@ -131,11 +184,27 @@ async def list_keys(
     caller: Caller,
     session: Session,
     surface: Annotated[str | None, Query(description="Optional surface filter")] = None,
+    scope_tier: Annotated[str | None, Query(description="Optional scope tier filter")] = None,
 ) -> list[McpApiKeyResponse]:
-    """List metadata for MCP API keys belonging to the workspace."""
-    stmt = select(McpApiKey).where(McpApiKey.workspace_id == caller.workspace_id)
+    """List metadata for MCP API keys belonging to the workspace or global scope."""
+    stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+    is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
+
+    stmt = select(McpApiKey)
+    if is_server_admin:
+        stmt = stmt.where(
+            or_(
+                McpApiKey.workspace_id == caller.workspace_id,
+                McpApiKey.workspace_id.is_(None),
+            )
+        )
+    else:
+        stmt = stmt.where(McpApiKey.workspace_id == caller.workspace_id)
+
     if surface:
         stmt = stmt.where(McpApiKey.surface == surface)
+    if scope_tier:
+        stmt = stmt.where(McpApiKey.scope_tier == scope_tier)
     stmt = stmt.order_by(McpApiKey.created_at.desc())
 
     result = await session.execute(stmt)
@@ -155,6 +224,15 @@ async def list_keys(
             expires_at=k.expires_at,
             revoked_at=k.revoked_at,
             last_used_at=k.last_used_at,
+            scope_tier=k.scope_tier,
+            owner_kind=k.owner_kind,
+            project_id=k.project_id,
+            allowed_workspace_ids=k.allowed_workspace_ids,
+            allowed_project_ids=k.allowed_project_ids,
+            capability_mask=k.capability_mask,
+            allowed_tools=k.allowed_tools,
+            disabled_tools=list(k.disabled_tools or []),
+            allowed_cidrs=([str(c) for c in k.allowed_cidrs] if k.allowed_cidrs else None),
         )
         for k in records
     ]
@@ -170,9 +248,17 @@ async def revoke_key(
     caller: Caller,
     session: Session,
 ) -> None:
-    """Revoke an MCP API key by ID."""
+    """Revoke an active Model Context Protocol (MCP) API access key by unique UUID identifier."""
     key = await session.get(McpApiKey, key_id)
-    if key is None or key.workspace_id != caller.workspace_id:
+    if key is None:
+        not_found()
+
+    if key.workspace_id is None:
+        stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+        is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
+        if not is_server_admin:
+            not_found()
+    elif key.workspace_id != caller.workspace_id:
         not_found()
 
     await revoke_mcp_api_key(

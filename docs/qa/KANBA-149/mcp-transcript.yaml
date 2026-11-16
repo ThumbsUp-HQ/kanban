@@ -1,0 +1,129 @@
+# MCP Tool 8: manage_workflow_interceptors Transcript
+# Protocol Surface: /mcp/admin
+# Auth Token: kb_adm_live_test_token (Admin surface only)
+
+transcript:
+  - interaction: "Action: help"
+    request:
+      tool: "manage_workflow_interceptors"
+      parameters:
+        action: "help"
+        project: "KAN"
+    response: |
+      project: "KAN"
+      actions:
+        - "help: Show help, available workflow states, agents, wasm modules, and mutable fields"
+        - "list: List transitions and attached workflow interceptors"
+        - "attach: Attach a new interceptor hook to a transition"
+        - "update: Update an existing hook configuration"
+        - "reorder: Reorder execution sequence of hooks on a transition"
+        - "enable: Enable an attached hook"
+        - "disable: Disable an attached hook without detaching"
+        - "detach: Detach a hook from a transition (requires confirm: true)"
+        - "dry_run: Simulate transition execution against sample ticket or existing issue"
+      workflow_states:
+        - name: "Backlog"
+          type: "backlog"
+        - name: "In Progress"
+          type: "unstarted"
+        - name: "In QA"
+          type: "started"
+        - name: "Done"
+          type: "completed"
+      approved_wasm_modules:
+        - name: "qa-proof-checker"
+          sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      available_agents:
+        - slug: "reality-checker"
+          display_name: "Forensic Reality Checker"
+      mutable_field_universe:
+        - "priority"
+        - "estimate_points"
+        - "labels"
+        - "custom_fields"
+
+  - interaction: "Action: attach (validator)"
+    request:
+      tool: "manage_workflow_interceptors"
+      parameters:
+        action: "attach"
+        project: "KAN"
+        from_state: "In Progress"
+        to_state: "In QA"
+        name: "require-qa-proof-link"
+        hook_kind: "sync_validator"
+        wasm_module: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        failure_policy: "fail_closed"
+    response: |
+      status: "attached"
+      hook:
+        id: "c0000000-0000-0000-0000-000000000001"
+        name: "require-qa-proof-link"
+        hook_kind: "sync_validator"
+        from_state: "In Progress"
+        to_state: "In QA"
+        sort_rank: "0000000000000001"
+        is_enabled: true
+        wasm_module_sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        failure_policy: "fail_closed"
+        manifest_sha256: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b"
+
+  - interaction: "Action: dry_run"
+    request:
+      tool: "manage_workflow_interceptors"
+      parameters:
+        action: "dry_run"
+        project: "KAN"
+        from_state: "In Progress"
+        to_state: "In QA"
+        sample_ticket:
+          summary: "Implement feature X"
+          description_markdown: "Includes full unit test coverage and verification evidence"
+          priority: "medium"
+          labels: ["feature"]
+    response: |
+      would_commit: true
+      transition: "In Progress -> In QA"
+      duration_us: 1250
+      steps:
+        - order: 1
+          name: "require-qa-proof-link"
+          kind: "sync_validator"
+          result: "allowed"
+          reason: null
+          field_updates: null
+          duration_us: 310
+
+  - interaction: "Action: detach (unconfirmed preview)"
+    request:
+      tool: "manage_workflow_interceptors"
+      parameters:
+        action: "detach"
+        project: "KAN"
+        hook: "c0000000-0000-0000-0000-000000000001"
+        confirm: false
+    response: |
+      requires_confirmation: true
+      warning: "Detaching a workflow interceptor permanently deletes the hook and affects transition enforcement."
+      action_preview:
+        action: "detach"
+        hook_id: "c0000000-0000-0000-0000-000000000001"
+        name: "require-qa-proof-link"
+        transition: "In Progress -> In QA"
+        kind: "sync_validator"
+        sort_rank: "0000000000000001"
+      copyable_confirmation: "action: detach\nhook: c0000000-0000-0000-0000-000000000001\nconfirm: true"
+
+  - interaction: "Action: detach (confirmed execution)"
+    request:
+      tool: "manage_workflow_interceptors"
+      parameters:
+        action: "detach"
+        project: "KAN"
+        hook: "c0000000-0000-0000-0000-000000000001"
+        confirm: true
+    response: |
+      status: "detached"
+      detached_hook_id: "c0000000-0000-0000-0000-000000000001"
+      name: "require-qa-proof-link"
+      transition: "In Progress -> In QA"

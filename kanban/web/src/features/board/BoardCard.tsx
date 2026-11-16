@@ -133,6 +133,18 @@ export function BoardCard({
     }
   };
 
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    const target = e.target as HTMLElement | null;
+    if (
+      target?.closest(
+        'button, input, select, textarea, a, [role="button"]:not(.board-card)',
+      )
+    ) {
+      return;
+    }
+    handleOpenPeek();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -177,6 +189,7 @@ export function BoardCard({
       data-dragging={isDragging ? 'true' : undefined}
       data-drop-target={dropEdge ?? undefined}
       onKeyDown={handleKeyDown}
+      onClick={handleCardClick}
       aria-label={`${issue.key}: ${issue.summary}`}
     >
       <div className="board-card-top">

@@ -1,0 +1,4063 @@
+diff --git a/.agents/skills/kanban-agent-manager/SKILL.md b/.agents/skills/kanban-agent-manager/SKILL.md
+index 57b94ce..7165f78 100644
+--- a/.agents/skills/kanban-agent-manager/SKILL.md
++++ b/.agents/skills/kanban-agent-manager/SKILL.md
+@@ -15,37 +15,50 @@ All tickets managed under this workflow should conform to the companion [`kanban
+ 
+ ## Core Duties of the Agent Manager
+ 
+-1. **Assign Tickets to Implementation Sub-Agents**:
++1. **Ticket Deduplication & Creation Boundaries**:
++   - **Search Before Creating (`search_tickets`)**: Always search existing `Backlog`, `Todo`, and `In Progress` tickets before creating new ones. If an upcoming or open ticket already covers the same subsystem or feature, **update that ticket in-place (`update_ticket`)** rather than creating a duplicate ticket.
++   - **Parallel Specialist Consultation**: Before authoring tickets or designing implementations, consult relevant domain specialists (e.g., UX/Frontend Architect, Backend Architect, Security Engineer) **in parallel** to validate architecture, UX ergonomics, and security invariants.
++   - **Do Not Start Implementation Unprompted**: When the user asks to create, refine, or add tickets, stop after creating/updating the tickets and wait for explicit instruction before starting implementation (`begin_work`).
++2. **Use Small/Fast Models Instead of the Coordinator's Model**:
++   - Do **not** default all workers or sub-agents to the Coordinator's heavy flagship model. Preserve quota and reduce latency by pinning implementation builders, test-coverage agents, specialist reviewers, and `reality-checker` auditors to **smaller, faster models** (e.g., `flash`, `gemini-3.8-flash-medium`, `gemini-4-argon-low`, `claude-sonnet-5-5-medium`, `haiku`, or Codex fast tier).
++   - For **black-box human browser QA**, explicitly use a small/low-reasoning model (`gemini-4-argon-low` or `flash`) supplied only with user-level instructions so it tests the UI as a human would rather than reverse-engineering source code or working around bugs.
++3. **Reuse Persistent Sub-Agents & Swarm Workers for Context Caching**:
++   - Maintain long-lived references (`conversationId`s via `send_message`, or warm `waiting` swarm roster members such as `reality-checker`, `arch-reviewer`, `ui-specialist`, `sec-eng`, and `qa-eng` via board `@mentions`) across tickets instead of spawning fresh disposable sub-agents for every task.
++   - Reusing an existing agent conversation keeps system prompts, persona files, and codebase reads in the **cached-token tier (~1/100th input token cost)**, and `waiting` swarm workers consume zero tokens while asleep. Only `kill` temporary implementation builders after their wave is merged and certified.
++   - In Antigravity, when custom agent markdown files in `.agents/agents/*.md` declare CLI-only tool names in frontmatter, invoke sub-agents with `TypeName: "self"` (inheriting valid harness tools) and instruct them to read `.agents/agents/<specialist>.md` for their persona and rubric.
++4. **Assign Tickets to Implementation Sub-Agents**:
+    - Move the target ticket to `In Progress` via `begin_work` (or `transition_ticket`).
+-   - Delegate implementation to a dedicated sub-agent with the verbatim ticket text and forensic proof requirements.
+-2. **Update Comments & Status on Tickets**:
++   - Delegate implementation to a dedicated sub-agent or swarm worker (on a fast/medium model) with the verbatim ticket text and forensic proof requirements.
++5. **Update Comments & Status on Tickets**:
+    - Record sub-agent assignments, forensic proof locations, `reality-checker` QA reports, and remediation cycles on the ticket via Kanban MCP tools (`begin_work`, `transition_ticket`, `complete_work`, `update_ticket`). All comments are recorded under the user's identity.
+-3. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
++6. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
+    - When an implementing sub-agent claims a ticket is done - or **even if the sub-agent closes the ticket itself** - you **MUST keep the ticket open** (immediately reopen/transition it back to `In Progress` via `transition_ticket` if a sub-agent closed it).
+-   - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after the `reality-checker` sub-agent certifies it as **grade-A `READY`**.
+-4. **Run the `reality-checker` QA Gate on a Fast Model**:
+-   - Invoke a dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
++   - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after required domain specialists (`ui-specialist-review.md`, `api-specialist-review.md`) and the `reality-checker` sub-agent certify it as **grade-A `READY`**.
++7. **Run the `reality-checker` QA Gate on a Fast Model**:
++   - Invoke or message the dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
+    - Provide **full forensic proofs, never summaries**. `reality-checker` is a pure quality assurance auditor and **must NOT run tests manually, execute shell commands to check results, or visit websites**.
+-5. **Route `reality-checker` Verdicts**:
++8. **Route `reality-checker` Verdicts**:
+    - **`FAILED` or `NEEDS WORK` (`NEEDS_WORK`)**: Keep the ticket open (`In Progress`), post the verdict to the ticket, and send the full `reality-checker` critique back to the implementing sub-agent to fix the defects and regenerate the proof bundle.
+    - **Grade-A `READY`**: Record the full `reality-checker` certification report in the ticket comments and complete the transition to `Done` (`complete_work`).
+-6. **Delegate Post-Completion >=95% Unit Test Coverage**:
++9. **Delegate Post-Completion >=95% Unit Test Coverage**:
+    - `reality-checker` does **not** audit unit test coverage percentages.
+-   - Once a feature ticket is implemented (or completed), assign a dedicated testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
+-7. **Continuous Gap Detection & Ticket Creation**:
+-   - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - immediately create a new Kanban ticket for it using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
++   - Once a feature ticket is implemented (or completed), assign a fast testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
++10. **Continuous Gap Detection & Ticket Creation**:
++    - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - first check `search_tickets` for an existing backlog item to update, or create a new Kanban ticket using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
+ 
+ ---
+ 
+ ## Cross-Harness Sub-Agent Mapping (Claude, Codex, Gemini)
+ 
+-Adapt sub-agent delegation to the active harness's native primitives while preserving identical workflow semantics:
++Adapt sub-agent delegation to the active harness's native primitives while preserving identical workflow semantics, **small/fast model selection**, and **persistent conversation reuse**:
+ 
+ | Action | Gemini CLI / Antigravity | Claude Code | OpenAI Codex / ChatGPT |
+ | :--- | :--- | :--- | :--- |
+-| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, write tools enabled) | `Task` tool (general-purpose sub-agent with edit/bash access) | Spawn worker/sub-agent task with workspace write permissions |
+-| **Spawn Read-Only `reality-checker`** | `define_subagent` (`EnableWriteTools: false`) + `invoke_subagent` (`Model: "flash"`) | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
+-| **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
++| **Consult Specialists Before Planning/Coding** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`, reads `.agents/agents/<role>.md`) or reuse `conversationId` via `send_message` | Parallel `Task` calls (`model: "haiku"` or `"sonnet"`) with `.agents/agents/<role>.md` | Parallel specialist workers on fast model tier |
++| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`) or `swarm` `add` (`model: "gemini-3.8-flash-medium"` / `"claude-sonnet-5-5-medium"`) | `Task` tool (`model: "sonnet"` or `"haiku"`, edit/bash access) | Spawn worker/sub-agent task on fast/medium model with workspace write permissions |
++| **Spawn / Reuse Read-Only `reality-checker`** | `invoke_subagent` (`Model: "flash"`) or reuse warm `reality-checker` via `send_message` / `@reality-checker` | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Reuse or spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
++| **Black-Box Browser QA** | `invoke_subagent` or `swarm` `add` pinned to `gemini-4-argon-low` / `flash` with user-level test plan only | `Task` tool (`model: "haiku"`) with browser MCP and user-level test plan | Fast/low-reasoning worker with browser harness and user-level test plan |
++| **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` or `@mention` on swarm board | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
+ 
+ ---
+ 
+diff --git a/.agents/skills/kanban-ticket/SKILL.md b/.agents/skills/kanban-ticket/SKILL.md
+index 97e577f..7ef86a6 100644
+--- a/.agents/skills/kanban-ticket/SKILL.md
++++ b/.agents/skills/kanban-ticket/SKILL.md
+@@ -15,6 +15,10 @@ Use this skill together with [`kanban-agent-manager`](../kanban-agent-manager/SK
+ 
+ ## Core Principles for Scoped Tickets
+ 
++0. **Deduplicate & Consult Specialists Before Creating Tickets**:
++   - **Search First (`search_tickets`)**: Always search `Backlog`, `Todo`, and `In Progress` before creating a new ticket. If an existing ticket already covers the target area or upcoming feature, **update that ticket in-place (`update_ticket`)** instead of creating a duplicate.
++   - **Consult Domain Specialists in Parallel**: Consult relevant specialists (UX/Frontend, Backend, Security) on fast models before finalizing ticket specifications.
++   - **Do Not Auto-Start Implementation**: When asked to create or update tickets, stop once the tickets are created/updated and wait for explicit instruction to begin implementation.
+ 1. **Single-Ticket Boundary (No Cross-Ticket Bleed)**:
+    - A ticket's **Definition of Done** and **Verification Proof** must only test artifacts, files, and behaviors that exist after completing *that specific ticket* (and its explicit prerequisites).
+    - Never require an early ticket to pass end-to-end checks against components built in later tickets.
+diff --git a/database/migrations/sql/p4_14_mcp_scopable_keys.down.sql b/database/migrations/sql/p4_14_mcp_scopable_keys.down.sql
+new file mode 100644
+index 0000000..07a5a7a
+--- /dev/null
++++ b/database/migrations/sql/p4_14_mcp_scopable_keys.down.sql
+@@ -0,0 +1,122 @@
++-- Phase 4 / MCP: Revert Hierarchical Scopable Keys (KB-P4-14 / KANBA-106)
++
++-- 1. Restore introspect_mcp_api_key function to original 11-column signature
++DROP FUNCTION IF EXISTS introspect_mcp_api_key(BYTEA);
++CREATE FUNCTION introspect_mcp_api_key(p_key_sha256 BYTEA)
++RETURNS TABLE (
++    id UUID,
++    workspace_id UUID,
++    principal_id UUID,
++    surface TEXT,
++    key_prefix TEXT,
++    scopes TEXT[],
++    created_at TIMESTAMPTZ,
++    expires_at TIMESTAMPTZ,
++    revoked_at TIMESTAMPTZ,
++    last_used_at TIMESTAMPTZ,
++    principal_status TEXT
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_now TIMESTAMPTZ := clock_timestamp();
++    v_key mcp_api_keys%ROWTYPE;
++    v_status TEXT;
++BEGIN
++    SELECT * INTO v_key
++    FROM mcp_api_keys k
++    WHERE k.key_sha256 = p_key_sha256;
++
++    IF NOT FOUND THEN
++        RETURN;
++    END IF;
++
++    SELECT status INTO v_status
++    FROM principals p
++    WHERE p.id = v_key.principal_id;
++
++    -- Update last_used_at at most once per 60 seconds
++    IF v_key.last_used_at IS NULL OR v_key.last_used_at < (v_now - interval '60 seconds') THEN
++        UPDATE mcp_api_keys
++        SET last_used_at = v_now
++        WHERE mcp_api_keys.id = v_key.id
++        RETURNING * INTO v_key;
++    END IF;
++
++    RETURN QUERY
++    SELECT
++        v_key.id,
++        v_key.workspace_id,
++        v_key.principal_id,
++        v_key.surface,
++        v_key.key_prefix,
++        v_key.scopes,
++        v_key.created_at,
++        v_key.expires_at,
++        v_key.revoked_at,
++        v_key.last_used_at,
++        v_status;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION introspect_mcp_api_key(BYTEA) TO kanban_app;
++
++-- 2. Restore original RLS policies
++DROP POLICY IF EXISTS mcp_api_keys_select_rls ON mcp_api_keys;
++DROP POLICY IF EXISTS mcp_api_keys_insert_rls ON mcp_api_keys;
++DROP POLICY IF EXISTS mcp_api_keys_update_rls ON mcp_api_keys;
++DROP POLICY IF EXISTS mcp_api_keys_delete_rls ON mcp_api_keys;
++
++CREATE POLICY mcp_api_keys_select_rls ON mcp_api_keys
++    FOR SELECT USING (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY mcp_api_keys_insert_rls ON mcp_api_keys
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY mcp_api_keys_update_rls ON mcp_api_keys
++    FOR UPDATE USING (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    ) WITH CHECK (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY mcp_api_keys_delete_rls ON mcp_api_keys
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++    );
++
++-- 3. Drop constraints, indexes, and revert columns
++DROP INDEX IF EXISTS mcp_api_keys_project_idx;
++DROP INDEX IF EXISTS mcp_api_keys_scope_tier_idx;
++DROP INDEX IF EXISTS mcp_api_keys_owner_kind_idx;
++
++ALTER TABLE mcp_api_keys DROP CONSTRAINT IF EXISTS mcp_keys_tier_shape_chk;
++ALTER TABLE mcp_api_keys DROP CONSTRAINT IF EXISTS mcp_api_keys_expires_at_check;
++ALTER TABLE mcp_api_keys ADD CONSTRAINT mcp_api_keys_expires_at_check
++    CHECK (expires_at <= created_at + interval '365 days');
++
++-- Ensure no NULL expires_at or workspace_id before enforcing NOT NULL
++UPDATE mcp_api_keys SET expires_at = created_at + interval '30 days' WHERE expires_at IS NULL;
++DELETE FROM mcp_api_keys WHERE workspace_id IS NULL;
++
++ALTER TABLE mcp_api_keys
++    ALTER COLUMN workspace_id SET NOT NULL,
++    ALTER COLUMN expires_at SET NOT NULL,
++    DROP COLUMN IF EXISTS scope_tier,
++    DROP COLUMN IF EXISTS owner_kind,
++    DROP COLUMN IF EXISTS project_id,
++    DROP COLUMN IF EXISTS allowed_workspace_ids,
++    DROP COLUMN IF EXISTS allowed_project_ids,
++    DROP COLUMN IF EXISTS capability_mask,
++    DROP COLUMN IF EXISTS allowed_tools,
++    DROP COLUMN IF EXISTS disabled_tools,
++    DROP COLUMN IF EXISTS allowed_cidrs;
+diff --git a/database/migrations/sql/p4_14_mcp_scopable_keys.up.sql b/database/migrations/sql/p4_14_mcp_scopable_keys.up.sql
+new file mode 100644
+index 0000000..94385a2
+--- /dev/null
++++ b/database/migrations/sql/p4_14_mcp_scopable_keys.up.sql
+@@ -0,0 +1,172 @@
++-- Phase 4 / MCP: Hierarchical Scopable Keys (Global, Workspace, Project, Personal User) + Capability/Tool Narrowing (KB-P4-14 / KANBA-106)
++
++-- 1. Schema modifications for mcp_api_keys
++ALTER TABLE mcp_api_keys
++    ALTER COLUMN workspace_id DROP NOT NULL,
++    ALTER COLUMN expires_at DROP NOT NULL,
++    ADD COLUMN scope_tier            TEXT NOT NULL DEFAULT 'workspace'
++        CHECK (scope_tier IN ('global', 'workspace', 'project')),
++    ADD COLUMN owner_kind            TEXT NOT NULL DEFAULT 'service_bot'
++        CHECK (owner_kind IN ('personal_user', 'service_bot')),
++    ADD COLUMN project_id            UUID REFERENCES projects(id) ON DELETE CASCADE,
++    ADD COLUMN allowed_workspace_ids UUID[],
++    ADD COLUMN allowed_project_ids   UUID[],
++    ADD COLUMN capability_mask       INTEGER NOT NULL DEFAULT 7 CHECK (capability_mask BETWEEN 1 AND 255),
++    ADD COLUMN allowed_tools         TEXT[],
++    ADD COLUMN disabled_tools        TEXT[] NOT NULL DEFAULT '{}'::TEXT[],
++    ADD COLUMN allowed_cidrs         CIDR[];
++
++-- Update expires_at check constraint to permit NULL when unlimited
++ALTER TABLE mcp_api_keys DROP CONSTRAINT IF EXISTS mcp_api_keys_expires_at_check;
++ALTER TABLE mcp_api_keys ADD CONSTRAINT mcp_api_keys_expires_at_check
++    CHECK (expires_at IS NULL OR expires_at <= created_at + interval '365 days');
++
++-- Shape constraint enforcing tier-specific foreign key rules
++ALTER TABLE mcp_api_keys ADD CONSTRAINT mcp_keys_tier_shape_chk CHECK (
++    (scope_tier = 'global'    AND workspace_id IS NULL AND project_id IS NULL) OR
++    (scope_tier = 'workspace' AND workspace_id IS NOT NULL AND project_id IS NULL) OR
++    (scope_tier = 'project'   AND workspace_id IS NOT NULL AND project_id IS NOT NULL)
++);
++
++CREATE INDEX mcp_api_keys_project_idx ON mcp_api_keys (project_id);
++CREATE INDEX mcp_api_keys_scope_tier_idx ON mcp_api_keys (scope_tier);
++CREATE INDEX mcp_api_keys_owner_kind_idx ON mcp_api_keys (owner_kind);
++
++-- 2. Update Row Level Security Policies
++DROP POLICY IF EXISTS mcp_api_keys_select_rls ON mcp_api_keys;
++DROP POLICY IF EXISTS mcp_api_keys_insert_rls ON mcp_api_keys;
++DROP POLICY IF EXISTS mcp_api_keys_update_rls ON mcp_api_keys;
++DROP POLICY IF EXISTS mcp_api_keys_delete_rls ON mcp_api_keys;
++
++CREATE POLICY mcp_api_keys_select_rls ON mcp_api_keys
++    FOR SELECT USING (
++        (scope_tier = 'global' AND (app_current_workspace_id() IS NULL OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])))
++        OR
++        (scope_tier = 'workspace' AND (app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++        OR
++        (scope_tier = 'project' AND (app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN']))
++        OR
++        (owner_kind = 'personal_user' AND principal_id = app_current_principal_id() AND (workspace_id IS NULL OR app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()))
++    );
++
++CREATE POLICY mcp_api_keys_insert_rls ON mcp_api_keys
++    FOR INSERT WITH CHECK (
++        (scope_tier = 'global' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++        OR
++        (scope_tier = 'workspace' AND (app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++        OR
++        (scope_tier = 'project' AND (app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN']))
++        OR
++        (owner_kind = 'personal_user' AND principal_id = app_current_principal_id())
++    );
++
++CREATE POLICY mcp_api_keys_update_rls ON mcp_api_keys
++    FOR UPDATE USING (
++        (scope_tier = 'global' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++        OR
++        (scope_tier = 'workspace' AND (app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++        OR
++        (scope_tier = 'project' AND (app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN']))
++        OR
++        (owner_kind = 'personal_user' AND principal_id = app_current_principal_id())
++    ) WITH CHECK (
++        (scope_tier = 'global' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++        OR
++        (scope_tier = 'workspace' AND (app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++        OR
++        (scope_tier = 'project' AND (app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN']))
++        OR
++        (owner_kind = 'personal_user' AND principal_id = app_current_principal_id())
++    );
++
++CREATE POLICY mcp_api_keys_delete_rls ON mcp_api_keys
++    FOR DELETE USING (
++        (scope_tier = 'global' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++        OR
++        (scope_tier = 'workspace' AND (app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()) AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++        OR
++        (scope_tier = 'project' AND (app_current_workspace_id() IS NULL OR workspace_id = app_current_workspace_id()) AND app_principal_has_role(project_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN']))
++        OR
++        (owner_kind = 'personal_user' AND principal_id = app_current_principal_id())
++    );
++
++-- 3. Update introspect_mcp_api_key FUNCTION to return hierarchical scope, narrowing, and tool fields
++DROP FUNCTION IF EXISTS introspect_mcp_api_key(BYTEA);
++CREATE FUNCTION introspect_mcp_api_key(p_key_sha256 BYTEA)
++RETURNS TABLE (
++    id UUID,
++    workspace_id UUID,
++    principal_id UUID,
++    surface TEXT,
++    key_prefix TEXT,
++    scopes TEXT[],
++    created_at TIMESTAMPTZ,
++    expires_at TIMESTAMPTZ,
++    revoked_at TIMESTAMPTZ,
++    last_used_at TIMESTAMPTZ,
++    principal_status TEXT,
++    scope_tier TEXT,
++    owner_kind TEXT,
++    project_id UUID,
++    allowed_workspace_ids UUID[],
++    allowed_project_ids UUID[],
++    capability_mask INTEGER,
++    allowed_tools TEXT[],
++    disabled_tools TEXT[],
++    allowed_cidrs CIDR[]
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_now TIMESTAMPTZ := clock_timestamp();
++    v_key mcp_api_keys%ROWTYPE;
++    v_status TEXT;
++BEGIN
++    SELECT * INTO v_key
++    FROM mcp_api_keys k
++    WHERE k.key_sha256 = p_key_sha256;
++
++    IF NOT FOUND THEN
++        RETURN;
++    END IF;
++
++    SELECT status INTO v_status
++    FROM principals p
++    WHERE p.id = v_key.principal_id;
++
++    -- Update last_used_at at most once per 60 seconds
++    IF v_key.last_used_at IS NULL OR v_key.last_used_at < (v_now - interval '60 seconds') THEN
++        UPDATE mcp_api_keys
++        SET last_used_at = v_now
++        WHERE mcp_api_keys.id = v_key.id
++        RETURNING * INTO v_key;
++    END IF;
++
++    RETURN QUERY
++    SELECT
++        v_key.id,
++        v_key.workspace_id,
++        v_key.principal_id,
++        v_key.surface,
++        v_key.key_prefix,
++        v_key.scopes,
++        v_key.created_at,
++        v_key.expires_at,
++        v_key.revoked_at,
++        v_key.last_used_at,
++        v_status,
++        v_key.scope_tier,
++        v_key.owner_kind,
++        v_key.project_id,
++        v_key.allowed_workspace_ids,
++        v_key.allowed_project_ids,
++        v_key.capability_mask,
++        v_key.allowed_tools,
++        v_key.disabled_tools,
++        v_key.allowed_cidrs;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION introspect_mcp_api_key(BYTEA) TO kanban_app;
+diff --git a/database/migrations/versions/p4_14_mcp_scopable_keys.py b/database/migrations/versions/p4_14_mcp_scopable_keys.py
+new file mode 100644
+index 0000000..7c72e2d
+--- /dev/null
++++ b/database/migrations/versions/p4_14_mcp_scopable_keys.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Hierarchical scopable MCP API keys, narrowing, RLS & unlimited expiry (KB-P4-14 / KANBA-106).
++
++Revision ID: p4_14_mcp_scopable_keys
++Revises: p5_13_approved_wasm_modules
++Create Date: 2026-11-15 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p4_14_mcp_scopable_keys"
++down_revision: str | None = "p5_13_approved_wasm_modules"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply mcp_api_keys hierarchical scope columns, constraints, RLS, and functions."""
++    execute_sql_file("p4_14_mcp_scopable_keys.up.sql")
++
++
++def downgrade() -> None:
++    """Revert mcp_api_keys hierarchical scope columns, constraints, RLS, and functions."""
++    execute_sql_file("p4_14_mcp_scopable_keys.down.sql")
+diff --git a/database/models/mcp_api_key.py b/database/models/mcp_api_key.py
+index e695b33..9974a2d 100644
+--- a/database/models/mcp_api_key.py
++++ b/database/models/mcp_api_key.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""SQLAlchemy model for mcp_api_keys table (KB-P4-02a / S11.1)."""
++"""SQLAlchemy model for mcp_api_keys table (KB-P4-02a / KB-P4-14 / S11.1)."""
+ 
+ from __future__ import annotations
+ 
+@@ -8,18 +8,21 @@ import uuid  # Runtime import required for Pydantic / SQLAlchemy mapped_column
+ from datetime import datetime  # noqa: TC003  # Runtime import required for SQLAlchemy Mapped[datetime]
+ from typing import TYPE_CHECKING, Literal
+ 
+-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func
+-from sqlalchemy.dialects.postgresql import ARRAY, BYTEA, UUID
++from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func, text
++from sqlalchemy.dialects.postgresql import ARRAY, BYTEA, CIDR, UUID
+ from sqlalchemy.orm import Mapped, mapped_column, relationship
+ 
+ from database.models.base import Base
+ 
+ if TYPE_CHECKING:
+     from database.models.principals import Principal
++    from database.models.projects import Project
+     from database.models.spine import Workspace
+ 
+ McpSurface = Literal["agent", "docs", "admin"]
+ McpKeyPrefix = Literal["kb_agt_", "kb_doc_", "kb_adm_"]
++ScopeTier = Literal["global", "workspace", "project"]
++OwnerKind = Literal["personal_user", "service_bot"]
+ 
+ 
+ class McpApiKey(Base):
+@@ -33,10 +36,10 @@ class McpApiKey(Base):
+         default=uuid.uuid4,
+         server_default=func.uuidv7(),
+     )
+-    workspace_id: Mapped[uuid.UUID] = mapped_column(
++    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+         UUID(as_uuid=True),
+         ForeignKey("workspaces.id", ondelete="CASCADE"),
+-        nullable=False,
++        nullable=True,
+         index=True,
+     )
+     principal_id: Mapped[uuid.UUID] = mapped_column(
+@@ -67,6 +70,50 @@ class McpApiKey(Base):
+         ARRAY(Text),
+         nullable=False,
+     )
++    scope_tier: Mapped[str] = mapped_column(
++        Text,
++        nullable=False,
++        server_default="workspace",
++        index=True,
++    )
++    owner_kind: Mapped[str] = mapped_column(
++        Text,
++        nullable=False,
++        server_default="service_bot",
++        index=True,
++    )
++    project_id: Mapped[uuid.UUID | None] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("projects.id", ondelete="CASCADE"),
++        nullable=True,
++        index=True,
++    )
++    allowed_workspace_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
++        ARRAY(UUID(as_uuid=True)),
++        nullable=True,
++    )
++    allowed_project_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
++        ARRAY(UUID(as_uuid=True)),
++        nullable=True,
++    )
++    capability_mask: Mapped[int] = mapped_column(
++        Integer,
++        nullable=False,
++        server_default="7",
++    )
++    allowed_tools: Mapped[list[str] | None] = mapped_column(
++        ARRAY(Text),
++        nullable=True,
++    )
++    disabled_tools: Mapped[list[str]] = mapped_column(
++        ARRAY(Text),
++        nullable=False,
++        server_default=text("'{}'::TEXT[]"),
++    )
++    allowed_cidrs: Mapped[list[str] | None] = mapped_column(
++        ARRAY(CIDR),
++        nullable=True,
++    )
+     created_by_id: Mapped[uuid.UUID] = mapped_column(
+         UUID(as_uuid=True),
+         ForeignKey("principals.id"),
+@@ -77,9 +124,9 @@ class McpApiKey(Base):
+         nullable=False,
+         server_default=func.clock_timestamp(),
+     )
+-    expires_at: Mapped[datetime] = mapped_column(
++    expires_at: Mapped[datetime | None] = mapped_column(
+         DateTime(timezone=True),
+-        nullable=False,
++        nullable=True,
+     )
+     revoked_at: Mapped[datetime | None] = mapped_column(
+         DateTime(timezone=True),
+@@ -90,7 +137,7 @@ class McpApiKey(Base):
+         nullable=True,
+     )
+ 
+-    workspace: Mapped[Workspace] = relationship(
++    workspace: Mapped[Workspace | None] = relationship(
+         "Workspace",
+         foreign_keys=[workspace_id],
+     )
+@@ -98,6 +145,10 @@ class McpApiKey(Base):
+         "Principal",
+         foreign_keys=[principal_id],
+     )
++    project: Mapped[Project | None] = relationship(
++        "Project",
++        foreign_keys=[project_id],
++    )
+     created_by: Mapped[Principal] = relationship(
+         "Principal",
+         foreign_keys=[created_by_id],
+@@ -121,11 +172,29 @@ class McpApiKey(Base):
+             name="mcp_api_keys_display_hint_check",
+         ),
+         CheckConstraint(
+-            "expires_at <= created_at + interval '365 days'",
++            "expires_at IS NULL OR expires_at <= created_at + interval '365 days'",
+             name="mcp_api_keys_expires_at_check",
+         ),
+         CheckConstraint(
+             "(surface, key_prefix) IN (('agent','kb_agt_'),('docs','kb_doc_'),('admin','kb_adm_'))",
+             name="mcp_api_keys_surface_prefix_pair_check",
+         ),
++        CheckConstraint(
++            "scope_tier IN ('global', 'workspace', 'project')",
++            name="mcp_api_keys_scope_tier_check",
++        ),
++        CheckConstraint(
++            "owner_kind IN ('personal_user', 'service_bot')",
++            name="mcp_api_keys_owner_kind_check",
++        ),
++        CheckConstraint(
++            "capability_mask BETWEEN 1 AND 255",
++            name="mcp_api_keys_capability_mask_check",
++        ),
++        CheckConstraint(
++            "(scope_tier = 'global' AND workspace_id IS NULL AND project_id IS NULL) OR "
++            "(scope_tier = 'workspace' AND workspace_id IS NOT NULL AND project_id IS NULL) OR "
++            "(scope_tier = 'project' AND workspace_id IS NOT NULL AND project_id IS NOT NULL)",
++            name="mcp_keys_tier_shape_chk",
++        ),
+     )
+diff --git a/database/testing/pg_harness.py b/database/testing/pg_harness.py
+index 80054ba..8489cb0 100644
+--- a/database/testing/pg_harness.py
++++ b/database/testing/pg_harness.py
+@@ -2,6 +2,7 @@
+ 
+ import asyncio
+ import configparser
++import contextlib
+ import hashlib
+ import logging
+ import os
+@@ -212,6 +213,7 @@ async def ensure_template(
+ 
+     conn = await asyncpg.connect(user=resolved_user, database="postgres", host=resolved_host)
+     try:
++        await conn.execute("SELECT pg_advisory_lock(718293041)")
+         row = await conn.fetchrow(
+             "SELECT d.oid, pg_catalog.shobj_description(d.oid, 'pg_database') AS comment "
+             "FROM pg_catalog.pg_database d WHERE d.datname = $1",
+@@ -222,36 +224,34 @@ async def ensure_template(
+ 
+         await conn.execute(f"DROP DATABASE IF EXISTS {template_db_name} WITH (FORCE)")
+         await conn.execute(f"CREATE DATABASE {template_db_name}")
+-    finally:
+-        await conn.close()
+ 
+-    # Step A: Bootstrap cluster roles and extensions
+-    superuser_dsn = build_dsn(database=template_db_name, host=resolved_host, user=resolved_user)
+-    await bootstrap_cluster(superuser_dsn)
++        # Step A: Bootstrap cluster roles and extensions
++        superuser_dsn = build_dsn(database=template_db_name, host=resolved_host, user=resolved_user)
++        await bootstrap_cluster(superuser_dsn)
+ 
+-    # Step B: Run Alembic migrations if alembic.ini is present
+-    alembic_ini_path: Path | None = None
+-    for candidate in (resolved_root / "database" / "alembic.ini", resolved_root / "alembic.ini"):
+-        if candidate.is_file():
+-            alembic_ini_path = candidate
+-            break
++        # Step B: Run Alembic migrations if alembic.ini is present
++        alembic_ini_path: Path | None = None
++        for candidate in (resolved_root / "database" / "alembic.ini", resolved_root / "alembic.ini"):
++            if candidate.is_file():
++                alembic_ini_path = candidate
++                break
+ 
+-    if alembic_ini_path is not None:
+-        await asyncio.to_thread(_run_template_alembic, alembic_ini_path, superuser_dsn)
++        if alembic_ini_path is not None:
++            await asyncio.to_thread(_run_template_alembic, alembic_ini_path, superuser_dsn)
+ 
+-    # Step C: Apply custom template SQL files
+-    await _apply_template_sql(resolved_sql_dir, template_db_name, resolved_host, resolved_user)
++        # Step C: Apply custom template SQL files
++        await _apply_template_sql(resolved_sql_dir, template_db_name, resolved_host, resolved_user)
+ 
+-    # Step D: Record fingerprint and lock connections
+-    conn = await asyncpg.connect(user=resolved_user, database="postgres", host=resolved_host)
+-    try:
++        # Step D: Record fingerprint and lock connections
+         await conn.execute(f"COMMENT ON DATABASE {template_db_name} IS '{fingerprint}'")
+         await conn.execute(f"ALTER DATABASE {template_db_name} WITH ALLOW_CONNECTIONS false")
++
++        return fingerprint
+     finally:
++        with contextlib.suppress(Exception):
++            await conn.execute("SELECT pg_advisory_unlock(718293041)")
+         await conn.close()
+ 
+-    return fingerprint
+-
+ 
+ def pytest_configure(config: pytest.Config) -> None:
+     """Validate PostgreSQL readiness and build template DB in controller process."""
+diff --git a/database/tests/migrations/test_p4_14_migration.py b/database/tests/migrations/test_p4_14_migration.py
+new file mode 100644
+index 0000000..ed9d9c6
+--- /dev/null
++++ b/database/tests/migrations/test_p4_14_migration.py
+@@ -0,0 +1,73 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Migration lifecycle test for p4_14_mcp_scopable_keys (KB-P4-14 / KANBA-106)."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_p4_14_mcp_scopable_keys_migration_lifecycle() -> None:
++    """Verify p4_14 upgrade applies scopable key columns, constraints, and downgrade reverts."""
++    async with MigrationHarness() as harness:
++        prev_rev = harness.previous_of("p4_14_mcp_scopable_keys")
++        assert prev_rev == "p5_13_approved_wasm_modules"
++
++        # 1. Upgrade to p4_14_mcp_scopable_keys
++        await harness.upgrade("p4_14_mcp_scopable_keys")
++
++        # Verify table exists with FORCE RLS
++        table_info = await harness.fetch(
++            "SELECT c.relrowsecurity, c.relforcerowsecurity "
++            "FROM pg_class c "
++            "JOIN pg_namespace n ON n.oid = c.relnamespace "
++            "WHERE n.nspname = 'public' AND c.relname = $1",
++            "mcp_api_keys",
++        )
++        assert len(table_info) == 1, "Table mcp_api_keys missing"
++        assert table_info[0]["relrowsecurity"] is True
++        assert table_info[0]["relforcerowsecurity"] is True
++
++        # Verify new columns exist
++        cols = await harness.fetch(
++            "SELECT column_name, is_nullable, data_type "
++            "FROM information_schema.columns "
++            "WHERE table_name = 'mcp_api_keys'"
++        )
++        col_map = {r["column_name"]: (r["is_nullable"], r["data_type"]) for r in cols}
++        assert "scope_tier" in col_map
++        assert "owner_kind" in col_map
++        assert "project_id" in col_map
++        assert "allowed_workspace_ids" in col_map
++        assert "allowed_project_ids" in col_map
++        assert "capability_mask" in col_map
++        assert "allowed_tools" in col_map
++        assert "disabled_tools" in col_map
++        assert "allowed_cidrs" in col_map
++        assert col_map["workspace_id"][0] == "YES", "workspace_id must be nullable for global tier"
++        assert col_map["expires_at"][0] == "YES", "expires_at must be nullable for unlimited keys"
++
++        # Verify check constraint mcp_keys_tier_shape_chk exists
++        constrs = await harness.fetch(
++            "SELECT conname FROM pg_constraint WHERE conname = 'mcp_keys_tier_shape_chk'"
++        )
++        assert len(constrs) == 1, "Constraint mcp_keys_tier_shape_chk missing"
++
++        # 2. Downgrade to previous revision
++        await harness.downgrade(prev_rev)
++
++        # Verify columns removed and workspace_id NOT NULL restored
++        cols_post = await harness.fetch(
++            "SELECT column_name, is_nullable "
++            "FROM information_schema.columns "
++            "WHERE table_name = 'mcp_api_keys'"
++        )
++        col_map_post = {r["column_name"]: r["is_nullable"] for r in cols_post}
++        assert "scope_tier" not in col_map_post
++        assert "disabled_tools" not in col_map_post
++        assert col_map_post["workspace_id"] == "NO", "workspace_id must be NOT NULL after downgrade"
++        assert col_map_post["expires_at"] == "NO", "expires_at must be NOT NULL after downgrade"
++
++        # 3. Upgrade back to head
++        await harness.upgrade("p4_14_mcp_scopable_keys")
+diff --git a/kanban/api/internal/mcp_introspect.py b/kanban/api/internal/mcp_introspect.py
+index 8bb6297..b00ecdc 100644
+--- a/kanban/api/internal/mcp_introspect.py
++++ b/kanban/api/internal/mcp_introspect.py
+@@ -51,9 +51,16 @@ class McpIntrospectResponse(BaseModel):
+     reason: str | None = None
+     allowed_projects: list[uuid.UUID] | None = None
+     allowed_tools: list[str] | None = None
++    disabled_tools: list[str] | None = None
+     calls_used: int | None = None
+     max_calls: int | None = None
+     expires_at: str | None = None
++    owner_kind: str | None = None
++    scope_tier: str | None = None
++    allowed_workspace_ids: list[uuid.UUID] | None = None
++    allowed_project_ids: list[uuid.UUID] | None = None
++    capability_mask: int | None = None
++    allowed_cidrs: list[str] | None = None
+ 
+ 
+ def verify_internal_auth(request: Request) -> None:
+@@ -138,7 +145,14 @@ async def introspect_token(
+         reason=result.reason,
+         allowed_projects=result.allowed_projects,
+         allowed_tools=result.allowed_tools,
++        disabled_tools=result.disabled_tools,
+         calls_used=result.calls_used,
+         max_calls=result.max_calls,
+         expires_at=expires_str,
++        owner_kind=result.owner_kind,
++        scope_tier=result.scope_tier,
++        allowed_workspace_ids=result.allowed_workspace_ids,
++        allowed_project_ids=result.allowed_project_ids,
++        capability_mask=result.capability_mask,
++        allowed_cidrs=result.allowed_cidrs,
+     )
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 9ae747d..e873848 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -28,6 +28,7 @@ from kanban.api.v1.auth_cards_public import router as auth_cards_public_router
+ from kanban.api.v1.auth_identities import router as auth_identities_router
+ from kanban.api.v1.auth_ldap import auth_ldap_router
+ from kanban.api.v1.auth_local import router as auth_local_router
++from kanban.api.v1.auth_mcp_keys import router as auth_mcp_keys_router
+ from kanban.api.v1.auth_mfa import router as auth_mfa_router
+ from kanban.api.v1.auth_oidc import router as auth_oidc_router
+ from kanban.api.v1.auth_session import router as auth_session_router
+@@ -118,6 +119,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(admin_imports_router)
+     v1.include_router(admin_link_auditor_router)
+     v1.include_router(admin_mcp_keys_router)
++    v1.include_router(auth_mcp_keys_router)
+     v1.include_router(admin_workspace_settings_router)
+     v1.include_router(admin_project_blueprint_router)
+     v1.include_router(admin_principals_router)
+diff --git a/kanban/api/v1/admin/mcp_keys.py b/kanban/api/v1/admin/mcp_keys.py
+index 30e99b1..56f7dcf 100644
+--- a/kanban/api/v1/admin/mcp_keys.py
++++ b/kanban/api/v1/admin/mcp_keys.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""REST API router for MCP API keys administration (KB-P4-02a, S11.1)."""
++"""REST API router for MCP API keys administration (KB-P4-02a / KB-P4-14, S11.1)."""
+ 
+ from __future__ import annotations
+ 
+@@ -10,7 +10,7 @@ from typing import Annotated, Literal
+ 
+ from fastapi import APIRouter, Depends, Query, Response, status
+ from pydantic import BaseModel, ConfigDict, Field
+-from sqlalchemy import select
++from sqlalchemy import or_, select, text
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from database.models.mcp_api_key import McpApiKey
+@@ -38,6 +38,17 @@ class McpApiKeyMintRequest(BaseModel):
+     principal_id: uuid.UUID | None = None
+     expires_in_days: int | None = Field(default=None, ge=1, le=365)
+     expires_at: datetime | None = None
++    scope_tier: Literal["global", "workspace", "project"] = "workspace"
++    owner_kind: Literal["service_bot", "personal_user"] = "service_bot"
++    project_id: uuid.UUID | None = None
++    allowed_workspace_ids: list[uuid.UUID] | None = None
++    allowed_project_ids: list[uuid.UUID] | None = None
++    capability_mask: int = Field(default=7, ge=1, le=255)
++    allowed_tools: list[str] | None = None
++    disabled_tools: list[str] = Field(default_factory=list)
++    allowed_cidrs: list[str] | None = None
++    unlimited: bool = False
++    confirm_unlimited: bool = False
+ 
+ 
+ class McpApiKeyMintResponse(BaseModel):
+@@ -47,16 +58,25 @@ class McpApiKeyMintResponse(BaseModel):
+ 
+     id: uuid.UUID
+     token: str
+-    workspace_id: uuid.UUID
++    workspace_id: uuid.UUID | None = None
+     principal_id: uuid.UUID
+     surface: str
+     key_prefix: str
+     display_hint: str
+     scopes: list[str]
+     created_at: datetime
+-    expires_at: datetime
++    expires_at: datetime | None = None
+     revoked_at: datetime | None = None
+     last_used_at: datetime | None = None
++    scope_tier: str = "workspace"
++    owner_kind: str = "service_bot"
++    project_id: uuid.UUID | None = None
++    allowed_workspace_ids: list[uuid.UUID] | None = None
++    allowed_project_ids: list[uuid.UUID] | None = None
++    capability_mask: int = 7
++    allowed_tools: list[str] | None = None
++    disabled_tools: list[str] = Field(default_factory=list)
++    allowed_cidrs: list[str] | None = None
+ 
+ 
+ class McpApiKeyResponse(BaseModel):
+@@ -65,7 +85,7 @@ class McpApiKeyResponse(BaseModel):
+     model_config = ConfigDict(extra="ignore")
+ 
+     id: uuid.UUID
+-    workspace_id: uuid.UUID
++    workspace_id: uuid.UUID | None = None
+     principal_id: uuid.UUID
+     surface: str
+     key_prefix: str
+@@ -73,9 +93,18 @@ class McpApiKeyResponse(BaseModel):
+     scopes: list[str]
+     created_by_id: uuid.UUID
+     created_at: datetime
+-    expires_at: datetime
++    expires_at: datetime | None = None
+     revoked_at: datetime | None = None
+     last_used_at: datetime | None = None
++    scope_tier: str = "workspace"
++    owner_kind: str = "service_bot"
++    project_id: uuid.UUID | None = None
++    allowed_workspace_ids: list[uuid.UUID] | None = None
++    allowed_project_ids: list[uuid.UUID] | None = None
++    capability_mask: int = 7
++    allowed_tools: list[str] | None = None
++    disabled_tools: list[str] = Field(default_factory=list)
++    allowed_cidrs: list[str] | None = None
+ 
+ 
+ @router.post(
+@@ -92,16 +121,29 @@ async def mint_key(
+ ) -> McpApiKeyMintResponse:
+     """Mint a surface-bound MCP API key and return plaintext token once."""
+     target_principal_id = body.principal_id or caller.principal_id
++    target_workspace_id = None if body.scope_tier == "global" else caller.workspace_id
+ 
+     key_record, plaintext_token = await mint_mcp_api_key(
+         session,
+-        workspace_id=caller.workspace_id,
++        workspace_id=target_workspace_id,
+         principal_id=target_principal_id,
+         surface=body.surface,
+         scopes=body.scopes,
+         created_by_id=caller.principal_id,
+         expires_at=body.expires_at,
+         expires_in_days=body.expires_in_days,
++        scope_tier=body.scope_tier,
++        owner_kind=body.owner_kind,
++        project_id=body.project_id,
++        allowed_workspace_ids=body.allowed_workspace_ids,
++        allowed_project_ids=body.allowed_project_ids,
++        capability_mask=body.capability_mask,
++        allowed_tools=body.allowed_tools,
++        disabled_tools=body.disabled_tools,
++        allowed_cidrs=body.allowed_cidrs,
++        unlimited=body.unlimited,
++        confirm_unlimited=body.confirm_unlimited,
++        caller_aal_level=caller.aal_level,
+     )
+ 
+     response.headers["Location"] = f"/api/v1/admin/mcp-keys/{key_record.id}"
+@@ -119,6 +161,17 @@ async def mint_key(
+         expires_at=key_record.expires_at,
+         revoked_at=key_record.revoked_at,
+         last_used_at=key_record.last_used_at,
++        scope_tier=key_record.scope_tier,
++        owner_kind=key_record.owner_kind,
++        project_id=key_record.project_id,
++        allowed_workspace_ids=key_record.allowed_workspace_ids,
++        allowed_project_ids=key_record.allowed_project_ids,
++        capability_mask=key_record.capability_mask,
++        allowed_tools=key_record.allowed_tools,
++        disabled_tools=list(key_record.disabled_tools or []),
++        allowed_cidrs=(
++            [str(c) for c in key_record.allowed_cidrs] if key_record.allowed_cidrs else None
++        ),
+     )
+ 
+ 
+@@ -131,11 +184,27 @@ async def list_keys(
+     caller: Caller,
+     session: Session,
+     surface: Annotated[str | None, Query(description="Optional surface filter")] = None,
++    scope_tier: Annotated[str | None, Query(description="Optional scope tier filter")] = None,
+ ) -> list[McpApiKeyResponse]:
+-    """List metadata for MCP API keys belonging to the workspace."""
+-    stmt = select(McpApiKey).where(McpApiKey.workspace_id == caller.workspace_id)
++    """List metadata for MCP API keys belonging to the workspace or global scope."""
++    stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++    is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
++
++    stmt = select(McpApiKey)
++    if is_server_admin:
++        stmt = stmt.where(
++            or_(
++                McpApiKey.workspace_id == caller.workspace_id,
++                McpApiKey.workspace_id.is_(None),
++            )
++        )
++    else:
++        stmt = stmt.where(McpApiKey.workspace_id == caller.workspace_id)
++
+     if surface:
+         stmt = stmt.where(McpApiKey.surface == surface)
++    if scope_tier:
++        stmt = stmt.where(McpApiKey.scope_tier == scope_tier)
+     stmt = stmt.order_by(McpApiKey.created_at.desc())
+ 
+     result = await session.execute(stmt)
+@@ -155,6 +224,15 @@ async def list_keys(
+             expires_at=k.expires_at,
+             revoked_at=k.revoked_at,
+             last_used_at=k.last_used_at,
++            scope_tier=k.scope_tier,
++            owner_kind=k.owner_kind,
++            project_id=k.project_id,
++            allowed_workspace_ids=k.allowed_workspace_ids,
++            allowed_project_ids=k.allowed_project_ids,
++            capability_mask=k.capability_mask,
++            allowed_tools=k.allowed_tools,
++            disabled_tools=list(k.disabled_tools or []),
++            allowed_cidrs=([str(c) for c in k.allowed_cidrs] if k.allowed_cidrs else None),
+         )
+         for k in records
+     ]
+@@ -172,7 +250,15 @@ async def revoke_key(
+ ) -> None:
+     """Revoke an MCP API key by ID."""
+     key = await session.get(McpApiKey, key_id)
+-    if key is None or key.workspace_id != caller.workspace_id:
++    if key is None:
++        not_found()
++
++    if key.workspace_id is None:
++        stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++        is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
++        if not is_server_admin:
++            not_found()
++    elif key.workspace_id != caller.workspace_id:
+         not_found()
+ 
+     await revoke_mcp_api_key(
+diff --git a/kanban/api/v1/auth_mcp_keys.py b/kanban/api/v1/auth_mcp_keys.py
+new file mode 100644
+index 0000000..a3a5e41
+--- /dev/null
++++ b/kanban/api/v1/auth_mcp_keys.py
+@@ -0,0 +1,236 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""User self-service MCP API keys router (KB-P4-14 / KANBA-106, S11.1, S3.2)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003  # Runtime import required for Pydantic type annotations
++from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic type annotations
++from typing import Annotated, Literal
++
++from fastapi import APIRouter, Depends, Response, status
++from pydantic import BaseModel, ConfigDict, Field
++from sqlalchemy import select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from database.models.mcp_api_key import McpApiKey
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.problems import not_found
++from kanban.security.mcp_keys import (
++    mint_mcp_api_key,
++    revoke_mcp_api_key,
++)
++
++router = APIRouter(prefix="/auth/mcp-keys", tags=["auth-mcp-keys"])
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++class PersonalMcpKeyMintRequest(BaseModel):
++    """Payload for minting a self-service personal MCP API key."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    surface: Literal["agent", "docs", "admin"]
++    scopes: list[str] = Field(min_length=1)
++    expires_in_days: int | None = Field(default=30, ge=1, le=365)
++    expires_at: datetime | None = None
++    scope_tier: Literal["global", "workspace", "project"] = "workspace"
++    workspace_id: uuid.UUID | None = None
++    project_id: uuid.UUID | None = None
++    allowed_workspace_ids: list[uuid.UUID] | None = None
++    allowed_project_ids: list[uuid.UUID] | None = None
++    capability_mask: int = Field(default=7, ge=1, le=255)
++    allowed_tools: list[str] | None = None
++    disabled_tools: list[str] = Field(default_factory=list)
++    allowed_cidrs: list[str] | None = None
++    unlimited: bool = False
++    confirm_unlimited: bool = False
++
++
++class PersonalMcpKeyMintResponse(BaseModel):
++    """One-time mint response carrying raw plaintext key."""
++
++    model_config = ConfigDict(extra="ignore")
++
++    id: uuid.UUID
++    raw_key: str
++    surface: str
++    key_prefix: str
++    display_hint: str
++    scopes: list[str]
++    created_at: datetime
++    expires_at: datetime | None = None
++    scope_tier: str = "workspace"
++    owner_kind: str = "personal_user"
++    workspace_id: uuid.UUID | None = None
++    project_id: uuid.UUID | None = None
++    allowed_tools: list[str] | None = None
++    disabled_tools: list[str] = Field(default_factory=list)
++    allowed_cidrs: list[str] | None = None
++    capability_mask: int = 7
++
++
++class PersonalMcpKeyItem(BaseModel):
++    """Metadata for an existing personal MCP API key."""
++
++    model_config = ConfigDict(extra="ignore")
++
++    id: uuid.UUID
++    surface: str
++    key_prefix: str
++    display_hint: str
++    scopes: list[str]
++    created_at: datetime
++    expires_at: datetime | None = None
++    revoked_at: datetime | None = None
++    last_used_at: datetime | None = None
++    scope_tier: str = "workspace"
++    owner_kind: str = "personal_user"
++    workspace_id: uuid.UUID | None = None
++    project_id: uuid.UUID | None = None
++    allowed_tools: list[str] | None = None
++    disabled_tools: list[str] = Field(default_factory=list)
++    allowed_cidrs: list[str] | None = None
++    capability_mask: int = 7
++
++
++class PersonalMcpKeyListResponse(BaseModel):
++    """Listing response of personal MCP keys for current caller."""
++
++    model_config = ConfigDict(extra="ignore")
++
++    keys: list[PersonalMcpKeyItem]
++
++
++@router.post(
++    "",
++    status_code=status.HTTP_201_CREATED,
++    response_model=PersonalMcpKeyMintResponse,
++    summary="Mint personal MCP API key",
++)
++async def mint_personal_key(
++    body: PersonalMcpKeyMintRequest,
++    caller: Caller,
++    session: Session,
++    response: Response,
++) -> PersonalMcpKeyMintResponse:
++    """Mint a self-service personal MCP API key locked to the caller's principal."""
++    target_workspace_id = (
++        None if body.scope_tier == "global" else (body.workspace_id or caller.workspace_id)
++    )
++
++    key_record, plaintext_token = await mint_mcp_api_key(
++        session,
++        workspace_id=target_workspace_id,
++        principal_id=caller.principal_id,
++        surface=body.surface,
++        scopes=body.scopes,
++        created_by_id=caller.principal_id,
++        expires_at=body.expires_at,
++        expires_in_days=body.expires_in_days,
++        scope_tier=body.scope_tier,
++        owner_kind="personal_user",
++        project_id=body.project_id,
++        allowed_workspace_ids=body.allowed_workspace_ids,
++        allowed_project_ids=body.allowed_project_ids,
++        capability_mask=body.capability_mask,
++        allowed_tools=body.allowed_tools,
++        disabled_tools=body.disabled_tools,
++        allowed_cidrs=body.allowed_cidrs,
++        unlimited=body.unlimited,
++        confirm_unlimited=body.confirm_unlimited,
++        caller_aal_level=caller.aal_level,
++    )
++
++    response.headers["Location"] = f"/api/v1/auth/mcp-keys/{key_record.id}"
++
++    return PersonalMcpKeyMintResponse(
++        id=key_record.id,
++        raw_key=plaintext_token,
++        surface=key_record.surface,
++        key_prefix=key_record.key_prefix,
++        display_hint=key_record.display_hint,
++        scopes=list(key_record.scopes),
++        created_at=key_record.created_at,
++        expires_at=key_record.expires_at,
++        scope_tier=key_record.scope_tier,
++        owner_kind=key_record.owner_kind,
++        workspace_id=key_record.workspace_id,
++        project_id=key_record.project_id,
++        allowed_tools=key_record.allowed_tools,
++        disabled_tools=list(key_record.disabled_tools or []),
++        allowed_cidrs=(
++            [str(c) for c in key_record.allowed_cidrs] if key_record.allowed_cidrs else None
++        ),
++        capability_mask=key_record.capability_mask,
++    )
++
++
++@router.get(
++    "",
++    response_model=PersonalMcpKeyListResponse,
++    summary="List personal MCP API keys",
++)
++async def list_personal_keys(
++    caller: Caller,
++    session: Session,
++) -> PersonalMcpKeyListResponse:
++    """List all personal MCP API keys owned by the calling principal."""
++    stmt = (
++        select(McpApiKey)
++        .where(
++            McpApiKey.principal_id == caller.principal_id,
++            McpApiKey.owner_kind == "personal_user",
++        )
++        .order_by(McpApiKey.created_at.desc())
++    )
++    records = (await session.execute(stmt)).scalars().all()
++
++    return PersonalMcpKeyListResponse(
++        keys=[
++            PersonalMcpKeyItem(
++                id=k.id,
++                surface=k.surface,
++                key_prefix=k.key_prefix,
++                display_hint=k.display_hint,
++                scopes=list(k.scopes),
++                created_at=k.created_at,
++                expires_at=k.expires_at,
++                revoked_at=k.revoked_at,
++                last_used_at=k.last_used_at,
++                scope_tier=k.scope_tier,
++                owner_kind=k.owner_kind,
++                workspace_id=k.workspace_id,
++                project_id=k.project_id,
++                allowed_tools=k.allowed_tools,
++                disabled_tools=list(k.disabled_tools or []),
++                allowed_cidrs=([str(c) for c in k.allowed_cidrs] if k.allowed_cidrs else None),
++                capability_mask=k.capability_mask,
++            )
++            for k in records
++        ]
++    )
++
++
++@router.delete(
++    "/{key_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Revoke personal MCP API key",
++)
++async def revoke_personal_key(
++    key_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++) -> None:
++    """Revoke a personal MCP API key owned by the caller."""
++    key = await session.get(McpApiKey, key_id)
++    if key is None or key.principal_id != caller.principal_id or key.owner_kind != "personal_user":
++        not_found()
++
++    await revoke_mcp_api_key(
++        session,
++        key_id=key_id,
++        caller_principal_id=caller.principal_id,
++    )
+diff --git a/kanban/api/v1/oauth.py b/kanban/api/v1/oauth.py
+index b5f4a23..d116996 100644
+--- a/kanban/api/v1/oauth.py
++++ b/kanban/api/v1/oauth.py
+@@ -1060,6 +1060,9 @@ class PersonalMcpKeyMintRequest(BaseModel):
+     surface: Literal["agent", "docs", "admin"]
+     scopes: list[str]
+     expires_in_days: int | None = Field(default=30, ge=1, le=365)
++    unlimited: bool = False
++    confirm_unlimited: bool = False
++    disabled_tools: list[str] = Field(default_factory=list)
+ 
+ 
+ @oauth_v1_router.get(
+@@ -1115,104 +1118,3 @@ async def activate_device(
+         is_aal2=is_aal2,
+     )
+     return JSONResponse({"status": "approved" if grant is not None else "denied"})
+-
+-
+-@oauth_v1_router.get(
+-    "/auth/mcp-keys",
+-    summary="List personal MCP API keys",
+-)
+-async def list_personal_mcp_keys(
+-    caller: Caller,
+-    session: Session,
+-) -> JSONResponse:
+-    """List all active and revoked personal MCP API keys for the current caller."""
+-    stmt = (
+-        select(McpApiKey)
+-        .where(
+-            McpApiKey.principal_id == caller.principal_id,
+-            McpApiKey.workspace_id == caller.workspace_id,
+-        )
+-        .order_by(McpApiKey.created_at.desc())
+-    )
+-    keys = (await session.execute(stmt)).scalars().all()
+-    return JSONResponse(
+-        {
+-            "keys": [
+-                {
+-                    "id": str(k.id),
+-                    "surface": k.surface,
+-                    "key_prefix": k.key_prefix,
+-                    "display_hint": k.display_hint,
+-                    "scopes": k.scopes,
+-                    "created_at": k.created_at.isoformat(),
+-                    "expires_at": k.expires_at.isoformat(),
+-                    "revoked_at": k.revoked_at.isoformat() if k.revoked_at else None,
+-                }
+-                for k in keys
+-            ]
+-        }
+-    )
+-
+-
+-@oauth_v1_router.post(
+-    "/auth/mcp-keys",
+-    status_code=201,
+-    summary="Mint a personal MCP API key",
+-)
+-async def mint_personal_mcp_key_endpoint(
+-    body: PersonalMcpKeyMintRequest,
+-    caller: Caller,
+-    session: Session,
+-) -> JSONResponse:
+-    """Mint a new personal MCP API key, returning the plaintext key once."""
+-    key_record, raw_key = await mint_mcp_api_key(
+-        session,
+-        workspace_id=caller.workspace_id,
+-        principal_id=caller.principal_id,
+-        surface=body.surface,
+-        scopes=body.scopes,
+-        created_by_id=caller.principal_id,
+-        expires_in_days=body.expires_in_days,
+-    )
+-    await session.commit()
+-    return JSONResponse(
+-        {
+-            "id": str(key_record.id),
+-            "raw_key": raw_key,
+-            "surface": key_record.surface,
+-            "key_prefix": key_record.key_prefix,
+-            "display_hint": key_record.display_hint,
+-            "scopes": key_record.scopes,
+-            "created_at": key_record.created_at.isoformat(),
+-            "expires_at": key_record.expires_at.isoformat(),
+-        },
+-        status_code=201,
+-    )
+-
+-
+-@oauth_v1_router.delete(
+-    "/auth/mcp-keys/{key_id}",
+-    status_code=204,
+-    summary="Revoke personal MCP API key",
+-)
+-async def revoke_personal_mcp_key_endpoint(
+-    key_id: uuid.UUID,
+-    caller: Caller,
+-    session: Session,
+-) -> Response:
+-    """Revoke a personal MCP API key owned by the caller."""
+-    stmt = select(McpApiKey).where(
+-        McpApiKey.id == key_id,
+-        McpApiKey.principal_id == caller.principal_id,
+-        McpApiKey.workspace_id == caller.workspace_id,
+-    )
+-    key = (await session.execute(stmt)).scalar_one_or_none()
+-    if key is None:
+-        raise not_found()
+-    await revoke_mcp_api_key(
+-        session,
+-        key_id=key_id,
+-        caller_principal_id=caller.principal_id,
+-    )
+-    await session.commit()
+-    return Response(status_code=204)
+diff --git a/kanban/api/v1/system_status.py b/kanban/api/v1/system_status.py
+index ca6c6ed..a702a76 100644
+--- a/kanban/api/v1/system_status.py
++++ b/kanban/api/v1/system_status.py
+@@ -42,6 +42,7 @@ class SystemStatusResponse(BaseModel):
+     air_gap_mode: bool
+     local_llm_endpoint_host: str | None = None
+     is_server_admin: bool
++    allow_unlimited_mcp_keys: bool = True
+ 
+ 
+ class StandaloneBackupRequest(BaseModel):
+@@ -114,6 +115,9 @@ async def get_system_status_endpoint(
+     mount_point = status_data["data_mount_point"] if is_server_admin else None
+     mount_fstype = status_data["data_mount_fstype"] if is_server_admin else None
+     local_llm_host = status_data["local_llm_endpoint_host"] if is_server_admin else None
++    disable_unlimited = (
++        bool(getattr(settings, "disable_unlimited_mcp_keys", False)) if settings else False
++    )
+ 
+     return SystemStatusResponse(
+         deployment_mode=status_data["deployment_mode"],
+@@ -124,6 +128,7 @@ async def get_system_status_endpoint(
+         air_gap_mode=status_data["air_gap_mode"],
+         local_llm_endpoint_host=local_llm_host,
+         is_server_admin=is_server_admin,
++        allow_unlimited_mcp_keys=not disable_unlimited,
+     )
+ 
+ 
+diff --git a/kanban/security/mcp_keys.py b/kanban/security/mcp_keys.py
+index 1f354e4..563f7eb 100644
+--- a/kanban/security/mcp_keys.py
++++ b/kanban/security/mcp_keys.py
+@@ -1,6 +1,9 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Scoped kb_* API keys, surface binding, scopes and token introspection (KB-P4-02a)."""
++"""Scoped kb_* API keys, hierarchical scoping, narrowing and token introspection.
++
++Implementation for KB-P4-02a and KB-P4-14.
++"""
+ 
+ from __future__ import annotations
+ 
+@@ -8,20 +11,23 @@ import base64
+ import contextlib
+ import hashlib
+ import hmac
++import ipaddress
+ import secrets
+ import time
+ import uuid  # Runtime import required for Pydantic / dataclass type annotations
+ from dataclasses import dataclass
+ from datetime import UTC, datetime, timedelta
+-from typing import TYPE_CHECKING, Any, Final
++from typing import TYPE_CHECKING, Any, Final, Literal
+ 
+ from sqlalchemy import text
++from sqlalchemy.exc import SQLAlchemyError
+ 
+ from database.models.mcp_api_key import McpApiKey
+ from database.models.principals import Principal
+ from kanban.api.problems import ProblemException, not_found
+ from kanban.security.keys import derive_subkey, load_key_material
+ from kanban.services.activity import ActivityEventType, record_activity
++from kanban.settings import get_settings
+ 
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+@@ -38,6 +44,7 @@ __all__ = [
+     "McpIntrospectionResult",
+     "create_internal_mcp_auth_header",
+     "derive_internal_mcp_auth_key",
++    "evaluate_key_boundary",
+     "generate_mcp_api_key",
+     "hash_mcp_api_key",
+     "introspect_subject_token",
+@@ -65,6 +72,8 @@ SURFACE_ALLOWED_SCOPES: Final[dict[str, frozenset[str]]] = {
+ ALL_SCOPES: Final[frozenset[str]] = frozenset().union(*SURFACE_ALLOWED_SCOPES.values())
+ 
+ MAX_KEY_TTL_DAYS: Final[int] = 365
++REQUIRED_SERVICE_BOT_AAL: Final[int] = 2
++MAX_CAPABILITY_MASK: Final[int] = 255
+ KEY_RANDOM_BYTES_COUNT: Final[int] = 32
+ KEY_TOKEN_TOTAL_LENGTH: Final[int] = 50  # 7-char prefix + 43-char unpadded base64url
+ DISPLAY_HINT_LENGTH: Final[int] = 4
+@@ -87,11 +96,18 @@ class McpIntrospectionResult:
+     reason: str | None = None
+     allowed_projects: list[uuid.UUID] | None = None
+     allowed_tools: list[str] | None = None
++    disabled_tools: list[str] | None = None
+     calls_used: int | None = None
+     max_calls: int | None = None
+     expires_at: datetime | str | None = None
+-
+-    def to_dict(self) -> dict[str, Any]:  # noqa: C901
++    scope_tier: str | None = None
++    owner_kind: str | None = None
++    allowed_workspace_ids: list[uuid.UUID] | None = None
++    allowed_project_ids: list[uuid.UUID] | None = None
++    capability_mask: int | None = None
++    allowed_cidrs: list[str] | None = None
++
++    def to_dict(self) -> dict[str, Any]:  # noqa: C901, PLR0912
+         """Convert introspection result to API JSON payload."""
+         if not self.active:
+             res: dict[str, Any] = {"active": False}
+@@ -104,8 +120,8 @@ class McpIntrospectionResult:
+             return res
+         payload: dict[str, Any] = {
+             "active": True,
+-            "principal_id": str(self.principal_id),
+-            "workspace_id": str(self.workspace_id),
++            "principal_id": str(self.principal_id) if self.principal_id else None,
++            "workspace_id": str(self.workspace_id) if self.workspace_id else None,
+             "surface": self.surface,
+             "scopes": self.scopes or [],
+             "token_kind": self.token_kind,
+@@ -116,10 +132,24 @@ class McpIntrospectionResult:
+             payload["project_id"] = str(self.project_id)
+         if self.execution_id is not None:
+             payload["execution_id"] = str(self.execution_id)
++        if self.scope_tier is not None:
++            payload["scope_tier"] = self.scope_tier
++        if self.owner_kind is not None:
++            payload["owner_kind"] = self.owner_kind
++        if self.allowed_workspace_ids is not None:
++            payload["allowed_workspace_ids"] = [str(w) for w in self.allowed_workspace_ids]
++        if self.allowed_project_ids is not None:
++            payload["allowed_project_ids"] = [str(p) for p in self.allowed_project_ids]
+         if self.allowed_projects is not None:
+             payload["allowed_projects"] = [str(p) for p in self.allowed_projects]
++        if self.capability_mask is not None:
++            payload["capability_mask"] = self.capability_mask
+         if self.allowed_tools is not None:
+             payload["allowed_tools"] = self.allowed_tools
++        if self.disabled_tools is not None:
++            payload["disabled_tools"] = self.disabled_tools
++        if self.allowed_cidrs is not None:
++            payload["allowed_cidrs"] = self.allowed_cidrs
+         if self.calls_used is not None:
+             payload["calls_used"] = self.calls_used
+         if self.max_calls is not None:
+@@ -206,18 +236,30 @@ def verify_internal_mcp_auth_header(
+     return hmac.compare_digest(header_val, expected_direct)
+ 
+ 
+-async def mint_mcp_api_key(  # noqa: PLR0913
++async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
+     session: AsyncSession,
+     *,
+-    workspace_id: uuid.UUID,
++    workspace_id: uuid.UUID | None = None,
+     principal_id: uuid.UUID,
+     surface: str,
+     scopes: list[str],
+     created_by_id: uuid.UUID,
+     expires_at: datetime | None = None,
+     expires_in_days: int | None = None,
++    scope_tier: Literal["global", "workspace", "project"] = "workspace",
++    owner_kind: Literal["personal_user", "service_bot"] = "service_bot",
++    project_id: uuid.UUID | None = None,
++    allowed_workspace_ids: list[uuid.UUID] | None = None,
++    allowed_project_ids: list[uuid.UUID] | None = None,
++    capability_mask: int = 7,
++    allowed_tools: list[str] | None = None,
++    disabled_tools: list[str] | None = None,
++    allowed_cidrs: list[str] | None = None,
++    unlimited: bool = False,
++    confirm_unlimited: bool = False,
++    caller_aal_level: int | None = None,
+ ) -> tuple[McpApiKey, str]:
+-    """Mint an MCP API key, enforce surface and role constraints, and persist digest."""
++    """Mint an MCP API key, enforce surface, tier, and role constraints, and persist digest."""
+     if surface not in ALLOWED_SURFACES:
+         raise ProblemException(
+             code="INVALID_SURFACE",
+@@ -248,38 +290,237 @@ async def mint_mcp_api_key(  # noqa: PLR0913
+                 detail="admin:destructive scope requires SERVER_ADMIN role.",
+             )
+ 
+-    now = datetime.now(UTC)
+-    if expires_at is None:
+-        days = expires_in_days if expires_in_days is not None else 30
+-        effective_expires = now + timedelta(days=days)
+-    else:
+-        effective_expires = (
+-            expires_at if expires_at.tzinfo is not None else expires_at.replace(tzinfo=UTC)
++    # 1. Tier and shape validation
++    if scope_tier not in ("global", "workspace", "project"):
++        raise ProblemException(
++            code="INVALID_SCOPE_TIER",
++            status=422,
++            title="Invalid Scope Tier",
++            detail="scope_tier must be one of ('global', 'workspace', 'project').",
+         )
+ 
+-    stmt_ttl = text(
+-        "SELECT mcp_key_max_ttl_days FROM workspace_settings WHERE workspace_id = :ws_id"
+-    )
+-    max_ttl_days = (
+-        await session.execute(stmt_ttl, {"ws_id": workspace_id})
+-    ).scalar_one_or_none() or MAX_KEY_TTL_DAYS
++    if scope_tier == "global":
++        if workspace_id is not None or project_id is not None:
++            raise ProblemException(
++                code="INVALID_TIER_SHAPE",
++                status=422,
++                title="Invalid Tier Shape",
++                detail="Global keys must have workspace_id=None and project_id=None.",
++            )
++    elif scope_tier == "workspace":
++        if workspace_id is None or project_id is not None:
++            raise ProblemException(
++                code="INVALID_TIER_SHAPE",
++                status=422,
++                title="Invalid Tier Shape",
++                detail="Workspace keys must have workspace_id set and project_id=None.",
++            )
++    elif scope_tier == "project":
++        if workspace_id is None or project_id is None:
++            raise ProblemException(
++                code="INVALID_TIER_SHAPE",
++                status=422,
++                title="Invalid Tier Shape",
++                detail="Project keys must have both workspace_id and project_id set.",
++            )
++        if allowed_project_ids is None or not allowed_project_ids:
++            allowed_project_ids = [project_id]
++        elif project_id not in allowed_project_ids:
++            allowed_project_ids = [*allowed_project_ids, project_id]
+ 
+-    if effective_expires <= now or effective_expires > (now + timedelta(days=max_ttl_days)):
++    # Resolve effective AAL level
++    if caller_aal_level is None:
++        try:
++            stmt_aal = text("SELECT NULLIF(current_setting('app.aal_level', true), '')::integer")
++            sess_aal = (await session.execute(stmt_aal)).scalar_one_or_none()
++            effective_aal = sess_aal if sess_aal is not None else REQUIRED_SERVICE_BOT_AAL
++        except SQLAlchemyError:
++            effective_aal = REQUIRED_SERVICE_BOT_AAL
++    else:
++        effective_aal = caller_aal_level
++
++    # 2. Authorization and Privilege Checks
++    if owner_kind == "service_bot":
++        if effective_aal < REQUIRED_SERVICE_BOT_AAL:
++            raise ProblemException(
++                code="AAL2_REQUIRED",
++                status=403,
++                title="AAL2 Required",
++                detail="Minting service bot keys requires AAL2 authentication.",
++            )
++        if scope_tier == "global":
++            stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++            if not bool((await session.execute(stmt_sa)).scalar_one()):
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail="Minting global service bot keys requires SERVER_ADMIN role.",
++                )
++        elif scope_tier == "workspace":
++            stmt_wa = text(
++                "SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])"
++            )
++            if not bool((await session.execute(stmt_wa)).scalar_one()):
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail=(
++                        "Minting workspace service bot keys requires "
++                        "WORKSPACE_ADMIN or SERVER_ADMIN role."
++                    ),
++                )
++        elif scope_tier == "project":
++            stmt_pa = text(
++                "SELECT app_principal_has_role("
++                ":p_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"
++            )
++            if not bool((await session.execute(stmt_pa, {"p_id": project_id})).scalar_one()):
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail=(
++                        "Minting project service bot keys requires "
++                        "PROJECT_ADMIN, WORKSPACE_ADMIN, or SERVER_ADMIN role."
++                    ),
++                )
++    elif owner_kind == "personal_user":
++        if principal_id != created_by_id:
++            raise ProblemException(
++                code="CANNOT_MINT_FOR_OTHER_USER",
++                status=403,
++                title="Forbidden",
++                detail="Personal user keys cannot be minted for another user.",
++            )
++        if (
++            surface == "admin" or (capability_mask & 8)
++        ) and effective_aal < REQUIRED_SERVICE_BOT_AAL:
++            raise ProblemException(
++                code="AAL2_REQUIRED",
++                status=403,
++                title="AAL2 Required",
++                detail="Minting admin surface or delete capability personal keys requires AAL2.",
++            )
++        if scope_tier == "workspace":
++            stmt_ws_view = text(
++                "SELECT app_has_object_capability(:ws_id, 1) OR "
++                "app_principal_has_role(NULL, "
++                "ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', "
++                "'WORKSPACE_GUEST', 'MEMBER', 'VIEWER'])"
++            )
++            can_view = bool(
++                (await session.execute(stmt_ws_view, {"ws_id": workspace_id})).scalar_one()
++            )
++            if not can_view:
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail="User lacks VIEW permission in target workspace.",
++                )
++        elif scope_tier == "project":
++            stmt_proj_view = text(
++                "SELECT app_has_object_capability(:p_id, 1) OR "
++                "app_principal_has_role(:p_id, "
++                "ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN', "
++                "'WORKSPACE_MEMBER', 'MEMBER', 'VIEWER'])"
++            )
++            can_view = bool(
++                (await session.execute(stmt_proj_view, {"p_id": project_id})).scalar_one()
++            )
++            if not can_view:
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail="User lacks VIEW permission on target project.",
++                )
++
++    # 3. CIDR Validation
++    if allowed_cidrs:
++        for c in allowed_cidrs:
++            try:
++                ipaddress.ip_network(c, strict=False)
++            except ValueError as exc:
++                raise ProblemException(
++                    code="INVALID_CIDR",
++                    status=422,
++                    title="Invalid CIDR",
++                    detail=f"Invalid CIDR string: {c}",
++                ) from exc
++
++    # 4. Capability Mask Validation
++    if not (1 <= capability_mask <= MAX_CAPABILITY_MASK):
+         raise ProblemException(
+-            code="INVALID_EXPIRATION",
++            code="INVALID_CAPABILITY_MASK",
+             status=422,
+-            title="Invalid Expiration",
+-            detail=f"Key expiration must be in the future and within {max_ttl_days} days.",
++            title="Invalid Capability Mask",
++            detail="capability_mask must be between 1 and 255.",
+         )
+ 
+-    # Validate target principal
++    # 5. Expiration & Unlimited Keys Validation
++    now = datetime.now(UTC)
++    effective_expires: datetime | None = None
++    if unlimited:
++        settings = get_settings()
++        if settings.disable_unlimited_mcp_keys:
++            raise ProblemException(
++                code="UNLIMITED_KEY_FORBIDDEN",
++                status=422,
++                title="Unlimited Key Forbidden",
++                detail="Unlimited MCP API keys are forbidden on this instance.",
++            )
++        if not confirm_unlimited:
++            raise ProblemException(
++                code="UNLIMITED_CONFIRMATION_REQUIRED",
++                status=422,
++                title="Confirmation Required",
++                detail="Explicit confirmation required to mint an unlimited MCP API key.",
++            )
++        effective_expires = None
++    else:
++        if expires_at is None:
++            days = expires_in_days if expires_in_days is not None else 30
++            effective_expires = now + timedelta(days=days)
++        else:
++            effective_expires = (
++                expires_at if expires_at.tzinfo is not None else expires_at.replace(tzinfo=UTC)
++            )
++
++        max_ttl_days = MAX_KEY_TTL_DAYS
++        if workspace_id is not None:
++            stmt_ttl = text(
++                "SELECT mcp_key_max_ttl_days FROM workspace_settings WHERE workspace_id = :ws_id"
++            )
++            ws_ttl = (await session.execute(stmt_ttl, {"ws_id": workspace_id})).scalar_one_or_none()
++            if ws_ttl is not None:
++                max_ttl_days = ws_ttl
++
++        if effective_expires <= now or effective_expires > (now + timedelta(days=max_ttl_days)):
++            raise ProblemException(
++                code="INVALID_EXPIRATION",
++                status=422,
++                title="Invalid Expiration",
++                detail=f"Key expiration must be in the future and within {max_ttl_days} days.",
++            )
++
++    # 6. Target Principal Validation
+     principal = await session.get(Principal, principal_id)
+-    if principal is None or principal.workspace_id != workspace_id or principal.status != "ACTIVE":
++    if principal is None or principal.status != "ACTIVE":
+         raise ProblemException(
+             code="INVALID_PRINCIPAL",
+             status=422,
+             title="Invalid Principal",
+-            detail="Target principal must be an active principal in the current workspace.",
++            detail="Target principal must be an active principal.",
++        )
++    if scope_tier in ("workspace", "project") and principal.workspace_id != workspace_id:
++        raise ProblemException(
++            code="INVALID_PRINCIPAL",
++            status=422,
++            title="Invalid Principal",
++            detail="Target principal must belong to the workspace.",
+         )
+ 
+     token, prefix, key_sha256, display_hint = generate_mcp_api_key(surface)
+@@ -292,6 +533,15 @@ async def mint_mcp_api_key(  # noqa: PLR0913
+         key_sha256=key_sha256,
+         display_hint=display_hint,
+         scopes=scopes,
++        scope_tier=scope_tier,
++        owner_kind=owner_kind,
++        project_id=project_id,
++        allowed_workspace_ids=allowed_workspace_ids,
++        allowed_project_ids=allowed_project_ids,
++        capability_mask=capability_mask,
++        allowed_tools=allowed_tools,
++        disabled_tools=disabled_tools or [],
++        allowed_cidrs=allowed_cidrs,
+         created_by_id=created_by_id,
+         created_at=now,
+         expires_at=effective_expires,
+@@ -301,21 +551,26 @@ async def mint_mcp_api_key(  # noqa: PLR0913
+     await session.refresh(key_record)
+ 
+     # Emit MCP_KEY_MINTED activity
+-    await record_activity(
+-        session,
+-        workspace_id=workspace_id,
+-        object_id=None,
+-        actor_principal_id=created_by_id,
+-        event_type=ActivityEventType.MCP_KEY_MINTED,
+-        payload={
+-            "key_id": str(key_record.id),
+-            "principal_id": str(principal_id),
+-            "surface": surface,
+-            "display_hint": display_hint,
+-            "scopes": scopes,
+-            "expires_at": effective_expires.isoformat(),
+-        },
+-    )
++    ws_target = workspace_id or principal.workspace_id
++    if ws_target is not None:
++        await record_activity(
++            session,
++            workspace_id=ws_target,
++            object_id=None,
++            actor_principal_id=created_by_id,
++            event_type=ActivityEventType.MCP_KEY_MINTED,
++            payload={
++                "key_id": str(key_record.id),
++                "principal_id": str(principal_id),
++                "surface": surface,
++                "display_hint": display_hint,
++                "scopes": scopes,
++                "scope_tier": scope_tier,
++                "owner_kind": owner_kind,
++                "project_id": str(project_id) if project_id else None,
++                "expires_at": effective_expires.isoformat() if effective_expires else None,
++            },
++        )
+ 
+     return key_record, token
+ 
+@@ -335,20 +590,27 @@ async def revoke_mcp_api_key(
+         key.revoked_at = datetime.now(UTC)
+         await session.flush()
+ 
+-        await record_activity(
+-            session,
+-            workspace_id=key.workspace_id,
+-            object_id=None,
+-            actor_principal_id=caller_principal_id,
+-            event_type=ActivityEventType.MCP_KEY_REVOKED,
+-            payload={
+-                "key_id": str(key.id),
+-                "principal_id": str(key.principal_id),
+-                "surface": key.surface,
+-                "display_hint": key.display_hint,
+-                "revoked_by": str(caller_principal_id),
+-            },
+-        )
++        ws_target = key.workspace_id
++        if ws_target is None and key.principal_id is not None:
++            principal = await session.get(Principal, key.principal_id)
++            if principal is not None:
++                ws_target = principal.workspace_id
++
++        if ws_target is not None:
++            await record_activity(
++                session,
++                workspace_id=ws_target,
++                object_id=None,
++                actor_principal_id=caller_principal_id,
++                event_type=ActivityEventType.MCP_KEY_REVOKED,
++                payload={
++                    "key_id": str(key.id),
++                    "principal_id": str(key.principal_id),
++                    "surface": key.surface,
++                    "display_hint": key.display_hint,
++                    "revoked_by": str(caller_principal_id),
++                },
++            )
+ 
+     return key
+ 
+@@ -447,7 +709,6 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+ 
+         scope_str = claims.get("scope", "")
+         scopes_list = scope_str.split() if scope_str else []
+-
+         allowed_projects_raw = claims.get("allowed_projects")
+         allowed_projects: list[uuid.UUID] | None = None
+         if allowed_projects_raw and isinstance(allowed_projects_raw, list):
+@@ -462,6 +723,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+             scopes=scopes_list,
+             token_kind="oauth",  # noqa: S106
+             allowed_projects=allowed_projects,
++            allowed_project_ids=allowed_projects,
+         )
+ 
+     digest = hash_mcp_api_key(token)
+@@ -471,7 +733,9 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+ 
+     stmt = text(
+         "SELECT id, workspace_id, principal_id, surface, key_prefix, "
+-        "scopes, created_at, expires_at, revoked_at, last_used_at, principal_status "
++        "scopes, created_at, expires_at, revoked_at, last_used_at, principal_status, "
++        "scope_tier, owner_kind, project_id, allowed_workspace_ids, allowed_project_ids, "
++        "capability_mask, allowed_tools, disabled_tools, allowed_cidrs "
+         "FROM introspect_mcp_api_key(:digest)"
+     )
+     result = await session.execute(stmt, {"digest": digest})
+@@ -495,13 +759,22 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+         revoked_at,
+         _last_used_at,
+         principal_status,
++        scope_tier,
++        owner_kind,
++        project_id,
++        allowed_workspace_ids,
++        allowed_project_ids,
++        capability_mask,
++        allowed_tools,
++        disabled_tools,
++        allowed_cidrs,
+     ) = row
+ 
+     if revoked_at is not None:
+         return McpIntrospectionResult(active=False)
+ 
+     now = datetime.now(UTC)
+-    if expires_at <= now:
++    if expires_at is not None and expires_at <= now:
+         return McpIntrospectionResult(active=False)
+ 
+     if principal_status != "ACTIVE":
+@@ -522,4 +795,150 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+         surface=key_surface,
+         scopes=list(key_scopes),
+         token_kind="api_key",  # noqa: S106
++        scope_tier=scope_tier,
++        owner_kind=owner_kind,
++        project_id=project_id,
++        allowed_workspace_ids=list(allowed_workspace_ids) if allowed_workspace_ids else None,
++        allowed_project_ids=list(allowed_project_ids) if allowed_project_ids else None,
++        allowed_projects=list(allowed_project_ids) if allowed_project_ids else None,
++        capability_mask=capability_mask if capability_mask is not None else 7,
++        allowed_tools=list(allowed_tools) if allowed_tools is not None else None,
++        disabled_tools=list(disabled_tools) if disabled_tools is not None else [],
++        allowed_cidrs=[str(c) for c in allowed_cidrs] if allowed_cidrs else None,
++        expires_at=expires_at,
++    )
++
++
++def evaluate_key_boundary(  # noqa: C901, PLR0912, PLR0913
++    key: McpApiKey | McpIntrospectionResult,
++    *,
++    target_workspace_id: uuid.UUID | None = None,
++    target_project_id: uuid.UUID | None = None,
++    client_ip: str | None = None,
++    tool_name: str | None = None,
++    required_capability: int | None = None,
++) -> None:
++    """Evaluate key boundary constraints: CIDR, scope tier, tools, and capability mask."""
++    # 1. CIDR Pin Check
++    allowed_cidrs = getattr(key, "allowed_cidrs", None)
++    if allowed_cidrs and client_ip:
++        ip = ipaddress.ip_address(client_ip)
++        matched = any(ip in ipaddress.ip_network(str(c), strict=False) for c in allowed_cidrs)
++        if not matched:
++            raise ProblemException(
++                code="KEY_CIDR_DENIED",
++                status=403,
++                title="CIDR Denied",
++                detail=f"Client IP '{client_ip}' is outside allowed CIDRs.",
++            )
++
++    # 2. Scope Tier & Hierarchy Boundary Check
++    scope_tier = getattr(key, "scope_tier", "workspace")
++    key_ws = getattr(key, "workspace_id", None)
++    key_proj = getattr(key, "project_id", None)
++    allowed_ws = getattr(key, "allowed_workspace_ids", None)
++    allowed_projs = getattr(key, "allowed_project_ids", None) or getattr(
++        key, "allowed_projects", None
+     )
++
++    if scope_tier == "global":
++        if target_workspace_id is not None and allowed_ws:
++            ws_matches = target_workspace_id in allowed_ws or str(target_workspace_id) in [
++                str(w) for w in allowed_ws
++            ]
++            if not ws_matches:
++                raise ProblemException(
++                    code="KEY_SCOPE_VIOLATION",
++                    status=403,
++                    title="Key Scope Violation",
++                    detail=f"Workspace '{target_workspace_id}' is outside allowed workspaces.",
++                )
++        if target_project_id is not None and allowed_projs:
++            proj_matches = target_project_id in allowed_projs or str(target_project_id) in [
++                str(p) for p in allowed_projs
++            ]
++            if not proj_matches:
++                raise ProblemException(
++                    code="KEY_SCOPE_VIOLATION",
++                    status=403,
++                    title="Key Scope Violation",
++                    detail=f"Project '{target_project_id}' is outside allowed projects.",
++                )
++    elif scope_tier == "workspace":
++        if (
++            target_workspace_id is not None
++            and key_ws is not None
++            and str(target_workspace_id) != str(key_ws)
++        ):
++            raise ProblemException(
++                code="KEY_SCOPE_VIOLATION",
++                status=403,
++                title="Key Scope Violation",
++                detail=f"Workspace '{target_workspace_id}' is outside key workspace '{key_ws}'.",
++            )
++        if target_project_id is not None and allowed_projs:
++            proj_matches = target_project_id in allowed_projs or str(target_project_id) in [
++                str(p) for p in allowed_projs
++            ]
++            if not proj_matches:
++                raise ProblemException(
++                    code="KEY_SCOPE_VIOLATION",
++                    status=403,
++                    title="Key Scope Violation",
++                    detail=f"Project '{target_project_id}' is outside allowed projects.",
++                )
++    elif scope_tier == "project":
++        if (
++            target_workspace_id is not None
++            and key_ws is not None
++            and str(target_workspace_id) != str(key_ws)
++        ):
++            raise ProblemException(
++                code="KEY_SCOPE_VIOLATION",
++                status=403,
++                title="Key Scope Violation",
++                detail=f"Workspace '{target_workspace_id}' is outside key workspace '{key_ws}'.",
++            )
++        if (
++            target_project_id is not None
++            and key_proj is not None
++            and str(target_project_id) != str(key_proj)
++        ):
++            raise ProblemException(
++                code="KEY_SCOPE_VIOLATION",
++                status=403,
++                title="Key Scope Violation",
++                detail=f"Project '{target_project_id}' is outside key project '{key_proj}'.",
++            )
++
++    # 3. Tool Narrowing Check
++    if tool_name:
++        disabled_tools = getattr(key, "disabled_tools", None) or []
++        if tool_name in disabled_tools:
++            raise ProblemException(
++                code="INSUFFICIENT_SCOPE",
++                status=403,
++                title="Insufficient Scope",
++                detail=f"Tool '{tool_name}' is disabled for this key.",
++            )
++        allowed_tools = getattr(key, "allowed_tools", None)
++        if allowed_tools is not None and tool_name not in allowed_tools:
++            raise ProblemException(
++                code="INSUFFICIENT_SCOPE",
++                status=403,
++                title="Insufficient Scope",
++                detail=f"Tool '{tool_name}' is not in allowed_tools for this key.",
++            )
++
++    # 4. Capability Mask Check
++    if required_capability is not None:
++        mask = getattr(key, "capability_mask", 7)
++        if mask is None:
++            mask = 7
++        if (mask & required_capability) != required_capability:
++            raise ProblemException(
++                code="INSUFFICIENT_CAPABILITY",
++                status=403,
++                title="Insufficient Capability",
++                detail=f"Key capability mask {mask} lacks required bit {required_capability}.",
++            )
+diff --git a/kanban/settings.py b/kanban/settings.py
+index 489aa1d..2bc1250 100644
+--- a/kanban/settings.py
++++ b/kanban/settings.py
+@@ -92,6 +92,14 @@ class Settings(BaseSettings):
+             "TRASH_RETENTION_DAYS",
+         ),
+     )
++    disable_unlimited_mcp_keys: bool = Field(
++        default=False,
++        validation_alias=AliasChoices(
++            "KANBAN_DISABLE_UNLIMITED_MCP_KEYS",
++            "KB_DISABLE_UNLIMITED_MCP_KEYS",
++            "disable_unlimited_mcp_keys",
++        ),
++    )
+ 
+     @field_validator("trash_retention_days")
+     @classmethod
+diff --git a/kanban/tests/api/test_admin_mcp_keys_api.py b/kanban/tests/api/test_admin_mcp_keys_api.py
+index f7251d4..1b78466 100644
+--- a/kanban/tests/api/test_admin_mcp_keys_api.py
++++ b/kanban/tests/api/test_admin_mcp_keys_api.py
+@@ -245,3 +245,206 @@ async def test_internal_mcp_introspect_missing_session_factory() -> None:
+     with pytest.raises(RuntimeError, match="Session factory not configured"):
+         async for _ in get_internal_session(req):
+             pass
++
++
++@pytest.mark.asyncio
++async def test_admin_mcp_keys_hierarchical_and_unlimited_minting(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test admin endpoints with unlimited keys, disabled tools, and CIDRs."""
++    admin_user = await make_user("hier_admin", workspace_role="WORKSPACE_ADMIN")
++    await api_env.seed.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {
++            "p_id": admin_user.id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await api_env.seed.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": admin_user.id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await api_env.seed.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await api_env.seed.commit()
++
++    client = api_env.client
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=admin_user.id,
++        workspace_id=admin_user.workspace_id,
++        aal_level=2,
++    )
++
++    # 1. Mint key with unlimited=True and confirm_unlimited=True
++    resp = await client.post(
++        "/api/v1/admin/mcp-keys",
++        json={
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "workspace",
++            "unlimited": True,
++            "confirm_unlimited": True,
++            "disabled_tools": ["complete_work"],
++            "allowed_cidrs": ["10.0.0.0/8"],
++        },
++    )
++    assert resp.status_code == 201
++    contract_recorder.record("mint_admin_mcp_key_hierarchical_201", resp.request, resp)
++    data = resp.json()
++    assert data["scope_tier"] == "workspace"
++    assert data["expires_at"] is None
++    assert data["disabled_tools"] == ["complete_work"]
++    assert data["allowed_cidrs"] == ["10.0.0.0/8"]
++    key_id = data["id"]
++
++    # 2. List with surface filter
++    resp_list = await client.get("/api/v1/admin/mcp-keys?surface=agent&include_revoked=false")
++    assert resp_list.status_code == 200
++    assert any(k["id"] == key_id for k in resp_list.json())
++
++    # 3. Revoke via DELETE /api/v1/admin/mcp-keys/{id}
++    resp_del = await client.delete(f"/api/v1/admin/mcp-keys/{key_id}")
++    assert resp_del.status_code == 204
++
++    # 4. Revoke non-existent key returns 404
++    resp_del_nf = await client.delete("/api/v1/admin/mcp-keys/00000000-0000-0000-0000-000000000000")
++    assert resp_del_nf.status_code == 404
++
++    # 5. SERVER_ADMIN listing with scope_tier filter and revoking global key
++    server_admin = await make_user("global_sa", workspace_role="WORKSPACE_ADMIN")
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:ws_id, :pid, 'SERVER_ADMIN', 'server', NULL)"
++        ),
++        {"ws_id": server_admin.workspace_id, "pid": server_admin.id},
++    )
++    await api_env.seed.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {"p_id": server_admin.id, "blob": b"\x01" + b"\x00" * 28, "dek": b"\x01" + b"\x00" * 44},
++    )
++    res_totp = await api_env.seed.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": server_admin.id},
++    )
++    p_row = res_totp.mappings().first()
++    if p_row:
++        await api_env.seed.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await api_env.seed.commit()
++
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=server_admin.id,
++        workspace_id=server_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_global = await client.post(
++        "/api/v1/admin/mcp-keys",
++        json={
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "global",
++            "owner_kind": "service_bot",
++        },
++    )
++    assert resp_global.status_code == 201
++    global_key_id = resp_global.json()["id"]
++
++    resp_list_global = await client.get("/api/v1/admin/mcp-keys?scope_tier=global")
++    assert resp_list_global.status_code == 200
++    assert any(k["id"] == global_key_id for k in resp_list_global.json())
++
++    # Regular admin cannot delete global key (404)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=admin_user.id,
++        workspace_id=admin_user.workspace_id,
++        aal_level=2,
++    )
++    resp_del_denied = await client.delete(f"/api/v1/admin/mcp-keys/{global_key_id}")
++    assert resp_del_denied.status_code == 404
++
++    # Server admin can delete global key (204)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=server_admin.id,
++        workspace_id=server_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_del_allowed = await client.delete(f"/api/v1/admin/mcp-keys/{global_key_id}")
++    assert resp_del_allowed.status_code == 204
++
++
++@pytest.mark.asyncio
++async def test_personal_mcp_keys_api_lifecycle(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test personal self-service MCP key endpoints (mint, list, revoke, and authorization)."""
++    user_a = await make_user("user_a", workspace_role="WORKSPACE_MEMBER")
++    user_b = await make_user("user_b", workspace_role="WORKSPACE_MEMBER")
++
++    client = api_env.client
++
++    # 1. User A mints a personal MCP key
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user_a.id,
++        workspace_id=user_a.workspace_id,
++        aal_level=1,
++    )
++    resp_mint = await client.post(
++        "/api/v1/auth/mcp-keys",
++        json={
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "workspace",
++            "disabled_tools": ["complete_work"],
++        },
++    )
++    assert resp_mint.status_code == 201
++    contract_recorder.record("mint_personal_mcp_key_201", resp_mint.request, resp_mint)
++    mint_data = resp_mint.json()
++    key_id = mint_data["id"]
++    assert mint_data["owner_kind"] == "personal_user"
++    assert mint_data["disabled_tools"] == ["complete_work"]
++
++    # 2. User A lists their personal keys
++    resp_list = await client.get("/api/v1/auth/mcp-keys")
++    assert resp_list.status_code == 200
++    contract_recorder.record("list_personal_mcp_keys_200", resp_list.request, resp_list)
++    keys = resp_list.json()["keys"]
++    assert any(k["id"] == key_id for k in keys)
++
++    # 3. User B cannot see or revoke User A's key (404)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user_b.id,
++        workspace_id=user_b.workspace_id,
++        aal_level=1,
++    )
++    resp_b_list = await client.get("/api/v1/auth/mcp-keys")
++    assert not any(k["id"] == key_id for k in resp_b_list.json()["keys"])
++
++    resp_b_del = await client.delete(f"/api/v1/auth/mcp-keys/{key_id}")
++    assert resp_b_del.status_code == 404
++
++    # 4. User A revokes their key (204)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user_a.id,
++        workspace_id=user_a.workspace_id,
++        aal_level=1,
++    )
++    resp_del = await client.delete(f"/api/v1/auth/mcp-keys/{key_id}")
++    assert resp_del.status_code == 204
++    contract_recorder.record("revoke_personal_mcp_key_204", resp_del.request, resp_del)
++
++    # 5. Revoking non-existent key returns 404
++    resp_del_nf = await client.delete("/api/v1/auth/mcp-keys/00000000-0000-0000-0000-000000000000")
++    assert resp_del_nf.status_code == 404
+diff --git a/kanban/tests/security/test_mcp_scopable_keys.py b/kanban/tests/security/test_mcp_scopable_keys.py
+new file mode 100644
+index 0000000..49165cf
+--- /dev/null
++++ b/kanban/tests/security/test_mcp_scopable_keys.py
+@@ -0,0 +1,450 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for hierarchical scopable MCP keys, narrowing, RLS & gates (KB-P4-14)."""
++
++from __future__ import annotations
++
++import base64
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy.exc import IntegrityError
++
++from database.models.mcp_api_key import McpApiKey
++from database.session import RLSContext, bind_rls_context
++from kanban.api.problems import ProblemException
++from kanban.security.mcp_keys import (
++    evaluate_key_boundary,
++    generate_mcp_api_key,
++    introspect_subject_token,
++    mint_mcp_api_key,
++    revoke_mcp_api_key,
++)
++from kanban.settings import get_settings
++from kanban.tests.security.helpers import (
++    add_role_binding,
++    create_agent,
++    create_project,
++    create_user,
++    create_workspace,
++)
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++@pytest.mark.asyncio
++async def test_case_1_positive_global_bot_key(db_session: AsyncSession) -> None:
++    """Test Case 1: Global bot key across allowed workspaces and blocking out-of-scope."""
++    ws_a = await create_workspace(db_session, name="WS-Alpha")
++    ws_b = await create_workspace(db_session, name="WS-Beta")
++    ws_c = await create_workspace(db_session, name="WS-Gamma")
++    ws_secret = await create_workspace(db_session, name="WS-Secret")
++
++    admin_id = await create_user(
++        db_session, ws_a, handle="@serveradmin", display_name="Server Admin"
++    )
++    await add_role_binding(db_session, ws_a, admin_id, role="SERVER_ADMIN", scope_type="server")
++
++    # Global service bot principal in ws_a
++    bot_id = await create_agent(db_session, ws_a, display_name="meatloaf-bot")
++
++    ctx = RLSContext(
++        principal_id=admin_id,
++        workspace_id=ws_a,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++    await bind_rls_context(db_session, ctx)
++
++    key_record, _plaintext = await mint_mcp_api_key(
++        db_session,
++        workspace_id=None,
++        principal_id=bot_id,
++        surface="agent",
++        scopes=["agent:read", "agent:write"],
++        scope_tier="global",
++        owner_kind="service_bot",
++        allowed_workspace_ids=[ws_a, ws_b, ws_c],
++        created_by_id=admin_id,
++        caller_aal_level=2,
++    )
++
++    assert key_record.scope_tier == "global"
++    assert key_record.workspace_id is None
++    assert key_record.allowed_workspace_ids == [ws_a, ws_b, ws_c]
++
++    # Verify evaluate_key_boundary passes for allowed workspaces
++    evaluate_key_boundary(key_record, target_workspace_id=ws_a)
++    evaluate_key_boundary(key_record, target_workspace_id=ws_b)
++    evaluate_key_boundary(key_record, target_workspace_id=ws_c)
++
++    # Verify evaluate_key_boundary rejects out-of-scope workspace
++    with pytest.raises(ProblemException) as exc_info:
++        evaluate_key_boundary(key_record, target_workspace_id=ws_secret)
++    assert exc_info.value.status == 403
++    assert exc_info.value.code == "KEY_SCOPE_VIOLATION"
++
++
++@pytest.mark.asyncio
++async def test_case_2_positive_per_project_key(db_session: AsyncSession) -> None:
++    """Test Case 2: Project-scoped key on KANBA vs sibling project in same workspace."""
++    ws_id = await create_workspace(db_session, name="WS-Projects")
++    prj_kanba = await create_project(db_session, ws_id, identifier="KANBA", name="Kanban Core")
++    prj_other = await create_project(db_session, ws_id, identifier="OTHER", name="Other Service")
++    ws_external = await create_workspace(db_session, name="WS-External")
++
++    admin_id = await create_user(db_session, ws_id, handle="@wsadmin", display_name="WS Admin")
++    await add_role_binding(
++        db_session, ws_id, admin_id, role="WORKSPACE_ADMIN", scope_type="workspace"
++    )
++
++    bot_id = await create_agent(db_session, ws_id, display_name="kanba-project-bot")
++
++    ctx = RLSContext(
++        principal_id=admin_id,
++        workspace_id=ws_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++    await bind_rls_context(db_session, ctx)
++
++    key_record, _plaintext = await mint_mcp_api_key(
++        db_session,
++        workspace_id=ws_id,
++        principal_id=bot_id,
++        surface="agent",
++        scopes=["agent:read", "agent:write"],
++        scope_tier="project",
++        owner_kind="service_bot",
++        project_id=prj_kanba,
++        created_by_id=admin_id,
++        caller_aal_level=2,
++    )
++
++    assert key_record.scope_tier == "project"
++    assert key_record.project_id == prj_kanba
++
++    # Target project KANBA in ws_id passes
++    evaluate_key_boundary(key_record, target_workspace_id=ws_id, target_project_id=prj_kanba)
++
++    # Target sibling project OTHER fails
++    with pytest.raises(ProblemException) as exc_info:
++        evaluate_key_boundary(key_record, target_workspace_id=ws_id, target_project_id=prj_other)
++    assert exc_info.value.status == 403
++    assert exc_info.value.code == "KEY_SCOPE_VIOLATION"
++
++    # Target external workspace fails
++    with pytest.raises(ProblemException) as exc_info2:
++        evaluate_key_boundary(
++            key_record, target_workspace_id=ws_external, target_project_id=prj_kanba
++        )
++    assert exc_info2.value.status == 403
++    assert exc_info2.value.code == "KEY_SCOPE_VIOLATION"
++
++
++@pytest.mark.asyncio
++async def test_case_3_personal_key_lifecycle_and_tool_narrowing(
++    db_session: AsyncSession,
++) -> None:
++    """Test Case 3: Personal user self-service key with revocation & tool narrowing."""
++    ws_id = await create_workspace(db_session, name="WS-SelfService")
++    user_id = await create_user(db_session, ws_id, handle="@devuser", display_name="Dev User")
++    await add_role_binding(
++        db_session, ws_id, user_id, role="WORKSPACE_MEMBER", scope_type="workspace"
++    )
++
++    ctx = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws_id,
++        token_scopes=("session",),
++        aal_level=1,
++    )
++    await bind_rls_context(db_session, ctx)
++
++    key_record, plaintext = await mint_mcp_api_key(
++        db_session,
++        workspace_id=ws_id,
++        principal_id=user_id,
++        surface="agent",
++        scopes=["agent:read", "agent:write"],
++        scope_tier="workspace",
++        owner_kind="personal_user",
++        disabled_tools=["transition_ticket", "complete_work"],
++        created_by_id=user_id,
++        caller_aal_level=1,
++    )
++
++    assert key_record.scope_tier == "workspace"
++    assert key_record.owner_kind == "personal_user"
++    assert key_record.disabled_tools == ["transition_ticket", "complete_work"]
++
++    # Allowed tool passes
++    evaluate_key_boundary(key_record, tool_name="search_tickets")
++
++    # Disabled tool fails with INSUFFICIENT_SCOPE
++    with pytest.raises(ProblemException) as exc_info:
++        evaluate_key_boundary(key_record, tool_name="complete_work")
++    assert exc_info.value.status == 403
++    assert exc_info.value.code == "INSUFFICIENT_SCOPE"
++
++    # Introspect returns active key with disabled_tools
++    intro = await introspect_subject_token(db_session, plaintext, surface="agent")
++    assert intro is not None
++    assert intro.active is True
++    assert intro.disabled_tools == ["transition_ticket", "complete_work"]
++
++    # Revoke key
++    await revoke_mcp_api_key(db_session, key_id=key_record.id, caller_principal_id=user_id)
++
++    # Introspect now returns inactive
++    revoked_intro = await introspect_subject_token(db_session, plaintext, surface="agent")
++    assert revoked_intro is not None
++    assert revoked_intro.active is False
++
++
++@pytest.mark.asyncio
++async def test_case_4_privilege_escalation_blocked(db_session: AsyncSession) -> None:
++    """Test Case 4: Privilege escalation blocked (AAL1 user attempting admin key or global tier)."""
++    ws_id = await create_workspace(db_session, name="WS-Security")
++    user_id = await create_user(db_session, ws_id, handle="@regular", display_name="Regular User")
++    await add_role_binding(
++        db_session, ws_id, user_id, role="WORKSPACE_MEMBER", scope_type="workspace"
++    )
++
++    ctx = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws_id,
++        token_scopes=("session",),
++        aal_level=1,
++    )
++    await bind_rls_context(db_session, ctx)
++
++    # 1. Non-admin attempting to mint global key -> 403
++    with pytest.raises(ProblemException) as exc1:
++        await mint_mcp_api_key(
++            db_session,
++            workspace_id=None,
++            principal_id=user_id,
++            surface="agent",
++            scopes=["agent:read"],
++            scope_tier="global",
++            owner_kind="service_bot",
++            created_by_id=user_id,
++            caller_aal_level=1,
++        )
++    assert exc1.value.status == 403
++
++    # 2. Member attempting to mint workspace tier bot key -> 403
++    bot_id = await create_agent(db_session, ws_id, display_name="ws-bot")
++    with pytest.raises(ProblemException) as exc2:
++        await mint_mcp_api_key(
++            db_session,
++            workspace_id=ws_id,
++            principal_id=bot_id,
++            surface="agent",
++            scopes=["agent:read"],
++            scope_tier="workspace",
++            owner_kind="service_bot",
++            created_by_id=user_id,
++            caller_aal_level=1,
++        )
++    assert exc2.value.status == 403
++
++    # 3. Caller with AAL1 attempting to mint service_bot key -> 403 AAL2 Required
++    admin_id = await create_user(db_session, ws_id, handle="@adminaal1", display_name="Admin AAL1")
++    await add_role_binding(
++        db_session, ws_id, admin_id, role="WORKSPACE_ADMIN", scope_type="workspace"
++    )
++    with pytest.raises(ProblemException) as exc3:
++        await mint_mcp_api_key(
++            db_session,
++            workspace_id=ws_id,
++            principal_id=bot_id,
++            surface="agent",
++            scopes=["agent:read"],
++            scope_tier="workspace",
++            owner_kind="service_bot",
++            created_by_id=admin_id,
++            caller_aal_level=1,
++        )
++    assert exc3.value.status == 403
++    assert "AAL2" in exc3.value.detail
++
++
++@pytest.mark.asyncio
++async def test_case_5_cidr_pin_and_shape_check_constraints(db_session: AsyncSession) -> None:
++    """Test Case 5: CIDR Pinning and database tier shape check constraints (23514)."""
++    ws_id = await create_workspace(db_session, name="WS-CIDR")
++    user_id = await create_user(db_session, ws_id, handle="@cidruser", display_name="CIDR User")
++    await add_role_binding(
++        db_session, ws_id, user_id, role="WORKSPACE_MEMBER", scope_type="workspace"
++    )
++
++    ctx = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws_id,
++        token_scopes=("session",),
++        aal_level=1,
++    )
++    await bind_rls_context(db_session, ctx)
++
++    key_record, _ = await mint_mcp_api_key(
++        db_session,
++        workspace_id=ws_id,
++        principal_id=user_id,
++        surface="agent",
++        scopes=["agent:read"],
++        scope_tier="workspace",
++        owner_kind="personal_user",
++        allowed_cidrs=["192.168.1.0/24"],
++        created_by_id=user_id,
++        caller_aal_level=1,
++    )
++
++    # 1. CIDR evaluation: allowed IP passes
++    evaluate_key_boundary(key_record, client_ip="192.168.1.100")
++
++    # 2. CIDR evaluation: disallowed IP fails
++    with pytest.raises(ProblemException) as exc_info:
++        evaluate_key_boundary(key_record, client_ip="10.0.0.1")
++    assert exc_info.value.status == 403
++    assert exc_info.value.code == "KEY_CIDR_DENIED"
++
++    # 3. Database shape check constraint: mcp_keys_tier_shape_chk
++    # Global tier with non-null workspace_id violates CHECK constraint
++    _, prefix, key_sha256, hint = generate_mcp_api_key("agent")
++    invalid_global = McpApiKey(
++        workspace_id=ws_id,  # Invalid: global MUST have workspace_id NULL
++        principal_id=user_id,
++        surface="agent",
++        key_prefix=prefix,
++        key_sha256=key_sha256,
++        display_hint=hint,
++        scopes=["agent:read"],
++        scope_tier="global",
++        owner_kind="service_bot",
++        created_by_id=user_id,
++    )
++    async with db_session.begin_nested():
++        db_session.add(invalid_global)
++        with pytest.raises(IntegrityError) as exc_db1:
++            await db_session.flush()
++    assert "mcp_keys_tier_shape_chk" in str(exc_db1.value)
++
++    # Project tier with NULL project_id violates CHECK constraint
++    invalid_project = McpApiKey(
++        workspace_id=ws_id,
++        principal_id=user_id,
++        surface="agent",
++        key_prefix=prefix,
++        key_sha256=key_sha256,
++        display_hint=hint,
++        scopes=["agent:read"],
++        scope_tier="project",
++        owner_kind="service_bot",
++        project_id=None,  # Invalid: project tier MUST have project_id NOT NULL
++        created_by_id=user_id,
++    )
++    async with db_session.begin_nested():
++        db_session.add(invalid_project)
++        with pytest.raises(IntegrityError) as exc_db2:
++            await db_session.flush()
++    assert "mcp_keys_tier_shape_chk" in str(exc_db2.value)
++
++
++@pytest.mark.asyncio
++async def test_case_6_unlimited_key_gate(
++    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Test Case 6: Unlimited key gate with friction confirmation and settings enforcement."""
++    ws_id = await create_workspace(db_session, name="WS-Unlimited")
++    user_id = await create_user(db_session, ws_id, handle="@unluser", display_name="Unlimited User")
++    await add_role_binding(
++        db_session, ws_id, user_id, role="WORKSPACE_MEMBER", scope_type="workspace"
++    )
++
++    ctx = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws_id,
++        token_scopes=("session",),
++        aal_level=1,
++    )
++    await bind_rls_context(db_session, ctx)
++
++    # 1. Unlimited requested without confirmation -> 422 UNLIMITED_CONFIRMATION_REQUIRED
++    with pytest.raises(ProblemException) as exc1:
++        await mint_mcp_api_key(
++            db_session,
++            workspace_id=ws_id,
++            principal_id=user_id,
++            surface="agent",
++            scopes=["agent:read"],
++            scope_tier="workspace",
++            owner_kind="personal_user",
++            unlimited=True,
++            confirm_unlimited=False,
++            created_by_id=user_id,
++            caller_aal_level=1,
++        )
++    assert exc1.value.status == 422
++    assert exc1.value.code == "UNLIMITED_CONFIRMATION_REQUIRED"
++
++    # 2. Unlimited with confirmation when system forbids unlimited keys -> 422
++    settings = get_settings()
++    monkeypatch.setattr(settings, "disable_unlimited_mcp_keys", True)
++
++    with pytest.raises(ProblemException) as exc2:
++        await mint_mcp_api_key(
++            db_session,
++            workspace_id=ws_id,
++            principal_id=user_id,
++            surface="agent",
++            scopes=["agent:read"],
++            scope_tier="workspace",
++            owner_kind="personal_user",
++            unlimited=True,
++            confirm_unlimited=True,
++            created_by_id=user_id,
++            caller_aal_level=1,
++        )
++    assert exc2.value.status == 422
++    assert exc2.value.code == "UNLIMITED_KEY_FORBIDDEN"
++
++    # 3. Unlimited with confirmation when system allows unlimited keys -> Success
++    monkeypatch.setattr(settings, "disable_unlimited_mcp_keys", False)
++
++    key_record, plaintext = await mint_mcp_api_key(
++        db_session,
++        workspace_id=ws_id,
++        principal_id=user_id,
++        surface="agent",
++        scopes=["agent:read"],
++        scope_tier="workspace",
++        owner_kind="personal_user",
++        unlimited=True,
++        confirm_unlimited=True,
++        created_by_id=user_id,
++        caller_aal_level=1,
++    )
++    assert key_record.expires_at is None
++
++    # Introspect also reflects expires_at is None
++    intro = await introspect_subject_token(db_session, plaintext, surface="agent")
++    assert intro is not None
++    assert intro.active is True
++    assert intro.expires_at is None
+diff --git a/kanban/web/e2e/mcp-scopable-keys.spec.ts b/kanban/web/e2e/mcp-scopable-keys.spec.ts
+new file mode 100644
+index 0000000..49270b9
+--- /dev/null
++++ b/kanban/web/e2e/mcp-scopable-keys.spec.ts
+@@ -0,0 +1,238 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++import { test, expect } from './support/test';
++import { mockApi, loadFixture, type MockHandlers, type MockRecorder } from './support/mockApi';
++import { annotatedScreenshot } from './support/annotate';
++import type { McpApiKeyItem, OAuthConnectedApp } from '../src/features/settings/settingsApi';
++
++const SCREENSHOT_DIR = resolve(
++  import.meta.dirname,
++  '../../../docs/qa/KANBA-106/screenshots',
++);
++
++const initialKeys: McpApiKeyItem[] = [
++  {
++    id: 'key-global-1',
++    label: 'Global Service Bot Key',
++    display_hint: 'g1a1',
++    surface: 'agent',
++    scope_tier: 'global',
++    scopes: ['agent:read', 'agent:write'],
++    allowed_projects: null,
++    created_at: new Date().toISOString(),
++    expires_at: null, // Unlimited key
++    last_used_at: null,
++    revoked_at: null,
++    disabled_tools: ['delete_all_projects'],
++    allowed_cidrs: ['10.0.0.0/8'],
++  },
++  {
++    id: 'key-ws-1',
++    label: 'Workspace Bot Key',
++    display_hint: 'w2b2',
++    surface: 'agent',
++    scope_tier: 'workspace',
++    scopes: ['agent:read'],
++    allowed_projects: null,
++    created_at: new Date().toISOString(),
++    expires_at: new Date(Date.now() + 86400000 * 90).toISOString(),
++    last_used_at: null,
++    revoked_at: null,
++    disabled_tools: [],
++  },
++  {
++    id: 'key-proj-1',
++    label: 'Project CI/CD Key',
++    display_hint: 'p3c3',
++    surface: 'agent',
++    scope_tier: 'project',
++    scopes: ['agent:read', 'agent:write'],
++    allowed_projects: ['KANBA'],
++    created_at: new Date().toISOString(),
++    expires_at: new Date(Date.now() + 86400000 * 60).toISOString(),
++    last_used_at: null,
++    revoked_at: null,
++    disabled_tools: ['complete_work'],
++  },
++  {
++    id: 'key-personal-1',
++    label: 'Personal Developer Key',
++    display_hint: 'a4d4',
++    surface: 'agent',
++    scope_tier: 'personal_user',
++    scopes: ['agent:read'],
++    allowed_projects: null,
++    created_at: new Date().toISOString(),
++    expires_at: new Date(Date.now() + 86400000 * 30).toISOString(),
++    last_used_at: null,
++    revoked_at: null,
++    disabled_tools: ['transition_ticket'],
++  },
++];
++
++const initialApps: OAuthConnectedApp[] = [
++  {
++    id: 'grant-1',
++    client_id: 'client_claude_cli',
++    client_name: 'Claude Code CLI',
++    surface: 'agent',
++    scopes: ['agent:read'],
++    allowed_projects: ['KANBA'],
++    created_at: new Date().toISOString(),
++    revoked_at: null,
++  },
++];
++
++async function setupMocks(page: Page, handlers: MockHandlers = {}): Promise<MockRecorder> {
++  await page.unroute('**/api/v1/**');
++  return mockApi(page, {
++    'GET /api/v1/me': { json: loadFixture('me-adam') },
++    'GET /api/v1/auth/me': { json: loadFixture('me-adam') },
++    'GET /api/v1/setup/status': { json: { initialized: true } },
++    'GET /api/v1/auth/session': {
++      json: {
++        authenticated: true,
++        principal_id: 'usr_adam',
++        workspace_id: 'ws_kanban',
++        aal_level: 2,
++        mfa_pending: false,
++        csrf_token: 'test-csrf-token-123',
++      },
++    },
++    'GET /api/v1/projects': { json: [loadFixture('project-kan')] },
++    'GET /api/v1/system/status': () => ({
++      json: {
++        ...loadFixture<Record<string, unknown>>('system-status-prod'),
++        allow_unlimited_mcp_keys: true,
++      },
++    }),
++    'GET /api/v1/projects/KAN': { json: loadFixture('project-kan') },
++    'GET /api/v1/objects/project/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/objects/KAN/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/auth/mcp-keys': () => ({ json: { keys: initialKeys } }),
++    'GET /api/v1/auth/oauth-grants': () => ({ json: initialApps }),
++    ...handlers,
++  });
++}
++
++test.describe('Hierarchical Scopable Keys & Granular Narrowing (KB-P4-14 / KANBA-106)', () => {
++  test.beforeEach(async ({ context }) => {
++    mkdirSync(SCREENSHOT_DIR, { recursive: true });
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-123',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('01: MCP Studio overview with hierarchical scope tiers and unlimited expiry', async ({
++    page,
++  }, testInfo) => {
++    await setupMocks(page);
++
++    await page.goto('/settings/mcp');
++    await expect(page.locator('[data-testid="mcp-access-studio"]')).toBeVisible();
++    await expect(page.locator('[data-testid="tier-badge-global"]')).toBeVisible();
++    await expect(page.locator('[data-testid="tier-badge-workspace"]')).toBeVisible();
++    await expect(page.locator('[data-testid="tier-badge-project"]')).toBeVisible();
++    await expect(page.locator('[data-testid="tier-badge-personal"]')).toBeVisible();
++
++    // Verify Never (Unlimited) text for key-global-1
++    await expect(page.locator('text=Never (Unlimited)')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-mcp-studio-hierarchical-overview',
++      annotations: [
++        {
++          selector: '[data-testid="tier-badge-global"]',
++          label: 'Hierarchical Scope Tiers',
++          note: 'Global, Workspace, Project, and Personal User cryptographic boundaries',
++        },
++        {
++          selector: 'text=Never (Unlimited)',
++          label: 'Unlimited Key Expiry Indicator',
++          note: 'Explicit unlimited lifetime pill displayed when expires_at is NULL',
++        },
++        {
++          selector: '[data-testid="mint-key-button"]',
++          label: 'Self-Service Key Minting Action',
++          note: 'Enforces AAL2 and privilege boundary checks',
++        },
++      ],
++    });
++  });
++
++  test('02: Mint modal unlimited key friction and warning banner', async ({
++    page,
++  }, testInfo) => {
++    await setupMocks(page);
++
++    await page.goto('/settings/mcp');
++    await expect(page.locator('[data-testid="mint-key-button"]')).toBeVisible();
++    await page.locator('[data-testid="mint-key-button"]').click();
++
++    await expect(page.locator('[data-testid="mint-label-input"]')).toBeVisible();
++    await page.locator('[data-testid="mint-label-input"]').fill('Long-Running Production Agent');
++
++    // Select Unlimited expiry option
++    await page.locator('[data-testid="mint-expiry-select"]').selectOption('unlimited');
++
++    // Warning banner and confirmation checkbox must now be visible
++    await expect(page.locator('[data-testid="unlimited-warning-box"]')).toBeVisible();
++    await expect(page.locator('[data-testid="confirm-unlimited-checkbox"]')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '02-mint-modal-unlimited-warning',
++      annotations: [
++        {
++          selector: '[data-testid="unlimited-warning-box"]',
++          label: 'Friction: Security Warning Banner',
++          note: 'Warns against token leakage and credential replay without expiration',
++        },
++        {
++          selector: '[data-testid="confirm-unlimited-checkbox"]',
++          label: 'Explicit Acknowledgment Checkbox',
++          note: 'Submitting without confirmation yields 422 UNLIMITED_CONFIRMATION_REQUIRED',
++        },
++      ],
++    });
++  });
++
++  test('03: Mint modal granular tool narrowing and disabled tools selection', async ({
++    page,
++  }, testInfo) => {
++    await setupMocks(page);
++
++    await page.goto('/settings/mcp');
++    await expect(page.locator('[data-testid="mint-key-button"]')).toBeVisible();
++    await page.locator('[data-testid="mint-key-button"]').click();
++
++    // Check complete_work and transition_ticket tool checkboxes to disable them
++    const completeWorkCb = page.locator('[data-testid="disable-tool-complete_work"]');
++    if (await completeWorkCb.isVisible()) {
++      await completeWorkCb.check();
++    }
++    const transitionTicketCb = page.locator('[data-testid="disable-tool-transition_ticket"]');
++    if (await transitionTicketCb.isVisible()) {
++      await transitionTicketCb.check();
++    }
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '03-mint-modal-tool-narrowing',
++      annotations: [
++        {
++          selector: '[data-testid="tools-selection-grid"]',
++          label: 'Granular Tool Disabling Grid',
++          note: 'Allows stripping specific mutating or destructive tools from the minted key',
++        },
++      ],
++    });
++  });
++});
+diff --git a/kanban/web/src/app/useSystemStatus.ts b/kanban/web/src/app/useSystemStatus.ts
+index 14c3bf3..d2322bb 100644
+--- a/kanban/web/src/app/useSystemStatus.ts
++++ b/kanban/web/src/app/useSystemStatus.ts
+@@ -16,6 +16,7 @@ export interface SystemStatus {
+   readonly air_gap_mode: boolean;
+   readonly local_llm_endpoint_host: string | null;
+   readonly is_server_admin?: boolean;
++  readonly allow_unlimited_mcp_keys?: boolean;
+   readonly data_mount_point?: string | null;
+   readonly data_mount_fstype?: string | null;
+   readonly tier_b_sandbox_available?: boolean;
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index fac8d7b..3c130a2 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -241,3 +241,62 @@
+   gap: 12px;
+   margin-top: 8px;
+ }
++
++.kb-mcp-unlimited-warning {
++  background-color: rgba(210, 153, 34, 0.15);
++  border: 1px solid rgba(210, 153, 34, 0.4);
++  border-radius: 6px;
++  padding: 12px 14px;
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++}
++
++.kb-mcp-warning-text {
++  font-size: 0.8125rem;
++  color: #e3b341;
++  margin: 0;
++  line-height: 1.4;
++}
++
++.kb-mcp-confirm-unlimited-label {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  font-size: 0.8125rem;
++  color: #e6edf3;
++  cursor: pointer;
++  font-weight: 500;
++}
++
++.kb-mcp-tools-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
++  gap: 8px;
++  max-height: 160px;
++  overflow-y: auto;
++  background-color: #0d1117;
++  border: 1px solid var(--border-subtle, #30363d);
++  border-radius: 6px;
++  padding: 10px 12px;
++}
++
++.kb-mcp-tool-checkbox-label {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  font-size: 0.75rem;
++  color: #c9d1d9;
++  cursor: pointer;
++}
++
++.kb-mcp-tool-checkbox-label code {
++  color: #79c0ff;
++  font-family: var(--font-mono);
++}
++
++.kb-mcp-unlimited-pill {
++  color: #e3b341;
++  font-weight: 500;
++}
++
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index 174d6cc..41f2466 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -15,13 +15,58 @@ import {
+ } from './settingsApi';
+ import { McpConfigSnippetModal } from './McpConfigSnippetModal';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
++import { useSystemStatus } from '../../app/useSystemStatus';
+ import './McpAccessStudio.css';
+ 
++export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]> = {
++  agent: [
++    'ping_agent',
++    'search_tickets',
++    'read_ticket',
++    'create_ticket',
++    'update_ticket',
++    'begin_work',
++    'transition_ticket',
++    'complete_work',
++    'add_comment',
++    'link_objects',
++  ],
++  docs: [
++    'ping_docs',
++    'search_docs',
++    'search_knowledge',
++    'read_doc',
++    'create_doc',
++    'update_doc',
++    'upsert_doc',
++    'manage_stickies',
++    'promote_sticky_to_doc',
++    'link_knowledge',
++  ],
++  admin: [
++    'manage_principals_and_groups',
++    'manage_access_policies',
++    'audit_links',
++    'override_ticket_provenance',
++    'audit_and_purge_object_links',
++    'manage_ai_and_agent_runners',
++    'destructive_lifecycle',
++  ],
++};
++
+ export interface McpAccessStudioProps {
+   tier?: ('personal' | 'project' | 'workspace' | 'global') | undefined;
++  allowUnlimitedKeys?: boolean | undefined;
+ }
+ 
+-export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JSX.Element {
++export function McpAccessStudio({
++  tier = 'personal',
++  allowUnlimitedKeys,
++}: McpAccessStudioProps): JSX.Element {
++  const systemStatusQuery = useSystemStatus();
++  const allowUnlimited =
++    allowUnlimitedKeys ?? systemStatusQuery.data?.allow_unlimited_mcp_keys ?? true;
++
+   const { projectKey = 'KANBA' } = useParams<{ projectKey?: string }>();
+   const [keys, setKeys] = useState<McpApiKeyItem[]>([]);
+   const [connectedApps, setConnectedApps] = useState<OAuthConnectedApp[]>([]);
+@@ -32,6 +77,9 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
+   const [newKeyLabel, setNewKeyLabel] = useState<string>('');
+   const [newKeySurface, setNewKeySurface] = useState<'agent' | 'docs' | 'admin'>('agent');
+   const [newKeyExpiry, setNewKeyExpiry] = useState<number>(60);
++  const [isUnlimited, setIsUnlimited] = useState<boolean>(false);
++  const [confirmUnlimited, setConfirmUnlimited] = useState<boolean>(false);
++  const [disabledTools, setDisabledTools] = useState<string[]>([]);
+   const [minting, setMinting] = useState<boolean>(false);
+ 
+   // Snippet modal state (ephemeral secret)
+@@ -72,14 +120,20 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
+     if (!newKeyLabel.trim()) {
+       return;
+     }
++    if (isUnlimited && !confirmUnlimited) {
++      return;
++    }
+     setMinting(true);
+     try {
+       const minted = await mintPersonalMcpKey({
+         label: newKeyLabel.trim(),
+         surface: newKeySurface,
+         scopes: [`${newKeySurface}:read`, `${newKeySurface}:write`],
+-        allowed_projects: tier === 'project' ? [projectKey] : undefined,
+-        expires_in_days: newKeyExpiry,
++        ...(tier === 'project' ? { allowed_projects: [projectKey] } : {}),
++        ...(isUnlimited
++          ? { unlimited: true, confirm_unlimited: confirmUnlimited }
++          : { expires_in_days: newKeyExpiry }),
++        ...(disabledTools.length > 0 ? { disabled_tools: disabledTools } : {}),
+       });
+ 
+       // Update keys table (table receives key item with display_hint only)
+@@ -90,6 +144,10 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
+       setShowMintModal(false);
+       setShowSnippetModal(true);
+       setNewKeyLabel('');
++      setIsUnlimited(false);
++      setConfirmUnlimited(false);
++      setDisabledTools([]);
++      setNewKeyExpiry(60);
+     } catch {
+       // Handle error
+     } finally {
+@@ -193,6 +251,7 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
+                 <th className="kb-mcp-th">Key Hint</th>
+                 <th className="kb-mcp-th">Scope Tier</th>
+                 <th className="kb-mcp-th">Surface</th>
++                <th className="kb-mcp-th">Expires</th>
+                 <th className="kb-mcp-th">Status</th>
+                 <th className="kb-mcp-th">Actions</th>
+               </tr>
+@@ -200,7 +259,7 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
+             <tbody>
+               {keys.length === 0 && !loading && (
+                 <tr>
+-                  <td colSpan={6} className="kb-mcp-empty-state">
++                  <td colSpan={7} className="kb-mcp-empty-state">
+                     No active MCP keys configured. Click "+ Mint MCP Key" to create one.
+                   </td>
+                 </tr>
+@@ -222,6 +281,15 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
+                     </td>
+                     <td className="kb-mcp-td">{getTierBadge(k.scope_tier)}</td>
+                     <td className="kb-mcp-td">{k.surface.toUpperCase()}</td>
++                    <td className="kb-mcp-td" data-testid={`key-expires-${k.id}`}>
++                      {k.expires_at ? (
++                        new Date(k.expires_at).toLocaleDateString()
++                      ) : (
++                        <span className="kb-mcp-unlimited-pill" data-testid={`key-unlimited-${k.id}`}>
++                          Never (Unlimited)
++                        </span>
++                      )}
++                    </td>
+                     <td className="kb-mcp-td">
+                       {isRevoked ? (
+                         <span className="kb-mcp-status-revoked" data-testid="status-revoked">Revoked</span>
+@@ -430,6 +498,7 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
+                   value={newKeySurface}
+                   onChange={(e) => {
+                     setNewKeySurface(e.target.value as 'agent' | 'docs' | 'admin');
++                    setDisabledTools([]);
+                   }}
+                 >
+                   <option value="agent">/mcp/agent (Standard Tools)</option>
+@@ -446,24 +515,89 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
+                   id="mint-expiry-select"
+                   className="kb-mcp-form-select"
+                   data-testid="mint-expiry-select"
+-                  value={newKeyExpiry}
++                  value={isUnlimited ? 'unlimited' : newKeyExpiry}
+                   onChange={(e) => {
+-                    setNewKeyExpiry(Number(e.target.value));
++                    if (e.target.value === 'unlimited') {
++                      setIsUnlimited(true);
++                    } else {
++                      setIsUnlimited(false);
++                      setNewKeyExpiry(Number(e.target.value));
++                      setConfirmUnlimited(false);
++                    }
+                   }}
+                 >
+                   <option value={30}>30 Days</option>
+                   <option value={60}>60 Days</option>
+                   <option value={90}>90 Days</option>
+                   <option value={365}>1 Year</option>
++                  {allowUnlimited && (
++                    <option value="unlimited" data-testid="option-unlimited">
++                      Unlimited (not recommended)
++                    </option>
++                  )}
+                 </select>
+               </div>
+ 
++              {isUnlimited && (
++                <div
++                  className="kb-mcp-unlimited-warning"
++                  data-testid="unlimited-warning-box"
++                  data-test-banner="unlimited-warning-banner"
++                >
++                  <p className="kb-mcp-warning-text">
++                    ⚠️ <strong>Are you sure?</strong> Unlimited keys never expire. This poses a significant security risk if the token is leaked or compromised.
++                  </p>
++                  <label className="kb-mcp-confirm-unlimited-label">
++                    <input
++                      type="checkbox"
++                      data-testid="confirm-unlimited-checkbox"
++                      checked={confirmUnlimited}
++                      onChange={(e) => {
++                        setConfirmUnlimited(e.target.checked);
++                      }}
++                    />
++                    <span>I understand the security risk and confirm creating an unlimited key</span>
++                  </label>
++                </div>
++              )}
++
++              <div className="kb-mcp-form-row">
++                <label className="kb-mcp-form-label">
++                  Narrow Tools (Disable specific capabilities):
++                </label>
++                <div className="kb-mcp-tools-grid" data-testid="tools-selection-grid">
++                  {SURFACE_TOOLS[newKeySurface].map((toolName) => {
++                    const isDisabled = disabledTools.includes(toolName);
++                    return (
++                      <label key={toolName} className="kb-mcp-tool-checkbox-label">
++                        <input
++                          type="checkbox"
++                          data-testid={`disable-tool-${toolName}`}
++                          checked={isDisabled}
++                          onChange={(e) => {
++                            if (e.target.checked) {
++                              setDisabledTools([...disabledTools, toolName]);
++                            } else {
++                              setDisabledTools(disabledTools.filter((t) => t !== toolName));
++                            }
++                          }}
++                        />
++                        <span><code>{toolName}</code> (disable)</span>
++                      </label>
++                    );
++                  })}
++                </div>
++              </div>
++
+               <div className="kb-mcp-form-actions">
+                 <button
+                   type="button"
+                   className="kb-snippet-copy-btn"
+                   onClick={() => {
+                     setShowMintModal(false);
++                    setIsUnlimited(false);
++                    setConfirmUnlimited(false);
++                    setDisabledTools([]);
+                   }}
+                 >
+                   Cancel
+@@ -472,7 +606,7 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
+                   type="submit"
+                   className="kb-snippet-done-btn"
+                   data-testid="mint-submit-btn"
+-                  disabled={minting || !newKeyLabel.trim()}
++                  disabled={minting || !newKeyLabel.trim() || (isUnlimited && !confirmUnlimited)}
+                 >
+                   {minting ? 'Minting...' : 'Mint Key'}
+                 </button>
+diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+index 77396de..0a27826 100644
+--- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+@@ -8,6 +8,14 @@ import { MemoryRouter, Routes, Route } from 'react-router';
+ import { McpAccessStudio } from '../McpAccessStudio';
+ import * as settingsApi from '../settingsApi';
+ 
++vi.mock('../../../app/useSystemStatus', () => ({
++  useSystemStatus: vi.fn(() => ({
++    data: { allow_unlimited_mcp_keys: true },
++    isLoading: false,
++    error: null,
++  })),
++}));
++
+ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   const mockKeys: settingsApi.McpApiKeyItem[] = [
+     {
+@@ -458,4 +466,144 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     fireEvent.click(backdrop);
+     expect(screen.queryByTestId('mint-label-input')).toBeNull();
+   });
++
++  it('supports unlimited key minting with friction checkbox and disables button until confirmed', async () => {
++    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++
++    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
++      id: 'key-unlimited',
++      label: 'Unlimited Token',
++      display_hint: 'unl1',
++      surface: 'agent',
++      scope_tier: 'personal_user',
++      scopes: ['agent:read', 'agent:write'],
++      allowed_projects: null,
++      created_at: new Date().toISOString(),
++      expires_at: null,
++      last_used_at: null,
++      revoked_at: null,
++      raw_key: 'kb_agt_unlimited_secret',
++    });
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio tier="personal" />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
++    });
++
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++
++    const labelInput = screen.getByTestId('mint-label-input');
++    fireEvent.change(labelInput, { target: { value: 'Unlimited Token' } });
++
++    const expirySelect = screen.getByTestId('mint-expiry-select');
++    expect(screen.getByTestId('option-unlimited')).not.toBeNull();
++    fireEvent.change(expirySelect, { target: { value: 'unlimited' } });
++
++    // Warning box should be visible
++    expect(screen.getByTestId('unlimited-warning-box')).not.toBeNull();
++
++    // Submit button should be disabled until confirm checkbox is checked
++    const submitBtn = screen.getByTestId('mint-submit-btn');
++    expect((submitBtn as HTMLButtonElement).disabled).toBe(true);
++
++    // Check confirmation checkbox
++    const confirmCheckbox = screen.getByTestId('confirm-unlimited-checkbox');
++    fireEvent.click(confirmCheckbox);
++    expect((submitBtn as HTMLButtonElement).disabled).toBe(false);
++
++    // Submit form
++    fireEvent.click(submitBtn);
++
++    await waitFor(() => {
++      expect(mintSpy).toHaveBeenCalledWith({
++        label: 'Unlimited Token',
++        surface: 'agent',
++        scopes: ['agent:read', 'agent:write'],
++        unlimited: true,
++        confirm_unlimited: true,
++      });
++    });
++
++    // Keys table should render 'Never (Unlimited)' for expires_at: null
++    expect(screen.getByTestId('key-unlimited-key-unlimited')).not.toBeNull();
++    expect(screen.getByTestId('key-unlimited-key-unlimited').textContent).toContain('Never (Unlimited)');
++  });
++
++  it('hides unlimited option when allow_unlimited_mcp_keys is false', async () => {
++    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio tier="personal" allowUnlimitedKeys={false} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
++    });
++
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++    expect(screen.queryByTestId('option-unlimited')).toBeNull();
++  });
++
++  it('supports granular tool disabling into disabled_tools on minting', async () => {
++    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++
++    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
++      id: 'key-narrow',
++      label: 'Narrowed Agent Key',
++      display_hint: 'nar1',
++      surface: 'agent',
++      scope_tier: 'personal_user',
++      scopes: ['agent:read', 'agent:write'],
++      allowed_projects: null,
++      created_at: new Date().toISOString(),
++      expires_at: new Date(Date.now() + 86400000 * 30).toISOString(),
++      disabled_tools: ['complete_work', 'add_comment'],
++      last_used_at: null,
++      revoked_at: null,
++      raw_key: 'kb_agt_narrow_secret',
++    });
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio tier="personal" />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
++    });
++
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++    fireEvent.change(screen.getByTestId('mint-label-input'), { target: { value: 'Narrowed Agent Key' } });
++
++    // Tools selection grid should have tools
++    expect(screen.getByTestId('tools-selection-grid')).not.toBeNull();
++    const completeWorkCheckbox = screen.getByTestId('disable-tool-complete_work');
++    const addCommentCheckbox = screen.getByTestId('disable-tool-add_comment');
++
++    fireEvent.click(completeWorkCheckbox);
++    fireEvent.click(addCommentCheckbox);
++
++    fireEvent.click(screen.getByTestId('mint-submit-btn'));
++
++    await waitFor(() => {
++      expect(mintSpy).toHaveBeenCalledWith({
++        label: 'Narrowed Agent Key',
++        surface: 'agent',
++        scopes: ['agent:read', 'agent:write'],
++        expires_in_days: 60,
++        disabled_tools: ['complete_work', 'add_comment'],
++      });
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/settings/settingsApi.test.ts b/kanban/web/src/features/settings/settingsApi.test.ts
+index 815e44c..e30e38f 100644
+--- a/kanban/web/src/features/settings/settingsApi.test.ts
++++ b/kanban/web/src/features/settings/settingsApi.test.ts
+@@ -39,7 +39,9 @@ describe('settingsApi', () => {
+         scopes: [],
+         allowed_projects: null,
+         created_at: '',
+-        expires_at: '',
++        expires_at: null,
++        disabled_tools: [],
++        allowed_tools: null,
+         last_used_at: null,
+         revoked_at: null,
+       },
+diff --git a/kanban/web/src/features/settings/settingsApi.ts b/kanban/web/src/features/settings/settingsApi.ts
+index 3dc6bca..a6b8757 100644
+--- a/kanban/web/src/features/settings/settingsApi.ts
++++ b/kanban/web/src/features/settings/settingsApi.ts
+@@ -14,9 +14,12 @@ export interface McpApiKeyItem {
+   scopes: string[];
+   allowed_projects: string[] | null;
+   created_at: string;
+-  expires_at: string;
++  expires_at: string | null;
+   last_used_at: string | null;
+   revoked_at: string | null;
++  disabled_tools?: string[];
++  allowed_tools?: string[] | null;
++  allowed_cidrs?: string[] | null;
+   raw_key?: string | undefined;
+ }
+ 
+@@ -29,7 +32,11 @@ export interface MintMcpKeyRequest {
+   surface: 'agent' | 'docs' | 'admin';
+   scopes: string[];
+   allowed_projects?: string[] | undefined;
+-  expires_in_days: number;
++  expires_in_days?: number | null | undefined;
++  unlimited?: boolean | undefined;
++  confirm_unlimited?: boolean | undefined;
++  disabled_tools?: string[] | undefined;
++  allowed_tools?: string[] | undefined;
+ }
+ 
+ export interface OAuthConnectedApp {
+@@ -56,9 +63,11 @@ function normalizeMcpKeyItem(
+     scopes: raw.scopes ?? [],
+     allowed_projects: raw.allowed_projects ?? null,
+     created_at: raw.created_at ?? '',
+-    expires_at: raw.expires_at ?? '',
++    expires_at: raw.expires_at ?? null,
+     last_used_at: raw.last_used_at ?? null,
+     revoked_at: raw.revoked_at ?? null,
++    disabled_tools: raw.disabled_tools ?? [],
++    allowed_tools: raw.allowed_tools ?? null,
+     ...(raw.raw_key !== undefined ? { raw_key: raw.raw_key } : {}),
+   };
+ }
+diff --git a/mcp/auth.py b/mcp/auth.py
+index 709dfb4..b22aaaf 100644
+--- a/mcp/auth.py
++++ b/mcp/auth.py
+@@ -5,6 +5,7 @@
+ from __future__ import annotations
+ 
+ import hashlib
++import ipaddress
+ import logging
+ import time
+ from collections import OrderedDict
+@@ -116,7 +117,13 @@ class McpAuthContext:
+     max_calls: int | None = None
+     workspace_slug: str | None = None
+     scope_tier: str | None = None
++    owner_kind: str | None = None
+     allowed_projects: list[str] | None = None
++    allowed_workspace_ids: list[str] | None = None
++    allowed_project_ids: list[str] | None = None
++    capability_mask: int = 7
++    allowed_cidrs: list[str] | None = None
++    disabled_tools: frozenset[str] | None = None
+     aal_level: int = 2
+ 
+ 
+@@ -368,6 +375,44 @@ class McpAuthMiddleware:
+                     self.cache.set(surface.value, digest, res_data, ttl_s=DEFAULT_CACHE_TTL_S)
+                 intro_result = res_data
+ 
++        # Check CIDR restriction if configured on token
++        allowed_cidrs = intro_result.get("allowed_cidrs")
++        if allowed_cidrs:
++            client_ip = None
++            xff = headers.get("x-forwarded-for")
++            if xff:
++                client_ip = xff.split(",")[0].strip()
++            elif scope.get("client"):
++                client_ip = scope["client"][0]
++
++            if client_ip:
++                try:
++                    ip = ipaddress.ip_address(client_ip)
++                    matched = False
++                    for cidr_str in allowed_cidrs:
++                        if ip in ipaddress.ip_network(str(cidr_str), strict=False):
++                            matched = True
++                            break
++                    if not matched:
++                        resp = JSONResponse(
++                            {
++                                "error": "KEY_CIDR_DENIED",
++                                "message": (
++                                    f"Client IP '{client_ip}' not allowed by key CIDR restriction"
++                                ),
++                            },
++                            status_code=403,
++                        )
++                        await resp(scope, receive, send)
++                        return
++                except ValueError:
++                    resp = JSONResponse(
++                        {"error": "KEY_CIDR_DENIED", "message": "Invalid client IP format"},
++                        status_code=403,
++                    )
++                    await resp(scope, receive, send)
++                    return
++
+         # Populate request state and forward validated token header
+         raw_headers = list(scope.get("headers", []))
+         # Add or replace X-KB-Subject-Token
+@@ -376,12 +421,13 @@ class McpAuthMiddleware:
+         filtered_headers.append((b"x-kb-subject-token", token_bytes))
+         scope["headers"] = filtered_headers
+ 
+-        scopes_list = intro_result.get("scopes") or []
+         scopes_list = intro_result.get("scopes") or []
+         allowed_tools_list = intro_result.get("allowed_tools")
+         allowed_tools_set = (
+             frozenset(allowed_tools_list) if allowed_tools_list is not None else None
+         )
++        disabled_tools_list = intro_result.get("disabled_tools")
++        disabled_tools_set = frozenset(disabled_tools_list) if disabled_tools_list else frozenset()
+         token_kind = (
+             "ephemeral"
+             if token.startswith(RESERVED_EPHEMERAL_PREFIX)
+@@ -407,11 +453,25 @@ class McpAuthMiddleware:
+             project_id=intro_result.get("project_id"),
+             execution_id=intro_result.get("execution_id"),
+             allowed_tools=allowed_tools_set,
++            disabled_tools=disabled_tools_set,
+             calls_used=intro_result.get("calls_used"),
+             max_calls=intro_result.get("max_calls"),
+             workspace_slug=intro_result.get("workspace_slug"),
+             scope_tier=intro_result.get("scope_tier"),
++            owner_kind=intro_result.get("owner_kind"),
+             allowed_projects=allowed_projects,
++            allowed_workspace_ids=(
++                [str(w) for w in intro_result["allowed_workspace_ids"]]
++                if intro_result.get("allowed_workspace_ids")
++                else None
++            ),
++            allowed_project_ids=(
++                [str(p) for p in intro_result["allowed_project_ids"]]
++                if intro_result.get("allowed_project_ids")
++                else None
++            ),
++            capability_mask=int(intro_result.get("capability_mask") or 7),
++            allowed_cidrs=allowed_cidrs,
+         )
+ 
+         try:
+diff --git a/mcp/errors.py b/mcp/errors.py
+index e47c5f6..81c65a7 100644
+--- a/mcp/errors.py
++++ b/mcp/errors.py
+@@ -36,6 +36,7 @@ class McpErrorCode(StrEnum):
+     EPHEMERAL_CALL_BUDGET_EXCEEDED = "EPHEMERAL_CALL_BUDGET_EXCEEDED"
+     TOKEN_EXPIRED_OR_REVOKED = "TOKEN_EXPIRED_OR_REVOKED"  # noqa: S105
+     KEY_SCOPE_VIOLATION = "KEY_SCOPE_VIOLATION"
++    KEY_CIDR_DENIED = "KEY_CIDR_DENIED"
+     CONNECTION_SCOPE_VIOLATION = "CONNECTION_SCOPE_VIOLATION"
+     CONFLICTING_SCOPE_HEADERS = "CONFLICTING_SCOPE_HEADERS"
+     LOCKOUT_PREVENTED = "LOCKOUT_PREVENTED"
+diff --git a/mcp/protocol.py b/mcp/protocol.py
+index b8b6cfb..df22c8e 100644
+--- a/mcp/protocol.py
++++ b/mcp/protocol.py
+@@ -527,9 +527,14 @@ class McpProtocolHandler:
+                     or SCOPE_REQUIREMENTS[s.name].issubset(caller_scopes)
+                 )
+             ]
+-        if auth_context is not None and auth_context.token_kind == "ephemeral":  # noqa: S105
+-            allowed = auth_context.allowed_tools or frozenset()
+-            specs = [s for s in specs if s.name in allowed]
++        if auth_context is not None:
++            if auth_context.token_kind == "ephemeral":  # noqa: S105
++                allowed = auth_context.allowed_tools or frozenset()
++                specs = [s for s in specs if s.name in allowed]
++            elif auth_context.allowed_tools is not None:
++                specs = [s for s in specs if s.name in auth_context.allowed_tools]
++            if auth_context.disabled_tools:
++                specs = [s for s in specs if s.name not in auth_context.disabled_tools]
+ 
+         tools_list: list[dict[str, Any]] = [
+             {
+@@ -634,6 +639,44 @@ class McpProtocolHandler:
+ 
+         req_scopes = SCOPE_REQUIREMENTS.get(tool_name)
+ 
++        # Standard API key disabled_tools and allowed_tools narrowing (KB-P4-14)
++        if auth_context is not None and auth_context.token_kind != "ephemeral":  # noqa: S105
++            if auth_context.disabled_tools and tool_name in auth_context.disabled_tools:
++                err = KbMcpError(
++                    code=McpErrorCode.INSUFFICIENT_SCOPE,
++                    message=f"Tool '{tool_name}' is disabled for this API key",
++                    hint="Key administrator has disabled this tool via disabled_tools narrowing.",
++                )
++                return JSONResponse(
++                    {
++                        "jsonrpc": "2.0",
++                        "id": req_id,
++                        "result": {
++                            "content": [{"type": "text", "text": err.to_yaml()}],
++                            "isError": True,
++                        },
++                    }
++                )
++            if (
++                auth_context.allowed_tools is not None
++                and tool_name not in auth_context.allowed_tools
++            ):
++                err = KbMcpError(
++                    code=McpErrorCode.INSUFFICIENT_SCOPE,
++                    message=f"Tool '{tool_name}' is not in allowed_tools for this API key",
++                    hint=("Tool narrowing is active; only tools in allowed_tools may be called."),
++                )
++                return JSONResponse(
++                    {
++                        "jsonrpc": "2.0",
++                        "id": req_id,
++                        "result": {
++                            "content": [{"type": "text", "text": err.to_yaml()}],
++                            "isError": True,
++                        },
++                    }
++                )
++
+         # Ephemeral token allowlist and atomic call budget consumption
+         if auth_context is not None and auth_context.token_kind == "ephemeral":  # noqa: S105
+             allowed_tools = sorted(auth_context.allowed_tools or [])
+diff --git a/mcp/tests/test_key_narrowing.py b/mcp/tests/test_key_narrowing.py
+new file mode 100644
+index 0000000..f936896
+--- /dev/null
++++ b/mcp/tests/test_key_narrowing.py
+@@ -0,0 +1,278 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for hierarchical MCP key narrowing and CIDR gating (KB-P4-14)."""
++
++from __future__ import annotations
++
++import base64
++import os
++from typing import Any
++
++import httpx
++import pytest
++
++from mcp.app import create_mcp_app
++from mcp.auth import McpAuthMiddleware
++from mcp.internal_client import KanbanApiClient
++from mcp.registry import Surface, ToolRegistry, ToolSpec, create_placeholder_tool
++from mcp.settings import McpSettings
++
++
++def _generate_test_mcp_key(surface: Surface) -> str:
++    prefix = {"agent": "kb_agt_", "docs": "kb_doc_", "admin": "kb_adm_"}[surface.value]
++    rand = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii").rstrip("=")
++    return f"{prefix}{rand}"
++
++
++def _build_test_app(
++    surface: Surface,
++    mock_transport: httpx.AsyncBaseTransport,
++) -> tuple[httpx.AsyncClient, ToolRegistry]:
++    """Construct an MCP application with placeholder and test tools."""
++    reg = ToolRegistry(surface)
++    reg.register(create_placeholder_tool(surface))
++
++    async def _write_handler(_args: dict[str, Any]) -> dict[str, str]:
++        return {"status": "created"}
++
++    reg.register(
++        ToolSpec(
++            name="test_agent_write",
++            description="Tool requiring agent:write scope",
++            surface=surface,
++            input_schema={"type": "object"},
++            handler=_write_handler,
++        )
++    )
++
++    settings = McpSettings(mode="standalone_inprocess", auth_enabled=True)
++    kanban_client = KanbanApiClient(settings, transport=mock_transport)
++
++    kwargs: dict[str, Any] = {"settings": settings}
++    if surface == Surface.AGENT:
++        kwargs["agent_registry"] = reg
++    elif surface == Surface.DOCS:
++        kwargs["docs_registry"] = reg
++    else:
++        kwargs["admin_registry"] = reg
++
++    base_app = create_mcp_app(**kwargs)
++    middleware = McpAuthMiddleware(
++        base_app,
++        surface=surface,
++        internal_client=kanban_client,
++        settings=settings,
++    )
++    client = httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=middleware),
++        base_url="http://testserver",
++    )
++    return client, reg
++
++
++@pytest.mark.asyncio
++async def test_disabled_tools_omitted_from_tools_list_and_blocked_on_call() -> None:
++    """Verify disabled_tools are omitted in tools/list and rejected with INSUFFICIENT_SCOPE."""
++    token = _generate_test_mcp_key(Surface.AGENT)
++
++    def mock_introspect(_request: httpx.Request) -> httpx.Response:
++        return httpx.Response(
++            200,
++            json={
++                "active": True,
++                "principal_id": "018f-0000",
++                "workspace_id": "018f-0001",
++                "surface": "agent",
++                "scopes": ["agent:read", "agent:write"],
++                "scope_tier": "personal_user",
++                "disabled_tools": ["ping_agent"],
++                "allowed_tools": None,
++            },
++        )
++
++    mock_transport = httpx.MockTransport(mock_introspect)
++    client, _reg = _build_test_app(Surface.AGENT, mock_transport)
++
++    async with client:
++        # Initialize
++        init_resp = await client.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {token}"},
++            json={
++                "jsonrpc": "2.0",
++                "id": 1,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert init_resp.status_code == 200
++        session_id = init_resp.headers["mcp-session-id"]
++
++        # tools/list should omit ping_agent because it is in disabled_tools
++        list_resp = await client.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {token}", "Mcp-Session-Id": session_id},
++            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
++        )
++        assert list_resp.status_code == 200
++        tools = list_resp.json()["result"]["tools"]
++        tool_names = [t["name"] for t in tools]
++        assert "ping_agent" not in tool_names
++        assert "test_agent_write" in tool_names
++
++        # tools/call for ping_agent should fail with INSUFFICIENT_SCOPE
++        call_resp = await client.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {token}", "Mcp-Session-Id": session_id},
++            json={
++                "jsonrpc": "2.0",
++                "id": 3,
++                "method": "tools/call",
++                "params": {"name": "ping_agent", "arguments": {}},
++            },
++        )
++        assert call_resp.status_code == 200
++        data = call_resp.json()
++        assert data.get("result", {}).get("isError") is True
++        error_content = data["result"]["content"][0]["text"]
++        assert "disabled_tools" in error_content or "disabled" in error_content
++
++
++@pytest.mark.asyncio
++async def test_allowed_tools_narrowing() -> None:
++    """Verify allowed_tools narrows tools/list and rejects unlisted tools."""
++    token = _generate_test_mcp_key(Surface.AGENT)
++
++    def mock_introspect(_request: httpx.Request) -> httpx.Response:
++        return httpx.Response(
++            200,
++            json={
++                "active": True,
++                "principal_id": "018f-0000",
++                "workspace_id": "018f-0001",
++                "surface": "agent",
++                "scopes": ["agent:read", "agent:write"],
++                "scope_tier": "project",
++                "disabled_tools": [],
++                "allowed_tools": ["ping_agent"],
++            },
++        )
++
++    mock_transport = httpx.MockTransport(mock_introspect)
++    client, _reg = _build_test_app(Surface.AGENT, mock_transport)
++
++    async with client:
++        init_resp = await client.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {token}"},
++            json={
++                "jsonrpc": "2.0",
++                "id": 1,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert init_resp.status_code == 200
++        session_id = init_resp.headers["mcp-session-id"]
++
++        # tools/list should only include ping_agent
++        list_resp = await client.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {token}", "Mcp-Session-Id": session_id},
++            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
++        )
++        assert list_resp.status_code == 200
++        tools = list_resp.json()["result"]["tools"]
++        tool_names = [t["name"] for t in tools]
++        assert tool_names == ["ping_agent"]
++
++        # Calling test_agent_write should fail because it is not in allowed_tools
++        call_resp = await client.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {token}", "Mcp-Session-Id": session_id},
++            json={
++                "jsonrpc": "2.0",
++                "id": 3,
++                "method": "tools/call",
++                "params": {"name": "test_agent_write", "arguments": {}},
++            },
++        )
++        assert call_resp.status_code == 200
++        data = call_resp.json()
++        assert data.get("result", {}).get("isError") is True
++        error_content = data["result"]["content"][0]["text"]
++        assert "allowed_tools" in error_content
++
++
++@pytest.mark.asyncio
++async def test_cidr_filtering_in_mcp_auth_middleware() -> None:
++    """Verify McpAuthMiddleware enforces allowed_cidrs from introspection."""
++    token = _generate_test_mcp_key(Surface.AGENT)
++
++    def mock_introspect(_request: httpx.Request) -> httpx.Response:
++        return httpx.Response(
++            200,
++            json={
++                "active": True,
++                "principal_id": "018f-0000",
++                "workspace_id": "018f-0001",
++                "surface": "agent",
++                "scopes": ["agent:read", "agent:write"],
++                "scope_tier": "personal_user",
++                "allowed_cidrs": ["192.168.1.0/24"],
++            },
++        )
++
++    mock_transport = httpx.MockTransport(mock_introspect)
++    client, _reg = _build_test_app(Surface.AGENT, mock_transport)
++
++    async with client:
++        # 1. Denied IP
++        denied_resp = await client.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "X-Forwarded-For": "10.0.0.1",
++            },
++            json={
++                "jsonrpc": "2.0",
++                "id": 1,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert denied_resp.status_code == 403
++        denied_json = denied_resp.json()
++        assert denied_json["error"] == "KEY_CIDR_DENIED"
++
++        # 2. Allowed IP
++        allowed_resp = await client.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "X-Forwarded-For": "192.168.1.55",
++            },
++            json={
++                "jsonrpc": "2.0",
++                "id": 2,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert allowed_resp.status_code == 200

@@ -13,6 +13,7 @@ import React, {
 } from 'react';
 import { useSystemStatus, type SystemStatus } from '../../app/useSystemStatus';
 import { getCsrfToken } from '../../editor/sparkle/sparkleClient';
+import { safeCopyToClipboard } from '../../utils/uuid';
 import { ComposeExportTab } from './ComposeExportTab';
 import './StandaloneStatusPanel.css';
 
@@ -106,13 +107,15 @@ export function StandaloneStatusPanel({
 
   const handleCopyDockerRun = async (): Promise<void> => {
     try {
-      await navigator.clipboard.writeText(
+      const success = await safeCopyToClipboard(
         'docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data kanban:latest',
       );
-      setCopiedDockerRun(true);
-      setTimeout(() => {
-        setCopiedDockerRun(false);
-      }, 2000);
+      if (success) {
+        setCopiedDockerRun(true);
+        setTimeout(() => {
+          setCopiedDockerRun(false);
+        }, 2000);
+      }
     } catch {
       // Fallback
     }

@@ -1,0 +1,49 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p5-147-35c2e283/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p5-147-35c2e283
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 26 items
+
+database/tests/test_workflow_hooks_ddl.py::test_workflow_hooks_ddl_constraints PASSED [  3%]
+database/tests/test_workflow_hooks_ddl.py::test_issues_state_guard_trigger PASSED [  7%]
+database/tests/test_workflow_hooks_ddl.py::test_workflow_hooks_rls_security PASSED [ 11%]
+kanban/tests/workflows/test_manifest.py::test_manifest_determinism_and_length PASSED [ 15%]
+kanban/tests/workflows/test_manifest.py::test_manifest_hex_and_bytes_equivalence PASSED [ 19%]
+kanban/tests/workflows/test_manifest.py::test_manifest_wildcard_from_state PASSED [ 23%]
+kanban/tests/workflows/test_manifest.py::test_manifest_tamper_sensitivity PASSED [ 26%]
+kanban/tests/workflows/test_mutations.py::test_is_in_mutable_universe PASSED [ 30%]
+kanban/tests/workflows/test_mutations.py::test_validate_field_updates_validation PASSED [ 34%]
+kanban/tests/workflows/test_mutations.py::test_apply_field_updates_all_fields PASSED [ 38%]
+kanban/tests/workflows/test_transition_engine.py::test_case_1_positive_no_hooks_and_ordered_pipeline PASSED [ 42%]
+kanban/tests/workflows/test_transition_engine.py::test_case_2_rejection_require_qa_proof_link PASSED [ 46%]
+kanban/tests/workflows/test_transition_engine.py::test_case_3_security_illegal_mutations PASSED [ 50%]
+kanban/tests/workflows/test_transition_engine.py::test_case_4_security_direct_update_and_patch_route PASSED [ 53%]
+kanban/tests/workflows/test_transition_engine.py::test_case_5_security_tampered_manifest_fails_closed PASSED [ 57%]
+kanban/tests/workflows/test_transition_engine.py::test_case_6_boundary_timeout_fail_open_wildcard_disabled PASSED [ 61%]
+kanban/tests/workflows/test_transition_engine.py::test_case_7_boundary_hop_depth_and_concurrency PASSED [ 65%]
+kanban/tests/workflows/test_transition_engine.py::test_case_8_agent_hook_default_dispatcher PASSED [ 69%]
+kanban/tests/workflows/test_transition_engine.py::test_case_9_rls_isolation PASSED [ 73%]
+kanban/tests/workflows/test_transition_engine.py::test_case_10_real_wasm_fixture PASSED [ 76%]
+kanban/tests/workflows/test_transition_engine.py::test_sync_latency_benchmark PASSED [ 80%]
+kanban/tests/workflows/test_transition_engine.py::test_transition_if_match_and_etag PASSED [ 84%]
+kanban/tests/workflows/test_transition_engine.py::test_transition_pending_conflict_and_invalid_state PASSED [ 88%]
+kanban/tests/workflows/test_transition_engine.py::test_transition_comment_and_parent_execution PASSED [ 92%]
+kanban/tests/workflows/test_transition_engine.py::test_transition_hook_errors_and_malformed PASSED [ 96%]
+kanban/tests/workflows/test_transition_engine.py::test_transition_mutator_fail_open_warn PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+kanban/workflows/__init__.py         6      0      0      0   100%
+kanban/workflows/engine.py         250     10     62     10    94%   181, 275, 355-364, 380, 399-400, 429, 447, 488->541, 565->574, 609->629, 611->629, 616->621, 644
+kanban/workflows/gate_types.py      23      0      0      0   100%
+kanban/workflows/manifest.py        17      0      4      0   100%
+kanban/workflows/mutations.py      140      0     66      4    98%   168->180, 180->116, 200->208, 266->116
+----------------------------------------------------------------------------
+TOTAL                              436     10    132     14    96%
+Required test coverage of 95% reached. Total coverage: 95.77%
+============================= 26 passed in 15.44s ==============================

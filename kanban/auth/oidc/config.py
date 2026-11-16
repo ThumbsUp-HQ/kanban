@@ -82,6 +82,8 @@ class OidcCardConfig(BaseModel):
     email_verified_claim: str = "email_verified"
     groups_claim: str | None = None
     allowed_algs: list[AllowedAlg] = Field(default_factory=_default_allowed_algs)
+    admin_allowlist: list[str] = Field(default_factory=list)
+    user_allowlist: list[str] = Field(default_factory=list)
 
     @field_validator(
         "issuer",

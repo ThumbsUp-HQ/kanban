@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from database.models.issues import Issue
 from database.models.principals import Principal, User
 from database.models.projects import Cycle, Module, Project, ProjectLabel, WorkflowState
+from database.models.repo_binding import ProjectRepoBinding
 from database.models.spine import Workspace
 from kanban.api.problems import FieldError, ProblemException, not_found
 
@@ -145,7 +146,7 @@ class ResolutionService:
                     not_found()
 
         project_context: ResolvedRef | None = None
-        if kind in ("state", "cycle", "module", "label"):
+        if kind in ("state", "cycle", "module", "label", "repo_binding"):
             if not project_ref:
                 msg = "pass project=<KEY>"
                 raise ProblemException(
@@ -198,7 +199,7 @@ class ResolutionService:
 
         return matches[0]
 
-    async def _find_matches(  # noqa: PLR0913, PLR0917, PLR0911
+    async def _find_matches(  # noqa: PLR0913, PLR0917, PLR0911, C901
         self,
         session: AsyncSession,
         kind: str,
@@ -231,7 +232,10 @@ class ResolutionService:
                 caller_workspace_id=caller_workspace_id,
             )
 
-        if kind in ("state", "cycle", "module", "label") and project_context is None:
+        if (
+            kind in ("state", "cycle", "module", "label", "repo_binding")
+            and project_context is None
+        ):
             msg = f"Project context is required for {kind} resolution"
             raise ProblemException(
                 code="VALIDATION_FAILED",
@@ -239,6 +243,11 @@ class ResolutionService:
                 title="Validation Failed",
                 detail=msg,
                 errors=[FieldError(path="project", message=msg)],
+            )
+
+        if kind == "repo_binding" and project_context is not None:
+            return await self._resolve_repo_binding(
+                session, ref, is_uuid=is_uuid, uuid_val=uuid_val, project_id=project_context.id
             )
 
         if kind == "state" and project_context is not None:
@@ -575,4 +584,39 @@ class ResolutionService:
         return [
             ResolvedRef(id=label.id, kind="label", key=label.name, title=label.name)
             for label in labels
+        ]
+
+    async def _resolve_repo_binding(
+        self,
+        session: AsyncSession,
+        ref: str,
+        *,
+        is_uuid: bool,
+        uuid_val: uuid.UUID | None,
+        project_id: uuid.UUID,
+    ) -> list[ResolvedRef]:
+        if is_uuid and uuid_val is not None:
+            stmt = select(ProjectRepoBinding).where(
+                ProjectRepoBinding.id == uuid_val,
+                ProjectRepoBinding.project_id == project_id,
+            )
+            binding = (await session.execute(stmt)).scalar_one_or_none()
+            if binding is not None:
+                return [
+                    ResolvedRef(
+                        id=binding.id,
+                        kind="repo_binding",
+                        key=binding.slug,
+                        title=binding.slug,
+                    )
+                ]
+            return []
+
+        stmt_name = select(ProjectRepoBinding).where(
+            ProjectRepoBinding.project_id == project_id,
+            func.lower(ProjectRepoBinding.slug) == ref.lower(),
+        )
+        bindings = list((await session.execute(stmt_name)).scalars().all())
+        return [
+            ResolvedRef(id=b.id, kind="repo_binding", key=b.slug, title=b.slug) for b in bindings
         ]

@@ -1,0 +1,19 @@
+cassette_version: 1
+matcher:
+  argv_prefix: ["/usr/local/bin/agy", "-p"]
+  stdin_contains: ["schema: kb-transition-context/v1"]
+simulated_ttft_ms: 10.0
+cli_result:
+  stdout: |
+    {
+      "schema": "kb-transition-verdict/v1",
+      "nonce": "{{verdict_nonce}}",
+      "decision": "approve",
+      "reason_markdown": "Acceptance criteria met, implementation verified.",
+      "field_updates": {},
+      "add_labels": ["security-reviewed"],
+      "add_links": []
+    }
+  stderr: ""
+  exit_code: 0
+  duration_ms: 15.0

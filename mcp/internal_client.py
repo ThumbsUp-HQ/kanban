@@ -74,7 +74,7 @@ class KanbanApiClient:
                 raise ValueError(msg)
             self._client = httpx.AsyncClient(
                 transport=active_transport,
-                base_url="http://kanban.local",
+                base_url="http://localhost",
                 headers={"X-KB-Service-Principal": "mcp-gateway"},
                 timeout=timeout,
             )
@@ -168,6 +168,8 @@ class KanbanApiClient:
     ) -> object:
         """Send authenticated internal request with identity forwarding and error mapping."""
         req_headers = dict(headers or {})
+        if self.settings.mode == "standalone_inprocess":
+            req_headers.setdefault("X-KB-Service-Principal", "mcp-gateway")
         if subject_token:
             req_headers["X-KB-Subject-Token"] = subject_token
         if mcp_session_id:
@@ -265,12 +267,20 @@ class KanbanApiClient:
         )
         prob_blockers = problem.get("blockers")
         blockers_list = [str(b) for b in prob_blockers] if isinstance(prob_blockers, list) else None
+        extra_dict: dict[str, Any] = {}
+        if "tainted_by" in problem:
+            extra_dict["tainted_by"] = problem["tainted_by"]
+        elif isinstance(problem.get("extra"), dict) and "tainted_by" in problem["extra"]:
+            extra_dict["tainted_by"] = problem["extra"]["tainted_by"]
+        if "unauthorized_mentions" in problem:
+            extra_dict["unauthorized_mentions"] = problem["unauthorized_mentions"]
         raise KbMcpError(
             mapped_code,
             error_message,
             hint=hint_str,
             candidates=candidates_list,
             blockers=blockers_list,
+            extra=extra_dict or None,
         )
 
     @staticmethod
@@ -281,6 +291,10 @@ class KanbanApiClient:
             "AMBIGUOUS_IDENTIFIER": McpErrorCode.AMBIGUOUS_IDENTIFIER,
             "ALREADY_PROMOTED": McpErrorCode.ALREADY_PROMOTED,
             "LINK_TYPE_NOT_ALLOWED": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
+            "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED": (
+                McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
+            ),
+            "MENTION_ACCESS_WARNING": McpErrorCode.MENTION_ACCESS_WARNING,
             "LINK_NOT_FLAGGED": McpErrorCode.LINK_NOT_FLAGGED,
             "CREATOR_UNCHANGED": McpErrorCode.CREATOR_UNCHANGED,
             "NOT_ARCHIVED": McpErrorCode.NOT_ARCHIVED,
@@ -292,11 +306,16 @@ class KanbanApiClient:
             "INVALID_CYCLE_TRANSITION": McpErrorCode.INVALID_TRANSITION,
             "OPEN_CHILD_BLOCKERS": McpErrorCode.OPEN_CHILD_BLOCKERS,
             "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
+            "TRANSITION_PENDING": McpErrorCode.TRANSITION_PENDING,
             "GROUP_CYCLE_REJECTED": McpErrorCode.GROUP_CYCLE_REJECTED,
             "GROUP_DEPTH_EXCEEDED": McpErrorCode.GROUP_DEPTH_EXCEEDED,
         }
         if prob_code in conflict_map:
             return conflict_map[prob_code]
+        if prob_type.endswith("cross-scope-taint"):
+            return McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
+        if prob_type.endswith("mention-access-warning"):
+            return McpErrorCode.MENTION_ACCESS_WARNING
         for name, code in conflict_map.items():
             if prob_type.endswith(name.lower().replace("_", "-")):
                 return code
@@ -315,8 +334,15 @@ class KanbanApiClient:
             "INSUFFICIENT_CAPABILITY": McpErrorCode.INSUFFICIENT_PERMISSION,
             "MODULES_DISABLED": McpErrorCode.MODULES_DISABLED,
             "SECTION_NOT_FOUND": McpErrorCode.SECTION_NOT_FOUND,
+            "TARGET_NOT_FOUND": McpErrorCode.NOT_FOUND,
+            "SOURCE_NOT_FOUND": McpErrorCode.NOT_FOUND,
             "ALREADY_PROMOTED": McpErrorCode.ALREADY_PROMOTED,
             "LINK_TYPE_NOT_ALLOWED": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
+            "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED": (
+                McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
+            ),
+            "MENTION_ACCESS_WARNING": McpErrorCode.MENTION_ACCESS_WARNING,
+            "SELF_LINK": McpErrorCode.VALIDATION_FAILED,
             "CREATOR_NOT_ELIGIBLE": McpErrorCode.CREATOR_NOT_ELIGIBLE,
             "LINK_NOT_FLAGGED": McpErrorCode.LINK_NOT_FLAGGED,
             "CREATOR_UNCHANGED": McpErrorCode.CREATOR_UNCHANGED,
@@ -332,6 +358,7 @@ class KanbanApiClient:
             "QA_VERDICT_NOT_READY": McpErrorCode.QA_VERDICT_NOT_READY,
             "INVALID_TRANSITION": McpErrorCode.INVALID_TRANSITION,
             "TRANSITION_HELD": McpErrorCode.TRANSITION_HELD,
+            "TRANSITION_PENDING": McpErrorCode.TRANSITION_PENDING,
             "GROUP_CYCLE_REJECTED": McpErrorCode.GROUP_CYCLE_REJECTED,
             "GROUP_DEPTH_EXCEEDED": McpErrorCode.GROUP_DEPTH_EXCEEDED,
             "CONFIRMATION_TOKEN_INVALID_OR_EXPIRED": (
@@ -354,6 +381,8 @@ class KanbanApiClient:
             "section-not-found": McpErrorCode.SECTION_NOT_FOUND,
             "already-promoted": McpErrorCode.ALREADY_PROMOTED,
             "link-type-not-allowed": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
+            "cross-scope-taint": McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED,
+            "mention-access-warning": McpErrorCode.MENTION_ACCESS_WARNING,
             "creator-not-eligible": McpErrorCode.CREATOR_NOT_ELIGIBLE,
             "link-not-flagged": McpErrorCode.LINK_NOT_FLAGGED,
             "creator-unchanged": McpErrorCode.CREATOR_UNCHANGED,

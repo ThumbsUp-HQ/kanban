@@ -1,0 +1,13 @@
+=== TYPECHECK ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
+> tsc -b --noEmit
+
+Clean exit (code 0) - Zero TypeScript errors.
+
+=== ESLINT ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
+> eslint src/components/icons/KanbanIcons.tsx src/components/state/StateBadge.tsx src/components/state/StateBadge.test.tsx src/components/emoji/emojiRegistry.ts src/components/emoji/emojiRegistry.test.ts src/features/views/QuickCreateIssueModal.tsx src/features/views/FilterDisplayBar.tsx src/features/views/SwimlaneBoardGrid.tsx src/features/drawer-rail/StatePriorityRows.tsx src/features/board/BoardColumn.tsx src/features/list/ListRow.tsx src/features/drawer-rail/railApi.ts src/features/drawer-rail/DatesCycleModulesRows.tsx src/features/board/BoardCard.tsx src/features/table/TableView.tsx src/features/views/viewRegistry.tsx src/app/routes.tsx src/dev/IconStory.tsx src/dev/IconStory.test.tsx --max-warnings 0
+
+Clean exit (code 0) - Zero ESLint errors or warnings across all modified and newly authored files.

@@ -1,0 +1,4013 @@
+diff --git a/.agents/skills/kanban-agent-manager/SKILL.md b/.agents/skills/kanban-agent-manager/SKILL.md
+index 57b94ce..7165f78 100644
+--- a/.agents/skills/kanban-agent-manager/SKILL.md
++++ b/.agents/skills/kanban-agent-manager/SKILL.md
+@@ -15,37 +15,50 @@ All tickets managed under this workflow should conform to the companion [`kanban
+ 
+ ## Core Duties of the Agent Manager
+ 
+-1. **Assign Tickets to Implementation Sub-Agents**:
++1. **Ticket Deduplication & Creation Boundaries**:
++   - **Search Before Creating (`search_tickets`)**: Always search existing `Backlog`, `Todo`, and `In Progress` tickets before creating new ones. If an upcoming or open ticket already covers the same subsystem or feature, **update that ticket in-place (`update_ticket`)** rather than creating a duplicate ticket.
++   - **Parallel Specialist Consultation**: Before authoring tickets or designing implementations, consult relevant domain specialists (e.g., UX/Frontend Architect, Backend Architect, Security Engineer) **in parallel** to validate architecture, UX ergonomics, and security invariants.
++   - **Do Not Start Implementation Unprompted**: When the user asks to create, refine, or add tickets, stop after creating/updating the tickets and wait for explicit instruction before starting implementation (`begin_work`).
++2. **Use Small/Fast Models Instead of the Coordinator's Model**:
++   - Do **not** default all workers or sub-agents to the Coordinator's heavy flagship model. Preserve quota and reduce latency by pinning implementation builders, test-coverage agents, specialist reviewers, and `reality-checker` auditors to **smaller, faster models** (e.g., `flash`, `gemini-3.8-flash-medium`, `gemini-4-argon-low`, `claude-sonnet-5-5-medium`, `haiku`, or Codex fast tier).
++   - For **black-box human browser QA**, explicitly use a small/low-reasoning model (`gemini-4-argon-low` or `flash`) supplied only with user-level instructions so it tests the UI as a human would rather than reverse-engineering source code or working around bugs.
++3. **Reuse Persistent Sub-Agents & Swarm Workers for Context Caching**:
++   - Maintain long-lived references (`conversationId`s via `send_message`, or warm `waiting` swarm roster members such as `reality-checker`, `arch-reviewer`, `ui-specialist`, `sec-eng`, and `qa-eng` via board `@mentions`) across tickets instead of spawning fresh disposable sub-agents for every task.
++   - Reusing an existing agent conversation keeps system prompts, persona files, and codebase reads in the **cached-token tier (~1/100th input token cost)**, and `waiting` swarm workers consume zero tokens while asleep. Only `kill` temporary implementation builders after their wave is merged and certified.
++   - In Antigravity, when custom agent markdown files in `.agents/agents/*.md` declare CLI-only tool names in frontmatter, invoke sub-agents with `TypeName: "self"` (inheriting valid harness tools) and instruct them to read `.agents/agents/<specialist>.md` for their persona and rubric.
++4. **Assign Tickets to Implementation Sub-Agents**:
+    - Move the target ticket to `In Progress` via `begin_work` (or `transition_ticket`).
+-   - Delegate implementation to a dedicated sub-agent with the verbatim ticket text and forensic proof requirements.
+-2. **Update Comments & Status on Tickets**:
++   - Delegate implementation to a dedicated sub-agent or swarm worker (on a fast/medium model) with the verbatim ticket text and forensic proof requirements.
++5. **Update Comments & Status on Tickets**:
+    - Record sub-agent assignments, forensic proof locations, `reality-checker` QA reports, and remediation cycles on the ticket via Kanban MCP tools (`begin_work`, `transition_ticket`, `complete_work`, `update_ticket`). All comments are recorded under the user's identity.
+-3. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
++6. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
+    - When an implementing sub-agent claims a ticket is done - or **even if the sub-agent closes the ticket itself** - you **MUST keep the ticket open** (immediately reopen/transition it back to `In Progress` via `transition_ticket` if a sub-agent closed it).
+-   - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after the `reality-checker` sub-agent certifies it as **grade-A `READY`**.
+-4. **Run the `reality-checker` QA Gate on a Fast Model**:
+-   - Invoke a dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
++   - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after required domain specialists (`ui-specialist-review.md`, `api-specialist-review.md`) and the `reality-checker` sub-agent certify it as **grade-A `READY`**.
++7. **Run the `reality-checker` QA Gate on a Fast Model**:
++   - Invoke or message the dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
+    - Provide **full forensic proofs, never summaries**. `reality-checker` is a pure quality assurance auditor and **must NOT run tests manually, execute shell commands to check results, or visit websites**.
+-5. **Route `reality-checker` Verdicts**:
++8. **Route `reality-checker` Verdicts**:
+    - **`FAILED` or `NEEDS WORK` (`NEEDS_WORK`)**: Keep the ticket open (`In Progress`), post the verdict to the ticket, and send the full `reality-checker` critique back to the implementing sub-agent to fix the defects and regenerate the proof bundle.
+    - **Grade-A `READY`**: Record the full `reality-checker` certification report in the ticket comments and complete the transition to `Done` (`complete_work`).
+-6. **Delegate Post-Completion >=95% Unit Test Coverage**:
++9. **Delegate Post-Completion >=95% Unit Test Coverage**:
+    - `reality-checker` does **not** audit unit test coverage percentages.
+-   - Once a feature ticket is implemented (or completed), assign a dedicated testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
+-7. **Continuous Gap Detection & Ticket Creation**:
+-   - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - immediately create a new Kanban ticket for it using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
++   - Once a feature ticket is implemented (or completed), assign a fast testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
++10. **Continuous Gap Detection & Ticket Creation**:
++    - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - first check `search_tickets` for an existing backlog item to update, or create a new Kanban ticket using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
+ 
+ ---
+ 
+ ## Cross-Harness Sub-Agent Mapping (Claude, Codex, Gemini)
+ 
+-Adapt sub-agent delegation to the active harness's native primitives while preserving identical workflow semantics:
++Adapt sub-agent delegation to the active harness's native primitives while preserving identical workflow semantics, **small/fast model selection**, and **persistent conversation reuse**:
+ 
+ | Action | Gemini CLI / Antigravity | Claude Code | OpenAI Codex / ChatGPT |
+ | :--- | :--- | :--- | :--- |
+-| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, write tools enabled) | `Task` tool (general-purpose sub-agent with edit/bash access) | Spawn worker/sub-agent task with workspace write permissions |
+-| **Spawn Read-Only `reality-checker`** | `define_subagent` (`EnableWriteTools: false`) + `invoke_subagent` (`Model: "flash"`) | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
+-| **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
++| **Consult Specialists Before Planning/Coding** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`, reads `.agents/agents/<role>.md`) or reuse `conversationId` via `send_message` | Parallel `Task` calls (`model: "haiku"` or `"sonnet"`) with `.agents/agents/<role>.md` | Parallel specialist workers on fast model tier |
++| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`) or `swarm` `add` (`model: "gemini-3.8-flash-medium"` / `"claude-sonnet-5-5-medium"`) | `Task` tool (`model: "sonnet"` or `"haiku"`, edit/bash access) | Spawn worker/sub-agent task on fast/medium model with workspace write permissions |
++| **Spawn / Reuse Read-Only `reality-checker`** | `invoke_subagent` (`Model: "flash"`) or reuse warm `reality-checker` via `send_message` / `@reality-checker` | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Reuse or spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
++| **Black-Box Browser QA** | `invoke_subagent` or `swarm` `add` pinned to `gemini-4-argon-low` / `flash` with user-level test plan only | `Task` tool (`model: "haiku"`) with browser MCP and user-level test plan | Fast/low-reasoning worker with browser harness and user-level test plan |
++| **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` or `@mention` on swarm board | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
+ 
+ ---
+ 
+diff --git a/.agents/skills/kanban-ticket/SKILL.md b/.agents/skills/kanban-ticket/SKILL.md
+index 97e577f..7ef86a6 100644
+--- a/.agents/skills/kanban-ticket/SKILL.md
++++ b/.agents/skills/kanban-ticket/SKILL.md
+@@ -15,6 +15,10 @@ Use this skill together with [`kanban-agent-manager`](../kanban-agent-manager/SK
+ 
+ ## Core Principles for Scoped Tickets
+ 
++0. **Deduplicate & Consult Specialists Before Creating Tickets**:
++   - **Search First (`search_tickets`)**: Always search `Backlog`, `Todo`, and `In Progress` before creating a new ticket. If an existing ticket already covers the target area or upcoming feature, **update that ticket in-place (`update_ticket`)** instead of creating a duplicate.
++   - **Consult Domain Specialists in Parallel**: Consult relevant specialists (UX/Frontend, Backend, Security) on fast models before finalizing ticket specifications.
++   - **Do Not Auto-Start Implementation**: When asked to create or update tickets, stop once the tickets are created/updated and wait for explicit instruction to begin implementation.
+ 1. **Single-Ticket Boundary (No Cross-Ticket Bleed)**:
+    - A ticket's **Definition of Done** and **Verification Proof** must only test artifacts, files, and behaviors that exist after completing *that specific ticket* (and its explicit prerequisites).
+    - Never require an early ticket to pass end-to-end checks against components built in later tickets.
+diff --git a/database/migrations/sql/p4_07_mcp_read_taint.down.sql b/database/migrations/sql/p4_07_mcp_read_taint.down.sql
+new file mode 100644
+index 0000000..f90da1f
+--- /dev/null
++++ b/database/migrations/sql/p4_07_mcp_read_taint.down.sql
+@@ -0,0 +1,3 @@
++-- Revert mcp_read_taint table
++
++DROP TABLE IF EXISTS mcp_read_taint CASCADE;
+diff --git a/database/migrations/sql/p4_07_mcp_read_taint.up.sql b/database/migrations/sql/p4_07_mcp_read_taint.up.sql
+new file mode 100644
+index 0000000..c044939
+--- /dev/null
++++ b/database/migrations/sql/p4_07_mcp_read_taint.up.sql
+@@ -0,0 +1,45 @@
++-- Phase 4 / MCP: Session read-taint exfiltration guard (KB-P4-07, S3.5, S11.2)
++
++CREATE TABLE mcp_read_taint (
++    workspace_id   UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    taint_key      BYTEA NOT NULL CHECK (octet_length(taint_key) = 32),
++    key_kind       TEXT NOT NULL CHECK (key_kind IN ('session', 'credential')),
++    project_id     UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
++    first_read_at  TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    expires_at     TIMESTAMPTZ NOT NULL,
++    PRIMARY KEY (taint_key, project_id)
++);
++
++CREATE INDEX mcp_read_taint_workspace_idx ON mcp_read_taint (workspace_id);
++CREATE INDEX mcp_read_taint_expires_idx ON mcp_read_taint (expires_at);
++
++ALTER TABLE mcp_read_taint ENABLE ROW LEVEL SECURITY;
++ALTER TABLE mcp_read_taint FORCE ROW LEVEL SECURITY;
++
++CREATE POLICY mcp_read_taint_select_rls ON mcp_read_taint
++    FOR SELECT USING (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY mcp_read_taint_insert_rls ON mcp_read_taint
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY mcp_read_taint_update_rls ON mcp_read_taint
++    FOR UPDATE USING (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    ) WITH CHECK (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY mcp_read_taint_delete_rls ON mcp_read_taint
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++    );
++
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE mcp_read_taint TO kanban_app;
++GRANT SELECT ON TABLE mcp_read_taint TO app_rls_reader;
+diff --git a/database/migrations/versions/p4_07_mcp_read_taint.py b/database/migrations/versions/p4_07_mcp_read_taint.py
+new file mode 100644
+index 0000000..e7e6c3b
+--- /dev/null
++++ b/database/migrations/versions/p4_07_mcp_read_taint.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""mcp_read_taint table for session read-taint exfiltration guard (KB-P4-07).
++
++Revision ID: p4_07_mcp_read_taint
++Revises: p5_13_approved_wasm_modules
++Create Date: 2026-11-15 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p4_07_mcp_read_taint"
++down_revision: str | None = "p5_13_approved_wasm_modules"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply mcp_read_taint DDL, indexes, and RLS policies."""
++    execute_sql_file("p4_07_mcp_read_taint.up.sql")
++
++
++def downgrade() -> None:
++    """Revert mcp_read_taint DDL and RLS policies."""
++    execute_sql_file("p4_07_mcp_read_taint.down.sql")
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index 6ed69c4..7d8f4d6 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -44,6 +44,7 @@ from database.models.issues import (
+ from database.models.knowledge import Doc, Page, PageVersion, Sticky
+ from database.models.mcp_api_key import McpApiKey
+ from database.models.mcp_ephemeral_token import McpEphemeralToken
++from database.models.mcp_read_taint import McpReadTaint
+ from database.models.notifications import Notification
+ from database.models.oauth import (
+     OAuthAuthorizationCode,
+@@ -121,6 +122,7 @@ __all__ = [
+     "LtreeType",
+     "McpApiKey",
+     "McpEphemeralToken",
++    "McpReadTaint",
+     "Module",
+     "Notification",
+     "OAuthAuthorizationCode",
+diff --git a/database/models/mcp_read_taint.py b/database/models/mcp_read_taint.py
+new file mode 100644
+index 0000000..17c7e00
+--- /dev/null
++++ b/database/models/mcp_read_taint.py
+@@ -0,0 +1,79 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""SQLAlchemy model for mcp_read_taint table (KB-P4-07 / S3.5)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003  # Runtime import required for SQLAlchemy mapped_column
++from datetime import datetime  # noqa: TC003  # Runtime import required for SQLAlchemy Mapped[datetime]
++from typing import TYPE_CHECKING, Literal
++
++from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func
++from sqlalchemy.dialects.postgresql import BYTEA, UUID
++from sqlalchemy.orm import Mapped, mapped_column, relationship
++
++from database.models.base import Base
++
++if TYPE_CHECKING:
++    from database.models.projects import Project
++    from database.models.spine import Workspace
++
++McpTaintKeyKind = Literal["session", "credential"]
++
++
++class McpReadTaint(Base):
++    """Session or credential read taint tracking projects accessed by MCP agents."""
++
++    __tablename__ = "mcp_read_taint"
++
++    taint_key: Mapped[bytes] = mapped_column(
++        BYTEA,
++        primary_key=True,
++        nullable=False,
++    )
++    project_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("projects.id", ondelete="CASCADE"),
++        primary_key=True,
++        nullable=False,
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workspaces.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    key_kind: Mapped[str] = mapped_column(
++        String(16),
++        nullable=False,
++    )
++    first_read_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=func.clock_timestamp(),
++    )
++    expires_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        index=True,
++    )
++
++    workspace: Mapped[Workspace] = relationship(
++        "Workspace",
++        foreign_keys=[workspace_id],
++    )
++    project: Mapped[Project] = relationship(
++        "Project",
++        foreign_keys=[project_id],
++    )
++
++    __table_args__ = (
++        CheckConstraint(
++            "octet_length(taint_key) = 32",
++            name="mcp_read_taint_key_len_check",
++        ),
++        CheckConstraint(
++            "key_kind IN ('session', 'credential')",
++            name="mcp_read_taint_key_kind_check",
++        ),
++    )
+diff --git a/database/testing/pg_harness.py b/database/testing/pg_harness.py
+index 80054ba..634d66a 100644
+--- a/database/testing/pg_harness.py
++++ b/database/testing/pg_harness.py
+@@ -263,25 +263,28 @@ def pytest_configure(config: pytest.Config) -> None:
+ 
+     socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
+     user = os.environ.get("KB_TEST_PGUSER", "kanban_test")
++    tmpl_db = os.environ.get("KB_TEST_TEMPLATE_DB", "kanban_template")
+ 
+     if not check_pg_ready(socket_dir=socket_dir, user=user, timeout_seconds=10.0):
+         pytest.exit(f"PG test server unavailable at {socket_dir}; run make testdb-up", returncode=3)
+ 
+-    asyncio.run(ensure_template(socket_dir=socket_dir, user=user))
++    asyncio.run(ensure_template(socket_dir=socket_dir, user=user, template_db_name=tmpl_db))
+ 
+ 
+ @pytest.fixture(scope="session")
+ async def pg_worker_db(request: pytest.FixtureRequest) -> AsyncGenerator[AsyncEngine, None]:
+     """Provide an isolated worker database cloned from golden kanban_template."""
+     worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
+-    db_name = f"kanban_test_{worker_id}"
++    prefix = os.environ.get("KB_TEST_DB_PREFIX", "kanban_test")
++    db_name = f"{prefix}_{worker_id}"
+     socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
+     user = os.environ.get("KB_TEST_PGUSER", "kanban_test")
++    tmpl_db = os.environ.get("KB_TEST_TEMPLATE_DB", "kanban_template")
+ 
+     admin_conn = await asyncpg.connect(user=user, database="postgres", host=socket_dir)
+     try:
+         await admin_conn.execute(f"DROP DATABASE IF EXISTS {db_name} WITH (FORCE)")
+-        await admin_conn.execute(f"CREATE DATABASE {db_name} TEMPLATE kanban_template")
++        await admin_conn.execute(f"CREATE DATABASE {db_name} TEMPLATE {tmpl_db}")
+     finally:
+         await admin_conn.close()
+ 
+diff --git a/kanban/api/v1/comments.py b/kanban/api/v1/comments.py
+index 645e567..258628b 100644
+--- a/kanban/api/v1/comments.py
++++ b/kanban/api/v1/comments.py
+@@ -19,7 +19,14 @@ from kanban.api.v1.schemas.comments import (
+     CommentResponse,
+     ReactionResponse,
+ )
++from kanban.security.read_taint import (
++    TaintGuard,
++    TaintRecorder,
++    get_taint_guard,
++    get_taint_recorder,
++)
+ from kanban.services import comments as svc
++from kanban.services.issue_keys import resolve_issue_ref
+ 
+ __all__ = [
+     "comments_router",
+@@ -35,15 +42,18 @@ comments_router: Final[APIRouter] = router
+     response_model=CommentList,
+     summary="List comments on an issue with nested replies",
+ )
+-async def list_issue_comments(
++async def list_issue_comments(  # noqa: PLR0913, PLR0917
+     issue_ref: str,
+     caller: Annotated[PrincipalContext, Depends(get_principal)],
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     cursor: Annotated[str | None, Query(max_length=128)] = None,
+     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+ ) -> CommentList:
+     """Return top-level comments ordered created_at ASC with up to 200 inlined replies."""
+     async with timing_floor(floor_ms=25.0):
++        issue = await resolve_issue_ref(session, caller, issue_ref)
++        await taint_recorder.record_project_ids([issue.project_id])
+         return await svc.list_comments(
+             session=session,
+             caller=caller,
+@@ -59,15 +69,18 @@ async def list_issue_comments(
+     status_code=status.HTTP_201_CREATED,
+     summary="Create a top-level comment or depth-1 reply on an issue",
+ )
+-async def create_issue_comment(
++async def create_issue_comment(  # noqa: PLR0913, PLR0917
+     issue_ref: str,
+     body: CommentCreate,
+     caller: Annotated[PrincipalContext, Depends(get_principal)],
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> CommentResponse:
+     """Create comment after normalization, check mention access, and emit activity."""
+     async with timing_floor(floor_ms=25.0):
++        issue = await resolve_issue_ref(session, caller, issue_ref)
++        await taint_guard.check_write(issue.project_id, tool_name="add_comment")
+         result, etag = await svc.create_comment(
+             session=session,
+             caller=caller,
+diff --git a/kanban/api/v1/issue_trees.py b/kanban/api/v1/issue_trees.py
+index e1bc704..4bc8cce 100644
+--- a/kanban/api/v1/issue_trees.py
++++ b/kanban/api/v1/issue_trees.py
+@@ -13,6 +13,7 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.timing import timing_floor
+ from kanban.api.v1.schemas.issue_trees import IssueTreeNode, IssueTreeResponse
+ from kanban.issues import tree_service as svc
++from kanban.security.read_taint import TaintGuard, get_taint_guard
+ 
+ router = APIRouter(tags=["issues"])
+ 
+@@ -26,15 +27,17 @@ Session = Annotated[AsyncSession, Depends(get_rls_session)]
+     response_model=IssueTreeResponse,
+     summary="Create an issue tree atomically",
+ )
+-async def create_issue_tree(
++async def create_issue_tree(  # noqa: PLR0913, PLR0917
+     project_ref: str,
+     body: IssueTreeNode,
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> IssueTreeResponse:
+     """Create a parent-child issue hierarchy inside a single atomic transaction."""
+     async with timing_floor(floor_ms=25.0):
++        await taint_guard.check_write(project_ref, tool_name="create_ticket")
+         result = await svc.create_issue_tree(session, caller, project_ref, body)
+         response.headers["Location"] = f"/api/v1/issues/{result.root.key}"
+         return result
+diff --git a/kanban/api/v1/issue_workflow.py b/kanban/api/v1/issue_workflow.py
+index 1a6f246..27b8653 100644
+--- a/kanban/api/v1/issue_workflow.py
++++ b/kanban/api/v1/issue_workflow.py
+@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.timing import timing_floor
+ from kanban.issues.workflow_service import begin_work, complete_work, transition_ticket
++from kanban.security.read_taint import TaintGuard, get_taint_guard
+ from kanban.services import issues as svc
+ 
+ router = APIRouter(tags=["issue-workflow"])
+@@ -60,10 +61,13 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+     if_match: Annotated[str | None, Header()] = None,
+ ) -> JSONResponse:
+     """Initiate work on an issue in a single atomic transaction."""
+     async with timing_floor(floor_ms=25.0):
++        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
++        await taint_guard.check_write(pre_issue.project_id, tool_name="begin_work")
+         issue, from_state, started_state, comment_ref, gate_hold = await begin_work(
+             session,
+             caller,
+@@ -118,10 +122,13 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+     if_match: Annotated[str | None, Header()] = None,
+ ) -> JSONResponse:
+     """Transition an issue state under concurrency and gate hook evaluation."""
+     async with timing_floor(floor_ms=25.0):
++        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
++        await taint_guard.check_write(pre_issue.project_id, tool_name="transition_ticket")
+         issue, from_state, target_state, gate_hold = await transition_ticket(
+             session,
+             caller,
+@@ -177,10 +184,13 @@ async def api_complete_work(  # noqa: PLR0913, PLR0917
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+     if_match: Annotated[str | None, Header()] = None,
+ ) -> JSONResponse:
+     """Verify preconditions, complete issue workflow, and record WORK_COMPLETED activity."""
+     async with timing_floor(floor_ms=25.0):
++        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
++        await taint_guard.check_write(pre_issue.project_id, tool_name="complete_work")
+         issue, from_state, target_state, proof, comment_ref, gate_hold = await complete_work(
+             session,
+             caller,
+diff --git a/kanban/api/v1/issues.py b/kanban/api/v1/issues.py
+index 3bee241..167251f 100644
+--- a/kanban/api/v1/issues.py
++++ b/kanban/api/v1/issues.py
+@@ -11,6 +11,12 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.problems import ProblemException
+ from kanban.api.timing import timing_floor
+ from kanban.api.v1.schemas.issues import IssueCreate, IssueList, IssuePatch, IssueResponse
++from kanban.security.read_taint import (
++    TaintGuard,
++    TaintRecorder,
++    get_taint_guard,
++    get_taint_recorder,
++)
+ from kanban.services import issues as svc
+ 
+ router = APIRouter(tags=["issues"])
+@@ -51,6 +57,7 @@ async def get_issue(  # noqa: PLR0913, PLR0917
+     session: Session,
+     response: Response,
+     request: Request,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     workspace: Annotated[str | None, Query(description="Optional workspace slug or UUID")] = None,
+     if_none_match: Annotated[str | None, Header()] = None,
+ ) -> IssueResponse | Response:
+@@ -58,6 +65,7 @@ async def get_issue(  # noqa: PLR0913, PLR0917
+     workspace_ref = workspace or request.headers.get("x-kb-scope-workspace")
+     async with timing_floor(floor_ms=25.0):
+         issue = await svc.get_issue_or_404(session, caller, issue_key, workspace_ref=workspace_ref)
++        await taint_recorder.record_project_ids([issue.project_id])
+         sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
+         etag = f'"{sha256_hex}"'
+ 
+@@ -84,10 +92,13 @@ async def patch_issue(  # noqa: PLR0913, PLR0917
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+     if_match: Annotated[str | None, Header()] = None,
+ ) -> IssueResponse:
+     """Update issue fields under description ETag concurrency check."""
+     async with timing_floor(floor_ms=25.0):
++        issue = await svc.get_issue_or_404(session, caller, issue_key)
++        await taint_guard.check_write(issue.project_id, tool_name="update_ticket")
+         result, new_etag = await svc.update_issue(session, caller, issue_key, body, if_match)
+         response.headers["ETag"] = new_etag
+         return result
+@@ -102,6 +113,7 @@ async def list_issues(  # noqa: PLR0913
+     project_ref: str,
+     caller: Caller,
+     session: Session,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     *,
+     cursor: Annotated[str | None, Query(max_length=64)] = None,
+     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+@@ -117,7 +129,7 @@ async def list_issues(  # noqa: PLR0913
+             detail="Cannot filter only_archived=true when include_archived=false",
+         )
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.list_issues(
++        res = await svc.list_issues(
+             session,
+             caller,
+             project_ref,
+@@ -126,3 +138,5 @@ async def list_issues(  # noqa: PLR0913
+             include_archived=include_archived,
+             only_archived=only_archived,
+         )
++        await taint_recorder.record_project_ids([project_ref])
++        return res
+diff --git a/kanban/api/v1/links.py b/kanban/api/v1/links.py
+index a7d6796..0109f2d 100644
+--- a/kanban/api/v1/links.py
++++ b/kanban/api/v1/links.py
+@@ -9,8 +9,10 @@ import uuid  # noqa: TC003
+ from typing import Annotated, Final
+ 
+ from fastapi import APIRouter, Depends, Response, status
++from sqlalchemy import select
+ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
+ 
++from database.models import ObjectRecord
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session, get_settings
+ from kanban.api.problems import not_found
+ from kanban.api.timing import timing_floor
+@@ -19,8 +21,15 @@ from kanban.api.v1.schemas.links import (
+     LinkCreateRequest,
+     LinksListResponse,
+     OutboundLinkOut,
++    UnrestrictedEndpointOut,
+ )
+ from kanban.security.permissions import Capability, evaluate_capabilities
++from kanban.security.read_taint import (
++    TaintGuard,
++    TaintRecorder,
++    get_taint_guard,
++    get_taint_recorder,
++)
+ from kanban.services.links import (
+     build_canonical_url,
+     create_object_link,
+@@ -44,6 +53,7 @@ async def get_object_links_endpoint(
+     object_ref: str,
+     caller: Annotated[PrincipalContext, Depends(get_principal)],
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+ ) -> LinksListResponse:
+     """List directed links for an object, masking unreadable far endpoints."""
+     async with timing_floor(floor_ms=25.0):
+@@ -55,7 +65,34 @@ async def get_object_links_endpoint(
+         if Capability.VIEW not in caps:
+             not_found()
+ 
+-        return await list_object_links(session, caller, obj)
++        links_res = await list_object_links(session, caller, obj)
++        proj_ids: set[uuid.UUID] = set()
++        if obj.project_id:
++            proj_ids.add(obj.project_id)
++        elif obj.object_type.value == "project":
++            proj_ids.add(obj.id)
++
++        visible_ids = {
++            link.target.id
++            for link in links_res.outbound
++            if isinstance(link.target, UnrestrictedEndpointOut)
++        } | {
++            link.source.id
++            for link in links_res.inbound
++            if isinstance(link.source, UnrestrictedEndpointOut)
++        }
++        if visible_ids:
++            stmt = select(ObjectRecord.id, ObjectRecord.project_id, ObjectRecord.object_type).where(
++                ObjectRecord.id.in_(visible_ids)
++            )
++            for r in (await session.execute(stmt)).all():
++                if r[1]:
++                    proj_ids.add(r[1])
++                elif r[2].value == "project":
++                    proj_ids.add(r[0])
++        if proj_ids:
++            await taint_recorder.record_project_ids(proj_ids)
++        return links_res
+ 
+ 
+ @router.post(
+@@ -69,6 +106,7 @@ async def create_object_link_endpoint(
+     req: LinkCreateRequest,
+     caller: Annotated[PrincipalContext, Depends(get_principal)],
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> OutboundLinkOut:
+     """Validate and insert a typed link between two Universal Object Graph nodes."""
+     async with timing_floor(floor_ms=25.0):
+@@ -76,6 +114,17 @@ async def create_object_link_endpoint(
+         if source is None:
+             not_found()
+ 
++        target = await resolve_object_ref(session, req.target)
++        source_proj = source.project_id or (
++            source.id if source.object_type.value == "project" else None
++        )
++        target_proj = (target.project_id if target else None) or (
++            target.id if (target and target.object_type.value == "project") else None
++        )
++        check_projs = [p for p in (source_proj, target_proj) if p is not None]
++        if check_projs:
++            await taint_guard.check_write(check_projs, tool_name="link_objects")
++
+         return await create_object_link(session, caller, source, req)
+ 
+ 
+diff --git a/kanban/api/v1/search.py b/kanban/api/v1/search.py
+index 3ae2841..47ace3f 100644
+--- a/kanban/api/v1/search.py
++++ b/kanban/api/v1/search.py
+@@ -18,6 +18,7 @@ from kanban.api.v1.schemas.search import (
+     KnowledgeSearchResponse,
+     SearchResponse,
+ )
++from kanban.security.read_taint import TaintRecorder, get_taint_recorder
+ from kanban.services import search as svc
+ 
+ router = APIRouter(prefix="/search", tags=["search"])
+@@ -30,6 +31,7 @@ Session = Annotated[AsyncSession, Depends(get_rls_session)]
+ async def search_unified(  # noqa: PLR0913, PLR0917
+     caller: Caller,
+     session: Session,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     q: Annotated[str, Query(description="Search query string")] = "",
+     kinds: Annotated[
+         str | None,
+@@ -48,7 +50,7 @@ async def search_unified(  # noqa: PLR0913, PLR0917
+     """Execute unified lexical full-text and trigram search under caller RLS."""
+     async with timing_floor(floor_ms=25.0):
+         kinds_list = [k.strip() for k in kinds.split(",") if k.strip()] if kinds else None
+-        return await svc.search_unified(
++        res = await svc.search_unified(
+             session=session,
+             caller=caller,
+             query=q,
+@@ -57,6 +59,10 @@ async def search_unified(  # noqa: PLR0913, PLR0917
+             limit=limit,
+             cursor=cursor,
+         )
++        pids = {item.project_identifier for item in res.items if item.project_identifier}
++        if pids:
++            await taint_recorder.record_project_ids(pids)
++        return res
+ 
+ 
+ @router.post("/issues", response_model=IssueSearchResponse, summary="Structured issue search")
+@@ -65,6 +71,7 @@ async def search_issues(
+     caller: Caller,
+     session: Session,
+     request: Request,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+ ) -> IssueSearchResponse:
+     """Execute issue-scoped search composed with FilterSpec DSL predicates."""
+     ws_scope = body.workspace or request.headers.get("x-kb-scope-workspace")
+@@ -72,11 +79,15 @@ async def search_issues(
+     if ws_scope and not body.workspace:
+         effective_body = body.model_copy(update={"workspace": ws_scope})
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.search_issues(
++        res = await svc.search_issues(
+             session=session,
+             caller=caller,
+             request=effective_body,
+         )
++        pids = {item.project_identifier for item in res.items if item.project_identifier}
++        if pids:
++            await taint_recorder.record_project_ids(pids)
++        return res
+ 
+ 
+ @router.post(
+@@ -88,11 +99,16 @@ async def search_knowledge(
+     body: KnowledgeSearchRequest,
+     caller: Caller,
+     session: Session,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+ ) -> KnowledgeSearchResponse:
+     """Execute knowledge search across docs, pages, and stickies under caller RLS."""
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.search_knowledge(
++        res = await svc.search_knowledge(
+             session=session,
+             caller=caller,
+             request=body,
+         )
++        pids = {item.project_identifier for item in res.items if item.project_identifier}
++        if pids:
++            await taint_recorder.record_project_ids(pids)
++        return res
+diff --git a/kanban/security/__init__.py b/kanban/security/__init__.py
+index 05163c2..ada4711 100644
+--- a/kanban/security/__init__.py
++++ b/kanban/security/__init__.py
+@@ -34,6 +34,12 @@ from kanban.security.permissions import (
+     parse_token_scope_mask,
+     require_capability,
+ )
++from kanban.security.read_taint import (
++    TaintGuard,
++    TaintRecorder,
++    get_taint_guard,
++    get_taint_recorder,
++)
+ from kanban.security.scrubber import (
+     ScrubFinding,
+     ScrubResult,
+@@ -72,11 +78,15 @@ __all__ = [
+     "SecretKind",
+     "SecurityHeadersMiddleware",
+     "StaticKekProvider",
++    "TaintGuard",
++    "TaintRecorder",
+     "UnknownKekError",
+     "build_access_manifest",
+     "capabilities_to_names",
+     "derive_subkey",
+     "evaluate_capabilities",
++    "get_taint_guard",
++    "get_taint_recorder",
+     "load_key_material",
+     "open_card_secret",
+     "outbound_secret_scrubber",
+diff --git a/kanban/security/read_taint.py b/kanban/security/read_taint.py
+new file mode 100644
+index 0000000..697a71d
+--- /dev/null
++++ b/kanban/security/read_taint.py
+@@ -0,0 +1,349 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Session read-taint exfiltration guard and recorder (KB-P4-07 / S3.5, S11.2)."""
++
++from __future__ import annotations
++
++import hashlib
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING, Annotated, Final, Literal, cast
++
++from fastapi import Depends, Request
++from sqlalchemy import select, text
++from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
++
++from database.models.projects import Project
++from database.session import RLSContext, RLSSessionFactory
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.problems import ProblemException
++from kanban.services.activity import ActivityEventType, record_activity
++
++if TYPE_CHECKING:
++    from collections.abc import Iterable, Sequence
++
++__all__ = [
++    "CREDENTIAL_TAINT_TTL_HOURS",
++    "SESSION_TAINT_TTL_SECONDS",
++    "TaintGuard",
++    "TaintRecorder",
++    "get_taint_guard",
++    "get_taint_recorder",
++]
++
++SESSION_TAINT_TTL_SECONDS: Final[int] = 3600
++CREDENTIAL_TAINT_TTL_HOURS: Final[int] = 8
++
++_UUID_REGEX_LEN: Final[int] = 36
++
++
++async def _resolve_project_uuid(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    project_ref: uuid.UUID | str,
++) -> tuple[uuid.UUID, str] | None:
++    """Resolve project reference (UUID or identifier) to (project_id, identifier)."""
++    if isinstance(project_ref, uuid.UUID):
++        stmt = select(Project.id, Project.identifier).where(
++            Project.id == project_ref, Project.workspace_id == workspace_id
++        )
++        row = (await session.execute(stmt)).first()
++        return (row[0], row[1]) if row is not None else None
++
++    ref_str = str(project_ref).strip()
++    try:
++        parsed_uuid = uuid.UUID(ref_str)
++        stmt = select(Project.id, Project.identifier).where(
++            Project.id == parsed_uuid, Project.workspace_id == workspace_id
++        )
++        row = (await session.execute(stmt)).first()
++        if row is not None:
++            return (row[0], row[1])
++    except ValueError:
++        pass
++
++    stmt = select(Project.id, Project.identifier).where(
++        Project.identifier == ref_str, Project.workspace_id == workspace_id
++    )
++    row = (await session.execute(stmt)).first()
++    return (row[0], row[1]) if row is not None else None
++
++
++class TaintRecorder:
++    """FastAPI dependency recording project read-taint for MCP sessions."""
++
++    def __init__(
++        self,
++        request: Request,
++        session: Annotated[AsyncSession, Depends(get_rls_session)],
++        caller: Annotated[PrincipalContext, Depends(get_principal)],
++    ) -> None:
++        """Initialize TaintRecorder dependency and check service principal headers."""
++        self.request: Final[Request] = request
++        self.session: Final[AsyncSession] = session
++        self.caller: Final[PrincipalContext] = caller
++        self.session_id: Final[str | None] = request.headers.get("x-kb-mcp-session")
++        self.service_principal: Final[str | None] = request.headers.get("x-kb-service-principal")
++
++        if self.service_principal == "mcp-gateway" and not self.session_id:
++            raise ProblemException(
++                code="MISSING_MCP_SESSION",
++                status=400,
++                title="Missing MCP Session",
++                detail=(
++                    "Requests from mcp-gateway service principal require X-KB-MCP-Session header."
++                ),
++            )
++
++    async def record_project_ids(self, project_refs: Iterable[uuid.UUID | str]) -> None:
++        """Record read-taint for all distinct project IDs returned in a response."""
++        if not self.session_id:
++            return
++
++        session_key = hashlib.sha256(self.session_id.encode("utf-8")).digest()
++        subject_token = self.request.headers.get("x-kb-subject-token") or getattr(
++            self.caller, "token", None
++        )
++        credential_key = (
++            hashlib.sha256(subject_token.encode("utf-8")).digest()
++            if subject_token is not None
++            else None
++        )
++
++        now = datetime.now(UTC)
++        session_expires = now + timedelta(seconds=SESSION_TAINT_TTL_SECONDS)
++        cred_expires = now + timedelta(hours=CREDENTIAL_TAINT_TTL_HOURS)
++
++        upsert_sql = text(
++            """
++            INSERT INTO mcp_read_taint (
++                workspace_id, taint_key, key_kind, project_id, first_read_at, expires_at
++            )
++            VALUES (
++                :ws_id, :taint_key, :key_kind, :proj_id, :now, :expires_at
++            )
++            ON CONFLICT (taint_key, project_id)
++            DO UPDATE SET expires_at = EXCLUDED.expires_at;
++            """
++        )
++
++        seen_projects: set[uuid.UUID] = set()
++        for ref in project_refs:
++            resolved = await _resolve_project_uuid(self.session, self.caller.workspace_id, ref)
++            if resolved is None:
++                continue
++            proj_id, _ = resolved
++            if proj_id in seen_projects:
++                continue
++            seen_projects.add(proj_id)
++
++            # Record session taint
++            await self.session.execute(
++                upsert_sql,
++                {
++                    "ws_id": self.caller.workspace_id,
++                    "taint_key": session_key,
++                    "key_kind": "session",
++                    "proj_id": proj_id,
++                    "now": now,
++                    "expires_at": session_expires,
++                },
++            )
++
++            # Record credential taint
++            if credential_key is not None:
++                await self.session.execute(
++                    upsert_sql,
++                    {
++                        "ws_id": self.caller.workspace_id,
++                        "taint_key": credential_key,
++                        "key_kind": "credential",
++                        "proj_id": proj_id,
++                        "now": now,
++                        "expires_at": cred_expires,
++                    },
++                )
++
++        if seen_projects:
++            await self.session.flush()
++
++
++class TaintGuard:
++    """FastAPI dependency enforcing read-taint exfiltration guards on MCP writes."""
++
++    def __init__(
++        self,
++        request: Request,
++        session: Annotated[AsyncSession, Depends(get_rls_session)],
++        caller: Annotated[PrincipalContext, Depends(get_principal)],
++    ) -> None:
++        """Initialize TaintRecorder dependency and check service principal headers."""
++        self.request: Final[Request] = request
++        self.session: Final[AsyncSession] = session
++        self.caller: Final[PrincipalContext] = caller
++        self.session_id: Final[str | None] = request.headers.get("x-kb-mcp-session")
++        self.service_principal: Final[str | None] = request.headers.get("x-kb-service-principal")
++
++        if self.service_principal == "mcp-gateway" and not self.session_id:
++            raise ProblemException(
++                code="MISSING_MCP_SESSION",
++                status=400,
++                title="Missing MCP Session",
++                detail=(
++                    "Requests from mcp-gateway service principal require X-KB-MCP-Session header."
++                ),
++            )
++
++    async def check_write(
++        self,
++        target_projects: uuid.UUID | str | Sequence[uuid.UUID | str],
++        tool_name: str | None = None,
++    ) -> None:
++        """Assert write target project(s) audience is not broader than any tainted project."""
++        if not self.session_id:
++            return
++
++        session_key = hashlib.sha256(self.session_id.encode("utf-8")).digest()
++        subject_token = self.request.headers.get("x-kb-subject-token") or getattr(
++            self.caller, "token", None
++        )
++        taint_keys: list[bytes] = [session_key]
++        if subject_token is not None:
++            credential_key = hashlib.sha256(subject_token.encode("utf-8")).digest()
++            taint_keys.append(credential_key)
++
++        now = datetime.now(UTC)
++        targets = (
++            [target_projects]
++            if isinstance(target_projects, (str, uuid.UUID))
++            else list(target_projects)
++        )
++
++        query = text(
++            """
++            SELECT t.project_id, p.identifier AS project_key
++            FROM mcp_read_taint t
++            JOIN projects p ON p.id = t.project_id
++            WHERE t.taint_key = ANY(:taint_keys)
++              AND t.expires_at > :now
++              AND t.project_id <> :target_project_id
++              AND EXISTS (
++                  SELECT 1 FROM effective_resource_access b
++                  WHERE b.object_id = :target_project_id
++                    AND (b.allow_mask & 1) = 1
++                    AND (b.deny_mask & 1) = 0
++                    AND NOT EXISTS (
++                        SELECT 1 FROM effective_resource_access a
++                        WHERE a.object_id = t.project_id
++                          AND a.principal_id = b.principal_id
++                          AND (a.allow_mask & 1) = 1
++                          AND (a.deny_mask & 1) = 0
++                    )
++              )
++            LIMIT 1;
++            """
++        )
++
++        for ref in targets:
++            resolved = await _resolve_project_uuid(self.session, self.caller.workspace_id, ref)
++            if resolved is None:
++                continue
++            target_proj_id, target_proj_key = resolved
++
++            result = (
++                await self.session.execute(
++                    query,
++                    {
++                        "taint_keys": taint_keys,
++                        "now": now,
++                        "target_project_id": target_proj_id,
++                    },
++                )
++            ).first()
++
++            if result is not None:
++                source_proj_id, source_proj_key = result[0], result[1]
++                effective_tool = tool_name or self.request.headers.get("x-kb-mcp-tool") or "unknown"
++
++                # Emit MCP_TAINT_BLOCKED activity
++                session_key_hash = hashlib.sha256(session_key).hexdigest()
++                payload = {
++                    "session_key_hash": session_key_hash,
++                    "source_project_id": str(source_proj_id),
++                    "target_project_id": str(target_proj_id),
++                    "tool_name": effective_tool,
++                    "tool": effective_tool,
++                }
++
++                session_factory: RLSSessionFactory | None = getattr(
++                    self.request.app.state, "session_factory", None
++                )
++                if session_factory is not None:
++                    user_access_hash = self.caller.user_access_hash
++                    if user_access_hash is None:
++                        caller = self.caller
++                        scopes_str = ",".join(sorted(caller.token_scopes))
++                        raw = f"{caller.workspace_id}:{caller.principal_id}:{scopes_str}".encode()
++                        user_access_hash = hashlib.sha256(raw).digest()
++                    audit_ctx = RLSContext(
++                        principal_id=self.caller.principal_id,
++                        workspace_id=self.caller.workspace_id,
++                        token_scopes=self.caller.token_scopes,
++                        aal_level=cast("Literal[1, 2]", self.caller.aal_level),
++                        agent_principal_id=self.caller.agent_principal_id,
++                        ephemeral_project_id=self.caller.ephemeral_project_id,
++                        read_only=False,
++                        user_access_hash=user_access_hash,
++                    )
++                    async with session_factory.session(audit_ctx) as audit_session:
++                        await record_activity(
++                            session=audit_session,
++                            workspace_id=self.caller.workspace_id,
++                            object_id=target_proj_id,
++                            actor_principal_id=self.caller.principal_id,
++                            event_type=ActivityEventType.MCP_TAINT_BLOCKED,
++                            payload=payload,
++                        )
++                else:
++                    await record_activity(
++                        session=self.session,
++                        workspace_id=self.caller.workspace_id,
++                        object_id=target_proj_id,
++                        actor_principal_id=self.caller.principal_id,
++                        event_type=ActivityEventType.MCP_TAINT_BLOCKED,
++                        payload=payload,
++                    )
++                    await self.session.flush()
++
++                raise ProblemException(
++                    code="CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED",
++                    status=409,
++                    title="Cross-Scope Taint Confirmation Required",
++                    type_uri="urn:kanban:problem:cross-scope-taint",
++                    detail=(
++                        f"Write to project '{target_proj_key}' blocked due to session read-taint "
++                        f"from '{source_proj_key}'."
++                    ),
++                    extra={
++                        "tainted_by": [source_proj_key],
++                        "hint": "Ask a human to perform this write in the web UI.",
++                    },
++                )
++
++
++def get_taint_recorder(
++    request: Request,
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++) -> TaintRecorder:
++    """Dependency provider for TaintRecorder."""
++    return TaintRecorder(request, session, caller)
++
++
++def get_taint_guard(
++    request: Request,
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++) -> TaintGuard:
++    """Dependency provider for TaintGuard."""
++    return TaintGuard(request, session, caller)
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index b1fb871..0711e4c 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -178,6 +178,7 @@ class ActivityEventType(StrEnum):
+     WASM_MODULE_UPLOADED = "WASM_MODULE_UPLOADED"
+     STANDALONE_BACKUP_EXPORTED = "STANDALONE_BACKUP_EXPORTED"
+     PLANE_IMPORT_COMPLETED = "PLANE_IMPORT_COMPLETED"
++    MCP_TAINT_BLOCKED = "MCP_TAINT_BLOCKED"
+     WORKSPACE_SETTINGS_CHANGED = "WORKSPACE_SETTINGS_CHANGED"
+     AIR_GAP_MODE_CHANGED = "AIR_GAP_MODE_CHANGED"
+     WORK_COMPLETED = "WORK_COMPLETED"
+@@ -239,6 +240,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
+         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
+         ActivityEventType.PLANE_IMPORT_COMPLETED: ActivityCategory.SYSTEM,
++        ActivityEventType.MCP_TAINT_BLOCKED: ActivityCategory.SYSTEM,
+         ActivityEventType.EXTERNAL_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
+         ActivityEventType.EXTERNAL_LOGIN_UNPROVISIONED: ActivityCategory.SYSTEM,
+         ActivityEventType.IDENTITY_AUTO_MERGE_BLOCKED: ActivityCategory.SYSTEM,
+@@ -314,6 +316,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.AUTH_CARD_HANDSHAKE_TESTED: ActivityCategory.SYSTEM,
+         ActivityEventType.STANDALONE_BACKUP_EXPORTED: ActivityCategory.SYSTEM,
+         ActivityEventType.PLANE_IMPORT_COMPLETED: ActivityCategory.SYSTEM,
++        ActivityEventType.MCP_TAINT_BLOCKED: ActivityCategory.SYSTEM,
+         ActivityEventType.DESTRUCTIVE_LIFECYCLE_EXECUTED: ActivityCategory.HISTORY,
+         ActivityEventType.WORK_COMPLETED: ActivityCategory.HISTORY,
+         ActivityEventType.CUSTOM_FIELD_APPROVAL_REQUESTED: ActivityCategory.HISTORY,
+diff --git a/kanban/tests/security/test_read_taint.py b/kanban/tests/security/test_read_taint.py
+new file mode 100644
+index 0000000..090077e
+--- /dev/null
++++ b/kanban/tests/security/test_read_taint.py
+@@ -0,0 +1,614 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: PLC0415, E501, I001, PT018
++"""Feature unit and security tests for read-taint exfiltration guard (KB-P4-07).
++
++Covers:
++  1. Positive: Read records session and credential taint in mcp_read_taint table.
++  2. Exfiltration canary: Reading SEC-1 and posting to PUB-1 is blocked (409 cross-scope-taint),
++     zero comments with CANARY-7f3a exist in DB, MCP_TAINT_BLOCKED activity event is recorded.
++  3. Session escape: New session ID with same subject token is still blocked by credential taint;
++     different credential without reads succeeds.
++  4. Allowed paths: Reading PUB and writing to SEC succeeds (narrower audience); reading SEC and
++     writing to SEC succeeds; linking SEC-1 -> PUB-1 is blocked.
++  5. Boundary: Expired session and credential taints allow writing to PUB-1.
++  6. Missing header: Requests from mcp-gateway without X-KB-MCP-Session return 400.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import os
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING, Any
++
++import httpx
++import pytest
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
++from sqlalchemy.pool import NullPool
++
++from database.session import RLSSessionFactory
++from database.testing.pg_harness import build_dsn
++from kanban.api.deps import PrincipalContext
++from kanban.app import create_app
++from kanban.auth.sessions.csrf import (
++    CSRF_COOKIE_NAME,
++    CSRF_HEADER_NAME,
++    PRE_SESSION_ID,
++    generate_csrf_token,
++)
++from kanban.tests.security.helpers import (
++    add_role_binding,
++    create_project,
++    create_user,
++    create_workspace,
++    rebuild_era,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import AsyncIterator
++
++pytestmark = pytest.mark.committed_db
++
++
++class _TestTokenResolver:
++    """Resolves PrincipalContext by checking X-KB-Subject-Token header or default."""
++
++    def __init__(
++        self,
++        default_principal: PrincipalContext,
++        token_map: dict[str, PrincipalContext],
++    ) -> None:
++        self.default_principal = default_principal
++        self.token_map = token_map
++
++    async def resolve(self, request: Any) -> PrincipalContext | None:  # noqa: ANN401
++        tok = request.headers.get("x-kb-subject-token")
++        if tok and tok in self.token_map:
++            return self.token_map[tok]
++        return self.default_principal
++
++
++async def _seed_test_issue(  # noqa: PLR0913, PLR0917
++    session: AsyncSession,
++    ws_id: uuid.UUID,
++    proj_id: uuid.UUID,
++    identifier: str,
++    seq: int,
++    summary: str,
++    description: str,
++    creator_id: uuid.UUID,
++) -> uuid.UUID:
++    """Seed an issue row with sequence counter and Universal Object Graph registration."""
++    await session.execute(
++        text(
++            "UPDATE projects SET issue_seq_counter = GREATEST(issue_seq_counter, :seq) "
++            "WHERE id = :p"
++        ),
++        {"p": proj_id, "seq": seq},
++    )
++    iss_id = uuid.uuid4()
++    await session.execute(
++        text("SELECT register_object('issue'::object_kind, :ws, :proj, :ckey, :title, :cr, :id)"),
++        {
++            "ws": ws_id,
++            "proj": proj_id,
++            "ckey": f"{identifier}-{seq}",
++            "title": summary,
++            "cr": creator_id,
++            "id": iss_id,
++        },
++    )
++    st_row = (
++        await session.execute(
++            text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"),
++            {"p": proj_id},
++        )
++    ).scalar_one()
++    pri_row = (
++        await session.execute(
++            text("SELECT id FROM project_priorities WHERE project_id = :p LIMIT 1"),
++            {"p": proj_id},
++        )
++    ).scalar_one()
++
++    await session.execute(
++        text(
++            "INSERT INTO issues (id, object_type, workspace_id, project_id, sequence_id, summary, "
++            "description_markdown, state_id, priority_id, created_by_id, original_created_by_id, "
++            "board_rank, ancestry_path) "
++            "VALUES (:id, 'issue', :ws, :proj, :seq, :summary, :desc, :st, :pri, :cr, :cr, "
++            "'0|s00001:', 'top')"
++        ),
++        {
++            "id": iss_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "seq": seq,
++            "summary": summary,
++            "desc": description,
++            "st": st_row,
++            "pri": pri_row,
++            "cr": creator_id,
++        },
++    )
++    return iss_id
++
++
++@pytest.fixture
++async def taint_test_env(
++    committed_db_session: AsyncSession,
++    pg_worker_db: AsyncEngine,
++) -> AsyncIterator[dict[str, Any]]:
++    """Set up clean-DB test environment with SEC (restricted) and PUB (broader) projects."""
++    ws_id = await create_workspace(committed_db_session, name="Security Workspace")
++
++    # Users
++    admin_id = await create_user(committed_db_session, ws_id, handle="@admin", display_name="Admin")
++    await add_role_binding(
++        committed_db_session, ws_id, admin_id, role="WORKSPACE_ADMIN", scope_type="workspace"
++    )
++
++    adam_id = await create_user(committed_db_session, ws_id, handle="@adam", display_name="Adam")
++    maya_id = await create_user(committed_db_session, ws_id, handle="@maya", display_name="Maya")
++
++    # Projects:
++    # 1. SEC: Secret project. Audience = {adam, admin}. Maya has NO role on SEC.
++    proj_sec_id = await create_project(
++        committed_db_session, ws_id, identifier="SEC", name="Secret Project", created_by_id=admin_id
++    )
++    await add_role_binding(
++        committed_db_session,
++        ws_id,
++        adam_id,
++        role="MEMBER",
++        scope_type="project",
++        project_id=proj_sec_id,
++    )
++
++    # 2. PUB: Public project. Audience = {adam, admin, maya}.
++    proj_pub_id = await create_project(
++        committed_db_session, ws_id, identifier="PUB", name="Public Project", created_by_id=admin_id
++    )
++    await add_role_binding(
++        committed_db_session,
++        ws_id,
++        adam_id,
++        role="MEMBER",
++        scope_type="project",
++        project_id=proj_pub_id,
++    )
++    await add_role_binding(
++        committed_db_session,
++        ws_id,
++        maya_id,
++        role="MEMBER",
++        scope_type="project",
++        project_id=proj_pub_id,
++    )
++
++    await rebuild_era(committed_db_session, ws_id)
++    await committed_db_session.commit()
++
++    # Seed issues:
++    # SEC-1 contains the canary CANARY-7f3a
++    canary_content = "Confidential specification containing secret canary CANARY-7f3a."
++    sec_1_id = await _seed_test_issue(
++        committed_db_session,
++        ws_id,
++        proj_sec_id,
++        "SEC",
++        seq=1,
++        summary="Secret Architecture",
++        description=canary_content,
++        creator_id=admin_id,
++    )
++
++    pub_1_id = await _seed_test_issue(
++        committed_db_session,
++        ws_id,
++        proj_pub_id,
++        "PUB",
++        seq=1,
++        summary="Public Roadmap",
++        description="Publicly visible backlog roadmap.",
++        creator_id=admin_id,
++    )
++
++    await committed_db_session.commit()
++
++    # Tokens
++    tok_adam = "kb_test_tok_adam_" + "a" * 32
++    tok_maya = "kb_test_tok_maya_" + "m" * 32
++
++    token_map = {
++        tok_adam: PrincipalContext(
++            principal_id=adam_id,
++            workspace_id=ws_id,
++            token_scopes=("agent:read", "agent:write"),
++        ),
++        tok_maya: PrincipalContext(
++            principal_id=maya_id,
++            workspace_id=ws_id,
++            token_scopes=("agent:read", "agent:write"),
++        ),
++    }
++
++    resolver = _TestTokenResolver(default_principal=token_map[tok_adam], token_map=token_map)
++
++    db_name = pg_worker_db.url.database or "kanban_test"
++    socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++    app_engine = create_async_engine(
++        build_dsn(database=db_name, host=socket_dir, user="kanban_app"),
++        poolclass=NullPool,
++    )
++
++    app = create_app()
++    app.state.session_factory = RLSSessionFactory(app_engine)
++    app.state.principal_resolver = resolver
++
++    csrf_token = generate_csrf_token(PRE_SESSION_ID, b"\x00" * 32)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(
++        transport=transport,
++        base_url="http://test",
++        headers={
++            CSRF_HEADER_NAME: csrf_token,
++        },
++        cookies={CSRF_COOKIE_NAME: csrf_token},
++    ) as client:
++        yield {
++            "client": client,
++            "session": committed_db_session,
++            "ws_id": ws_id,
++            "admin_id": admin_id,
++            "adam_id": adam_id,
++            "maya_id": maya_id,
++            "proj_sec_id": proj_sec_id,
++            "proj_pub_id": proj_pub_id,
++            "sec_1_id": sec_1_id,
++            "pub_1_id": pub_1_id,
++            "tok_adam": tok_adam,
++            "tok_maya": tok_maya,
++        }
++    await app_engine.dispose()
++
++
++@pytest.mark.asyncio
++async def test_case_1_positive_read_taint_recorded(taint_test_env: dict[str, Any]) -> None:
++    """Case 1: Reading an issue records session and credential taints in mcp_read_taint."""
++    client: httpx.AsyncClient = taint_test_env["client"]
++    db_session: AsyncSession = taint_test_env["session"]
++    sec_1_id = taint_test_env["sec_1_id"]
++    tok_adam = taint_test_env["tok_adam"]
++    session_id = f"mcp-sess-{uuid.uuid4()}"
++
++    resp = await client.get(
++        f"/api/v1/issues/{sec_1_id}",
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_id,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert resp.status_code == 200
++
++    # Query mcp_read_taint directly
++    sess_hash = hashlib.sha256(session_id.encode("utf-8")).digest()
++    tok_hash = hashlib.sha256(tok_adam.encode("utf-8")).digest()
++
++    await db_session.rollback()
++    rows = (
++        await db_session.execute(
++            text(
++                "SELECT taint_key, key_kind, project_id FROM mcp_read_taint WHERE project_id = :p"
++            ),
++            {"p": taint_test_env["proj_sec_id"]},
++        )
++    ).all()
++
++    assert len(rows) >= 2
++    kinds = {row[1] for row in rows}
++    assert "session" in kinds
++    assert "credential" in kinds
++    keys = {bytes(row[0]) for row in rows}
++    assert sess_hash in keys
++    assert tok_hash in keys
++
++
++@pytest.mark.asyncio
++async def test_case_2_canary_exfiltration_blocked(taint_test_env: dict[str, Any]) -> None:
++    """Case 2: Canary exfiltration test: reading SEC-1 then writing to PUB-1 is blocked."""
++    client: httpx.AsyncClient = taint_test_env["client"]
++    db_session: AsyncSession = taint_test_env["session"]
++    sec_1_id = taint_test_env["sec_1_id"]
++    pub_1_id = taint_test_env["pub_1_id"]
++    tok_adam = taint_test_env["tok_adam"]
++    session_id = f"mcp-sess-canary-{uuid.uuid4()}"
++
++    # 1. Read SEC-1 containing CANARY-7f3a
++    read_resp = await client.get(
++        f"/api/v1/issues/{sec_1_id}",
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_id,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert read_resp.status_code == 200
++    assert "CANARY-7f3a" in read_resp.json()["description_markdown"]
++
++    # 2. Attempt to post comment with canary to PUB-1
++    write_resp = await client.post(
++        f"/api/v1/issues/{pub_1_id}/comments",
++        json={"body_markdown": "Attempted exfiltration of secret canary CANARY-7f3a"},
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_id,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert write_resp.status_code == 409
++    body = write_resp.json()
++    assert body["code"] == "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED"
++    assert "tainted_by" in body
++    assert any("SEC" in str(t) for t in body["tainted_by"])
++
++    # 3. Forensic DB assertions: zero comments contain CANARY-7f3a
++    await db_session.rollback()
++    comment_count = (
++        await db_session.execute(
++            text("SELECT count(*) FROM issue_comments WHERE body_markdown LIKE '%CANARY-7f3a%'")
++        )
++    ).scalar_one()
++    assert comment_count == 0
++
++    # 4. Forensic DB assertions: MCP_TAINT_BLOCKED activity event recorded
++    activity_count = (
++        await db_session.execute(
++            text("SELECT count(*) FROM activity_records WHERE event_type = 'MCP_TAINT_BLOCKED'")
++        )
++    ).scalar_one()
++    assert activity_count >= 1
++
++
++@pytest.mark.asyncio
++async def test_case_3_session_escape_prevented(taint_test_env: dict[str, Any]) -> None:
++    """Case 3: Session escape prevented by credential taint; clean credential succeeds."""
++    client: httpx.AsyncClient = taint_test_env["client"]
++    sec_1_id = taint_test_env["sec_1_id"]
++    pub_1_id = taint_test_env["pub_1_id"]
++    tok_adam = taint_test_env["tok_adam"]
++    tok_maya = taint_test_env["tok_maya"]
++
++    session_1 = f"mcp-sess-read-{uuid.uuid4()}"
++
++    # Read SEC-1 with tok_adam under session_1
++    r_read = await client.get(
++        f"/api/v1/issues/{sec_1_id}",
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_1,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert r_read.status_code == 200
++
++    # Escape attempt: New session_2 with same tok_adam writing to PUB-1
++    session_2 = f"mcp-sess-escape-{uuid.uuid4()}"
++    r_escape = await client.post(
++        f"/api/v1/issues/{pub_1_id}/comments",
++        json={"body_markdown": "Attempting session escape with new session ID"},
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_2,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert r_escape.status_code == 409
++    assert r_escape.json()["code"] == "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED"
++
++    # Different credential without reads (tok_maya) succeeds
++    session_maya = f"mcp-sess-maya-{uuid.uuid4()}"
++    r_maya = await client.post(
++        f"/api/v1/issues/{pub_1_id}/comments",
++        json={"body_markdown": "Legitimate comment from untainted principal Maya."},
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_maya,
++            "X-KB-Subject-Token": tok_maya,
++        },
++    )
++    assert r_maya.status_code == 201
++
++
++@pytest.mark.asyncio
++async def test_case_4_allowed_paths_and_link_guard(taint_test_env: dict[str, Any]) -> None:
++    """Case 4: Reading PUB and writing to SEC succeeds; linking SEC-1 -> PUB-1 is blocked."""
++    client: httpx.AsyncClient = taint_test_env["client"]
++    sec_1_id = taint_test_env["sec_1_id"]
++    pub_1_id = taint_test_env["pub_1_id"]
++    tok_adam = taint_test_env["tok_adam"]
++
++    # Path A: Read PUB-1, then write to SEC-1 (SEC audience {adam, admin} is subset of PUB audience)
++    session_pub = f"mcp-sess-pub-{uuid.uuid4()}"
++    r_read_pub = await client.get(
++        f"/api/v1/issues/{pub_1_id}",
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_pub,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert r_read_pub.status_code == 200
++
++    r_write_sec = await client.post(
++        f"/api/v1/issues/{sec_1_id}/comments",
++        json={"body_markdown": "Writing narrower scope SEC-1 after reading PUB-1 is permitted."},
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_pub,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert r_write_sec.status_code == 201
++
++    # Path B: Read SEC-1, write into same project SEC-1 succeeds
++    session_sec = f"mcp-sess-same-{uuid.uuid4()}"
++    r_read_sec = await client.get(
++        f"/api/v1/issues/{sec_1_id}",
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_sec,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert r_read_sec.status_code == 200
++
++    r_write_same = await client.post(
++        f"/api/v1/issues/{sec_1_id}/comments",
++        json={"body_markdown": "Writing into same SEC-1 project after reading SEC-1 is permitted."},
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_sec,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert r_write_same.status_code == 201
++
++    # Path C: Link SEC-1 -> PUB-1 is blocked because PUB audience is broader
++    r_link_blocked = await client.post(
++        f"/api/v1/objects/{sec_1_id}/links",
++        json={"target": str(pub_1_id), "link_type": "BLOCKS"},
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_sec,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert r_link_blocked.status_code == 409
++    assert r_link_blocked.json()["code"] == "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED"
++
++
++@pytest.mark.asyncio
++async def test_case_5_taint_expiry_allows_write(taint_test_env: dict[str, Any]) -> None:
++    """Case 5: Expired taints in mcp_read_taint do not block writing to PUB-1."""
++    client: httpx.AsyncClient = taint_test_env["client"]
++    db_session: AsyncSession = taint_test_env["session"]
++    pub_1_id = taint_test_env["pub_1_id"]
++    tok_adam = taint_test_env["tok_adam"]
++    session_expired = f"mcp-sess-exp-{uuid.uuid4()}"
++
++    # Insert pre-expired session and credential taints
++    sess_hash = hashlib.sha256(session_expired.encode("utf-8")).digest()
++    tok_hash = hashlib.sha256(tok_adam.encode("utf-8")).digest()
++    past_time = datetime.now(UTC) - timedelta(seconds=30)
++
++    await db_session.execute(
++        text(
++            "INSERT INTO mcp_read_taint (workspace_id, taint_key, key_kind, project_id, first_read_at, expires_at) "
++            "VALUES (:ws, :k1, 'session', :p, :exp, :exp), (:ws, :k2, 'credential', :p, :exp, :exp) "
++            "ON CONFLICT (taint_key, project_id) DO UPDATE SET expires_at = :exp"
++        ),
++        {
++            "ws": taint_test_env["ws_id"],
++            "k1": sess_hash,
++            "k2": tok_hash,
++            "p": taint_test_env["proj_sec_id"],
++            "exp": past_time,
++        },
++    )
++    await db_session.commit()
++
++    # Attempt to write to PUB-1: should succeed because taints are expired
++    r_post = await client.post(
++        f"/api/v1/issues/{pub_1_id}/comments",
++        json={"body_markdown": "Writing after taints have expired is allowed."},
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            "X-KB-MCP-Session": session_expired,
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert r_post.status_code == 201
++
++
++@pytest.mark.asyncio
++async def test_case_6_missing_session_header_rejected(taint_test_env: dict[str, Any]) -> None:
++    """Case 6: Requests from mcp-gateway without X-KB-MCP-Session return 400 Bad Request."""
++    client: httpx.AsyncClient = taint_test_env["client"]
++    sec_1_id = taint_test_env["sec_1_id"]
++    tok_adam = taint_test_env["tok_adam"]
++
++    resp = await client.get(
++        f"/api/v1/issues/{sec_1_id}",
++        headers={
++            "X-KB-Service-Principal": "mcp-gateway",
++            # X-KB-MCP-Session missing!
++            "X-KB-Subject-Token": tok_adam,
++        },
++    )
++    assert resp.status_code == 400
++    body = resp.json()
++    assert body["code"] in ("MISSING_MCP_SESSION", "MISSING_SESSION_HEADER")
++
++
++@pytest.mark.asyncio
++async def test_case_7_unit_coverage_read_taint(taint_test_env: dict[str, Any]) -> None:
++    """Case 7: Direct unit coverage for read_taint resolver, deps, and branch fallbacks."""
++    from starlette.requests import Request
++    from kanban.security.read_taint import (
++        _resolve_project_uuid,
++        TaintGuard,
++        TaintRecorder,
++        get_taint_guard,
++        get_taint_recorder,
++    )
++
++    db_session: AsyncSession = taint_test_env["session"]
++    ws_id = taint_test_env["ws_id"]
++    proj_sec_id = taint_test_env["proj_sec_id"]
++    adam_id = taint_test_env["adam_id"]
++
++    # 1. _resolve_project_uuid with string identifier and string UUID
++    res_ident = await _resolve_project_uuid(db_session, ws_id, "SEC")
++    assert res_ident is not None and res_ident[0] == proj_sec_id
++    res_str_uuid = await _resolve_project_uuid(db_session, ws_id, str(proj_sec_id))
++    assert res_str_uuid is not None and res_str_uuid[0] == proj_sec_id
++    res_unknown = await _resolve_project_uuid(db_session, ws_id, "DOES_NOT_EXIST")
++    assert res_unknown is None
++
++    # 2. TaintRecorder without session ID (noop)
++    scope = {"type": "http", "headers": []}
++    req_no_session = Request(scope)
++    caller = PrincipalContext(
++        principal_id=adam_id,
++        workspace_id=ws_id,
++        token_scopes=("agent:read",),
++    )
++    rec_no_sess = TaintRecorder(req_no_session, db_session, caller)
++    await rec_no_sess.record_project_ids(["SEC", "SEC", "DOES_NOT_EXIST"])
++
++    # 3. TaintRecorder with session ID and duplicate/unknown projects
++    scope_with_sess = {
++        "type": "http",
++        "headers": [(b"x-kb-mcp-session", b"test-sess-123")],
++    }
++    rec_with_sess = TaintRecorder(Request(scope_with_sess), db_session, caller)
++    await rec_with_sess.record_project_ids(["SEC", "SEC", "DOES_NOT_EXIST"])
++
++    # 4. TaintGuard without session ID (noop)
++    guard_no_sess = TaintGuard(req_no_session, db_session, caller)
++    await guard_no_sess.check_write("SEC")
++
++    # 5. TaintGuard with unknown target project (noop)
++    guard_with_sess = TaintGuard(Request(scope_with_sess), db_session, caller)
++    await guard_with_sess.check_write("DOES_NOT_EXIST")
++
++    # 6. Dependency factory functions
++    dep_rec = get_taint_recorder(req_no_session, db_session, caller)
++    assert isinstance(dep_rec, TaintRecorder)
++    dep_guard = get_taint_guard(req_no_session, db_session, caller)
++    assert isinstance(dep_guard, TaintGuard)
+diff --git a/mcp/errors.py b/mcp/errors.py
+index e47c5f6..4cefd24 100644
+--- a/mcp/errors.py
++++ b/mcp/errors.py
+@@ -32,6 +32,8 @@ class McpErrorCode(StrEnum):
+     SECTION_NOT_FOUND = "SECTION_NOT_FOUND"
+     ALREADY_PROMOTED = "ALREADY_PROMOTED"
+     LINK_TYPE_NOT_ALLOWED = "LINK_TYPE_NOT_ALLOWED"
++    CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED = "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED"
++    MENTION_ACCESS_WARNING = "MENTION_ACCESS_WARNING"
+     EPHEMERAL_TOOL_FORBIDDEN = "EPHEMERAL_TOOL_FORBIDDEN"
+     EPHEMERAL_CALL_BUDGET_EXCEEDED = "EPHEMERAL_CALL_BUDGET_EXCEEDED"
+     TOKEN_EXPIRED_OR_REVOKED = "TOKEN_EXPIRED_OR_REVOKED"  # noqa: S105
+diff --git a/mcp/help.py b/mcp/help.py
+index e371b0e..69d5e52 100644
+--- a/mcp/help.py
++++ b/mcp/help.py
+@@ -28,6 +28,13 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
+     "search_tickets": {"query": "str", "project": "KAN", "lod": "summary | standard | full"},
+     "begin_work": {"identifier": "KAN-142 | uuid"},
+     "transition_ticket": {"identifier": "KAN-142 | uuid", "state": "str"},
++    "add_comment": {"identifier": "KAN-142 | uuid", "body_markdown": "str", "ack_mentions": "bool"},
++    "link_objects": {
++        "source": "KAN-142 | uuid",
++        "target": "KAN-150 | uuid",
++        "link_type": "blocks | blocked_by | relates_to | duplicates | duplicated_by",
++        "action": "add | remove",
++    },
+     "ping_agent": {"action": "ping | help | echo", "message": "str"},
+     "configure_workspace": {"action": "get | update | help", "settings": "object"},
+     "manage_auth_cards": {
+diff --git a/mcp/internal_client.py b/mcp/internal_client.py
+index 6972047..a1b5625 100644
+--- a/mcp/internal_client.py
++++ b/mcp/internal_client.py
+@@ -265,12 +265,20 @@ class KanbanApiClient:
+         )
+         prob_blockers = problem.get("blockers")
+         blockers_list = [str(b) for b in prob_blockers] if isinstance(prob_blockers, list) else None
++        extra_dict: dict[str, Any] = {}
++        if "tainted_by" in problem:
++            extra_dict["tainted_by"] = problem["tainted_by"]
++        elif isinstance(problem.get("extra"), dict) and "tainted_by" in problem["extra"]:
++            extra_dict["tainted_by"] = problem["extra"]["tainted_by"]
++        if "unauthorized_mentions" in problem:
++            extra_dict["unauthorized_mentions"] = problem["unauthorized_mentions"]
+         raise KbMcpError(
+             mapped_code,
+             error_message,
+             hint=hint_str,
+             candidates=candidates_list,
+             blockers=blockers_list,
++            extra=extra_dict if extra_dict else None,
+         )
+ 
+     @staticmethod
+@@ -281,6 +289,10 @@ class KanbanApiClient:
+             "AMBIGUOUS_IDENTIFIER": McpErrorCode.AMBIGUOUS_IDENTIFIER,
+             "ALREADY_PROMOTED": McpErrorCode.ALREADY_PROMOTED,
+             "LINK_TYPE_NOT_ALLOWED": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
++            "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED": (
++                McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
++            ),
++            "MENTION_ACCESS_WARNING": McpErrorCode.MENTION_ACCESS_WARNING,
+             "LINK_NOT_FLAGGED": McpErrorCode.LINK_NOT_FLAGGED,
+             "CREATOR_UNCHANGED": McpErrorCode.CREATOR_UNCHANGED,
+             "NOT_ARCHIVED": McpErrorCode.NOT_ARCHIVED,
+@@ -297,6 +309,10 @@ class KanbanApiClient:
+         }
+         if prob_code in conflict_map:
+             return conflict_map[prob_code]
++        if prob_type.endswith("cross-scope-taint"):
++            return McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
++        if prob_type.endswith("mention-access-warning"):
++            return McpErrorCode.MENTION_ACCESS_WARNING
+         for name, code in conflict_map.items():
+             if prob_type.endswith(name.lower().replace("_", "-")):
+                 return code
+@@ -315,8 +331,15 @@ class KanbanApiClient:
+             "INSUFFICIENT_CAPABILITY": McpErrorCode.INSUFFICIENT_PERMISSION,
+             "MODULES_DISABLED": McpErrorCode.MODULES_DISABLED,
+             "SECTION_NOT_FOUND": McpErrorCode.SECTION_NOT_FOUND,
++            "TARGET_NOT_FOUND": McpErrorCode.NOT_FOUND,
++            "SOURCE_NOT_FOUND": McpErrorCode.NOT_FOUND,
+             "ALREADY_PROMOTED": McpErrorCode.ALREADY_PROMOTED,
+             "LINK_TYPE_NOT_ALLOWED": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
++            "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED": (
++                McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
++            ),
++            "MENTION_ACCESS_WARNING": McpErrorCode.MENTION_ACCESS_WARNING,
++            "SELF_LINK": McpErrorCode.VALIDATION_FAILED,
+             "CREATOR_NOT_ELIGIBLE": McpErrorCode.CREATOR_NOT_ELIGIBLE,
+             "LINK_NOT_FLAGGED": McpErrorCode.LINK_NOT_FLAGGED,
+             "CREATOR_UNCHANGED": McpErrorCode.CREATOR_UNCHANGED,
+@@ -354,6 +377,8 @@ class KanbanApiClient:
+             "section-not-found": McpErrorCode.SECTION_NOT_FOUND,
+             "already-promoted": McpErrorCode.ALREADY_PROMOTED,
+             "link-type-not-allowed": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
++            "cross-scope-taint": McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED,
++            "mention-access-warning": McpErrorCode.MENTION_ACCESS_WARNING,
+             "creator-not-eligible": McpErrorCode.CREATOR_NOT_ELIGIBLE,
+             "link-not-flagged": McpErrorCode.LINK_NOT_FLAGGED,
+             "creator-unchanged": McpErrorCode.CREATOR_UNCHANGED,
+diff --git a/mcp/surfaces/agent/__init__.py b/mcp/surfaces/agent/__init__.py
+index 904fb76..fb3a457 100644
+--- a/mcp/surfaces/agent/__init__.py
++++ b/mcp/surfaces/agent/__init__.py
+@@ -5,9 +5,11 @@
+ from __future__ import annotations
+ 
+ from mcp.registry import Surface, ToolRegistry, ToolSpec
++from mcp.surfaces.agent.add_comment import ADD_COMMENT_SCHEMA, add_comment
+ from mcp.surfaces.agent.begin_work import BEGIN_WORK_SCHEMA, begin_work
+ from mcp.surfaces.agent.complete_work import COMPLETE_WORK_SCHEMA, complete_work
+ from mcp.surfaces.agent.create_ticket import CREATE_TICKET_SCHEMA, create_ticket
++from mcp.surfaces.agent.link_objects import LINK_OBJECTS_SCHEMA, link_objects
+ from mcp.surfaces.agent.read_ticket import READ_TICKET_SCHEMA, read_ticket
+ from mcp.surfaces.agent.search_tickets import SEARCH_TICKETS_SCHEMA, search_tickets
+ from mcp.surfaces.agent.transition_ticket import (
+@@ -17,17 +19,21 @@ from mcp.surfaces.agent.transition_ticket import (
+ from mcp.surfaces.agent.update_ticket import UPDATE_TICKET_SCHEMA, update_ticket
+ 
+ __all__ = [
++    "ADD_COMMENT_SCHEMA",
+     "BEGIN_WORK_SCHEMA",
+     "COMPLETE_WORK_SCHEMA",
+     "CREATE_TICKET_SCHEMA",
++    "LINK_OBJECTS_SCHEMA",
+     "READ_TICKET_SCHEMA",
+     "SEARCH_TICKETS_SCHEMA",
+     "TRANSITION_TICKET_SCHEMA",
+     "UPDATE_TICKET_SCHEMA",
++    "add_comment",
+     "begin_work",
+     "complete_work",
+     "create_agent_registry",
+     "create_ticket",
++    "link_objects",
+     "read_ticket",
+     "search_tickets",
+     "transition_ticket",
+@@ -41,9 +47,7 @@ def create_agent_registry() -> ToolRegistry:
+     registry.register(
+         ToolSpec(
+             name="search_tickets",
+-            description=(
+-                "Search and filter tickets by query text, lifecycle attributes, or assignees."
+-            ),
++            description="Search tickets.",
+             input_schema=SEARCH_TICKETS_SCHEMA,
+             surface=Surface.AGENT,
+             handler=search_tickets,
+@@ -52,9 +56,7 @@ def create_agent_registry() -> ToolRegistry:
+     registry.register(
+         ToolSpec(
+             name="read_ticket",
+-            description=(
+-                "Read full ticket details, child hierarchy, comments, activities, or blockers."
+-            ),
++            description="Read ticket.",
+             input_schema=READ_TICKET_SCHEMA,
+             surface=Surface.AGENT,
+             handler=read_ticket,
+@@ -63,9 +65,7 @@ def create_agent_registry() -> ToolRegistry:
+     registry.register(
+         ToolSpec(
+             name="create_ticket",
+-            description=(
+-                "Create a single ticket or parent-child issue tree atomically with human names."
+-            ),
++            description="Create ticket.",
+             input_schema=CREATE_TICKET_SCHEMA,
+             surface=Surface.AGENT,
+             handler=create_ticket,
+@@ -74,9 +74,7 @@ def create_agent_registry() -> ToolRegistry:
+     registry.register(
+         ToolSpec(
+             name="update_ticket",
+-            description=(
+-                "Apply an atomic patch or append description under description ETag concurrency."
+-            ),
++            description="Update ticket.",
+             input_schema=UPDATE_TICKET_SCHEMA,
+             surface=Surface.AGENT,
+             handler=update_ticket,
+@@ -85,9 +83,7 @@ def create_agent_registry() -> ToolRegistry:
+     registry.register(
+         ToolSpec(
+             name="begin_work",
+-            description=(
+-                "Atomically assign caller, bind cycle, move to started state, and post plan."
+-            ),
++            description="Begin work.",
+             input_schema=BEGIN_WORK_SCHEMA,
+             surface=Surface.AGENT,
+             handler=begin_work,
+@@ -96,7 +92,7 @@ def create_agent_registry() -> ToolRegistry:
+     registry.register(
+         ToolSpec(
+             name="transition_ticket",
+-            description="Transition ticket to intermediate workflow state under gate evaluation.",
++            description="Transition ticket.",
+             input_schema=TRANSITION_TICKET_SCHEMA,
+             surface=Surface.AGENT,
+             handler=transition_ticket,
+@@ -105,10 +101,28 @@ def create_agent_registry() -> ToolRegistry:
+     registry.register(
+         ToolSpec(
+             name="complete_work",
+-            description="Verify blockers and QA gate, transition to completed, and log proof.",
++            description="Complete work.",
+             input_schema=COMPLETE_WORK_SCHEMA,
+             surface=Surface.AGENT,
+             handler=complete_work,
+         )
+     )
++    registry.register(
++        ToolSpec(
++            name="add_comment",
++            description="Add comment.",
++            input_schema=ADD_COMMENT_SCHEMA,
++            surface=Surface.AGENT,
++            handler=add_comment,
++        )
++    )
++    registry.register(
++        ToolSpec(
++            name="link_objects",
++            description="Link objects.",
++            input_schema=LINK_OBJECTS_SCHEMA,
++            surface=Surface.AGENT,
++            handler=link_objects,
++        )
++    )
+     return registry
+diff --git a/mcp/surfaces/agent/add_comment.py b/mcp/surfaces/agent/add_comment.py
+new file mode 100644
+index 0000000..30994db
+--- /dev/null
++++ b/mcp/surfaces/agent/add_comment.py
+@@ -0,0 +1,186 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Implementation of the add_comment MCP tool (S11.2, KB-P4-07)."""
++
++from __future__ import annotations
++
++from typing import Any, Final
++
++from mcp.context import get_current_mcp_context
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.help import build_help
++
++__all__ = [
++    "ADD_COMMENT_SCHEMA",
++    "add_comment",
++]
++
++_MAX_IDENTIFIER_LEN: Final[int] = 200
++_MAX_BODY_BYTES: Final[int] = 65536
++
++ADD_COMMENT_SCHEMA: Final[dict[str, Any]] = {
++    "type": "object",
++    "properties": {
++        "identifier": {
++            "type": "string",
++            "description": "Issue ref",
++        },
++        "body_markdown": {
++            "type": "string",
++            "description": "Body markdown",
++        },
++        "reply_to": {
++            "type": "string",
++            "description": "Reply to ID",
++        },
++        "ack_mentions": {
++            "type": "boolean",
++            "default": False,
++            "description": "Ack mentions",
++        },
++    },
++    "required": ["identifier", "body_markdown"],
++    "additionalProperties": False,
++}
++
++_ALLOWED_KEYS: Final[frozenset[str]] = frozenset(ADD_COMMENT_SCHEMA["properties"].keys())
++
++
++def _validate_add_comment_arguments(arguments: dict[str, Any]) -> None:  # noqa: C901
++    """Strictly validate add_comment arguments against schema constraints."""
++    if arguments.get("identifier") == "help" or arguments.get("action") == "help":
++        return
++
++    for key in arguments:
++        if key not in _ALLOWED_KEYS:
++            msg = f"Unknown parameter '{key}'"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if "identifier" not in arguments:
++        msg = "identifier is required"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    identifier = arguments["identifier"]
++    if not isinstance(identifier, str) or not identifier.strip():
++        msg = "identifier must be a non-empty string"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++    if len(identifier) > _MAX_IDENTIFIER_LEN:
++        msg = f"identifier length ({len(identifier)}) exceeds maximum of {_MAX_IDENTIFIER_LEN}"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if "body_markdown" not in arguments:
++        msg = "body_markdown is required"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    body = arguments["body_markdown"]
++    if not isinstance(body, str) or not body.strip():
++        msg = "body_markdown cannot be empty"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    body_bytes = len(body.encode("utf-8"))
++    if body_bytes > _MAX_BODY_BYTES:
++        msg = (
++            f"body_markdown length ({body_bytes} bytes) exceeds maximum of {_MAX_BODY_BYTES} bytes"
++        )
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    reply_to = arguments.get("reply_to")
++    if reply_to is not None and (not isinstance(reply_to, str) or not reply_to.strip()):
++        msg = "reply_to must be a non-empty string"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    ack_mentions = arguments.get("ack_mentions")
++    if ack_mentions is not None and not isinstance(ack_mentions, bool):
++        msg = "ack_mentions must be a boolean"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++
++async def add_comment(arguments: dict[str, Any]) -> dict[str, Any]:
++    """Execute add_comment MCP tool to post Markdown comment to an issue."""
++    ctx = get_current_mcp_context()
++    if ctx is None or ctx.client is None:
++        msg = "MCP request context or API client is unavailable"
++        raise KbMcpError(McpErrorCode.INTERNAL, msg)
++
++    # JIT help progressive disclosure
++    if arguments.get("identifier") == "help" or arguments.get("action") == "help":
++        return await build_help(
++            "add_comment",
++            client=ctx.client,
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++        )
++
++    _validate_add_comment_arguments(arguments)
++
++    identifier = str(arguments["identifier"]).strip()
++    body_markdown = str(arguments["body_markdown"])
++    reply_to = arguments.get("reply_to")
++    ack_mentions = bool(arguments.get("ack_mentions", False))
++
++    payload: dict[str, Any] = {
++        "body_markdown": body_markdown,
++    }
++    if reply_to:
++        payload["parent_comment_id"] = str(reply_to).strip()
++
++    try:
++        res = await ctx.client.request(
++            "POST",
++            f"/api/v1/issues/{identifier}/comments",
++            json_data=payload,
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++            headers={"X-KB-MCP-Tool": "add_comment"},
++        )
++    except KbMcpError as exc:
++        if exc.code == McpErrorCode.MENTION_ACCESS_WARNING:
++            unauth = (exc.extra or {}).get("unauthorized_mentions", [])
++            if ack_mentions and unauth:
++                ack_pids = [
++                    u["principal_id"] for u in unauth if isinstance(u, dict) and "principal_id" in u
++                ]
++                payload["acknowledge_mentions"] = ack_pids
++                res = await ctx.client.request(
++                    "POST",
++                    f"/api/v1/issues/{identifier}/comments",
++                    json_data=payload,
++                    subject_token=ctx.subject_token,
++                    mcp_session_id=ctx.session_id,
++                    headers={"X-KB-MCP-Tool": "add_comment"},
++                )
++            else:
++                handles = [
++                    str(u.get("handle")) for u in unauth if isinstance(u, dict) and u.get("handle")
++                ]
++                handles_str = (
++                    ", ".join(f"@{h.lstrip('@')}" for h in handles) if handles else "unknown"
++                )
++                msg = f"Mentioned users lack access to issue: {handles_str}."
++                raise KbMcpError(
++                    McpErrorCode.MENTION_ACCESS_WARNING,
++                    msg,
++                    hint="Pass ack_mentions=true to post without granting access.",
++                    extra={"unauthorized_mentions": unauth},
++                ) from exc
++        else:
++            raise
++
++    if not isinstance(res, dict):
++        msg = "Unexpected response from comment creation"
++        raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++    comment_id = str(res.get("id", ""))
++    short_id = comment_id.replace("-", "")[:8]
++    permalink = str(res.get("permalink", ""))
++    if "/issues/" in permalink:
++        issue_key = permalink.rsplit("/issues/", maxsplit=1)[-1].split("#", maxsplit=1)[0]
++    else:
++        issue_key = identifier
++
++    comment_ref = f"{issue_key}#c-{short_id}"
++    return {
++        "status": "commented",
++        "key": issue_key,
++        "comment": comment_ref,
++    }
+diff --git a/mcp/surfaces/agent/begin_work.py b/mcp/surfaces/agent/begin_work.py
+index 42cf7fa..f8a40ab 100644
+--- a/mcp/surfaces/agent/begin_work.py
++++ b/mcp/surfaces/agent/begin_work.py
+@@ -27,11 +27,11 @@ BEGIN_WORK_SCHEMA: Final[dict[str, Any]] = {
+     "properties": {
+         "identifier": {
+             "type": "string",
+-            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
++            "description": "Issue ref",
+         },
+         "plan_markdown": {
+             "type": "string",
+-            "description": "Implementation plan markdown (1..65536 bytes)",
++            "description": "Plan markdown",
+         },
+     },
+     "required": ["identifier", "plan_markdown"],
+diff --git a/mcp/surfaces/agent/complete_work.py b/mcp/surfaces/agent/complete_work.py
+index 095e029..bf29328 100644
+--- a/mcp/surfaces/agent/complete_work.py
++++ b/mcp/surfaces/agent/complete_work.py
+@@ -30,19 +30,19 @@ COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
+     "properties": {
+         "identifier": {
+             "type": "string",
+-            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
++            "description": "Issue ref",
+         },
+         "summary_markdown": {
+             "type": "string",
+-            "description": "Comprehensive summary of completed work (1..65536 bytes)",
++            "description": "Summary",
+         },
+         "verification_proof": {
+             "type": "object",
+-            "description": "Structured VerificationProof object matching required schema",
++            "description": "Proof packet",
+         },
+         "to_state": {
+             "type": "string",
+-            "description": "Optional completed group state name or UUID",
++            "description": "Target state",
+         },
+     },
+     "required": ["identifier", "summary_markdown", "verification_proof"],
+diff --git a/mcp/surfaces/agent/create_ticket.py b/mcp/surfaces/agent/create_ticket.py
+index 80c6509..ad40f3f 100644
+--- a/mcp/surfaces/agent/create_ticket.py
++++ b/mcp/surfaces/agent/create_ticket.py
+@@ -24,66 +24,66 @@ _MAX_DESCRIPTION_BYTES: Final[int] = 1048576
+ CREATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
+     "type": "object",
+     "properties": {
+-        "project": {"type": "string", "description": "Project key or identifier (required)"},
++        "project": {"type": "string", "description": "Project ref"},
+         "summary": {
+             "type": "string",
+             "minLength": 1,
+             "maxLength": 500,
+-            "description": "Issue summary (required, 1..500 characters)",
++            "description": "Summary",
+         },
+         "description_markdown": {
+             "type": "string",
+-            "description": "Markdown description (<= 1,048,576 bytes UTF-8)",
++            "description": "Description",
+         },
+         "state": {
+             "type": "string",
+-            "description": "Workflow state name or UUID (default: project default state)",
++            "description": "State name or UUID",
+         },
+         "priority": {
+             "type": "string",
+-            "description": "Priority slug or UUID (e.g. 'high')",
++            "description": "Priority slug",
+         },
+         "assignees": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Assignees: @handle, 'Vendor QA' (free text), or UUID",
++            "description": "Assignees",
+         },
+         "labels": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Project label names or UUIDs",
++            "description": "Labels",
+         },
+         "cycle": {
+             "type": "string",
+-            "description": "Cycle name, key, or UUID",
++            "description": "Cycle",
+         },
+         "modules": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Module names or UUIDs (omitted -> project defaults if enabled)",
++            "description": "Modules",
+         },
+         "parent": {
+             "type": "string",
+-            "description": "Existing parent issue key or UUID",
++            "description": "Parent issue ref",
+         },
+         "start_date": {
+             "type": "string",
+             "format": "date",
+-            "description": "Start date (YYYY-MM-DD)",
++            "description": "Start date",
+         },
+         "due_date": {
+             "type": "string",
+             "format": "date",
+-            "description": "Due date (YYYY-MM-DD)",
++            "description": "Due date",
+         },
+         "children": {
+             "type": "array",
+             "maxItems": 49,
+             "items": {"$ref": "#"},
+-            "description": "Child sub-issues to create recursively (max 49 direct children)",
++            "description": "Child sub-issues",
+         },
+     },
+     "required": ["project", "summary"],
+diff --git a/mcp/surfaces/agent/link_objects.py b/mcp/surfaces/agent/link_objects.py
+new file mode 100644
+index 0000000..016b18a
+--- /dev/null
++++ b/mcp/surfaces/agent/link_objects.py
+@@ -0,0 +1,260 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Implementation of the link_objects MCP tool (S11.2, S12.1, KB-P4-07)."""
++
++from __future__ import annotations
++
++from typing import Any, Final
++
++from mcp.context import get_current_mcp_context
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.help import build_help
++from mcp.resolver import EntityResolver
++
++__all__ = [
++    "ALLOWED_LINK_TYPES",
++    "LINK_OBJECTS_SCHEMA",
++    "link_objects",
++]
++
++_MAX_REF_LEN: Final[int] = 200
++
++ALLOWED_LINK_TYPES: Final[frozenset[str]] = frozenset(
++    {"BLOCKS", "BLOCKED_BY", "RELATES_TO", "DUPLICATES", "DUPLICATED_BY", "VERIFIED_BY_DOC"}
++)
++
++LINK_OBJECTS_SCHEMA: Final[dict[str, Any]] = {
++    "type": "object",
++    "properties": {
++        "source": {
++            "type": "string",
++            "description": "Source ref",
++        },
++        "target": {
++            "type": "string",
++            "description": "Target ref",
++        },
++        "link_type": {
++            "type": "string",
++            "description": "Link kind",
++        },
++        "action": {
++            "type": "string",
++            "enum": ["add", "remove"],
++            "default": "add",
++            "description": "add or remove",
++        },
++    },
++    "required": ["source", "target", "link_type"],
++    "additionalProperties": False,
++}
++
++_ALLOWED_KEYS: Final[frozenset[str]] = frozenset(LINK_OBJECTS_SCHEMA["properties"].keys())
++
++
++def _validate_link_objects_arguments(arguments: dict[str, Any]) -> None:  # noqa: C901, PLR0912
++    """Strictly validate link_objects arguments against schema constraints."""
++    if arguments.get("source") == "help" or arguments.get("action") == "help":
++        return
++
++    for key in arguments:
++        if key not in _ALLOWED_KEYS:
++            msg = f"Unknown parameter '{key}'"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if "source" not in arguments:
++        msg = "source is required"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    source = arguments["source"]
++    if not isinstance(source, str) or not source.strip():
++        msg = "source must be a non-empty string"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++    if len(source) > _MAX_REF_LEN:
++        msg = f"source length ({len(source)}) exceeds maximum of {_MAX_REF_LEN}"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if "target" not in arguments:
++        msg = "target is required"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    target = arguments["target"]
++    if not isinstance(target, str) or not target.strip():
++        msg = "target must be a non-empty string"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++    if len(target) > _MAX_REF_LEN:
++        msg = f"target length ({len(target)}) exceeds maximum of {_MAX_REF_LEN}"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if source.strip().lower() == target.strip().lower():
++        msg = "Self-linking is not allowed"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if "link_type" not in arguments:
++        msg = "link_type is required"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    link_type = str(arguments["link_type"]).strip().upper()
++    if link_type not in ALLOWED_LINK_TYPES:
++        msg = f"Unsupported link_type: {arguments['link_type']}"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    action = arguments.get("action", "add")
++    if action not in ("add", "remove"):
++        msg = f"Unsupported action: {action}"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++
++async def _resolve_key(resolver: EntityResolver, ref: str) -> tuple[str, str]:
++    """Resolve reference to (id_or_ref, canonical_key)."""
++    for kind in ("issue", "doc"):
++        try:
++            resolved = await resolver.resolve(kind, ref)
++        except KbMcpError:
++            continue
++        else:
++            return (resolved.id, resolved.key)
++    return (ref, ref)
++
++
++async def link_objects(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915
++    """Execute link_objects MCP tool to create or delete typed links."""
++    ctx = get_current_mcp_context()
++    if ctx is None or ctx.client is None:
++        msg = "MCP request context or API client is unavailable"
++        raise KbMcpError(McpErrorCode.INTERNAL, msg)
++
++    # JIT help progressive disclosure
++    if (
++        arguments.get("identifier") == "help"
++        or arguments.get("action") == "help"
++        or arguments.get("source") == "help"
++    ):
++        return await build_help(
++            "link_objects",
++            client=ctx.client,
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++        )
++
++    _validate_link_objects_arguments(arguments)
++
++    source = str(arguments["source"]).strip()
++    target = str(arguments["target"]).strip()
++    link_type = str(arguments["link_type"]).strip()
++    action = str(arguments.get("action", "add")).strip()
++
++    resolver = EntityResolver(
++        ctx.client,
++        subject_token=ctx.subject_token,
++        mcp_session_id=ctx.session_id,
++    )
++
++    source_id, source_key = await _resolve_key(resolver, source)
++    target_id, target_key = await _resolve_key(resolver, target)
++
++    if source_id == target_id or source_key.lower() == target_key.lower():
++        msg = "An object cannot be linked to itself"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++    if action == "add":
++        payload = {
++            "target": target_id,
++            "link_type": link_type.upper(),
++        }
++        res = await ctx.client.request(
++            "POST",
++            f"/api/v1/objects/{source_id}/links",
++            json_data=payload,
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++            headers={"X-KB-MCP-Tool": "link_objects"},
++        )
++
++        if isinstance(res, dict) and "target" in res and isinstance(res["target"], dict):
++            resolved_target_key = res["target"].get("key") or target_key
++        else:
++            resolved_target_key = target_key
++
++        return {
++            "status": "linked",
++            "link": {
++                "source": source_key,
++                "link_type": link_type,
++                "type": link_type,
++                "target": resolved_target_key,
++            },
++        }
++
++    # Handle link removal
++    links_res = await ctx.client.request(
++        "GET",
++        f"/api/v1/objects/{source_id}/links",
++        subject_token=ctx.subject_token,
++        mcp_session_id=ctx.session_id,
++    )
++
++    if not isinstance(links_res, dict):
++        msg = f"Failed to retrieve links for object '{source}'"
++        raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++    outbound = links_res.get("outbound", [])
++    target_link_id: str | None = None
++
++    if isinstance(outbound, list):
++        for link in outbound:
++            if not isinstance(link, dict):
++                continue
++            if str(link.get("link_type", "")).upper() != link_type.upper():
++                continue
++            t_obj = link.get("target")
++            if isinstance(t_obj, dict):
++                t_id = str(t_obj.get("id", ""))
++                t_key = str(t_obj.get("key", ""))
++                if t_id in (target_id, target) or t_key.lower() in (
++                    target_key.lower(),
++                    target.lower(),
++                ):
++                    target_link_id = str(link.get("id"))
++                    break
++
++    if target_link_id is None:
++        inbound = links_res.get("inbound", [])
++        if isinstance(inbound, list):
++            for link in inbound:
++                if not isinstance(link, dict):
++                    continue
++                if str(link.get("link_type", "")).upper() != link_type.upper():
++                    continue
++                s_obj = link.get("source")
++                if isinstance(s_obj, dict):
++                    s_id = str(s_obj.get("id", ""))
++                    s_key = str(s_obj.get("key", ""))
++                    if s_id in (target_id, target) or s_key.lower() in (
++                        target_key.lower(),
++                        target.lower(),
++                    ):
++                        target_link_id = str(link.get("id"))
++                        break
++
++    if target_link_id is None:
++        msg = f"No link of type '{link_type}' found between '{source_key}' and '{target_key}'"
++        raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
++
++    await ctx.client.request(
++        "DELETE",
++        f"/api/v1/links/{target_link_id}",
++        subject_token=ctx.subject_token,
++        mcp_session_id=ctx.session_id,
++        headers={"X-KB-MCP-Tool": "link_objects"},
++    )
++
++    return {
++        "status": "unlinked",
++        "link": {
++            "source": source_key,
++            "link_type": link_type,
++            "type": link_type,
++            "target": target_key,
++        },
++    }
+diff --git a/mcp/surfaces/agent/read_ticket.py b/mcp/surfaces/agent/read_ticket.py
+index 118a975..ea364ed 100644
+--- a/mcp/surfaces/agent/read_ticket.py
++++ b/mcp/surfaces/agent/read_ticket.py
+@@ -29,24 +29,24 @@ READ_TICKET_SCHEMA: Final[dict[str, Any]] = {
+     "properties": {
+         "identifier": {
+             "type": "string",
+-            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
++            "description": "Issue ref",
+         },
+         "workspace": {
+             "type": "string",
+-            "description": "Optional workspace slug for disambiguation in global mode",
++            "description": "Workspace",
+         },
+         "lod": {
+             "type": "string",
+             "enum": ["summary", "standard", "full"],
+             "default": "standard",
+-            "description": "Level of detail for response projection",
++            "description": "LOD tier",
+         },
+         "comments_limit": {
+             "type": "integer",
+             "minimum": 0,
+             "maximum": 50,
+             "default": 20,
+-            "description": "Maximum comments to return (0..50)",
++            "description": "Max comments",
+         },
+     },
+     "required": ["identifier"],
+diff --git a/mcp/surfaces/agent/search_tickets.py b/mcp/surfaces/agent/search_tickets.py
+index b32c6fe..6cf2c61 100644
+--- a/mcp/surfaces/agent/search_tickets.py
++++ b/mcp/surfaces/agent/search_tickets.py
+@@ -31,76 +31,76 @@ SEARCH_TICKETS_SCHEMA: Final[dict[str, Any]] = {
+         "query": {
+             "type": "string",
+             "maxLength": 500,
+-            "description": "Optional lexical query string",
++            "description": "Search query",
+         },
+         "workspace": {
+             "type": "string",
+-            "description": "Optional workspace slug for disambiguation in global mode",
++            "description": "Workspace slug",
+         },
+         "project": {
+             "type": "string",
+-            "description": "Project key or UUID",
++            "description": "Project ref",
+         },
+         "states": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "State names or UUIDs",
++            "description": "State filters",
+         },
+         "assignees": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Assignee handles (@handle), 'me', or UUIDs",
++            "description": "Assignee filters",
+         },
+         "cycle": {
+             "type": "string",
+-            "description": "Cycle number or UUID",
++            "description": "Cycle filter",
+         },
+         "modules": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Module names or UUIDs",
++            "description": "Module filters",
+         },
+         "labels": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Label names or UUIDs",
++            "description": "Label filters",
+         },
+         "blocked": {
+             "type": "boolean",
+-            "description": "true = has open inbound BLOCKS links",
++            "description": "Blocked filter",
+         },
+         "gate_status": {
+             "type": "string",
+             "enum": ["pending", "approved", "rejected"],
+-            "description": "Filter by gate review status",
++            "description": "Gate status filter",
+         },
+         "mode": {
+             "type": "string",
+             "enum": ["lexical", "hybrid"],
+             "default": "lexical",
+-            "description": "Search mode ('lexical' or 'hybrid')",
++            "description": "Search mode",
+         },
+         "lod": {
+             "type": "string",
+             "enum": ["summary", "standard"],
+             "default": "summary",
+-            "description": "Level of detail for returned items",
++            "description": "LOD tier",
+         },
+         "limit": {
+             "type": "integer",
+             "minimum": 1,
+             "maximum": 50,
+             "default": 20,
+-            "description": "Maximum number of items to return (1..50)",
++            "description": "Max results",
+         },
+         "cursor": {
+             "type": "string",
+             "maxLength": 200,
+-            "description": "Opaque pagination cursor from previous response",
++            "description": "Cursor",
+         },
+     },
+     "additionalProperties": False,
+diff --git a/mcp/surfaces/agent/transition_ticket.py b/mcp/surfaces/agent/transition_ticket.py
+index eb690a3..7b40d80 100644
+--- a/mcp/surfaces/agent/transition_ticket.py
++++ b/mcp/surfaces/agent/transition_ticket.py
+@@ -30,19 +30,19 @@ TRANSITION_TICKET_SCHEMA: Final[dict[str, Any]] = {
+     "properties": {
+         "identifier": {
+             "type": "string",
+-            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
++            "description": "Issue ref",
+         },
+         "to_state": {
+             "type": "string",
+-            "description": "Target workflow state name or UUID (cannot be a completed state)",
++            "description": "Target state",
+         },
+         "comment_markdown": {
+             "type": "string",
+-            "description": "Optional comment markdown (<= 65536 bytes)",
++            "description": "Comment",
+         },
+         "verification_proof": {
+             "type": "object",
+-            "description": "Optional structured VerificationProof packet",
++            "description": "Proof packet",
+         },
+     },
+     "required": ["identifier", "to_state"],
+diff --git a/mcp/surfaces/agent/update_ticket.py b/mcp/surfaces/agent/update_ticket.py
+index f10c412..1fc0204 100644
+--- a/mcp/surfaces/agent/update_ticket.py
++++ b/mcp/surfaces/agent/update_ticket.py
+@@ -29,86 +29,86 @@ UPDATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
+     "properties": {
+         "identifier": {
+             "type": "string",
+-            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
++            "description": "Issue ref",
+         },
+         "if_match": {
+             "type": "string",
+             "pattern": "^[0-9a-f]{64}$",
+-            "description": "Mandatory 64-char hex SHA-256 ETag when description is present",
++            "description": "ETag",
+         },
+         "summary": {
+             "type": "string",
+             "minLength": 1,
+             "maxLength": 500,
+-            "description": "New summary (1..500 characters)",
++            "description": "New summary",
+         },
+         "description_markdown": {
+             "type": "string",
+-            "description": "Description content (append or replace, <= 1MB total)",
++            "description": "Description",
+         },
+         "description_mode": {
+             "type": "string",
+             "enum": ["append", "replace"],
+             "default": "append",
+-            "description": "How to apply description update ('append' joins with \\n\\n)",
++            "description": "append or replace",
+         },
+         "assignees_add": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Assignees to add (@handle, free-text, or UUID)",
++            "description": "Assignees to add",
+         },
+         "assignees_remove": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Assignees to remove (@handle, free-text, or UUID)",
++            "description": "Assignees to remove",
+         },
+         "priority": {
+             "type": "string",
+-            "description": "Priority slug or UUID",
++            "description": "Priority slug",
+         },
+         "start_date": {
+             "type": ["string", "null"],
+             "format": "date",
+-            "description": "Start date or null to clear",
++            "description": "Start date",
+         },
+         "due_date": {
+             "type": ["string", "null"],
+             "format": "date",
+-            "description": "Due date or null to clear",
++            "description": "Due date",
+         },
+         "cycle": {
+             "type": ["string", "null"],
+-            "description": "Cycle name/UUID or null to clear",
++            "description": "Cycle",
+         },
+         "modules_add": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Module names or UUIDs to add",
++            "description": "Modules to add",
+         },
+         "modules_remove": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Module names or UUIDs to remove",
++            "description": "Modules to remove",
+         },
+         "labels_add": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Label names or UUIDs to add",
++            "description": "Labels to add",
+         },
+         "labels_remove": {
+             "type": "array",
+             "items": {"type": "string"},
+             "maxItems": 20,
+-            "description": "Label names or UUIDs to remove",
++            "description": "Labels to remove",
+         },
+         "parent": {
+             "type": ["string", "null"],
+-            "description": "Parent issue key/UUID or null to detach",
++            "description": "Parent issue ref",
+         },
+     },
+     "required": ["identifier"],
+diff --git a/mcp/tests/agent/conftest.py b/mcp/tests/agent/conftest.py
+index a9f31c7..d37ab3c 100644
+--- a/mcp/tests/agent/conftest.py
++++ b/mcp/tests/agent/conftest.py
+@@ -63,6 +63,7 @@ class AgentTestEnv:
+     workspace_id: uuid.UUID
+     admin_user: AgentSeededUser
+     adam_user: AgentSeededUser
++    maya_user: AgentSeededUser
+     agent_no_grant_id: uuid.UUID
+     proj_kan_id: uuid.UUID
+     proj_pub_id: uuid.UUID
+@@ -170,11 +171,14 @@ async def agent_test_env(  # noqa: PLR0915
+     )
+ 
+     adam_id = await create_user(committed_db_session, ws_id, handle="@adam", display_name="Adam")
++    maya_id = await create_user(
++        committed_db_session, ws_id, handle="@maya", display_name="Maya Specialist"
++    )
+ 
+     agent_no_grant_id = await create_agent(
+         committed_db_session, ws_id, "Agent Without Grant", principal_type="AGENT"
+     )
+-    # Notice: agent_no_grant_id is NOT given any role binding on KAN
++    # Notice: agent_no_grant_id and maya_id are NOT given any role binding on KAN
+ 
+     # 2. Create projects
+     proj_kan_id = await create_project(
+@@ -430,7 +434,7 @@ async def agent_test_env(  # noqa: PLR0915
+         "SEC",
+         seq=1,
+         summary="Secret issue containing secret data",
+-        description="Ultra secret confidential details.",
++        description="Ultra secret confidential details containing secret canary CANARY-7f3a.",
+         user_id=admin_id,
+         state_id=sec_states["Todo"],
+         priority_id=sec_priorities["high"],
+@@ -502,6 +506,7 @@ async def agent_test_env(  # noqa: PLR0915
+             workspace_id=ws_id,
+             admin_user=AgentSeededUser(id=admin_id, workspace_id=ws_id, handle="admin"),
+             adam_user=AgentSeededUser(id=adam_id, workspace_id=ws_id, handle="adam"),
++            maya_user=AgentSeededUser(id=maya_id, workspace_id=ws_id, handle="maya"),
+             agent_no_grant_id=agent_no_grant_id,
+             proj_kan_id=proj_kan_id,
+             proj_pub_id=proj_pub_id,
+diff --git a/mcp/tests/agent/test_add_comment.py b/mcp/tests/agent/test_add_comment.py
+new file mode 100644
+index 0000000..06cb7e6
+--- /dev/null
++++ b/mcp/tests/agent/test_add_comment.py
+@@ -0,0 +1,606 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: PLC0415, PT011, E501, I001
++"""Feature unit tests for /mcp/agent tool: add_comment (KB-P4-07)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, cast
++
++import pytest
++import yaml
++from sqlalchemy import text
++
++from mcp.errors import McpErrorCode
++from mcp.surfaces.agent.add_comment import _validate_add_comment_arguments
++
++if TYPE_CHECKING:
++    from mcp.tests.agent.conftest import AgentTestEnv
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _call_add_comment(
++    env: AgentTestEnv,
++    arguments: dict[str, Any],
++    *,
++    subject_token: str | None = None,
++    session_id: str | None = None,
++) -> dict[str, Any]:
++    """Invoke add_comment via JSON-RPC 2.0 tools/call."""
++    active_session_id = session_id
++    if active_session_id is None:
++        init_resp = await env.mcp_client.post(
++            "/mcp/agent",
++            json={
++                "jsonrpc": "2.0",
++                "id": 999,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-agent", "version": "1.0"},
++                },
++            },
++            headers={"X-KB-Subject-Token": subject_token} if subject_token else {},
++        )
++        assert init_resp.status_code == 200
++        active_session_id = init_resp.headers["mcp-session-id"]
++
++    headers: dict[str, str] = {"mcp-session-id": active_session_id}
++    if subject_token is not None:
++        headers["X-KB-Subject-Token"] = subject_token
++
++    req_payload = {
++        "jsonrpc": "2.0",
++        "id": 1,
++        "method": "tools/call",
++        "params": {
++            "name": "add_comment",
++            "arguments": arguments,
++        },
++    }
++    resp = await env.mcp_client.post("/mcp/agent", json=req_payload, headers=headers)
++    assert resp.status_code == 200
++    data = resp.json()
++    assert data["jsonrpc"] == "2.0"
++    assert data["id"] == 1
++    return cast("dict[str, Any]", data["result"])
++
++
++@pytest.mark.asyncio
++async def test_case_1_positive_add_comment(agent_test_env: AgentTestEnv) -> None:
++    """Case 1: Positive add_comment on KAN-142 posts Markdown and returns comment identifier."""
++    env = agent_test_env
++
++    comment_body = "Automated test comment posting on KAN-142 with *markdown* formatting."
++    res = await _call_add_comment(
++        env,
++        {"identifier": "KAN-142", "body_markdown": comment_body},
++        subject_token=env.token_adam,
++    )
++    assert res["isError"] is False
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert parsed["status"] == "commented"
++    assert parsed["key"] == "KAN-142"
++    assert "comment" in parsed
++    comment_ref = parsed["comment"]
++    assert "#c-" in comment_ref
++
++    # Verify comment in database
++    await env.seed_session.rollback()
++    row = (
++        await env.seed_session.execute(
++            text(
++                "SELECT body_markdown, author_id FROM issue_comments WHERE issue_id = :iid ORDER BY created_at DESC LIMIT 1"
++            ),
++            {"iid": env.issue_142_id},
++        )
++    ).one_or_none()
++    assert row is not None
++    assert row[0] == comment_body
++    assert row[1] == env.adam_user.id
++
++
++@pytest.mark.asyncio
++async def test_case_2_add_comment_help(agent_test_env: AgentTestEnv) -> None:
++    """Case 2: add_comment(identifier='help') returns JIT help documentation."""
++    env = agent_test_env
++
++    res = await _call_add_comment(env, {"identifier": "help"})
++    assert res["isError"] is False
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert "tool" in parsed or "help" in parsed or "commands" in parsed or "description" in parsed
++
++
++def test_case_3_argument_validation() -> None:
++    """Case 3: Unit validation of input arguments and boundaries."""
++    # Identifier == help early exit
++    _validate_add_comment_arguments({"identifier": "help"})
++    _validate_add_comment_arguments({"action": "help"})
++
++    # Unknown parameter
++    with pytest.raises(Exception) as exc_info:
++        _validate_add_comment_arguments(
++            {"identifier": "KAN-142", "body_markdown": "ok", "bad_key": 1}
++        )
++    assert "Unknown parameter" in str(exc_info.value)
++
++    # Empty / non-string identifier
++    with pytest.raises(Exception) as exc_info:
++        _validate_add_comment_arguments({"identifier": "", "body_markdown": "ok"})
++    assert "non-empty string" in str(exc_info.value)
++
++    # Long identifier (> 255 chars)
++    with pytest.raises(Exception) as exc_info:
++        _validate_add_comment_arguments({"identifier": "x" * 256, "body_markdown": "ok"})
++    assert "exceeds maximum" in str(exc_info.value)
++
++    # Missing identifier
++    with pytest.raises(Exception) as exc_info:
++        _validate_add_comment_arguments({"body_markdown": "Valid body"})
++    assert "identifier is required" in str(exc_info.value)
++
++    # Missing body
++    with pytest.raises(Exception) as exc_info:
++        _validate_add_comment_arguments({"identifier": "KAN-142"})
++    assert "body_markdown is required" in str(exc_info.value)
++
++    # Empty body
++    with pytest.raises(Exception) as exc_info:
++        _validate_add_comment_arguments({"identifier": "KAN-142", "body_markdown": "   "})
++    assert "cannot be empty" in str(exc_info.value)
++
++    # Body exceeding 65,536 bytes
++    with pytest.raises(Exception) as exc_info:
++        _validate_add_comment_arguments({"identifier": "KAN-142", "body_markdown": "x" * 65537})
++    assert "65536 bytes" in str(exc_info.value)
++
++    # Invalid reply_to
++    with pytest.raises(Exception) as exc_info:
++        _validate_add_comment_arguments(
++            {"identifier": "KAN-142", "body_markdown": "ok", "reply_to": ""}
++        )
++    assert "reply_to must be a non-empty string" in str(exc_info.value)
++
++    # Invalid ack_mentions
++    with pytest.raises(Exception) as exc_info:
++        _validate_add_comment_arguments(
++            {"identifier": "KAN-142", "body_markdown": "ok", "ack_mentions": "not_bool"}
++        )
++    assert "ack_mentions must be a boolean" in str(exc_info.value)
++
++
++@pytest.mark.asyncio
++async def test_case_4_body_size_boundary_via_rpc(agent_test_env: AgentTestEnv) -> None:
++    """Case 4: 65,537-byte comment rejected with VALIDATION_FAILED via RPC."""
++    env = agent_test_env
++
++    res = await _call_add_comment(
++        env,
++        {"identifier": "KAN-142", "body_markdown": "a" * 65537},
++        subject_token=env.token_adam,
++    )
++    assert res["isError"] is True
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert parsed["error"]["code"] == McpErrorCode.VALIDATION_FAILED.value
++
++
++@pytest.mark.asyncio
++async def test_case_5_nonexistent_ticket(agent_test_env: AgentTestEnv) -> None:
++    """Case 5: add_comment on absent ticket returns NOT_FOUND."""
++    env = agent_test_env
++
++    res = await _call_add_comment(
++        env,
++        {"identifier": "KAN-99999", "body_markdown": "Comment on ghost ticket"},
++        subject_token=env.token_adam,
++    )
++    assert res["isError"] is True
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert parsed["error"]["code"] == McpErrorCode.NOT_FOUND.value
++
++
++@pytest.mark.asyncio
++async def test_case_6_mention_access_warning_and_ack(agent_test_env: AgentTestEnv) -> None:
++    """Case 6: Mentioning a user without project view returns MENTION_ACCESS_WARNING, retrying with ack succeeds."""
++    env = agent_test_env
++
++    # 1. Without ack_mentions -> MENTION_ACCESS_WARNING
++    res_warn = await _call_add_comment(
++        env,
++        {"identifier": "KAN-142", "body_markdown": "Pinging @maya to check this out."},
++        subject_token=env.token_adam,
++    )
++    assert res_warn["isError"] is True
++    parsed_warn = yaml.safe_load(res_warn["content"][0]["text"])
++    assert parsed_warn["error"]["code"] == McpErrorCode.MENTION_ACCESS_WARNING.value
++    assert "unauthorized_mentions" in parsed_warn["error"]
++    assert any(
++        "maya" in str(u.get("handle")) for u in parsed_warn["error"]["unauthorized_mentions"]
++    )
++
++    # 2. With ack_mentions: true -> posts successfully!
++    res_ack = await _call_add_comment(
++        env,
++        {
++            "identifier": "KAN-142",
++            "body_markdown": "Pinging @maya to check this out.",
++            "ack_mentions": True,
++        },
++        subject_token=env.token_adam,
++    )
++    assert res_ack["isError"] is False
++    parsed_ack = yaml.safe_load(res_ack["content"][0]["text"])
++    assert parsed_ack["status"] == "commented"
++    assert parsed_ack["key"] == "KAN-142"
++
++
++@pytest.mark.asyncio
++async def test_case_7_add_comment_reply_and_help_action(agent_test_env: AgentTestEnv) -> None:
++    """Case 7: add_comment with action=help, reply_to threaded comment, and missing context."""
++    from mcp.surfaces.agent.add_comment import add_comment
++
++    env = agent_test_env
++
++    # 1. Action == help
++    res_help = await _call_add_comment(env, {"action": "help"})
++    assert res_help["isError"] is False
++
++    # 2. First comment, then reply_to
++    res_parent = await _call_add_comment(
++        env,
++        {"identifier": "KAN-142", "body_markdown": "Parent comment for thread test"},
++        subject_token=env.token_adam,
++    )
++    assert res_parent["isError"] is False
++
++    await env.seed_session.rollback()
++    cid = (
++        await env.seed_session.execute(
++            text(
++                "SELECT id FROM issue_comments WHERE body_markdown = 'Parent comment for thread test'"
++            )
++        )
++    ).scalar_one()
++
++    res_reply = await _call_add_comment(
++        env,
++        {
++            "identifier": "KAN-142",
++            "body_markdown": "Child threaded reply",
++            "reply_to": str(cid),
++        },
++        subject_token=env.token_adam,
++    )
++    assert res_reply["isError"] is False
++
++    # 3. Missing MCP context raises INTERNAL error
++    with pytest.raises(Exception) as exc_ctx:
++        await add_comment({"identifier": "KAN-142", "body_markdown": "no context"})
++    assert "MCP request context" in str(exc_ctx.value)
++
++    # 4. Direct call with identifier='help'
++    from unittest.mock import AsyncMock, MagicMock
++    from mcp.context import McpRequestContext, reset_current_mcp_context, set_current_mcp_context
++    from mcp.registry import Surface
++
++    req_ctx = McpRequestContext(
++        surface=Surface.AGENT,
++        client=env.internal_client,
++        subject_token=env.token_adam,
++        session_id="sess-1",
++    )
++
++    token = set_current_mcp_context(req_ctx)
++    try:
++        h = await add_comment({"identifier": "help"})
++        assert "commands" in h or "help" in h or "tool" in h
++
++        # Non-dict response from backend
++        mock_client = MagicMock()
++        mock_client.request = AsyncMock(return_value="not a dict")
++        set_current_mcp_context(
++            McpRequestContext(
++                surface=Surface.AGENT,
++                client=mock_client,
++                subject_token=env.token_adam,
++                session_id="sess-1",
++            )
++        )
++        with pytest.raises(Exception) as exc:
++            await add_comment({"identifier": "KAN-142", "body_markdown": "test comment"})
++        assert "Unexpected response from comment creation" in str(exc.value)
++
++        # Permalink without /issues/
++        mock_client.request = AsyncMock(
++            return_value={"id": str(cid), "permalink": "custom-link#c-123"}
++        )
++        res_custom = await add_comment({"identifier": "KAN-142", "body_markdown": "test comment"})
++        assert res_custom["key"] == "KAN-142"
++    finally:
++        reset_current_mcp_context(token)
++
++
++@pytest.mark.asyncio
++async def test_case_8_mcp_transcript_and_canary_exfiltration(  # noqa: PLR0915
++    agent_test_env: AgentTestEnv,
++) -> None:
++    """Case 8: Full MCP canary exfiltration sequence.
++
++    1. Initialize session 1 with token_admin.
++    2. read_ticket SEC-1 containing secret canary CANARY-7f3a.
++    3. add_comment on PUB-1 attempting to leak CANARY-7f3a -> 409 CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED.
++    4. Session-escape attempt: Initialize session 2 with token_admin and retry add_comment -> blocked.
++    5. Clean principal: Initialize session 3 with token_adam and add_comment on PUB-1 -> succeeds.
++    6. Forensic DB verification: 0 comments contain CANARY-7f3a, MCP_TAINT_BLOCKED activity recorded.
++    """
++    env = agent_test_env
++
++    # 1. Initialize MCP session 1 with token_admin
++    init_resp1 = await env.mcp_client.post(
++        "/mcp/agent",
++        json={
++            "jsonrpc": "2.0",
++            "id": 1,
++            "method": "initialize",
++            "params": {
++                "protocolVersion": "2025-06-18",
++                "capabilities": {},
++                "clientInfo": {"name": "test-canary-agent", "version": "1.0"},
++            },
++        },
++        headers={"X-KB-Subject-Token": env.token_admin},
++    )
++    assert init_resp1.status_code == 200
++    sess_id_1 = init_resp1.headers["mcp-session-id"]
++
++    # 2. Call read_ticket for SEC-1 containing CANARY-7f3a
++    read_resp = await env.mcp_client.post(
++        "/mcp/agent",
++        json={
++            "jsonrpc": "2.0",
++            "id": 2,
++            "method": "tools/call",
++            "params": {
++                "name": "read_ticket",
++                "arguments": {"identifier": "SEC-1", "lod": "full"},
++            },
++        },
++        headers={
++            "mcp-session-id": sess_id_1,
++            "X-KB-Subject-Token": env.token_admin,
++        },
++    )
++    assert read_resp.status_code == 200
++    read_data = read_resp.json()
++    assert read_data["result"]["isError"] is False
++    read_text = read_data["result"]["content"][0]["text"]
++    assert "CANARY-7f3a" in read_text
++
++    # 3. Call add_comment on PUB-1 attempting to leak CANARY-7f3a -> blocked
++    leak_resp = await env.mcp_client.post(
++        "/mcp/agent",
++        json={
++            "jsonrpc": "2.0",
++            "id": 3,
++            "method": "tools/call",
++            "params": {
++                "name": "add_comment",
++                "arguments": {
++                    "identifier": "PUB-1",
++                    "body_markdown": "Attempted exfiltration of secret canary CANARY-7f3a from SEC-1.",
++                },
++            },
++        },
++        headers={
++            "mcp-session-id": sess_id_1,
++            "X-KB-Subject-Token": env.token_admin,
++        },
++    )
++    assert leak_resp.status_code == 200
++    leak_data = leak_resp.json()
++    assert leak_data["result"]["isError"] is True
++    leak_parsed = yaml.safe_load(leak_data["result"]["content"][0]["text"])
++    assert (
++        leak_parsed["error"]["code"] == McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED.value
++    )
++    assert "tainted_by" in leak_parsed["error"]
++
++    # 4. Session escape attempt: Initialize session 2 with same token_admin
++    init_resp2 = await env.mcp_client.post(
++        "/mcp/agent",
++        json={
++            "jsonrpc": "2.0",
++            "id": 4,
++            "method": "initialize",
++            "params": {
++                "protocolVersion": "2025-06-18",
++                "capabilities": {},
++                "clientInfo": {"name": "test-canary-escape-agent", "version": "1.0"},
++            },
++        },
++        headers={"X-KB-Subject-Token": env.token_admin},
++    )
++    assert init_resp2.status_code == 200
++    sess_id_2 = init_resp2.headers["mcp-session-id"]
++    assert sess_id_2 != sess_id_1
++
++    escape_resp = await env.mcp_client.post(
++        "/mcp/agent",
++        json={
++            "jsonrpc": "2.0",
++            "id": 5,
++            "method": "tools/call",
++            "params": {
++                "name": "add_comment",
++                "arguments": {
++                    "identifier": "PUB-1",
++                    "body_markdown": "Second exfiltration attempt with rotated session ID.",
++                },
++            },
++        },
++        headers={
++            "mcp-session-id": sess_id_2,
++            "X-KB-Subject-Token": env.token_admin,
++        },
++    )
++    assert escape_resp.status_code == 200
++    escape_data = escape_resp.json()
++    assert escape_data["result"]["isError"] is True
++    escape_parsed = yaml.safe_load(escape_data["result"]["content"][0]["text"])
++    assert (
++        escape_parsed["error"]["code"] == McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED.value
++    )
++
++    # 5. Clean principal: Initialize session 3 with token_adam (who never read SEC)
++    init_resp3 = await env.mcp_client.post(
++        "/mcp/agent",
++        json={
++            "jsonrpc": "2.0",
++            "id": 6,
++            "method": "initialize",
++            "params": {
++                "protocolVersion": "2025-06-18",
++                "capabilities": {},
++                "clientInfo": {"name": "test-clean-agent", "version": "1.0"},
++            },
++        },
++        headers={"X-KB-Subject-Token": env.token_adam},
++    )
++    assert init_resp3.status_code == 200
++    sess_id_3 = init_resp3.headers["mcp-session-id"]
++
++    clean_resp = await env.mcp_client.post(
++        "/mcp/agent",
++        json={
++            "jsonrpc": "2.0",
++            "id": 7,
++            "method": "tools/call",
++            "params": {
++                "name": "add_comment",
++                "arguments": {
++                    "identifier": "PUB-1",
++                    "body_markdown": "Legitimate comment from untainted principal Adam.",
++                },
++            },
++        },
++        headers={
++            "mcp-session-id": sess_id_3,
++            "X-KB-Subject-Token": env.token_adam,
++        },
++    )
++    assert clean_resp.status_code == 200
++    clean_data = clean_resp.json()
++    assert clean_data["result"]["isError"] is False
++    clean_parsed = yaml.safe_load(clean_data["result"]["content"][0]["text"])
++    assert clean_parsed["status"] == "commented"
++    assert clean_parsed["key"] == "PUB-1"
++
++    # 6. Forensic database verifications
++    await env.seed_session.rollback()
++    canary_comments = (
++        await env.seed_session.execute(
++            text("SELECT count(*) FROM issue_comments WHERE body_markdown LIKE '%CANARY-7f3a%'")
++        )
++    ).scalar_one()
++    assert canary_comments == 0
++
++    blocked_activities = (
++        await env.seed_session.execute(
++            text(
++                "SELECT count(*) FROM activity_records "
++                "WHERE event_type = 'MCP_TAINT_BLOCKED' "
++                "  AND payload->>'tool' = 'add_comment'"
++            )
++        )
++    ).scalar_one()
++    assert blocked_activities >= 2
++
++    # Format and write taint-canary-db-proof.txt
++    from datetime import UTC, datetime
++    from pathlib import Path
++
++    proof_path = Path("docs/qa/KANBA-141/taint-canary-db-proof.txt")
++    proof_path.parent.mkdir(parents=True, exist_ok=True)
++
++    canary_rows = (
++        await env.seed_session.execute(
++            text(
++                "SELECT id, workspace_id, issue_id, author_id, body_markdown, created_at "
++                "FROM issue_comments WHERE body_markdown LIKE '%CANARY-7f3a%'"
++            )
++        )
++    ).all()
++
++    activity_rows = (
++        await env.seed_session.execute(
++            text(
++                "SELECT id, workspace_id, actor_id, event_type, payload, recorded_at "
++                "FROM activity_records WHERE event_type = 'MCP_TAINT_BLOCKED' ORDER BY recorded_at ASC"
++            )
++        )
++    ).all()
++
++    taint_rows = (
++        await env.seed_session.execute(
++            text(
++                "SELECT encode(taint_key, 'hex') AS taint_key_hex, key_kind, project_id, first_read_at, expires_at "
++                "FROM mcp_read_taint WHERE project_id = :p"
++            ),
++            {"p": env.proj_sec_id},
++        )
++    ).all()
++
++    proof_lines = [
++        "================================================================================",
++        "FORENSIC EVIDENCE: TAINT CANARY EXFILTRATION DEFENSE AUDIT (KB-P4-07)",
++        "================================================================================",
++        f"Timestamp: {datetime.now(UTC).isoformat()}",
++        f"Workspace ID: {env.workspace_id}",
++        f"Restricted Project (SEC): {env.proj_sec_id}",
++        f"Public Project (PUB): {env.proj_pub_id}",
++        "Canary String: CANARY-7f3a",
++        "",
++        "--------------------------------------------------------------------------------",
++        "QUERY 1: Assert 0 comments containing secret canary in public or restricted issues",
++        "--------------------------------------------------------------------------------",
++        "SQL: SELECT id, workspace_id, issue_id, author_id, body_markdown, created_at",
++        "     FROM issue_comments WHERE body_markdown LIKE '%CANARY-7f3a%';",
++        f"Result row count: {len(canary_rows)}",
++        "(0 rows returned - canary leak prevented)",
++        "",
++        "--------------------------------------------------------------------------------",
++        "QUERY 2: Audit log showing MCP_TAINT_BLOCKED security events",
++        "--------------------------------------------------------------------------------",
++        "SQL: SELECT id, workspace_id, actor_principal_id, event_type, payload, created_at",
++        "     FROM activity_records WHERE event_type = 'MCP_TAINT_BLOCKED' ORDER BY created_at ASC;",
++        f"Result row count: {len(activity_rows)}",
++    ]
++    for row in activity_rows:
++        proof_lines.append(
++            f"  - Event: {row[3]} | Actor: {row[2]} | Target Object: {row[1]} | Created: {row[5]}"
++        )
++        proof_lines.append(f"    Payload: {row[4]}")
++
++    proof_lines.extend(
++        [
++            "",
++            "--------------------------------------------------------------------------------",
++            "QUERY 3: mcp_read_taint table records (session and credential taints)",
++            "--------------------------------------------------------------------------------",
++            "SQL: SELECT encode(taint_key, 'hex') AS taint_key_hex, key_kind, project_id, first_read_at, expires_at",
++            "     FROM mcp_read_taint WHERE project_id = :proj_sec_id;",
++            f"Result row count: {len(taint_rows)}",
++            *(
++                f"  - Key Kind: {row[1]} | Taint Key SHA256: {row[0][:16]}... | Project: {row[2]} | Expires: {row[4]}"
++                for row in taint_rows
++            ),
++            "",
++            "================================================================================",
++            "AUDIT VERDICT: PASS - EXFILTRATION BLOCKED, ZERO LEAKS, AUDIT LOGS RECORDED",
++            "================================================================================",
++        ]
++    )
++
++    proof_path.write_text("\n".join(proof_lines) + "\n", encoding="utf-8")  # noqa: ASYNC240
+diff --git a/mcp/tests/agent/test_link_objects.py b/mcp/tests/agent/test_link_objects.py
+new file mode 100644
+index 0000000..3e9b517
+--- /dev/null
++++ b/mcp/tests/agent/test_link_objects.py
+@@ -0,0 +1,454 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: PLC0415, PT011, I001, PLR0915
++"""Feature unit tests for /mcp/agent tool: link_objects (KB-P4-07)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, cast
++
++import pytest
++import yaml
++
++from mcp.errors import McpErrorCode
++from mcp.surfaces.agent.link_objects import _validate_link_objects_arguments
++
++if TYPE_CHECKING:
++    from mcp.tests.agent.conftest import AgentTestEnv
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _call_link_objects(
++    env: AgentTestEnv,
++    arguments: dict[str, Any],
++    *,
++    subject_token: str | None = None,
++    session_id: str | None = None,
++) -> dict[str, Any]:
++    """Invoke link_objects via JSON-RPC 2.0 tools/call."""
++    active_session_id = session_id
++    if active_session_id is None:
++        init_resp = await env.mcp_client.post(
++            "/mcp/agent",
++            json={
++                "jsonrpc": "2.0",
++                "id": 999,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-agent", "version": "1.0"},
++                },
++            },
++            headers={"X-KB-Subject-Token": subject_token} if subject_token else {},
++        )
++        assert init_resp.status_code == 200
++        active_session_id = init_resp.headers["mcp-session-id"]
++
++    headers: dict[str, str] = {"mcp-session-id": active_session_id}
++    if subject_token is not None:
++        headers["X-KB-Subject-Token"] = subject_token
++
++    req_payload = {
++        "jsonrpc": "2.0",
++        "id": 1,
++        "method": "tools/call",
++        "params": {
++            "name": "link_objects",
++            "arguments": arguments,
++        },
++    }
++    resp = await env.mcp_client.post("/mcp/agent", json=req_payload, headers=headers)
++    assert resp.status_code == 200
++    data = resp.json()
++    assert data["jsonrpc"] == "2.0"
++    assert data["id"] == 1
++    return cast("dict[str, Any]", data["result"])
++
++
++@pytest.mark.asyncio
++async def test_case_1_positive_link_and_remove(agent_test_env: AgentTestEnv) -> None:
++    """Case 1: Positive link KAN-142 BLOCKS KAN-150, then remove the link."""
++    env = agent_test_env
++
++    # 1. Create link
++    res_link = await _call_link_objects(
++        env,
++        {
++            "source": "KAN-142",
++            "target": "KAN-150",
++            "link_type": "blocks",
++            "action": "add",
++        },
++        subject_token=env.token_adam,
++    )
++    assert res_link["isError"] is False
++    parsed_link = yaml.safe_load(res_link["content"][0]["text"])
++    assert parsed_link["status"] == "linked"
++    link_info = parsed_link["link"]
++    assert link_info["source"] == "KAN-142"
++    assert link_info["target"] == "KAN-150"
++    assert link_info["link_type"] == "blocks"
++
++    # 2. Remove link
++    res_remove = await _call_link_objects(
++        env,
++        {
++            "source": "KAN-142",
++            "target": "KAN-150",
++            "link_type": "blocks",
++            "action": "remove",
++        },
++        subject_token=env.token_adam,
++    )
++    assert res_remove["isError"] is False
++    parsed_remove = yaml.safe_load(res_remove["content"][0]["text"])
++    assert parsed_remove["status"] == "unlinked"
++    assert parsed_remove["link"]["source"] == "KAN-142"
++    assert parsed_remove["link"]["target"] == "KAN-150"
++
++
++@pytest.mark.asyncio
++async def test_case_2_link_objects_help(agent_test_env: AgentTestEnv) -> None:
++    """Case 2: link_objects(source='help') returns JIT help documentation."""
++    env = agent_test_env
++
++    res = await _call_link_objects(env, {"source": "help"})
++    assert res["isError"] is False
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert "tool" in parsed or "help" in parsed or "commands" in parsed or "description" in parsed
++
++
++def test_case_3_argument_validation() -> None:
++    """Case 3: Unit validation of link arguments and boundaries."""
++    # Source == help early exit
++    _validate_link_objects_arguments({"source": "help"})
++    _validate_link_objects_arguments({"action": "help"})
++
++    # Unknown parameter
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": "A", "target": "B", "link_type": "blocks", "bad": 1}
++        )
++    assert "Unknown parameter" in str(exc_info.value)
++
++    # Missing source
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments({"target": "KAN-150", "link_type": "blocks"})
++    assert "source is required" in str(exc_info.value)
++
++    # Non-string source
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": 123, "target": "KAN-150", "link_type": "blocks"}
++        )
++    assert "non-empty string" in str(exc_info.value)
++
++    # Empty source
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": "  ", "target": "KAN-150", "link_type": "blocks"}
++        )
++    assert "non-empty string" in str(exc_info.value)
++
++    # Long source (> 255 chars)
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": "x" * 256, "target": "KAN-150", "link_type": "blocks"}
++        )
++    assert "exceeds maximum" in str(exc_info.value)
++
++    # Missing target
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments({"source": "KAN-142", "link_type": "blocks"})
++    assert "target is required" in str(exc_info.value)
++
++    # Non-string target
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": "KAN-142", "target": 123, "link_type": "blocks"}
++        )
++    assert "non-empty string" in str(exc_info.value)
++
++    # Empty target
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": "KAN-142", "target": " ", "link_type": "blocks"}
++        )
++    assert "non-empty string" in str(exc_info.value)
++
++    # Long target (> 255 chars)
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": "KAN-142", "target": "y" * 256, "link_type": "blocks"}
++        )
++    assert "exceeds maximum" in str(exc_info.value)
++
++    # Missing link_type
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments({"source": "KAN-142", "target": "KAN-150"})
++    assert "link_type is required" in str(exc_info.value)
++
++    # Empty link_type
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": "KAN-142", "target": "KAN-150", "link_type": "  "}
++        )
++    assert "Unsupported link_type" in str(exc_info.value)
++
++    # Invalid link_type type
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": "KAN-142", "target": "KAN-150", "link_type": 123}
++        )
++    assert "Unsupported link_type" in str(exc_info.value)
++
++    # Invalid action type
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {
++                "source": "KAN-142",
++                "target": "KAN-150",
++                "link_type": "blocks",
++                "action": 123,
++            }
++        )
++    assert "Unsupported action" in str(exc_info.value)
++
++    # Self-link
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": "KAN-142", "target": "KAN-142", "link_type": "relates_to"}
++        )
++    assert "Self-linking is not allowed" in str(exc_info.value)
++
++    # Invalid link type
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {"source": "KAN-142", "target": "KAN-150", "link_type": "PARENT_OF"}
++        )
++    assert "Unsupported link_type: PARENT_OF" in str(exc_info.value)
++
++    # Invalid action
++    with pytest.raises(Exception) as exc_info:
++        _validate_link_objects_arguments(
++            {
++                "source": "KAN-142",
++                "target": "KAN-150",
++                "link_type": "blocks",
++                "action": "destroy",
++            }
++        )
++    assert "Unsupported action: destroy" in str(exc_info.value)
++
++
++@pytest.mark.asyncio
++async def test_case_4_self_link_via_rpc(agent_test_env: AgentTestEnv) -> None:
++    """Case 4: Self link rejected via RPC."""
++    env = agent_test_env
++
++    res = await _call_link_objects(
++        env,
++        {"source": "KAN-142", "target": "KAN-142", "link_type": "relates_to"},
++        subject_token=env.token_adam,
++    )
++    assert res["isError"] is True
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert parsed["error"]["code"] == McpErrorCode.VALIDATION_FAILED.value
++
++
++@pytest.mark.asyncio
++async def test_case_5_invalid_link_type_via_rpc(agent_test_env: AgentTestEnv) -> None:
++    """Case 5: PARENT_OF rejected as user-creatable link type."""
++    env = agent_test_env
++
++    res = await _call_link_objects(
++        env,
++        {"source": "KAN-142", "target": "KAN-150", "link_type": "PARENT_OF"},
++        subject_token=env.token_adam,
++    )
++    assert res["isError"] is True
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert parsed["error"]["code"] == McpErrorCode.VALIDATION_FAILED.value
++
++
++@pytest.mark.asyncio
++async def test_case_6_nonexistent_object(agent_test_env: AgentTestEnv) -> None:
++    """Case 6: link_objects with nonexistent target returns NOT_FOUND."""
++    env = agent_test_env
++
++    res = await _call_link_objects(
++        env,
++        {"source": "KAN-142", "target": "KAN-99999", "link_type": "blocks"},
++        subject_token=env.token_adam,
++    )
++    assert res["isError"] is True
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert parsed["error"]["code"] == McpErrorCode.NOT_FOUND.value
++
++
++@pytest.mark.asyncio
++async def test_case_7_link_objects_remove_not_found_and_help(agent_test_env: AgentTestEnv) -> None:
++    """Case 7: link_objects with action=help, remove non-existent link, and missing context."""
++    from mcp.surfaces.agent.link_objects import link_objects
++
++    env = agent_test_env
++
++    # 1. Action == help
++    res_help = await _call_link_objects(env, {"action": "help"})
++    assert res_help["isError"] is False
++
++    # 2. Remove non-existent link between KAN-142 and KAN-150
++    res_rem = await _call_link_objects(
++        env,
++        {
++            "source": "KAN-142",
++            "target": "KAN-150",
++            "link_type": "blocks",
++            "action": "remove",
++        },
++        subject_token=env.token_adam,
++    )
++    assert res_rem["isError"] is True
++    parsed_rem = yaml.safe_load(res_rem["content"][0]["text"])
++    assert parsed_rem["error"]["code"] == McpErrorCode.NOT_FOUND.value
++
++    # 3. Missing MCP context raises INTERNAL error
++    with pytest.raises(Exception) as exc_ctx:
++        await link_objects({"source": "KAN-142", "target": "KAN-150", "link_type": "blocks"})
++    assert "MCP request context" in str(exc_ctx.value)
++
++    # 4. Self-link after key resolution (different string identifiers resolving to same object)
++    res_self_resolved = await _call_link_objects(
++        env,
++        {
++            "source": "KAN-142",
++            "target": str(env.issue_142_id),
++            "link_type": "relates_to",
++        },
++        subject_token=env.token_adam,
++    )
++    assert res_self_resolved["isError"] is True
++    parsed_self = yaml.safe_load(res_self_resolved["content"][0]["text"])
++    assert parsed_self["error"]["code"] == McpErrorCode.VALIDATION_FAILED.value
++    assert "cannot be linked to itself" in parsed_self["error"]["message"]
++
++    # 5. Remove link via inbound direction
++    # First create link KAN-150 BLOCKS KAN-142
++    await _call_link_objects(
++        env,
++        {
++            "source": "KAN-150",
++            "target": "KAN-142",
++            "link_type": "blocks",
++            "action": "add",
++        },
++        subject_token=env.token_adam,
++    )
++    # Now remove from perspective of KAN-142 targeting KAN-150
++    res_rem_inbound = await _call_link_objects(
++        env,
++        {
++            "source": "KAN-142",
++            "target": "KAN-150",
++            "link_type": "blocks",
++            "action": "remove",
++        },
++        subject_token=env.token_adam,
++    )
++    assert res_rem_inbound["isError"] is False
++    parsed_inbound = yaml.safe_load(res_rem_inbound["content"][0]["text"])
++    assert parsed_inbound["status"] == "unlinked"
++
++
++@pytest.mark.asyncio
++async def test_case_8_direct_handler_coverage(agent_test_env: AgentTestEnv) -> None:
++    """Case 8: Direct handler branches: help, upstream error, non-dict target."""
++    from unittest.mock import AsyncMock, MagicMock
++    from mcp.context import McpRequestContext, reset_current_mcp_context, set_current_mcp_context
++    from mcp.registry import Surface
++    from mcp.surfaces.agent.link_objects import link_objects
++
++    env = agent_test_env
++
++    # 1. Direct call with source='help'
++    req_ctx = McpRequestContext(
++        surface=Surface.AGENT,
++        client=env.internal_client,
++        subject_token=env.token_adam,
++        session_id="sess-1",
++    )
++
++    token = set_current_mcp_context(req_ctx)
++    try:
++        h = await link_objects({"source": "help"})
++        assert "commands" in h or "help" in h or "tool" in h
++
++        # 2. Action == "remove" with non-dict upstream response
++        mock_client = MagicMock()
++        mock_client.request = AsyncMock(
++            side_effect=[
++                {
++                    "id": "s1",
++                    "key": "KAN-142",
++                    "kind": "issue",
++                    "title": "Issue 142",
++                },  # resolve source
++                {
++                    "id": "t1",
++                    "key": "KAN-150",
++                    "kind": "issue",
++                    "title": "Issue 150",
++                },  # resolve target
++                "non-dict response",  # links get
++            ]
++        )
++        set_current_mcp_context(
++            McpRequestContext(
++                surface=Surface.AGENT,
++                client=mock_client,
++                subject_token=env.token_adam,
++                session_id="sess-1",
++            )
++        )
++        with pytest.raises(Exception) as exc:
++            await link_objects(
++                {
++                    "source": "KAN-142",
++                    "target": "KAN-150",
++                    "link_type": "blocks",
++                    "action": "remove",
++                }
++            )
++        assert "Failed to retrieve links" in str(exc.value)
++
++        # 3. Action == "add" where res['target'] is not a dict
++        mock_client.request = AsyncMock(
++            side_effect=[
++                {
++                    "id": "s1",
++                    "key": "KAN-142",
++                    "kind": "issue",
++                    "title": "Issue 142",
++                },  # resolve source
++                {
++                    "id": "t1",
++                    "key": "KAN-150",
++                    "kind": "issue",
++                    "title": "Issue 150",
++                },  # resolve target
++                {"status": "linked", "target": "string_target"},  # add
++            ]
++        )
++        res = await link_objects(
++            {
++                "source": "KAN-142",
++                "target": "KAN-150",
++                "link_type": "blocks",
++                "action": "add",
++            }
++        )
++        assert res["status"] == "linked"
++    finally:
++        reset_current_mcp_context(token)
+diff --git a/mcp/tests/test_schema_budget.py b/mcp/tests/test_schema_budget.py
+new file mode 100644
+index 0000000..a6af6b0
+--- /dev/null
++++ b/mcp/tests/test_schema_budget.py
+@@ -0,0 +1,49 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Token budget audit for /mcp/agent tools schema (S11.1, KB-P4-07)."""
++
++from __future__ import annotations
++
++import json
++from typing import Any
++
++from mcp.surfaces.agent import create_agent_registry
++
++EXPECTED_AGENT_TOOL_NAMES: frozenset[str] = frozenset(
++    {
++        "search_tickets",
++        "read_ticket",
++        "create_ticket",
++        "update_ticket",
++        "begin_work",
++        "transition_ticket",
++        "complete_work",
++        "add_comment",
++        "link_objects",
++    }
++)
++MAX_AGENT_SCHEMA_BUDGET_TOKENS: int = 1850
++
++
++def test_schema_budget_agent_tools() -> None:
++    """Assert /mcp/agent tools/list JSON conforms to <= 1,850 token budget."""
++    registry = create_agent_registry()
++    specs = registry.list_specs()
++    tool_names = {s.name for s in specs}
++
++    assert tool_names == EXPECTED_AGENT_TOOL_NAMES, f"Mismatch in agent tools: {tool_names}"
++
++    tools_list: list[dict[str, Any]] = [
++        {
++            "name": s.name,
++            "description": s.description,
++            "inputSchema": s.input_schema,
++        }
++        for s in specs
++    ]
++    raw_json = json.dumps({"tools": tools_list})
++    approx_tokens = len(raw_json) // 4
++
++    assert approx_tokens <= MAX_AGENT_SCHEMA_BUDGET_TOKENS, (
++        f"Token budget exceeded: {approx_tokens} > {MAX_AGENT_SCHEMA_BUDGET_TOKENS}"
++    )

@@ -29,24 +29,24 @@ READ_TICKET_SCHEMA: Final[dict[str, Any]] = {
     "properties": {
         "identifier": {
             "type": "string",
-            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
+            "description": "Issue ref",
         },
         "workspace": {
             "type": "string",
-            "description": "Optional workspace slug for disambiguation in global mode",
+            "description": "Workspace",
         },
         "lod": {
             "type": "string",
             "enum": ["summary", "standard", "full"],
             "default": "standard",
-            "description": "Level of detail for response projection",
+            "description": "LOD tier",
         },
         "comments_limit": {
             "type": "integer",
             "minimum": 0,
             "maximum": 50,
             "default": 20,
-            "description": "Maximum comments to return (0..50)",
+            "description": "Max comments",
         },
     },
     "required": ["identifier"],

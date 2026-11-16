@@ -15,8 +15,9 @@ if [ -n "${CI:-}" ] || [ -f /.dockerenv ]; then
   fi
   
   CID=$(hostname)
-  docker rm -f kanban-pg-test-1 2>/dev/null || true
-  docker run -d --name kanban-pg-test-1 \
+  PG_NAME="kanban-pg-test-${CI_JOB_NAME:-1}"
+  docker rm -f "${PG_NAME}" 2>/dev/null || true
+  docker run -d --name "${PG_NAME}" \
     --volumes-from "${CID}" \
     --label com.docker.compose.service=pg-test \
     -e POSTGRES_USER=kanban_test \
@@ -29,14 +30,14 @@ if [ -n "${CI:-}" ] || [ -f /.dockerenv ]; then
 
   # Wait for readiness
   for i in $(seq 1 45); do
-    if docker exec kanban-pg-test-1 pg_isready -h /var/run/postgresql -U kanban_test >/dev/null 2>&1 && test -S "${WS_SOCK_DIR}/.s.PGSQL.5432"; then
+    if docker exec "${PG_NAME}" pg_isready -h /var/run/postgresql -U kanban_test >/dev/null 2>&1 && test -S "${WS_SOCK_DIR}/.s.PGSQL.5432"; then
       echo "PostgreSQL test container is healthy at ${WS_SOCK_DIR}"
       exit 0
     fi
     sleep 1
   done
   echo "PostgreSQL failed to become ready in time. Container logs:" >&2
-  docker logs kanban-pg-test-1 >&2 || true
+  docker logs "${PG_NAME}" >&2 || true
   exit 1
 else
   # Local host environment

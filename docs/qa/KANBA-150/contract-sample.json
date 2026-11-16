@@ -1,0 +1,41 @@
+{
+  "post_transition_202_dispatch": {
+    "status": "pending_agent_gate",
+    "execution_id": "01933390-3333-7111-8222-333344445555",
+    "active_agent": "forensic-code-check",
+    "hook_name": "forensic_qa_gate",
+    "harness_kind": "in_app_sdk",
+    "state": "In Progress"
+  },
+  "delete_transition_cancel": {
+    "status": "cancelled",
+    "execution_id": "01933390-3333-7111-8222-333344445555"
+  },
+  "issue_serializer_pending_gate": {
+    "execution_id": "01933390-3333-7111-8222-333344445555",
+    "hook_name": "forensic_qa_gate",
+    "agent_slug": "forensic-code-check",
+    "harness_label": "gemini-flash",
+    "started_at": "2026-11-15T19:00:00.000000Z",
+    "deadline_at": "2026-11-15T19:01:00.000000Z"
+  },
+  "issue_serializer_latest_gate_verdict": {
+    "decision": "approve",
+    "hook_name": "forensic_qa_gate",
+    "completed_at": "2026-11-15T19:00:02.150000Z",
+    "latency_ms": 2150,
+    "verdict_sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4"
+  },
+  "mcp_transition_ticket_response": {
+    "status": "pending_agent_gate",
+    "execution_id": "01933390-3333-7111-8222-333344445555",
+    "active_agent": "forensic-code-check"
+  },
+  "mcp_transition_pending_conflict_error": {
+    "error_code": "TRANSITION_PENDING",
+    "message": "Another transition is currently pending gate approval for this issue.",
+    "context": {
+      "execution_id": "01933390-3333-7111-8222-333344445555"
+    }
+  }
+}

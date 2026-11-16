@@ -1,0 +1,14 @@
+cassette_version: 1
+matcher:
+  stdin_contains: ["malformed"]
+simulated_ttft_ms: 5.0
+cli_result:
+  stdout: |
+    ======================= CLI AGENT RUNNER =======================
+    Traceback (most recent call last):
+      File "/app/agent_cli.py", line 42, in <module>
+        process_verdict()
+    RuntimeError: Unhandled unexpected failure during model inference.
+  stderr: "warning: unexpected error during execution\n"
+  exit_code: 0
+  duration_ms: 8.0

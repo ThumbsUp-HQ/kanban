@@ -24,11 +24,20 @@ class ProjectCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    identifier: str = Field(pattern=IDENTIFIER_PATTERN)
-    name: ProjectName
-    description_markdown: str = ""
-    modules_enabled: bool = False
-    auto_archive_days: AutoArchiveDays | None = None
+    identifier: str = Field(
+        pattern=IDENTIFIER_PATTERN,
+        description="Unique uppercase project identifier slug (2 to 10 chars, e.g. KAN)",
+    )
+    name: ProjectName = Field(description="Human-readable project display name")
+    description_markdown: str = Field(
+        default="", description="Detailed project description in canonical Markdown"
+    )
+    modules_enabled: bool = Field(
+        default=False, description="Whether sub-project modules feature is enabled"
+    )
+    auto_archive_days: AutoArchiveDays | None = Field(
+        default=None, description="Number of days after completion before auto-archiving issues"
+    )
 
 
 class ProjectPatch(BaseModel):
@@ -36,11 +45,22 @@ class ProjectPatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    identifier: str | None = None
-    name: ProjectName | None = None
-    description_markdown: str | None = None
-    modules_enabled: bool | None = None
-    auto_archive_days: AutoArchiveDays | None = None
+    identifier: str | None = Field(
+        default=None,
+        description="Immutable identifier (rejects with 422 if client attempts mutation)",
+    )
+    name: ProjectName | None = Field(
+        default=None, description="Updated human-readable project display name"
+    )
+    description_markdown: str | None = Field(
+        default=None, description="Updated project description in canonical Markdown"
+    )
+    modules_enabled: bool | None = Field(
+        default=None, description="Updated modules feature enablement toggle"
+    )
+    auto_archive_days: AutoArchiveDays | None = Field(
+        default=None, description="Updated auto-archive retention threshold in days"
+    )
 
 
 class ModuleDefaultsPut(BaseModel):
@@ -48,7 +68,10 @@ class ModuleDefaultsPut(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    module_ids: list[uuid.UUID] = Field(max_length=20)
+    module_ids: list[uuid.UUID] = Field(
+        max_length=20,
+        description="List of module UUIDs automatically assigned to newly created issues",
+    )
 
     @field_validator("module_ids")
     @classmethod
@@ -65,15 +88,23 @@ class ProjectResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: uuid.UUID
-    identifier: str
-    name: str
-    description_markdown: str
-    modules_enabled: bool
-    default_module_ids: list[uuid.UUID]
-    auto_archive_days: int | None
-    access_manifest: AccessManifest
-    capabilities: list[str]
+    id: uuid.UUID = Field(description="Unique project UUID identifier")
+    identifier: str = Field(description="Project uppercase identifier slug (e.g. KAN)")
+    name: str = Field(description="Project human-readable display name")
+    description_markdown: str = Field(description="Project description in canonical Markdown")
+    modules_enabled: bool = Field(description="Whether the modules feature is enabled")
+    default_module_ids: list[uuid.UUID] = Field(
+        description="Module UUIDs assigned by default to newly created issues"
+    )
+    auto_archive_days: int | None = Field(
+        description="Configured auto-archive retention threshold in days, if enabled"
+    )
+    access_manifest: AccessManifest = Field(
+        description="Anti-enumeration access manifest metadata (S3.4)"
+    )
+    capabilities: list[str] = Field(
+        description="Effective capabilities held by the calling principal on this project"
+    )
 
 
 class ProjectList(BaseModel):
@@ -81,5 +112,7 @@ class ProjectList(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    items: list[ProjectResponse]
-    next_cursor: str | None = None
+    items: list[ProjectResponse] = Field(description="List of project responses matching query")
+    next_cursor: str | None = Field(
+        default=None, description="Opaque keyset cursor for fetching the next page"
+    )

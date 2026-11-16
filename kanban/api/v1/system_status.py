@@ -42,6 +42,7 @@ class SystemStatusResponse(BaseModel):
     air_gap_mode: bool
     local_llm_endpoint_host: str | None = None
     is_server_admin: bool
+    allow_unlimited_mcp_keys: bool = True
 
 
 class StandaloneBackupRequest(BaseModel):
@@ -89,7 +90,7 @@ system_router = APIRouter(prefix="/system", tags=["system"])
 admin_standalone_router = APIRouter(
     prefix="/admin/standalone",
     tags=["admin-standalone"],
-    dependencies=[Depends(require_admin_aal2), Depends(require_server_admin)],
+    dependencies=[Depends(require_admin_aal2)],
 )
 
 
@@ -114,6 +115,9 @@ async def get_system_status_endpoint(
     mount_point = status_data["data_mount_point"] if is_server_admin else None
     mount_fstype = status_data["data_mount_fstype"] if is_server_admin else None
     local_llm_host = status_data["local_llm_endpoint_host"] if is_server_admin else None
+    disable_unlimited = (
+        bool(getattr(settings, "disable_unlimited_mcp_keys", False)) if settings else False
+    )
 
     return SystemStatusResponse(
         deployment_mode=status_data["deployment_mode"],
@@ -124,12 +128,52 @@ async def get_system_status_endpoint(
         air_gap_mode=status_data["air_gap_mode"],
         local_llm_endpoint_host=local_llm_host,
         is_server_admin=is_server_admin,
+        allow_unlimited_mcp_keys=not disable_unlimited,
+    )
+
+
+@admin_standalone_router.get(
+    "/status",
+    response_model=SystemStatusResponse,
+    summary="Get standalone deployment and persistence status for administrators",
+)
+async def get_admin_standalone_status_endpoint(
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+    request: Request,
+) -> SystemStatusResponse:
+    """Retrieve standalone deployment status for administrators with full topology."""
+    del caller
+    stmt = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+    is_server_admin = bool((await session.execute(stmt)).scalar_one())
+
+    settings = getattr(request.app.state, "settings", None)
+    status_data = get_standalone_status(settings=settings)
+
+    mount_point = status_data["data_mount_point"] if is_server_admin else None
+    mount_fstype = status_data["data_mount_fstype"] if is_server_admin else None
+    local_llm_host = status_data["local_llm_endpoint_host"] if is_server_admin else None
+    disable_unlimited = (
+        bool(getattr(settings, "disable_unlimited_mcp_keys", False)) if settings else False
+    )
+
+    return SystemStatusResponse(
+        deployment_mode=status_data["deployment_mode"],
+        persistent_volume=status_data["persistent_volume"],
+        data_mount_point=mount_point,
+        data_mount_fstype=mount_fstype,
+        tier_b_sandbox_available=status_data["tier_b_sandbox_available"],
+        air_gap_mode=status_data["air_gap_mode"],
+        local_llm_endpoint_host=local_llm_host,
+        is_server_admin=is_server_admin,
+        allow_unlimited_mcp_keys=not disable_unlimited,
     )
 
 
 @admin_standalone_router.post(
     "/backup",
     summary="Generate and download encrypted database backup",
+    dependencies=[Depends(require_server_admin)],
     responses={
         200: {"content": {"application/octet-stream": {}}},
         403: {"description": "AAL2 or SERVER_ADMIN required"},
@@ -182,7 +226,7 @@ async def create_standalone_backup(
         master_kek = None
 
     try:
-        dump_bytes = await run_pg_dump()
+        dump_bytes = await run_pg_dump(settings=settings)
     except Exception as exc:
         logger.exception("Database backup dump failed")
         raise ProblemException(

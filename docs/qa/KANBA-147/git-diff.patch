@@ -1,0 +1,4774 @@
+diff --git a/.agents/skills/kanban-agent-manager/SKILL.md b/.agents/skills/kanban-agent-manager/SKILL.md
+index 57b94ce..7165f78 100644
+--- a/.agents/skills/kanban-agent-manager/SKILL.md
++++ b/.agents/skills/kanban-agent-manager/SKILL.md
+@@ -15,37 +15,50 @@ All tickets managed under this workflow should conform to the companion [`kanban
+ 
+ ## Core Duties of the Agent Manager
+ 
+-1. **Assign Tickets to Implementation Sub-Agents**:
++1. **Ticket Deduplication & Creation Boundaries**:
++   - **Search Before Creating (`search_tickets`)**: Always search existing `Backlog`, `Todo`, and `In Progress` tickets before creating new ones. If an upcoming or open ticket already covers the same subsystem or feature, **update that ticket in-place (`update_ticket`)** rather than creating a duplicate ticket.
++   - **Parallel Specialist Consultation**: Before authoring tickets or designing implementations, consult relevant domain specialists (e.g., UX/Frontend Architect, Backend Architect, Security Engineer) **in parallel** to validate architecture, UX ergonomics, and security invariants.
++   - **Do Not Start Implementation Unprompted**: When the user asks to create, refine, or add tickets, stop after creating/updating the tickets and wait for explicit instruction before starting implementation (`begin_work`).
++2. **Use Small/Fast Models Instead of the Coordinator's Model**:
++   - Do **not** default all workers or sub-agents to the Coordinator's heavy flagship model. Preserve quota and reduce latency by pinning implementation builders, test-coverage agents, specialist reviewers, and `reality-checker` auditors to **smaller, faster models** (e.g., `flash`, `gemini-3.8-flash-medium`, `gemini-4-argon-low`, `claude-sonnet-5-5-medium`, `haiku`, or Codex fast tier).
++   - For **black-box human browser QA**, explicitly use a small/low-reasoning model (`gemini-4-argon-low` or `flash`) supplied only with user-level instructions so it tests the UI as a human would rather than reverse-engineering source code or working around bugs.
++3. **Reuse Persistent Sub-Agents & Swarm Workers for Context Caching**:
++   - Maintain long-lived references (`conversationId`s via `send_message`, or warm `waiting` swarm roster members such as `reality-checker`, `arch-reviewer`, `ui-specialist`, `sec-eng`, and `qa-eng` via board `@mentions`) across tickets instead of spawning fresh disposable sub-agents for every task.
++   - Reusing an existing agent conversation keeps system prompts, persona files, and codebase reads in the **cached-token tier (~1/100th input token cost)**, and `waiting` swarm workers consume zero tokens while asleep. Only `kill` temporary implementation builders after their wave is merged and certified.
++   - In Antigravity, when custom agent markdown files in `.agents/agents/*.md` declare CLI-only tool names in frontmatter, invoke sub-agents with `TypeName: "self"` (inheriting valid harness tools) and instruct them to read `.agents/agents/<specialist>.md` for their persona and rubric.
++4. **Assign Tickets to Implementation Sub-Agents**:
+    - Move the target ticket to `In Progress` via `begin_work` (or `transition_ticket`).
+-   - Delegate implementation to a dedicated sub-agent with the verbatim ticket text and forensic proof requirements.
+-2. **Update Comments & Status on Tickets**:
++   - Delegate implementation to a dedicated sub-agent or swarm worker (on a fast/medium model) with the verbatim ticket text and forensic proof requirements.
++5. **Update Comments & Status on Tickets**:
+    - Record sub-agent assignments, forensic proof locations, `reality-checker` QA reports, and remediation cycles on the ticket via Kanban MCP tools (`begin_work`, `transition_ticket`, `complete_work`, `update_ticket`). All comments are recorded under the user's identity.
+-3. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
++6. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
+    - When an implementing sub-agent claims a ticket is done - or **even if the sub-agent closes the ticket itself** - you **MUST keep the ticket open** (immediately reopen/transition it back to `In Progress` via `transition_ticket` if a sub-agent closed it).
+-   - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after the `reality-checker` sub-agent certifies it as **grade-A `READY`**.
+-4. **Run the `reality-checker` QA Gate on a Fast Model**:
+-   - Invoke a dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
++   - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after required domain specialists (`ui-specialist-review.md`, `api-specialist-review.md`) and the `reality-checker` sub-agent certify it as **grade-A `READY`**.
++7. **Run the `reality-checker` QA Gate on a Fast Model**:
++   - Invoke or message the dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
+    - Provide **full forensic proofs, never summaries**. `reality-checker` is a pure quality assurance auditor and **must NOT run tests manually, execute shell commands to check results, or visit websites**.
+-5. **Route `reality-checker` Verdicts**:
++8. **Route `reality-checker` Verdicts**:
+    - **`FAILED` or `NEEDS WORK` (`NEEDS_WORK`)**: Keep the ticket open (`In Progress`), post the verdict to the ticket, and send the full `reality-checker` critique back to the implementing sub-agent to fix the defects and regenerate the proof bundle.
+    - **Grade-A `READY`**: Record the full `reality-checker` certification report in the ticket comments and complete the transition to `Done` (`complete_work`).
+-6. **Delegate Post-Completion >=95% Unit Test Coverage**:
++9. **Delegate Post-Completion >=95% Unit Test Coverage**:
+    - `reality-checker` does **not** audit unit test coverage percentages.
+-   - Once a feature ticket is implemented (or completed), assign a dedicated testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
+-7. **Continuous Gap Detection & Ticket Creation**:
+-   - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - immediately create a new Kanban ticket for it using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
++   - Once a feature ticket is implemented (or completed), assign a fast testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
++10. **Continuous Gap Detection & Ticket Creation**:
++    - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - first check `search_tickets` for an existing backlog item to update, or create a new Kanban ticket using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
+ 
+ ---
+ 
+ ## Cross-Harness Sub-Agent Mapping (Claude, Codex, Gemini)
+ 
+-Adapt sub-agent delegation to the active harness's native primitives while preserving identical workflow semantics:
++Adapt sub-agent delegation to the active harness's native primitives while preserving identical workflow semantics, **small/fast model selection**, and **persistent conversation reuse**:
+ 
+ | Action | Gemini CLI / Antigravity | Claude Code | OpenAI Codex / ChatGPT |
+ | :--- | :--- | :--- | :--- |
+-| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, write tools enabled) | `Task` tool (general-purpose sub-agent with edit/bash access) | Spawn worker/sub-agent task with workspace write permissions |
+-| **Spawn Read-Only `reality-checker`** | `define_subagent` (`EnableWriteTools: false`) + `invoke_subagent` (`Model: "flash"`) | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
+-| **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
++| **Consult Specialists Before Planning/Coding** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`, reads `.agents/agents/<role>.md`) or reuse `conversationId` via `send_message` | Parallel `Task` calls (`model: "haiku"` or `"sonnet"`) with `.agents/agents/<role>.md` | Parallel specialist workers on fast model tier |
++| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`) or `swarm` `add` (`model: "gemini-3.8-flash-medium"` / `"claude-sonnet-5-5-medium"`) | `Task` tool (`model: "sonnet"` or `"haiku"`, edit/bash access) | Spawn worker/sub-agent task on fast/medium model with workspace write permissions |
++| **Spawn / Reuse Read-Only `reality-checker`** | `invoke_subagent` (`Model: "flash"`) or reuse warm `reality-checker` via `send_message` / `@reality-checker` | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Reuse or spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
++| **Black-Box Browser QA** | `invoke_subagent` or `swarm` `add` pinned to `gemini-4-argon-low` / `flash` with user-level test plan only | `Task` tool (`model: "haiku"`) with browser MCP and user-level test plan | Fast/low-reasoning worker with browser harness and user-level test plan |
++| **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` or `@mention` on swarm board | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
+ 
+ ---
+ 
+diff --git a/.agents/skills/kanban-ticket/SKILL.md b/.agents/skills/kanban-ticket/SKILL.md
+index 97e577f..7ef86a6 100644
+--- a/.agents/skills/kanban-ticket/SKILL.md
++++ b/.agents/skills/kanban-ticket/SKILL.md
+@@ -15,6 +15,10 @@ Use this skill together with [`kanban-agent-manager`](../kanban-agent-manager/SK
+ 
+ ## Core Principles for Scoped Tickets
+ 
++0. **Deduplicate & Consult Specialists Before Creating Tickets**:
++   - **Search First (`search_tickets`)**: Always search `Backlog`, `Todo`, and `In Progress` before creating a new ticket. If an existing ticket already covers the target area or upcoming feature, **update that ticket in-place (`update_ticket`)** instead of creating a duplicate.
++   - **Consult Domain Specialists in Parallel**: Consult relevant specialists (UX/Frontend, Backend, Security) on fast models before finalizing ticket specifications.
++   - **Do Not Auto-Start Implementation**: When asked to create or update tickets, stop once the tickets are created/updated and wait for explicit instruction to begin implementation.
+ 1. **Single-Ticket Boundary (No Cross-Ticket Bleed)**:
+    - A ticket's **Definition of Done** and **Verification Proof** must only test artifacts, files, and behaviors that exist after completing *that specific ticket* (and its explicit prerequisites).
+    - Never require an early ticket to pass end-to-end checks against components built in later tickets.
+diff --git a/database/migrations/sql/p5_17a_workflow_hooks.down.sql b/database/migrations/sql/p5_17a_workflow_hooks.down.sql
+new file mode 100644
+index 0000000..8115a62
+--- /dev/null
++++ b/database/migrations/sql/p5_17a_workflow_hooks.down.sql
+@@ -0,0 +1,7 @@
++-- Phase 5 / Database + Workflow Engine: rollback workflow hooks, executions, and invocations (KB-P5-17a)
++
++DROP TRIGGER IF EXISTS issues_state_guard ON issues;
++DROP FUNCTION IF EXISTS check_issues_state_guard();
++DROP TABLE IF EXISTS workflow_hook_invocations CASCADE;
++DROP TABLE IF EXISTS workflow_transition_executions CASCADE;
++DROP TABLE IF EXISTS workflow_transition_hooks CASCADE;
+diff --git a/database/migrations/sql/p5_17a_workflow_hooks.up.sql b/database/migrations/sql/p5_17a_workflow_hooks.up.sql
+new file mode 100644
+index 0000000..977c9f4
+--- /dev/null
++++ b/database/migrations/sql/p5_17a_workflow_hooks.up.sql
+@@ -0,0 +1,244 @@
++-- Phase 5 / Database + Workflow Engine: workflow hooks, executions, and invocations (KB-P5-17a, S14.1, S14.2)
++
++CREATE TABLE workflow_transition_hooks (
++    id                      UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id            UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    project_id              UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
++    name                    TEXT NOT NULL,
++    from_state_id           UUID REFERENCES workflow_states(id) ON DELETE CASCADE, -- NULL = wildcard '*'
++    to_state_id             UUID NOT NULL REFERENCES workflow_states(id) ON DELETE CASCADE,
++    hook_kind               TEXT NOT NULL CHECK (hook_kind IN ('sync_validator', 'sync_mutator', 'agent_interceptor')),
++    sort_rank               TEXT COLLATE "C" NOT NULL,
++    is_enabled              BOOLEAN NOT NULL DEFAULT TRUE,
++    wasm_module_sha256      BYTEA,
++    agent_definition_id     UUID REFERENCES agent_definitions(id) ON DELETE RESTRICT,
++    allowed_mutable_fields  TEXT[] NOT NULL DEFAULT '{}', -- Whitelist of fields this hook may auto-update
++    failure_policy          TEXT NOT NULL DEFAULT 'fail_closed' CHECK (failure_policy IN ('fail_closed', 'fail_open_warn')),
++    manifest_sha256         BYTEA NOT NULL
++);
++
++ALTER TABLE workflow_transition_hooks ADD CONSTRAINT ck_workflow_transition_hooks_kind CHECK (
++    (hook_kind IN ('sync_validator', 'sync_mutator') AND wasm_module_sha256 IS NOT NULL AND agent_definition_id IS NULL)
++    OR
++    (hook_kind = 'agent_interceptor' AND agent_definition_id IS NOT NULL AND wasm_module_sha256 IS NULL)
++);
++
++ALTER TABLE workflow_transition_hooks ADD CONSTRAINT ck_workflow_transition_hooks_manifest_sha256 CHECK (
++    octet_length(manifest_sha256) = 32
++);
++
++ALTER TABLE workflow_transition_hooks ADD CONSTRAINT ck_workflow_transition_hooks_wasm_sha256 CHECK (
++    wasm_module_sha256 IS NULL OR octet_length(wasm_module_sha256) = 32
++);
++
++CREATE INDEX wth_lookup ON workflow_transition_hooks (project_id, to_state_id, sort_rank) WHERE is_enabled;
++CREATE INDEX idx_wth_workspace ON workflow_transition_hooks (workspace_id);
++CREATE INDEX idx_wth_project ON workflow_transition_hooks (project_id);
++
++CREATE TABLE workflow_transition_executions (
++    id                          UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id                UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    project_id                  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
++    issue_id                    UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
++    invoking_principal_id       UUID NOT NULL REFERENCES principals(id),
++    from_state_id               UUID NOT NULL REFERENCES workflow_states(id),
++    to_state_id                 UUID NOT NULL REFERENCES workflow_states(id),
++    status                      TEXT NOT NULL CHECK (status IN ('running_sync','pending_async','approved','rejected','cancelled','timed_out')),
++    hop_depth                   SMALLINT NOT NULL DEFAULT 0 CONSTRAINT ck_workflow_transition_executions_hop_depth CHECK (hop_depth <= 3), -- Infinite-loop breaker
++    issue_body_sha256_snapshot  BYTEA NOT NULL CHECK (octet_length(issue_body_sha256_snapshot) = 32), -- Zero-TOCTOU content hash
++    verdict_json                JSONB,
++    created_at                  TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    completed_at                TIMESTAMPTZ
++);
++
++CREATE UNIQUE INDEX wte_one_pending ON workflow_transition_executions (issue_id) WHERE status IN ('running_sync','pending_async');
++CREATE INDEX idx_wte_issue ON workflow_transition_executions (issue_id);
++CREATE INDEX idx_wte_workspace ON workflow_transition_executions (workspace_id);
++
++CREATE TABLE workflow_hook_invocations (
++    id            UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id  UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    execution_id  UUID NOT NULL REFERENCES workflow_transition_executions(id) ON DELETE CASCADE,
++    hook_id       UUID NOT NULL REFERENCES workflow_transition_hooks(id) ON DELETE RESTRICT,
++    hook_kind     TEXT NOT NULL CHECK (hook_kind IN ('sync_validator','sync_mutator','agent_interceptor')),
++    status        TEXT NOT NULL CHECK (status IN ('running','allowed','rejected','mutated','error','timed_out','skipped')),
++    error_code    TEXT,
++    output_json   JSONB CHECK (output_json IS NULL OR octet_length(output_json::text) <= 65536), -- bounded <= 64 KiB, scrubbed
++    duration_us   INTEGER CHECK (duration_us >= 0),
++    started_at    TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    completed_at  TIMESTAMPTZ,
++    CONSTRAINT uq_workflow_hook_invocations_exec_hook UNIQUE (execution_id, hook_id)
++);
++
++CREATE INDEX idx_whi_execution ON workflow_hook_invocations (execution_id);
++CREATE INDEX idx_whi_workspace ON workflow_hook_invocations (workspace_id);
++
++-- Enable and force Row-Level Security
++ALTER TABLE workflow_transition_hooks ENABLE ROW LEVEL SECURITY;
++ALTER TABLE workflow_transition_hooks FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE workflow_transition_executions ENABLE ROW LEVEL SECURITY;
++ALTER TABLE workflow_transition_executions FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE workflow_hook_invocations ENABLE ROW LEVEL SECURITY;
++ALTER TABLE workflow_hook_invocations FORCE ROW LEVEL SECURITY;
++
++-- 1. Policies for workflow_transition_hooks
++CREATE POLICY workflow_transition_hooks_select_rls ON workflow_transition_hooks
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(project_id, 1)
++    );
++
++CREATE POLICY workflow_transition_hooks_insert_rls ON workflow_transition_hooks
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(project_id, ARRAY['PROJECT_ADMIN', 'WORKSPACE_ADMIN', 'SERVER_ADMIN'])
++    );
++
++CREATE POLICY workflow_transition_hooks_update_rls ON workflow_transition_hooks
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(project_id, ARRAY['PROJECT_ADMIN', 'WORKSPACE_ADMIN', 'SERVER_ADMIN'])
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(project_id, ARRAY['PROJECT_ADMIN', 'WORKSPACE_ADMIN', 'SERVER_ADMIN'])
++    );
++
++CREATE POLICY workflow_transition_hooks_delete_rls ON workflow_transition_hooks
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(project_id, ARRAY['PROJECT_ADMIN', 'WORKSPACE_ADMIN', 'SERVER_ADMIN'])
++    );
++
++-- 2. Policies for workflow_transition_executions
++CREATE POLICY workflow_transition_executions_select_rls ON workflow_transition_executions
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++    );
++
++CREATE POLICY workflow_transition_executions_insert_rls ON workflow_transition_executions
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++    );
++
++CREATE POLICY workflow_transition_executions_update_rls ON workflow_transition_executions
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(issue_id, 1)
++    );
++
++CREATE POLICY workflow_transition_executions_delete_rls ON workflow_transition_executions
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(project_id, ARRAY['PROJECT_ADMIN', 'WORKSPACE_ADMIN', 'SERVER_ADMIN'])
++    );
++
++-- 3. Policies for workflow_hook_invocations
++CREATE POLICY workflow_hook_invocations_select_rls ON workflow_hook_invocations
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND EXISTS (
++            SELECT 1 FROM workflow_transition_executions e
++            WHERE e.id = workflow_hook_invocations.execution_id
++              AND app_has_object_capability(e.issue_id, 1)
++        )
++    );
++
++CREATE POLICY workflow_hook_invocations_insert_rls ON workflow_hook_invocations
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND EXISTS (
++            SELECT 1 FROM workflow_transition_executions e
++            WHERE e.id = workflow_hook_invocations.execution_id
++              AND app_has_object_capability(e.issue_id, 1)
++        )
++    );
++
++CREATE POLICY workflow_hook_invocations_update_rls ON workflow_hook_invocations
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND EXISTS (
++            SELECT 1 FROM workflow_transition_executions e
++            WHERE e.id = workflow_hook_invocations.execution_id
++              AND app_has_object_capability(e.issue_id, 1)
++        )
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND EXISTS (
++            SELECT 1 FROM workflow_transition_executions e
++            WHERE e.id = workflow_hook_invocations.execution_id
++              AND app_has_object_capability(e.issue_id, 1)
++        )
++    );
++
++CREATE POLICY workflow_hook_invocations_delete_rls ON workflow_hook_invocations
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++    );
++
++-- Grants
++GRANT SELECT, INSERT, UPDATE, DELETE ON workflow_transition_hooks, workflow_transition_executions, workflow_hook_invocations TO kanban_app;
++GRANT SELECT ON workflow_transition_hooks, workflow_transition_executions, workflow_hook_invocations TO app_rls_reader;
++
++-- 4. Database guard trigger on issues.state_id
++CREATE OR REPLACE FUNCTION check_issues_state_guard() RETURNS trigger AS $$
++DECLARE
++    v_exec_id_text TEXT;
++    v_exec_id UUID;
++    v_valid BOOLEAN;
++BEGIN
++    -- If state_id is unchanged, permit the update without transition engine
++    IF NEW.state_id IS NOT DISTINCT FROM OLD.state_id THEN
++        RETURN NEW;
++    END IF;
++
++    -- Bootstrap fixtures running under superuser or kanban_migrator may seed states directly if no exec id
++    IF CURRENT_USER IN ('postgres', 'kanban_migrator') AND current_setting('app.transition_exec_id', true) IS NULL THEN
++        RETURN NEW;
++    END IF;
++
++    v_exec_id_text := current_setting('app.transition_exec_id', true);
++    IF v_exec_id_text IS NULL OR v_exec_id_text = '' THEN
++        RAISE EXCEPTION 'STATE_CHANGE_REQUIRES_TRANSITION_ENGINE'
++            USING ERRCODE = 'P0001',
++                  HINT = 'Issues state changes must pass through TransitionEngine';
++    END IF;
++
++    BEGIN
++        v_exec_id := v_exec_id_text::uuid;
++    EXCEPTION WHEN OTHERS THEN
++        RAISE EXCEPTION 'STATE_CHANGE_REQUIRES_TRANSITION_ENGINE'
++            USING ERRCODE = 'P0001',
++                  HINT = 'app.transition_exec_id is not a valid UUID';
++    END;
++
++    SELECT EXISTS (
++        SELECT 1
++        FROM workflow_transition_executions
++        WHERE id = v_exec_id
++          AND issue_id = NEW.id
++          AND to_state_id = NEW.state_id
++          AND status IN ('running_sync', 'pending_async')
++    ) INTO v_valid;
++
++    IF NOT v_valid THEN
++        RAISE EXCEPTION 'STATE_CHANGE_REQUIRES_TRANSITION_ENGINE'
++            USING ERRCODE = 'P0001',
++                  HINT = 'No active workflow_transition_executions row matches this state change';
++    END IF;
++
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++DROP TRIGGER IF EXISTS issues_state_guard ON issues;
++CREATE TRIGGER issues_state_guard
++    BEFORE UPDATE OF state_id ON issues
++    FOR EACH ROW
++    EXECUTE FUNCTION check_issues_state_guard();
+diff --git a/database/migrations/versions/p5_17a_workflow_hooks.py b/database/migrations/versions/p5_17a_workflow_hooks.py
+new file mode 100644
+index 0000000..a6a79de
+--- /dev/null
++++ b/database/migrations/versions/p5_17a_workflow_hooks.py
+@@ -0,0 +1,26 @@
++"""Workflow hook DDL, executions, and invocations (KB-P5-17a).
++
++Revision ID: p5_17a_workflow_hooks
++Revises: p5_13_approved_wasm_modules
++Create Date: 2026-11-15 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p5_17a_workflow_hooks"
++down_revision: str | None = "p4_07_mcp_read_taint"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply workflow transition hooks, executions, and guard trigger."""
++    execute_sql_file("p5_17a_workflow_hooks.up.sql")
++
++
++def downgrade() -> None:
++    """Revert workflow transition hooks, executions, and guard trigger."""
++    execute_sql_file("p5_17a_workflow_hooks.down.sql")
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index 6ed69c4..6b1c139 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -83,6 +83,11 @@ from database.models.spine import (
+     Workspace,
+ )
+ from database.models.wasm_module import ApprovedWasmModule
++from database.models.workflow import (
++    WorkflowHookInvocation,
++    WorkflowTransitionExecution,
++    WorkflowTransitionHook,
++)
+ from database.models.workspace_settings import WorkspaceSettings
+ 
+ __all__ = [
+@@ -159,7 +164,10 @@ __all__ = [
+     "ViewLayout",
+     "WebauthnChallenge",
+     "WebauthnCredential",
++    "WorkflowHookInvocation",
+     "WorkflowState",
++    "WorkflowTransitionExecution",
++    "WorkflowTransitionHook",
+     "Workspace",
+     "WorkspaceSettings",
+ ]
+diff --git a/database/models/workflow.py b/database/models/workflow.py
+new file mode 100644
+index 0000000..c5ce980
+--- /dev/null
++++ b/database/models/workflow.py
+@@ -0,0 +1,191 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""SQLAlchemy 2.0 ORM models for workflow transition hooks, executions, and invocations.
++
++KB-P5-17a, S14.1, S14.2.
++"""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003
++from datetime import datetime  # noqa: TC003
++from typing import Any
++
++from sqlalchemy import (
++    ARRAY,
++    Boolean,
++    CheckConstraint,
++    DateTime,
++    ForeignKey,
++    Index,
++    Integer,
++    LargeBinary,
++    SmallInteger,
++    Text,
++    UniqueConstraint,
++    text,
++)
++from sqlalchemy.dialects.postgresql import JSONB
++from sqlalchemy.orm import Mapped, mapped_column
++
++from database.models.base import Base
++
++
++class WorkflowTransitionHook(Base):
++    """Workflow transition hook definition (sync validator/mutator or async agent gate)."""
++
++    __tablename__ = "workflow_transition_hooks"
++    __table_args__ = (
++        CheckConstraint(
++            "(hook_kind IN ('sync_validator', 'sync_mutator') "
++            "AND wasm_module_sha256 IS NOT NULL AND agent_definition_id IS NULL) "
++            "OR (hook_kind = 'agent_interceptor' "
++            "AND agent_definition_id IS NOT NULL AND wasm_module_sha256 IS NULL)",
++            name="ck_workflow_transition_hooks_kind",
++        ),
++        CheckConstraint(
++            "octet_length(manifest_sha256) = 32",
++            name="ck_workflow_transition_hooks_manifest_sha256",
++        ),
++        CheckConstraint(
++            "wasm_module_sha256 IS NULL OR octet_length(wasm_module_sha256) = 32",
++            name="ck_workflow_transition_hooks_wasm_sha256",
++        ),
++        Index(
++            "wth_lookup",
++            "project_id",
++            "to_state_id",
++            "sort_rank",
++            postgresql_where=text("is_enabled"),
++        ),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
++    )
++    project_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
++    )
++    name: Mapped[str] = mapped_column(Text, nullable=False)
++    from_state_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("workflow_states.id", ondelete="CASCADE"), nullable=True
++    )
++    to_state_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workflow_states.id", ondelete="CASCADE"), nullable=False
++    )
++    hook_kind: Mapped[str] = mapped_column(Text, nullable=False)
++    sort_rank: Mapped[str] = mapped_column(Text, nullable=False)
++    is_enabled: Mapped[bool] = mapped_column(
++        Boolean, nullable=False, default=True, server_default=text("TRUE")
++    )
++    wasm_module_sha256: Mapped[bytes | None] = mapped_column(LargeBinary(32), nullable=True)
++    agent_definition_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("agent_definitions.id", ondelete="RESTRICT"), nullable=True
++    )
++    allowed_mutable_fields: Mapped[list[str]] = mapped_column(
++        ARRAY(Text), nullable=False, default=list, server_default=text("'{}'")
++    )
++    failure_policy: Mapped[str] = mapped_column(
++        Text, nullable=False, default="fail_closed", server_default=text("'fail_closed'")
++    )
++    manifest_sha256: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
++
++
++class WorkflowTransitionExecution(Base):
++    """Workflow transition execution record tracking synchronous and asynchronous gates."""
++
++    __tablename__ = "workflow_transition_executions"
++    __table_args__ = (
++        CheckConstraint(
++            "status IN ("
++            "'running_sync','pending_async','approved','rejected','cancelled','timed_out'"
++            ")",
++            name="ck_workflow_transition_executions_status",
++        ),
++        CheckConstraint("hop_depth <= 3", name="ck_workflow_transition_executions_hop_depth"),
++        CheckConstraint(
++            "octet_length(issue_body_sha256_snapshot) = 32",
++            name="ck_workflow_transition_executions_snapshot",
++        ),
++        Index(
++            "wte_one_pending",
++            "issue_id",
++            unique=True,
++            postgresql_where=text("status IN ('running_sync','pending_async')"),
++        ),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
++    )
++    project_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
++    )
++    issue_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("issues.id", ondelete="CASCADE"), nullable=False
++    )
++    invoking_principal_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("principals.id"), nullable=False
++    )
++    from_state_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workflow_states.id"), nullable=False
++    )
++    to_state_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workflow_states.id"), nullable=False)
++    status: Mapped[str] = mapped_column(Text, nullable=False)
++    hop_depth: Mapped[int] = mapped_column(
++        SmallInteger, nullable=False, default=0, server_default=text("0")
++    )
++    issue_body_sha256_snapshot: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
++    verdict_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
++    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
++
++
++class WorkflowHookInvocation(Base):
++    """Invocation telemetry and outcome of a hook within an execution."""
++
++    __tablename__ = "workflow_hook_invocations"
++    __table_args__ = (
++        CheckConstraint(
++            "hook_kind IN ('sync_validator','sync_mutator','agent_interceptor')",
++            name="ck_workflow_hook_invocations_kind",
++        ),
++        CheckConstraint(
++            "status IN ('running','allowed','rejected','mutated','error','timed_out','skipped')",
++            name="ck_workflow_hook_invocations_status",
++        ),
++        CheckConstraint("duration_us >= 0", name="ck_workflow_hook_invocations_duration"),
++        CheckConstraint(
++            "output_json IS NULL OR octet_length(output_json::text) <= 65536",
++            name="ck_workflow_hook_invocations_output_json",
++        ),
++        UniqueConstraint("execution_id", "hook_id", name="uq_workflow_hook_invocations_exec_hook"),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
++    )
++    execution_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workflow_transition_executions.id", ondelete="CASCADE"), nullable=False
++    )
++    hook_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workflow_transition_hooks.id", ondelete="RESTRICT"), nullable=False
++    )
++    hook_kind: Mapped[str] = mapped_column(Text, nullable=False)
++    status: Mapped[str] = mapped_column(Text, nullable=False)
++    error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
++    output_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
++    duration_us: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    started_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
++    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+diff --git a/database/tests/test_workflow_hooks_ddl.py b/database/tests/test_workflow_hooks_ddl.py
+new file mode 100644
+index 0000000..e461d3e
+--- /dev/null
++++ b/database/tests/test_workflow_hooks_ddl.py
+@@ -0,0 +1,647 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""DDL constraints, guard triggers, and RLS policies for workflow transition hooks (KB-P5-17a)."""
++
++from __future__ import annotations
++
++import hashlib
++import uuid
++from typing import TYPE_CHECKING, Any
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++async def _create_test_env(
++    session: AsyncSession,
++) -> dict[str, Any]:
++    """Provision workspace, project, states, issues, wasm module, agent def, and principals."""
++    ws_id = uuid.uuid4()
++    await session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
++        {"id": ws_id, "slug": f"ws-{ws_id.hex[:10]}", "name": "Workflow DDL WS"},
++    )
++
++    admin_id = uuid.uuid4()
++    member_id = uuid.uuid4()
++
++    for pid, dname in (
++        (admin_id, "Admin User"),
++        (member_id, "Member User"),
++    ):
++        await session.execute(
++            text("SELECT register_object('user'::object_kind, :ws, NULL, :ckey, :name, :uid, :id)"),
++            {"ws": ws_id, "ckey": f"usr-{pid.hex[:8]}", "name": dname, "uid": pid, "id": pid},
++        )
++        await session.execute(
++            text(
++                "INSERT INTO principals (id, workspace_id, principal_type, display_name) "
++                "VALUES (:id, :ws_id, 'USER', :name)"
++            ),
++            {"id": pid, "ws_id": ws_id, "name": dname},
++        )
++        await session.execute(
++            text("INSERT INTO users (id, workspace_id, email) VALUES (:id, :ws_id, :email)"),
++            {"id": pid, "ws_id": ws_id, "email": f"{pid.hex[:8]}@example.com"},
++        )
++
++    ident = f"P{uuid.uuid4().hex[:4].upper()}"
++    proj_id = await session.scalar(
++        text(
++            "SELECT register_object("
++            "'project'::object_kind, :ws, NULL, :ident, 'Workflow Project', :uid)"
++        ),
++        {"ws": ws_id, "ident": ident, "uid": admin_id},
++    )
++    assert isinstance(proj_id, uuid.UUID)
++    await session.execute(
++        text(
++            "INSERT INTO projects (id, workspace_id, identifier, name) "
++            "VALUES (:id, :ws, :ident, 'Workflow Project')"
++        ),
++        {"id": proj_id, "ws": ws_id, "ident": ident},
++    )
++
++    # Project roles: admin has PROJECT_ADMIN, member has MEMBER
++    await session.execute(
++        text(
++            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:ws_id, :p_id, 'PROJECT_ADMIN', 'project', :proj_id)"
++        ),
++        {"ws_id": ws_id, "p_id": admin_id, "proj_id": proj_id},
++    )
++    await session.execute(
++        text(
++            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:ws_id, :p_id, 'MEMBER', 'project', :proj_id)"
++        ),
++        {"ws_id": ws_id, "p_id": member_id, "proj_id": proj_id},
++    )
++    await session.execute(text("SELECT rebuild_effective_access_for_workspace(:ws)"), {"ws": ws_id})
++
++    # Project triggers automatically seed default workflow states and priorities
++    state_todo = await session.scalar(
++        text("SELECT id FROM workflow_states WHERE project_id = :proj AND name = 'Todo' LIMIT 1"),
++        {"proj": proj_id},
++    )
++    if state_todo is None:
++        state_todo = await session.scalar(
++            text(
++                "SELECT id FROM workflow_states "
++                "WHERE project_id = :proj AND state_group = 'unstarted' LIMIT 1"
++            ),
++            {"proj": proj_id},
++        )
++    assert isinstance(state_todo, uuid.UUID)
++
++    state_done = await session.scalar(
++        text("SELECT id FROM workflow_states WHERE project_id = :proj AND name = 'Done' LIMIT 1"),
++        {"proj": proj_id},
++    )
++    if state_done is None:
++        state_done = await session.scalar(
++            text(
++                "SELECT id FROM workflow_states "
++                "WHERE project_id = :proj AND state_group = 'completed' LIMIT 1"
++            ),
++            {"proj": proj_id},
++        )
++    assert isinstance(state_done, uuid.UUID)
++
++    prio_id = await session.scalar(
++        text(
++            "SELECT id FROM project_priorities "
++            "WHERE project_id = :proj AND is_default = true LIMIT 1"
++        ),
++        {"proj": proj_id},
++    )
++    if prio_id is None:
++        prio_id = await session.scalar(
++            text("SELECT id FROM project_priorities WHERE project_id = :proj LIMIT 1"),
++            {"proj": proj_id},
++        )
++    assert isinstance(prio_id, uuid.UUID)
++
++    # Issue
++    seq = await session.scalar(text("SELECT allocate_issue_sequence(:proj)"), {"proj": proj_id})
++    issue_ckey = f"{ident}-{seq}"
++    issue_id = await session.scalar(
++        text("SELECT register_object('issue'::object_kind, :ws, :proj, :ckey, 'Test Issue', :uid)"),
++        {"ws": ws_id, "proj": proj_id, "ckey": issue_ckey, "uid": admin_id},
++    )
++    assert isinstance(issue_id, uuid.UUID)
++    await session.execute(
++        text(
++            "INSERT INTO issues ("
++            "  id, workspace_id, project_id, sequence_id, summary, "
++            "  description_markdown, state_id, priority_id, created_by_id, original_created_by_id, "
++            "  board_rank"
++            ") VALUES ("
++            "  :id, :ws_id, :proj_id, :seq, 'Test Issue', "
++            "  'Issue body content', :state_id, :prio_id, :cb_id, :cb_id, "
++            "  '0|i00000:'"
++            ")"
++        ),
++        {
++            "id": issue_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "seq": seq,
++            "state_id": state_todo,
++            "prio_id": prio_id,
++            "cb_id": admin_id,
++        },
++    )
++
++    # Wasm module
++    wasm_sha256 = hashlib.sha256(b"\x00asm\x01\x00\x00\x00dummy").digest()
++    wasm_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO approved_wasm_modules ("
++            "  id, workspace_id, project_id, sha256, name, wasm_bytes, approved_by_id"
++            ") VALUES ("
++            "  :id, :ws_id, :proj_id, :sha, 'test-wasm', :bytes, :app_by"
++            ")"
++        ),
++        {
++            "id": wasm_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "sha": wasm_sha256,
++            "bytes": b"\x00asm\x01\x00\x00\x00dummy",
++            "app_by": admin_id,
++        },
++    )
++
++    # Agent definition
++    agent_def_id = uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO agent_definitions ("
++            "  id, workspace_id, project_id, principal_id, slug, display_name,"
++            "  harness_kind, cli_binary_allowlist_id, cli_args_json"
++            ") VALUES ("
++            "  :id, :ws_id, :proj_id, :p_id, 'test-interceptor', 'Test Interceptor',"
++            "  'cli_pipe', 'agy', '[\"-p\"]'::jsonb"
++            ")"
++        ),
++        {
++            "id": agent_def_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "p_id": admin_id,
++        },
++    )
++
++    return {
++        "workspace_id": ws_id,
++        "admin_user_id": admin_id,
++        "admin_principal_id": admin_id,
++        "member_user_id": member_id,
++        "member_principal_id": member_id,
++        "project_id": proj_id,
++        "state_todo": state_todo,
++        "state_done": state_done,
++        "issue_id": issue_id,
++        "wasm_sha256": wasm_sha256,
++        "agent_def_id": agent_def_id,
++    }
++
++
++@pytest.mark.asyncio
++async def test_workflow_hooks_ddl_constraints(db_session: AsyncSession) -> None:
++    """Verify check constraints on workflow_transition_hooks, executions, and invocations."""
++    env = await _create_test_env(db_session)
++    ws_id = env["workspace_id"]
++    proj_id = env["project_id"]
++    state_todo = env["state_todo"]
++    state_done = env["state_done"]
++    wasm_sha = env["wasm_sha256"]
++    agent_def_id = env["agent_def_id"]
++    issue_id = env["issue_id"]
++    admin_p_id = env["admin_principal_id"]
++
++    dummy_manifest = hashlib.sha256(b"dummy_manifest").digest()
++
++    # 1. Positive insert sync_validator
++    hook_val_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO workflow_transition_hooks ("
++            "  id, workspace_id, project_id, name, from_state_id, to_state_id,"
++            "  hook_kind, sort_rank, is_enabled, wasm_module_sha256,"
++            "  failure_policy, manifest_sha256"
++            ") VALUES ("
++            "  :id, :ws_id, :proj_id, 'val-1', :from_st, :to_st,"
++            "  'sync_validator', '0|i00001:', true, :wasm_sha, 'fail_closed', :manifest"
++            ")"
++        ),
++        {
++            "id": hook_val_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "from_st": state_todo,
++            "to_st": state_done,
++            "wasm_sha": wasm_sha,
++            "manifest": dummy_manifest,
++        },
++    )
++
++    # 2. CHECK constraint: sync_validator with agent_definition_id set -> rejected
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO workflow_transition_hooks ("
++                    "  workspace_id, project_id, name, from_state_id, to_state_id,"
++                    "  hook_kind, sort_rank, wasm_module_sha256,"
++                    "  agent_definition_id, manifest_sha256"
++                    ") VALUES ("
++                    "  :ws_id, :proj_id, 'invalid-hook', :from_st, :to_st,"
++                    "  'sync_validator', '0|i00002:', :wasm_sha, :agent_def, :manifest"
++                    ")"
++                ),
++                {
++                    "ws_id": ws_id,
++                    "proj_id": proj_id,
++                    "from_st": state_todo,
++                    "to_st": state_done,
++                    "wasm_sha": wasm_sha,
++                    "agent_def": agent_def_id,
++                    "manifest": dummy_manifest,
++                },
++            )
++    assert "ck_workflow_transition_hooks_kind" in str(exc_info.value).lower()
++
++    # 3. CHECK constraint: agent_interceptor with wasm_module_sha256 set -> rejected
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO workflow_transition_hooks ("
++                    "  workspace_id, project_id, name, from_state_id, to_state_id,"
++                    "  hook_kind, sort_rank, wasm_module_sha256,"
++                    "  agent_definition_id, manifest_sha256"
++                    ") VALUES ("
++                    "  :ws_id, :proj_id, 'invalid-agent-hook', :from_st, :to_st,"
++                    "  'agent_interceptor', '0|i00003:', :wasm_sha, :agent_def, :manifest"
++                    ")"
++                ),
++                {
++                    "ws_id": ws_id,
++                    "proj_id": proj_id,
++                    "from_st": state_todo,
++                    "to_st": state_done,
++                    "wasm_sha": wasm_sha,
++                    "agent_def": agent_def_id,
++                    "manifest": dummy_manifest,
++                },
++            )
++    assert "ck_workflow_transition_hooks_kind" in str(exc_info.value).lower()
++
++    # 4. CHECK constraint: manifest_sha256 not 32 bytes -> rejected
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO workflow_transition_hooks ("
++                    "  workspace_id, project_id, name, from_state_id, to_state_id,"
++                    "  hook_kind, sort_rank, wasm_module_sha256, manifest_sha256"
++                    ") VALUES ("
++                    "  :ws_id, :proj_id, 'bad-manifest-hook', :from_st, :to_st,"
++                    "  'sync_validator', '0|i00004:', :wasm_sha, :manifest"
++                    ")"
++                ),
++                {
++                    "ws_id": ws_id,
++                    "proj_id": proj_id,
++                    "from_st": state_todo,
++                    "to_st": state_done,
++                    "wasm_sha": wasm_sha,
++                    "manifest": b"short",
++                },
++            )
++    assert "ck_workflow_transition_hooks_manifest_sha256" in str(exc_info.value).lower()
++
++    # 5. Execution: hop_depth > 3 check constraint (KB-P5-17a test case 7)
++    snapshot = hashlib.sha256(b"body").digest()
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO workflow_transition_executions ("
++                    "  workspace_id, project_id, issue_id, invoking_principal_id,"
++                    "  from_state_id, to_state_id, status, hop_depth, issue_body_sha256_snapshot"
++                    ") VALUES ("
++                    "  :ws_id, :proj_id, :issue_id, :p_id,"
++                    "  :from_st, :to_st, 'running_sync', 4, :snap"
++                    ")"
++                ),
++                {
++                    "ws_id": ws_id,
++                    "proj_id": proj_id,
++                    "issue_id": issue_id,
++                    "p_id": admin_p_id,
++                    "from_st": state_todo,
++                    "to_st": state_done,
++                    "snap": snapshot,
++                },
++            )
++    assert (
++        "ck_workflow_transition_executions_hop_depth" in str(exc_info.value).lower()
++        or "hop_depth" in str(exc_info.value).lower()
++    )
++
++    # 6. Execution: unique partial index wte_one_pending
++    exec1_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO workflow_transition_executions ("
++            "  id, workspace_id, project_id, issue_id, invoking_principal_id,"
++            "  from_state_id, to_state_id, status, hop_depth, issue_body_sha256_snapshot"
++            ") VALUES ("
++            "  :id, :ws_id, :proj_id, :issue_id, :p_id,"
++            "  :from_st, :to_st, 'running_sync', 0, :snap"
++            ")"
++        ),
++        {
++            "id": exec1_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "issue_id": issue_id,
++            "p_id": admin_p_id,
++            "from_st": state_todo,
++            "to_st": state_done,
++            "snap": snapshot,
++        },
++    )
++
++    # Second concurrent transition while status is 'running_sync' fails unique index wte_one_pending
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO workflow_transition_executions ("
++                    "  workspace_id, project_id, issue_id, invoking_principal_id,"
++                    "  from_state_id, to_state_id, status, hop_depth, issue_body_sha256_snapshot"
++                    ") VALUES ("
++                    "  :ws_id, :proj_id, :issue_id, :p_id,"
++                    "  :from_st, :to_st, 'running_sync', 0, :snap"
++                    ")"
++                ),
++                {
++                    "ws_id": ws_id,
++                    "proj_id": proj_id,
++                    "issue_id": issue_id,
++                    "p_id": admin_p_id,
++                    "from_st": state_todo,
++                    "to_st": state_done,
++                    "snap": snapshot,
++                },
++            )
++    assert "wte_one_pending" in str(exc_info.value).lower()
++
++    # 7. Invocations positive insert + unique constraint (execution_id, hook_id)
++    inv_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO workflow_hook_invocations ("
++            "  id, workspace_id, execution_id, hook_id, hook_kind, status, duration_us"
++            ") VALUES ("
++            "  :id, :ws_id, :exec_id, :hook_id, 'sync_validator', 'allowed', 120"
++            ")"
++        ),
++        {"id": inv_id, "ws_id": ws_id, "exec_id": exec1_id, "hook_id": hook_val_id},
++    )
++
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO workflow_hook_invocations ("
++                    "  workspace_id, execution_id, hook_id, hook_kind, status, duration_us"
++                    ") VALUES ("
++                    "  :ws_id, :exec_id, :hook_id, 'sync_validator', 'allowed', 150"
++                    ")"
++                ),
++                {"ws_id": ws_id, "exec_id": exec1_id, "hook_id": hook_val_id},
++            )
++    assert (
++        "uq_workflow_hook_invocations_exec_hook" in str(exc_info.value).lower()
++        or "unique constraint" in str(exc_info.value).lower()
++    )
++
++
++@pytest.mark.asyncio
++async def test_issues_state_guard_trigger(db_session: AsyncSession) -> None:
++    """Verify issues_state_guard trigger raises required guard error (test case 4)."""
++    env = await _create_test_env(db_session)
++    ws_id = env["workspace_id"]
++    proj_id = env["project_id"]
++    state_todo = env["state_todo"]
++    state_done = env["state_done"]
++    issue_id = env["issue_id"]
++    admin_p_id = env["admin_principal_id"]
++
++    # Switch session authorization to kanban_app and bind context
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++    await db_session.execute(
++        text(
++            "SELECT set_config('app.principal_id', :p_id, true), "
++            "set_config('app.workspace_id', :w_id, true)"
++        ),
++        {"p_id": str(admin_p_id), "w_id": str(ws_id)},
++    )
++
++    # 1. Update summary without changing state_id -> succeeds
++    await db_session.execute(
++        text("UPDATE issues SET summary = 'Updated summary' WHERE id = :id"),
++        {"id": issue_id},
++    )
++
++    # 2. Direct UPDATE issues SET state_id=... without app.transition_exec_id
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET state_id = :st WHERE id = :id"),
++                {"st": state_done, "id": issue_id},
++            )
++    assert "STATE_CHANGE_REQUIRES_TRANSITION_ENGINE" in str(exc_info.value)
++
++    # 3. Direct UPDATE with random UUID in app.transition_exec_id
++    bogus_exec = uuid.uuid4()
++    await db_session.execute(
++        text("SELECT set_config('app.transition_exec_id', :val, true)"),
++        {"val": str(bogus_exec)},
++    )
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text("UPDATE issues SET state_id = :st WHERE id = :id"),
++                {"st": state_done, "id": issue_id},
++            )
++    assert "STATE_CHANGE_REQUIRES_TRANSITION_ENGINE" in str(exc_info.value)
++
++    # 4. Legitimate transition with active execution row -> succeeds!
++    snapshot = hashlib.sha256(b"body").digest()
++    valid_exec_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO workflow_transition_executions ("
++            "  id, workspace_id, project_id, issue_id, invoking_principal_id,"
++            "  from_state_id, to_state_id, status, hop_depth, issue_body_sha256_snapshot"
++            ") VALUES ("
++            "  :id, :ws_id, :proj_id, :issue_id, :p_id,"
++            "  :from_st, :to_st, 'running_sync', 0, :snap"
++            ")"
++        ),
++        {
++            "id": valid_exec_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "issue_id": issue_id,
++            "p_id": admin_p_id,
++            "from_st": state_todo,
++            "to_st": state_done,
++            "snap": snapshot,
++        },
++    )
++
++    await db_session.execute(
++        text("SELECT set_config('app.transition_exec_id', :val, true)"),
++        {"val": str(valid_exec_id)},
++    )
++    await db_session.execute(
++        text("UPDATE issues SET state_id = :st WHERE id = :id"),
++        {"st": state_done, "id": issue_id},
++    )
++
++
++@pytest.mark.asyncio
++async def test_workflow_hooks_rls_security(db_session: AsyncSession) -> None:
++    """Verify RLS policies on hooks, executions, and invocations (test case 9)."""
++    env = await _create_test_env(db_session)
++    ws_id = env["workspace_id"]
++    proj_id = env["project_id"]
++    state_todo = env["state_todo"]
++    state_done = env["state_done"]
++    wasm_sha = env["wasm_sha256"]
++    member_p_id = env["member_principal_id"]
++
++    dummy_manifest = hashlib.sha256(b"dummy_manifest").digest()
++
++    # 1. Assert FORCE ROW LEVEL SECURITY on all 3 tables
++    for tbl in [
++        "workflow_transition_hooks",
++        "workflow_transition_executions",
++        "workflow_hook_invocations",
++    ]:
++        res = (
++            (
++                await db_session.execute(
++                    text(
++                        "SELECT c.relrowsecurity, c.relforcerowsecurity "
++                        "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
++                        "WHERE n.nspname = 'public' AND c.relname = :tbl"
++                    ),
++                    {"tbl": tbl},
++                )
++            )
++            .mappings()
++            .one()
++        )
++        assert res["relrowsecurity"] is True, f"{tbl} must have relrowsecurity=true"
++        assert res["relforcerowsecurity"] is True, f"{tbl} must have relforcerowsecurity=true"
++
++    # Insert hook under superuser
++    hook_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO workflow_transition_hooks ("
++            "  id, workspace_id, project_id, name, from_state_id, to_state_id,"
++            "  hook_kind, sort_rank, is_enabled, wasm_module_sha256, manifest_sha256"
++            ") VALUES ("
++            "  :id, :ws_id, :proj_id, 'hook-rls', :from_st, :to_st,"
++            "  'sync_validator', '0|i00001:', true, :wasm_sha, :manifest"
++            ")"
++        ),
++        {
++            "id": hook_id,
++            "ws_id": ws_id,
++            "proj_id": proj_id,
++            "from_st": state_todo,
++            "to_st": state_done,
++            "wasm_sha": wasm_sha,
++            "manifest": dummy_manifest,
++        },
++    )
++
++    # Switch session to kanban_app
++    await db_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++
++    # Member principal context
++    await db_session.execute(
++        text(
++            "SELECT set_config('app.principal_id', :p_id, true), "
++            "set_config('app.workspace_id', :w_id, true)"
++        ),
++        {"p_id": str(member_p_id), "w_id": str(ws_id)},
++    )
++
++    # Hook is visible because member has VIEW on project
++    rows = (
++        (await db_session.execute(text("SELECT id FROM workflow_transition_hooks"))).scalars().all()
++    )
++    assert hook_id in rows
++
++    # Hooks invisible across workspaces
++    other_ws = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "SELECT set_config('app.principal_id', :p_id, true), "
++            "set_config('app.workspace_id', :w_id, true)"
++        ),
++        {"p_id": str(member_p_id), "w_id": str(other_ws)},
++    )
++    rows_other = (
++        (await db_session.execute(text("SELECT id FROM workflow_transition_hooks"))).scalars().all()
++    )
++    assert len(rows_other) == 0
++
++    # Back to valid workspace, MEMBER insert into hooks rejected by WITH CHECK
++    await db_session.execute(
++        text(
++            "SELECT set_config('app.principal_id', :p_id, true), "
++            "set_config('app.workspace_id', :w_id, true)"
++        ),
++        {"p_id": str(member_p_id), "w_id": str(ws_id)},
++    )
++    with pytest.raises(DBAPIError) as exc_info:
++        async with db_session.begin_nested():
++            await db_session.execute(
++                text(
++                    "INSERT INTO workflow_transition_hooks ("
++                    "  workspace_id, project_id, name, to_state_id,"
++                    "  hook_kind, sort_rank, wasm_module_sha256, manifest_sha256"
++                    ") VALUES ("
++                    "  :ws_id, :proj_id, 'member-hook', :to_st,"
++                    "  'sync_validator', '0|i00002:', :wasm_sha, :manifest"
++                    ")"
++                ),
++                {
++                    "ws_id": ws_id,
++                    "proj_id": proj_id,
++                    "to_st": state_done,
++                    "wasm_sha": wasm_sha,
++                    "manifest": dummy_manifest,
++                },
++            )
++    assert (
++        "row-level security" in str(exc_info.value).lower()
++        or "check" in str(exc_info.value).lower()
++    )
+diff --git a/kanban/api/problems.py b/kanban/api/problems.py
+index e110d44..bea18fc 100644
+--- a/kanban/api/problems.py
++++ b/kanban/api/problems.py
+@@ -154,7 +154,8 @@ async def problem_exception_handler(
+     """Format an explicit ProblemException into application/problem+json."""
+     del request
+     req_id = get_request_id()
+-    extra_fields = exc.extra or {}
++    extra_fields = dict(exc.extra or {})
++    extra_field = extra_fields.pop("field", None)
+     problem = Problem(
+         type=exc.type_uri or f"urn:kanban:problem:{exc.code}",
+         title=exc.title,
+@@ -164,7 +165,7 @@ async def problem_exception_handler(
+         request_id=req_id,
+         errors=exc.errors,
+         current_etag=exc.current_etag,
+-        field=exc.field,
++        field=exc.field or extra_field,
+         candidates=exc.candidates,
+         unauthorized_mentions=exc.unauthorized_mentions,
+         state_group=exc.state_group,
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 9ae747d..f7a46f5 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -69,6 +69,7 @@ from kanban.api.v1.system_status import (
+     admin_standalone_router,
+     system_router,
+ )
++from kanban.api.v1.transitions import router as transitions_router
+ from kanban.api.v1.views import router as views_router
+ 
+ 
+@@ -84,6 +85,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(issues_router)
+     v1.include_router(issue_trees_router)
+     v1.include_router(issue_workflow_router)
++    v1.include_router(transitions_router)
+     v1.include_router(issue_copy_router)
+     v1.include_router(assignees_router)
+     v1.include_router(links_router)
+diff --git a/kanban/api/v1/schemas/issues.py b/kanban/api/v1/schemas/issues.py
+index 9bce704..e59d4b9 100644
+--- a/kanban/api/v1/schemas/issues.py
++++ b/kanban/api/v1/schemas/issues.py
+@@ -80,6 +80,7 @@ class IssueCreate(BaseModel):
+     summary: str
+     description_markdown: str = ""
+     priority: str | uuid.UUID | None = None
++    state: str | uuid.UUID | None = None
+     state_id: uuid.UUID | None = None
+     start_date: date | None = None
+     due_date: date | None = None
+@@ -123,6 +124,7 @@ class IssuePatch(BaseModel):
+     summary: str | None = None
+     description_markdown: str | None = None
+     priority: str | uuid.UUID | None = None
++    state: str | uuid.UUID | None = None
+     state_id: uuid.UUID | None = None
+     start_date: date | None = None
+     due_date: date | None = None
+diff --git a/kanban/api/v1/transitions.py b/kanban/api/v1/transitions.py
+new file mode 100644
+index 0000000..4d7a267
+--- /dev/null
++++ b/kanban/api/v1/transitions.py
+@@ -0,0 +1,87 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Issue workflow transition endpoint (KB-P5-17a, S14.1, S14.2)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003
++from typing import Annotated
++
++from fastapi import APIRouter, Depends, Header
++from pydantic import BaseModel, ConfigDict, Field
++from sqlalchemy.exc import SQLAlchemyError
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.problems import ProblemException
++from kanban.workflows.engine import TransitionEngine
++
++router = APIRouter(tags=["transitions"])
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++class TransitionRequest(BaseModel):
++    """Request payload for executing an issue workflow transition."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    to_state: Annotated[
++        str, Field(min_length=1, max_length=100, description="Target workflow state name or UUID")
++    ]
++    comment_markdown: Annotated[
++        str | None, Field(max_length=65536, description="Optional transition comment")
++    ] = None
++
++
++class TransitionResponse(BaseModel):
++    """Response payload for an approved workflow transition."""
++
++    model_config = ConfigDict(extra="allow")
++
++    execution_id: uuid.UUID
++    status: str
++    state: str
++    sync_duration_ms: float | None = None
++
++
++@router.post(
++    "/issues/{issue_key}/transitions",
++    response_model=TransitionResponse,
++    summary="Execute workflow state transition through validation pipeline",
++)
++async def post_issue_transition(
++    issue_key: str,
++    body: TransitionRequest,
++    caller: Caller,
++    session: Session,
++    if_match: Annotated[str | None, Header()] = None,
++) -> TransitionResponse:
++    """Execute synchronous Tier A validator/mutator transition pipeline and update issue state."""
++    try:
++        outcome = await TransitionEngine.request_transition(
++            session=session,
++            issue_key=issue_key,
++            to_state=body.to_state,
++            actor=caller,
++            if_match=if_match,
++            comment_markdown=body.comment_markdown,
++        )
++    except ProblemException:
++        # Persist execution audit records before propagating problem exception
++        if session.is_active:
++            try:
++                await session.commit()
++            except SQLAlchemyError:
++                await session.rollback()
++        raise
++    if outcome.execution_id is None or outcome.state is None:
++        msg = "Transition outcome missing required execution_id or state"
++        raise RuntimeError(msg)
++    return TransitionResponse(
++        execution_id=outcome.execution_id,
++        status=outcome.status,
++        state=outcome.state,
++        sync_duration_ms=outcome.sync_duration_ms,
++    )
+diff --git a/kanban/services/issue_move.py b/kanban/services/issue_move.py
+index 9ffe2bf..5558edb 100644
+--- a/kanban/services/issue_move.py
++++ b/kanban/services/issue_move.py
+@@ -15,6 +15,7 @@ from kanban.security.permissions import Capability, require_capability
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.board_rank import REBALANCE_THRESHOLD_LEN, midpoint_rank
+ from kanban.services.issue_keys import resolve_issue_ref
++from kanban.workflows.engine import TransitionEngine
+ 
+ if TYPE_CHECKING:
+     import uuid
+@@ -311,10 +312,22 @@ async def move_issue(
+     old_rank = issue.board_rank
+     old_state_id = issue.state_id
+ 
+-    await session.execute(
+-        text("UPDATE issues SET state_id = :s, board_rank = :r WHERE id = :id"),
+-        {"s": target_state_id, "r": new_rank, "id": issue.id},
+-    )
++    if is_cross_column:
++        await TransitionEngine.request_transition(
++            session=session,
++            issue_key=str(issue.id),
++            to_state=target_state_id,
++            actor=caller,
++        )
++        await session.execute(
++            text("UPDATE issues SET board_rank = :r WHERE id = :id"),
++            {"r": new_rank, "id": issue.id},
++        )
++    else:
++        await session.execute(
++            text("UPDATE issues SET board_rank = :r WHERE id = :id"),
++            {"r": new_rank, "id": issue.id},
++        )
+     await session.flush()
+     await session.refresh(issue)
+ 
+@@ -329,19 +342,6 @@ async def move_issue(
+             payload={"old_rank": old_rank, "new_rank": new_rank},
+         )
+ 
+-    if is_cross_column:
+-        await record_activity(
+-            session,
+-            workspace_id=issue.workspace_id,
+-            object_id=issue.id,
+-            actor_principal_id=caller.principal_id,
+-            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
+-            payload={
+-                "from_state_id": str(old_state_id),
+-                "to_state_id": str(target_state_id),
+-            },
+-        )
+-
+     if wip_overridden and clean_override_reason is not None:
+         await record_activity(
+             session,
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index 5da3d66..4295113 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -71,6 +71,7 @@ from kanban.services.assignees import get_issue_assignees
+ from kanban.services.issue_keys import _ISSUE_KEY_RE, resolve_issue_ref
+ from kanban.services.issue_provenance import build_issue_provenance
+ from kanban.services.projects import get_project_or_404
++from kanban.workflows.engine import TransitionEngine
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Sequence
+@@ -302,23 +303,27 @@ async def _default_state_id(session: AsyncSession, project_id: uuid.UUID) -> uui
+ 
+ 
+ async def _resolve_state(
+-    session: AsyncSession, project_id: uuid.UUID, state_id: uuid.UUID
++    session: AsyncSession, project_id: uuid.UUID, state_ref: str | uuid.UUID
+ ) -> uuid.UUID:
+-    """Validate that state_id belongs to project_id."""
+-    state = (
+-        await session.execute(
+-            select(WorkflowState.id).where(
+-                WorkflowState.project_id == project_id, WorkflowState.id == state_id
+-            )
+-        )
+-    ).scalar_one_or_none()
++    """Validate and resolve workflow state by UUID or name within project_id."""
++    stmt = select(WorkflowState.id).where(WorkflowState.project_id == project_id)
++    if isinstance(state_ref, uuid.UUID):
++        stmt = stmt.where(WorkflowState.id == state_ref)
++    else:
++        try:
++            s_uuid = uuid.UUID(state_ref)
++            stmt = stmt.where(WorkflowState.id == s_uuid)
++        except ValueError:
++            stmt = stmt.where(WorkflowState.name == state_ref)
++
++    state = (await session.execute(stmt)).scalar_one_or_none()
+     if state is None:
+         raise _problem(
+             code="INVALID_REFERENCE",
+             status=422,
+             title="Invalid Reference",
+             detail="Workflow state not found in project",
+-            field="state_id",
++            field="state",
+         )
+     return state
+ 
+@@ -778,7 +783,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+         "state_id" in body.model_fields_set
+         and body.state_id is not None
+         and body.state_id != issue.state_id
+-    ):
++    ) or ("state" in body.model_fields_set and body.state is not None):
+         required |= Capability.TRANSITION
+     await require_capability(session, caller, issue.id, required)
+ 
+@@ -859,15 +864,21 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+             update_vals["priority_id"] = new_prio_id
+             field_changes.append(("priority_id", str(issue.priority_id), str(new_prio_id)))
+ 
++    target_state_ref = None
++    if "state" in body.model_fields_set:
++        target_state_ref = body.state
++    elif "state_id" in body.model_fields_set:
++        target_state_ref = body.state_id
++
+     state_changed = False
+-    if "state_id" in body.model_fields_set:
++    new_state_id: uuid.UUID | None = None
++    if "state" in body.model_fields_set or "state_id" in body.model_fields_set:
+         new_state_id = (
+             await _default_state_id(session, issue.project_id)
+-            if body.state_id is None
+-            else await _resolve_state(session, issue.project_id, body.state_id)
++            if target_state_ref is None
++            else await _resolve_state(session, issue.project_id, target_state_ref)
+         )
+         if new_state_id != issue.state_id:
+-            update_vals["state_id"] = new_state_id
+             state_changed = True
+ 
+     if "cycle_id" in body.model_fields_set:
+@@ -930,7 +941,6 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+         return await serialize_issue(session, caller, issue), current_etag
+ 
+     issue_id = issue.id
+-    old_state_id = issue.state_id
+     old_desc_sha256_hex = current_sha256_hex
+ 
+     try:
+@@ -983,6 +993,16 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+                         )
+                     )
+ 
++            if state_changed and new_state_id is not None:
++                await session.flush()
++                await TransitionEngine.request_transition(
++                    session=session,
++                    issue_key=str(issue_id),
++                    to_state=new_state_id,
++                    actor=caller,
++                    if_match=if_match,
++                )
++
+             await session.flush()
+     except (IntegrityError, DBAPIError) as exc:
+         _handle_parent_dag_error(exc)
+@@ -1014,19 +1034,6 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+             },
+         )
+ 
+-    if state_changed:
+-        await record_activity(
+-            session,
+-            workspace_id=caller.workspace_id,
+-            object_id=issue_id,
+-            actor_principal_id=caller.principal_id,
+-            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
+-            payload={
+-                "from_state_id": str(old_state_id),
+-                "to_state_id": str(update_vals["state_id"]),
+-            },
+-        )
+-
+     if labels_changed:
+         await record_activity(
+             session,
+diff --git a/kanban/tests/workflows/__init__.py b/kanban/tests/workflows/__init__.py
+new file mode 100644
+index 0000000..031001b
+--- /dev/null
++++ b/kanban/tests/workflows/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for workflow engine and hook pipelines (KB-P5-17a)."""
+diff --git a/kanban/tests/workflows/test_manifest.py b/kanban/tests/workflows/test_manifest.py
+new file mode 100644
+index 0000000..d7b3ad6
+--- /dev/null
++++ b/kanban/tests/workflows/test_manifest.py
+@@ -0,0 +1,140 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for workflow hook manifest SHA-256 calculation (KB-P5-17a)."""
++
++from __future__ import annotations
++
++import hashlib
++import uuid
++
++from kanban.workflows.manifest import compute_hook_manifest_sha256
++
++
++def test_manifest_determinism_and_length() -> None:
++    """Verify compute_hook_manifest_sha256 is deterministic and returns 32 bytes."""
++    to_state = uuid.uuid4()
++    wasm_bytes = hashlib.sha256(b"module").digest()
++
++    h1 = compute_hook_manifest_sha256(
++        hook_kind="sync_validator",
++        wasm_module_sha256=wasm_bytes,
++        allowed_mutable_fields=["labels", "priority"],
++        failure_policy="fail_closed",
++        from_state_id=None,
++        to_state_id=to_state,
++    )
++    h2 = compute_hook_manifest_sha256(
++        hook_kind="sync_validator",
++        wasm_module_sha256=wasm_bytes,
++        allowed_mutable_fields=["priority", "labels"],
++        failure_policy="fail_closed",
++        from_state_id=None,
++        to_state_id=to_state,
++    )
++    assert len(h1) == 32
++    assert h1 == h2
++
++
++def test_manifest_hex_and_bytes_equivalence() -> None:
++    """Verify wasm_module_sha256 as bytes vs lower-case hex produces identical manifest."""
++    to_state = uuid.uuid4()
++    wasm_bytes = hashlib.sha256(b"module").digest()
++    wasm_hex = wasm_bytes.hex()
++
++    h_bytes = compute_hook_manifest_sha256(
++        hook_kind="sync_mutator",
++        wasm_module_sha256=wasm_bytes,
++        to_state_id=to_state,
++    )
++    h_hex = compute_hook_manifest_sha256(
++        hook_kind="sync_mutator",
++        wasm_module_sha256=wasm_hex,
++        to_state_id=to_state,
++    )
++    assert h_bytes == h_hex
++
++
++def test_manifest_wildcard_from_state() -> None:
++    """Verify from_state_id=None and empty string map to '*' in canonical hash."""
++    to_state = uuid.uuid4()
++    agent_id = uuid.uuid4()
++
++    h_none = compute_hook_manifest_sha256(
++        hook_kind="agent_interceptor",
++        agent_definition_id=agent_id,
++        from_state_id=None,
++        to_state_id=to_state,
++    )
++    h_empty = compute_hook_manifest_sha256(
++        hook_kind="agent_interceptor",
++        agent_definition_id=agent_id,
++        from_state_id="",
++        to_state_id=to_state,
++    )
++    assert h_none == h_empty
++
++
++def test_manifest_tamper_sensitivity() -> None:
++    """Verify modifying any field changes the resulting manifest hash."""
++    to_state = uuid.uuid4()
++    from_state = uuid.uuid4()
++    wasm_bytes = hashlib.sha256(b"module").digest()
++
++    base = compute_hook_manifest_sha256(
++        hook_kind="sync_validator",
++        wasm_module_sha256=wasm_bytes,
++        allowed_mutable_fields=["labels"],
++        failure_policy="fail_closed",
++        from_state_id=from_state,
++        to_state_id=to_state,
++    )
++
++    diff_kind = compute_hook_manifest_sha256(
++        hook_kind="sync_mutator",
++        wasm_module_sha256=wasm_bytes,
++        allowed_mutable_fields=["labels"],
++        failure_policy="fail_closed",
++        from_state_id=from_state,
++        to_state_id=to_state,
++    )
++    assert diff_kind != base
++
++    diff_policy = compute_hook_manifest_sha256(
++        hook_kind="sync_validator",
++        wasm_module_sha256=wasm_bytes,
++        allowed_mutable_fields=["labels"],
++        failure_policy="fail_open_warn",
++        from_state_id=from_state,
++        to_state_id=to_state,
++    )
++    assert diff_policy != base
++
++    diff_fields = compute_hook_manifest_sha256(
++        hook_kind="sync_validator",
++        wasm_module_sha256=wasm_bytes,
++        allowed_mutable_fields=["labels", "priority"],
++        failure_policy="fail_closed",
++        from_state_id=from_state,
++        to_state_id=to_state,
++    )
++    assert diff_fields != base
++
++    diff_to = compute_hook_manifest_sha256(
++        hook_kind="sync_validator",
++        wasm_module_sha256=wasm_bytes,
++        allowed_mutable_fields=["labels"],
++        failure_policy="fail_closed",
++        from_state_id=from_state,
++        to_state_id=uuid.uuid4(),
++    )
++    assert diff_to != base
++
++    diff_from = compute_hook_manifest_sha256(
++        hook_kind="sync_validator",
++        wasm_module_sha256=wasm_bytes,
++        allowed_mutable_fields=["labels"],
++        failure_policy="fail_closed",
++        from_state_id=None,
++        to_state_id=to_state,
++    )
++    assert diff_from != base
+diff --git a/kanban/tests/workflows/test_mutations.py b/kanban/tests/workflows/test_mutations.py
+new file mode 100644
+index 0000000..5ec99d0
+--- /dev/null
++++ b/kanban/tests/workflows/test_mutations.py
+@@ -0,0 +1,300 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit tests for workflow hook mutable field updates (KB-P5-17a)."""
++
++from __future__ import annotations
++
++import datetime as dt
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import select, text
++
++from database.models.custom_field import CustomFieldDefinition, CustomFieldValue
++from database.models.issues import Issue, IssueAssignee, IssueLabel
++from database.models.projects import Cycle, ProjectLabel, ProjectPriority, WorkflowState
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.workflows.mutations import (
++    apply_field_updates,
++    is_in_mutable_universe,
++    validate_field_updates,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def test_is_in_mutable_universe() -> None:
++    """Test validation of base and custom field universe members."""
++    for base in ("labels", "priority", "assignees", "start_date", "due_date", "cycle"):
++        assert is_in_mutable_universe(base) is True
++
++    assert is_in_mutable_universe("custom_fields.qa_status") is True
++    assert is_in_mutable_universe("custom_fields.risk-level_1") is True
++    assert is_in_mutable_universe("custom_fields.") is False
++    assert is_in_mutable_universe("custom_fields.INVALID/CHARS") is False
++    assert is_in_mutable_universe("state") is False
++    assert is_in_mutable_universe("summary") is False
++    assert is_in_mutable_universe("description_markdown") is False
++    assert is_in_mutable_universe("unknown_field") is False
++
++
++def test_validate_field_updates_validation() -> None:
++    """Test validate_field_updates against immutable, unknown, and forbidden fields."""
++    # None or empty is a no-op
++    validate_field_updates([], None)
++    validate_field_updates([], {})
++
++    # Valid allowed fields
++    validate_field_updates(["labels", "priority"], {"labels": ["foo"], "priority": "high"})
++
++    # Immutable fields reject with HOOK_MUTATION_NOT_ALLOWED
++    for imm in ("state", "state_id", "summary", "description_markdown", "created_by", "parent"):
++        with pytest.raises(ProblemException) as exc_info:
++            validate_field_updates([imm], {imm: "val"})
++        assert exc_info.value.code == "HOOK_MUTATION_NOT_ALLOWED"
++        assert exc_info.value.status == 422
++        assert "immutable" in (exc_info.value.detail or "")
++
++    # Unknown field outside universe
++    with pytest.raises(ProblemException) as exc_info:
++        validate_field_updates(["bogus"], {"bogus": "val"})
++    assert exc_info.value.code == "HOOK_MUTATION_NOT_ALLOWED"
++    assert "not in MUTABLE_FIELD_UNIVERSE" in (exc_info.value.detail or "")
++
++    # Field in universe but not allowed by hook
++    with pytest.raises(ProblemException) as exc_info:
++        validate_field_updates(["labels"], {"priority": "urgent"})
++    assert exc_info.value.code == "HOOK_MUTATION_NOT_ALLOWED"
++    assert "not in hook's allowed_mutable_fields" in (exc_info.value.detail or "")
++
++
++async def test_apply_field_updates_all_fields(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Test applying labels, priority, assignees, dates, cycle, and custom fields."""
++    admin = await make_user("mut_admin", workspace_role="WORKSPACE_ADMIN")
++    dev = await make_user("mut_dev", workspace_role="WORKSPACE_MEMBER")
++    proj_id = await make_project(
++        "MUT", created_by=admin, roles={admin: "PROJECT_ADMIN", dev: "MEMBER"}
++    )
++
++    actor = PrincipalContext(
++        principal_id=admin.id,
++        workspace_id=api_env.workspace_id,
++        token_scopes=("session",),
++    )
++
++    # Empty updates return {}
++    empty_changes = await apply_field_updates(api_env.seed, None, None, actor)  # type: ignore[arg-type]
++    assert empty_changes == {}
++
++    # Get seeded Project Priority
++    prio_urgent = (
++        await api_env.seed.execute(
++            select(ProjectPriority).where(
++                ProjectPriority.project_id == proj_id,
++                ProjectPriority.slug == "urgent",
++            )
++        )
++    ).scalar_one()
++    prio_medium = (
++        await api_env.seed.execute(
++            select(ProjectPriority).where(
++                ProjectPriority.project_id == proj_id,
++                ProjectPriority.slug == "medium",
++            )
++        )
++    ).scalar_one()
++    prio_id = prio_urgent.id
++    medium_id = prio_medium.id
++
++    # Seed Project Cycle
++    cy_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text(
++            "SELECT register_object("
++            "'cycle'::object_kind, :ws, :proj, 'CY-1', 'Sprint 1', :uid, :id)"
++        ),
++        {"ws": api_env.workspace_id, "proj": proj_id, "uid": admin.id, "id": cy_id},
++    )
++    cy = Cycle(
++        id=cy_id,
++        workspace_id=api_env.workspace_id,
++        project_id=proj_id,
++        name="Sprint 1",
++    )
++    api_env.seed.add(cy)
++
++    # Seed Custom Field Definition
++    cf_def_id = uuid.uuid4()
++    cf_def = CustomFieldDefinition(
++        id=cf_def_id,
++        workspace_id=api_env.workspace_id,
++        project_id=proj_id,
++        slug="qa-signoff",
++        name="QA Signoff",
++        tier="wasm",
++        output_format="text",
++        script_source="return 'ok';",
++        manifest_sha256=b"\x00" * 32,
++        created_by_id=admin.id,
++    )
++    api_env.seed.add(cf_def)
++
++    # Seed an existing Project Label
++    existing_pl_id = uuid.uuid4()
++    existing_pl = ProjectLabel(
++        id=existing_pl_id,
++        workspace_id=api_env.workspace_id,
++        project_id=proj_id,
++        name="backend",
++        color_hex="#0284c7",
++    )
++    api_env.seed.add(existing_pl)
++    await api_env.seed.commit()
++
++    # Get default state for project
++    default_state_id = (
++        (
++            await api_env.seed.execute(
++                select(WorkflowState.id).where(WorkflowState.project_id == proj_id)
++            )
++        )
++        .scalars()
++        .first()
++    )
++
++    # Create issue
++    issue_id = uuid.uuid4()
++    seq_id = (
++        await api_env.seed.execute(
++            text("SELECT allocate_issue_sequence(:proj)"),
++            {"proj": proj_id},
++        )
++    ).scalar_one()
++
++    await api_env.seed.execute(
++        text(
++            "SELECT register_object("
++            "'issue'::object_kind, :ws, :proj, 'MUT-1', 'Mut Issue', :uid, :id)"
++        ),
++        {"ws": api_env.workspace_id, "proj": proj_id, "uid": admin.id, "id": issue_id},
++    )
++    issue = Issue(
++        id=issue_id,
++        workspace_id=api_env.workspace_id,
++        project_id=proj_id,
++        sequence_id=seq_id,
++        summary="Mut Issue",
++        state_id=default_state_id,
++        priority_id=medium_id,
++        board_rank="0|i00000:",
++        created_by_id=admin.id,
++    )
++    api_env.seed.add(issue)
++    await api_env.seed.commit()
++
++    # 1. Apply labels: one existing UUID, one existing name, one new name
++    new_label_name = "security-audit"
++    updates: dict[str, object] = {
++        "labels": [existing_pl_id, "backend", new_label_name],
++        "priority": "Urgent",
++        "assignees": [dev.id, "external@example.com"],
++        "start_date": "2026-11-15",
++        "due_date": dt.date(2026, 11, 20),
++        "cycle": "Sprint 1",
++        "custom_fields.qa-signoff": "Approved by SecTeam",
++    }
++
++    changes = await apply_field_updates(api_env.seed, issue, updates, actor)
++    await api_env.seed.commit()
++
++    assert "labels" in changes
++    assert "priority" in changes
++    assert changes["priority"] == (str(medium_id), str(prio_id))
++    assert "assignees" in changes
++    assert "start_date" in changes
++    assert changes["start_date"] == (None, "2026-11-15")
++    assert "due_date" in changes
++    assert changes["due_date"] == (None, "2026-11-20")
++    assert "cycle" in changes
++    assert "custom_fields.qa-signoff" in changes
++
++    # Verify Issue in DB
++    await api_env.seed.rollback()
++    reloaded = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
++    assert reloaded.priority_id == prio_id
++    assert reloaded.start_date == dt.date(2026, 11, 15)
++    assert reloaded.due_date == dt.date(2026, 11, 20)
++    assert reloaded.cycle_id == cy_id
++
++    # Verify labels in DB
++    labels_in_db = (
++        (await api_env.seed.execute(select(IssueLabel).where(IssueLabel.issue_id == issue_id)))
++        .scalars()
++        .all()
++    )
++    assert len(labels_in_db) == 2
++
++    # Verify assignees in DB
++    assignees_in_db = (
++        (
++            await api_env.seed.execute(
++                select(IssueAssignee).where(IssueAssignee.issue_id == issue_id)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(assignees_in_db) == 2
++
++    # Verify custom field value in DB
++    cfv_in_db = (
++        await api_env.seed.execute(
++            select(CustomFieldValue).where(
++                CustomFieldValue.issue_id == issue_id,
++                CustomFieldValue.field_id == cf_def_id,
++            )
++        )
++    ).scalar_one()
++    assert cfv_in_db.value_json == "Approved by SecTeam"
++
++    # 2. Update custom field value, cycle to None, priority to medium by UUID
++    updates_2: dict[str, object] = {
++        "labels": [str(existing_pl_id)],
++        "priority": medium_id,
++        "assignees": [admin.handle],
++        "cycle": None,
++        "start_date": None,
++        "due_date": None,
++        "custom_fields.qa-signoff": "Updated Signoff",
++        "custom_fields.nonexistent-field": "ignored-value",
++    }
++    changes_2 = await apply_field_updates(api_env.seed, reloaded, updates_2, actor)
++    await api_env.seed.commit()
++    assert changes_2["custom_fields.qa-signoff"] == (None, "Updated Signoff")
++    assert changes_2["priority"] == (str(prio_id), str(medium_id))
++    assert changes_2["cycle"] == (str(cy_id), None)
++    assert changes_2["start_date"] == ("2026-11-15", None)
++    assert changes_2["due_date"] == ("2026-11-20", None)
++
++    # 3. Test cycle with UUID, start_date with date, due_date with string
++    updates_3: dict[str, object] = {
++        "cycle": cy_id,
++        "start_date": dt.date(2026, 12, 1),
++        "due_date": "2026-12-15",
++    }
++    changes_3 = await apply_field_updates(api_env.seed, reloaded, updates_3, actor)
++    await api_env.seed.commit()
++    assert changes_3["cycle"] == (None, str(cy_id))
++    assert changes_3["start_date"] == (None, "2026-12-01")
++    assert changes_3["due_date"] == (None, "2026-12-15")
+diff --git a/kanban/tests/workflows/test_transition_engine.py b/kanban/tests/workflows/test_transition_engine.py
+new file mode 100644
+index 0000000..8654706
+--- /dev/null
++++ b/kanban/tests/workflows/test_transition_engine.py
+@@ -0,0 +1,1499 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: E501, PLR0913, PLR0917, ARG001, ANN401, PT012, ASYNC240, PLC0415
++"""Comprehensive unit and integration tests for TransitionEngine and Tier A pipeline (KB-P5-17a)."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import time
++import uuid
++from pathlib import Path
++from typing import TYPE_CHECKING, Any
++
++import pytest
++import wasmtime
++from sqlalchemy import select, text
++from sqlalchemy.exc import DBAPIError
++
++from database.models.agent_definition import AgentDefinition
++from database.models.issues import Issue, IssueLabel
++from database.models.projects import ProjectLabel, WorkflowState
++from database.models.wasm_module import ApprovedWasmModule
++from database.models.workflow import (
++    WorkflowHookInvocation,
++    WorkflowTransitionExecution,
++    WorkflowTransitionHook,
++)
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.sandbox.wasm_runner import TierAWasmRunner
++from kanban.workflows.engine import TransitionEngine
++from kanban.workflows.manifest import compute_hook_manifest_sha256
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++    from kanban.tests.contract import ContractRecorder
++
++pytestmark = pytest.mark.committed_db
++
++FIXTURES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "tests" / "fixtures" / "wasm"
++
++
++def make_wat_bytes(json_payload: str) -> bytes:
++    """Compile a minimal WASM module that calls env.kb_output with json_payload."""
++    escaped = json_payload.replace('"', '\\"')
++    byte_len = len(json_payload.encode("utf-8"))
++    wat = f"""(module
++  (import "env" "kb_output" (func $kb_output (param i32 i32)))
++  (memory (export "memory") 1)
++  (data (i32.const 1024) "{escaped}")
++  (func (export "kb_alloc") (param $len i32) (result i32) i32.const 2048)
++  (func (export "kb_run") (param $ptr i32) (param $len i32) (result i32)
++    (call $kb_output (i32.const 1024) (i32.const {byte_len}))
++    i32.const 0
++  )
++)"""
++    return bytes(wasmtime.wat2wasm(wat))
++
++
++async def register_wasm_module(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    project_id: uuid.UUID,
++    admin_id: uuid.UUID,
++    wasm_bytes: bytes,
++    name: str = "module.wasm",
++) -> bytes:
++    """Register and validate a WASM module in approved_wasm_modules."""
++    runner = TierAWasmRunner.get_instance()
++    sha = runner.validate_module(wasm_bytes)
++
++    existing = (
++        await session.execute(
++            select(ApprovedWasmModule.sha256).where(
++                ApprovedWasmModule.workspace_id == workspace_id,
++                ApprovedWasmModule.sha256 == sha,
++            )
++        )
++    ).scalar_one_or_none()
++    if existing is not None:
++        return sha
++
++    mod = ApprovedWasmModule(
++        id=uuid.uuid4(),
++        workspace_id=workspace_id,
++        project_id=project_id,
++        sha256=sha,
++        name=name,
++        wasm_bytes=wasm_bytes,
++        approved_by_id=admin_id,
++    )
++    session.add(mod)
++    await session.commit()
++    return sha
++
++
++async def create_hook(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    project_id: uuid.UUID,
++    admin_id: uuid.UUID,
++    *,
++    to_state_id: uuid.UUID,
++    from_state_id: uuid.UUID | None = None,
++    sort_rank: str = "10",
++    name: str = "hook",
++    hook_kind: str = "sync_validator",
++    is_enabled: bool = True,
++    wasm_module_sha256: bytes | None = None,
++    agent_definition_id: uuid.UUID | None = None,
++    allowed_mutable_fields: list[str] | None = None,
++    fail_mode: str = "fail_closed",
++) -> WorkflowTransitionHook:
++    """Create a validated WorkflowTransitionHook with canonical manifest."""
++    hook_id = uuid.uuid4()
++    manifest_sha = compute_hook_manifest_sha256(
++        hook_kind=hook_kind,
++        wasm_module_sha256=wasm_module_sha256,
++        agent_definition_id=agent_definition_id,
++        allowed_mutable_fields=allowed_mutable_fields,
++        failure_policy=fail_mode,
++        from_state_id=from_state_id,
++        to_state_id=to_state_id,
++    )
++    hook = WorkflowTransitionHook(
++        id=hook_id,
++        workspace_id=workspace_id,
++        project_id=project_id,
++        from_state_id=from_state_id,
++        to_state_id=to_state_id,
++        sort_rank=str(sort_rank),
++        name=name,
++        hook_kind=hook_kind,
++        is_enabled=is_enabled,
++        wasm_module_sha256=wasm_module_sha256,
++        agent_definition_id=agent_definition_id,
++        allowed_mutable_fields=allowed_mutable_fields or [],
++        failure_policy=fail_mode,
++        manifest_sha256=manifest_sha,
++    )
++    session.add(hook)
++    await session.commit()
++    return hook
++
++
++async def _get_states(session: AsyncSession, project_id: uuid.UUID) -> dict[str, uuid.UUID]:
++    """Fetch workflow state IDs by name."""
++    await session.rollback()
++    stmt = select(WorkflowState.name, WorkflowState.id).where(
++        WorkflowState.project_id == project_id
++    )
++    rows = (await session.execute(stmt)).all()
++    return {str(r[0]): r[1] for r in rows}
++
++
++# ---------------------------------------------------------------------------
++# Test Cases
++# ---------------------------------------------------------------------------
++
++
++async def test_case_1_positive_no_hooks_and_ordered_pipeline(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 1: (a) No hooks -> 200 approved. (b) 2 validators + 1 mutator -> 200, label applied."""
++    admin = await make_user("t1_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("T1P", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    in_prog_id = states["In Progress"]
++    done_id = states["Done"]
++
++    # (a) Transition without hooks
++    resp = await client.post(
++        "/api/v1/projects/T1P/issues",
++        json={"summary": "Issue without hooks", "description_markdown": "Clean description"},
++    )
++    assert resp.status_code == 201, resp.text
++    issue_key = resp.json()["key"]
++    issue_id = uuid.UUID(resp.json()["id"])
++
++    t_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "In Progress"},
++    )
++    contract_recorder.record("transition_positive_no_hooks_200", t_resp.request, t_resp)
++    assert t_resp.status_code == 200, t_resp.text
++    body = t_resp.json()
++    assert body["status"] == "approved"
++    assert body["state"] == "In Progress"
++
++    # Verify DB state
++    await api_env.seed.rollback()
++    issue_row = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
++    assert issue_row.state_id == in_prog_id
++
++    # (b) 2 ordered validators + 1 mutator
++    for lbl_name in ("backend", "qa-verified"):
++        api_env.seed.add(
++            ProjectLabel(
++                workspace_id=api_env.workspace_id,
++                project_id=proj_id,
++                name=lbl_name,
++                color_hex="#0055ff",
++            )
++        )
++    await api_env.seed.commit()
++
++    val1_wasm = make_wat_bytes('{"allowed": true}')
++    val2_wasm = make_wat_bytes('{"decision": "allow"}')
++    mut1_wasm = make_wat_bytes(
++        '{"decision": "allow", "field_updates": {"labels": ["backend", "qa-verified"]}}'
++    )
++
++    val1_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, val1_wasm, "val1.wasm"
++    )
++    val2_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, val2_wasm, "val2.wasm"
++    )
++    mut1_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, mut1_wasm, "mut1.wasm"
++    )
++
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=in_prog_id,
++        sort_rank="10",
++        name="val1",
++        hook_kind="sync_validator",
++        wasm_module_sha256=val1_sha,
++    )
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=in_prog_id,
++        sort_rank="20",
++        name="val2",
++        hook_kind="sync_validator",
++        wasm_module_sha256=val2_sha,
++    )
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=in_prog_id,
++        sort_rank="30",
++        name="mut1",
++        hook_kind="sync_mutator",
++        allowed_mutable_fields=["labels"],
++        wasm_module_sha256=mut1_sha,
++    )
++
++    t2_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "Done"},
++    )
++    contract_recorder.record("transition_ordered_pipeline_200", t2_resp.request, t2_resp)
++    assert t2_resp.status_code == 200, t2_resp.text
++    t2_body = t2_resp.json()
++    assert t2_body["status"] == "approved"
++    assert t2_body["state"] == "Done"
++
++    # Verify invocations in DB
++    await api_env.seed.rollback()
++    inv_rows = (
++        (
++            await api_env.seed.execute(
++                select(WorkflowHookInvocation)
++                .join(
++                    WorkflowTransitionHook,
++                    WorkflowTransitionHook.id == WorkflowHookInvocation.hook_id,
++                )
++                .where(WorkflowHookInvocation.execution_id == uuid.UUID(t2_body["execution_id"]))
++                .order_by(WorkflowTransitionHook.sort_rank)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(inv_rows) == 3
++    for inv in inv_rows:
++        assert inv.duration_us is not None
++        assert inv.duration_us >= 0
++        assert inv.error_code is None
++        assert inv.status in ("allowed", "mutated")
++
++    # Verify label mutation applied in DB
++    applied_labels = (
++        (
++            await api_env.seed.execute(
++                select(ProjectLabel.name)
++                .join(IssueLabel, IssueLabel.label_id == ProjectLabel.id)
++                .where(IssueLabel.issue_id == issue_id)
++                .order_by(ProjectLabel.name)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert set(applied_labels) == {"backend", "qa-verified"}
++
++
++async def test_case_2_rejection_require_qa_proof_link(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 2: Validator require-qa-proof-link rejects -> 422 TRANSITION_REJECTED_BY_HOOK."""
++    admin = await make_user("t2_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("T2P", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    backlog_id = states["Backlog"]
++    done_id = states["Done"]
++
++    rej_wasm = make_wat_bytes(
++        '{"decision": "reject", "reason": "Missing docs/qa/ proof link in description"}'
++    )
++    rej_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, rej_wasm, "reject.wasm"
++    )
++
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="require-qa-proof-link",
++        hook_kind="sync_validator",
++        wasm_module_sha256=rej_sha,
++    )
++
++    resp = await client.post(
++        "/api/v1/projects/T2P/issues",
++        json={"summary": "Unproven issue", "description_markdown": "No QA proof here"},
++    )
++    assert resp.status_code == 201
++    issue_key = resp.json()["key"]
++    issue_id = uuid.UUID(resp.json()["id"])
++
++    t_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "Done"},
++    )
++    contract_recorder.record("transition_rejected_by_hook_422", t_resp.request, t_resp)
++    assert t_resp.status_code == 422, t_resp.text
++    err = t_resp.json()
++    assert err["code"] == "TRANSITION_REJECTED_BY_HOOK"
++    assert "Missing docs/qa/ proof link in description" in err["detail"]
++
++    # Verify state unchanged and execution marked rejected
++    await api_env.seed.rollback()
++    issue_row = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
++    assert issue_row.state_id == backlog_id
++
++    exec_row = (
++        await api_env.seed.execute(
++            select(WorkflowTransitionExecution).where(
++                WorkflowTransitionExecution.issue_id == issue_id
++            )
++        )
++    ).scalar_one()
++    assert exec_row.status == "rejected"
++    assert exec_row.verdict_json is not None
++    assert exec_row.verdict_json["reason"] == "Missing docs/qa/ proof link in description"
++
++
++async def test_case_3_security_illegal_mutations(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 3: Mutator returning field_updates for state, description, or priority fails closed 422."""
++    admin = await make_user("t3_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("T3P", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    backlog_id = states["Backlog"]
++    done_id = states["Done"]
++
++    for illegal_field, illegal_val in [
++        ("state", "Done"),
++        ("description_markdown", "# Malicious update"),
++        ("priority", "urgent"),
++    ]:
++        payload = json.dumps({"decision": "allow", "field_updates": {illegal_field: illegal_val}})
++        wasm_bytes = make_wat_bytes(payload)
++        sha = await register_wasm_module(
++            api_env.seed,
++            api_env.workspace_id,
++            proj_id,
++            admin.id,
++            wasm_bytes,
++            f"illegal_{illegal_field}.wasm",
++        )
++
++        hook = await create_hook(
++            api_env.seed,
++            api_env.workspace_id,
++            proj_id,
++            admin.id,
++            to_state_id=done_id,
++            from_state_id=None,
++            sort_rank="10",
++            name=f"illegal_{illegal_field}",
++            hook_kind="sync_mutator",
++            allowed_mutable_fields=["labels"],
++            wasm_module_sha256=sha,
++        )
++
++        resp = await client.post(
++            "/api/v1/projects/T3P/issues",
++            json={"summary": f"Test {illegal_field}", "description_markdown": "Test"},
++        )
++        assert resp.status_code == 201
++        issue_key = resp.json()["key"]
++        issue_id = uuid.UUID(resp.json()["id"])
++
++        t_resp = await client.post(
++            f"/api/v1/issues/{issue_key}/transitions",
++            json={"to_state": "Done"},
++        )
++        contract_recorder.record("transition_illegal_mutation_422", t_resp.request, t_resp)
++        assert t_resp.status_code == 422, t_resp.text
++        assert t_resp.json()["code"] == "HOOK_MUTATION_NOT_ALLOWED"
++
++        # Verify state unchanged
++        await api_env.seed.rollback()
++        issue_row = (
++            await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))
++        ).scalar_one()
++        assert issue_row.state_id == backlog_id
++
++        # Clean up hook for next loop iteration
++        await api_env.seed.execute(
++            text("UPDATE workflow_transition_hooks SET is_enabled = FALSE WHERE id = :id"),
++            {"id": hook.id},
++        )
++        await api_env.seed.commit()
++
++
++async def test_case_4_security_direct_update_and_patch_route(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Case 4: Direct UPDATE issues blocked by trigger; PATCH /issues/{key} with state routes to engine."""
++    admin = await make_user("t4_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("T4P", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    backlog_id = states["Backlog"]
++    done_id = states["Done"]
++
++    resp = await client.post(
++        "/api/v1/projects/T4P/issues",
++        json={"summary": "Guard test", "description_markdown": "Test"},
++    )
++    assert resp.status_code == 201
++    issue_key = resp.json()["key"]
++    issue_id = uuid.UUID(resp.json()["id"])
++
++    # 1. Direct UPDATE as kanban_app without transition_exec_id raises trigger error
++    with pytest.raises(DBAPIError) as exc_info:
++        await api_env.seed.execute(
++            text("UPDATE issues SET state_id = :s WHERE id = :id"),
++            {"s": done_id, "id": issue_id},
++        )
++        await api_env.seed.flush()
++    assert "STATE_CHANGE_REQUIRES_TRANSITION_ENGINE" in str(exc_info.value)
++    await api_env.seed.rollback()
++
++    # 2. Add rejecting hook on transition to Done
++    rej_wasm = make_wat_bytes('{"decision": "reject", "reason": "Blocked by policy"}')
++    rej_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, rej_wasm, "rej_patch.wasm"
++    )
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="rej_patch",
++        hook_kind="sync_validator",
++        wasm_module_sha256=rej_sha,
++    )
++
++    # 3. PATCH /issues/{key} with state routes through engine and sees hook rejection
++    patch_resp = await client.patch(
++        f"/api/v1/issues/{issue_key}",
++        json={"state": "Done"},
++    )
++    assert patch_resp.status_code == 422, patch_resp.text
++    assert patch_resp.json()["code"] == "TRANSITION_REJECTED_BY_HOOK"
++
++    # State remains unchanged
++    await api_env.seed.rollback()
++    issue_row = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
++    assert issue_row.state_id == backlog_id
++
++
++async def test_case_5_security_tampered_manifest_fails_closed(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Case 5: Tampered manifest with fail_open_warn still fails closed with HOOK_MANIFEST_MISMATCH."""
++    admin = await make_user("t5_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("T5P", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    states["Backlog"]
++    done_id = states["Done"]
++
++    wasm_bytes = make_wat_bytes('{"allowed": true}')
++    sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, wasm_bytes, "ok.wasm"
++    )
++
++    hook = await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="tampered_hook",
++        hook_kind="sync_validator",
++        fail_mode="fail_open_warn",
++        wasm_module_sha256=sha,
++    )
++
++    # Tamper manifest in database
++    await api_env.seed.execute(
++        text(
++            "UPDATE workflow_transition_hooks SET manifest_sha256 = decode(:tampered, 'hex') WHERE id = :id"
++        ),
++        {"tampered": "00" * 32, "id": hook.id},
++    )
++    await api_env.seed.commit()
++
++    resp = await client.post(
++        "/api/v1/projects/T5P/issues",
++        json={"summary": "Tamper test", "description_markdown": "Test"},
++    )
++    assert resp.status_code == 201
++    issue_key = resp.json()["key"]
++
++    t_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "Done"},
++    )
++    assert t_resp.status_code == 422, t_resp.text
++    assert t_resp.json()["code"] == "HOOK_MANIFEST_MISMATCH"
++
++
++async def test_case_6_boundary_timeout_fail_open_wildcard_disabled(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Case 6: Boundary: timeout fail_closed vs fail_open_warn, wildcard hook, and disabled hook."""
++    admin = await make_user("t6_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("T6P", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    states["Backlog"]
++    done_id = states["Done"]
++
++    loop_bytes = (FIXTURES_DIR / "infinite_loop.wasm").read_bytes()
++    loop_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, loop_bytes, "loop.wasm"
++    )
++
++    # (a) Timeout with fail_closed -> 422
++    hook_closed = await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="timeout_closed",
++        hook_kind="sync_validator",
++        fail_mode="fail_closed",
++        wasm_module_sha256=loop_sha,
++    )
++
++    resp = await client.post(
++        "/api/v1/projects/T6P/issues",
++        json={"summary": "Timeout test", "description_markdown": "Test"},
++    )
++    issue_key = resp.json()["key"]
++
++    t1_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "Done"},
++    )
++    assert t1_resp.status_code == 422, t1_resp.text
++    assert t1_resp.json()["code"] in ("HOOK_TIMEOUT", "SYNC_HOOK_BUDGET_EXCEEDED")
++
++    # (b) Timeout with fail_open_warn -> 200, state changed
++    await api_env.seed.execute(
++        text("UPDATE workflow_transition_hooks SET is_enabled = FALSE WHERE id = :id"),
++        {"id": hook_closed.id},
++    )
++    await api_env.seed.commit()
++
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="timeout_open",
++        hook_kind="sync_validator",
++        fail_mode="fail_open_warn",
++        wasm_module_sha256=loop_sha,
++    )
++
++    t2_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "Done"},
++    )
++    assert t2_resp.status_code == 200, t2_resp.text
++    assert t2_resp.json()["status"] == "approved"
++    assert t2_resp.json()["state"] == "Done"
++
++    # (c) Wildcard hook (from_state_id IS NULL) applies from any state
++    await api_env.seed.execute(text("UPDATE workflow_transition_hooks SET is_enabled = FALSE"))
++    await api_env.seed.commit()
++
++    ok_bytes = make_wat_bytes('{"allowed": true}')
++    ok_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, ok_bytes, "ok_wildcard.wasm"
++    )
++
++    wildcard_hook = await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,  # Wildcard!
++        sort_rank="10",
++        name="wildcard_hook",
++        hook_kind="sync_validator",
++        wasm_module_sha256=ok_sha,
++    )
++
++    # (d) Disabled hook is skipped
++    disabled_rej_bytes = make_wat_bytes('{"decision": "reject"}')
++    disabled_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, disabled_rej_bytes, "disabled.wasm"
++    )
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="20",
++        name="disabled_hook",
++        hook_kind="sync_validator",
++        is_enabled=False,  # Disabled!
++        wasm_module_sha256=disabled_sha,
++    )
++
++    # Issue transition should execute wildcard hook and skip disabled hook
++    resp3 = await client.post(
++        "/api/v1/projects/T6P/issues",
++        json={"summary": "Wildcard issue", "description_markdown": "Test"},
++    )
++    issue_key3 = resp3.json()["key"]
++    await client.post(f"/api/v1/issues/{issue_key3}/transitions", json={"to_state": "In Progress"})
++
++    t3_resp = await client.post(
++        f"/api/v1/issues/{issue_key3}/transitions",
++        json={"to_state": "Done"},
++    )
++    assert t3_resp.status_code == 200, t3_resp.text
++    assert t3_resp.json()["status"] == "approved"
++    assert t3_resp.json()["state"] == "Done"
++
++    # Verify wildcard hook was invoked
++    await api_env.seed.rollback()
++    inv_rows = (
++        (
++            await api_env.seed.execute(
++                select(WorkflowHookInvocation).where(
++                    WorkflowHookInvocation.execution_id == uuid.UUID(t3_resp.json()["execution_id"])
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(inv_rows) == 1
++    assert inv_rows[0].hook_id == wildcard_hook.id
++
++
++async def test_case_7_boundary_hop_depth_and_concurrency(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 7: Hop depth 4 -> 422 HOP_DEPTH_EXCEEDED; concurrent transition -> 409 TRANSITION_PENDING."""
++    admin = await make_user("t7_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("T7P", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    backlog_id = states["Backlog"]
++    done_id = states["Done"]
++
++    resp = await client.post(
++        "/api/v1/projects/T7P/issues",
++        json={"summary": "Depth test", "description_markdown": "Test"},
++    )
++    issue_key = resp.json()["key"]
++    issue_id = uuid.UUID(resp.json()["id"])
++
++    # 1. Hop depth test: execution record with hop_depth = 3
++    e3_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text(
++            """
++            INSERT INTO workflow_transition_executions (
++                id, workspace_id, project_id, issue_id, from_state_id, to_state_id,
++                invoking_principal_id, hop_depth, issue_body_sha256_snapshot, status
++            ) VALUES
++            (:e3, :ws, :proj, :iss, :from_s, :to_s, :uid, 3, :snap, 'approved')
++            """
++        ),
++        {
++            "e3": e3_id,
++            "ws": api_env.workspace_id,
++            "proj": proj_id,
++            "iss": issue_id,
++            "from_s": backlog_id,
++            "to_s": done_id,
++            "uid": admin.id,
++            "snap": b"\x00" * 32,
++        },
++    )
++    await api_env.seed.commit()
++
++    admin_ctx = PrincipalContext(
++        principal_id=admin.id,
++        workspace_id=api_env.workspace_id,
++        token_scopes=("session",),
++    )
++
++    with pytest.raises(ProblemException) as exc_info:
++        await TransitionEngine.request_transition(
++            session=api_env.seed,
++            issue_key=issue_key,
++            to_state=done_id,
++            actor=admin_ctx,
++            parent_execution_id=e3_id,
++        )
++    assert exc_info.value.status == 422
++    assert exc_info.value.code == "HOP_DEPTH_EXCEEDED"
++
++    # 2. Concurrency test: active execution with status='running_sync'
++    e_running_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text(
++            """
++            INSERT INTO workflow_transition_executions (
++                id, workspace_id, project_id, issue_id, from_state_id, to_state_id,
++                invoking_principal_id, hop_depth, issue_body_sha256_snapshot, status
++            ) VALUES
++            (:eid, :ws, :proj, :iss, :from_s, :to_s, :uid, 0, :snap, 'running_sync')
++            """
++        ),
++        {
++            "eid": e_running_id,
++            "ws": api_env.workspace_id,
++            "proj": proj_id,
++            "iss": issue_id,
++            "from_s": backlog_id,
++            "to_s": done_id,
++            "uid": admin.id,
++            "snap": b"\x00" * 32,
++        },
++    )
++    await api_env.seed.commit()
++
++    t_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "Done"},
++    )
++    contract_recorder.record("transition_pending_conflict_409", t_resp.request, t_resp)
++    assert t_resp.status_code == 409, t_resp.text
++    assert t_resp.json()["code"] == "TRANSITION_PENDING"
++
++
++async def test_case_8_agent_hook_default_dispatcher(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Case 8: Agent hook present with default dispatcher -> 409 AGENT_GATE_NOT_CONFIGURED."""
++    admin = await make_user("t8_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("T8P", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    backlog_id = states["Backlog"]
++    done_id = states["Done"]
++
++    # Register an agent definition
++    agent_id = uuid.uuid4()
++    agent_def = AgentDefinition(
++        id=agent_id,
++        workspace_id=api_env.workspace_id,
++        principal_id=admin.id,
++        slug="t8-qa-agent",
++        display_name="T8 QA Agent",
++        harness_kind="in_app_sdk",
++        provider_kind="openai",
++        model_id="gpt-4o",
++    )
++    api_env.seed.add(agent_def)
++    await api_env.seed.commit()
++
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="agent_gate_hook",
++        hook_kind="agent_interceptor",
++        agent_definition_id=agent_id,
++        wasm_module_sha256=None,
++    )
++
++    resp = await client.post(
++        "/api/v1/projects/T8P/issues",
++        json={"summary": "Agent hook test", "description_markdown": "Test"},
++    )
++    issue_key = resp.json()["key"]
++    issue_id = uuid.UUID(resp.json()["id"])
++
++    t_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "Done"},
++    )
++    contract_recorder.record("transition_agent_gate_not_configured_409", t_resp.request, t_resp)
++    assert t_resp.status_code == 409, t_resp.text
++    assert t_resp.json()["code"] == "AGENT_GATE_NOT_CONFIGURED"
++
++    # Verify execution cancelled and state unchanged
++    await api_env.seed.rollback()
++    issue_row = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
++    assert issue_row.state_id == backlog_id
++
++    exec_row = (
++        await api_env.seed.execute(
++            select(WorkflowTransitionExecution).where(
++                WorkflowTransitionExecution.issue_id == issue_id
++            )
++        )
++    ).scalar_one()
++    assert exec_row.status == "cancelled"
++
++
++async def test_case_9_rls_isolation(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Case 9: Hooks invisible across workspaces; MEMBER insert into hooks rejected by WITH CHECK."""
++    admin = await make_user("t9_admin", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("t9_member", workspace_role="WORKSPACE_MEMBER")
++    proj_id = await make_project(
++        "T9P", created_by=admin, roles={admin: "PROJECT_ADMIN", member: "MEMBER"}
++    )
++
++    states = await _get_states(api_env.seed, proj_id)
++    backlog_id = states["Backlog"]
++    done_id = states["Done"]
++
++    wasm_bytes = make_wat_bytes('{"allowed": true}')
++    sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, wasm_bytes, "rls.wasm"
++    )
++
++    hook_id = uuid.uuid4()
++    manifest_sha = compute_hook_manifest_sha256(
++        hook_kind="sync_validator",
++        wasm_module_sha256=sha,
++        failure_policy="fail_closed",
++        from_state_id=backlog_id,
++        to_state_id=done_id,
++    )
++
++    # Using member context session
++    with pytest.raises(DBAPIError) as exc_info:
++        await api_env.seed.execute(
++            text(
++                """
++                SET LOCAL app.current_workspace_id = :ws;
++                SET LOCAL app.current_principal_id = :uid;
++                SET LOCAL app.current_role = 'MEMBER';
++                INSERT INTO workflow_transition_hooks (
++                    id, workspace_id, project_id, from_state_id, to_state_id,
++                    sort_rank, name, hook_kind, is_enabled, wasm_module_sha256,
++                    manifest_sha256, failure_policy
++                ) VALUES (
++                    :id, :ws, :proj, :from_s, :to_s, '10', 'member_hook',
++                    'sync_validator', true, :wasm_sha, :man_sha, 'fail_closed'
++                );
++                """
++            ),
++            {
++                "id": hook_id,
++                "ws": api_env.workspace_id,
++                "proj": proj_id,
++                "from_s": backlog_id,
++                "to_s": done_id,
++                "uid": member.id,
++                "wasm_sha": sha,
++                "man_sha": manifest_sha,
++            },
++        )
++        await api_env.seed.flush()
++    assert "workflow_transition_hooks" in str(exc_info.value)
++    await api_env.seed.rollback()
++
++
++async def test_case_10_real_wasm_fixture(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Case 10: Real tests/fixtures/wasm/require_qa_proof_link.wasm fixture runs and approves."""
++    admin = await make_user("t10_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("T10P", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    states["Backlog"]
++    done_id = states["Done"]
++
++    fixture_path = FIXTURES_DIR / "require_qa_proof_link.wasm"
++    assert fixture_path.exists(), f"Fixture missing: {fixture_path}"
++    real_wasm_bytes = fixture_path.read_bytes()
++
++    sha = await register_wasm_module(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        real_wasm_bytes,
++        "require_qa_proof_link.wasm",
++    )
++
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="require_qa_proof_link",
++        hook_kind="sync_validator",
++        wasm_module_sha256=sha,
++    )
++
++    resp = await client.post(
++        "/api/v1/projects/T10P/issues",
++        json={"summary": "Real wasm issue", "description_markdown": "Docs in docs/qa/proof"},
++    )
++    assert resp.status_code == 201
++    issue_key = resp.json()["key"]
++
++    t_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "Done"},
++    )
++    assert t_resp.status_code == 200, t_resp.text
++    body = t_resp.json()
++    assert body["status"] == "approved"
++    assert body["state"] == "Done"
++
++    await api_env.seed.rollback()
++    inv_rows = (
++        (
++            await api_env.seed.execute(
++                select(WorkflowHookInvocation).where(
++                    WorkflowHookInvocation.execution_id == uuid.UUID(body["execution_id"])
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(inv_rows) == 1
++    inv = inv_rows[0]
++    assert inv.duration_us is not None
++    assert inv.duration_us >= 0
++    assert inv.output_json is not None
++    assert inv.output_json["allowed"] is True
++    assert inv.output_json["reason"] == "Verified QA link present"
++
++
++async def test_sync_latency_benchmark(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Benchmark: 200 transitions with 3 Tier A hooks asserting p95 < 25.0ms."""
++    admin = await make_user("t_bench_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("BENCH", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    backlog_id = states["Backlog"]
++    done_id = states["Done"]
++
++    fixture_path = FIXTURES_DIR / "require_qa_proof_link.wasm"
++    assert fixture_path.exists(), f"Fixture missing: {fixture_path}"
++    real_wasm_bytes = fixture_path.read_bytes()
++
++    h1_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, real_wasm_bytes, "bench1.wasm"
++    )
++    h2_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, real_wasm_bytes, "bench2.wasm"
++    )
++    h3_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, real_wasm_bytes, "bench3.wasm"
++    )
++
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="b1",
++        hook_kind="sync_validator",
++        wasm_module_sha256=h1_sha,
++    )
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="20",
++        name="b2",
++        hook_kind="sync_validator",
++        wasm_module_sha256=h2_sha,
++    )
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="30",
++        name="b3",
++        hook_kind="sync_validator",
++        wasm_module_sha256=h3_sha,
++    )
++
++    # Pre-create 10 issues
++    issue_keys: list[str] = []
++    for i in range(10):
++        resp = await client.post(
++            "/api/v1/projects/BENCH/issues",
++            json={"summary": f"Bench issue {i}", "description_markdown": "Docs in docs/qa/proof"},
++        )
++        assert resp.status_code == 201
++        issue_keys.append(resp.json()["key"])
++
++    # Measure transition latency over 200 runs (20 rounds across 10 issues)
++    sync_latencies_ms: list[float] = []
++    total_latencies_ms: list[float] = []
++    for _round in range(20):
++        for key in issue_keys:
++            t0 = time.perf_counter()
++            resp = await client.post(f"/api/v1/issues/{key}/transitions", json={"to_state": "Done"})
++            dt_ms = (time.perf_counter() - t0) * 1000.0
++            assert resp.status_code == 200, resp.text
++            total_latencies_ms.append(dt_ms)
++            sync_ms = resp.json().get("sync_duration_ms", 0.0)
++            sync_latencies_ms.append(float(sync_ms))
++
++        # Reset issues back to Backlog for next round
++        await api_env.seed.execute(text("SET LOCAL session_replication_role = 'replica'"))
++        await api_env.seed.execute(
++            text("UPDATE issues SET state_id = :b WHERE project_id = :p"),
++            {"b": backlog_id, "p": proj_id},
++        )
++        await api_env.seed.commit()
++
++    sync_latencies_ms.sort()
++    n = len(sync_latencies_ms)
++    p50 = sync_latencies_ms[int(n * 0.50)]
++    p95 = sync_latencies_ms[int(n * 0.95)]
++    p99 = sync_latencies_ms[int(n * 0.99)]
++    max_lat = sync_latencies_ms[-1]
++    avg_lat = sum(sync_latencies_ms) / n
++
++    total_latencies_ms.sort()
++    tot_p95 = total_latencies_ms[int(n * 0.95)]
++
++    report = (
++        f"=== Tier A Sync Hook Latency Benchmark (KB-P5-17a) ===\n"
++        f"Total Samples:      {n} transitions with 3 hooks (real wasm fixture)\n"
++        f"Sync Stage Average: {avg_lat:.2f} ms\n"
++        f"Sync Stage p50:     {p50:.2f} ms\n"
++        f"Sync Stage p95:     {p95:.2f} ms (Target: < 25.0 ms)\n"
++        f"Sync Stage p99:     {p99:.2f} ms\n"
++        f"Sync Stage Max:     {max_lat:.2f} ms\n"
++        f"Total Request p95:  {tot_p95:.2f} ms\n"
++        f"Status:             {'PASS' if p95 < 25.0 else 'FAIL'}\n"
++    )
++
++    out_dir = Path("docs/qa/KANBA-147")
++    out_dir.mkdir(parents=True, exist_ok=True)
++    (out_dir / "sync-latency.txt").write_text(report, encoding="utf-8")
++
++    assert p95 < 25.0, f"p95 latency {p95:.2f}ms exceeds 25.0ms budget!"
++
++
++async def test_transition_if_match_and_etag(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test description ETag checking: 412 on mismatch, 200 on match."""
++    admin = await make_user("t_etag_admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("ETAG", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    resp = await client.post(
++        "/api/v1/projects/ETAG/issues",
++        json={"summary": "ETag test", "description_markdown": "Original description"},
++    )
++    assert resp.status_code == 201
++    issue_data = resp.json()
++    key = issue_data["key"]
++
++    # 1. Mismatch header -> 412
++    resp_mismatch = await client.post(
++        f"/api/v1/issues/{key}/transitions",
++        json={"to_state": "In Progress"},
++        headers={"if-match": '"0000000000000000000000000000000000000000000000000000000000000000"'},
++    )
++    assert resp_mismatch.status_code == 412
++    assert resp_mismatch.json()["code"] == "PRECONDITION_FAILED"
++
++    # 2. Matching header with weak prefix -> 200
++    desc_sha = hashlib.sha256(b"Original description").hexdigest()
++    resp_match = await client.post(
++        f"/api/v1/issues/{key}/transitions",
++        json={"to_state": "In Progress"},
++        headers={"if-match": f'W/"{desc_sha}"'},
++    )
++    assert resp_match.status_code == 200
++
++
++async def test_transition_pending_conflict_and_invalid_state(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test 409 when transition is pending, and 422 when target state does not exist."""
++    admin = await make_user("t_pend_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("PEND", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    resp = await client.post(
++        "/api/v1/projects/PEND/issues",
++        json={"summary": "Pending issue"},
++    )
++    assert resp.status_code == 201
++    key = resp.json()["key"]
++
++    # Target state not existing -> 422
++    resp_invalid_st = await client.post(
++        f"/api/v1/issues/{key}/transitions",
++        json={"to_state": "NoSuchState"},
++    )
++    assert resp_invalid_st.status_code == 422
++    assert resp_invalid_st.json()["code"] == "INVALID_STATE"
++
++    # Target state by string UUID
++    states = await _get_states(api_env.seed, proj_id)
++    resp_by_uuid = await client.post(
++        f"/api/v1/issues/{key}/transitions",
++        json={"to_state": str(states["In Progress"])},
++    )
++    assert resp_by_uuid.status_code == 200
++
++    # Set pending_transition_exec_id -> 409
++    fake_exec_id = uuid.uuid4()
++    # Fetch issue id
++    issue_id = (
++        await api_env.seed.execute(select(Issue.id).where(Issue.project_id == proj_id))
++    ).scalar_one()
++    exec_row = WorkflowTransitionExecution(
++        id=fake_exec_id,
++        workspace_id=api_env.workspace_id,
++        project_id=proj_id,
++        issue_id=issue_id,
++        invoking_principal_id=admin.id,
++        from_state_id=states["In Progress"],
++        to_state_id=states["Done"],
++        status="pending_async",
++        hop_depth=0,
++        issue_body_sha256_snapshot=b"\x00" * 32,
++    )
++    api_env.seed.add(exec_row)
++    await api_env.seed.flush()
++    await api_env.seed.execute(
++        text("UPDATE issues SET pending_transition_exec_id = :p WHERE id = :id"),
++        {"p": fake_exec_id, "id": issue_id},
++    )
++    await api_env.seed.commit()
++
++    resp_conflict = await client.post(
++        f"/api/v1/issues/{key}/transitions",
++        json={"to_state": "Done"},
++    )
++    assert resp_conflict.status_code == 409
++    assert resp_conflict.json()["code"] == "TRANSITION_PENDING"
++
++    # Reset pending_transition_exec_id to avoid teardown conflicts
++    await api_env.seed.execute(
++        text("UPDATE issues SET pending_transition_exec_id = NULL WHERE id = :id"),
++        {"id": issue_id},
++    )
++    await api_env.seed.commit()
++
++
++async def test_transition_comment_and_parent_execution(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test transition with comment_markdown, and invalid parent_execution_id."""
++    admin = await make_user("t_comm_admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("COMM", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    resp = await client.post(
++        "/api/v1/projects/COMM/issues",
++        json={"summary": "Comment issue"},
++    )
++    assert resp.status_code == 201
++    key = resp.json()["key"]
++
++    resp_comm = await client.post(
++        f"/api/v1/issues/{key}/transitions",
++        json={"to_state": "In Progress", "comment_markdown": "Moving to in progress with comment"},
++    )
++    assert resp_comm.status_code == 200
++
++    # Test invalid parent_execution_id on TransitionEngine directly
++    actor = PrincipalContext(
++        principal_id=admin.id,
++        workspace_id=api_env.workspace_id,
++        token_scopes=("session",),
++    )
++    engine = TransitionEngine(api_env.seed)
++    with pytest.raises(ProblemException) as exc_info:
++        await engine.execute_transition(
++            issue_key=key,
++            to_state="Done",
++            actor=actor,
++            parent_execution_id=uuid.uuid4(),
++        )
++    assert exc_info.value.code == "INVALID_PARENT_EXECUTION"
++
++
++async def test_transition_hook_errors_and_malformed(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Test hook wasm not found, malformed outputs, and timeout."""
++    from kanban.sandbox.wasm_runner import WasmRunError
++
++    admin = await make_user("t_mal_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("MAL", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    done_id = states["Done"]
++
++    resp = await client.post(
++        "/api/v1/projects/MAL/issues",
++        json={"summary": "Mal issue"},
++    )
++    assert resp.status_code == 201
++    key = resp.json()["key"]
++
++    # 1. Hook pointing to nonexistent wasm module -> 422 SYNC_HOOK_OUTPUT_INVALID
++    fake_sha = b"\xaa" * 32
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="missing_wasm_hook",
++        hook_kind="sync_validator",
++        wasm_module_sha256=fake_sha,
++    )
++
++    resp_err = await client.post(f"/api/v1/issues/{key}/transitions", json={"to_state": "Done"})
++    assert resp_err.status_code == 422
++    assert resp_err.json()["code"] == "SYNC_HOOK_OUTPUT_INVALID"
++
++    # Register real wasm module
++    wasm_bytes = make_wat_bytes('{"decision": "allow"}')
++    real_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, wasm_bytes, "valid.wasm"
++    )
++
++    # Update hook to point to real wasm
++    await api_env.seed.execute(
++        text(
++            "UPDATE workflow_transition_hooks SET wasm_module_sha256 = :sha WHERE name = 'missing_wasm_hook'"
++        ),
++        {"sha": real_sha},
++    )
++    # Update manifest_sha256 to match
++    correct_manifest = compute_hook_manifest_sha256(
++        hook_kind="sync_validator",
++        wasm_module_sha256=real_sha,
++        agent_definition_id=None,
++        allowed_mutable_fields=[],
++        failure_policy="fail_closed",
++        from_state_id=None,
++        to_state_id=done_id,
++    )
++    await api_env.seed.execute(
++        text(
++            "UPDATE workflow_transition_hooks SET manifest_sha256 = :m WHERE name = 'missing_wasm_hook'"
++        ),
++        {"m": correct_manifest},
++    )
++    await api_env.seed.commit()
++
++    # 2. Mock wasm runner timeout -> SYNC_HOOK_BUDGET_EXCEEDED
++    def mock_run_timeout(*args: Any, **kwargs: Any) -> Any:
++        msg = "Guest wasm execution timeout"
++        raise WasmRunError(msg, code="SCRIPT_TIMEOUT")
++
++    monkeypatch.setattr(TierAWasmRunner, "run_sync", mock_run_timeout)
++    resp_timeout = await client.post(f"/api/v1/issues/{key}/transitions", json={"to_state": "Done"})
++    assert resp_timeout.status_code == 422
++    assert resp_timeout.json()["code"] == "SYNC_HOOK_BUDGET_EXCEEDED"
++
++    # 3. Mock wasm runner returning non-JSON -> SYNC_HOOK_OUTPUT_INVALID
++    def mock_run_bad_json(*args: Any, **kwargs: Any) -> Any:
++        return b"not json"
++
++    monkeypatch.setattr(TierAWasmRunner, "run_sync", mock_run_bad_json)
++    resp_bad_json = await client.post(
++        f"/api/v1/issues/{key}/transitions", json={"to_state": "Done"}
++    )
++    assert resp_bad_json.status_code == 422
++    assert resp_bad_json.json()["code"] == "SYNC_HOOK_OUTPUT_INVALID"
++
++    # 4. Mock wasm runner returning JSON without decision or allowed -> SYNC_HOOK_OUTPUT_INVALID
++    def mock_run_no_decision(*args: Any, **kwargs: Any) -> Any:
++        return b'{"unexpected": "field"}'
++
++    monkeypatch.setattr(TierAWasmRunner, "run_sync", mock_run_no_decision)
++    resp_no_dec = await client.post(f"/api/v1/issues/{key}/transitions", json={"to_state": "Done"})
++    assert resp_no_dec.status_code == 422
++    assert resp_no_dec.json()["code"] == "SYNC_HOOK_OUTPUT_INVALID"
++
++
++async def test_transition_mutator_fail_open_warn(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Test that a sync_mutator violating allowed_mutable_fields with fail_open_warn logs activity and continues."""
++    admin = await make_user("t_fow_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("FOW", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    done_id = states["Done"]
++
++    resp = await client.post(
++        "/api/v1/projects/FOW/issues",
++        json={"summary": "Fail open issue"},
++    )
++    assert resp.status_code == 201
++    key = resp.json()["key"]
++
++    wasm_bytes = make_wat_bytes('{"decision": "allow"}')
++    real_sha = await register_wasm_module(
++        api_env.seed, api_env.workspace_id, proj_id, admin.id, wasm_bytes, "mutator.wasm"
++    )
++
++    await create_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        admin.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="fow_mutator",
++        hook_kind="sync_mutator",
++        wasm_module_sha256=real_sha,
++        allowed_mutable_fields=["labels"],
++        fail_mode="fail_open_warn",
++    )
++
++    # Mock output to include mutation on disallowed field 'priority'
++    def mock_run_disallowed_mut(*args: Any, **kwargs: Any) -> Any:
++        return b'{"decision": "allow", "field_updates": {"priority": "urgent"}}'
++
++    monkeypatch.setattr(TierAWasmRunner, "run_sync", mock_run_disallowed_mut)
++
++    resp_fow = await client.post(f"/api/v1/issues/{key}/transitions", json={"to_state": "Done"})
++    # Since failure_policy is fail_open_warn, transition succeeds (200) despite disallowed mutation
++    assert resp_fow.status_code == 200
++    assert resp_fow.json()["state"] == "Done"
+diff --git a/kanban/workflows/__init__.py b/kanban/workflows/__init__.py
+index 2fa8923..2d0baf0 100644
+--- a/kanban/workflows/__init__.py
++++ b/kanban/workflows/__init__.py
+@@ -1,13 +1,35 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Workflow engine types and transition gates."""
++"""Workflow engine types, transition pipeline, and gate coordinator (KB-P5-17a)."""
+ 
+ from __future__ import annotations
+ 
++from kanban.workflows.engine import (
++    AsyncGateDispatcher,
++    FailClosedAsyncGateDispatcher,
++    TransitionEngine,
++    TransitionOutcome,
++)
+ from kanban.workflows.gate_types import GateDecision, GateEventType, LinkSpec
++from kanban.workflows.manifest import compute_hook_manifest_sha256
++from kanban.workflows.mutations import (
++    MUTABLE_FIELD_UNIVERSE,
++    apply_field_updates,
++    is_in_mutable_universe,
++    validate_field_updates,
++)
+ 
+ __all__ = [
++    "MUTABLE_FIELD_UNIVERSE",
++    "AsyncGateDispatcher",
++    "FailClosedAsyncGateDispatcher",
+     "GateDecision",
+     "GateEventType",
+     "LinkSpec",
++    "TransitionEngine",
++    "TransitionOutcome",
++    "apply_field_updates",
++    "compute_hook_manifest_sha256",
++    "is_in_mutable_universe",
++    "validate_field_updates",
+ ]
+diff --git a/kanban/workflows/engine.py b/kanban/workflows/engine.py
+new file mode 100644
+index 0000000..e26cd04
+--- /dev/null
++++ b/kanban/workflows/engine.py
+@@ -0,0 +1,787 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Transition engine and synchronous Tier A hook pipeline (KB-P5-17a, S14.1, S14.2)."""
++
++from __future__ import annotations
++
++import datetime as dt
++import hashlib
++import json
++import logging
++import time
++import uuid
++from dataclasses import dataclass, field
++from typing import TYPE_CHECKING, Any, Final, Protocol
++
++from sqlalchemy import or_, select, text
++from sqlalchemy.exc import DBAPIError, IntegrityError
++
++from database.models.issues import Issue, IssueAssignee, IssueComment, IssueLabel
++from database.models.projects import Project, ProjectLabel, ProjectPriority, WorkflowState
++from database.models.wasm_module import ApprovedWasmModule
++from database.models.workflow import (
++    WorkflowHookInvocation,
++    WorkflowTransitionExecution,
++    WorkflowTransitionHook,
++)
++from kanban.api.problems import ProblemException, not_found
++from kanban.content.normalize import normalize_to_markdown
++from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError, WasmRunLimits
++from kanban.security.permissions import Capability, evaluate_capabilities
++from kanban.services.activity import ActivityEventType, record_activity
++from kanban.services.issue_keys import resolve_issue_ref
++from kanban.workflows.manifest import compute_hook_manifest_sha256
++from kanban.workflows.mutations import apply_field_updates, validate_field_updates
++
++if TYPE_CHECKING:
++    from collections.abc import Sequence
++
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.api.deps import PrincipalContext
++
++logger = logging.getLogger(__name__)
++
++SYNC_TOTAL_BUDGET_MS: float = 25.0
++MAX_TRANSITION_HOP_DEPTH: Final[int] = 3
++
++
++@dataclass(slots=True)
++class TransitionOutcome:
++    """Result of requesting a workflow transition."""
++
++    status_code: int = 200
++    execution_id: uuid.UUID | None = None
++    status: str = "approved"
++    state: str | None = None
++    to_state_id: uuid.UUID | None = None
++    from_state_id: uuid.UUID | None = None
++    reason: str | None = None
++    hook_name: str | None = None
++    error_code: str | None = None
++    sync_duration_ms: float = 0.0
++    field_updates: dict[str, Any] = field(default_factory=dict)
++
++
++class AsyncGateDispatcher(Protocol):
++    """Protocol for dispatching asynchronous AI/CLI agent transition interceptors."""
++
++    async def dispatch(
++        self,
++        session: AsyncSession,
++        execution: WorkflowTransitionExecution,
++        hooks: Sequence[WorkflowTransitionHook],
++        caller: PrincipalContext,
++    ) -> TransitionOutcome:
++        """Dispatch async agent gate execution, returning 202 or handling error."""
++        ...
++
++
++class FailClosedAsyncGateDispatcher:
++    """Default fallback dispatcher marking execution cancelled.
++
++    Returns 409 AGENT_GATE_NOT_CONFIGURED.
++    """
++
++    async def dispatch(
++        self,
++        session: AsyncSession,
++        execution: WorkflowTransitionExecution,
++        hooks: Sequence[WorkflowTransitionHook],
++        caller: PrincipalContext,
++    ) -> TransitionOutcome:
++        """Cancel execution and reject with 409 AGENT_GATE_NOT_CONFIGURED (replaced by KB-P5-18)."""
++        del hooks, caller
++        execution.status = "cancelled"
++        execution.completed_at = dt.datetime.now(dt.UTC)
++        await session.flush()
++        raise ProblemException(
++            code="AGENT_GATE_NOT_CONFIGURED",
++            status=409,
++            title="Agent Gate Not Configured",
++            detail="Async agent gate dispatch is not configured on this host (KB-P5-18 required)",
++        )
++
++
++class WasmRunnerProtocol(Protocol):
++    """Protocol for synchronously executing WebAssembly modules."""
++
++    def run_sync(
++        self,
++        wasm_bytes: bytes | bytearray,
++        input_bytes: bytes,
++        limits: WasmRunLimits | None = None,
++    ) -> object:
++        """Execute wasm guest synchronously."""
++        ...
++
++
++_WASM_BYTES_CACHE: dict[bytes, bytes] = {}
++
++
++class TransitionEngine:
++    """Synchronous Tier A validator/mutator transition engine and gate coordinator (KB-P5-17a)."""
++
++    def __init__(
++        self,
++        session: AsyncSession,
++        *,
++        wasm_runner: WasmRunnerProtocol | None = None,
++        async_dispatcher: AsyncGateDispatcher | None = None,
++    ) -> None:
++        """Initialize TransitionEngine bound to session."""
++        self.session = session
++        self.wasm_runner: WasmRunnerProtocol = wasm_runner or TierAWasmRunner.get_instance()
++        self.async_dispatcher: AsyncGateDispatcher = (
++            async_dispatcher or FailClosedAsyncGateDispatcher()
++        )
++
++    @classmethod
++    async def request_transition(  # noqa: PLR0913, PLR0917
++        cls,
++        session: AsyncSession,
++        issue_key: str,
++        to_state: str | uuid.UUID,
++        actor: PrincipalContext,
++        if_match: str | None = None,
++        parent_execution_id: uuid.UUID | None = None,
++        comment_markdown: str | None = None,
++        *,
++        wasm_runner: WasmRunnerProtocol | None = None,
++        async_dispatcher: AsyncGateDispatcher | None = None,
++    ) -> TransitionOutcome:
++        """Delegate to TransitionEngine instance."""
++        engine = cls(session, wasm_runner=wasm_runner, async_dispatcher=async_dispatcher)
++        return await engine.execute_transition(
++            issue_key=issue_key,
++            to_state=to_state,
++            actor=actor,
++            if_match=if_match,
++            parent_execution_id=parent_execution_id,
++            comment_markdown=comment_markdown,
++        )
++
++    async def execute_transition(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
++        self,
++        issue_key: str,
++        to_state: str | uuid.UUID,
++        actor: PrincipalContext,
++        if_match: str | None = None,
++        parent_execution_id: uuid.UUID | None = None,
++        comment_markdown: str | None = None,
++    ) -> TransitionOutcome:
++        """Execute state transition pipeline under S14.1 / S14.2 invariants."""
++        session = self.session
++
++        # 1. Resolve issue and capabilities
++        issue = await resolve_issue_ref(session, actor, issue_key)
++
++        caps = await evaluate_capabilities(session, actor, issue.id)
++        if Capability.VIEW not in caps or Capability.TRANSITION not in caps:
++            not_found()
++
++        # Lock issue row
++        locked_stmt = select(Issue).where(Issue.id == issue.id).with_for_update()
++        locked_issue = (await session.execute(locked_stmt)).scalar_one_or_none()
++        if locked_issue is None:  # pragma: no cover
++            not_found()
++        issue = locked_issue
++
++        # Description ETag check (If-Match)
++        current_sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
++        current_etag = f'"{current_sha256_hex}"'
++
++        if if_match is not None:
++            raw_etag = if_match.strip()
++            if raw_etag.startswith("W/"):
++                raw_etag = raw_etag[2:].strip()
++            client_hex = raw_etag.strip('"')
++            if client_hex.lower() != current_sha256_hex.lower():
++                raise ProblemException(
++                    code="PRECONDITION_FAILED",
++                    status=412,
++                    title="Precondition Failed",
++                    detail="Current description ETag does not match If-Match header",
++                    current_etag=current_etag,
++                )
++
++        if issue.pending_transition_exec_id is not None:
++            raise ProblemException(
++                code="TRANSITION_PENDING",
++                status=409,
++                title="Transition Pending",
++                detail="A transition execution is already pending on this issue",
++            )
++
++        # Resolve target state
++        target_state = await self._resolve_target_state(session, issue.project_id, to_state)
++        from_state = await session.get(WorkflowState, issue.state_id)
++        if from_state is None:  # pragma: no cover
++            raise ProblemException(
++                code="INVALID_STATE",
++                status=422,
++                title="Invalid State",
++                detail="Current issue state could not be found",
++            )
++
++        # 2. Hop depth calculation
++        hop_depth = 0
++        if parent_execution_id is not None:
++            parent = await session.get(WorkflowTransitionExecution, parent_execution_id)
++            if parent is None:
++                raise ProblemException(
++                    code="INVALID_PARENT_EXECUTION",
++                    status=422,
++                    title="Invalid Parent Execution",
++                    detail="parent_execution_id not found",
++                )
++            hop_depth = parent.hop_depth + 1
++
++        if hop_depth > MAX_TRANSITION_HOP_DEPTH:
++            raise ProblemException(
++                code="HOP_DEPTH_EXCEEDED",
++                status=422,
++                title="Hop Depth Exceeded",
++                detail=f"Transition hop depth exceeds maximum limit of {MAX_TRANSITION_HOP_DEPTH}",
++            )
++
++        # 3. Insert execution record
++        desc_bytes = (issue.description_markdown or "").encode("utf-8")
++        issue_body_sha256 = issue.description_sha256 or hashlib.sha256(desc_bytes).digest()
++
++        execution = WorkflowTransitionExecution(
++            id=uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4(),
++            workspace_id=issue.workspace_id,
++            project_id=issue.project_id,
++            issue_id=issue.id,
++            invoking_principal_id=actor.principal_id,
++            from_state_id=issue.state_id,
++            to_state_id=target_state.id,
++            status="running_sync",
++            hop_depth=hop_depth,
++            issue_body_sha256_snapshot=issue_body_sha256,
++        )
++        session.add(execution)
++        try:
++            await session.flush()
++        except (IntegrityError, DBAPIError) as exc:
++            if "wte_one_pending" in str(exc).lower():
++                raise ProblemException(
++                    code="TRANSITION_PENDING",
++                    status=409,
++                    title="Transition Pending",
++                    detail="A transition execution is already pending on this issue",
++                ) from exc
++            raise
++
++        # Set transaction-local execution ID for DB guard trigger
++        await session.execute(
++            text("SELECT set_config('app.transition_exec_id', :val, true)"),
++            {"val": str(execution.id)},
++        )
++
++        # 4. Load enabled hooks ordered sort_rank COLLATE "C", id
++        hooks_stmt = (
++            select(WorkflowTransitionHook)
++            .where(
++                WorkflowTransitionHook.project_id == issue.project_id,
++                WorkflowTransitionHook.to_state_id == target_state.id,
++                WorkflowTransitionHook.is_enabled.is_(True),
++                or_(
++                    WorkflowTransitionHook.from_state_id == issue.state_id,
++                    WorkflowTransitionHook.from_state_id.is_(None),
++                ),
++            )
++            .order_by(WorkflowTransitionHook.sort_rank.collate("C"), WorkflowTransitionHook.id)
++        )
++        hooks = list((await session.execute(hooks_stmt)).scalars().all())
++
++        sync_hooks = [h for h in hooks if h.hook_kind in ("sync_validator", "sync_mutator")]
++        agent_hooks = [h for h in hooks if h.hook_kind == "agent_interceptor"]
++
++        # 5. Build hook input payload
++        hook_input_dict = await self._build_hook_input(
++            session=session,
++            issue=issue,
++            from_state=from_state,
++            to_state=target_state,
++            actor=actor,
++        )
++        hook_input_bytes = json.dumps(hook_input_dict, sort_keys=True).encode("utf-8")
++
++        # Execute Tier A synchronous hook pipeline within 25ms monotonic budget
++        sync_start_mono = time.monotonic()
++
++        for hook in sync_hooks:
++            # Recompute manifest SHA-256 for runtime tamper check
++            recomputed_hash = compute_hook_manifest_sha256(
++                hook_kind=hook.hook_kind,
++                wasm_module_sha256=hook.wasm_module_sha256,
++                agent_definition_id=hook.agent_definition_id,
++                allowed_mutable_fields=hook.allowed_mutable_fields,
++                failure_policy=hook.failure_policy,
++                from_state_id=hook.from_state_id,
++                to_state_id=hook.to_state_id,
++            )
++            if recomputed_hash != hook.manifest_sha256:
++                await self._record_invocation(
++                    session=session,
++                    workspace_id=issue.workspace_id,
++                    execution_id=execution.id,
++                    hook=hook,
++                    status="error",
++                    error_code="HOOK_MANIFEST_MISMATCH",
++                    duration_us=0,
++                )
++                execution.status = "rejected"
++                execution.verdict_json = {
++                    "decision": "reject",
++                    "reason": f"Cryptographic manifest mismatch on hook '{hook.name}'",
++                }
++                execution.completed_at = dt.datetime.now(dt.UTC)
++                await session.flush()
++                raise ProblemException(
++                    code="HOOK_MANIFEST_MISMATCH",
++                    status=422,
++                    title="Hook Manifest Mismatch",
++                    detail=f"Cryptographic manifest mismatch on hook '{hook.name}'",
++                    extra={"hook_name": hook.name},
++                )
++
++            # Check remaining 25ms monotonic budget
++            elapsed_ms = (time.monotonic() - sync_start_mono) * 1000.0
++            remaining_ms = SYNC_TOTAL_BUDGET_MS - elapsed_ms
++            if remaining_ms <= 0.0:
++                await self._handle_hook_failure(
++                    session=session,
++                    issue=issue,
++                    execution=execution,
++                    hook=hook,
++                    error_code="SYNC_HOOK_BUDGET_EXCEEDED",
++                    detail=f"Sync hook budget of {SYNC_TOTAL_BUDGET_MS}ms exceeded",
++                    duration_us=int(elapsed_ms * 1000),
++                )
++                continue
++
++            # Fetch wasm module bytes
++            wasm_bytes = await self._fetch_wasm_bytes(
++                session, issue.workspace_id, hook.wasm_module_sha256
++            )
++            if wasm_bytes is None:
++                await self._handle_hook_failure(
++                    session=session,
++                    issue=issue,
++                    execution=execution,
++                    hook=hook,
++                    error_code="SYNC_HOOK_OUTPUT_INVALID",
++                    detail="Approved wasm module binary not found",
++                    duration_us=0,
++                )
++                continue
++
++            # Execute guest wasm synchronously
++            t0 = time.perf_counter()
++            timeout_int = max(1, int(remaining_ms))
++            limits = WasmRunLimits(timeout_ms=min(500, timeout_int))
++            try:
++                res = self.wasm_runner.run_sync(wasm_bytes, hook_input_bytes, limits=limits)
++                duration_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
++                output_raw = (
++                    getattr(res, "output_bytes", res) if hasattr(res, "output_bytes") else res
++                )
++                output_str = (
++                    output_raw.decode("utf-8")
++                    if isinstance(output_raw, (bytes, bytearray))
++                    else str(output_raw)
++                )
++                output_json = json.loads(output_str)
++                if not isinstance(output_json, dict):
++                    msg = "Output must be a JSON object"
++                    raise TypeError(msg)  # noqa: TRY301
++            except WasmRunError as ex:
++                duration_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
++                err_code = (
++                    "SYNC_HOOK_BUDGET_EXCEEDED"
++                    if ex.code == "SCRIPT_TIMEOUT"
++                    else "SYNC_HOOK_OUTPUT_INVALID"
++                )
++                await self._handle_hook_failure(
++                    session=session,
++                    issue=issue,
++                    execution=execution,
++                    hook=hook,
++                    error_code=err_code,
++                    detail=ex.message,
++                    duration_us=duration_us,
++                )
++                continue
++            except Exception as ex:  # noqa: BLE001
++                duration_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
++                await self._handle_hook_failure(
++                    session=session,
++                    issue=issue,
++                    execution=execution,
++                    hook=hook,
++                    error_code="SYNC_HOOK_OUTPUT_INVALID",
++                    detail=f"Hook execution failed: {ex}",
++                    duration_us=duration_us,
++                )
++                continue
++
++            # Evaluate guest decision
++            is_allow = output_json.get("decision") == "allow" or output_json.get("allowed") is True
++            is_reject = (
++                output_json.get("decision") == "reject" or output_json.get("allowed") is False
++            )
++
++            if not (is_allow or is_reject):
++                await self._handle_hook_failure(
++                    session=session,
++                    issue=issue,
++                    execution=execution,
++                    hook=hook,
++                    error_code="SYNC_HOOK_OUTPUT_INVALID",
++                    detail="Hook returned output without valid decision or allowed field",
++                    duration_us=duration_us,
++                )
++                continue
++
++            if is_reject:
++                raw_reason = str(output_json.get("reason") or "Transition rejected by hook")
++                clean_reason = raw_reason.strip()[:2000]
++                await self._record_invocation(
++                    session=session,
++                    workspace_id=issue.workspace_id,
++                    execution_id=execution.id,
++                    hook=hook,
++                    status="rejected",
++                    error_code=None,
++                    output_json={"decision": "reject", "reason": clean_reason},
++                    duration_us=duration_us,
++                )
++                execution.status = "rejected"
++                execution.verdict_json = {
++                    "decision": "reject",
++                    "reason": clean_reason,
++                }
++                execution.completed_at = dt.datetime.now(dt.UTC)
++                await session.flush()
++                await record_activity(
++                    session=session,
++                    workspace_id=issue.workspace_id,
++                    object_id=issue.id,
++                    actor_principal_id=actor.principal_id,
++                    event_type=ActivityEventType.SYNC_HOOK_REJECTED,
++                    payload={"hook_name": hook.name, "reason": clean_reason},
++                )
++                raise ProblemException(
++                    code="TRANSITION_REJECTED_BY_HOOK",
++                    status=422,
++                    title="Transition Rejected by Hook",
++                    detail=clean_reason,
++                    extra={"hook_name": hook.name, "reason": clean_reason},
++                )
++
++            # Mutator field_updates validation and application
++            if hook.hook_kind == "sync_mutator" and "field_updates" in output_json:
++                field_updates = output_json.get("field_updates")
++                if isinstance(field_updates, dict) and field_updates:
++                    try:
++                        validate_field_updates(hook.allowed_mutable_fields, field_updates)
++                    except ProblemException:
++                        if hook.failure_policy == "fail_open_warn":
++                            await self._record_invocation(
++                                session=session,
++                                workspace_id=issue.workspace_id,
++                                execution_id=execution.id,
++                                hook=hook,
++                                status="error",
++                                error_code="HOOK_MUTATION_NOT_ALLOWED",
++                                duration_us=duration_us,
++                            )
++                            await record_activity(
++                                session=session,
++                                workspace_id=issue.workspace_id,
++                                object_id=issue.id,
++                                actor_principal_id=actor.principal_id,
++                                event_type=ActivityEventType.HOOK_FAIL_OPEN_WARN,
++                                payload={
++                                    "hook_name": hook.name,
++                                    "error": "HOOK_MUTATION_NOT_ALLOWED",
++                                },
++                            )
++                            continue
++                        await self._record_invocation(
++                            session=session,
++                            workspace_id=issue.workspace_id,
++                            execution_id=execution.id,
++                            hook=hook,
++                            status="error",
++                            error_code="HOOK_MUTATION_NOT_ALLOWED",
++                            duration_us=duration_us,
++                        )
++                        execution.status = "rejected"
++                        execution.completed_at = dt.datetime.now(dt.UTC)
++                        await session.flush()
++                        raise
++
++                    await apply_field_updates(session, issue, field_updates, actor)
++                    await self._record_invocation(
++                        session=session,
++                        workspace_id=issue.workspace_id,
++                        execution_id=execution.id,
++                        hook=hook,
++                        status="mutated",
++                        output_json=output_json,
++                        duration_us=duration_us,
++                    )
++                    continue
++
++            # Standard allowed validator/mutator outcome
++            await self._record_invocation(
++                session=session,
++                workspace_id=issue.workspace_id,
++                execution_id=execution.id,
++                hook=hook,
++                status="allowed",
++                output_json=output_json,
++                duration_us=duration_us,
++            )
++
++        sync_duration_ms = (time.monotonic() - sync_start_mono) * 1000.0
++
++        # 6. Check for asynchronous agent interceptors
++        if agent_hooks:
++            return await self.async_dispatcher.dispatch(session, execution, agent_hooks, actor)
++
++        # 7. No async gates: commit state change
++        old_state_id = issue.state_id
++        issue.state_id = target_state.id
++        execution.status = "approved"
++        execution.completed_at = dt.datetime.now(dt.UTC)
++
++        if comment_markdown:
++            norm_comment = normalize_to_markdown(comment_markdown)
++            if norm_comment:
++                comment = IssueComment(
++                    workspace_id=issue.workspace_id,
++                    issue_id=issue.id,
++                    author_id=actor.principal_id,
++                    body_markdown=norm_comment,
++                )
++                session.add(comment)
++
++        await session.flush()
++
++        await record_activity(
++            session=session,
++            workspace_id=issue.workspace_id,
++            object_id=issue.id,
++            actor_principal_id=actor.principal_id,
++            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
++            payload={
++                "from_state_id": str(old_state_id),
++                "to_state_id": str(target_state.id),
++                "from_state": from_state.name,
++                "to_state": target_state.name,
++            },
++        )
++
++        return TransitionOutcome(
++            status_code=200,
++            execution_id=execution.id,
++            status="approved",
++            state=target_state.name,
++            to_state_id=target_state.id,
++            from_state_id=old_state_id,
++            sync_duration_ms=sync_duration_ms,
++        )
++
++    async def _resolve_target_state(
++        self,
++        session: AsyncSession,
++        project_id: uuid.UUID,
++        to_state: str | uuid.UUID,
++    ) -> WorkflowState:
++        """Resolve destination WorkflowState by UUID or exact name."""
++        if isinstance(to_state, uuid.UUID):
++            st = await session.get(WorkflowState, to_state)
++            if st is not None and st.project_id == project_id:
++                return st
++        elif isinstance(to_state, str):
++            state_str = to_state.strip()
++            try:
++                state_uuid = uuid.UUID(state_str)
++                st = await session.get(WorkflowState, state_uuid)
++                if st is not None and st.project_id == project_id:
++                    return st
++            except ValueError:
++                pass
++
++            stmt = select(WorkflowState).where(
++                WorkflowState.project_id == project_id,
++                WorkflowState.name.ilike(state_str),
++            )
++            found = (await session.execute(stmt)).scalar_one_or_none()
++            if found is not None:
++                return found
++
++        raise ProblemException(
++            code="INVALID_STATE",
++            status=422,
++            title="Invalid State",
++            detail=f"Target state '{to_state}' does not exist in this project",
++        )
++
++    async def _fetch_wasm_bytes(
++        self,
++        session: AsyncSession,
++        workspace_id: uuid.UUID,
++        wasm_module_sha256: bytes | None,
++    ) -> bytes | None:
++        """Query approved wasm module binary by sha256 with in-memory caching."""
++        if wasm_module_sha256 is None:
++            return None
++        cached = _WASM_BYTES_CACHE.get(wasm_module_sha256)
++        if cached is not None:
++            return cached
++        stmt = select(ApprovedWasmModule.wasm_bytes).where(
++            ApprovedWasmModule.workspace_id == workspace_id,
++            ApprovedWasmModule.sha256 == wasm_module_sha256,
++        )
++        res = (await session.execute(stmt)).scalar_one_or_none()
++        if res is not None:
++            _WASM_BYTES_CACHE[wasm_module_sha256] = bytes(res)
++        return res
++
++    async def _handle_hook_failure(  # noqa: PLR0913, PLR0917
++        self,
++        session: AsyncSession,
++        issue: Issue,
++        execution: WorkflowTransitionExecution,
++        hook: WorkflowTransitionHook,
++        error_code: str,
++        detail: str,
++        duration_us: int,
++    ) -> None:
++        """Handle synchronous hook budget, execution, or validation failure."""
++        if hook.failure_policy == "fail_open_warn":
++            await self._record_invocation(
++                session=session,
++                workspace_id=issue.workspace_id,
++                execution_id=execution.id,
++                hook=hook,
++                status="error",
++                error_code=error_code,
++                duration_us=duration_us,
++            )
++            await record_activity(
++                session=session,
++                workspace_id=issue.workspace_id,
++                object_id=issue.id,
++                actor_principal_id=execution.invoking_principal_id,
++                event_type=ActivityEventType.HOOK_FAIL_OPEN_WARN,
++                payload={"hook_name": hook.name, "error_code": error_code, "detail": detail},
++            )
++            return
++
++        await self._record_invocation(
++            session=session,
++            workspace_id=issue.workspace_id,
++            execution_id=execution.id,
++            hook=hook,
++            status="error",
++            error_code=error_code,
++            duration_us=duration_us,
++        )
++        execution.status = "rejected"
++        execution.completed_at = dt.datetime.now(dt.UTC)
++        await session.flush()
++        raise ProblemException(
++            code=error_code,
++            status=422,
++            title="Sync Hook Error",
++            detail=detail,
++            extra={"hook_name": hook.name},
++        )
++
++    async def _record_invocation(  # noqa: PLR0913, PLR0917
++        self,
++        session: AsyncSession,
++        workspace_id: uuid.UUID,
++        execution_id: uuid.UUID,
++        hook: WorkflowTransitionHook,
++        status: str,
++        error_code: str | None = None,
++        output_json: dict[str, Any] | None = None,
++        duration_us: int | None = None,
++    ) -> None:
++        """Persist a single WorkflowHookInvocation row."""
++        inv = WorkflowHookInvocation(
++            id=uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4(),
++            workspace_id=workspace_id,
++            execution_id=execution_id,
++            hook_id=hook.id,
++            hook_kind=hook.hook_kind,
++            status=status,
++            error_code=error_code,
++            output_json=output_json,
++            duration_us=duration_us,
++            completed_at=dt.datetime.now(dt.UTC),
++        )
++        session.add(inv)
++
++    async def _build_hook_input(
++        self,
++        session: AsyncSession,
++        issue: Issue,
++        from_state: WorkflowState,
++        to_state: WorkflowState,
++        actor: PrincipalContext,
++    ) -> dict[str, Any]:
++        """Construct the kb-sync-hook-input/v1 JSON input payload."""
++        prio = await session.get(ProjectPriority, issue.priority_id)
++        prio_slug = prio.slug if prio else "normal"
++
++        labels_stmt = (
++            select(ProjectLabel.name)
++            .join(IssueLabel, IssueLabel.label_id == ProjectLabel.id)
++            .where(IssueLabel.issue_id == issue.id)
++        )
++        labels = list((await session.execute(labels_stmt)).scalars().all())
++
++        assignees_stmt = select(IssueAssignee).where(IssueAssignee.issue_id == issue.id)
++        assignees = list((await session.execute(assignees_stmt)).scalars().all())
++        assignees_list: list[str] = [
++            str(a.principal_id) if a.principal_id else (a.free_text_assignee or "")
++            for a in assignees
++        ]
++
++        # Fetch project identifier for issue key
++        proj_ident = (
++            await session.execute(select(Project.identifier).where(Project.id == issue.project_id))
++        ).scalar_one_or_none()
++        issue_key = f"{proj_ident}-{issue.sequence_id}" if proj_ident else str(issue.id)
++
++        return {
++            "contract": "kb-sync-hook-input/v1",
++            "schema": "kb-sync-hook-input/v1",
++            "issue": {
++                "id": str(issue.id),
++                "key": issue_key,
++                "summary": issue.summary,
++                "description_markdown": issue.description_markdown,
++                "priority": prio_slug,
++                "labels": labels,
++                "assignees": assignees_list,
++                "custom_fields": {},
++            },
++            "transition": {
++                "from_state": {"id": str(from_state.id), "name": from_state.name},
++                "to_state": {"id": str(to_state.id), "name": to_state.name},
++            },
++            "actor": {
++                "principal_id": str(actor.principal_id),
++                "role": "MEMBER",
++            },
++        }
+diff --git a/kanban/workflows/manifest.py b/kanban/workflows/manifest.py
+new file mode 100644
+index 0000000..1f6eb5d
+--- /dev/null
++++ b/kanban/workflows/manifest.py
+@@ -0,0 +1,61 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Cryptographic manifest calculation for workflow transition hooks (KB-P5-17a, S14.2)."""
++
++from __future__ import annotations
++
++import hashlib
++from typing import TYPE_CHECKING
++
++if TYPE_CHECKING:
++    import uuid
++    from collections.abc import Collection
++
++
++def compute_hook_manifest_sha256(  # noqa: PLR0913
++    *,
++    hook_kind: str,
++    wasm_module_sha256: bytes | str | None = None,
++    agent_definition_id: uuid.UUID | str | None = None,
++    allowed_mutable_fields: Collection[str] | None = None,
++    failure_policy: str = "fail_closed",
++    from_state_id: uuid.UUID | str | None = None,
++    to_state_id: uuid.UUID | str,
++) -> bytes:
++    """Compute deterministic SHA-256 manifest hash over workflow hook specification.
++
++    Specification (S14.2):
++    SHA256(
++        hook_kind || 0x00 ||
++        hex(wasm_module_sha256 or '') || 0x00 ||
++        str(agent_definition_id or '') || 0x00 ||
++        ",".join(sorted(allowed_mutable_fields)) || 0x00 ||
++        failure_policy || 0x00 ||
++        str(from_state_id or '*') || 0x00 ||
++        str(to_state_id)
++    )
++    """
++    if isinstance(wasm_module_sha256, (bytes, bytearray)):
++        wasm_hex = bytes(wasm_module_sha256).hex()
++    elif wasm_module_sha256:
++        wasm_hex = str(wasm_module_sha256)
++    else:
++        wasm_hex = ""
++
++    agent_def_str = str(agent_definition_id) if agent_definition_id is not None else ""
++    sorted_fields = sorted(set(allowed_mutable_fields or []))
++    fields_str = ",".join(sorted_fields)
++    from_str = str(from_state_id) if from_state_id is not None and str(from_state_id) != "" else "*"
++    to_str = str(to_state_id)
++
++    parts = [
++        hook_kind.encode("utf-8"),
++        wasm_hex.encode("utf-8"),
++        agent_def_str.encode("utf-8"),
++        fields_str.encode("utf-8"),
++        failure_policy.encode("utf-8"),
++        from_str.encode("utf-8"),
++        to_str.encode("utf-8"),
++    ]
++    payload = b"\x00".join(parts)
++    return hashlib.sha256(payload).digest()
+diff --git a/kanban/workflows/mutations.py b/kanban/workflows/mutations.py
+new file mode 100644
+index 0000000..9de282c
+--- /dev/null
++++ b/kanban/workflows/mutations.py
+@@ -0,0 +1,298 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Allowed mutable field universe and field update application for workflow hooks.
++
++KB-P5-17a, S14.1, S14.2.
++"""
++
++from __future__ import annotations
++
++import datetime as dt
++import re
++import uuid
++from typing import TYPE_CHECKING, Any, Final
++
++from sqlalchemy import delete, select
++
++from database.models.custom_field import CustomFieldDefinition, CustomFieldValue
++from database.models.issues import Issue, IssueAssignee, IssueLabel
++from database.models.principals import Principal, User
++from database.models.projects import Cycle, ProjectLabel, ProjectPriority
++from kanban.api.problems import ProblemException
++
++if TYPE_CHECKING:
++    from collections.abc import Collection, Mapping
++
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.api.deps import PrincipalContext
++
++_CUSTOM_FIELD_SLUG_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
++
++MUTABLE_BASE_FIELDS: Final[frozenset[str]] = frozenset(
++    {"labels", "priority", "assignees", "start_date", "due_date", "cycle"}
++)
++
++IMMUTABLE_FIELDS: Final[frozenset[str]] = frozenset(
++    {
++        "state",
++        "state_id",
++        "summary",
++        "description_markdown",
++        "created_by",
++        "created_by_id",
++        "original_created_by_id",
++        "parent",
++        "parent_issue_id",
++        "id",
++        "workspace_id",
++        "project_id",
++        "sequence_id",
++    }
++)
++
++# Canonical set definition per spec
++MUTABLE_FIELD_UNIVERSE: Final[frozenset[str]] = MUTABLE_BASE_FIELDS
++
++
++def is_in_mutable_universe(field_name: str) -> bool:
++    """Return True if field_name belongs to MUTABLE_FIELD_UNIVERSE or valid custom_fields.<slug>."""
++    if field_name in MUTABLE_BASE_FIELDS:
++        return True
++    if field_name.startswith("custom_fields."):
++        slug = field_name[len("custom_fields.") :]
++        return bool(_CUSTOM_FIELD_SLUG_PATTERN.match(slug))
++    return False
++
++
++def validate_field_updates(
++    allowed_mutable_fields: Collection[str],
++    field_updates: Mapping[str, Any] | None,
++) -> None:
++    """Validate that every key in field_updates is permitted, in universe, and non-immutable."""
++    if not field_updates:
++        return
++
++    allowed_set = set(allowed_mutable_fields)
++    for key in field_updates:
++        if key in IMMUTABLE_FIELDS:
++            raise ProblemException(
++                code="HOOK_MUTATION_NOT_ALLOWED",
++                status=422,
++                title="Hook Mutation Not Allowed",
++                detail=f"Field '{key}' is immutable (TOCTOU security invariant)",
++                field=key,
++            )
++        if not is_in_mutable_universe(key):
++            raise ProblemException(
++                code="HOOK_MUTATION_NOT_ALLOWED",
++                status=422,
++                title="Hook Mutation Not Allowed",
++                detail=f"Field '{key}' is not in MUTABLE_FIELD_UNIVERSE",
++                field=key,
++            )
++        if key not in allowed_set:
++            raise ProblemException(
++                code="HOOK_MUTATION_NOT_ALLOWED",
++                status=422,
++                title="Hook Mutation Not Allowed",
++                detail=f"Field '{key}' is not in hook's allowed_mutable_fields",
++                field=key,
++            )
++
++
++async def apply_field_updates(  # noqa: C901, PLR0912, PLR0915
++    session: AsyncSession,
++    issue: Issue,
++    field_updates: Mapping[str, Any] | None,
++    _caller: PrincipalContext,
++) -> dict[str, tuple[Any, Any]]:
++    """Apply validated field_updates to issue within session, returning changes dict."""
++    if not field_updates:
++        return {}
++
++    changes: dict[str, tuple[Any, Any]] = {}
++
++    for key, val in field_updates.items():
++        if key == "labels":
++            # val can be list of label names or UUIDs
++            raw_labels: list[Any] = list(val) if isinstance(val, (list, tuple)) else [val]
++            label_ids: list[uuid.UUID] = []
++            for item in raw_labels:
++                if isinstance(item, uuid.UUID):
++                    label_ids.append(item)
++                else:
++                    item_str = str(item).strip()
++                    try:
++                        parsed_u = uuid.UUID(item_str)
++                        label_ids.append(parsed_u)
++                    except ValueError:
++                        # Find or create project label by name
++                        pl_stmt = select(ProjectLabel.id).where(
++                            ProjectLabel.project_id == issue.project_id,
++                            ProjectLabel.name == item_str,
++                        )
++                        found_id = (await session.execute(pl_stmt)).scalar_one_or_none()
++                        if found_id is not None:
++                            label_ids.append(found_id)
++                        else:
++                            new_pl_id = uuid.uuid4()
++                            session.add(
++                                ProjectLabel(
++                                    id=new_pl_id,
++                                    workspace_id=issue.workspace_id,
++                                    project_id=issue.project_id,
++                                    name=item_str,
++                                    color_hex="#0284c7",
++                                )
++                            )
++                            await session.flush()
++                            label_ids.append(new_pl_id)
++
++            unique_label_ids = list(dict.fromkeys(label_ids))
++            await session.execute(delete(IssueLabel).where(IssueLabel.issue_id == issue.id))
++            for lid in unique_label_ids:
++                session.add(
++                    IssueLabel(
++                        issue_id=issue.id,
++                        label_id=lid,
++                        workspace_id=issue.workspace_id,
++                    )
++                )
++            changes["labels"] = (None, [str(x) for x in unique_label_ids])
++
++        elif key == "priority":
++            prio_obj_id: uuid.UUID | None = None
++            if isinstance(val, uuid.UUID):
++                prio_obj_id = val
++            elif val is not None:
++                val_str = str(val).strip()
++                try:
++                    prio_obj_id = uuid.UUID(val_str)
++                except ValueError:
++                    p_stmt = select(ProjectPriority.id).where(
++                        ProjectPriority.project_id == issue.project_id,
++                        (ProjectPriority.slug == val_str.lower())
++                        | (ProjectPriority.label.ilike(val_str)),
++                    )
++                    prio_obj_id = (await session.execute(p_stmt)).scalar_one_or_none()
++
++            if prio_obj_id is not None and prio_obj_id != issue.priority_id:
++                old_prio = issue.priority_id
++                issue.priority_id = prio_obj_id
++                changes["priority"] = (str(old_prio), str(prio_obj_id))
++
++        elif key == "assignees":
++            raw_assignees: list[Any] = list(val) if isinstance(val, (list, tuple)) else [val]
++            await session.execute(delete(IssueAssignee).where(IssueAssignee.issue_id == issue.id))
++            for a_item in raw_assignees:
++                a_str = str(a_item).strip()
++                target_p_id: uuid.UUID | None = None
++                try:
++                    target_p_id = uuid.UUID(a_str)
++                except ValueError:
++                    # Look up user by email or username
++                    u_stmt = select(User.id).where(
++                        User.workspace_id == issue.workspace_id,
++                        User.email == a_str,
++                    )
++                    target_p_id = (await session.execute(u_stmt)).scalar_one_or_none()
++                    if target_p_id is None:
++                        # Check display_name in principals
++                        pr_stmt = select(Principal.id).where(
++                            Principal.workspace_id == issue.workspace_id,
++                            Principal.display_name == a_str,
++                        )
++                        target_p_id = (await session.execute(pr_stmt)).scalar_one_or_none()
++
++                session.add(
++                    IssueAssignee(
++                        workspace_id=issue.workspace_id,
++                        issue_id=issue.id,
++                        principal_id=target_p_id,
++                        free_text_assignee=a_str if target_p_id is None else None,
++                    )
++                )
++            changes["assignees"] = (None, raw_assignees)
++
++        elif key == "start_date":
++            old_sd = issue.start_date
++            new_sd: dt.date | None = None
++            if isinstance(val, dt.date):
++                new_sd = val
++            elif isinstance(val, str) and val.strip():
++                new_sd = dt.date.fromisoformat(val.strip())
++            issue.start_date = new_sd
++            changes["start_date"] = (
++                old_sd.isoformat() if old_sd else None,
++                new_sd.isoformat() if new_sd else None,
++            )
++
++        elif key == "due_date":
++            old_dd = issue.due_date
++            new_dd: dt.date | None = None
++            if isinstance(val, dt.date):
++                new_dd = val
++            elif isinstance(val, str) and val.strip():
++                new_dd = dt.date.fromisoformat(val.strip())
++            issue.due_date = new_dd
++            changes["due_date"] = (
++                old_dd.isoformat() if old_dd else None,
++                new_dd.isoformat() if new_dd else None,
++            )
++
++        elif key == "cycle":
++            old_cy = issue.cycle_id
++            new_cy_id: uuid.UUID | None = None
++            if isinstance(val, uuid.UUID):
++                new_cy_id = val
++            elif val is not None:
++                val_str = str(val).strip()
++                try:
++                    new_cy_id = uuid.UUID(val_str)
++                except ValueError:
++                    cy_stmt = select(Cycle.id).where(
++                        Cycle.project_id == issue.project_id,
++                        Cycle.name.ilike(val_str),
++                    )
++                    new_cy_id = (await session.execute(cy_stmt)).scalar_one_or_none()
++
++            issue.cycle_id = new_cy_id
++            changes["cycle"] = (
++                str(old_cy) if old_cy else None,
++                str(new_cy_id) if new_cy_id else None,
++            )
++
++        elif key.startswith("custom_fields."):
++            slug = key[len("custom_fields.") :]
++            cf_stmt = select(CustomFieldDefinition).where(
++                CustomFieldDefinition.project_id == issue.project_id,
++                CustomFieldDefinition.slug == slug,
++            )
++            cf_def = (await session.execute(cf_stmt)).scalar_one_or_none()
++            if cf_def is not None:
++                cfv_stmt = select(CustomFieldValue).where(
++                    CustomFieldValue.issue_id == issue.id,
++                    CustomFieldValue.field_id == cf_def.id,
++                )
++                cfv = (await session.execute(cfv_stmt)).scalar_one_or_none()
++                if cfv is None:
++                    now = dt.datetime.now(dt.UTC)
++                    cfv = CustomFieldValue(
++                        workspace_id=issue.workspace_id,
++                        project_id=issue.project_id,
++                        field_id=cf_def.id,
++                        issue_id=issue.id,
++                        script_version=cf_def.script_version,
++                        user_access_hash=b"",
++                        value_json=val,
++                        last_latency_ms=0,
++                        expires_at=now + dt.timedelta(days=1),
++                    )
++                    session.add(cfv)
++                else:
++                    cfv.value_json = val
++                changes[key] = (None, val)
++
++    await session.flush()
++    return changes

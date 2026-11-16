@@ -1,0 +1,1492 @@
+diff --git a/kanban/web/src/App.tsx b/kanban/web/src/App.tsx
+index e66aecf..d5a11d0 100644
+--- a/kanban/web/src/App.tsx
++++ b/kanban/web/src/App.tsx
+@@ -9,6 +9,7 @@ import { createAppRouter, IssuesWorkspaceRoute } from './app/routes';
+ import { FIXTURE_12_ISSUES } from './features/views/fixtures';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { ShellPanelsProvider } from './app/shellPanels';
++import { GlobalErrorBoundary } from './components/error/AppErrorModal';
+ import './App.css';
+ 
+ const appQueryClient = new QueryClient({
+@@ -25,7 +26,7 @@ export function isStoryEnabled(devMode: boolean, storyEnv?: string): boolean {
+   return storyEnv === '1';
+ }
+ 
+-export function App(): JSX.Element {
++function AppContent(): JSX.Element {
+   const isEnabled = isStoryEnabled(
+     import.meta.env.DEV,
+     import.meta.env.VITE_ENABLE_STORY,
+@@ -93,3 +94,11 @@ export function App(): JSX.Element {
+     </QueryClientProvider>
+   );
+ }
++
++export function App(): JSX.Element {
++  return (
++    <GlobalErrorBoundary>
++      <AppContent />
++    </GlobalErrorBoundary>
++  );
++}
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 6deb83c..b286741 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -6,6 +6,7 @@
+ 
+ import React, {
+   createContext,
++  useCallback,
+   useContext,
+   useEffect,
+   useState,
+@@ -43,12 +44,14 @@ import { ProjectOverviewView } from '../features/stickies/ProjectOverviewView';
+ import { WorkspaceStickiesView } from '../features/stickies/WorkspaceStickiesView';
+ import ProjectCustomFieldsSettingsRoute from '../routes/projects/settings/custom-fields';
+ import { apiClient } from '../api/client';
++import { RouteErrorBoundary } from '../components/error/AppErrorModal';
+ import type { IssueDetail } from '../features/drawer/slots';
+ import { LoginPage } from '../features/auth/LoginPage';
+ import { SetupClaimPage } from '../features/auth/SetupClaimPage';
+ import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
+ import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
+ import { McpAccessStudio } from '../features/settings/McpAccessStudio';
++import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
+ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+ import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
+ import { useSessionGuard } from '../features/auth/useSessionGuard';
+@@ -106,9 +109,18 @@ export function ProjectIssuesRoute(): JSX.Element {
+   const { projectKey: paramKey } = useParams<{ projectKey: string }>();
+   const ctx = useContext(ProjectRouteContext);
+   const queryClient = useQueryClient();
+-  const [searchParams] = useSearchParams();
++  const [searchParams, setSearchParams] = useSearchParams();
+   const navigate = useNavigate();
+ 
++  const handleOpenPeek = useCallback(
++    (issueKey: string) => {
++      const next = new URLSearchParams(searchParams);
++      next.set('peek', issueKey);
++      setSearchParams(next);
++    },
++    [searchParams, setSearchParams],
++  );
++
+   const resolvedProjectKey = paramKey ?? ctx.projectKey;
+   const rawLayout = searchParams.get('layout');
+   const createTrigger = searchParams.get('create');
+@@ -165,6 +177,7 @@ export function ProjectIssuesRoute(): JSX.Element {
+         modulesEnabled={modulesEnabled}
+         initialLayout={normalizedLayout}
+         queryClient={queryClient}
++        onOpenPeek={handleOpenPeek}
+       />
+     </div>
+   );
+@@ -533,6 +546,7 @@ export function RootShellLayout(): JSX.Element {
+ export const appRoutes: RouteObject[] = [
+   {
+     path: '/',
++    errorElement: <RouteErrorBoundary />,
+     children: [
+       {
+         path: 'projects/:projectKey',
+@@ -578,6 +592,10 @@ export const appRoutes: RouteObject[] = [
+             path: 'settings/custom-fields',
+             element: <ProjectCustomFieldsSettingsRoute />,
+           },
++          {
++            path: 'settings/workflows',
++            element: <WorkflowStudioPage />,
++          },
+         ],
+       },
+       {
+diff --git a/kanban/web/src/components/error/AppErrorModal.css b/kanban/web/src/components/error/AppErrorModal.css
+new file mode 100644
+index 0000000..213a578
+--- /dev/null
++++ b/kanban/web/src/components/error/AppErrorModal.css
+@@ -0,0 +1,188 @@
++/**
++ * AppErrorModal CSS - High-Contrast Danger Theme
++ * Strict CSP Compliant (style-src 'self', zero inline styles)
++ */
++
++.app-error-backdrop {
++  position: fixed;
++  inset: 0;
++  background-color: rgba(0, 0, 0, 0.75);
++  backdrop-filter: blur(4px);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  padding: 1.5rem;
++  z-index: 99999;
++}
++
++.app-error-modal {
++  width: 100%;
++  max-width: 720px;
++  background-color: var(--surface-bg, #1a1a1a);
++  color: var(--text-primary, #ffffff);
++  border: 2px solid var(--danger-border, #d32f2f);
++  border-radius: 8px;
++  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 24px rgba(211, 47, 47, 0.3);
++  display: flex;
++  flex-direction: column;
++  overflow: hidden;
++  animation: appErrorFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
++}
++
++@keyframes appErrorFadeIn {
++  from {
++    opacity: 0;
++    transform: scale(0.96) translateY(-8px);
++  }
++  to {
++    opacity: 1;
++    transform: scale(1) translateY(0);
++  }
++}
++
++.app-error-modal__header {
++  background-color: #d32f2f;
++  color: #ffffff;
++  padding: 1rem 1.25rem;
++  display: flex;
++  align-items: center;
++  gap: 0.75rem;
++}
++
++.app-error-modal__icon {
++  font-size: 1.5rem;
++  line-height: 1;
++}
++
++.app-error-modal__title {
++  margin: 0;
++  font-size: 1.25rem;
++  font-weight: 700;
++  letter-spacing: -0.01em;
++  color: #ffffff;
++}
++
++.app-error-modal__body {
++  padding: 1.25rem;
++  display: flex;
++  flex-direction: column;
++  gap: 1rem;
++  overflow-y: auto;
++  max-height: 70vh;
++}
++
++.app-error-modal__message {
++  font-size: 1rem;
++  font-weight: 600;
++  color: #ff8a80;
++  word-break: break-word;
++  background-color: rgba(211, 47, 47, 0.1);
++  padding: 0.75rem 1rem;
++  border-radius: 6px;
++  border-left: 4px solid #d32f2f;
++}
++
++.app-error-modal__url {
++  font-size: 0.875rem;
++  color: var(--text-secondary, #b0bec5);
++  display: flex;
++  align-items: baseline;
++  gap: 0.5rem;
++  word-break: break-all;
++}
++
++.app-error-modal__label {
++  font-weight: 600;
++  color: var(--text-primary, #ffffff);
++}
++
++.app-error-modal__url code {
++  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
++  background-color: rgba(255, 255, 255, 0.08);
++  padding: 0.2rem 0.4rem;
++  border-radius: 4px;
++}
++
++.app-error-modal__trace-wrapper {
++  display: flex;
++  flex-direction: column;
++  gap: 0.4rem;
++}
++
++.app-error-modal__trace {
++  margin: 0;
++  padding: 0.875rem;
++  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
++  font-size: 0.8125rem;
++  line-height: 1.45;
++  background-color: #121212;
++  color: #eceff1;
++  border: 1px solid rgba(255, 255, 255, 0.12);
++  border-radius: 6px;
++  max-height: 240px;
++  overflow-y: auto;
++  overflow-x: auto;
++  white-space: pre-wrap;
++  word-break: break-all;
++}
++
++.app-error-modal__actions {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  justify-content: flex-end;
++  gap: 0.75rem;
++  padding: 1rem 1.25rem;
++  background-color: rgba(255, 255, 255, 0.03);
++  border-top: 1px solid rgba(255, 255, 255, 0.1);
++}
++
++.app-error-modal__btn {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  padding: 0.5rem 1rem;
++  font-size: 0.875rem;
++  font-weight: 600;
++  border-radius: 6px;
++  cursor: pointer;
++  text-decoration: none;
++  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
++  line-height: 1.25;
++}
++
++.app-error-modal__btn:focus-visible {
++  outline: 2px solid #ffffff;
++  outline-offset: 2px;
++}
++
++.app-error-modal__btn--copy {
++  background-color: transparent;
++  color: #eceff1;
++  border: 1px solid rgba(255, 255, 255, 0.25);
++}
++
++.app-error-modal__btn--copy:hover {
++  background-color: rgba(255, 255, 255, 0.1);
++  border-color: rgba(255, 255, 255, 0.4);
++}
++
++.app-error-modal__btn--report {
++  background-color: #2e7d32;
++  color: #ffffff;
++  border: 1px solid #388e3c;
++}
++
++.app-error-modal__btn--report:hover {
++  background-color: #1b5e20;
++}
++
++.app-error-modal__btn--dismiss {
++  background-color: #d32f2f;
++  color: #ffffff;
++  border: 1px solid #b71c1c;
++}
++
++.app-error-modal__btn--dismiss:hover {
++  background-color: #c62828;
++}
+diff --git a/kanban/web/src/components/error/AppErrorModal.test.tsx b/kanban/web/src/components/error/AppErrorModal.test.tsx
+new file mode 100644
+index 0000000..e10499e
+--- /dev/null
++++ b/kanban/web/src/components/error/AppErrorModal.test.tsx
+@@ -0,0 +1,213 @@
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import React, { useState } from 'react';
++import { MemoryRouter, useRouteError } from 'react-router';
++import {
++  AppErrorModal,
++  RouteErrorBoundary,
++  GlobalErrorBoundary,
++} from './AppErrorModal';
++
++vi.mock('../../utils/uuid', () => ({
++  safeCopyToClipboard: vi.fn().mockResolvedValue(true),
++  safeRandomUUID: vi.fn().mockReturnValue('11111111-1111-4111-8111-111111111111'),
++}));
++
++vi.mock('react-router', async () => {
++  const actual = await vi.importActual<typeof import('react-router')>('react-router');
++  return {
++    ...actual,
++    useRouteError: vi.fn(),
++  };
++});
++
++describe('AppErrorModal, RouteErrorBoundary, and GlobalErrorBoundary', () => {
++  afterEach(() => {
++    vi.clearAllMocks();
++  });
++
++  describe('AppErrorModal', () => {
++    it('renders danger header, message, url, stack trace, and action buttons', () => {
++      const error = new Error('Test fatal failure');
++      error.stack = 'Error: Test fatal failure\n    at Component.tsx:42';
++
++      render(<AppErrorModal error={error} />);
++
++      expect(screen.getByText('Application Error Detected')).toBeDefined();
++      expect(screen.getByTestId('error-message').textContent).toBe('Test fatal failure');
++      expect(screen.getByTestId('error-url')).toBeDefined();
++      expect(screen.getByTestId('error-trace').textContent).toContain('Error: Test fatal failure');
++
++      const copyBtn = screen.getByTestId('error-copy-btn');
++      const reportLink = screen.getByTestId('error-report-link');
++      const dismissBtn = screen.getByTestId('error-dismiss-btn');
++
++      expect(copyBtn).toBeDefined();
++      expect(reportLink).toBeDefined();
++      expect(dismissBtn).toBeDefined();
++
++      const href = reportLink.getAttribute('href') ?? '';
++      expect(href).toContain('https://github.com/ThumbsUp-HQ/thumbs-up-kanban/issues/new');
++      expect(href).toContain(encodeURIComponent('[Bug]: Application Error: Test fatal failure'));
++    });
++
++    it('copies traceback and shows Copied feedback on click', async () => {
++      const { safeCopyToClipboard } = await import('../../utils/uuid');
++      const error = new Error('Clipboard test error');
++      render(<AppErrorModal error={error} />);
++
++      const copyBtn = screen.getByTestId('error-copy-btn');
++      fireEvent.click(copyBtn);
++
++      await waitFor(() => {
++        expect(safeCopyToClipboard).toHaveBeenCalled();
++        expect(screen.getByText('Copied Traceback!')).toBeDefined();
++      });
++    });
++
++    it('clears ?peek= search param and invokes onDismiss callback', () => {
++      const onDismiss = vi.fn();
++      const pushStateSpy = vi.spyOn(window.history, 'replaceState');
++
++      const url = new URL(window.location.href);
++      url.searchParams.set('peek', 'KAN-123');
++      window.history.pushState({}, '', url.toString());
++
++      render(<AppErrorModal error="Non-Error string failure" onDismiss={onDismiss} />);
++
++      const dismissBtn = screen.getByTestId('error-dismiss-btn');
++      fireEvent.click(dismissBtn);
++
++      expect(onDismiss).toHaveBeenCalledTimes(1);
++      expect(pushStateSpy).toHaveBeenCalled();
++    });
++
++    it('handles non-Error objects and statusText gracefully', () => {
++      render(<AppErrorModal error={{ statusText: 'Not Found', status: 404 }} />);
++      expect(screen.getByTestId('error-message').textContent).toBe('Not Found');
++    });
++  });
++
++  describe('RouteErrorBoundary', () => {
++    it('renders AppErrorModal with error from useRouteError', () => {
++      const mockRouteError = new Error('Route level failure');
++      vi.mocked(useRouteError).mockReturnValue(mockRouteError);
++
++      render(
++        <MemoryRouter>
++          <RouteErrorBoundary />
++        </MemoryRouter>,
++      );
++
++      expect(screen.getByText('Application Error Detected')).toBeDefined();
++      expect(screen.getByTestId('error-message').textContent).toBe('Route level failure');
++    });
++  });
++
++  describe('GlobalErrorBoundary', () => {
++    // Suppress console.error in error boundary tests
++    const originalConsoleError = console.error;
++    beforeEach(() => {
++      console.error = vi.fn();
++    });
++    afterEach(() => {
++      console.error = originalConsoleError;
++    });
++
++    function BuggyComponent({ shouldThrow }: { shouldThrow: boolean }): React.JSX.Element {
++      if (shouldThrow) {
++        throw new Error('Component crashed inside GlobalErrorBoundary');
++      }
++      return <div>Healthy Child Content</div>;
++    }
++
++    it('renders children when no error occurs', () => {
++      render(
++        <GlobalErrorBoundary>
++          <div>Safe Content</div>
++        </GlobalErrorBoundary>,
++      );
++
++      expect(screen.getByText('Safe Content')).toBeDefined();
++    });
++
++    it('catches render errors and recovers on Dismiss click', () => {
++      function TestWrapper() {
++        const [hasError, setHasError] = useState(false);
++        return (
++          <div>
++            <button
++              type="button"
++              onClick={() => {
++                setHasError(true);
++              }}
++            >
++              Trigger Error
++            </button>
++            <GlobalErrorBoundary>
++              <BuggyComponent shouldThrow={hasError} />
++            </GlobalErrorBoundary>
++          </div>
++        );
++      }
++
++      render(<TestWrapper />);
++      expect(screen.getByText('Healthy Child Content')).toBeDefined();
++
++      fireEvent.click(screen.getByText('Trigger Error'));
++
++      expect(screen.getByText('Application Error Detected')).toBeDefined();
++      expect(screen.getByTestId('error-message').textContent).toBe(
++        'Component crashed inside GlobalErrorBoundary',
++      );
++
++      // Dismiss recovers
++      fireEvent.click(screen.getByTestId('error-dismiss-btn'));
++    });
++
++    it('catches window error and unhandledrejection events', async () => {
++      render(
++        <GlobalErrorBoundary>
++          <div>Child Area</div>
++        </GlobalErrorBoundary>,
++      );
++
++      expect(screen.getByText('Child Area')).toBeDefined();
++
++      // Dispatch window error event
++      const errorEvent = new ErrorEvent('error', {
++        error: new Error('Window level script error'),
++      });
++      window.dispatchEvent(errorEvent);
++
++      await waitFor(() => {
++        expect(screen.getByText('Application Error Detected')).toBeDefined();
++        expect(screen.getByTestId('error-message').textContent).toBe(
++          'Window level script error',
++        );
++      });
++
++      // Dismiss recovers back
++      fireEvent.click(screen.getByTestId('error-dismiss-btn'));
++      await waitFor(() => {
++        expect(screen.getByText('Child Area')).toBeDefined();
++      });
++
++      // Dispatch unhandled promise rejection event
++      const rejectionEvent = new CustomEvent('unhandledrejection', {
++        detail: { reason: new Error('Promise rejection error') },
++      }) as unknown as PromiseRejectionEvent;
++      Object.defineProperty(rejectionEvent, 'reason', {
++        value: new Error('Promise rejection error'),
++      });
++      window.dispatchEvent(rejectionEvent);
++
++      await waitFor(() => {
++        expect(screen.getByText('Application Error Detected')).toBeDefined();
++        expect(screen.getByTestId('error-message').textContent).toBe(
++          'Promise rejection error',
++        );
++      });
++    });
++  });
++});
+diff --git a/kanban/web/src/components/error/AppErrorModal.tsx b/kanban/web/src/components/error/AppErrorModal.tsx
+new file mode 100644
+index 0000000..fb4277b
+--- /dev/null
++++ b/kanban/web/src/components/error/AppErrorModal.tsx
+@@ -0,0 +1,280 @@
++/**
++ * Blatant, Dismissible On-Screen Error Modal & Boundaries.
++ * Strict CSP Compliant (style-src 'self', zero inline style attributes).
++ */
++
++import React, {
++  Component,
++  useState,
++  useCallback,
++  type ErrorInfo,
++  type ReactNode,
++  type JSX,
++} from 'react';
++import { useLocation, useNavigate, useRouteError } from 'react-router';
++import { safeCopyToClipboard } from '../../utils/uuid';
++import './AppErrorModal.css';
++
++export interface AppErrorModalProps {
++  readonly error: unknown;
++  readonly errorInfo?: { componentStack?: string | null | undefined } | null | undefined;
++  readonly onDismiss?: () => void;
++}
++
++export function AppErrorModal({
++  error,
++  errorInfo,
++  onDismiss,
++}: AppErrorModalProps): JSX.Element {
++  const [copied, setCopied] = useState(false);
++
++  let errorMessage = 'An unexpected application error occurred.';
++  if (error instanceof Error) {
++    errorMessage = error.message;
++  } else if (typeof error === 'string') {
++    errorMessage = error;
++  } else if (typeof error === 'object' && error !== null && 'statusText' in error) {
++    errorMessage = String(error.statusText);
++  }
++
++  let stackTrace = 'No stack trace available.';
++  if (error instanceof Error && error.stack) {
++    stackTrace = error.stack;
++  } else if (typeof error === 'object' && error !== null) {
++    stackTrace = JSON.stringify(error, null, 2);
++  } else if (typeof error === 'string') {
++    stackTrace = error;
++  } else if (
++    typeof error === 'number' ||
++    typeof error === 'boolean' ||
++    typeof error === 'bigint'
++  ) {
++    stackTrace = error.toString();
++  }
++
++  const componentStack = errorInfo?.componentStack ?? '';
++  const fullTrace = componentStack
++    ? `${stackTrace}\n\nComponent Stack:\n${componentStack}`
++    : stackTrace;
++
++  const currentUrl =
++    typeof window !== 'undefined' ? window.location.href : 'Unknown URL';
++
++  const handleCopy = useCallback(async (): Promise<void> => {
++    const textToCopy = `Error: ${errorMessage}\nURL: ${currentUrl}\n\nTraceback:\n${fullTrace}`;
++    const success = await safeCopyToClipboard(textToCopy);
++    if (success) {
++      setCopied(true);
++      setTimeout(() => {
++        setCopied(false);
++      }, 2000);
++    }
++  }, [errorMessage, currentUrl, fullTrace]);
++
++  const handleDismiss = useCallback((): void => {
++    if (typeof window !== 'undefined') {
++      const url = new URL(window.location.href);
++      if (url.searchParams.has('peek')) {
++        url.searchParams.delete('peek');
++        window.history.replaceState({}, '', url.toString());
++        window.dispatchEvent(new PopStateEvent('popstate'));
++      }
++    }
++    onDismiss?.();
++  }, [onDismiss]);
++
++  const reportTitle = `[Bug]: Application Error: ${errorMessage.slice(0, 80)}`;
++  const reportBody = `### Application Error Detected\n\n**URL:** ${currentUrl}\n**Error:** ${errorMessage}\n\n\`\`\`\n${fullTrace}\n\`\`\``;
++  const reportUrl = `https://github.com/ThumbsUp-HQ/thumbs-up-kanban/issues/new?title=${encodeURIComponent(reportTitle)}&body=${encodeURIComponent(reportBody)}`;
++
++  return (
++    <div
++      className="app-error-backdrop"
++      role="alertdialog"
++      aria-modal="true"
++      aria-labelledby="app-error-title"
++      aria-describedby="app-error-message"
++    >
++      <div className="app-error-modal">
++        <header className="app-error-modal__header">
++          <span className="app-error-modal__icon" aria-hidden="true">
++            🚨
++          </span>
++          <h2 id="app-error-title" className="app-error-modal__title">
++            Application Error Detected
++          </h2>
++        </header>
++
++        <div className="app-error-modal__body">
++          <div
++            id="app-error-message"
++            className="app-error-modal__message"
++            data-testid="error-message"
++          >
++            {errorMessage}
++          </div>
++
++          <div className="app-error-modal__url" data-testid="error-url">
++            <span className="app-error-modal__label">URL:</span>
++            <code>{currentUrl}</code>
++          </div>
++
++          <div className="app-error-modal__trace-wrapper">
++            <span className="app-error-modal__label">Stack Trace:</span>
++            <pre className="app-error-modal__trace" data-testid="error-trace">
++              {fullTrace}
++            </pre>
++          </div>
++        </div>
++
++        <footer className="app-error-modal__actions">
++          <button
++            type="button"
++            className="app-error-modal__btn app-error-modal__btn--copy"
++            onClick={() => {
++              void handleCopy();
++            }}
++            data-testid="error-copy-btn"
++          >
++            {copied ? 'Copied Traceback!' : 'Copy Traceback'}
++          </button>
++
++          <a
++            href={reportUrl}
++            target="_blank"
++            rel="noopener noreferrer"
++            className="app-error-modal__btn app-error-modal__btn--report"
++            data-testid="error-report-link"
++          >
++            Report to ThumbsUp-HQ
++          </a>
++
++          <button
++            type="button"
++            className="app-error-modal__btn app-error-modal__btn--dismiss"
++            onClick={handleDismiss}
++            data-testid="error-dismiss-btn"
++          >
++            Dismiss / Recover
++          </button>
++        </footer>
++      </div>
++    </div>
++  );
++}
++
++/**
++ * Route-level error boundary for React Router route `errorElement`.
++ */
++export function RouteErrorBoundary(): JSX.Element {
++  const error = useRouteError();
++  const navigate = useNavigate();
++  const location = useLocation();
++
++  const handleDismiss = useCallback((): void => {
++    const params = new URLSearchParams(location.search);
++    if (params.has('peek')) {
++      params.delete('peek');
++      const qs = params.toString();
++      void navigate(`${location.pathname}${qs ? `?${qs}` : ''}`, {
++        replace: true,
++      });
++    } else {
++      window.location.reload();
++    }
++  }, [location.pathname, location.search, navigate]);
++
++  return <AppErrorModal error={error} onDismiss={handleDismiss} />;
++}
++
++interface GlobalErrorBoundaryProps {
++  readonly children: ReactNode;
++}
++
++interface GlobalErrorBoundaryState {
++  readonly error: unknown;
++  readonly errorInfo: { componentStack?: string | null | undefined } | null;
++}
++
++/**
++ * Top-level application error boundary that wraps `<App />` and catches
++ * render errors as well as unhandled window errors and promise rejections.
++ */
++export class GlobalErrorBoundary extends Component<
++  GlobalErrorBoundaryProps,
++  GlobalErrorBoundaryState
++> {
++  constructor(props: GlobalErrorBoundaryProps) {
++    super(props);
++    this.state = {
++      error: null,
++      errorInfo: null,
++    };
++  }
++
++  static getDerivedStateFromError(error: unknown): Partial<GlobalErrorBoundaryState> {
++    return { error };
++  }
++
++  override componentDidCatch(error: unknown, errorInfo: ErrorInfo): void {
++    this.setState({
++      error,
++      errorInfo: { componentStack: errorInfo.componentStack ?? null },
++    });
++  }
++
++  override componentDidMount(): void {
++    window.addEventListener('error', this.handleWindowError);
++    window.addEventListener('unhandledrejection', this.handleUnhandledRejection);
++  }
++
++  override componentWillUnmount(): void {
++    window.removeEventListener('error', this.handleWindowError);
++    window.removeEventListener('unhandledrejection', this.handleUnhandledRejection);
++  }
++
++  private readonly handleWindowError = (event: ErrorEvent): void => {
++    // Only capture unhandled runtime script errors
++    if (event.error) {
++      this.setState({
++        error: event.error,
++        errorInfo: null,
++      });
++    } else if (event.message) {
++      this.setState({
++        error: new Error(event.message),
++        errorInfo: null,
++      });
++    }
++  };
++
++  private readonly handleUnhandledRejection = (
++    event: PromiseRejectionEvent,
++  ): void => {
++    this.setState({
++      error: event.reason ?? new Error('Unhandled Promise Rejection'),
++      errorInfo: null,
++    });
++  };
++
++  private readonly handleDismiss = (): void => {
++    this.setState({
++      error: null,
++      errorInfo: null,
++    });
++  };
++
++  override render(): ReactNode {
++    if (this.state.error !== null) {
++      return (
++        <AppErrorModal
++          error={this.state.error}
++          errorInfo={this.state.errorInfo}
++          onDismiss={this.handleDismiss}
++        />
++      );
++    }
++
++    return this.props.children;
++  }
++}
+diff --git a/kanban/web/src/editor/sparkle/sparkleClient.ts b/kanban/web/src/editor/sparkle/sparkleClient.ts
+index 3500ebd..6e01e94 100644
+--- a/kanban/web/src/editor/sparkle/sparkleClient.ts
++++ b/kanban/web/src/editor/sparkle/sparkleClient.ts
+@@ -5,6 +5,7 @@
+  */
+ 
+ import type { SparkleDoneStatus } from './sparkleMachine';
++import { safeRandomUUID } from '../../utils/uuid';
+ 
+ export type EditorSurfaceKind =
+   | 'summary'
+@@ -106,13 +107,10 @@ export function parseSseEvents(
+  * Generates a standard client request ID UUIDv4.
+  */
+ export function generateClientRequestId(): string {
+-  if (
+-    typeof crypto !== 'undefined' &&
+-    typeof crypto.randomUUID === 'function'
+-  ) {
+-    return crypto.randomUUID();
++  if (typeof crypto === 'undefined') {
++    return '00000000-0000-4000-8000-000000000000';
+   }
+-  return '00000000-0000-4000-8000-000000000000';
++  return safeRandomUUID();
+ }
+ 
+ interface MutableStreamResult {
+diff --git a/kanban/web/src/features/board/BoardCard.test.tsx b/kanban/web/src/features/board/BoardCard.test.tsx
+index d7fc111..751a547 100644
+--- a/kanban/web/src/features/board/BoardCard.test.tsx
++++ b/kanban/web/src/features/board/BoardCard.test.tsx
+@@ -117,6 +117,21 @@ describe('BoardCard Component', () => {
+     expect(pushStateSpy).toHaveBeenCalled();
+   });
+ 
++  it('opens peek drawer when clicking on the card container', () => {
++    const onOpenPeek = vi.fn();
++    render(
++      <BoardCard
++        issue={baseIssue}
++        stateGroup="started"
++        onOpenPeek={onOpenPeek}
++      />,
++    );
++
++    const card = screen.getByTestId('board-card-KAN-142');
++    fireEvent.click(card);
++    expect(onOpenPeek).toHaveBeenCalledWith('KAN-142');
++  });
++
+   it('renders different gate statuses, priority variants, dragging and drop edge', () => {
+     const rejectedIssue: BoardIssue = {
+       ...baseIssue,
+diff --git a/kanban/web/src/features/board/BoardCard.tsx b/kanban/web/src/features/board/BoardCard.tsx
+index 823e8a0..0e58e2d 100644
+--- a/kanban/web/src/features/board/BoardCard.tsx
++++ b/kanban/web/src/features/board/BoardCard.tsx
+@@ -133,6 +133,18 @@ export function BoardCard({
+     }
+   };
+ 
++  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>): void => {
++    const target = e.target as HTMLElement | null;
++    if (
++      target?.closest(
++        'button, input, select, textarea, a, [role="button"]:not(.board-card)',
++      )
++    ) {
++      return;
++    }
++    handleOpenPeek();
++  };
++
+   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+     if (e.key === 'Enter') {
+       e.preventDefault();
+@@ -177,6 +189,7 @@ export function BoardCard({
+       data-dragging={isDragging ? 'true' : undefined}
+       data-drop-target={dropEdge ?? undefined}
+       onKeyDown={handleKeyDown}
++      onClick={handleCardClick}
+       aria-label={`${issue.key}: ${issue.summary}`}
+     >
+       <div className="board-card-top">
+diff --git a/kanban/web/src/features/calendar/CalendarView.tsx b/kanban/web/src/features/calendar/CalendarView.tsx
+index 8bb1061..e1ad09b 100644
+--- a/kanban/web/src/features/calendar/CalendarView.tsx
++++ b/kanban/web/src/features/calendar/CalendarView.tsx
+@@ -47,6 +47,7 @@ export function CalendarView({
+   initialYear,
+   initialMonth,
+   today,
++  onOpenPeek,
+ }: CalendarViewProps): JSX.Element {
+   const todayDate = useMemo(() => {
+     return today ?? new Date().toISOString().slice(0, 10);
+@@ -391,6 +392,12 @@ export function CalendarView({
+                       draggable
+                       onDragStart={(e) => { handleDragStart(e, issue.key); }}
+                       onKeyDown={(e) => { handlePillKeyDown(e, issue, cell.date); }}
++                      onClick={(e) => {
++                        if (onOpenPeek) {
++                          e.preventDefault();
++                          onOpenPeek(issue.key);
++                        }
++                      }}
+                       title={`${issue.key}: ${issue.summary}`}
+                       data-issue-key={issue.key}
+                       data-testid={`calendar-pill-${issue.key}`}
+@@ -453,6 +460,12 @@ export function CalendarView({
+                         className={pillClass}
+                         draggable
+                         onDragStart={(e) => { handleDragStart(e, issue.key); }}
++                        onClick={(e) => {
++                          if (onOpenPeek) {
++                            e.preventDefault();
++                            onOpenPeek(issue.key);
++                          }
++                        }}
+                         data-issue-key={issue.key}
+                       >
+                         <span className="calendar-issue-pill-key">{issue.key}</span>
+@@ -514,6 +527,12 @@ export function CalendarView({
+                 href={`?layout=calendar&peek=${encodeURIComponent(issue.key)}`}
+                 className={rowClass}
+                 data-testid={`agenda-row-${issue.key}`}
++                onClick={(e) => {
++                  if (onOpenPeek) {
++                    e.preventDefault();
++                    onOpenPeek(issue.key);
++                  }
++                }}
+               >
+                 <span className="calendar-issue-pill-key">{issue.key}</span>
+                 <EmojiHint kind={priorityKind} />
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index 4ed560f..bcad88c 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -28,6 +28,7 @@ import {
+   fetchProjectStates,
+   type StateSummary,
+ } from '../views/viewsApi';
++import { safeRandomUUID } from '../../utils/uuid';
+ import './IssueSurface.css';
+ 
+ let moduleMountCounter = 0;
+@@ -90,7 +91,7 @@ function IssueSurfaceRoot({
+   issueKey,
+   projectKey,
+ }: IssueSurfaceRootProps): JSX.Element {
+-  const [mountId] = useState(() => crypto.randomUUID());
++  const [mountId] = useState(() => safeRandomUUID());
+   const [mountSeq] = useState(() => {
+     moduleMountCounter += 1;
+     return moduleMountCounter;
+diff --git a/kanban/web/src/features/standalone/ComposeExportTab.tsx b/kanban/web/src/features/standalone/ComposeExportTab.tsx
+index 7c66786..a45fbbe 100644
+--- a/kanban/web/src/features/standalone/ComposeExportTab.tsx
++++ b/kanban/web/src/features/standalone/ComposeExportTab.tsx
+@@ -4,6 +4,7 @@
+  */
+ 
+ import React, { useCallback, useEffect, useState, type JSX } from 'react';
++import { safeCopyToClipboard } from '../../utils/uuid';
+ 
+ export interface ComposeExportData {
+   readonly filename: string;
+@@ -91,11 +92,15 @@ export function ComposeExportTab({
+       if (!exportData) {
+         return;
+       }
+-      await navigator.clipboard.writeText(exportData.env_template);
+-      setCopiedEnv(true);
+-      setTimeout(() => {
+-        setCopiedEnv(false);
+-      }, 2000);
++      const success = await safeCopyToClipboard(exportData.env_template);
++      if (success) {
++        setCopiedEnv(true);
++        setTimeout(() => {
++          setCopiedEnv(false);
++        }, 2000);
++      } else {
++        setError('Failed to copy');
++      }
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Failed to copy';
+       setError(msg);
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+index 5b324c0..2c3c47e 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+@@ -13,6 +13,7 @@ import React, {
+ } from 'react';
+ import { useSystemStatus, type SystemStatus } from '../../app/useSystemStatus';
+ import { getCsrfToken } from '../../editor/sparkle/sparkleClient';
++import { safeCopyToClipboard } from '../../utils/uuid';
+ import { ComposeExportTab } from './ComposeExportTab';
+ import './StandaloneStatusPanel.css';
+ 
+@@ -106,13 +107,15 @@ export function StandaloneStatusPanel({
+ 
+   const handleCopyDockerRun = async (): Promise<void> => {
+     try {
+-      await navigator.clipboard.writeText(
++      const success = await safeCopyToClipboard(
+         'docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data kanban:latest',
+       );
+-      setCopiedDockerRun(true);
+-      setTimeout(() => {
+-        setCopiedDockerRun(false);
+-      }, 2000);
++      if (success) {
++        setCopiedDockerRun(true);
++        setTimeout(() => {
++          setCopiedDockerRun(false);
++        }, 2000);
++      }
+     } catch {
+       // Fallback
+     }
+diff --git a/kanban/web/src/features/table/TableView.tsx b/kanban/web/src/features/table/TableView.tsx
+index 01c5fa8..94f702d 100644
+--- a/kanban/web/src/features/table/TableView.tsx
++++ b/kanban/web/src/features/table/TableView.tsx
+@@ -21,6 +21,7 @@ export interface TableViewProps {
+   nextCursor?: string | null;
+   onLoadMore?: () => void;
+   isLoading?: boolean;
++  onOpenPeek?: (issueKey: string) => void;
+ }
+ 
+ export function TableView({
+@@ -34,6 +35,7 @@ export function TableView({
+   nextCursor,
+   onLoadMore,
+   isLoading = false,
++  onOpenPeek,
+ }: TableViewProps): JSX.Element {
+   // Load saved columns from localStorage
+   const [columns, setColumns] = useState<TableColumnId[]>(() => {
+@@ -247,6 +249,17 @@ export function TableView({
+                   key={issue.id || issue.key}
+                   data-issue-key={issue.key}
+                   className={`table-row ${isSelected ? 'table-row--selected' : ''}`.trim()}
++                  onClick={(e) => {
++                    const target = e.target as HTMLElement | null;
++                    if (
++                      target?.closest(
++                        'button, input, select, textarea, a, [role="button"]',
++                      )
++                    ) {
++                      return;
++                    }
++                    onOpenPeek?.(issue.key);
++                  }}
+                 >
+                   <td className="sticky-col">
+                     <div className="table-key-cell-content">
+@@ -259,6 +272,12 @@ export function TableView({
+                       <a
+                         href={`?layout=table&peek=${encodeURIComponent(issue.key)}`}
+                         className="mono table-key-link"
++                        onClick={(e) => {
++                          if (onOpenPeek) {
++                            e.preventDefault();
++                            onOpenPeek(issue.key);
++                          }
++                        }}
+                       >
+                         {issue.key}
+                       </a>
+diff --git a/kanban/web/src/features/timeline/TimelineView.tsx b/kanban/web/src/features/timeline/TimelineView.tsx
+index 2b964d2..719ded2 100644
+--- a/kanban/web/src/features/timeline/TimelineView.tsx
++++ b/kanban/web/src/features/timeline/TimelineView.tsx
+@@ -188,6 +188,7 @@ export function TimelineView({
+   initialStartDate,
+   today,
+   links,
++  onOpenPeek,
+ }: TimelineViewProps): JSX.Element {
+   const todayDate = useMemo(() => {
+     return today ?? new Date().toISOString().slice(0, 10);
+@@ -607,11 +608,22 @@ export function TimelineView({
+                   className="timeline-left-row"
+                   data-issue-key={issue.key}
+                   data-testid={`timeline-left-row-${issue.key}`}
++                  onClick={(e) => {
++                    const target = e.target as HTMLElement | null;
++                    if (target?.closest('a, button, input')) return;
++                    onOpenPeek?.(issue.key);
++                  }}
+                 >
+                   <EmojiHint kind={priorityKind} />
+                   <a
+                     href={`?layout=timeline&peek=${encodeURIComponent(issue.key)}`}
+                     className="timeline-left-row-key"
++                    onClick={(e) => {
++                      if (onOpenPeek) {
++                        e.preventDefault();
++                        onOpenPeek(issue.key);
++                      }
++                    }}
+                   >
+                     {issue.key}
+                   </a>
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index c583ce6..78bfc6a 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -1,4 +1,4 @@
+-import React, { useState, useMemo, useEffect, type ComponentType, type JSX } from 'react';
++import React, { useState, useMemo, useEffect, useCallback, type ComponentType, type JSX } from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
+ import type { BoardIssue, BoardWorkflowState } from '../board/boardApi.ts';
+@@ -89,6 +89,7 @@ export interface ViewComponentProps {
+   onLoadMore?: () => void;
+   isLoading?: boolean;
+   focusedKey?: string | null;
++  onOpenPeek?: (issueKey: string) => void;
+ }
+ 
+ export type ViewComponent = ComponentType<ViewComponentProps>;
+@@ -133,6 +134,7 @@ export interface IssuesWorkspaceRouteProps {
+   initialIssues?: IssueItem[];
+   initialLayout?: ViewLayout;
+   queryClient?: QueryClient;
++  onOpenPeek?: (issueKey: string) => void;
+ }
+ 
+ /**
+@@ -146,6 +148,7 @@ export function IssuesWorkspaceRoute({
+   initialIssues,
+   initialLayout,
+   queryClient = defaultQueryClient,
++  onOpenPeek: propOnOpenPeek,
+ }: IssuesWorkspaceRouteProps): JSX.Element {
+   const isLiveMode = initialIssues === undefined;
+ 
+@@ -177,6 +180,20 @@ export function IssuesWorkspaceRoute({
+   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
+   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+ 
++  const handleOpenPeek = useCallback(
++    (issueKey: string) => {
++      if (propOnOpenPeek) {
++        propOnOpenPeek(issueKey);
++        return;
++      }
++      const url = new URL(window.location.href);
++      url.searchParams.set('peek', issueKey);
++      window.history.pushState({}, '', url.toString());
++      window.dispatchEvent(new PopStateEvent('popstate'));
++    },
++    [propOnOpenPeek],
++  );
++
+   useEffect(() => {
+     if (!isLiveMode || !projectKey) {
+       return;
+@@ -623,6 +640,7 @@ export function IssuesWorkspaceRoute({
+           projectKey={projectKey}
+           states={boardStates}
+           issues={boardIssues}
++          onOpenPeek={handleOpenPeek}
+           onNewItem={() => {
+             setIsCreateModalOpen(true);
+           }}
+@@ -636,6 +654,7 @@ export function IssuesWorkspaceRoute({
+           selectedIds={selectedIds}
+           onToggleSelect={handleToggleSelect}
+           onSelectAll={handleSelectAll}
++          onOpenPeek={handleOpenPeek}
+           onCreateIssue={() => {
+             setIsCreateModalOpen(true);
+           }}
+diff --git a/kanban/web/src/utils/uuid.test.ts b/kanban/web/src/utils/uuid.test.ts
+new file mode 100644
+index 0000000..a80fad8
+--- /dev/null
++++ b/kanban/web/src/utils/uuid.test.ts
+@@ -0,0 +1,165 @@
++import { describe, it, expect, vi, afterEach } from 'vitest';
++import { safeRandomUUID, safeCopyToClipboard } from './uuid';
++
++describe('uuid and clipboard utilities', () => {
++  const originalCrypto = globalThis.crypto;
++  const originalNavigator = globalThis.navigator;
++
++  afterEach(() => {
++    Object.defineProperty(globalThis, 'crypto', {
++      value: originalCrypto,
++      writable: true,
++      configurable: true,
++    });
++    Object.defineProperty(globalThis, 'navigator', {
++      value: originalNavigator,
++      writable: true,
++      configurable: true,
++    });
++    vi.restoreAllMocks();
++  });
++
++  describe('safeRandomUUID', () => {
++    const UUID_V4_REGEX =
++      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
++
++    it('generates a valid UUIDv4 when crypto.randomUUID is available', () => {
++      const uuid = safeRandomUUID();
++      expect(uuid).toMatch(UUID_V4_REGEX);
++    });
++
++    it('falls back to crypto.getRandomValues when crypto.randomUUID is undefined (HTTP non-secure context)', () => {
++      const mockGetRandomValues = vi.fn((arr: Uint8Array) => {
++        for (let i = 0; i < arr.length; i++) {
++          arr[i] = i * 16;
++        }
++        return arr;
++      });
++
++      Object.defineProperty(globalThis, 'crypto', {
++        value: {
++          getRandomValues: mockGetRandomValues,
++        },
++        writable: true,
++        configurable: true,
++      });
++
++      const uuid = safeRandomUUID();
++      expect(mockGetRandomValues).toHaveBeenCalled();
++      expect(uuid).toMatch(UUID_V4_REGEX);
++    });
++
++    it('falls back to getRandomValues if crypto.randomUUID throws an exception', () => {
++      const mockGetRandomValues = vi.fn((arr: Uint8Array) => {
++        for (let i = 0; i < arr.length; i++) {
++          arr[i] = i * 8;
++        }
++        return arr;
++      });
++
++      Object.defineProperty(globalThis, 'crypto', {
++        value: {
++          randomUUID: () => {
++            throw new Error('Not allowed in this context');
++          },
++          getRandomValues: mockGetRandomValues,
++        },
++        writable: true,
++        configurable: true,
++      });
++
++      const uuid = safeRandomUUID();
++      expect(mockGetRandomValues).toHaveBeenCalled();
++      expect(uuid).toMatch(UUID_V4_REGEX);
++    });
++
++    it('falls back to Math.random when Web Crypto API is unavailable', () => {
++      Object.defineProperty(globalThis, 'crypto', {
++        value: undefined,
++        writable: true,
++        configurable: true,
++      });
++
++      const uuid = safeRandomUUID();
++      expect(uuid).toMatch(UUID_V4_REGEX);
++    });
++  });
++
++  describe('safeCopyToClipboard', () => {
++    it('uses navigator.clipboard.writeText when available', async () => {
++      const writeTextMock = vi.fn().mockResolvedValue(undefined);
++      Object.defineProperty(globalThis, 'navigator', {
++        value: {
++          clipboard: {
++            writeText: writeTextMock,
++          },
++        },
++        writable: true,
++        configurable: true,
++      });
++
++      const success = await safeCopyToClipboard('test-token');
++      expect(success).toBe(true);
++      expect(writeTextMock).toHaveBeenCalledWith('test-token');
++    });
++
++    it('falls back to execCommand when navigator.clipboard is missing', async () => {
++      Object.defineProperty(globalThis, 'navigator', {
++        value: {},
++        writable: true,
++        configurable: true,
++      });
++
++      /* eslint-disable @typescript-eslint/no-deprecated */
++      const execCommandMock = vi.fn().mockReturnValue(true);
++      document.execCommand = execCommandMock;
++
++      const success = await safeCopyToClipboard('fallback-text');
++      expect(success).toBe(true);
++      expect(execCommandMock).toHaveBeenCalledWith('copy');
++      /* eslint-enable @typescript-eslint/no-deprecated */
++    });
++
++    it('falls back to execCommand when navigator.clipboard.writeText rejects', async () => {
++      const writeTextMock = vi
++        .fn()
++        .mockRejectedValue(new Error('Permission denied'));
++      Object.defineProperty(globalThis, 'navigator', {
++        value: {
++          clipboard: {
++            writeText: writeTextMock,
++          },
++        },
++        writable: true,
++        configurable: true,
++      });
++
++      /* eslint-disable @typescript-eslint/no-deprecated */
++      const execCommandMock = vi.fn().mockReturnValue(true);
++      document.execCommand = execCommandMock;
++
++      const success = await safeCopyToClipboard('fallback-on-rejection');
++      expect(success).toBe(true);
++      expect(writeTextMock).toHaveBeenCalledWith('fallback-on-rejection');
++      expect(execCommandMock).toHaveBeenCalledWith('copy');
++      /* eslint-enable @typescript-eslint/no-deprecated */
++    });
++
++    it('returns false if execCommand copy fails', async () => {
++      Object.defineProperty(globalThis, 'navigator', {
++        value: {},
++        writable: true,
++        configurable: true,
++      });
++
++      /* eslint-disable @typescript-eslint/no-deprecated */
++      document.execCommand = vi.fn().mockImplementation(() => {
++        throw new Error('Command failed');
++      });
++
++      const success = await safeCopyToClipboard('failed-text');
++      expect(success).toBe(false);
++      /* eslint-enable @typescript-eslint/no-deprecated */
++    });
++  });
++});
+diff --git a/kanban/web/src/utils/uuid.ts b/kanban/web/src/utils/uuid.ts
+new file mode 100644
+index 0000000..82a6d2a
+--- /dev/null
++++ b/kanban/web/src/utils/uuid.ts
+@@ -0,0 +1,128 @@
++/**
++ * Unified UUID and Clipboard Utilities.
++ * Hardened for non-HTTPS and non-Secure Context environments.
++ */
++
++/**
++ * Generates an RFC 4122 version 4 UUID.
++ *
++ * In Secure Contexts (HTTPS / localhost), utilizes the native `crypto.randomUUID()`.
++ * In non-secure contexts (HTTP / IP addresses) where `crypto.randomUUID` is undefined,
++ * falls back to cryptographically strong random values from `crypto.getRandomValues()`.
++ * If Web Crypto is entirely unavailable, falls back to `Math.random()`.
++ */
++export function safeRandomUUID(): string {
++  if (
++    typeof crypto !== 'undefined' &&
++    typeof crypto.randomUUID === 'function'
++  ) {
++    try {
++      return crypto.randomUUID();
++    } catch {
++      // In case randomUUID throws in a non-standard runtime
++    }
++  }
++
++  const bytes = new Uint8Array(16);
++  if (
++    typeof crypto !== 'undefined' &&
++    typeof crypto.getRandomValues === 'function'
++  ) {
++    crypto.getRandomValues(bytes);
++  } else {
++    for (let i = 0; i < 16; i++) {
++      bytes[i] = Math.floor(Math.random() * 256);
++    }
++  }
++
++  // RFC 4122 v4 variant and version bits
++  // byte 6: 0100xxxx (version 4)
++  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
++  // byte 8: 10xxxxxx (variant 1: 10x)
++  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
++
++  const hex: string[] = [];
++  for (const b of bytes) {
++    hex.push(b.toString(16).padStart(2, '0'));
++  }
++
++  return [
++    hex.slice(0, 4).join(''),
++    hex.slice(4, 6).join(''),
++    hex.slice(6, 8).join(''),
++    hex.slice(8, 10).join(''),
++    hex.slice(10, 16).join(''),
++  ].join('-');
++}
++
++/**
++ * Copies text to the system clipboard asynchronously.
++ *
++ * Uses `navigator.clipboard.writeText()` when available in Secure Contexts.
++ * Falls back to creating a hidden `<textarea>` with `document.execCommand('copy')`
++ * in non-HTTPS / legacy contexts or if clipboard permissions are restricted.
++ * Returns true if the copy succeeded, false if unsupported, or throws the underlying error if rejected.
++ */
++export async function safeCopyToClipboard(text: string): Promise<boolean> {
++  let clipboardError: unknown = null;
++
++  if (
++    typeof navigator !== 'undefined' &&
++    'clipboard' in navigator &&
++    typeof navigator.clipboard.writeText === 'function'
++  ) {
++    try {
++      await navigator.clipboard.writeText(text);
++      return true;
++    } catch (err: unknown) {
++      clipboardError = err;
++      // Fallback to execCommand on permission/context error
++    }
++  }
++
++  if (typeof document !== 'undefined') {
++    try {
++      const textarea = document.createElement('textarea');
++      textarea.value = text;
++      textarea.setAttribute('readonly', '');
++      textarea.setAttribute('aria-hidden', 'true');
++      textarea.style.position = 'fixed';
++      textarea.style.top = '0';
++      textarea.style.left = '-9999px';
++      textarea.style.opacity = '0';
++      document.body.appendChild(textarea);
++
++      const selection = document.getSelection();
++      const originalRange =
++        selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
++
++      textarea.select();
++      textarea.setSelectionRange(0, textarea.value.length);
++
++      let success = false;
++      /* eslint-disable @typescript-eslint/no-deprecated */
++      if (typeof document.execCommand === 'function') {
++        success = document.execCommand('copy');
++      }
++      /* eslint-enable @typescript-eslint/no-deprecated */
++      document.body.removeChild(textarea);
++
++      if (originalRange && selection) {
++        selection.removeAllRanges();
++        selection.addRange(originalRange);
++      }
++      if (success) {
++        return true;
++      }
++    } catch {
++      // execCommand failure returns false below unless clipboardError was set
++    }
++  }
++
++  if (clipboardError !== null && clipboardError !== undefined) {
++    // eslint-disable-next-line @typescript-eslint/only-throw-error
++    throw clipboardError;
++  }
++
++  return false;
++}

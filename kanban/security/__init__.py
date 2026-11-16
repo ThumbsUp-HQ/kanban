@@ -34,6 +34,12 @@ from kanban.security.permissions import (
     parse_token_scope_mask,
     require_capability,
 )
+from kanban.security.read_taint import (
+    TaintGuard,
+    TaintRecorder,
+    get_taint_guard,
+    get_taint_recorder,
+)
 from kanban.security.scrubber import (
     ScrubFinding,
     ScrubResult,
@@ -72,11 +78,15 @@ __all__ = [
     "SecretKind",
     "SecurityHeadersMiddleware",
     "StaticKekProvider",
+    "TaintGuard",
+    "TaintRecorder",
     "UnknownKekError",
     "build_access_manifest",
     "capabilities_to_names",
     "derive_subkey",
     "evaluate_capabilities",
+    "get_taint_guard",
+    "get_taint_recorder",
     "load_key_material",
     "open_card_secret",
     "outbound_secret_scrubber",

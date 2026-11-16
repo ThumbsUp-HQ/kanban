@@ -1,0 +1,45 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p4-141-3ea80db6/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p4-141-3ea80db6
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 24 items
+
+kanban/tests/security/test_read_taint.py::test_case_1_positive_read_taint_recorded PASSED [  4%]
+kanban/tests/security/test_read_taint.py::test_case_2_canary_exfiltration_blocked PASSED [  8%]
+kanban/tests/security/test_read_taint.py::test_case_3_session_escape_prevented PASSED [ 12%]
+kanban/tests/security/test_read_taint.py::test_case_4_allowed_paths_and_link_guard PASSED [ 16%]
+kanban/tests/security/test_read_taint.py::test_case_5_taint_expiry_allows_write PASSED [ 20%]
+kanban/tests/security/test_read_taint.py::test_case_6_missing_session_header_rejected PASSED [ 25%]
+kanban/tests/security/test_read_taint.py::test_case_7_unit_coverage_read_taint PASSED [ 29%]
+mcp/tests/agent/test_add_comment.py::test_case_1_positive_add_comment PASSED [ 33%]
+mcp/tests/agent/test_add_comment.py::test_case_2_add_comment_help PASSED [ 37%]
+mcp/tests/agent/test_add_comment.py::test_case_3_argument_validation PASSED [ 41%]
+mcp/tests/agent/test_add_comment.py::test_case_4_body_size_boundary_via_rpc PASSED [ 45%]
+mcp/tests/agent/test_add_comment.py::test_case_5_nonexistent_ticket PASSED [ 50%]
+mcp/tests/agent/test_add_comment.py::test_case_6_mention_access_warning_and_ack PASSED [ 54%]
+mcp/tests/agent/test_add_comment.py::test_case_7_add_comment_reply_and_help_action PASSED [ 58%]
+mcp/tests/agent/test_add_comment.py::test_case_8_mcp_transcript_and_canary_exfiltration PASSED [ 62%]
+mcp/tests/agent/test_link_objects.py::test_case_1_positive_link_and_remove PASSED [ 66%]
+mcp/tests/agent/test_link_objects.py::test_case_2_link_objects_help PASSED [ 70%]
+mcp/tests/agent/test_link_objects.py::test_case_3_argument_validation PASSED [ 75%]
+mcp/tests/agent/test_link_objects.py::test_case_4_self_link_via_rpc PASSED [ 79%]
+mcp/tests/agent/test_link_objects.py::test_case_5_invalid_link_type_via_rpc PASSED [ 83%]
+mcp/tests/agent/test_link_objects.py::test_case_6_nonexistent_object PASSED [ 87%]
+mcp/tests/agent/test_link_objects.py::test_case_7_link_objects_remove_not_found_and_help PASSED [ 91%]
+mcp/tests/agent/test_link_objects.py::test_case_8_direct_handler_coverage PASSED [ 95%]
+mcp/tests/test_schema_budget.py::test_schema_budget_agent_tools PASSED   [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+database/models/mcp_read_taint.py       20      0      0      0   100%
+kanban/security/read_taint.py          117      3     34      5    95%   60->65, 167->exit, 188, 283->288, 308-316
+mcp/surfaces/agent/add_comment.py       86      0     36      0   100%
+mcp/surfaces/agent/link_objects.py     124      3     68      9    94%   204->221, 207, 211->205, 214->205, 223->240, 226, 228, 230->224, 233->224
+--------------------------------------------------------------------------------
+TOTAL                                  347      6    138     14    96%
+============================= 24 passed in 10.64s ==============================

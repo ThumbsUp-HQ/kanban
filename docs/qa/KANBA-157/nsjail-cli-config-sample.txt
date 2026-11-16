@@ -1,0 +1,181 @@
+================================================================================
+SAMPLE 1: agy -p (approval) nsjail config and execve argv
+================================================================================
+--- Target Binary & Execution Context ---
+Command Line (execve, zero-shell):
+['/usr/bin/nsjail', '--mode', 'o', '--time_limit', '15', '--chroot', '/var/empty', '--keep_env=false', '--env', 'PATH=/usr/local/bin:/usr/bin:/bin', '--env', 'HOME=/tmp', '--env', 'LANG=C.UTF-8', '--env', 'KANBAN_EPHEMERAL_MCP_TOKEN=[REDACTED_EPHEMERAL_TOKEN]', '--config', '/tmp/nsjail-cfg-01936c0a-7b2a.pbtxt', '--', '/usr/local/bin/agy', '-p']
+
+Environment Variables (scrubbed, host secrets purged):
+{"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.UTF-8", "KANBAN_EPHEMERAL_MCP_TOKEN": "[REDACTED_EPHEMERAL_TOKEN]"}
+
+--- Generated nsjail Protobuf Configuration ---
+# nsjail configuration for /workspace/repo snapshot
+name: "kanban-cli-pipe-repo"
+mode: ONCE
+cwd: "/workspace/repo"
+
+# Primary repository mount: MS_RDONLY | MS_NOEXEC | MS_NOSUID | MS_NODEV
+mount {
+    src: "/run/kanban/repo-snapshots/01936c0a-7b2a-7000-8000-112233445566"
+    dst: "/workspace/repo"
+    is_bind: true
+    rw: false
+    options: "MS_BIND,MS_REC,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: true
+}
+
+# 0000 secret and hook whiteout tmpfs overlays
+mount {
+    dst: "/workspace/repo/.env"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+mount {
+    dst: "/workspace/repo/.env.local"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+mount {
+    dst: "/workspace/repo/.git/config"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+mount {
+    dst: "/workspace/repo/.git/hooks"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+mount {
+    dst: "/workspace/repo/certs/server.key"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+mount {
+    dst: "/workspace/repo/id_rsa.pem"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+
+================================================================================
+SAMPLE 2: codex -p -s read-only (veto) nsjail config and execve argv
+================================================================================
+--- Target Binary & Execution Context ---
+Command Line (execve, zero-shell):
+['/usr/bin/nsjail', '--mode', 'o', '--time_limit', '15', '--chroot', '/var/empty', '--keep_env=false', '--env', 'PATH=/usr/local/bin:/usr/bin:/bin', '--env', 'HOME=/tmp', '--env', 'LANG=C.UTF-8', '--env', 'KANBAN_EPHEMERAL_MCP_TOKEN=[REDACTED_EPHEMERAL_TOKEN]', '--config', '/tmp/nsjail-cfg-01936c0a-codex.pbtxt', '--', '/usr/local/bin/codex', '-p', '-s', 'read-only']
+
+Environment Variables (scrubbed, host secrets purged):
+{"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.UTF-8", "KANBAN_EPHEMERAL_MCP_TOKEN": "[REDACTED_EPHEMERAL_TOKEN]"}
+
+--- Generated nsjail Protobuf Configuration ---
+# nsjail configuration for /workspace/repo snapshot
+name: "kanban-cli-pipe-repo"
+mode: ONCE
+cwd: "/workspace/repo"
+
+# Primary repository mount: MS_RDONLY | MS_NOEXEC | MS_NOSUID | MS_NODEV
+mount {
+    src: "/run/kanban/repo-snapshots/01936c0a-7b2a-7000-8000-778899aabbcc"
+    dst: "/workspace/repo"
+    is_bind: true
+    rw: false
+    options: "MS_BIND,MS_REC,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: true
+}
+
+# 0000 secret and hook whiteout tmpfs overlays
+mount {
+    dst: "/workspace/repo/.env"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+mount {
+    dst: "/workspace/repo/.env.local"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+mount {
+    dst: "/workspace/repo/.git/config"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+mount {
+    dst: "/workspace/repo/.git/hooks"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+mount {
+    dst: "/workspace/repo/certs/server.key"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}
+mount {
+    dst: "/workspace/repo/id_rsa.pem"
+    fstype: "tmpfs"
+    rw: false
+    options: "size=0,mode=0000,MS_RDONLY,MS_NODEV,MS_NOSUID,MS_NOEXEC"
+    nodev: true
+    nosuid: true
+    noexec: true
+    mandatory: false
+}

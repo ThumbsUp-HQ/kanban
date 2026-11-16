@@ -63,8 +63,8 @@ describe('routes and AppShell integration', () => {
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBeDefined();
 
     // Layout switcher has Board selected
-    const boardRadio = screen.getByRole('radio', { name: 'Board' });
-    expect(boardRadio.getAttribute('aria-checked')).toBe('true');
+    const boardLink = screen.getByRole('link', { name: /Board/ });
+    expect(boardLink).toBeDefined();
 
     // Route placeholder rendered inside shell
     expect(screen.getByTestId('route-placeholder')).toBeDefined();
@@ -81,9 +81,9 @@ describe('routes and AppShell integration', () => {
       </QueryClientProvider>,
     );
 
-    // After normalization, List should be checked
-    const listRadio = await screen.findByRole('radio', { name: 'List' });
-    expect(listRadio.getAttribute('aria-checked')).toBe('true');
+    // After normalization, List should be available
+    const listLink = await screen.findByRole('link', { name: /List/ });
+    expect(listLink).toBeDefined();
   });
 
   it('renders "Not found or no access" for invalid projectKey or issueKey without fetch calls', () => {

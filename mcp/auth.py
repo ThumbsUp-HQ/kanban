@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
 import time
 from collections import OrderedDict
@@ -116,7 +117,13 @@ class McpAuthContext:
     max_calls: int | None = None
     workspace_slug: str | None = None
     scope_tier: str | None = None
+    owner_kind: str | None = None
     allowed_projects: list[str] | None = None
+    allowed_workspace_ids: list[str] | None = None
+    allowed_project_ids: list[str] | None = None
+    capability_mask: int = 7
+    allowed_cidrs: list[str] | None = None
+    disabled_tools: frozenset[str] | None = None
     aal_level: int = 2
 
 
@@ -209,10 +216,13 @@ class McpAuthMiddleware:
 
     def _resolve_surface(self, scope: Scope) -> Surface | None:
         """Resolve surface from explicit configuration or URL path."""
+        path = scope.get("path", "")
+        if path.startswith("/.well-known/"):
+            return None
+
         if self.surface is not None:
             return self.surface
 
-        path = scope.get("path", "")
         if "/mcp/agent" in path:
             return Surface.AGENT
         if "/mcp/docs" in path:
@@ -267,14 +277,14 @@ class McpAuthMiddleware:
             await err_resp(scope, receive, send)
             return
 
-        auth_header = headers.get("authorization")
-
-        if not auth_header or not auth_header.lower().startswith("bearer "):
+        auth_header = headers.get("authorization", "").strip()
+        parts = auth_header.split(maxsplit=1)
+        if len(parts) != 2 or parts[0].lower() != "bearer":  # noqa: PLR2004
             resp = self._unauthorized_response(surface)
             await resp(scope, receive, send)
             return
 
-        token = auth_header[7:].strip()
+        token = parts[1].strip()
         if not token:
             resp = self._unauthorized_response(surface)
             await resp(scope, receive, send)
@@ -368,6 +378,44 @@ class McpAuthMiddleware:
                     self.cache.set(surface.value, digest, res_data, ttl_s=DEFAULT_CACHE_TTL_S)
                 intro_result = res_data
 
+        # Check CIDR restriction if configured on token
+        allowed_cidrs = intro_result.get("allowed_cidrs")
+        if allowed_cidrs:
+            client_ip = None
+            xff = headers.get("x-forwarded-for")
+            if xff:
+                client_ip = xff.split(",")[0].strip()
+            elif scope.get("client"):
+                client_ip = scope["client"][0]
+
+            if client_ip:
+                try:
+                    ip = ipaddress.ip_address(client_ip)
+                    matched = False
+                    for cidr_str in allowed_cidrs:
+                        if ip in ipaddress.ip_network(str(cidr_str), strict=False):
+                            matched = True
+                            break
+                    if not matched:
+                        resp = JSONResponse(
+                            {
+                                "error": "KEY_CIDR_DENIED",
+                                "message": (
+                                    f"Client IP '{client_ip}' not allowed by key CIDR restriction"
+                                ),
+                            },
+                            status_code=403,
+                        )
+                        await resp(scope, receive, send)
+                        return
+                except ValueError:
+                    resp = JSONResponse(
+                        {"error": "KEY_CIDR_DENIED", "message": "Invalid client IP format"},
+                        status_code=403,
+                    )
+                    await resp(scope, receive, send)
+                    return
+
         # Populate request state and forward validated token header
         raw_headers = list(scope.get("headers", []))
         # Add or replace X-KB-Subject-Token
@@ -377,11 +425,12 @@ class McpAuthMiddleware:
         scope["headers"] = filtered_headers
 
         scopes_list = intro_result.get("scopes") or []
-        scopes_list = intro_result.get("scopes") or []
         allowed_tools_list = intro_result.get("allowed_tools")
         allowed_tools_set = (
             frozenset(allowed_tools_list) if allowed_tools_list is not None else None
         )
+        disabled_tools_list = intro_result.get("disabled_tools")
+        disabled_tools_set = frozenset(disabled_tools_list) if disabled_tools_list else frozenset()
         token_kind = (
             "ephemeral"
             if token.startswith(RESERVED_EPHEMERAL_PREFIX)
@@ -407,11 +456,25 @@ class McpAuthMiddleware:
             project_id=intro_result.get("project_id"),
             execution_id=intro_result.get("execution_id"),
             allowed_tools=allowed_tools_set,
+            disabled_tools=disabled_tools_set,
             calls_used=intro_result.get("calls_used"),
             max_calls=intro_result.get("max_calls"),
             workspace_slug=intro_result.get("workspace_slug"),
             scope_tier=intro_result.get("scope_tier"),
+            owner_kind=intro_result.get("owner_kind"),
             allowed_projects=allowed_projects,
+            allowed_workspace_ids=(
+                [str(w) for w in intro_result["allowed_workspace_ids"]]
+                if intro_result.get("allowed_workspace_ids")
+                else None
+            ),
+            allowed_project_ids=(
+                [str(p) for p in intro_result["allowed_project_ids"]]
+                if intro_result.get("allowed_project_ids")
+                else None
+            ),
+            capability_mask=int(intro_result.get("capability_mask") or 7),
+            allowed_cidrs=allowed_cidrs,
         )
 
         try:

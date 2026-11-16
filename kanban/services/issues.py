@@ -59,6 +59,10 @@ from kanban.api.v1.schemas.issues import (
     StateSummary,
 )
 from kanban.content import ContentNormalizeError, normalize_plain_text, normalize_to_markdown
+from kanban.issues.serializers import (
+    resolve_latest_gate_verdict,
+    resolve_pending_gate,
+)
 from kanban.security.access_manifest import build_access_manifest
 from kanban.security.permissions import (
     Capability,
@@ -71,6 +75,7 @@ from kanban.services.assignees import get_issue_assignees
 from kanban.services.issue_keys import _ISSUE_KEY_RE, resolve_issue_ref
 from kanban.services.issue_provenance import build_issue_provenance
 from kanban.services.projects import get_project_or_404
+from kanban.workflows.engine import TransitionEngine
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -302,23 +307,27 @@ async def _default_state_id(session: AsyncSession, project_id: uuid.UUID) -> uui
 
 
 async def _resolve_state(
-    session: AsyncSession, project_id: uuid.UUID, state_id: uuid.UUID
+    session: AsyncSession, project_id: uuid.UUID, state_ref: str | uuid.UUID
 ) -> uuid.UUID:
-    """Validate that state_id belongs to project_id."""
-    state = (
-        await session.execute(
-            select(WorkflowState.id).where(
-                WorkflowState.project_id == project_id, WorkflowState.id == state_id
-            )
-        )
-    ).scalar_one_or_none()
+    """Validate and resolve workflow state by UUID or name within project_id."""
+    stmt = select(WorkflowState.id).where(WorkflowState.project_id == project_id)
+    if isinstance(state_ref, uuid.UUID):
+        stmt = stmt.where(WorkflowState.id == state_ref)
+    else:
+        try:
+            s_uuid = uuid.UUID(state_ref)
+            stmt = stmt.where(WorkflowState.id == s_uuid)
+        except ValueError:
+            stmt = stmt.where(WorkflowState.name == state_ref)
+
+    state = (await session.execute(stmt)).scalar_one_or_none()
     if state is None:
         raise _problem(
             code="INVALID_REFERENCE",
             status=422,
             title="Invalid Reference",
             detail="Workflow state not found in project",
-            field="state_id",
+            field="state",
         )
     return state
 
@@ -589,6 +598,9 @@ async def serialize_issue(
         else:
             archive_eligibility = ArchiveEligibility(allowed=True, reason=None)
 
+    pending_gate = await resolve_pending_gate(session, issue)
+    latest_gate_verdict = await resolve_latest_gate_verdict(session, issue)
+
     return IssueResponse(
         id=issue.id,
         key=f"{project.identifier}-{issue.sequence_id}",
@@ -613,6 +625,8 @@ async def serialize_issue(
         capabilities=capabilities_to_names(caps),
         archived_at=archived_at,
         archive_eligibility=archive_eligibility,
+        pending_gate=pending_gate,
+        latest_gate_verdict=latest_gate_verdict,
     )
 
 
@@ -778,7 +792,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
         "state_id" in body.model_fields_set
         and body.state_id is not None
         and body.state_id != issue.state_id
-    ):
+    ) or ("state" in body.model_fields_set and body.state is not None):
         required |= Capability.TRANSITION
     await require_capability(session, caller, issue.id, required)
 
@@ -859,15 +873,21 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
             update_vals["priority_id"] = new_prio_id
             field_changes.append(("priority_id", str(issue.priority_id), str(new_prio_id)))
 
+    target_state_ref = None
+    if "state" in body.model_fields_set:
+        target_state_ref = body.state
+    elif "state_id" in body.model_fields_set:
+        target_state_ref = body.state_id
+
     state_changed = False
-    if "state_id" in body.model_fields_set:
+    new_state_id: uuid.UUID | None = None
+    if "state" in body.model_fields_set or "state_id" in body.model_fields_set:
         new_state_id = (
             await _default_state_id(session, issue.project_id)
-            if body.state_id is None
-            else await _resolve_state(session, issue.project_id, body.state_id)
+            if target_state_ref is None
+            else await _resolve_state(session, issue.project_id, target_state_ref)
         )
         if new_state_id != issue.state_id:
-            update_vals["state_id"] = new_state_id
             state_changed = True
 
     if "cycle_id" in body.model_fields_set:
@@ -930,7 +950,6 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
         return await serialize_issue(session, caller, issue), current_etag
 
     issue_id = issue.id
-    old_state_id = issue.state_id
     old_desc_sha256_hex = current_sha256_hex
 
     try:
@@ -983,6 +1002,16 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
                         )
                     )
 
+            if state_changed and new_state_id is not None:
+                await session.flush()
+                await TransitionEngine.request_transition(
+                    session=session,
+                    issue_key=str(issue_id),
+                    to_state=new_state_id,
+                    actor=caller,
+                    if_match=if_match,
+                )
+
             await session.flush()
     except (IntegrityError, DBAPIError) as exc:
         _handle_parent_dag_error(exc)
@@ -1011,19 +1040,6 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
                 "old_sha256": old_h,
                 "new_sha256": new_h,
                 "byte_length": len(new_desc.encode("utf-8")),
-            },
-        )
-
-    if state_changed:
-        await record_activity(
-            session,
-            workspace_id=caller.workspace_id,
-            object_id=issue_id,
-            actor_principal_id=caller.principal_id,
-            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
-            payload={
-                "from_state_id": str(old_state_id),
-                "to_state_id": str(update_vals["state_id"]),
             },
         )
 

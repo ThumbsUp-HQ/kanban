@@ -15,6 +15,7 @@ from kanban.security.permissions import Capability, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.board_rank import REBALANCE_THRESHOLD_LEN, midpoint_rank
 from kanban.services.issue_keys import resolve_issue_ref
+from kanban.workflows.engine import TransitionEngine
 
 if TYPE_CHECKING:
     import uuid
@@ -311,10 +312,22 @@ async def move_issue(
     old_rank = issue.board_rank
     old_state_id = issue.state_id
 
-    await session.execute(
-        text("UPDATE issues SET state_id = :s, board_rank = :r WHERE id = :id"),
-        {"s": target_state_id, "r": new_rank, "id": issue.id},
-    )
+    if is_cross_column:
+        await TransitionEngine.request_transition(
+            session=session,
+            issue_key=str(issue.id),
+            to_state=target_state_id,
+            actor=caller,
+        )
+        await session.execute(
+            text("UPDATE issues SET board_rank = :r WHERE id = :id"),
+            {"r": new_rank, "id": issue.id},
+        )
+    else:
+        await session.execute(
+            text("UPDATE issues SET board_rank = :r WHERE id = :id"),
+            {"r": new_rank, "id": issue.id},
+        )
     await session.flush()
     await session.refresh(issue)
 
@@ -327,19 +340,6 @@ async def move_issue(
             actor_principal_id=caller.principal_id,
             event_type=ActivityEventType.ISSUE_RANK_MOVED,
             payload={"old_rank": old_rank, "new_rank": new_rank},
-        )
-
-    if is_cross_column:
-        await record_activity(
-            session,
-            workspace_id=issue.workspace_id,
-            object_id=issue.id,
-            actor_principal_id=caller.principal_id,
-            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
-            payload={
-                "from_state_id": str(old_state_id),
-                "to_state_id": str(target_state_id),
-            },
         )
 
     if wip_overridden and clean_override_reason is not None:

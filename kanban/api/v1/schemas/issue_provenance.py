@@ -33,7 +33,10 @@ class RedactedCreatorSummary(BaseModel):
 
 type CreatorSummary = Annotated[
     CreatorPrincipalSummary | RedactedCreatorSummary,
-    Field(discriminator=None),
+    Field(
+        discriminator=None,
+        description="Creator principal summary or masked external collaborator placeholder",
+    ),
 ]
 
 

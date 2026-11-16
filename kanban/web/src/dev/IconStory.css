@@ -1,0 +1,89 @@
+.icon-story {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 40px;
+  color: var(--fg-primary, #111827);
+  background-color: var(--bg-canvas, #f7f8fa);
+}
+
+.icon-story-header {
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+  padding-bottom: 16px;
+}
+
+.icon-story-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.icon-story-header p {
+  color: var(--fg-secondary, #4b5563);
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.icon-story-section {
+  background-color: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.icon-story-section h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.icon-story-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+
+.icon-story-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  min-width: 110px;
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: 6px;
+  background-color: var(--bg-canvas, #f7f8fa);
+  text-align: center;
+}
+
+.icon-story-card-title {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-secondary, #4b5563);
+}
+
+.icon-story-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.icon-story-badge-row--spaced {
+  margin-top: 16px;
+}
+
+.icon-story-module-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  background-color: var(--bg-surface, #ffffff);
+  font-size: 0.875rem;
+  font-weight: 500;
+}

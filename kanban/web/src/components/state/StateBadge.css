@@ -1,0 +1,64 @@
+/* Semantic Color-Coded State Badges (KB-UX-02) */
+
+.state-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  box-sizing: border-box;
+}
+
+.state-badge--compact {
+  padding: 2px 4px;
+  gap: 4px;
+}
+
+.state-badge--backlog {
+  color: var(--state-backlog-fg, #94a3b8);
+  background-color: var(--state-backlog-bg, rgba(148, 163, 184, 0.12));
+  border-color: var(--state-backlog-border, rgba(148, 163, 184, 0.28));
+}
+
+.state-badge--unstarted {
+  color: var(--state-unstarted-fg, #60a5fa);
+  background-color: var(--state-unstarted-bg, rgba(96, 165, 250, 0.12));
+  border-color: var(--state-unstarted-border, rgba(96, 165, 250, 0.28));
+}
+
+.state-badge--started {
+  color: var(--state-started-fg, #f59e0b);
+  background-color: var(--state-started-bg, rgba(245, 158, 11, 0.12));
+  border-color: var(--state-started-border, rgba(245, 158, 11, 0.28));
+}
+
+.state-badge--completed {
+  color: var(--state-completed-fg, #10b981);
+  background-color: var(--state-completed-bg, rgba(16, 185, 129, 0.12));
+  border-color: var(--state-completed-border, rgba(16, 185, 129, 0.28));
+}
+
+.state-badge--cancelled {
+  color: var(--state-cancelled-fg, #ef4444);
+  background-color: var(--state-cancelled-bg, rgba(239, 68, 68, 0.12));
+  border-color: var(--state-cancelled-border, rgba(239, 68, 68, 0.28));
+}
+
+.state-badge__emoji {
+  line-height: 1;
+  font-size: 0.8125rem;
+}
+
+.state-badge__ring {
+  flex-shrink: 0;
+}
+
+.state-badge__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -63,6 +63,7 @@ class AgentTestEnv:
     workspace_id: uuid.UUID
     admin_user: AgentSeededUser
     adam_user: AgentSeededUser
+    maya_user: AgentSeededUser
     agent_no_grant_id: uuid.UUID
     proj_kan_id: uuid.UUID
     proj_pub_id: uuid.UUID
@@ -170,11 +171,14 @@ async def agent_test_env(  # noqa: PLR0915
     )
 
     adam_id = await create_user(committed_db_session, ws_id, handle="@adam", display_name="Adam")
+    maya_id = await create_user(
+        committed_db_session, ws_id, handle="@maya", display_name="Maya Specialist"
+    )
 
     agent_no_grant_id = await create_agent(
         committed_db_session, ws_id, "Agent Without Grant", principal_type="AGENT"
     )
-    # Notice: agent_no_grant_id is NOT given any role binding on KAN
+    # Notice: agent_no_grant_id and maya_id are NOT given any role binding on KAN
 
     # 2. Create projects
     proj_kan_id = await create_project(
@@ -430,7 +434,7 @@ async def agent_test_env(  # noqa: PLR0915
         "SEC",
         seq=1,
         summary="Secret issue containing secret data",
-        description="Ultra secret confidential details.",
+        description="Ultra secret confidential details containing secret canary CANARY-7f3a.",
         user_id=admin_id,
         state_id=sec_states["Todo"],
         priority_id=sec_priorities["high"],
@@ -502,6 +506,7 @@ async def agent_test_env(  # noqa: PLR0915
             workspace_id=ws_id,
             admin_user=AgentSeededUser(id=admin_id, workspace_id=ws_id, handle="admin"),
             adam_user=AgentSeededUser(id=adam_id, workspace_id=ws_id, handle="adam"),
+            maya_user=AgentSeededUser(id=maya_id, workspace_id=ws_id, handle="maya"),
             agent_no_grant_id=agent_no_grant_id,
             proj_kan_id=proj_kan_id,
             proj_pub_id=proj_pub_id,

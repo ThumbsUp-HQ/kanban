@@ -1,0 +1,130 @@
+# MCP Transcript: /mcp/admin Tool 6 (manage_cycles_and_modules)
+# Ticket: KANBA-154 (KB-P5-19b, S11.4, S14.3)
+# Surface: admin, Mode: HTTP JSON-RPC 2.0 / YAML output
+
+---
+interaction: 1
+tool: manage_cycles_and_modules
+action: bind_project_repo
+request:
+  jsonrpc: "2.0"
+  id: "call-1"
+  method: "tools/call"
+  params:
+    name: "manage_cycles_and_modules"
+    arguments:
+      action: "bind_project_repo"
+      project: "KANBA"
+      slug: "primary-mirror"
+      remote_url: "https://github.com/octocat/Hello-World.git"
+      default_ref: "main"
+      access_mode: "bare_git_tools"
+      credential: "s3cr3t-token-example"
+response:
+  status: "created"
+  repo_binding:
+    id: "01a1e065-2a21-7db5-8062-a0978e1843d2"
+    workspace_id: "01a1e065-2a21-7db5-8062-a0978e1843d1"
+    project_id: "01a1e065-2a21-7db5-8062-a0978e1843d0"
+    slug: "primary-mirror"
+    remote_url: "https://github.com/octocat/Hello-World.git"
+    default_ref: "main"
+    access_mode: "bare_git_tools"
+    last_fetched_commit: "0123456789abcdef0123456789abcdef01234567"
+    last_fetched_at: "2026-11-15T18:00:00Z"
+    last_fetch_error: null
+    created_by: "01a1e065-2a21-7db5-8062-a0978e1843df"
+    created_at: "2026-11-15T18:00:00Z"
+
+---
+interaction: 2
+tool: manage_cycles_and_modules
+action: list_repo_bindings (summary LOD)
+request:
+  jsonrpc: "2.0"
+  id: "call-2"
+  method: "tools/call"
+  params:
+    name: "manage_cycles_and_modules"
+    arguments:
+      action: "list_repo_bindings"
+      project: "KANBA"
+      lod: "summary"
+response:
+  repo_bindings:
+    - id: "01a1e065-2a21-7db5-8062-a0978e1843d2"
+      slug: "primary-mirror"
+      remote_url: "https://github.com/octocat/Hello-World.git"
+      access_mode: "bare_git_tools"
+      default_ref: "main"
+      last_fetched_commit: "0123456789abcdef0123456789abcdef01234567"
+
+---
+interaction: 3
+tool: manage_cycles_and_modules
+action: refresh_repo_binding
+request:
+  jsonrpc: "2.0"
+  id: "call-3"
+  method: "tools/call"
+  params:
+    name: "manage_cycles_and_modules"
+    arguments:
+      action: "refresh_repo_binding"
+      project: "KANBA"
+      binding: "primary-mirror"
+response:
+  status: "refreshed"
+  repo_binding:
+    id: "01a1e065-2a21-7db5-8062-a0978e1843d2"
+    workspace_id: "01a1e065-2a21-7db5-8062-a0978e1843d1"
+    project_id: "01a1e065-2a21-7db5-8062-a0978e1843d0"
+    slug: "primary-mirror"
+    remote_url: "https://github.com/octocat/Hello-World.git"
+    default_ref: "main"
+    access_mode: "bare_git_tools"
+    last_fetched_commit: "abcdef0123456789abcdef0123456789abcdef01"
+    last_fetched_at: "2026-11-15T18:05:00Z"
+    last_fetch_error: null
+    created_by: "01a1e065-2a21-7db5-8062-a0978e1843df"
+    created_at: "2026-11-15T18:00:00Z"
+
+---
+interaction: 4
+tool: manage_cycles_and_modules
+action: unbind_project_repo (confirmation required)
+request:
+  jsonrpc: "2.0"
+  id: "call-4"
+  method: "tools/call"
+  params:
+    name: "manage_cycles_and_modules"
+    arguments:
+      action: "unbind_project_repo"
+      project: "KANBA"
+      binding: "primary-mirror"
+response:
+  status: "confirmation_required"
+  warning: "Unbinding repository requires explicit confirm: true parameter"
+  binding_id: "01a1e065-2a21-7db5-8062-a0978e1843d2"
+  project: "KANBA"
+
+---
+interaction: 5
+tool: manage_cycles_and_modules
+action: unbind_project_repo (confirmed)
+request:
+  jsonrpc: "2.0"
+  id: "call-5"
+  method: "tools/call"
+  params:
+    name: "manage_cycles_and_modules"
+    arguments:
+      action: "unbind_project_repo"
+      project: "KANBA"
+      binding: "primary-mirror"
+      confirm: true
+response:
+  status: "unbound"
+  binding_id: "01a1e065-2a21-7db5-8062-a0978e1843d2"
+  project: "KANBA"

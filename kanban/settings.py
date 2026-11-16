@@ -92,6 +92,14 @@ class Settings(BaseSettings):
             "TRASH_RETENTION_DAYS",
         ),
     )
+    disable_unlimited_mcp_keys: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "KANBAN_DISABLE_UNLIMITED_MCP_KEYS",
+            "KB_DISABLE_UNLIMITED_MCP_KEYS",
+            "disable_unlimited_mcp_keys",
+        ),
+    )
 
     @field_validator("trash_retention_days")
     @classmethod

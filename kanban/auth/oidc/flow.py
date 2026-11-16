@@ -625,6 +625,8 @@ class OidcFlow:
                 ) from err
 
             raw_sub = userinfo.get(config.subject_claim)
+            if raw_sub is None and "id" in userinfo:
+                raw_sub = userinfo["id"]
             if raw_sub is None or len(str(raw_sub)) == 0 or len(str(raw_sub)) > MAX_SUBJECT_LENGTH:
                 raise ProblemException(
                     code="OIDC_TOKEN_INVALID",
@@ -636,6 +638,55 @@ class OidcFlow:
             email_val = userinfo.get(config.email_claim)
             email = str(email_val) if email_val is not None else None
             email_verified = bool(userinfo.get(config.email_verified_claim, False))
+
+            # GitHub email handling: fetch /user/emails or fallback {login}@users.noreply.github.com
+            if not email and userinfo_endpoint and "api.github.com" in userinfo_endpoint:
+                emails_url = "https://api.github.com/user/emails"
+
+                async def _do_emails_get(c: httpx.AsyncClient) -> httpx.Response:
+                    return await c.get(
+                        emails_url,
+                        headers={
+                            "Authorization": f"Bearer {access_token}",
+                            "Accept": "application/json",
+                        },
+                        timeout=httpx.Timeout(5.0),
+                    )
+
+                try:
+                    if self._http_client is not None:
+                        emails_resp = await _do_emails_get(self._http_client)
+                    else:
+                        async with httpx.AsyncClient(follow_redirects=False) as default_client:
+                            emails_resp = await _do_emails_get(default_client)
+
+                    if emails_resp.status_code == HTTPStatus.OK:
+                        emails_data = emails_resp.json()
+                        if isinstance(emails_data, list):
+                            for em_item in emails_data:
+                                if (
+                                    isinstance(em_item, dict)
+                                    and em_item.get("primary")
+                                    and em_item.get("verified")
+                                ):
+                                    email = str(em_item.get("email"))
+                                    break
+                            if (
+                                not email
+                                and len(emails_data) > 0
+                                and isinstance(emails_data[0], dict)
+                            ):
+                                email = str(emails_data[0].get("email"))
+                except Exception:
+                    logger.debug(
+                        "Failed to retrieve emails from GitHub /user/emails", exc_info=True
+                    )
+
+                if not email:
+                    login_name = userinfo.get("login") or "user"
+                    email = f"{login_name}@users.noreply.github.com"
+                email_verified = True
+
             name_val = userinfo.get("name") or userinfo.get("login")
             display_name = str(name_val) if name_val is not None else None
             groups_val = userinfo.get(config.groups_claim) if config.groups_claim else ()

@@ -27,11 +27,11 @@ BEGIN_WORK_SCHEMA: Final[dict[str, Any]] = {
     "properties": {
         "identifier": {
             "type": "string",
-            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
+            "description": "Issue ref",
         },
         "plan_markdown": {
             "type": "string",
-            "description": "Implementation plan markdown (1..65536 bytes)",
+            "description": "Plan markdown",
         },
     },
     "required": ["identifier", "plan_markdown"],

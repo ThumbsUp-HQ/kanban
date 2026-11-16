@@ -1,0 +1,31 @@
+================================================================================
+MCP AGENT SURFACE SCHEMA TOKEN BUDGET AUDIT (KB-P4-07 / S11.1)
+================================================================================
+Target Surface: /mcp/agent
+Total Registered Tools: 9
+Raw JSON Payload Size : 7037 bytes (UTF-8)
+Approximate Tokens     : 1759 tokens (len // 4)
+Budget Ceiling         : 1850 tokens
+Budget Margin Remaining: 91 tokens
+Budget Status          : PASS
+
+--------------------------------------------------------------------------------
+PER-TOOL SCHEMA BREAKDOWN
+--------------------------------------------------------------------------------
+Tool Name              |  Chars |  Tokens | Description Preview
+--------------------------------------------------------------------------------
+add_comment            |    460 |     115 | Add comment.
+begin_work             |    310 |      77 | Begin work.
+complete_work          |    474 |     118 | Complete work.
+create_ticket          |   1219 |     304 | Create ticket.
+link_objects           |    471 |     117 | Link objects.
+read_ticket            |    519 |     129 | Read ticket.
+search_tickets         |   1418 |     354 | Search tickets.
+transition_ticket      |    452 |     113 | Transition ticket.
+update_ticket          |   1685 |     421 | Update ticket.
+--------------------------------------------------------------------------------
+TOTAL (enclosing object) |   7037 |    1759 | 9 tools combined
+
+================================================================================
+VERDICT: PASS - 1,759 tokens <= 1,850 ceiling (conforms to S11.1)
+================================================================================

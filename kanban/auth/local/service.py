@@ -178,6 +178,28 @@ class LocalAdminLoginService:
 
             await self._rate_limiter.reset(AUTH_LOGIN_ACCOUNT, account_key)
 
+            # Check MFA enrollment status
+            mfa_stmt = text("SELECT * FROM kb_auth.mfa_status(:p_id)")
+            mfa_res = await session.execute(mfa_stmt, {"p_id": principal_id})
+            mfa_row = mfa_res.mappings().first()
+            has_active_totp = bool(mfa_row["has_active_totp"]) if mfa_row else False
+            has_webauthn = (
+                int(mfa_row["webauthn_credential_count"]) > 0
+                if mfa_row and "webauthn_credential_count" in mfa_row
+                else False
+            )
+            has_enrolled_mfa = has_active_totp or has_webauthn
+
+            # Role check:
+            admin_stmt = text(
+                "SELECT 1 FROM role_bindings "
+                "WHERE principal_id = :p_id AND role = 'SERVER_ADMIN' LIMIT 1"
+            )
+            admin_res = await session.execute(admin_stmt, {"p_id": principal_id})
+            is_server_admin = admin_res.scalar_one_or_none() is not None
+
+            require_mfa = has_enrolled_mfa or is_server_admin
+
             auth_card_id = card.id if card is not None else None
             issued = await self._session_service.create_after_login(
                 session,
@@ -185,7 +207,7 @@ class LocalAdminLoginService:
                 workspace_id=effective_ws_id,
                 auth_card_id=auth_card_id,
                 aal_level=1,
-                mfa_pending=True,
+                mfa_pending=require_mfa,
                 existing_cookie=existing_cookie,
             )
 

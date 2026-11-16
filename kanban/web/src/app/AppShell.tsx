@@ -116,6 +116,7 @@ export function AppShell({
           issueCount={issueCount}
           accessManifest={accessManifest}
           systemStatus={systemStatus}
+          showLayoutSwitcher={false}
         />
 
         {/* Main Canvas Region */}

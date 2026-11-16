@@ -1,0 +1,36 @@
+=== RUFF CHECK ===
+All checks passed!
+
+=== RUFF FORMAT CHECK ===
+7 files already formatted
+
+=== MYPY TYPE CHECK ===
+Success: no issues found in 7 source files
+
+=== ESLINT FRONTEND ===
+
+> @kanban/web@0.1.0 lint
+> eslint . --max-warnings 0 src/features/settings/ e2e/mcp-scopable-keys.spec.ts
+
+
+=== FRONTEND BUILD (TSC + VITE) ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p4-106-d88e3656/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 622 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.39 kB │ gzip:   0.27 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-zJZhl2CR.css            208.86 kB │ gzip:  31.25 kB
+dist/assets/index-Dqyfh0S8.js           1,392.04 kB │ gzip: 405.64 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.16s

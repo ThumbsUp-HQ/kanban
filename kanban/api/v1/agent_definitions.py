@@ -15,6 +15,7 @@ from kanban.agents.schemas import (
 from kanban.agents.service import AgentDefinitionService
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.timing import timing_floor
+from kanban.auth.mfa.policy import require_admin_aal2
 
 router = APIRouter(tags=["agent-definitions"])
 
@@ -100,3 +101,67 @@ async def delete_agent_definition(
     async with timing_floor(floor_ms=25.0):
         await AgentDefinitionService.delete(session, caller, agent)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+admin_router = APIRouter(
+    prefix="/admin/agent-definitions",
+    tags=["admin-agent-definitions"],
+    dependencies=[Depends(require_admin_aal2)],
+)
+AdminCaller = Annotated[PrincipalContext, Depends(require_admin_aal2)]
+
+
+@admin_router.get("", response_model=list[AgentDefinitionResponse])
+async def admin_list_agent_definitions(
+    caller: AdminCaller, session: Session
+) -> list[AgentDefinitionResponse]:
+    """List agent definitions in caller's workspace under admin authority."""
+    return await AgentDefinitionService.list_definitions(session, caller, str(caller.workspace_id))
+
+
+@admin_router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    response_model=AgentDefinitionResponse,
+)
+async def admin_create_agent_definition(
+    body: AgentDefinitionCreate,
+    caller: AdminCaller,
+    session: Session,
+    response: Response,
+) -> AgentDefinitionResponse:
+    """Create a new agent definition in caller's workspace under admin authority."""
+    result = await AgentDefinitionService.create(session, caller, str(caller.workspace_id), body)
+    response.headers["Location"] = f"/api/v1/agent-definitions/{result.id}"
+    return result
+
+
+@admin_router.get("/{agent}", response_model=AgentDefinitionResponse)
+async def admin_get_agent_definition(
+    agent: str, caller: AdminCaller, session: Session
+) -> AgentDefinitionResponse:
+    """Retrieve an agent definition under admin authority."""
+    return await AgentDefinitionService.get(session, caller, agent)
+
+
+@admin_router.patch("/{agent}", response_model=AgentDefinitionResponse)
+async def admin_patch_agent_definition(
+    agent: str,
+    body: AgentDefinitionPatch,
+    caller: AdminCaller,
+    session: Session,
+) -> AgentDefinitionResponse:
+    """Update an existing agent definition under admin authority."""
+    return await AgentDefinitionService.patch(session, caller, agent, body)
+
+
+@admin_router.delete("/{agent}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_agent_definition(
+    agent: str, caller: AdminCaller, session: Session
+) -> Response:
+    """Delete an agent definition under admin authority."""
+    await AgentDefinitionService.delete(session, caller, agent)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+router.include_router(admin_router)

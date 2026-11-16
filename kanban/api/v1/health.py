@@ -7,9 +7,9 @@ from fastapi import APIRouter
 router = APIRouter(tags=["health"])
 
 
-@router.get("/healthz")
+@router.get("/healthz", summary="Liveness health check probe")
 async def healthz() -> dict[str, str]:
-    """Liveness probe with zero database access."""
+    """Liveness probe with zero database access for orchestration monitoring."""
     return {"status": "ok"}
 
 

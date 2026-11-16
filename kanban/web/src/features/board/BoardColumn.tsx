@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useRef, useEffect, type JSX } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { EmojiHint } from '../../components/emoji/EmojiHint.tsx';
+import { StateBadge } from '../../components/state/StateBadge.tsx';
 import { BoardCard } from './BoardCard.tsx';
 import type { BoardIssue, BoardWorkflowState, StateGroup } from './boardApi.ts';
 
@@ -164,7 +165,12 @@ export function BoardColumn({
     >
       <header className="board-column-header">
         <div className="board-column-header-left">
-          <span className="board-column-glyph" aria-hidden="true">
+          <StateBadge
+            state={state}
+            showLabel={false}
+            className="board-column-glyph"
+          />
+          <span hidden aria-hidden="true">
             {glyph}
           </span>
           <span className="board-column-title" title={state.name}>

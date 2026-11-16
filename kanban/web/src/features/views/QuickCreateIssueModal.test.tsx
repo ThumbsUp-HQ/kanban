@@ -1,10 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { QuickCreateIssueModal } from './QuickCreateIssueModal';
+import { getDrafts } from '../drafts/draftsStore';
 import type { IssueItem } from './viewsApi';
 
-describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
+describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it('does not render when isOpen is false', () => {
     const { container } = render(
       <QuickCreateIssueModal
@@ -18,8 +23,8 @@ describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('renders summary, description, state, priority, and module fields when open', () => {
-    const handleCreate = vi.fn();
+  it('renders summary, description, state, priority, and module fields when open and transitions to post-dialog on create', () => {
+    const handleCreate = vi.fn().mockReturnValue({ key: 'KAN-99', summary: 'New Test Task' });
     const handleClose = vi.fn();
 
     render(
@@ -38,6 +43,7 @@ describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
     expect(screen.getByLabelText(/^state$/i)).toBeDefined();
     expect(screen.getByLabelText(/^priority$/i)).toBeDefined();
     expect(screen.getByLabelText(/^module$/i)).toBeDefined();
+    expect(screen.getByTestId('quick-create-draft-checkbox')).toBeDefined();
 
     // Fill in summary and submit
     const summaryInput = screen.getByLabelText(/summary/i);
@@ -51,6 +57,15 @@ describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
         summary: 'New Test Task',
       })
     );
+
+    // Verify post-creation confirmation dialog state
+    const postDialog = screen.getByTestId('quick-create-post-dialog');
+    expect(postDialog).toBeDefined();
+    expect(screen.getByText('🎉 Work Item Created')).toBeDefined();
+    expect(screen.getByText('KAN-99')).toBeDefined();
+
+    // Clicking Done closes modal
+    fireEvent.click(screen.getByTestId('post-create-done-btn'));
     expect(handleClose).toHaveBeenCalled();
   });
 
@@ -211,5 +226,115 @@ describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
     expect(created.priority?.emoji).toBe('⚡');
     expect(created.state?.name).toBe('Todo');
     expect(created.module_ids).toEqual([]);
+  });
+
+  it('saves draft to draftsStore when ✍️ Keep work-in-progress is checked', () => {
+    const handleCreate = vi.fn();
+    const handleClose = vi.fn();
+
+    render(
+      <QuickCreateIssueModal
+        isOpen={true}
+        onClose={handleClose}
+        onCreate={handleCreate}
+        projectKey="KAN"
+        modulesEnabled={true}
+      />
+    );
+
+    const checkbox = screen.getByTestId('quick-create-draft-checkbox');
+    expect(checkbox).toBeDefined();
+
+    // Fill fields
+    fireEvent.change(screen.getByLabelText(/summary/i), {
+      target: { value: 'Draft Feature Spec' },
+    });
+    fireEvent.change(screen.getByLabelText(/description/i), {
+      target: { value: 'Needs more investigation' },
+    });
+
+    // Toggle draft checkbox
+    fireEvent.click(checkbox);
+
+    // Button should now say Save Draft
+    expect(screen.getByRole('button', { name: /save draft/i })).toBeDefined();
+
+    // Click Save Draft
+    fireEvent.click(screen.getByRole('button', { name: /save draft/i }));
+
+    // onCreate should NOT be called for drafts
+    expect(handleCreate).not.toHaveBeenCalled();
+
+    // Saved to draftsStore
+    const drafts = getDrafts();
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]?.summary).toBe('Draft Feature Spec');
+    expect(drafts[0]?.projectKey).toBe('KAN');
+
+    // Post-creation dialog for draft is visible
+    expect(screen.getByText('✍️ Draft Saved')).toBeDefined();
+    expect(screen.getByText(/Saved in Drafts \(\/drafts\)/i)).toBeDefined();
+
+    // View Issue button navigates or dismisses
+    fireEvent.click(screen.getByTestId('post-create-view-btn'));
+    expect(handleClose).toHaveBeenCalled();
+  });
+
+  it('post-create dialog View Issue opens peek drawer when onOpenPeek is provided', () => {
+    const handleOpenPeek = vi.fn();
+    const handleClose = vi.fn();
+    const handleCreate = vi.fn().mockReturnValue({ key: 'KAN-42' });
+
+    render(
+      <QuickCreateIssueModal
+        isOpen={true}
+        onClose={handleClose}
+        onCreate={handleCreate}
+        projectKey="KAN"
+        onOpenPeek={handleOpenPeek}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText(/summary/i), {
+      target: { value: 'Peek Target Issue' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+    expect(screen.getByTestId('quick-create-post-dialog')).toBeDefined();
+
+    fireEvent.click(screen.getByTestId('post-create-view-btn'));
+    expect(handleOpenPeek).toHaveBeenCalledWith('KAN-42');
+    expect(handleClose).toHaveBeenCalled();
+  });
+
+  it('post-create dialog Create Another resets form and stays in modal', () => {
+    const handleCreate = vi.fn();
+    const handleClose = vi.fn();
+
+    render(
+      <QuickCreateIssueModal
+        isOpen={true}
+        onClose={handleClose}
+        onCreate={handleCreate}
+        projectKey="KAN"
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText(/summary/i), {
+      target: { value: 'First Task' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+    expect(screen.getByTestId('quick-create-post-dialog')).toBeDefined();
+
+    // Click Create Another
+    fireEvent.click(screen.getByTestId('post-create-another-btn'));
+
+    // Modal did not close
+    expect(handleClose).not.toHaveBeenCalled();
+
+    // Form is back and summary is reset
+    const summaryInput = screen.getByLabelText<HTMLInputElement>(/summary/i);
+    expect(summaryInput.value).toBe('');
   });
 });

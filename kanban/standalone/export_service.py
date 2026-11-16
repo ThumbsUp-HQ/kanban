@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from sqlalchemy.engine.url import make_url
 
 if TYPE_CHECKING:
     from kanban.settings import Settings
@@ -86,12 +87,16 @@ def get_standalone_status(
 
     local_llm_host = os.environ.get("KANBAN_LOCAL_LLM_HOST") or os.environ.get("LOCAL_LLM_HOST")
 
+    settings_mode = getattr(settings, "deployment_mode", None) if settings is not None else None
+    if not settings_mode:
+        settings_mode = os.environ.get("KANBAN_DEPLOYMENT_MODE")
+
     if path.is_file():
         try:
             content = path.read_text(encoding="utf-8").strip()
             if content:
                 data = json.loads(content)
-                raw_mode = data.get("mode", "standalone_embedded_pg")
+                raw_mode = data.get("mode", settings_mode or "standalone_embedded_pg")
                 deployment_mode = (
                     "standalone_embedded_pg"
                     if raw_mode in ("standalone_embedded_pg", "standalone")
@@ -108,6 +113,18 @@ def get_standalone_status(
                 }
         except Exception:
             logger.warning("Failed to parse standalone status from %s", path, exc_info=True)
+
+    # Respect settings.deployment_mode when file is absent or corrupt
+    if settings_mode in ("standalone", "standalone_embedded_pg"):
+        return {
+            "deployment_mode": "standalone_embedded_pg",
+            "persistent_volume": False,
+            "data_mount_point": "/var/lib/kanban/data",
+            "data_mount_fstype": "ext4",
+            "tier_b_sandbox_available": False,
+            "air_gap_mode": air_gap,
+            "local_llm_endpoint_host": local_llm_host,
+        }
 
     # Default to production multi-container when file is absent or corrupt
     return {
@@ -228,7 +245,7 @@ def decrypt_backup(
         raise RestoreError(msg) from exc
 
 
-async def run_pg_dump(  # noqa: PLR0913
+async def run_pg_dump(  # noqa: C901, PLR0912, PLR0913
     *,
     pg_dump_bin: str | None = None,
     db_name: str = "kanban",
@@ -236,6 +253,8 @@ async def run_pg_dump(  # noqa: PLR0913
     socket_dir: str | None = None,
     port: int | None = None,
     extra_env: dict[str, str] | None = None,
+    settings: Settings | None = None,
+    database_url: str | None = None,
 ) -> bytes:
     """Execute pg_dump over direct subprocess (zero shell) and return raw bytes."""
     binary = (
@@ -245,25 +264,48 @@ async def run_pg_dump(  # noqa: PLR0913
         or "/usr/bin/pg_dump"
     )
 
+    resolved_db_name = db_name
+    resolved_db_user = db_user
+    resolved_host = socket_dir or os.environ.get("KB_TEST_PGHOST") or os.environ.get("PGHOST")
+    resolved_port = port or os.environ.get("PGPORT")
+    env_password: str | None = None
+
+    url_str = database_url or (getattr(settings, "database_url", None) if settings else None)
+    if url_str:
+        try:
+            parsed_url = make_url(str(url_str))
+            if parsed_url.database:
+                resolved_db_name = parsed_url.database
+            if parsed_url.username:
+                resolved_db_user = parsed_url.username
+            if parsed_url.host and not socket_dir:
+                resolved_host = parsed_url.host
+            if parsed_url.port and not port:
+                resolved_port = parsed_url.port
+            if parsed_url.password:
+                env_password = parsed_url.password
+        except Exception:
+            logger.warning("Could not parse database_url for pg_dump: %s", url_str, exc_info=True)
+
     args = [
         binary,
         "--format=custom",
         "--no-password",
         "-U",
-        db_user,
+        resolved_db_user,
         "-d",
-        db_name,
+        resolved_db_name,
     ]
 
-    host = socket_dir or os.environ.get("KB_TEST_PGHOST") or os.environ.get("PGHOST")
-    if host:
-        args.extend(["-h", host])
+    if resolved_host:
+        args.extend(["-h", str(resolved_host)])
 
-    resolved_port = port or os.environ.get("PGPORT")
     if resolved_port:
         args.extend(["-p", str(resolved_port)])
 
     env = os.environ.copy()
+    if env_password:
+        env["PGPASSWORD"] = env_password
     if extra_env:
         env.update(extra_env)
 

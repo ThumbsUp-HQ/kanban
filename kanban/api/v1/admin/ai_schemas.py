@@ -18,17 +18,32 @@ class ProviderConfigPublic(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: uuid.UUID
-    provider_kind: str
-    display_name: str
-    base_url: str | None = None
-    model_allowlist: list[str]
-    residency_tier: str
-    priority: int
-    settings: dict[str, Any] = Field(default_factory=dict)
-    api_key_set: bool
-    is_enabled: bool
-    project_id: uuid.UUID | None = None
+    id: uuid.UUID = Field(description="Unique AI provider configuration UUID")
+    provider_kind: str = Field(
+        description="Provider kind identifier (e.g. openai, gemini, ollama, custom)"
+    )
+    display_name: str = Field(description="Human-readable provider display label")
+    base_url: str | None = Field(
+        default=None, description="Optional custom HTTP base URL for provider endpoint"
+    )
+    model_allowlist: list[str] = Field(
+        description="List of model names authorized for completions on this provider"
+    )
+    residency_tier: str = Field(
+        description="Data residency classification tier (e.g. us-east, eu-central, local)"
+    )
+    priority: int = Field(description="Provider fallback priority order (lower evaluates first)")
+    settings: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Arbitrary provider-specific configuration key-value pairs",
+    )
+    api_key_set: bool = Field(
+        description="Whether an API secret key has been configured (key itself is write-only)"
+    )
+    is_enabled: bool = Field(description="Whether the provider configuration is currently enabled")
+    project_id: uuid.UUID | None = Field(
+        default=None, description="Owning project UUID if scoped to a project, null for workspace"
+    )
 
 
 class ProviderConfigCreate(BaseModel):
@@ -36,16 +51,34 @@ class ProviderConfigCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    provider_kind: str
-    display_name: str = Field(min_length=1, max_length=80)
-    model_allowlist: list[str] = Field(default_factory=list)
-    residency_tier: str = "default"
-    base_url: str | None = None
-    priority: int = 100
-    settings: dict[str, Any] = Field(default_factory=dict)
-    project_id: uuid.UUID | None = None
-    is_enabled: bool = True
-    api_key: SecretStr | None = None
+    provider_kind: str = Field(
+        description="Provider kind identifier (e.g. openai, gemini, ollama, custom)"
+    )
+    display_name: str = Field(
+        min_length=1, max_length=80, description="Human-readable provider display label"
+    )
+    model_allowlist: list[str] = Field(
+        default_factory=list, description="List of authorized model names"
+    )
+    residency_tier: str = Field(default="default", description="Data residency tier classification")
+    base_url: str | None = Field(
+        default=None, description="Optional custom HTTP base URL for provider"
+    )
+    priority: int = Field(
+        default=100, description="Provider fallback priority order (lower evaluates first)"
+    )
+    settings: dict[str, Any] = Field(
+        default_factory=dict, description="Provider-specific configuration dictionary"
+    )
+    project_id: uuid.UUID | None = Field(
+        default=None, description="Optional project UUID if scoping to a single project"
+    )
+    is_enabled: bool = Field(
+        default=True, description="Whether to immediately enable this provider"
+    )
+    api_key: SecretStr | None = Field(
+        default=None, description="Secret API key credential (stored using envelope encryption)"
+    )
 
     @field_validator("api_key")
     @classmethod
@@ -61,14 +94,28 @@ class ProviderConfigUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    display_name: str | None = Field(default=None, min_length=1, max_length=80)
-    model_allowlist: list[str] | None = None
-    residency_tier: str | None = None
-    base_url: str | None = None
-    priority: int | None = None
-    settings: dict[str, Any] | None = None
-    is_enabled: bool | None = None
-    api_key: SecretStr | None = None
+    display_name: str | None = Field(
+        default=None, min_length=1, max_length=80, description="Updated display label"
+    )
+    model_allowlist: list[str] | None = Field(
+        default=None, description="Updated list of authorized model names"
+    )
+    residency_tier: str | None = Field(
+        default=None, description="Updated data residency tier classification"
+    )
+    base_url: str | None = Field(
+        default=None, description="Updated custom HTTP base URL for provider"
+    )
+    priority: int | None = Field(default=None, description="Updated fallback priority order")
+    settings: dict[str, Any] | None = Field(
+        default=None, description="Updated provider-specific configuration dictionary"
+    )
+    is_enabled: bool | None = Field(
+        default=None, description="Updated provider enablement status toggle"
+    )
+    api_key: SecretStr | None = Field(
+        default=None, description="Updated secret API key (pass null to clear existing key)"
+    )
 
     @field_validator("api_key")
     @classmethod
@@ -84,11 +131,15 @@ class BudgetRecord(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    period_kind: Literal["daily", "monthly"]
-    period_start: date
-    token_cap: int = Field(ge=0, le=10_000_000_000)
-    tokens_used: int = Field(ge=0)
-    tokens_reserved: int = Field(ge=0)
+    period_kind: Literal["daily", "monthly"] = Field(
+        description="Accounting period tier: daily or monthly"
+    )
+    period_start: date = Field(description="Period start calendar date (YYYY-MM-DD)")
+    token_cap: int = Field(
+        ge=0, le=10_000_000_000, description="Configured maximum token budget cap"
+    )
+    tokens_used: int = Field(ge=0, description="Tokens committed and consumed in this period")
+    tokens_reserved: int = Field(ge=0, description="Tokens currently held in active reservations")
 
 
 class BudgetSetRequest(BaseModel):
@@ -96,7 +147,11 @@ class BudgetSetRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    provider_config_id: uuid.UUID
-    project_id: uuid.UUID | None = None
-    period_kind: Literal["daily", "monthly"]
-    token_cap: int = Field(ge=0, le=10_000_000_000)
+    provider_config_id: uuid.UUID = Field(description="Target AI provider configuration UUID")
+    project_id: uuid.UUID | None = Field(
+        default=None, description="Optional project UUID if setting a project-specific budget"
+    )
+    period_kind: Literal["daily", "monthly"] = Field(
+        description="Budget period tier: daily or monthly"
+    )
+    token_cap: int = Field(ge=0, le=10_000_000_000, description="Target maximum token budget cap")

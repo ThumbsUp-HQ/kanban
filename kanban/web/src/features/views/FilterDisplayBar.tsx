@@ -107,16 +107,16 @@ export function FilterDisplayBar({
 
   const facetDefinitions: FacetOption[] = [
     { key: 'active', label: 'Active', category: 'state' },
-    { key: 'backlog', label: 'Backlog', category: 'state' },
-    { key: 'unstarted', label: 'Todo', category: 'state' },
-    { key: 'started', label: 'In Progress', category: 'state' },
-    { key: 'completed', label: 'Done', category: 'state' },
-    { key: 'cancelled', label: 'Cancelled', category: 'state' },
+    { key: 'backlog', label: 'Backlog', emoji: '🗂️', category: 'state' },
+    { key: 'unstarted', label: 'Todo', emoji: '📋', category: 'state' },
+    { key: 'started', label: 'In Progress', emoji: '⚙️', category: 'state' },
+    { key: 'completed', label: 'Done', emoji: '✅', category: 'state' },
+    { key: 'cancelled', label: 'Cancelled', emoji: '🚫', category: 'state' },
 
     { key: 'urgent', label: 'Urgent', emoji: '🔥', category: 'priority' },
     { key: 'high', label: 'High', emoji: '⚡', category: 'priority' },
     { key: 'medium', label: 'Medium', emoji: '🔹', category: 'priority' },
-    { key: 'low', label: 'Low', emoji: '💤', category: 'priority' },
+    { key: 'low', label: 'Low', emoji: '🔽', category: 'priority' },
     { key: 'none', label: 'None', category: 'priority' },
 
     { key: 'unassigned', label: 'Unassigned', category: 'assignee' },

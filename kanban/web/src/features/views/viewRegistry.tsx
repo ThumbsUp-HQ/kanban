@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, type ComponentType, type JSX } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, type ComponentType, type JSX } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
 import type { BoardIssue, BoardWorkflowState } from '../board/boardApi.ts';
@@ -24,6 +24,7 @@ import {
   type StateSummary,
   type GroupAxis,
 } from './viewsApi';
+import { IssueSurfaceRoot } from '../drawer/IssueSurface';
 import './filterBulk.css';
 
 // Export all KB-P3-40 components per Scoped Definition of Done
@@ -89,6 +90,7 @@ export interface ViewComponentProps {
   onLoadMore?: () => void;
   isLoading?: boolean;
   focusedKey?: string | null;
+  onOpenPeek?: (issueKey: string) => void;
 }
 
 export type ViewComponent = ComponentType<ViewComponentProps>;
@@ -133,6 +135,7 @@ export interface IssuesWorkspaceRouteProps {
   initialIssues?: IssueItem[];
   initialLayout?: ViewLayout;
   queryClient?: QueryClient;
+  onOpenPeek?: (issueKey: string) => void;
 }
 
 /**
@@ -146,6 +149,7 @@ export function IssuesWorkspaceRoute({
   initialIssues,
   initialLayout,
   queryClient = defaultQueryClient,
+  onOpenPeek: propOnOpenPeek,
 }: IssuesWorkspaceRouteProps): JSX.Element {
   const isLiveMode = initialIssues === undefined;
 
@@ -176,6 +180,38 @@ export function IssuesWorkspaceRoute({
   const [issues, setIssues] = useState<IssueItem[]>(() => initialIssues ?? []);
   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const [peekParam, setPeekParam] = useState<string | null>(() => {
+    return typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('peek')
+      : null;
+  });
+
+  useEffect(() => {
+    const handlePopState = (): void => {
+      const p = new URLSearchParams(window.location.search).get('peek');
+      setPeekParam(p);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  const handleOpenPeek = useCallback(
+    (issueKey: string) => {
+      setPeekParam(issueKey);
+      if (propOnOpenPeek) {
+        propOnOpenPeek(issueKey);
+        return;
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.set('peek', issueKey);
+      window.history.pushState({}, '', url.toString());
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    },
+    [propOnOpenPeek],
+  );
 
   useEffect(() => {
     if (!isLiveMode || !projectKey) {
@@ -422,6 +458,7 @@ export function IssuesWorkspaceRoute({
   };
 
   const handleCreateIssue = (newIssue: Partial<IssueItem>) => {
+    setIsCreateModalOpen(false);
     const nextNum = issues.length + 140;
     const optimisticId = `01931234-new-${String(Date.now())}`;
     const item: IssueItem = {
@@ -470,7 +507,16 @@ export function IssuesWorkspaceRoute({
             priority: {
               slug,
               label: slug.charAt(0).toUpperCase() + slug.slice(1),
-              emoji: slug === 'urgent' ? '🔥' : slug === 'high' ? '⚡' : slug === 'low' ? '💤' : '🔹',
+              emoji:
+                slug === 'urgent'
+                  ? '🔥'
+                  : slug === 'high'
+                    ? '⚡'
+                    : slug === 'low'
+                      ? '🔽'
+                      : slug === 'none'
+                        ? '➖'
+                        : '🔹',
             },
           };
         }
@@ -584,6 +630,14 @@ export function IssuesWorkspaceRoute({
   // 2D Swimlane condition: layout === 'board' && subGroupBy !== 'none'
   const is2DSwimlane = layout === 'board' && subGroupBy !== 'none';
 
+  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified)
+  const activePeekKey = useMemo(() => {
+    if (peekParam) {
+      return peekParam;
+    }
+    return filteredIssues[0]?.key ?? null;
+  }, [peekParam, filteredIssues]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <main
@@ -605,7 +659,7 @@ export function IssuesWorkspaceRoute({
         onToggleFilterOpen={setIsFilterOpen}
       />
 
-      {/* 2. Main View: 2D Swimlane Board Grid or standard ViewHost */}
+      {/* 2. Main View: 2D Swimlane Board Grid, 3-pane split list view, or standard ViewHost */}
       {is2DSwimlane ? (
         <SwimlaneBoardGrid
           issues={filteredIssues}
@@ -623,10 +677,36 @@ export function IssuesWorkspaceRoute({
           projectKey={projectKey}
           states={boardStates}
           issues={boardIssues}
+          onOpenPeek={handleOpenPeek}
           onNewItem={() => {
             setIsCreateModalOpen(true);
           }}
         />
+      ) : layout === 'list' ? (
+        <div className="kb-split-layout" data-testid="split-list-layout">
+          <div className="kb-split-list-pane">
+            <ListView
+              issues={filteredIssues}
+              projectKey={projectKey}
+              modulesEnabled={modulesEnabled}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onCreateIssue={() => {
+                setIsCreateModalOpen(true);
+              }}
+              focusedKey={focusedKey}
+              onOpenPeek={handleOpenPeek}
+              activeKey={activePeekKey}
+            />
+          </div>
+          {activePeekKey && (
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey={activePeekKey}
+              projectKey={projectKey}
+            />
+          )}
+        </div>
       ) : (
         <ViewHost
           layout={layout}
@@ -636,6 +716,7 @@ export function IssuesWorkspaceRoute({
           selectedIds={selectedIds}
           onToggleSelect={handleToggleSelect}
           onSelectAll={handleSelectAll}
+          onOpenPeek={handleOpenPeek}
           onCreateIssue={() => {
             setIsCreateModalOpen(true);
           }}
@@ -678,8 +759,10 @@ export function IssuesWorkspaceRoute({
               : prioritySlug === 'high'
                 ? '⚡'
                 : prioritySlug === 'low'
-                  ? '💤'
-                  : '🔹';
+                  ? '🔽'
+                  : prioritySlug === 'none'
+                    ? '➖'
+                    : '🔹';
           setIssues((prev) =>
             prev.map((i) =>
               selectedIds.includes(i.key)

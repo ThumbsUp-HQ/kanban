@@ -1,0 +1,15 @@
+cassette_version: 1
+matcher:
+  agent_slug: forensic-code-check
+  transition_to: Done
+  prompt_contains: ["approve_with_diff"]
+tool_script:
+  - call: { tool: repo_git_diff, args: { base_ref: "HEAD~1" } }
+  - call: { tool: read_doc, args: { slug: "architecture-spec" } }
+simulated_ttft_ms: 15
+final_verdict:
+  schema: kb-transition-verdict/v1
+  decision: approve
+  reason_markdown: "Diff inspected, tests verified, architecture spec matches."
+  field_updates: {}
+  add_labels: ["security-gate-passed"]

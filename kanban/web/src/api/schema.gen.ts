@@ -5,6 +5,812 @@
  */
 
 export interface paths {
+    "/.well-known/oauth-authorization-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OAuth 2.1 Authorization Server Metadata (RFC 8414)
+         * @description Return RFC 8414 authorization server discovery metadata.
+         */
+        get: operations["oauth_as_metadata__well_known_oauth_authorization_server_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/acl-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grant or replace ACL entry
+         * @description Grant or replace an ALLOW or DENY capability access control entry on a target object.
+         */
+        post: operations["grant_acl_entry_endpoint_api_v1_admin_acl_entries_post"];
+        /**
+         * Revoke ACL entry
+         * @description Revoke an explicit ALLOW or DENY capability access control entry on a target object.
+         */
+        delete: operations["revoke_acl_entry_endpoint_api_v1_admin_acl_entries_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/acl-entries/{object_id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect object access manifest
+         * @description Inspect the full S3.4 access manifest for an object and anti-enumeration masking.
+         */
+        get: operations["inspect_manifest_endpoint_api_v1_admin_acl_entries__object_id__manifest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/agent-definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List Agent Definitions
+         * @description List agent definitions in caller's workspace under admin authority.
+         */
+        get: operations["admin_list_agent_definitions_api_v1_admin_agent_definitions_get"];
+        put?: never;
+        /**
+         * Admin Create Agent Definition
+         * @description Create a new agent definition in caller's workspace under admin authority.
+         */
+        post: operations["admin_create_agent_definition_api_v1_admin_agent_definitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/agent-definitions/{agent}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Get Agent Definition
+         * @description Retrieve an agent definition under admin authority.
+         */
+        get: operations["admin_get_agent_definition_api_v1_admin_agent_definitions__agent__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Admin Delete Agent Definition
+         * @description Delete an agent definition under admin authority.
+         */
+        delete: operations["admin_delete_agent_definition_api_v1_admin_agent_definitions__agent__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Admin Patch Agent Definition
+         * @description Update an existing agent definition under admin authority.
+         */
+        patch: operations["admin_patch_agent_definition_api_v1_admin_agent_definitions__agent__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/ai/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get budget records for provider configuration
+         * @description List token consumption ledger records and caps for a provider configuration.
+         */
+        get: operations["get_budgets_api_v1_admin_ai_budgets_get"];
+        /**
+         * Set token budget cap for provider configuration
+         * @description Configure or update maximum token budget limits for an AI provider configuration.
+         */
+        put: operations["set_budget_api_v1_admin_ai_budgets_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List AI provider configurations
+         * @description List AI provider configurations for workspace or project with API keys omitted.
+         */
+        get: operations["list_providers_api_v1_admin_ai_providers_get"];
+        put?: never;
+        /**
+         * Create AI provider configuration
+         * @description Create an AI provider configuration enforcing residency tier, air gap, and custody.
+         */
+        post: operations["create_provider_api_v1_admin_ai_providers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai/providers/{provider_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get AI provider configuration by ID
+         * @description Retrieve public metadata and status for a specific AI provider configuration by UUID.
+         */
+        get: operations["get_provider_api_v1_admin_ai_providers__provider_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update AI provider configuration
+         * @description Update settings, model allowlist, URL, priority, or credentials on an AI provider.
+         */
+        patch: operations["update_provider_api_v1_admin_ai_providers__provider_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/ai/providers/{provider_id}:disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable AI provider configuration
+         * @description Disable an active AI provider configuration, preventing subsequent completions.
+         */
+        post: operations["disable_provider_api_v1_admin_ai_providers__provider_id__disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/auth-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List all authentication cards
+         * @description List all authentication cards in sort_rank order without exposing secrets.
+         */
+        get: operations["list_admin_cards_api_v1_admin_auth_cards_get"];
+        put?: never;
+        /**
+         * Create authentication card
+         * @description Create a new authentication card with envelope-encrypted credentials.
+         */
+        post: operations["create_admin_card_api_v1_admin_auth_cards_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/auth-cards/{card_id}/ldap-test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test LDAP card connection
+         * @description Test LDAP/StartTLS handshake, CA trust, SPKI pinning, and optional service bind.
+         */
+        post: operations["ldap_test_connection_api_v1_admin_auth_cards__card_id__ldap_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/auth-cards/{card_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get authentication card details
+         * @description Retrieve non-secret metadata for a specific card by slug or UUID.
+         */
+        get: operations["get_admin_card_api_v1_admin_auth_cards__card_ref__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete authentication card
+         * @description Permanently delete an authentication card after confirmation and anti-lockout checks.
+         */
+        delete: operations["delete_admin_card_api_v1_admin_auth_cards__card_ref__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update authentication card
+         * @description Update metadata, configuration, or credentials on an existing card.
+         */
+        patch: operations["update_admin_card_api_v1_admin_auth_cards__card_ref__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/auth-cards/{card_ref}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable authentication card
+         * @description Disable card sign-in under 3-layer anti-lockout safeguards.
+         *
+         *     Prevents administrative lockout.
+         */
+        post: operations["disable_admin_card_api_v1_admin_auth_cards__card_ref__disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/auth-cards/{card_ref}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable authentication card
+         * @description Enable card sign-in for users and administrators while auditing the action.
+         */
+        post: operations["enable_admin_card_api_v1_admin_auth_cards__card_ref__enable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/auth-cards/{card_ref}/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reorder authentication card
+         * @description Reposition card in the sign-in sequence using fractional indexing.
+         */
+        post: operations["reorder_admin_card_api_v1_admin_auth_cards__card_ref__reorder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/auth-cards/{card_ref}/test-handshake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test authentication card handshake
+         * @description Execute live reachability and cryptographic probe within an 8.0s timeout.
+         */
+        post: operations["test_card_handshake_api_v1_admin_auth_cards__card_ref__test_handshake_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/destructive:execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage 2: Execute destructive delete with confirmation token
+         * @description Verify confirmation token and blast hash, then execute soft-trash or permanent purge.
+         */
+        post: operations["api_destructive_execute_api_v1_admin_destructive_execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/destructive:request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage 1: Request destructive delete and mint confirmation token
+         * @description Compute blast radius and issue a single-use 5m confirmation token.
+         */
+        post: operations["api_destructive_request_api_v1_admin_destructive_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/destructive:restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore a soft-deleted object from trash
+         * @description Restore a soft-deleted entity from trash back to active state.
+         */
+        post: operations["api_destructive_restore_api_v1_admin_destructive_restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/groups/{group_id}/members/{principal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add group member
+         * @description Add an existing principal (user or agent) as a member of the administrative group.
+         */
+        post: operations["add_group_member_endpoint_api_v1_admin_groups__group_id__members__principal_id__post"];
+        /**
+         * Remove group member
+         * @description Remove a member principal from the specified administrative group.
+         */
+        delete: operations["remove_group_member_endpoint_api_v1_admin_groups__group_id__members__principal_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/plane": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import or preview Plane export bundle (Server Admin + AAL2)
+         * @description Import a validated Plane bundle into the workspace with sequence continuity.
+         */
+        post: operations["import_plane_bundle_api_v1_admin_imports_plane_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mcp-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List MCP API keys in workspace
+         * @description List metadata for MCP API keys belonging to the workspace or global scope.
+         */
+        get: operations["list_keys_api_v1_admin_mcp_keys_get"];
+        put?: never;
+        /**
+         * Mint a scoped MCP API key
+         * @description Mint a surface-bound MCP API key and return plaintext token once.
+         */
+        post: operations["mint_key_api_v1_admin_mcp_keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mcp-keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke an MCP API key
+         * @description Revoke an active Model Context Protocol (MCP) API access key by unique UUID identifier.
+         */
+        delete: operations["revoke_key_api_v1_admin_mcp_keys__key_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/oauth-clients/{client_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Admin approve or disable OAuth client (AAL2)
+         * @description Workspace Admin approval for dynamically registered clients requiring AAL2.
+         */
+        patch: operations["admin_patch_oauth_client_api_v1_admin_oauth_clients__client_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/oauth-grants/{grant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Admin revoke connected OAuth grant (AAL2)
+         * @description Workspace Admin revocation of any workspace OAuth grant requiring AAL2.
+         */
+        delete: operations["admin_revoke_oauth_grant_api_v1_admin_oauth_grants__grant_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/object-links/audits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List flagged invalid object link audit records
+         * @description Retrieve paginated snapshot audits of flagged invalid object links.
+         */
+        get: operations["get_object_link_audits_api_v1_admin_object_links_audits_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/object-links:audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Universal Object Graph Link Auditor
+         * @description Scan workspace object links and return aggregated invalidity counts across 6 classes.
+         */
+        post: operations["post_audit_object_links_api_v1_admin_object_links_audit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/object-links:purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Audited purge of flagged invalid object links
+         * @description Execute audited purge of flagged invalid object links and emit activity ledger entries.
+         */
+        post: operations["post_purge_object_links_api_v1_admin_object_links_purge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/principals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List workspace principals
+         * @description List principals in the current workspace with optional type filtering.
+         */
+        get: operations["list_principals_endpoint_api_v1_admin_principals_get"];
+        put?: never;
+        /**
+         * Provision principal
+         * @description Provision a new USER, GROUP, or AGENT principal within the current workspace.
+         */
+        post: operations["provision_principal_endpoint_api_v1_admin_principals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/principals/{principal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get principal details
+         * @description Retrieve administrative metadata and group memberships for a principal by UUID or handle.
+         */
+        get: operations["get_principal_endpoint_api_v1_admin_principals__principal_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update principal status or display name
+         * @description Update principal operational status (active, deactivated, disabled) or display name.
+         */
+        patch: operations["patch_principal_endpoint_api_v1_admin_principals__principal_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/projects/blueprint:apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Atomically apply project configuration plan
+         * @description Atomically apply declarative blueprint changes in a single transaction.
+         */
+        post: operations["apply_project_blueprint_api_v1_admin_projects_blueprint_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/projects/blueprint:plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compute project configuration diff plan
+         * @description Compute declarative changes and canonical plan_sha256 without applying.
+         */
+        post: operations["plan_project_blueprint_api_v1_admin_projects_blueprint_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/projects/{project_ref}/blueprint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get current declarative project blueprint
+         * @description Read the complete declarative blueprint representation of a project.
+         */
+        get: operations["get_project_blueprint_api_v1_admin_projects__project_ref__blueprint_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/role-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bind RBAC role to principal
+         * @description Bind an RBAC role to a principal at server, workspace, or project scope.
+         */
+        post: operations["bind_role_endpoint_api_v1_admin_role_bindings_post"];
+        /**
+         * Unbind RBAC role from principal
+         * @description Unbind an RBAC role from a principal at server, workspace, or project scope.
+         */
+        delete: operations["unbind_role_endpoint_api_v1_admin_role_bindings_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/standalone/backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate and download encrypted database backup
+         * @description Execute pg_dump, encrypt with AES-256-GCM, record audit event, and stream .kbkp file.
+         */
+        post: operations["create_standalone_backup_api_v1_admin_standalone_backup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/standalone/compose-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export production Docker Compose and migration runbook
+         * @description Generate secret-free production docker-compose.yml and promotion checklist.
+         */
+        get: operations["get_compose_export_endpoint_api_v1_admin_standalone_compose_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/workspace-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get workspace settings
+         * @description Retrieve security defaults, timeouts, and air-gap mode for active workspace.
+         */
+        get: operations["get_workspace_settings_api_v1_admin_workspace_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update workspace settings
+         * @description Update workspace settings, enforce timeout invariants, and record audit activity.
+         */
+        patch: operations["update_workspace_settings_api_v1_admin_workspace_settings_patch"];
+        trace?: never;
+    };
     "/api/v1/agent-definitions/{agent}": {
         parameters: {
             query?: never;
@@ -73,6 +879,171 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List enabled login cards
+         * @description Retrieve enabled authentication cards for display on the public sign-in view.
+         *
+         *     Returns only non-sensitive login button metadata in sort_rank order.
+         *     Excludes private configs, secrets, email domains, and disabled cards.
+         */
+        get: operations["list_public_cards_api_v1_auth_cards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/cards/{slug}/ldap-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login with LDAP card alias
+         * @description Authenticate with LDAP credentials via alias /auth/cards/{slug}/ldap-login.
+         */
+        post: operations["ldap_card_login_alias_api_v1_auth_cards__slug__ldap_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/cards/{slug}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start OIDC/OAuth2 login flow for an enabled card
+         * @description Start OIDC/OAuth2 login flow for an enabled card.
+         *
+         *     Maps ?next= to return_to. Returns 404 NOT_FOUND for disabled cards or non-OIDC/OAuth2 kinds.
+         */
+        get: operations["start_card_login_api_v1_auth_cards__slug__start_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Identities
+         * @description List caller's bound external identities.
+         */
+        get: operations["list_identities_api_v1_auth_identities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/identities/link/ldap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link Ldap Identity
+         * @description Complete LDAP identity linking using credentials within active AAL2 session.
+         */
+        post: operations["link_ldap_identity_api_v1_auth_identities_link_ldap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/identities/link/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Identity Link
+         * @description Initiate explicit AAL2 identity linking flow.
+         */
+        post: operations["start_identity_link_api_v1_auth_identities_link_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/identities/{identity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unlink Identity
+         * @description Unlink secondary identity method (requires fresh AAL2, anti-lockout enforced).
+         */
+        delete: operations["unlink_identity_api_v1_auth_identities__identity_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/ldap/{slug}/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login with LDAP credentials
+         * @description Authenticate with LDAP credentials via /auth/ldap/{slug}/login.
+         */
+        post: operations["ldap_login_api_v1_auth_ldap__slug__login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/local/login": {
         parameters: {
             query?: never;
@@ -108,6 +1079,166 @@ export interface paths {
          */
         post: operations["logout_api_v1_auth_logout_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Current Principal
+         * @description Return profile and role summary for the currently authenticated principal.
+         */
+        get: operations["get_current_principal_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/mfa/recovery/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Recovery Codes
+         * @description Regenerate 10 one-time recovery codes (requires active AAL2 session).
+         */
+        post: operations["regenerate_recovery_codes_api_v1_auth_mfa_recovery_regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/mfa/totp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Totp
+         * @description Revoke active TOTP factor for authenticated principal (requires AAL2).
+         */
+        delete: operations["delete_totp_api_v1_auth_mfa_totp_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/mfa/totp/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Totp
+         * @description Confirm a pending TOTP factor using a valid 6-digit code.
+         */
+        post: operations["confirm_totp_api_v1_auth_mfa_totp_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/mfa/totp/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enroll Totp
+         * @description Enroll a new pending TOTP factor for the authenticated principal.
+         */
+        post: operations["enroll_totp_api_v1_auth_mfa_totp_enroll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/mfa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Mfa
+         * @description Verify TOTP or recovery second factor and elevate session to AAL2.
+         */
+        post: operations["verify_mfa_api_v1_auth_mfa_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/oauth-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List caller's connected OAuth grants
+         * @description List all active and recent OAuth grants for the authenticated principal.
+         */
+        get: operations["list_user_oauth_grants_api_v1_auth_oauth_grants_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/oauth-grants/{grant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Self-service deauthorize connected OAuth grant
+         * @description Revoke caller's own OAuth grant and invalidate all active tokens.
+         */
+        delete: operations["revoke_user_oauth_grant_api_v1_auth_oauth_grants__grant_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -173,6 +1304,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/webauthn/authenticate/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authenticate Options
+         * @description Generate WebAuthn authentication/assertion options for AAL2 elevation.
+         */
+        post: operations["authenticate_options_api_v1_auth_webauthn_authenticate_options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/webauthn/authenticate/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authenticate Verify
+         * @description Verify WebAuthn authentication response and elevate session to AAL2.
+         */
+        post: operations["authenticate_verify_api_v1_auth_webauthn_authenticate_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/webauthn/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Credentials
+         * @description List registered WebAuthn credentials for authenticated principal.
+         */
+        get: operations["list_credentials_api_v1_auth_webauthn_credentials_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/webauthn/credentials/{credential_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Credential
+         * @description Delete a registered WebAuthn credential. Refuses deleting last factor of admin.
+         */
+        delete: operations["delete_credential_api_v1_auth_webauthn_credentials__credential_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/webauthn/register/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Options
+         * @description Generate WebAuthn registration options. Requires AAL2 or first enrollment on mfa_pending.
+         */
+        post: operations["register_options_api_v1_auth_webauthn_register_options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/webauthn/register/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Verify
+         * @description Verify WebAuthn registration and persist credential. Elevates to AAL2 on first enrollment.
+         */
+        post: operations["register_verify_api_v1_auth_webauthn_register_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/comments/{comment_id}": {
         parameters: {
             query?: never;
@@ -216,6 +1467,218 @@ export interface paths {
          * @description Idempotently remove an emoji reaction from a visible comment.
          */
         delete: operations["delete_reaction_api_v1_comments__comment_id__reactions__emoji__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/custom-field-approvals/{approval_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a custom field escalation request
+         * @description Approve an escalation request (requires AAL2 <=900s, tier admin, and dual control).
+         */
+        post: operations["approve_escalation_api_v1_custom_field_approvals__approval_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/custom-fields/{field_id}/approval-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an escalation approval request for a custom field
+         * @description Create a pending escalation approval request (requires PROJECT_ADMIN and AAL2).
+         */
+        post: operations["create_approval_request_api_v1_custom_fields__field_id__approval_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/custom-fields/{field_id}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List escalation approval history for a custom field
+         * @description List escalation approvals for a custom field visible to project administrators.
+         */
+        get: operations["list_approvals_api_v1_custom_fields__field_id__approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cycles/{cycle_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get cycle by UUID
+         * @description Retrieve cycle details and real-time issue counts.
+         */
+        get: operations["get_cycle_api_v1_cycles__cycle_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a cycle
+         * @description Delete a non-completed cycle, setting issues.cycle_id to NULL.
+         */
+        delete: operations["delete_cycle_api_v1_cycles__cycle_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update cycle fields
+         * @description Update name, start_date, or end_date for upcoming or active cycles.
+         */
+        patch: operations["patch_cycle_api_v1_cycles__cycle_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/cycles/{cycle_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate an upcoming cycle (alias)
+         * @description Activate an upcoming cycle (semantic alias to /start).
+         */
+        post: operations["activate_cycle_api_v1_cycles__cycle_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cycles/{cycle_id}/burndown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get cycle burndown metrics
+         * @description Retrieve daily burndown scope and remaining points replaying historical activity.
+         */
+        get: operations["get_burndown_api_v1_cycles__cycle_id__burndown_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cycles/{cycle_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete an active cycle
+         * @description Complete an active cycle and optionally roll over unfinished issues.
+         */
+        post: operations["complete_cycle_api_v1_cycles__cycle_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cycles/{cycle_id}/issues/{issue_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add an issue to a cycle
+         * @description Assign an issue to a cycle, enforcing at-most-one active/upcoming cycle constraint.
+         */
+        put: operations["add_issue_to_cycle_api_v1_cycles__cycle_id__issues__issue_ref__put"];
+        post?: never;
+        /**
+         * Remove an issue from a cycle
+         * @description Remove an issue from a cycle, clearing cycle_id.
+         */
+        delete: operations["remove_issue_from_cycle_api_v1_cycles__cycle_id__issues__issue_ref__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cycles/{cycle_id}/rollover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rollover unfinished issues to a target cycle without completing
+         * @description Rollover unfinished issues from cycle to target_cycle.
+         */
+        post: operations["rollover_cycle_api_v1_cycles__cycle_id__rollover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cycles/{cycle_id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an upcoming cycle
+         * @description Activate an upcoming cycle, enforcing at most one active cycle per project.
+         */
+        post: operations["start_cycle_api_v1_cycles__cycle_id__start_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -321,12 +1784,72 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Healthz
-         * @description Liveness probe with zero database access.
+         * Liveness health check probe
+         * @description Liveness probe with zero database access for orchestration monitoring.
          */
         get: operations["healthz_api_v1_healthz_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/internal/v1/mcp/ephemeral-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint short-lived ephemeral read-only MCP token
+         * @description Mint ephemeral token bound to execution_id and Invoker ∩ Agent ∩ Project.
+         */
+        post: operations["mint_token_endpoint_api_v1_internal_v1_mcp_ephemeral_tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/internal/v1/mcp/ephemeral-tokens/by-execution/{execution_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke active ephemeral tokens by execution ID
+         * @description Revoke all active tokens for the specified execution ID.
+         */
+        post: operations["revoke_tokens_endpoint_api_v1_internal_v1_mcp_ephemeral_tokens_by_execution__execution_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/internal/v1/mcp/introspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Introspect MCP bearer token
+         * @description Introspect bearer token digest against database and return active state.
+         */
+        post: operations["introspect_token_api_v1_internal_v1_mcp_introspect_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -355,6 +1878,194 @@ export interface paths {
          * @description Update issue fields under description ETag concurrency check.
          */
         patch: operations["patch_issue_api_v1_issues__issue_key__patch"];
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_key}/begin-work": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Atomically assign caller, attach active cycle, move to started state, and post plan
+         * @description Initiate work on an issue in a single atomic transaction.
+         *
+         *     Moves workflow state, assigns caller as assignee, and records execution plan.
+         */
+        post: operations["api_begin_work_api_v1_issues__issue_key__begin_work_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_key}/complete-work": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify blockers and QA gate, transition to completed, and log proof
+         * @description Verify preconditions, complete issue workflow, and record WORK_COMPLETED activity.
+         */
+        post: operations["api_complete_work_api_v1_issues__issue_key__complete_work_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_key}/custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List computed and cached custom field values for an issue
+         * @description Retrieve all custom field values for an issue.
+         *
+         *     When X-Kanban-Script-Depth >= 1 (or request.state.script_depth >= 1),
+         *     serves cached rows only and avoids recursive execution.
+         */
+        get: operations["list_custom_fields_for_issue_api_v1_issues__issue_key__custom_fields_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_key}/custom-fields/{field_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Force fresh execution of a custom field for an issue
+         * @description Force fresh execution of a custom field.
+         *
+         *     Bypasses cache and records server audit if escalated.
+         *     Rate limited to 6 requests/minute per (principal, issue, field).
+         */
+        post: operations["execute_custom_field_for_issue_api_v1_issues__issue_key__custom_fields__field_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_key}/transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transition issue to intermediate workflow state
+         * @description Transition an issue state under concurrency and gate hook evaluation.
+         */
+        post: operations["api_transition_ticket_api_v1_issues__issue_key__transition_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_key}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute workflow state transition through validation pipeline
+         * @description Execute synchronous Tier A validator/mutator transition pipeline and update issue state.
+         */
+        post: operations["post_issue_transition_api_v1_issues__issue_key__transitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Soft-delete an issue into trash
+         * @description Soft-delete an issue into trash guarded by blast-radius hash concurrency check.
+         */
+        delete: operations["delete_issue_api_v1_issues__issue_ref__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_ref}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List activity feed items for an issue across 4 tabs
+         * @description Return paginated activity feed items with counts and hydrated comments for an issue.
+         */
+        get: operations["list_issue_activity_api_v1_issues__issue_ref__activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_ref}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive an issue
+         * @description Archive an issue enforcing completed/cancelled state and no open sub-issues.
+         */
+        post: operations["archive_issue_api_v1_issues__issue_ref__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/issues/{issue_ref}/assignees": {
@@ -421,6 +2132,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/issues/{issue_ref}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a copy of an issue
+         * @description Clone an issue and optionally its descendant subtree and attachments.
+         */
+        post: operations["copy_issue_endpoint_api_v1_issues__issue_ref__copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_ref}/created-by": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Issue Created By
+         * @description Override created_by on an issue under administrative authorization (S7.2 8d).
+         */
+        patch: operations["patch_issue_created_by_api_v1_issues__issue_ref__created_by_patch"];
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_ref}/delete-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get issue delete blast radius preview
+         * @description Return blast radius preview for deleting an issue (requires DELETE capability).
+         */
+        get: operations["delete_preview_api_v1_issues__issue_ref__delete_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_ref}/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace issue module assignments
+         * @description Replace all module assignments on an issue in a single operation (issue EDIT required).
+         */
+        put: operations["put_issue_modules_api_v1_issues__issue_ref__modules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_ref}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move or reorder an issue on the board
+         * @description Move an issue across columns or reorder it within a column (S6.4).
+         */
+        post: operations["post_issue_move_api_v1_issues__issue_ref__move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_ref}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore an issue from trash
+         * @description Restore a soft-deleted issue from trash back into active state.
+         */
+        post: operations["restore_issue_api_v1_issues__issue_ref__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_ref}/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get subscription status for an issue
+         * @description Return the caller's subscription status and muted event types for an issue.
+         */
+        get: operations["get_subscription_api_v1_issues__issue_ref__subscription_get"];
+        /**
+         * Subscribe to an issue
+         * @description Idempotently subscribe the caller to an issue (VIEW required).
+         */
+        put: operations["subscribe_issue_api_v1_issues__issue_ref__subscription_put"];
+        post?: never;
+        /**
+         * Unsubscribe from an issue
+         * @description Idempotently unsubscribe the caller from an issue with a tombstone (VIEW required).
+         */
+        delete: operations["unsubscribe_issue_api_v1_issues__issue_ref__subscription_delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update muted event types for an issue subscription
+         * @description Update the caller's muted event types on an active subscription (VIEW required).
+         */
+        patch: operations["patch_subscription_api_v1_issues__issue_ref__subscription_patch"];
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_ref}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unarchive an issue
+         * @description Unarchive an archived issue restoring active board state and workflow participation.
+         */
+        post: operations["unarchive_issue_api_v1_issues__issue_ref__unarchive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/links/{link_id}": {
         parameters: {
             query?: never;
@@ -456,6 +2339,158 @@ export interface paths {
          *     Validates HMAC signature before URL parsing or DNS lookup.
          */
         get: operations["get_media_proxy_api_v1_media_proxy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/modules/{module_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a module by ID
+         * @description Retrieve detailed module metadata and status by unique ID (project VIEW required).
+         */
+        get: operations["get_module_api_v1_modules__module_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a module
+         * @description Delete a module and remove all issue links (project ADMIN required).
+         */
+        delete: operations["delete_module_api_v1_modules__module_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a module
+         * @description Update mutable module fields such as name, status, or lead (project ADMIN required).
+         */
+        patch: operations["patch_module_api_v1_modules__module_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/modules/{module_id}/issues/{issue_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add an issue to a module
+         * @description Add a single issue to a module assignment link (issue EDIT required).
+         */
+        put: operations["add_issue_to_module_api_v1_modules__module_id__issues__issue_ref__put"];
+        post?: never;
+        /**
+         * Remove an issue from a module
+         * @description Remove a single issue from a module assignment link (issue EDIT required).
+         */
+        delete: operations["remove_issue_from_module_api_v1_modules__module_id__issues__issue_ref__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List caller's notifications
+         * @description Return paginated notifications for the calling user.
+         */
+        get: operations["list_notifications_api_v1_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark all unread notifications as read
+         * @description Mark all unread notifications for the calling user as read.
+         */
+        post: operations["mark_all_read_api_v1_notifications_read_all_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a notification as read
+         * @description Mark an individual notification as read (self only).
+         */
+        post: operations["mark_notification_read_api_v1_notifications__notification_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/oauth/device/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate or deny RFC 8628 device code
+         * @description Approve or deny a device authorization request with optional scope and project narrowing.
+         */
+        post: operations["activate_device_api_v1_oauth_device_activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/oauth/device/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get pending device authorization info
+         * @description Retrieve metadata for a pending device authorization request.
+         */
+        get: operations["get_device_info_api_v1_oauth_device_info_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -669,13 +2704,17 @@ export interface paths {
         };
         /**
          * List readable projects
-         * @description List projects visible to the caller with keyset pagination.
+         * @description List all projects visible to the calling principal under row-level security.
+         *
+         *     Uses keyset cursor pagination.
          */
         get: operations["list_projects_api_v1_projects_get"];
         put?: never;
         /**
          * Create a project
-         * @description Create a project (workspace admin or server admin only).
+         * @description Create a new project with unique identifier slug and workflow defaults.
+         *
+         *     Requires workspace admin or server admin role.
          */
         post: operations["create_project_api_v1_projects_post"];
         delete?: never;
@@ -693,7 +2732,9 @@ export interface paths {
         };
         /**
          * Get a project
-         * @description Return a project, or the jitter-equalized 404 when absent or unreadable.
+         * @description Return detailed project metadata.
+         *
+         *     Returns jitter-equalized 404 response when absent or unreadable to prevent enumeration.
          */
         get: operations["get_project_api_v1_projects__project_ref__get"];
         put?: never;
@@ -703,9 +2744,31 @@ export interface paths {
         head?: never;
         /**
          * Update a project
-         * @description Update mutable project fields (project ADMIN only).
+         * @description Update mutable project fields such as name and description markdown.
+         *
+         *     Requires project ADMIN role.
          */
         patch: operations["patch_project_api_v1_projects__project_ref__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List activity feed items across a project with RLS filtering
+         * @description Return paginated activity feed items across all readable objects in a project.
+         */
+        get: operations["list_project_activity_api_v1_projects__project_ref__activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/projects/{project_ref}/assignee-suggestions": {
@@ -748,6 +2811,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_ref}/cycles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List cycles for a project
+         * @description List cycles belonging to a project, ordered by start date.
+         */
+        get: operations["list_cycles_api_v1_projects__project_ref__cycles_get"];
+        put?: never;
+        /**
+         * Create a new cycle
+         * @description Create a new cycle in upcoming status (requires project ADMIN).
+         */
+        post: operations["create_cycle_api_v1_projects__project_ref__cycles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/docs/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get project page tree
+         * @description Retrieve full hierarchical page tree for a project.
+         */
+        get: operations["get_project_docs_tree_api_v1_projects__project_ref__docs_tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/issue-trees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an issue tree atomically
+         * @description Create a parent-child issue hierarchy inside a single atomic transaction.
+         */
+        post: operations["create_issue_tree_api_v1_projects__project_ref__issue_trees_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_ref}/issues": {
         parameters: {
             query?: never;
@@ -772,6 +2899,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_ref}/issues:query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ad-hoc query issues in a project
+         * @description Execute an ad-hoc 2D structured query against project issues without saving a view.
+         */
+        post: operations["query_project_issues_adhoc_api_v1_projects__project_ref__issues_query_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_ref}/labels": {
         parameters: {
             query?: never;
@@ -781,13 +2928,13 @@ export interface paths {
         };
         /**
          * List project labels
-         * @description List labels for a project ordered by name.
+         * @description List project labels available for tagging issues ordered alphabetically by name.
          */
         get: operations["list_labels_api_v1_projects__project_ref__labels_get"];
         put?: never;
         /**
          * Create a label
-         * @description Create a project label (project EDIT or ADMIN allowed).
+         * @description Create a new project label with name and hex color token (project EDIT or ADMIN allowed).
          */
         post: operations["create_label_api_v1_projects__project_ref__labels_post"];
         delete?: never;
@@ -808,14 +2955,16 @@ export interface paths {
         post?: never;
         /**
          * Delete a label
-         * @description Delete a project label and detach from issues (project ADMIN only).
+         * @description Permanently delete a project label, removing it from all tagged issues.
+         *
+         *     Requires project ADMIN role.
          */
         delete: operations["delete_label_api_v1_projects__project_ref__labels__label_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update a label
-         * @description Update a project label (project ADMIN only).
+         * @description Update a project label name or color code (project ADMIN capability required).
          */
         patch: operations["patch_label_api_v1_projects__project_ref__labels__label_id__patch"];
         trace?: never;
@@ -830,10 +2979,36 @@ export interface paths {
         get?: never;
         /**
          * Replace default modules
-         * @description Replace the project's default module list (project ADMIN only).
+         * @description Replace the project's default module assignment list for newly created issues.
+         *
+         *     Requires project ADMIN role.
          */
         put: operations["put_module_defaults_api_v1_projects__project_ref__module_defaults_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List modules in a project
+         * @description List modules for a project (VIEW capability required; 404 MODULES_DISABLED if disabled).
+         */
+        get: operations["list_modules_api_v1_projects__project_ref__modules_get"];
+        put?: never;
+        /**
+         * Create a module in a project
+         * @description Create a new module within a project (project ADMIN capability required).
+         */
+        post: operations["create_module_api_v1_projects__project_ref__modules_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -849,13 +3024,15 @@ export interface paths {
         };
         /**
          * List project priorities
-         * @description List priorities for a project ordered by sort_order.
+         * @description List custom priorities configured for a project ordered by priority rank and sort_order.
          */
         get: operations["list_priorities_api_v1_projects__project_ref__priorities_get"];
         put?: never;
         /**
          * Create a priority
-         * @description Create a custom project priority (project ADMIN only).
+         * @description Create a custom project priority with label and semantic emoji.
+         *
+         *     Requires project ADMIN capability.
          */
         post: operations["create_priority_api_v1_projects__project_ref__priorities_post"];
         delete?: never;
@@ -876,14 +3053,18 @@ export interface paths {
         post?: never;
         /**
          * Delete a priority
-         * @description Delete a custom priority, optionally migrating issues (project ADMIN only).
+         * @description Delete a custom priority with optional issue migration.
+         *
+         *     Optionally migrates associated issues to a replacement priority (project ADMIN only).
          */
         delete: operations["delete_priority_api_v1_projects__project_ref__priorities__priority_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update a priority
-         * @description Update mutable priority fields (project ADMIN only).
+         * @description Update mutable priority fields including label and emoji.
+         *
+         *     Requires project ADMIN capability.
          */
         patch: operations["patch_priority_api_v1_projects__project_ref__priorities__priority_id__patch"];
         trace?: never;
@@ -897,13 +3078,13 @@ export interface paths {
         };
         /**
          * List workflow states
-         * @description List workflow states ordered by sort_order.
+         * @description List workflow states configured for a project ordered by execution sort_order.
          */
         get: operations["list_states_api_v1_projects__project_ref__states_get"];
         put?: never;
         /**
          * Create a workflow state
-         * @description Create a workflow state (project ADMIN only).
+         * @description Create a new workflow state within a project (project ADMIN capability required).
          */
         post: operations["create_state_api_v1_projects__project_ref__states_post"];
         delete?: never;
@@ -924,16 +3105,226 @@ export interface paths {
         post?: never;
         /**
          * Delete a workflow state
-         * @description Delete a workflow state, optionally migrating issues (project ADMIN only).
+         * @description Delete a workflow state with optional migration of associated issues.
+         *
+         *     Optionally migrates associated issues to a replacement state (project ADMIN only).
          */
         delete: operations["delete_state_api_v1_projects__project_ref__states__state_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update a workflow state
-         * @description Update a workflow state (project ADMIN only).
+         * @description Update mutable properties of a workflow state including name and color.
+         *
+         *     Requires project ADMIN role.
          */
         patch: operations["patch_state_api_v1_projects__project_ref__states__state_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/stickies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List project stickies
+         * @description List stickies for a project ordered by sort rank.
+         *
+         *     Orders rank using COLLATE 'C', with optional inclusion of promoted stubs.
+         */
+        get: operations["list_project_stickies_api_v1_projects__project_ref__stickies_get"];
+        put?: never;
+        /**
+         * Create a sticky note
+         * @description Create a new sticky note in the specified project.
+         *
+         *     Supports auto-detected Markdown, color token, and sets ETag response header.
+         */
+        post: operations["create_sticky_api_v1_projects__project_ref__stickies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List issues in project trash
+         * @description List soft-deleted issues in project trash where caller has DELETE capability.
+         */
+        get: operations["list_trash_api_v1_projects__project_ref__trash_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List project saved views
+         * @description List all saved views configured for a project visible to the caller under RLS.
+         */
+        get: operations["list_project_views_api_v1_projects__project_ref__views_get"];
+        put?: never;
+        /**
+         * Create saved view
+         * @description Create a new saved view in a project with layout mode, grouping axes, and filter criteria.
+         */
+        post: operations["create_view_api_v1_projects__project_ref__views_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project}/custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List custom field definitions for a project
+         * @description List custom field definitions visible to caller, redacting source for non-admins.
+         */
+        get: operations["list_custom_fields_api_v1_projects__project__custom_fields_get"];
+        put?: never;
+        /**
+         * Create a custom field definition
+         * @description Create a new custom field definition (admin-only, requires AAL2 and CSRF).
+         */
+        post: operations["create_custom_field_api_v1_projects__project__custom_fields_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project}/custom-fields/{field_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a custom field definition
+         * @description Delete an existing custom field definition (admin-only, requires AAL2 and CSRF).
+         */
+        delete: operations["delete_custom_field_api_v1_projects__project__custom_fields__field_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a custom field definition
+         * @description Update an existing custom field definition (admin-only, requires AAL2 and CSRF).
+         */
+        patch: operations["update_custom_field_api_v1_projects__project__custom_fields__field_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project}/wasm-modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload and validate a WebAssembly module artifact
+         * @description Upload, validate, and register a compiled WebAssembly module.
+         *
+         *     Admin role and AAL2 required.
+         */
+        post: operations["upload_wasm_module_api_v1_projects__project__wasm_modules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project}/workflow-hooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List workflow hooks for a project grouped by transition
+         * @description List workflow hooks grouped by (from_state, to_state). S3.4: returns 404 for non-admins.
+         */
+        get: operations["list_workflow_hooks_api_v1_projects__project__workflow_hooks_get"];
+        put?: never;
+        /**
+         * Attach a new workflow hook to a transition
+         * @description Create and attach a workflow hook. Requires PROJECT_ADMIN and AAL2.
+         */
+        post: operations["create_workflow_hook_api_v1_projects__project__workflow_hooks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project}/workflow-hooks/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dry-run workflow hook pipeline against a sample or existing ticket
+         * @description Execute dry-run simulation inside a guaranteed non-persisted SAVEPOINT.
+         */
+        post: operations["dry_run_workflow_hooks_api_v1_projects__project__workflow_hooks_dry_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project}/workflow-hooks/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Atomically reorder workflow hooks for a transition
+         * @description Atomically rewrite sort_rank for hooks in transition. Requires PROJECT_ADMIN and AAL2.
+         */
+        post: operations["reorder_workflow_hooks_api_v1_projects__project__workflow_hooks_reorder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/resolve": {
@@ -950,6 +3341,426 @@ export interface paths {
         get: operations["resolve_entity_api_v1_resolve_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unified cross-entity search
+         * @description Execute unified lexical full-text and trigram search under caller RLS.
+         */
+        get: operations["search_unified_api_v1_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Structured issue search
+         * @description Execute issue-scoped search composed with FilterSpec DSL predicates.
+         */
+        post: operations["search_issues_api_v1_search_issues_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Knowledge search across docs, pages, and stickies
+         * @description Execute knowledge search across docs, pages, and stickies under caller RLS.
+         */
+        post: operations["search_knowledge_api_v1_search_knowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim Setup
+         * @description Atomically claim instance, provision first SERVER_ADMIN, and require AAL2 enrollment.
+         */
+        post: operations["claim_setup_api_v1_setup_claim_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Setup Status
+         * @description Check whether first-boot administrator claiming has occurred.
+         */
+        get: operations["get_setup_status_api_v1_setup_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stickies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List workspace stickies
+         * @description Keyset-paginated listing of stickies across the workspace.
+         *
+         *     Returns stickies visible to the caller under row-level security.
+         */
+        get: operations["list_workspace_stickies_api_v1_stickies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stickies/{sticky_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a sticky note
+         * @description Retrieve a sticky note by UUID with ETag caching.
+         *
+         *     Returns 304 Not Modified when matching If-None-Match header.
+         */
+        get: operations["get_sticky_api_v1_stickies__sticky_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a sticky note
+         * @description Soft-delete a sticky note into the project trash bin.
+         *
+         *     Preserves activity audit ledger history.
+         */
+        delete: operations["delete_sticky_api_v1_stickies__sticky_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a sticky note
+         * @description Update a sticky note with ETag optimistic concurrency enforcement.
+         *
+         *     Enforces concurrency using the If-Match request header.
+         */
+        patch: operations["update_sticky_api_v1_stickies__sticky_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/stickies/{sticky_id}/promote-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview AI-structured Doc proposal for a sticky scratchpad
+         * @description Generate read-only preview of an AI-structured Doc proposal without writing database rows.
+         */
+        post: operations["preview_sticky_promotion_api_v1_stickies__sticky_id__promote_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stickies/{sticky_id}/promote-to-doc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Promote sticky to doc
+         * @description Atomically promote a sticky into a Doc + Page preserving direct ACLs verbatim.
+         */
+        post: operations["promote_sticky_to_doc_api_v1_stickies__sticky_id__promote_to_doc_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stickies/{sticky_id}/snooze-promotion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Snooze promotion recommendation
+         * @description Snooze promotion recommendation until body grows by >= 1.5x.
+         */
+        post: operations["snooze_sticky_promotion_api_v1_stickies__sticky_id__snooze_promotion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stickies/{sticky_id}/unarchive-copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unarchive copy of promoted sticky
+         * @description Clone a promoted sticky's content, color, and ACLs into a fresh unpromoted sticky note.
+         */
+        post: operations["unarchive_sticky_copy_api_v1_stickies__sticky_id__unarchive_copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get system deployment and persistence status
+         * @description Retrieve system status with anti-enumeration redaction for non-administrators.
+         */
+        get: operations["get_system_status_endpoint_api_v1_system_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transitions/{execution_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Cancel a pending asynchronous workflow transition
+         * @description Cancel a pending asynchronous workflow transition hold.
+         *
+         *     Releases held locks on the target issue.
+         */
+        delete: operations["cancel_transition_api_v1_transitions__execution_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/{view_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get saved view
+         * @description Retrieve an existing saved view definition by its unique identifier under RLS.
+         */
+        get: operations["get_view_api_v1_views__view_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete saved view
+         * @description Permanently delete a saved view definition from the owning project.
+         */
+        delete: operations["delete_view_api_v1_views__view_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update saved view
+         * @description Update mutable properties of an existing saved view including layout, filters, and limits.
+         */
+        patch: operations["update_view_api_v1_views__view_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/views/{view_id}/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Query issues in a saved view
+         * @description Execute a 2D structured query for a saved view using its configuration and pagination.
+         */
+        get: operations["query_view_issues_get_api_v1_views__view_id__issues_get"];
+        put?: never;
+        /**
+         * Query issues in a saved view (POST issues alias)
+         * @description Execute query for a saved view via POST to avoid client URL length limitations.
+         */
+        post: operations["query_view_issues_post_api_v1_views__view_id__issues_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/{view_id}/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Query issues in a saved view (POST alias)
+         * @description Execute query for a saved view via POST to avoid client URL length limitations.
+         */
+        post: operations["query_view_issues_post_api_v1_views__view_id__query_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflow-hooks/{hook_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete/detach a workflow hook
+         * @description Permanently delete and detach a workflow hook from a transition rule.
+         *
+         *     Requires project admin and AAL2.
+         */
+        delete: operations["delete_workflow_hook_api_v1_workflow_hooks__hook_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update an existing workflow hook
+         * @description Update hook parameters and recompute manifest_sha256. Requires PROJECT_ADMIN and AAL2.
+         */
+        patch: operations["update_workflow_hook_api_v1_workflow_hooks__hook_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/workflow-hooks/{hook_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable a workflow hook
+         * @description Disable an active workflow hook to bypass execution during state transitions.
+         *
+         *     Does not detach the hook. Requires project admin and AAL2.
+         */
+        post: operations["disable_workflow_hook_api_v1_workflow_hooks__hook_id__disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflow-hooks/{hook_id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable a workflow hook
+         * @description Enable an existing workflow hook to resume intercepting state transitions.
+         *
+         *     Requires project admin and AAL2.
+         */
+        post: operations["enable_workflow_hook_api_v1_workflow_hooks__hook_id__enable_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -980,6 +3791,206 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/mcp/ephemeral-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint short-lived ephemeral read-only MCP token
+         * @description Mint ephemeral token bound to execution_id and Invoker ∩ Agent ∩ Project.
+         */
+        post: operations["mint_token_endpoint_internal_v1_mcp_ephemeral_tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/mcp/ephemeral-tokens/by-execution/{execution_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke active ephemeral tokens by execution ID
+         * @description Revoke all active tokens for the specified execution ID.
+         */
+        post: operations["revoke_tokens_endpoint_internal_v1_mcp_ephemeral_tokens_by_execution__execution_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/mcp/introspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Introspect MCP bearer token
+         * @description Introspect bearer token digest against database and return active state.
+         */
+        post: operations["introspect_token_internal_v1_mcp_introspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OAuth 2.1 Interactive Authorization / Consent Screen
+         * @description Render interactive consent screen for authorization code grant with PKCE S256.
+         */
+        get: operations["oauth_authorize_oauth_authorize_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/authorize/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Process OAuth 2.1 Consent Decision
+         * @description Process user consent decision, minting authorization code or returning access_denied.
+         */
+        post: operations["oauth_authorize_decision_oauth_authorize_decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/device/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * OAuth 2.0 Device Authorization (RFC 8628)
+         * @description Initiate RFC 8628 Device Authorization Flow for headless clients.
+         */
+        post: operations["oauth_device_authorize_oauth_device_authorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/jwks.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OAuth Public Key Set (JWKS)
+         * @description Return RFC 7517 public JWKS for verifying ES256 access tokens.
+         */
+        get: operations["oauth_jwks_oauth_jwks_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dynamic Client Registration (RFC 7591)
+         * @description Register public OAuth 2.1 client with strict URI and rate limit validation.
+         */
+        post: operations["oauth_register_client_oauth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * OAuth Token Revocation (RFC 7009)
+         * @description Revoke an access token or refresh token per RFC 7009.
+         */
+        post: operations["oauth_revoke_endpoint_oauth_revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * OAuth 2.1 Token Exchange (Authorization Code & Refresh Token)
+         * @description Exchange authorization code or refresh token for ES256 JWT access token.
+         */
+        post: operations["oauth_token_endpoint_oauth_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -994,6 +4005,16 @@ export interface components {
              * @description In-boundary active agents
              */
             agents?: components["schemas"]["ManifestAgent"][];
+            /**
+             * Caller Capabilities
+             * @description Effective capability names granted to calling principal
+             */
+            caller_capabilities?: string[];
+            /**
+             * Canonical Key
+             * @description Canonical display key (e.g. KAN-142)
+             */
+            canonical_key?: string | null;
             /**
              * Deny Overrides
              * @description Explicit DENY restricted overrides
@@ -1011,6 +4032,11 @@ export interface components {
             groups?: components["schemas"]["ManifestGroup"][];
             /** @description Inherited scoping metadata */
             inherited_scope: components["schemas"]["InheritedScope"];
+            /**
+             * Object Type
+             * @description Type of object (e.g. issue, project)
+             */
+            object_type?: string | null;
             /**
              * Pill Label
              * @description Compact header pill label, e.g. 'Project + 2'
@@ -1032,6 +4058,229 @@ export interface components {
              * @description In-boundary active users
              */
             users?: components["schemas"]["ManifestUser"][];
+        };
+        /**
+         * ActiveCommentSummary
+         * @description Hydrated metadata for an active comment.
+         */
+        ActiveCommentSummary: {
+            /**
+             * Body Markdown
+             * @description Canonical comment markdown body
+             */
+            body_markdown: string;
+            /**
+             * Edited At
+             * @description Timestamp of last edit
+             */
+            edited_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             * @description Comment UUID
+             */
+            id: string;
+            /**
+             * Permalink
+             * @description Canonical URL permalink fragment to the comment
+             */
+            permalink: string;
+            /**
+             * Reactions
+             * @description Aggregated emoji reactions
+             */
+            reactions?: components["schemas"]["ReactionSummary"][];
+        };
+        /**
+         * ActivityCategory
+         * @description Display grouping for activity events.
+         * @enum {string}
+         */
+        ActivityCategory: "COMMENT" | "HISTORY" | "AGENT_GATE" | "AGENT_GATE" | "SYSTEM";
+        /**
+         * ActivityCounts
+         * @description Aggregate counts across all 4 activity tabs for drawer badges.
+         */
+        ActivityCounts: {
+            /**
+             * All
+             * @description Total matching activity items across all tabs
+             */
+            all: number;
+            /**
+             * Comments
+             * @description Total comment-related activity items
+             */
+            comments: number;
+            /**
+             * Gates
+             * @description Total agent and workflow gate items
+             */
+            gates: number;
+            /**
+             * History
+             * @description Total history and lifecycle activity items
+             */
+            history: number;
+        };
+        /**
+         * ActivityFeedResponse
+         * @description Paginated activity feed response with counts and keyset cursor.
+         */
+        ActivityFeedResponse: {
+            /** @description Badge counts for all 4 tabs */
+            counts: components["schemas"]["ActivityCounts"];
+            /**
+             * Items
+             * @description Ordered list of activity items
+             */
+            items: components["schemas"]["ActivityItemResponse"][];
+            /**
+             * Next Cursor
+             * @description Opaque HMAC-signed cursor for keyset pagination
+             */
+            next_cursor?: string | null;
+            /**
+             * Tab
+             * @description Active filter tab: all, comments, history, or gates
+             */
+            tab: string;
+        };
+        /**
+         * ActivityItemResponse
+         * @description A single activity feed item with actor and comment hydration.
+         */
+        ActivityItemResponse: {
+            /**
+             * Actor
+             * @description Initiating principal or redacted collaborator
+             */
+            actor?: components["schemas"]["NormalActorSummary"] | components["schemas"]["RedactedActorSummary"] | null;
+            /** @description Display category tab grouping */
+            category: components["schemas"]["ActivityCategory"];
+            /**
+             * Comment
+             * @description Hydrated comment object for comment events
+             */
+            comment?: components["schemas"]["ActiveCommentSummary"] | components["schemas"]["SoftDeletedCommentSummary"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             * @description Timestamp when event was recorded
+             */
+            created_at: string;
+            /**
+             * Event Type
+             * @description Exact activity event type token
+             */
+            event_type: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description Activity record UUID
+             */
+            id: string;
+            /**
+             * Payload
+             * @description Structured event payload
+             */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Prev Hash
+             * @description Hex-encoded 32-byte cryptographic predecessor hash
+             */
+            prev_hash?: string | null;
+            /**
+             * Row Hash
+             * @description Hex-encoded 32-byte cryptographic row hash
+             */
+            row_hash?: string | null;
+        };
+        /** @enum {string} */
+        ActivityOrder: "desc" | "asc";
+        /** @enum {string} */
+        ActivityTab: "all" | "comments" | "history" | "gates";
+        /**
+         * AdHocQueryRequest
+         * @description Payload for ad-hoc unsaved issue querying.
+         */
+        AdHocQueryRequest: {
+            /**
+             * Cursor
+             * @description Opaque keyset cursor for fetching next page
+             */
+            cursor?: string | null;
+            /** @description Ad-hoc issue filtering criteria */
+            filters?: components["schemas"]["FilterSpec"];
+            /**
+             * @description Primary grouping axis
+             * @default state
+             */
+            group_by: components["schemas"]["GroupAxis"];
+            /**
+             * @description Target layout mode: board, list, table, calendar, timeline
+             * @default board
+             */
+            layout: components["schemas"]["ViewLayout"];
+            /**
+             * Limit
+             * @description Maximum number of issues to return
+             * @default 50
+             */
+            limit: number;
+            /**
+             * @description Sort order field
+             * @default board_rank
+             */
+            sort_by: components["schemas"]["SortField"];
+            /**
+             * @description Sort order direction: asc or desc
+             * @default asc
+             */
+            sort_dir: components["schemas"]["SortDir"];
+            /**
+             * @description Secondary sub-grouping axis
+             * @default none
+             */
+            sub_group_by: components["schemas"]["GroupAxis"];
+            /**
+             * Wip Limits Override
+             * @description Ad-hoc WIP limits overrides
+             */
+            wip_limits_override?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * AdminPlaneImportRequest
+         * @description Payload requesting execution or preview of a Plane export import.
+         */
+        AdminPlaneImportRequest: {
+            /**
+             * Bundle Name
+             * @description Name of bundle folder in imports storage (alphanumeric/dash/underscore)
+             */
+            bundle_name: string;
+            /**
+             * Dry Run
+             * @description Simulate import and return diff report without persisting database changes
+             * @default false
+             */
+            dry_run: boolean;
+            /**
+             * User Map
+             * @description Mapping from Plane user IDs to Kanban handles
+             */
+            user_map?: {
+                [key: string]: string;
+            };
+            /**
+             * Workspace Slug
+             * @description Target workspace slug (defaults to caller's active workspace)
+             */
+            workspace_slug?: string | null;
         };
         /**
          * AgentDefinitionCreate
@@ -1152,6 +4401,22 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * ArchiveEligibility
+         * @description Eligibility status and explanatory reason for archiving (S7.2 8p).
+         */
+        ArchiveEligibility: {
+            /**
+             * Allowed
+             * @description Whether the issue is currently eligible for archiving
+             */
+            allowed: boolean;
+            /**
+             * Reason
+             * @description Explanatory reason if archiving is prohibited
+             */
+            reason?: string | null;
+        };
+        /**
          * AssigneeCreate
          * @description Request payload for assigning a principal or free-text assignee.
          */
@@ -1234,6 +4499,198 @@ export interface components {
             signed_url: string;
         };
         /**
+         * AuthCardAdmin
+         * @description Administrative card presentation model.
+         *
+         *     Includes non-secret metadata and boolean presence indicator for secrets.
+         *     Never exposes encrypted_secret_blob or wrapped_dek.
+         */
+        AuthCardAdmin: {
+            /** Allowed Email Domains */
+            allowed_email_domains?: string[];
+            /**
+             * Auto Provision Users
+             * @default false
+             */
+            auto_provision_users: boolean;
+            /** Button Subtext */
+            button_subtext?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Dek Kid
+             * @default kek-v1
+             */
+            dek_kid: string;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Has Secret
+             * @default false
+             */
+            has_secret: boolean;
+            /**
+             * Icon Preset
+             * @default key
+             */
+            icon_preset: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Enabled
+             * @default false
+             */
+            is_enabled: boolean;
+            /** Last Admin Handshake At */
+            last_admin_handshake_at?: string | null;
+            /**
+             * Last Health Status
+             * @default UNVERIFIED
+             */
+            last_health_status: string;
+            /** Provider Kind */
+            provider_kind: string;
+            /** Public Config */
+            public_config?: {
+                [key: string]: unknown;
+            };
+            /** Slug */
+            slug: string;
+            /** Sort Rank */
+            sort_rank: string;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
+        /**
+         * AuthCardAdminListResponse
+         * @description List of all authentication cards for administrative overview.
+         */
+        AuthCardAdminListResponse: {
+            /** Cards */
+            cards: components["schemas"]["AuthCardAdmin"][];
+        };
+        /**
+         * AuthCardCreate
+         * @description Payload to create a new authentication card.
+         */
+        AuthCardCreate: {
+            /** Allowed Email Domains */
+            allowed_email_domains?: string[];
+            /**
+             * Auto Provision Users
+             * @default false
+             */
+            auto_provision_users: boolean;
+            /** Button Subtext */
+            button_subtext?: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Icon Preset
+             * @default key
+             */
+            icon_preset: string;
+            /**
+             * Is Enabled
+             * @default false
+             */
+            is_enabled: boolean;
+            /**
+             * Provider Kind
+             * @enum {string}
+             */
+            provider_kind: "OIDC" | "OAUTH2" | "LDAP" | "LOCAL_ADMIN";
+            /** Public Config */
+            public_config?: {
+                [key: string]: unknown;
+            };
+            /** Secret */
+            secret?: string | null;
+            /** Slug */
+            slug: string;
+            /** Sort Rank */
+            sort_rank?: string | null;
+        };
+        /**
+         * AuthCardDeleteRequest
+         * @description Payload required to permanently delete an authentication card.
+         */
+        AuthCardDeleteRequest: {
+            /** Confirm Slug */
+            confirm_slug: string;
+        };
+        /**
+         * AuthCardPublic
+         * @description Public card summary displayed on login screen.
+         *
+         *     Exposes no secret ciphertext, configuration internals, or administrative fields.
+         */
+        AuthCardPublic: {
+            /** Button Subtext */
+            button_subtext?: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Icon Preset
+             * @default key
+             */
+            icon_preset: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Provider Kind */
+            provider_kind: string;
+            /** Slug */
+            slug: string;
+        };
+        /**
+         * AuthCardPublicListResponse
+         * @description List of enabled cards for the public login screen.
+         */
+        AuthCardPublicListResponse: {
+            /** Cards */
+            cards: components["schemas"]["AuthCardPublic"][];
+        };
+        /**
+         * AuthCardReorderRequest
+         * @description Payload to reposition an authentication card in the display sequence.
+         */
+        AuthCardReorderRequest: {
+            /** After */
+            after?: string | null;
+        };
+        /**
+         * AuthCardUpdate
+         * @description Payload to update an existing authentication card.
+         */
+        AuthCardUpdate: {
+            /** Allowed Email Domains */
+            allowed_email_domains?: string[] | null;
+            /** Auto Provision Users */
+            auto_provision_users?: boolean | null;
+            /** Button Subtext */
+            button_subtext?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Icon Preset */
+            icon_preset?: string | null;
+            /** Is Enabled */
+            is_enabled?: boolean | null;
+            /** Public Config */
+            public_config?: {
+                [key: string]: unknown;
+            } | null;
+            /** Secret */
+            secret?: string | null;
+        };
+        /**
          * AuthorSummary
          * @description Comment author display metadata.
          */
@@ -1256,6 +4713,167 @@ export interface components {
             id: string;
         };
         /**
+         * BeginWorkRequest
+         * @description Payload for initiating work on an issue.
+         */
+        BeginWorkRequest: {
+            /** Plan Markdown */
+            plan_markdown: string;
+        };
+        /**
+         * BlastRadiusResponse
+         * @description Blast radius preview summary driving delete confirmation (S7.2 8q).
+         */
+        BlastRadiusResponse: {
+            /** Attachments */
+            attachments: number;
+            /** Blast Hash */
+            blast_hash: string;
+            /** Comments */
+            comments: number;
+            /** Inbound Links Flagged */
+            inbound_links_flagged: number;
+            /** Issue Key */
+            issue_key: string;
+            /** Outbound Links */
+            outbound_links: number;
+            /** Retention Days */
+            retention_days: number;
+            /** Sub Issues Unparented */
+            sub_issues_unparented: number;
+            /** Summary Text */
+            summary_text: string;
+        };
+        /**
+         * BlueprintApplyRequest
+         * @description Payload for applying a pre-calculated project blueprint plan.
+         */
+        BlueprintApplyRequest: {
+            blueprint: components["schemas"]["ProjectBlueprint"];
+            /** Plan Sha256 */
+            plan_sha256: string;
+        };
+        /**
+         * BlueprintApplyResponse
+         * @description Response returned when a project blueprint plan is successfully applied.
+         */
+        BlueprintApplyResponse: {
+            /** Changes */
+            changes: {
+                [key: string]: unknown;
+            };
+            /** Plan Sha256 */
+            plan_sha256: string;
+            /** Project */
+            project: string;
+            /**
+             * Status
+             * @default applied
+             */
+            status: string;
+        };
+        /**
+         * BlueprintLabel
+         * @description Declarative categorization label in a project blueprint.
+         */
+        BlueprintLabel: {
+            /**
+             * Color
+             * @default #64748B
+             */
+            color: string;
+            /** Exclusive Group */
+            exclusive_group?: string | null;
+            /** Name */
+            name: string;
+        };
+        /**
+         * BlueprintModule
+         * @description Declarative module in a project blueprint.
+         */
+        BlueprintModule: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * BlueprintPlanRequest
+         * @description Payload for computing a declarative project blueprint diff.
+         */
+        BlueprintPlanRequest: {
+            blueprint: components["schemas"]["ProjectBlueprint"];
+        };
+        /**
+         * BlueprintPlanResponse
+         * @description Response returned when a project blueprint diff plan is generated.
+         */
+        BlueprintPlanResponse: {
+            /** Changes */
+            changes: {
+                [key: string]: unknown;
+            };
+            /** Plan Sha256 */
+            plan_sha256: string;
+            /** Project */
+            project: string;
+        };
+        /**
+         * BlueprintPriority
+         * @description Declarative priority level in a project blueprint.
+         */
+        BlueprintPriority: {
+            /**
+             * Color
+             * @default #64748B
+             */
+            color: string;
+            /**
+             * Emoji
+             * @default
+             */
+            emoji: string | null;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+        };
+        /**
+         * BlueprintState
+         * @description Declarative workflow state in a project blueprint.
+         */
+        BlueprintState: {
+            /** Color */
+            color: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "backlog" | "unstarted" | "started" | "completed" | "cancelled";
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /** Wip Hard Limit */
+            wip_hard_limit?: number | null;
+            /** Wip Soft Limit */
+            wip_soft_limit?: number | null;
+        };
+        /**
          * BreadcrumbItem
          * @description Breadcrumb trail element representing an ancestor doc or page.
          */
@@ -1275,6 +4893,120 @@ export interface components {
             slug?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * BudgetRecord
+         * @description Active or historical token budget ledger row.
+         */
+        BudgetRecord: {
+            /**
+             * Period Kind
+             * @description Accounting period tier: daily or monthly
+             * @enum {string}
+             */
+            period_kind: "daily" | "monthly";
+            /**
+             * Period Start
+             * Format: date
+             * @description Period start calendar date (YYYY-MM-DD)
+             */
+            period_start: string;
+            /**
+             * Token Cap
+             * @description Configured maximum token budget cap
+             */
+            token_cap: number;
+            /**
+             * Tokens Reserved
+             * @description Tokens currently held in active reservations
+             */
+            tokens_reserved: number;
+            /**
+             * Tokens Used
+             * @description Tokens committed and consumed in this period
+             */
+            tokens_used: number;
+        };
+        /**
+         * BudgetSetRequest
+         * @description Payload for setting or updating token caps.
+         */
+        BudgetSetRequest: {
+            /**
+             * Period Kind
+             * @description Budget period tier: daily or monthly
+             * @enum {string}
+             */
+            period_kind: "daily" | "monthly";
+            /**
+             * Project Id
+             * @description Optional project UUID if setting a project-specific budget
+             */
+            project_id?: string | null;
+            /**
+             * Provider Config Id
+             * Format: uuid
+             * @description Target AI provider configuration UUID
+             */
+            provider_config_id: string;
+            /**
+             * Token Cap
+             * @description Target maximum token budget cap
+             */
+            token_cap: number;
+        };
+        /**
+         * BurndownIdealPoint
+         * @description Linear target progression for cycle completion.
+         */
+        BurndownIdealPoint: {
+            /** Date */
+            date: string;
+            /** Remaining */
+            remaining: number;
+        };
+        /**
+         * BurndownPoint
+         * @description Daily scope and remaining count for cycle burndown metrics.
+         */
+        BurndownPoint: {
+            /** Date */
+            date: string;
+            /** Remaining */
+            remaining: number;
+            /** Scope */
+            scope: number;
+        };
+        /**
+         * BurndownResponse
+         * @description Burndown metrics series and ideal line for a cycle.
+         */
+        BurndownResponse: {
+            /**
+             * Cycle Id
+             * Format: uuid
+             */
+            cycle_id: string;
+            /** Ideal */
+            ideal: components["schemas"]["BurndownIdealPoint"][];
+            /** Series */
+            series: components["schemas"]["BurndownPoint"][];
+        };
+        /**
+         * CancelTransitionResponse
+         * @description Response payload for cancelling a pending workflow transition.
+         */
+        CancelTransitionResponse: {
+            /**
+             * Execution Id
+             * Format: uuid
+             */
+            execution_id: string;
+            /**
+             * Status
+             * @default cancelled
+             */
+            status: string;
         };
         /**
          * CanonicalUrlResponse
@@ -1434,6 +5166,596 @@ export interface components {
             unnotified_mentions?: components["schemas"]["MentionSummary"][];
         };
         /**
+         * CompleteWorkRequest
+         * @description Payload for completing work with verification proof.
+         */
+        CompleteWorkRequest: {
+            /** Summary Markdown */
+            summary_markdown: string;
+            /** To State */
+            to_state?: string | null;
+            /** Verification Proof */
+            verification_proof: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ComposeExportResponse
+         * @description Production Docker Compose specification, environment template, and promotion guide.
+         */
+        ComposeExportResponse: {
+            /** Compose Yaml */
+            compose_yaml: string;
+            /** Env Template */
+            env_template: string;
+            /** Filename */
+            filename: string;
+            /** Migration Steps Markdown */
+            migration_steps_markdown: string;
+        };
+        /**
+         * CopiedSubIssueSummary
+         * @description Summary pair mapping a copied sub-issue source key to its new copy key.
+         */
+        CopiedSubIssueSummary: {
+            /** Copy Key */
+            copy_key: string;
+            /** Source Key */
+            source_key: string;
+        };
+        /**
+         * CreatorPrincipalSummary
+         * @description Summary of a visible user principal in provenance.
+         */
+        CreatorPrincipalSummary: {
+            /**
+             * Handle
+             * @description Display handle or username without leading @
+             */
+            handle: string;
+            /**
+             * Id
+             * @description UUID of the user principal
+             */
+            id: string;
+        };
+        /** @description Creator principal summary or masked external collaborator placeholder */
+        CreatorSummary: components["schemas"]["CreatorPrincipalSummary"] | components["schemas"]["RedactedCreatorSummary"];
+        /**
+         * CustomFieldApprovalApproveRequest
+         * @description Payload to approve a pending custom field escalation.
+         */
+        CustomFieldApprovalApproveRequest: {
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /**
+             * Sp Warning Acknowledged
+             * @default false
+             */
+            sp_warning_acknowledged: boolean;
+        };
+        /**
+         * CustomFieldApprovalRequestCreate
+         * @description Payload to request escalation approval for a custom field.
+         */
+        CustomFieldApprovalRequestCreate: {
+            /** Justification */
+            justification: string;
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+        };
+        /**
+         * CustomFieldApprovalResponse
+         * @description Public projection of a custom field escalation approval record.
+         */
+        CustomFieldApprovalResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Credential Mode */
+            credential_mode: string;
+            /**
+             * Field Id
+             * Format: uuid
+             */
+            field_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Justification */
+            justification: string;
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /** Primary Approved At */
+            primary_approved_at?: string | null;
+            /** Primary Approver Aal */
+            primary_approver_aal?: number | null;
+            /** Primary Approver Id */
+            primary_approver_id?: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Requested By Id
+             * Format: uuid
+             */
+            requested_by_id: string;
+            /** Required Tier */
+            required_tier: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /** Revoked Reason */
+            revoked_reason?: string | null;
+            /** Secondary Approved At */
+            secondary_approved_at?: string | null;
+            /** Secondary Approver Aal */
+            secondary_approver_aal?: number | null;
+            /** Secondary Approver Id */
+            secondary_approver_id?: string | null;
+            /** Sp Warning Acknowledged */
+            sp_warning_acknowledged: boolean;
+            /** Status */
+            status: string;
+            /** Target Scope */
+            target_scope: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * CustomFieldCreateRequest
+         * @description Payload to create a new admin-defined custom field.
+         */
+        CustomFieldCreateRequest: {
+            /**
+             * Credential Mode
+             * @default INVOKING_USER
+             * @enum {string}
+             */
+            credential_mode: "INVOKING_USER" | "PROJECT_ADMIN_SP" | "SERVER_ADMIN_SP";
+            /** Egress Allowlist */
+            egress_allowlist?: string[];
+            /**
+             * Is Enabled
+             * @default true
+             */
+            is_enabled: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Output Format
+             * @enum {string}
+             */
+            output_format: "text" | "number" | "badge" | "markdown_snippet" | "url" | "json_table" | "severity_pill";
+            /** Output Format Metadata */
+            output_format_metadata?: {
+                [key: string]: unknown;
+            };
+            /** Script Source */
+            script_source: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Target Scope
+             * @default PROJECT
+             * @enum {string}
+             */
+            target_scope: "PROJECT" | "WORKSPACE" | "SERVER";
+            /**
+             * Tier
+             * @default wasm
+             * @enum {string}
+             */
+            tier: "wasm" | "nsjail";
+            /** Wasm Module Sha256 */
+            wasm_module_sha256?: string | null;
+        };
+        /**
+         * CustomFieldResponse
+         * @description Public projection of a custom field definition.
+         */
+        CustomFieldResponse: {
+            /** Approval Status */
+            approval_status?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By Id
+             * Format: uuid
+             */
+            created_by_id: string;
+            /** Credential Mode */
+            credential_mode: string;
+            /** Egress Allowlist */
+            egress_allowlist: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Manifest Sha256 */
+            manifest_sha256?: string | null;
+            /** Name */
+            name: string;
+            /** Output Format */
+            output_format: string;
+            /** Output Format Metadata */
+            output_format_metadata: {
+                [key: string]: unknown;
+            };
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Required Approver Tier */
+            required_approver_tier?: string | null;
+            /** Script Source */
+            script_source?: string | null;
+            /** Script Version */
+            script_version: number;
+            /** Slug */
+            slug: string;
+            /** Target Scope */
+            target_scope: string;
+            /** Tier */
+            tier: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Wasm Module Sha256 */
+            wasm_module_sha256?: string | null;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * CustomFieldUpdateRequest
+         * @description Payload to update an existing admin-defined custom field.
+         */
+        CustomFieldUpdateRequest: {
+            /** Credential Mode */
+            credential_mode?: ("INVOKING_USER" | "PROJECT_ADMIN_SP" | "SERVER_ADMIN_SP") | null;
+            /** Egress Allowlist */
+            egress_allowlist?: string[] | null;
+            /** Is Enabled */
+            is_enabled?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Output Format */
+            output_format?: ("text" | "number" | "badge" | "markdown_snippet" | "url" | "json_table" | "severity_pill") | null;
+            /** Output Format Metadata */
+            output_format_metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Script Source */
+            script_source?: string | null;
+            /** Target Scope */
+            target_scope?: ("PROJECT" | "WORKSPACE" | "SERVER") | null;
+            /** Tier */
+            tier?: ("wasm" | "nsjail") | null;
+            /** Wasm Module Sha256 */
+            wasm_module_sha256?: string | null;
+        };
+        /**
+         * CustomFieldValueItem
+         * @description Single custom field evaluation result or cached value.
+         */
+        CustomFieldValueItem: {
+            /** Computed At */
+            computed_at?: string | null;
+            /**
+             * Credential Mode
+             * @default INVOKING_USER
+             */
+            credential_mode: string;
+            /** Field Id */
+            field_id: string;
+            /**
+             * Last Latency Ms
+             * @default 0
+             */
+            last_latency_ms: number;
+            /** Name */
+            name: string;
+            /** Output Format */
+            output_format: string;
+            /** Output Format Metadata */
+            output_format_metadata?: {
+                [key: string]: unknown;
+            };
+            /** Slug */
+            slug: string;
+            /**
+             * Status
+             * @default computed
+             */
+            status: string;
+            /**
+             * Tier
+             * @default wasm
+             */
+            tier: string;
+            /**
+             * Token Scope
+             * @default PROJECT
+             */
+            token_scope: string;
+            /** Value */
+            value?: unknown;
+        };
+        /**
+         * CycleComplete
+         * @description Payload to complete an active cycle with optional issue rollover.
+         */
+        CycleComplete: {
+            /** Rollover To Cycle Id */
+            rollover_to_cycle_id?: string | null;
+        };
+        /**
+         * CycleCompleteResponse
+         * @description Response returned upon successful cycle completion and issue rollover.
+         */
+        CycleCompleteResponse: {
+            cycle: components["schemas"]["CycleResponse"];
+            /** Rolled Over */
+            rolled_over: number;
+            /** Rollover To Cycle Id */
+            rollover_to_cycle_id?: string | null;
+        };
+        /**
+         * CycleCreate
+         * @description Payload to create a new cycle in upcoming status.
+         */
+        CycleCreate: {
+            /** End Date */
+            end_date?: string | null;
+            /** Name */
+            name: string;
+            /** Start Date */
+            start_date?: string | null;
+        };
+        /**
+         * CyclePatch
+         * @description Payload to update an existing upcoming or active cycle.
+         */
+        CyclePatch: {
+            /** End Date */
+            end_date?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+        };
+        /**
+         * CycleResponse
+         * @description Public representation of a cycle with real-time aggregate issue counts.
+         */
+        CycleResponse: {
+            /**
+             * Completed Count
+             * @default 0
+             */
+            completed_count: number;
+            /** End Date */
+            end_date?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Issue Count
+             * @default 0
+             */
+            issue_count: number;
+            /** Name */
+            name: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Start Date */
+            start_date?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "upcoming" | "active" | "completed";
+        };
+        /**
+         * CycleRolloverRequest
+         * @description Payload to rollover unfinished issues to a target cycle without completing.
+         */
+        CycleRolloverRequest: {
+            /**
+             * Target Cycle Id
+             * Format: uuid
+             */
+            target_cycle_id: string;
+        };
+        /**
+         * CycleRolloverResponse
+         * @description Response returned upon successful issue rollover.
+         */
+        CycleRolloverResponse: {
+            /** From Cycle */
+            from_cycle: string;
+            /** Moved */
+            moved: number;
+            /**
+             * Status
+             * @default rolled_over
+             */
+            status: string;
+            /** To Cycle */
+            to_cycle: string;
+        };
+        /**
+         * DestructiveExecuteIn
+         * @description Payload for Stage 2 delete execution.
+         */
+        DestructiveExecuteIn: {
+            /** Confirm Phrase */
+            confirm_phrase: string;
+            /** Confirmation Token */
+            confirmation_token: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "trash" | "permanent_purge";
+            /** Reason */
+            reason: string;
+            /** Target */
+            target: string;
+            /**
+             * Target Kind
+             * @enum {string}
+             */
+            target_kind: "issue" | "project" | "doc" | "page" | "sticky" | "cycle" | "module" | "view";
+        };
+        /**
+         * DestructiveExecuteOut
+         * @description Response returned by Stage 2 delete execution.
+         */
+        DestructiveExecuteOut: {
+            /** Blast Hash */
+            blast_hash: string;
+            /** Mode */
+            mode: string;
+            /** Reason */
+            reason: string;
+            /** Status */
+            status: string;
+            /** Target */
+            target: string;
+            /** Target Id */
+            target_id: string;
+            /** Target Kind */
+            target_kind: string;
+        };
+        /**
+         * DestructiveRequestIn
+         * @description Payload for Stage 1 delete request.
+         */
+        DestructiveRequestIn: {
+            /**
+             * Mode
+             * @default trash
+             * @enum {string}
+             */
+            mode: "trash" | "permanent_purge";
+            /** Target */
+            target: string;
+            /**
+             * Target Kind
+             * @enum {string}
+             */
+            target_kind: "issue" | "project" | "doc" | "page" | "sticky" | "cycle" | "module" | "view";
+        };
+        /**
+         * DestructiveRequestOut
+         * @description Response returned by Stage 1 delete request.
+         */
+        DestructiveRequestOut: {
+            /** Blast Hash */
+            blast_hash: string;
+            /** Blast Summary */
+            blast_summary: string;
+            /** Confirm Phrase */
+            confirm_phrase: string;
+            /** Confirmation Token */
+            confirmation_token: string;
+            /** Expires In Sec */
+            expires_in_sec: number;
+            /** Mode */
+            mode: string;
+            /** Stage */
+            stage: string;
+            /** Target */
+            target: string;
+            /** Target Id */
+            target_id: string;
+            /** Target Kind */
+            target_kind: string;
+        };
+        /**
+         * DestructiveRestoreIn
+         * @description Payload for restore operation.
+         */
+        DestructiveRestoreIn: {
+            /** Reason */
+            reason: string;
+            /** Target */
+            target: string;
+            /**
+             * Target Kind
+             * @enum {string}
+             */
+            target_kind: "issue" | "project" | "doc" | "page" | "sticky" | "cycle" | "module" | "view";
+        };
+        /**
+         * DestructiveRestoreOut
+         * @description Response returned by restore operation.
+         */
+        DestructiveRestoreOut: {
+            /** Reason */
+            reason: string;
+            /** Status */
+            status: string;
+            /** Target */
+            target: string;
+            /** Target Id */
+            target_id: string;
+            /** Target Kind */
+            target_kind: string;
+        };
+        /**
+         * DeviceActivateRequest
+         * @description Payload for RFC 8628 OAuth 2.0 device authorization activation.
+         */
+        DeviceActivateRequest: {
+            /**
+             * Allowed Projects
+             * @description Optional list of project UUIDs granted to the device session
+             */
+            allowed_projects?: string[] | null;
+            /**
+             * Approved
+             * @description Whether the authenticating user approves or denies authorization
+             */
+            approved: boolean;
+            /**
+             * Scopes
+             * @description Optional narrowed scopes granted to the device session
+             */
+            scopes?: string[] | null;
+            /**
+             * User Code
+             * @description Normalized 8-character device verification user code (e.g. WDFG-BTRJ)
+             */
+            user_code: string;
+        };
+        /**
          * DocCreate
          * @description Payload for creating a new top-level documentation entity.
          */
@@ -1519,7 +5841,151 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /**
+         * DryRunPayload
+         * @description Request payload for dry-running workflow hooks against a ticket.
+         */
+        DryRunPayload: {
+            /**
+             * From State
+             * @description Source state name, UUID, or null/'*'
+             */
+            from_state?: string | null;
+            /**
+             * Issue Key
+             * @description Existing issue key or UUID
+             */
+            issue_key?: string | null;
+            /** @description Synthetic ticket for dry-run */
+            sample_ticket?: components["schemas"]["DryRunSampleTicket"] | null;
+            /**
+             * To State
+             * @description Target state name or UUID
+             */
+            to_state: string;
+        };
+        /**
+         * DryRunResponse
+         * @description Aggregated dry-run response.
+         */
+        DryRunResponse: {
+            /** Steps */
+            steps: components["schemas"]["DryRunStepResult"][];
+            /** Would Commit */
+            would_commit: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * DryRunSampleTicket
+         * @description Sample ticket payload for dry-run simulation.
+         */
+        DryRunSampleTicket: {
+            /**
+             * Description Markdown
+             * @description Markdown ticket description
+             */
+            description_markdown: string;
+            /**
+             * Labels
+             * @description List of label names
+             */
+            labels?: string[];
+            /**
+             * Priority
+             * @description Priority slug or name
+             * @default medium
+             */
+            priority: string;
+            /**
+             * Summary
+             * @description Ticket summary
+             */
+            summary: string;
+        };
+        /**
+         * DryRunStepResult
+         * @description Result of a single hook execution in the dry-run pipeline.
+         */
+        DryRunStepResult: {
+            /** Cli Command */
+            cli_command?: string | null;
+            /**
+             * Duration Us
+             * @default 0
+             */
+            duration_us: number;
+            /** Field Updates */
+            field_updates?: {
+                [key: string]: unknown;
+            } | null;
+            /** Hook Kind */
+            hook_kind: string;
+            /** Name */
+            name: string;
+            /** Order */
+            order: number;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "allowed" | "mutated" | "rejected" | "error" | "skipped_async";
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description Link endpoint representation (unrestricted or masked restricted placeholder) */
         EndpointOut: components["schemas"]["RestrictedEndpointOut"] | components["schemas"]["UnrestrictedEndpointOut"];
+        /**
+         * FilterSpec
+         * @description Typed filter DSL for saved views and issue queries.
+         */
+        FilterSpec: {
+            /** Assignee Ids */
+            assignee_ids?: string[];
+            /** Blocked */
+            blocked?: boolean | null;
+            /** Cycle Ids */
+            cycle_ids?: string[];
+            /** Due Date From */
+            due_date_from?: string | null;
+            /** Due Date To */
+            due_date_to?: string | null;
+            gate_status?: components["schemas"]["GateStatus"] | null;
+            /** Has Free Text Assignee */
+            has_free_text_assignee?: boolean | null;
+            /**
+             * Include Archived
+             * @default false
+             */
+            include_archived: boolean;
+            /** Label Ids */
+            label_ids?: string[];
+            /** @default any */
+            label_match: components["schemas"]["LabelMatch"];
+            /** Module Ids */
+            module_ids?: string[];
+            /**
+             * Overdue Only
+             * @default false
+             */
+            overdue_only: boolean;
+            /** Parent Issue Id */
+            parent_issue_id?: string | null;
+            /** Priority Ids */
+            priority_ids?: string[];
+            /** Search Query */
+            search_query?: string | null;
+            /** Start Date From */
+            start_date_from?: string | null;
+            /** Start Date To */
+            start_date_to?: string | null;
+            /** State Groups */
+            state_groups?: string[];
+            /** State Ids */
+            state_ids?: string[];
+        };
         /**
          * FreeTextAssigneeResponse
          * @description Free-text external label assignee response model.
@@ -1548,10 +6014,153 @@ export interface components {
              */
             notify: boolean;
         };
+        /**
+         * GateStatus
+         * @description Workflow gate status filter.
+         * @enum {string}
+         */
+        GateStatus: "pending" | "approved" | "rejected";
+        /**
+         * GrantAclEntryRequest
+         * @description Schema for granting an ALLOW or DENY ACL capability entry.
+         */
+        GrantAclEntryRequest: {
+            /**
+             * Capabilities
+             * @description List of 1 to 8 capability tokens to grant or deny (e.g. READ, WRITE, ADMIN)
+             */
+            capabilities: string[];
+            /**
+             * Effect
+             * @description Access control decision effect: ALLOW to grant capabilities, DENY to explicitly override
+             * @enum {string}
+             */
+            effect: "ALLOW" | "DENY";
+            /**
+             * Object Id
+             * @description Target object UUID or canonical reference to which the ACL entry applies
+             */
+            object_id: string;
+            /**
+             * Principal Id
+             * @description Subject principal UUID (user, group, or agent) receiving the capability grant or denial
+             */
+            principal_id: string;
+        };
+        /**
+         * GroupAxis
+         * @description Allowed grouping axes for 2D board and query engine.
+         * @enum {string}
+         */
+        GroupAxis: "none" | "state" | "priority" | "assignee" | "cycle" | "module" | "label";
+        /**
+         * GroupResult
+         * @description A primary group bucket along the primary grouping axis.
+         */
+        GroupResult: {
+            /** Count */
+            count: number;
+            /** Group Key */
+            group_key: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Sub Groups */
+            sub_groups?: components["schemas"]["SubGroupResult"][];
+            wip?: components["schemas"]["WipStatus"] | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HandshakeProbeResult
+         * @description Diagnostic result of a live authentication provider handshake probe.
+         */
+        HandshakeProbeResult: {
+            /** Error Code */
+            error_code?: string | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Ok */
+            ok: boolean;
+            /** Status */
+            status: string;
+        };
+        /**
+         * IdentityLinkLdapRequest
+         * @description Request to complete LDAP identity linking with credentials.
+         */
+        IdentityLinkLdapRequest: {
+            /**
+             * Link Intent Id
+             * Format: uuid
+             * @description UUID of active link intent
+             */
+            link_intent_id: string;
+            /**
+             * Password
+             * @description LDAP directory password
+             */
+            password: string;
+            /**
+             * Username
+             * @description LDAP directory username
+             */
+            username: string;
+        };
+        /**
+         * IdentityLinkStartRequest
+         * @description Request to initiate linking an external identity provider.
+         */
+        IdentityLinkStartRequest: {
+            /**
+             * Card Slug
+             * @description Slug of authentication provider card
+             */
+            card_slug: string;
+        };
+        /**
+         * ImportDiffReport
+         * @description Forensic diff and impact report produced by Plane import dry-run or execution.
+         */
+        ImportDiffReport: {
+            /**
+             * Invalid Link Count
+             * @default 0
+             */
+            invalid_link_count: number;
+            /**
+             * Rewritten Attachments
+             * @default 0
+             */
+            rewritten_attachments: number;
+            /**
+             * Sequence High Water Mark
+             * @default 0
+             */
+            sequence_high_water_mark: number;
+            /**
+             * To Create
+             * @default 0
+             */
+            to_create: number;
+            /**
+             * To Update
+             * @default 0
+             */
+            to_update: number;
+            /**
+             * Unchanged
+             * @default 0
+             */
+            unchanged: number;
+            /** Unmapped Members */
+            unmapped_members?: string[];
+            /** Warnings */
+            warnings?: string[];
         };
         /**
          * InboundLinkOut
@@ -1621,95 +6230,451 @@ export interface components {
             workspace_name: string;
         };
         /**
+         * IssueCopyRequest
+         * @description Payload for issue copy request with interactive checkboxes.
+         */
+        IssueCopyRequest: {
+            /**
+             * Include Attachments
+             * @default false
+             */
+            include_attachments: boolean;
+            /**
+             * Include Sub Issues
+             * @default false
+             */
+            include_sub_issues: boolean;
+            /**
+             * Link As Relates To
+             * @default false
+             */
+            link_as_relates_to: boolean;
+        };
+        /**
+         * IssueCopyResponse
+         * @description Canonical response for copy issue endpoint.
+         */
+        IssueCopyResponse: {
+            /**
+             * Copied Attachments
+             * @default 0
+             */
+            copied_attachments: number;
+            /** Copied Sub Issues */
+            copied_sub_issues?: components["schemas"]["CopiedSubIssueSummary"][];
+            issue: components["schemas"]["IssueResponse"];
+            /** Link Id */
+            link_id?: string | null;
+            skipped?: components["schemas"]["IssueCopySkipped"];
+        };
+        /**
+         * IssueCopySkipped
+         * @description Summary of skipped objects during copy operation without leaking keys or titles.
+         */
+        IssueCopySkipped: {
+            /**
+             * Restricted Sub Issues
+             * @default 0
+             */
+            restricted_sub_issues: number;
+        };
+        /**
          * IssueCreate
          * @description Body of POST /api/v1/projects/{project_ref}/issues.
          */
         IssueCreate: {
-            /** Cycle Id */
+            /**
+             * Cycle Id
+             * @description Optional sprint cycle UUID
+             */
             cycle_id?: string | null;
             /**
              * Description Markdown
+             * @description Issue description body in canonical Markdown
              * @default
              */
             description_markdown: string;
-            /** Due Date */
+            /**
+             * Due Date
+             * @description Target completion due date (YYYY-MM-DD)
+             */
             due_date?: string | null;
-            /** Label Ids */
+            /**
+             * Label Ids
+             * @description List of label UUIDs to attach
+             */
             label_ids?: string[] | null;
-            /** Module Ids */
+            /**
+             * Module Ids
+             * @description List of module UUIDs to assign
+             */
             module_ids?: string[] | null;
-            /** Parent */
+            /**
+             * Parent
+             * @description Parent issue key or UUID
+             */
             parent?: string | null;
-            /** Priority */
+            /**
+             * Priority
+             * @description Priority slug or UUID identifier
+             */
             priority?: string | null;
-            /** Start Date */
+            /**
+             * Start Date
+             * @description Scheduled start date (YYYY-MM-DD)
+             */
             start_date?: string | null;
-            /** State Id */
+            /**
+             * State
+             * @description Workflow state name or UUID identifier
+             */
+            state?: string | null;
+            /**
+             * State Id
+             * @description Workflow state UUID identifier
+             */
             state_id?: string | null;
-            /** Summary */
+            /**
+             * Summary
+             * @description Issue summary title
+             */
             summary: string;
+        };
+        /**
+         * IssueDeleteResponse
+         * @description Response returned upon successful soft-delete into trash.
+         */
+        IssueDeleteResponse: {
+            /**
+             * Deleted At
+             * Format: date-time
+             */
+            deleted_at: string;
+            /** Issue Key */
+            issue_key: string;
+            /**
+             * Purge After
+             * Format: date-time
+             */
+            purge_after: string;
         };
         /**
          * IssueList
          * @description Keyset-paginated issue listing.
          */
         IssueList: {
-            /** Items */
+            /**
+             * Items
+             * @description List of issue responses matching query
+             */
             items: components["schemas"]["IssueResponse"][];
-            /** Next Cursor */
+            /**
+             * Next Cursor
+             * @description Opaque keyset cursor for fetching next page
+             */
             next_cursor?: string | null;
+        };
+        /**
+         * IssueModulesUpdate
+         * @description Request payload for setting issue module assignments.
+         */
+        IssueModulesUpdate: {
+            /** Module Ids */
+            module_ids?: string[];
+        };
+        /**
+         * IssueMoveRequest
+         * @description Request payload for moving or reordering an issue on the board.
+         */
+        IssueMoveRequest: {
+            /**
+             * After Issue
+             * @description Issue key or UUID preceding target position in column.
+             */
+            after_issue?: string | null;
+            /**
+             * Before Issue
+             * @description Issue key or UUID following target position in column.
+             */
+            before_issue?: string | null;
+            /**
+             * Override Wip
+             * @description Flag indicating administrative intent to override hard WIP limit.
+             * @default false
+             */
+            override_wip: boolean;
+            /**
+             * Target State Id
+             * @description Target workflow state UUID. If omitted or equal to current state, performs intra-column reordering.
+             */
+            target_state_id?: string | null;
+            /**
+             * Wip Override Reason
+             * @description Mandatory justification when overriding column hard WIP limit.
+             */
+            wip_override_reason?: string | null;
+        };
+        /**
+         * IssueMoveResponse
+         * @description Response payload for issue move endpoint.
+         */
+        IssueMoveResponse: {
+            /**
+             * Board Rank
+             * @description Assigned Base-62 board rank
+             */
+            board_rank: string;
+            /**
+             * Hard Limit
+             * @description Configured hard WIP limit on target state if overridden
+             */
+            hard_limit?: number | null;
+            /**
+             * Issue Key
+             * @description Human-readable issue key (e.g. KAN-142)
+             */
+            issue_key: string;
+            /**
+             * Rebalance Scheduled
+             * @description Whether a background column rebalance was enqueued (> 32 chars)
+             */
+            rebalance_scheduled: boolean;
+            /**
+             * Resulting Count
+             * @description Resulting active issue count in column if WIP limit was evaluated
+             */
+            resulting_count?: number | null;
+            /**
+             * State Id
+             * Format: uuid
+             * @description Resulting workflow state UUID
+             */
+            state_id: string;
+            /** @description Non-null if the move caused the column to exceed its soft WIP limit */
+            wip_warning?: components["schemas"]["WipWarning"] | null;
+        };
+        /**
+         * IssueOverrideCreatorRequest
+         * @description Request payload for administrative creator override endpoint.
+         */
+        IssueOverrideCreatorRequest: {
+            /**
+             * Created By
+             * @description UUID or @handle of the new creator
+             */
+            created_by: string;
+            /**
+             * Reason
+             * @description Mandatory administrative justification for override
+             */
+            reason: string;
         };
         /**
          * IssuePatch
          * @description Body of PATCH /api/v1/issues/{issue_ref} (omitted keys are unchanged).
          */
         IssuePatch: {
-            /** Cycle Id */
+            /**
+             * Cycle Id
+             * @description Updated sprint cycle UUID
+             */
             cycle_id?: string | null;
-            /** Description Markdown */
+            /**
+             * Description Markdown
+             * @description Updated issue description body in canonical Markdown
+             */
             description_markdown?: string | null;
-            /** Due Date */
+            /**
+             * Due Date
+             * @description Updated target completion due date
+             */
             due_date?: string | null;
-            /** Label Ids */
+            /**
+             * Label Ids
+             * @description Updated list of attached label UUIDs
+             */
             label_ids?: string[] | null;
-            /** Module Ids */
+            /**
+             * Module Ids
+             * @description Updated list of assigned module UUIDs
+             */
             module_ids?: string[] | null;
-            /** Parent */
+            /**
+             * Parent
+             * @description Updated parent issue key or UUID
+             */
             parent?: string | null;
-            /** Priority */
+            /**
+             * Priority
+             * @description Updated priority slug or UUID identifier
+             */
             priority?: string | null;
-            /** Start Date */
+            /**
+             * Start Date
+             * @description Updated scheduled start date
+             */
             start_date?: string | null;
-            /** State Id */
+            /**
+             * State
+             * @description Updated workflow state name or UUID identifier
+             */
+            state?: string | null;
+            /**
+             * State Id
+             * @description Updated workflow state UUID identifier
+             */
             state_id?: string | null;
-            /** Summary */
+            /**
+             * Summary
+             * @description Updated issue summary title
+             */
             summary?: string | null;
+        };
+        /**
+         * IssueProvenance
+         * @description Provenance tracking for issue creator and administrative overrides.
+         */
+        IssueProvenance: {
+            /** @description Current effective creator summary */
+            created_by: components["schemas"]["CreatorSummary"];
+            /**
+             * Creator Modified At
+             * @description ISO-8601 timestamp when override occurred
+             */
+            creator_modified_at?: string | null;
+            /** @description Admin user who performed the override */
+            creator_modified_by?: components["schemas"]["CreatorSummary"] | null;
+            /** @description Original creator at issue creation time */
+            original_created_by: components["schemas"]["CreatorSummary"];
+            /**
+             * Overridden
+             * @description Whether created_by has been overridden by an admin
+             */
+            overridden: boolean;
+            /**
+             * Reason
+             * @description Mandatory admin reason provided for the override
+             */
+            reason?: string | null;
         };
         /**
          * IssueResponse
          * @description Canonical issue representation returned by all issue endpoints.
          */
         IssueResponse: {
+            /** @description Anti-enumeration access manifest metadata (S3.4) */
             access_manifest: components["schemas"]["AccessManifest"];
-            /** Assignees */
+            /** @description Archiving eligibility status and reason */
+            archive_eligibility: components["schemas"]["ArchiveEligibility"];
+            /**
+             * Archived At
+             * @description Timestamp when the issue was archived, if archived
+             */
+            archived_at?: string | null;
+            /**
+             * Assignees
+             * @description List of principal or free-text assignees
+             */
             assignees?: (components["schemas"]["PrincipalAssigneeResponse"] | components["schemas"]["FreeTextAssigneeResponse"])[];
-            /** Board Rank */
+            /**
+             * Board Rank
+             * @description Fractional indexing board order rank
+             */
             board_rank: string;
-            /** Capabilities */
+            /**
+             * Capabilities
+             * @description Effective capabilities held by the calling principal on this issue
+             */
             capabilities: string[];
             /**
              * Created By Id
              * Format: uuid
+             * @description UUID of the principal who created this issue
              */
             created_by_id: string;
-            /** Cycle Id */
+            /**
+             * Cycle Id
+             * @description Sprint cycle UUID if assigned
+             */
             cycle_id?: string | null;
-            /** Description Markdown */
+            /**
+             * Description Markdown
+             * @description Canonical UTF-8 Markdown description body
+             */
             description_markdown: string;
-            /** Description Sha256 */
+            /**
+             * Description Sha256
+             * @description Hex-encoded SHA-256 digest of description_markdown for ETag concurrency
+             */
             description_sha256: string;
-            /** Due Date */
+            /**
+             * Due Date
+             * @description Target completion due date (YYYY-MM-DD)
+             */
             due_date?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             * @description Unique issue UUID identifier
+             */
+            id: string;
+            /**
+             * Key
+             * @description Canonical issue key (e.g. KAN-101)
+             */
+            key: string;
+            /**
+             * Labels
+             * @description List of attached project labels
+             */
+            labels?: components["schemas"]["LabelSummary"][];
+            /** @description Latest completed agent transition gate verdict, if any */
+            latest_gate_verdict?: components["schemas"]["LatestGateVerdictSummary"] | null;
+            /**
+             * Module Ids
+             * @description List of assigned module UUIDs
+             */
+            module_ids?: string[] | null;
+            /**
+             * Note
+             * @description Optional contextual note or transition reason
+             */
+            note?: string | null;
+            /**
+             * Parent
+             * @description Parent issue summary or masked restricted placeholder
+             */
+            parent?: components["schemas"]["NormalParentSummary"] | components["schemas"]["RestrictedParentSummary"] | null;
+            /** @description Active asynchronous agent gate hold metadata, if pending */
+            pending_gate?: components["schemas"]["PendingGateSummary"] | null;
+            /** @description Priority metadata */
+            priority: components["schemas"]["PrioritySummary"];
+            /** @description Creator provenance and administrative override tracking */
+            provenance: components["schemas"]["IssueProvenance"];
+            /**
+             * Start Date
+             * @description Scheduled start date (YYYY-MM-DD)
+             */
+            start_date?: string | null;
+            /** @description Workflow state metadata */
+            state: components["schemas"]["StateSummary"];
+            /**
+             * Summary
+             * @description Issue summary title
+             */
+            summary: string;
+        };
+        /**
+         * IssueSearchItem
+         * @description Single issue match returned by issues search endpoint.
+         */
+        IssueSearchItem: {
+            /** Anchor */
+            anchor?: string | null;
+            /** Assignees */
+            assignees?: string[];
+            /** Description Markdown */
+            description_markdown?: string | null;
             /**
              * Id
              * Format: uuid
@@ -1717,18 +6682,249 @@ export interface components {
             id: string;
             /** Key */
             key: string;
-            /** Labels */
-            labels?: components["schemas"]["LabelSummary"][];
-            /** Module Ids */
-            module_ids?: string[];
-            /** Parent */
-            parent?: components["schemas"]["NormalParentSummary"] | components["schemas"]["RestrictedParentSummary"] | null;
-            priority: components["schemas"]["PrioritySummary"];
-            /** Start Date */
-            start_date?: string | null;
-            state: components["schemas"]["StateSummary"];
+            /**
+             * Kind
+             * @default issue
+             * @constant
+             */
+            kind: "issue";
+            /** Match Spans */
+            match_spans?: [
+                number,
+                number
+            ][];
+            /** Priority */
+            priority?: string | null;
+            /** Project Identifier */
+            project_identifier: string;
+            /** Score */
+            score: number;
+            /** Snippet */
+            snippet: string;
+            /** State */
+            state?: string | null;
             /** Summary */
             summary: string;
+            /** Title */
+            title: string;
+            /** Workspace */
+            workspace?: string | null;
+        };
+        /**
+         * IssueSearchRequest
+         * @description Request payload for structured issue search with FilterSpec.
+         */
+        IssueSearchRequest: {
+            /** Cursor */
+            cursor?: string | null;
+            filters?: components["schemas"]["FilterSpec"] | null;
+            /**
+             * Limit
+             * @default 20
+             */
+            limit: number;
+            /**
+             * Mode
+             * @default lexical
+             * @enum {string}
+             */
+            mode: "lexical" | "hybrid";
+            /** Project */
+            project?: string | null;
+            /**
+             * Query
+             * @default
+             */
+            query: string;
+            /** Workspace */
+            workspace?: string | null;
+        };
+        /**
+         * IssueSearchResponse
+         * @description Response payload for structured issue search.
+         */
+        IssueSearchResponse: {
+            /**
+             * Executed Mode
+             * @default lexical
+             * @constant
+             */
+            executed_mode: "lexical";
+            /** Items */
+            items: components["schemas"]["IssueSearchItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total */
+            total: number;
+        };
+        /**
+         * IssueTreeChildSummary
+         * @description Summary projection of a child issue in a created tree.
+         */
+        IssueTreeChildSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Parent */
+            parent: string;
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * IssueTreeNode
+         * @description Recursive issue node schema for hierarchical tree creation.
+         */
+        IssueTreeNode: {
+            /** Assignees */
+            assignees?: string[];
+            /** Children */
+            children?: components["schemas"]["IssueTreeNode"][];
+            /** Cycle */
+            cycle?: string | null;
+            /**
+             * Description Markdown
+             * @default
+             */
+            description_markdown: string;
+            /** Due Date */
+            due_date?: string | null;
+            /** Labels */
+            labels?: (string)[];
+            /** Modules */
+            modules?: (string)[] | null;
+            /** Parent */
+            parent?: string | null;
+            /** Priority */
+            priority?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** State */
+            state?: string | null;
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * IssueTreeResponse
+         * @description Response payload returned by POST /api/v1/projects/{project_ref}/issue-trees.
+         */
+        IssueTreeResponse: {
+            /** Children */
+            children: components["schemas"]["IssueTreeChildSummary"][];
+            /** Created */
+            created: number;
+            root: components["schemas"]["IssueTreeRootSummary"];
+        };
+        /**
+         * IssueTreeRootSummary
+         * @description Summary projection of the root issue in a created tree.
+         */
+        IssueTreeRootSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Parent */
+            parent?: string | null;
+            /** Priority */
+            priority: string;
+            /** State */
+            state: string;
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * IssueUnarchiveRequest
+         * @description Optional request payload for unarchiving an issue.
+         */
+        IssueUnarchiveRequest: {
+            /**
+             * Admin Override
+             * @description Whether unarchive was invoked as an administrative override
+             * @default false
+             */
+            admin_override: boolean;
+            /**
+             * Reason
+             * @description Optional administrative unarchive justification
+             */
+            reason?: string | null;
+        };
+        /**
+         * KnowledgeSearchItem
+         * @description Single doc, page, or sticky match returned by knowledge search endpoint.
+         */
+        KnowledgeSearchItem: {
+            /** Anchor */
+            anchor?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "doc" | "page" | "sticky";
+            /** Match Spans */
+            match_spans?: [
+                number,
+                number
+            ][];
+            /** Project Identifier */
+            project_identifier?: string | null;
+            /** Score */
+            score: number;
+            /** Snippet */
+            snippet: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * KnowledgeSearchRequest
+         * @description Request payload for knowledge search across docs, pages, and stickies.
+         */
+        KnowledgeSearchRequest: {
+            /** Cursor */
+            cursor?: string | null;
+            /** Kinds */
+            kinds?: ("doc" | "page" | "sticky")[];
+            /**
+             * Limit
+             * @default 20
+             */
+            limit: number;
+            /** Project */
+            project?: string | null;
+            /** Query */
+            query: string;
+        };
+        /**
+         * KnowledgeSearchResponse
+         * @description Response payload for knowledge search.
+         */
+        KnowledgeSearchResponse: {
+            /**
+             * Executed Mode
+             * @default lexical
+             * @constant
+             */
+            executed_mode: "lexical";
+            /** Items */
+            items: components["schemas"]["KnowledgeSearchItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total */
+            total: number;
         };
         /**
          * LabelCreate
@@ -1742,6 +6938,12 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * LabelMatch
+         * @description Label matching strategy.
+         * @enum {string}
+         */
+        LabelMatch: "any" | "all";
         /**
          * LabelPatch
          * @description Payload for PATCH /api/v1/projects/{project_ref}/labels/{label_id}.
@@ -1781,15 +6983,162 @@ export interface components {
          * @description Project label metadata for issue response representation.
          */
         LabelSummary: {
-            /** Color Hex */
+            /**
+             * Color Hex
+             * @description Hexadecimal color code (e.g. #FF5733)
+             */
             color_hex: string;
             /**
              * Id
              * Format: uuid
+             * @description Label UUID
              */
             id: string;
-            /** Name */
+            /**
+             * Name
+             * @description Label text name
+             */
             name: string;
+        };
+        /**
+         * LatestGateVerdictSummary
+         * @description Latest completed agent transition gate verdict summary.
+         */
+        LatestGateVerdictSummary: {
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
+            /** Decision */
+            decision: string;
+            /** Hook Name */
+            hook_name: string;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Verdict Sha256 */
+            verdict_sha256: string;
+        };
+        /**
+         * LdapLoginRequest
+         * @description LDAP username and password login request.
+         */
+        LdapLoginRequest: {
+            /** Password */
+            password: string;
+            /** Username */
+            username: string;
+        };
+        /**
+         * LinkAuditListResponse
+         * @description Paginated list of invalid object link audit records.
+         */
+        LinkAuditListResponse: {
+            /**
+             * Has More
+             * @description Whether more records exist beyond the current page
+             * @default false
+             */
+            has_more: boolean;
+            /**
+             * Items
+             * @description List of link audit records matching filters
+             */
+            items: components["schemas"]["LinkAuditRecordResponse"][];
+            /**
+             * Next Cursor
+             * @description Keyset pagination cursor for subsequent page
+             */
+            next_cursor?: string | null;
+            /**
+             * Total
+             * @description Total unpurged count if requested
+             */
+            total?: number | null;
+        };
+        /**
+         * LinkAuditRecordResponse
+         * @description Detailed audit snapshot of a flagged invalid object link.
+         */
+        LinkAuditRecordResponse: {
+            /**
+             * Detected At
+             * Format: date-time
+             * @description Detection timestamp
+             */
+            detected_at: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description Audit record UUID
+             */
+            id: string;
+            /**
+             * Link Id
+             * Format: uuid
+             * @description Flagged object link UUID
+             */
+            link_id: string;
+            /**
+             * Link Snapshot
+             * @description Frozen snapshot of object_links row at audit time
+             */
+            link_snapshot: {
+                [key: string]: unknown;
+            };
+            /**
+             * Purged At
+             * @description Purge timestamp if purged
+             */
+            purged_at?: string | null;
+            /**
+             * Reason
+             * @description Invalidity reason code
+             */
+            reason: string;
+            /**
+             * Resolved At
+             * @description Resolution timestamp if resolved
+             */
+            resolved_at?: string | null;
+            /**
+             * Source Snapshot
+             * @description Snapshot of source object at audit time
+             */
+            source_snapshot?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Target Snapshot
+             * @description Snapshot of target object at audit time
+             */
+            target_snapshot?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Workspace Id
+             * Format: uuid
+             * @description Workspace UUID
+             */
+            workspace_id: string;
+        };
+        /**
+         * LinkAuditScanResponse
+         * @description Summary scan report of flagged invalid object links grouped by reason.
+         */
+        LinkAuditScanResponse: {
+            /**
+             * By Reason
+             * @description Counts of flagged invalid links grouped by invalidity reason
+             */
+            by_reason: {
+                [key: string]: number;
+            };
+            /**
+             * Flagged Total
+             * @description Total count of flagged invalid links
+             */
+            flagged_total: number;
         };
         /**
          * LinkCreateRequest
@@ -1806,6 +7155,38 @@ export interface components {
              * @description Target object reference (UUID, canonical key, or project identifier)
              */
             target: string;
+        };
+        /**
+         * LinkPurgeRequest
+         * @description Request payload for executing audited purge of flagged invalid object links.
+         */
+        LinkPurgeRequest: {
+            /**
+             * Audit Ids
+             * @description List of 1 to 200 audit record UUIDs to purge
+             */
+            audit_ids: string[];
+            /**
+             * Reason
+             * @description Mandatory administrative justification (10 to 500 characters)
+             */
+            reason: string;
+        };
+        /**
+         * LinkPurgeResponse
+         * @description Result of executing audited purge of flagged invalid object links.
+         */
+        LinkPurgeResponse: {
+            /**
+             * Activity Ids
+             * @description List of activity ledger UUIDs emitted for the purge
+             */
+            activity_ids: string[];
+            /**
+             * Purged Count
+             * @description Number of invalid links purged
+             */
+            purged_count: number;
         };
         /**
          * LinksListResponse
@@ -2003,6 +7384,277 @@ export interface components {
             principal_id: string;
         };
         /**
+         * MarkAllReadResponse
+         * @description Response summary for bulk mark-all-read.
+         */
+        MarkAllReadResponse: {
+            /**
+             * Marked
+             * @description Number of notifications marked as read
+             */
+            marked: number;
+        };
+        /**
+         * McpApiKeyMintRequest
+         * @description Payload for minting a surface-bound MCP API key.
+         */
+        McpApiKeyMintRequest: {
+            /** Allowed Cidrs */
+            allowed_cidrs?: string[] | null;
+            /** Allowed Project Ids */
+            allowed_project_ids?: string[] | null;
+            /** Allowed Tools */
+            allowed_tools?: string[] | null;
+            /** Allowed Workspace Ids */
+            allowed_workspace_ids?: string[] | null;
+            /**
+             * Capability Mask
+             * @default 7
+             */
+            capability_mask: number;
+            /**
+             * Confirm Unlimited
+             * @default false
+             */
+            confirm_unlimited: boolean;
+            /** Disabled Tools */
+            disabled_tools?: string[];
+            /** Expires At */
+            expires_at?: string | null;
+            /** Expires In Days */
+            expires_in_days?: number | null;
+            /**
+             * Owner Kind
+             * @default service_bot
+             * @enum {string}
+             */
+            owner_kind: "service_bot" | "personal_user";
+            /** Principal Id */
+            principal_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Scope Tier
+             * @default workspace
+             * @enum {string}
+             */
+            scope_tier: "global" | "workspace" | "project";
+            /** Scopes */
+            scopes: string[];
+            /**
+             * Surface
+             * @enum {string}
+             */
+            surface: "agent" | "docs" | "admin";
+            /**
+             * Unlimited
+             * @default false
+             */
+            unlimited: boolean;
+        };
+        /**
+         * McpApiKeyMintResponse
+         * @description Response returned exactly once when an MCP API key is minted.
+         */
+        McpApiKeyMintResponse: {
+            /** Allowed Cidrs */
+            allowed_cidrs?: string[] | null;
+            /** Allowed Project Ids */
+            allowed_project_ids?: string[] | null;
+            /** Allowed Tools */
+            allowed_tools?: string[] | null;
+            /** Allowed Workspace Ids */
+            allowed_workspace_ids?: string[] | null;
+            /**
+             * Capability Mask
+             * @default 7
+             */
+            capability_mask: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Disabled Tools */
+            disabled_tools?: string[];
+            /** Display Hint */
+            display_hint: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key Prefix */
+            key_prefix: string;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /**
+             * Owner Kind
+             * @default service_bot
+             */
+            owner_kind: string;
+            /**
+             * Principal Id
+             * Format: uuid
+             */
+            principal_id: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /**
+             * Scope Tier
+             * @default workspace
+             */
+            scope_tier: string;
+            /** Scopes */
+            scopes: string[];
+            /** Surface */
+            surface: string;
+            /** Token */
+            token: string;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
+        /**
+         * McpApiKeyResponse
+         * @description Metadata response for an existing MCP API key (without plaintext token).
+         */
+        McpApiKeyResponse: {
+            /** Allowed Cidrs */
+            allowed_cidrs?: string[] | null;
+            /** Allowed Project Ids */
+            allowed_project_ids?: string[] | null;
+            /** Allowed Tools */
+            allowed_tools?: string[] | null;
+            /** Allowed Workspace Ids */
+            allowed_workspace_ids?: string[] | null;
+            /**
+             * Capability Mask
+             * @default 7
+             */
+            capability_mask: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By Id
+             * Format: uuid
+             */
+            created_by_id: string;
+            /** Disabled Tools */
+            disabled_tools?: string[];
+            /** Display Hint */
+            display_hint: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key Prefix */
+            key_prefix: string;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /**
+             * Owner Kind
+             * @default service_bot
+             */
+            owner_kind: string;
+            /**
+             * Principal Id
+             * Format: uuid
+             */
+            principal_id: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /**
+             * Scope Tier
+             * @default workspace
+             */
+            scope_tier: string;
+            /** Scopes */
+            scopes: string[];
+            /** Surface */
+            surface: string;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
+        /**
+         * McpIntrospectRequest
+         * @description Payload for introspecting an MCP bearer token.
+         */
+        McpIntrospectRequest: {
+            /**
+             * Consume Call
+             * @default false
+             */
+            consume_call: boolean;
+            /** Surface */
+            surface?: string | null;
+            /** Token */
+            token: string;
+            /** Tool Name */
+            tool_name?: string | null;
+        };
+        /**
+         * McpIntrospectResponse
+         * @description Introspection result payload conforming to S11.1 and S14.3.
+         */
+        McpIntrospectResponse: {
+            /** Active */
+            active: boolean;
+            /** Agent Principal Id */
+            agent_principal_id?: string | null;
+            /** Allowed Cidrs */
+            allowed_cidrs?: string[] | null;
+            /** Allowed Project Ids */
+            allowed_project_ids?: string[] | null;
+            /** Allowed Projects */
+            allowed_projects?: string[] | null;
+            /** Allowed Tools */
+            allowed_tools?: string[] | null;
+            /** Allowed Workspace Ids */
+            allowed_workspace_ids?: string[] | null;
+            /** Calls Used */
+            calls_used?: number | null;
+            /** Capability Mask */
+            capability_mask?: number | null;
+            /** Disabled Tools */
+            disabled_tools?: string[] | null;
+            /** Execution Id */
+            execution_id?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Max Calls */
+            max_calls?: number | null;
+            /** Owner Kind */
+            owner_kind?: string | null;
+            /** Principal Id */
+            principal_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Scope Tier */
+            scope_tier?: string | null;
+            /** Scopes */
+            scopes?: string[] | null;
+            /** Surface */
+            surface?: string | null;
+            /** Token Kind */
+            token_kind?: string | null;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
+        /**
          * MentionSummary
          * @description Mentioned user handle and capability status.
          */
@@ -2025,22 +7677,351 @@ export interface components {
             principal_id: string;
         };
         /**
+         * MfaVerifyRequest
+         * @description Payload for verifying a TOTP or recovery second factor.
+         */
+        MfaVerifyRequest: {
+            /**
+             * Code
+             * @description 6-digit TOTP code or Crockford Base32 recovery code
+             */
+            code: string;
+            /**
+             * Method
+             * @description Verification factor method
+             * @enum {string}
+             */
+            method: "totp" | "recovery";
+        };
+        /**
+         * MintEphemeralTokenRequest
+         * @description Payload for minting a short-lived ephemeral MCP token.
+         */
+        MintEphemeralTokenRequest: {
+            /**
+             * Agent Principal Id
+             * Format: uuid
+             */
+            agent_principal_id: string;
+            /** Allowed Tools */
+            allowed_tools?: string[] | null;
+            /**
+             * Execution Id
+             * Format: uuid
+             */
+            execution_id: string;
+            /**
+             * Invoking Principal Id
+             * Format: uuid
+             */
+            invoking_principal_id: string;
+            /**
+             * Max Calls
+             * @default 25
+             */
+            max_calls: number;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Ttl Seconds
+             * @default 120
+             */
+            ttl_seconds: number;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * MintEphemeralTokenResponse
+         * @description Result returned after minting ephemeral token.
+         */
+        MintEphemeralTokenResponse: {
+            /** Allowed Tools */
+            allowed_tools: string[];
+            /** Expires At */
+            expires_at: string;
+            /** Max Calls */
+            max_calls: number;
+            /** Token */
+            token: string;
+        };
+        /**
+         * ModuleCreate
+         * @description Request payload for creating a module within a project.
+         */
+        ModuleCreate: {
+            /**
+             * Description Markdown
+             * @default
+             */
+            description_markdown: string;
+            /** Lead Principal Id */
+            lead_principal_id?: string | null;
+            /** Name */
+            name: string;
+            /** Start Date */
+            start_date?: string | null;
+            /**
+             * Status
+             * @default planned
+             * @enum {string}
+             */
+            status: "backlog" | "planned" | "in_progress" | "paused" | "completed" | "cancelled";
+            /** Target Date */
+            target_date?: string | null;
+        };
+        /**
          * ModuleDefaultsPut
          * @description Body of ``PUT /api/v1/projects/{project_ref}/module-defaults``.
          */
         ModuleDefaultsPut: {
-            /** Module Ids */
+            /**
+             * Module Ids
+             * @description List of module UUIDs automatically assigned to newly created issues
+             */
             module_ids: string[];
+        };
+        /**
+         * ModuleLeadSummary
+         * @description Lead principal summary for module representations.
+         */
+        ModuleLeadSummary: {
+            /** Display Name */
+            display_name: string;
+            /** Handle */
+            handle: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Type
+             * @default USER
+             */
+            type: string;
+        };
+        /**
+         * ModulePatch
+         * @description Request payload for partially updating a module.
+         */
+        ModulePatch: {
+            /** Description Markdown */
+            description_markdown?: string | null;
+            /** Lead Principal Id */
+            lead_principal_id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** Status */
+            status?: ("backlog" | "planned" | "in_progress" | "paused" | "completed" | "cancelled") | null;
+            /** Target Date */
+            target_date?: string | null;
+        };
+        /**
+         * ModuleResponse
+         * @description Canonical module representation returned by API.
+         */
+        ModuleResponse: {
+            /**
+             * Completed Count
+             * @default 0
+             */
+            completed_count: number;
+            /**
+             * Description Markdown
+             * @default
+             */
+            description_markdown: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Issue Count
+             * @default 0
+             */
+            issue_count: number;
+            lead?: components["schemas"]["ModuleLeadSummary"] | null;
+            /** Name */
+            name: string;
+            /** Start Date */
+            start_date?: string | null;
+            /** Status */
+            status: string;
+            /** Target Date */
+            target_date?: string | null;
+        };
+        /**
+         * NormalActorSummary
+         * @description Visible in-boundary principal metadata for activity actors.
+         */
+        NormalActorSummary: {
+            /**
+             * Display Name
+             * @description Full display name
+             */
+            display_name: string;
+            /**
+             * Handle
+             * @description User handle with @ prefix
+             */
+            handle?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             * @description Principal UUID
+             */
+            id: string;
+            /**
+             * Slug
+             * @description Agent slug identifier
+             */
+            slug?: string | null;
+            /**
+             * Type
+             * @description Principal type: USER, AGENT, or SERVICE_PRINCIPAL
+             */
+            type: string;
         };
         /**
          * NormalParentSummary
          * @description Public summary of a readable parent issue.
          */
         NormalParentSummary: {
+            /**
+             * Key
+             * @description Canonical project-qualified issue key (e.g. KAN-142)
+             */
+            key: string;
+            /**
+             * Summary
+             * @description Issue summary title
+             */
+            summary: string;
+        };
+        /**
+         * NotificationActorSummary
+         * @description Actor details or privacy-preserving redacted label.
+         */
+        NotificationActorSummary: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Handle */
+            handle?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Redacted */
+            redacted?: boolean | null;
+        };
+        /**
+         * NotificationIssueSummary
+         * @description Minimal issue metadata in a notification payload.
+         */
+        NotificationIssueSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
             /** Key */
             key: string;
             /** Summary */
             summary: string;
+        };
+        /**
+         * NotificationItem
+         * @description Individual notification representation for the notifications tray.
+         */
+        NotificationItem: {
+            actor: components["schemas"]["NotificationActorSummary"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Event Type */
+            event_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            issue: components["schemas"]["NotificationIssueSummary"];
+            /** Read At */
+            read_at?: string | null;
+        };
+        /**
+         * NotificationListResponse
+         * @description Keyset paginated notifications feed.
+         */
+        NotificationListResponse: {
+            /** Items */
+            items: components["schemas"]["NotificationItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * OAuthClientPatchRequest
+         * @description Admin patch request for client approval.
+         */
+        OAuthClientPatchRequest: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "disabled";
+        };
+        /**
+         * OAuthClientRegisterRequest
+         * @description Payload for RFC 7591 dynamic client registration.
+         */
+        OAuthClientRegisterRequest: {
+            /** Client Name */
+            client_name: string;
+            /**
+             * Client Type
+             * @default public
+             * @constant
+             */
+            client_type: "public";
+            /** Redirect Uris */
+            redirect_uris: string[];
+        };
+        /**
+         * OAuthGrantResponse
+         * @description Details of an active or revoked OAuth grant.
+         */
+        OAuthGrantResponse: {
+            /** Allowed Projects */
+            allowed_projects?: string[] | null;
+            /** Client Id */
+            client_id: string;
+            /** Client Name */
+            client_name?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /** Scopes */
+            scopes: string[];
+            /** Surface */
+            surface: string;
         };
         /**
          * OutboundLinkOut
@@ -2218,6 +8199,59 @@ export interface components {
             version_seq: number;
         };
         /**
+         * PendingGateResponse
+         * @description Response payload for an asynchronous agent transition gate hold (HTTP 202).
+         */
+        PendingGateResponse: {
+            /** Active Agent */
+            active_agent: string;
+            /**
+             * Execution Id
+             * Format: uuid
+             */
+            execution_id: string;
+            /** Harness Kind */
+            harness_kind: string;
+            /** Hook Name */
+            hook_name: string;
+            /** State */
+            state: string;
+            /**
+             * Status
+             * @default pending_agent_gate
+             */
+            status: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * PendingGateSummary
+         * @description Active asynchronous agent transition gate hold metadata.
+         */
+        PendingGateSummary: {
+            /** Agent Slug */
+            agent_slug: string;
+            /**
+             * Deadline At
+             * Format: date-time
+             */
+            deadline_at: string;
+            /**
+             * Execution Id
+             * Format: uuid
+             */
+            execution_id: string;
+            /** Harness Label */
+            harness_label: string;
+            /** Hook Name */
+            hook_name: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+        };
+        /**
          * PrincipalAssigneeResponse
          * @description Principal assignee response model.
          */
@@ -2326,20 +8360,31 @@ export interface components {
          * @description Project priority metadata for issue response representation.
          */
         PrioritySummary: {
-            /** Emoji */
+            /**
+             * Emoji
+             * @description Optional single semantic priority emoji
+             */
             emoji?: string | null;
-            /** Label */
+            /**
+             * Label
+             * @description Human-readable priority display label
+             */
             label: string;
-            /** Slug */
+            /**
+             * Slug
+             * @description Priority slug identifier (e.g. urgent, high, medium, low, none)
+             */
             slug: string;
         };
         /**
-         * ProjectCreate
-         * @description Body of ``POST /api/v1/projects``.
+         * ProjectBlueprint
+         * @description Declarative specification of a project configuration.
          */
-        ProjectCreate: {
+        ProjectBlueprint: {
             /** Auto Archive Days */
             auto_archive_days?: number | null;
+            /** Default Modules */
+            default_modules?: string[];
             /**
              * Description Markdown
              * @default
@@ -2347,6 +8392,10 @@ export interface components {
             description_markdown: string;
             /** Identifier */
             identifier: string;
+            /** Labels */
+            labels?: components["schemas"]["BlueprintLabel"][];
+            /** Modules */
+            modules?: components["schemas"]["BlueprintModule"][];
             /**
              * Modules Enabled
              * @default false
@@ -2354,15 +8403,68 @@ export interface components {
             modules_enabled: boolean;
             /** Name */
             name: string;
+            /** Priorities */
+            priorities?: components["schemas"]["BlueprintPriority"][];
+            /** State Migrations */
+            state_migrations?: {
+                [key: string]: string;
+            };
+            /** States */
+            states?: components["schemas"]["BlueprintState"][];
+            /** Wip Limits */
+            wip_limits?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+        };
+        /**
+         * ProjectCreate
+         * @description Body of ``POST /api/v1/projects``.
+         */
+        ProjectCreate: {
+            /**
+             * Auto Archive Days
+             * @description Number of days after completion before auto-archiving issues
+             */
+            auto_archive_days?: number | null;
+            /**
+             * Description Markdown
+             * @description Detailed project description in canonical Markdown
+             * @default
+             */
+            description_markdown: string;
+            /**
+             * Identifier
+             * @description Unique uppercase project identifier slug (2 to 10 chars, e.g. KAN)
+             */
+            identifier: string;
+            /**
+             * Modules Enabled
+             * @description Whether sub-project modules feature is enabled
+             * @default false
+             */
+            modules_enabled: boolean;
+            /**
+             * Name
+             * @description Human-readable project display name
+             */
+            name: string;
         };
         /**
          * ProjectList
          * @description Keyset-paginated project listing.
          */
         ProjectList: {
-            /** Items */
+            /**
+             * Items
+             * @description List of project responses matching query
+             */
             items: components["schemas"]["ProjectResponse"][];
-            /** Next Cursor */
+            /**
+             * Next Cursor
+             * @description Opaque keyset cursor for fetching the next page
+             */
             next_cursor?: string | null;
         };
         /**
@@ -2370,15 +8472,30 @@ export interface components {
          * @description Body of ``PATCH /api/v1/projects/{project_ref}`` (omitted keys are unchanged).
          */
         ProjectPatch: {
-            /** Auto Archive Days */
+            /**
+             * Auto Archive Days
+             * @description Updated auto-archive retention threshold in days
+             */
             auto_archive_days?: number | null;
-            /** Description Markdown */
+            /**
+             * Description Markdown
+             * @description Updated project description in canonical Markdown
+             */
             description_markdown?: string | null;
-            /** Identifier */
+            /**
+             * Identifier
+             * @description Immutable identifier (rejects with 422 if client attempts mutation)
+             */
             identifier?: string | null;
-            /** Modules Enabled */
+            /**
+             * Modules Enabled
+             * @description Updated modules feature enablement toggle
+             */
             modules_enabled?: boolean | null;
-            /** Name */
+            /**
+             * Name
+             * @description Updated human-readable project display name
+             */
             name?: string | null;
         };
         /**
@@ -2386,26 +8503,276 @@ export interface components {
          * @description Canonical project representation returned by every project read and write.
          */
         ProjectResponse: {
+            /** @description Anti-enumeration access manifest metadata (S3.4) */
             access_manifest: components["schemas"]["AccessManifest"];
-            /** Auto Archive Days */
+            /**
+             * Auto Archive Days
+             * @description Configured auto-archive retention threshold in days, if enabled
+             */
             auto_archive_days: number | null;
-            /** Capabilities */
+            /**
+             * Capabilities
+             * @description Effective capabilities held by the calling principal on this project
+             */
             capabilities: string[];
-            /** Default Module Ids */
+            /**
+             * Default Module Ids
+             * @description Module UUIDs assigned by default to newly created issues
+             */
             default_module_ids: string[];
-            /** Description Markdown */
+            /**
+             * Description Markdown
+             * @description Project description in canonical Markdown
+             */
             description_markdown: string;
             /**
              * Id
              * Format: uuid
+             * @description Unique project UUID identifier
              */
             id: string;
-            /** Identifier */
+            /**
+             * Identifier
+             * @description Project uppercase identifier slug (e.g. KAN)
+             */
             identifier: string;
-            /** Modules Enabled */
+            /**
+             * Modules Enabled
+             * @description Whether the modules feature is enabled
+             */
             modules_enabled: boolean;
-            /** Name */
+            /**
+             * Name
+             * @description Project human-readable display name
+             */
             name: string;
+        };
+        /**
+         * PromotedDocSummary
+         * @description Summary of the target doc for a promoted sticky note stub.
+         */
+        PromotedDocSummary: {
+            /**
+             * Canonical Key
+             * @description Target document canonical key
+             */
+            canonical_key?: string | null;
+            /**
+             * Id
+             * @description Target document UUID
+             */
+            id?: string | null;
+            /**
+             * Restricted
+             * @description True if target doc is hidden from the caller by RLS/ACLs
+             * @default false
+             */
+            restricted: boolean;
+            /**
+             * Title
+             * @description Target document title
+             */
+            title?: string | null;
+        };
+        /**
+         * ProviderConfigCreate
+         * @description Payload for creating a new AI provider configuration.
+         */
+        ProviderConfigCreate: {
+            /**
+             * Api Key
+             * @description Secret API key credential (stored using envelope encryption)
+             */
+            api_key?: string | null;
+            /**
+             * Base Url
+             * @description Optional custom HTTP base URL for provider
+             */
+            base_url?: string | null;
+            /**
+             * Display Name
+             * @description Human-readable provider display label
+             */
+            display_name: string;
+            /**
+             * Is Enabled
+             * @description Whether to immediately enable this provider
+             * @default true
+             */
+            is_enabled: boolean;
+            /**
+             * Model Allowlist
+             * @description List of authorized model names
+             */
+            model_allowlist?: string[];
+            /**
+             * Priority
+             * @description Provider fallback priority order (lower evaluates first)
+             * @default 100
+             */
+            priority: number;
+            /**
+             * Project Id
+             * @description Optional project UUID if scoping to a single project
+             */
+            project_id?: string | null;
+            /**
+             * Provider Kind
+             * @description Provider kind identifier (e.g. openai, gemini, ollama, custom)
+             */
+            provider_kind: string;
+            /**
+             * Residency Tier
+             * @description Data residency tier classification
+             * @default default
+             */
+            residency_tier: string;
+            /**
+             * Settings
+             * @description Provider-specific configuration dictionary
+             */
+            settings?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ProviderConfigPublic
+         * @description Public representation of an AI provider configuration with write-only key custody.
+         */
+        ProviderConfigPublic: {
+            /**
+             * Api Key Set
+             * @description Whether an API secret key has been configured (key itself is write-only)
+             */
+            api_key_set: boolean;
+            /**
+             * Base Url
+             * @description Optional custom HTTP base URL for provider endpoint
+             */
+            base_url?: string | null;
+            /**
+             * Display Name
+             * @description Human-readable provider display label
+             */
+            display_name: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description Unique AI provider configuration UUID
+             */
+            id: string;
+            /**
+             * Is Enabled
+             * @description Whether the provider configuration is currently enabled
+             */
+            is_enabled: boolean;
+            /**
+             * Model Allowlist
+             * @description List of model names authorized for completions on this provider
+             */
+            model_allowlist: string[];
+            /**
+             * Priority
+             * @description Provider fallback priority order (lower evaluates first)
+             */
+            priority: number;
+            /**
+             * Project Id
+             * @description Owning project UUID if scoped to a project, null for workspace
+             */
+            project_id?: string | null;
+            /**
+             * Provider Kind
+             * @description Provider kind identifier (e.g. openai, gemini, ollama, custom)
+             */
+            provider_kind: string;
+            /**
+             * Residency Tier
+             * @description Data residency classification tier (e.g. us-east, eu-central, local)
+             */
+            residency_tier: string;
+            /**
+             * Settings
+             * @description Arbitrary provider-specific configuration key-value pairs
+             */
+            settings?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ProviderConfigUpdate
+         * @description Payload for updating an existing AI provider configuration.
+         */
+        ProviderConfigUpdate: {
+            /**
+             * Api Key
+             * @description Updated secret API key (pass null to clear existing key)
+             */
+            api_key?: string | null;
+            /**
+             * Base Url
+             * @description Updated custom HTTP base URL for provider
+             */
+            base_url?: string | null;
+            /**
+             * Display Name
+             * @description Updated display label
+             */
+            display_name?: string | null;
+            /**
+             * Is Enabled
+             * @description Updated provider enablement status toggle
+             */
+            is_enabled?: boolean | null;
+            /**
+             * Model Allowlist
+             * @description Updated list of authorized model names
+             */
+            model_allowlist?: string[] | null;
+            /**
+             * Priority
+             * @description Updated fallback priority order
+             */
+            priority?: number | null;
+            /**
+             * Residency Tier
+             * @description Updated data residency tier classification
+             */
+            residency_tier?: string | null;
+            /**
+             * Settings
+             * @description Updated provider-specific configuration dictionary
+             */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * ProvisionPrincipalRequest
+         * @description Schema for provisioning a user, group, or agent principal.
+         */
+        ProvisionPrincipalRequest: {
+            /**
+             * Display Name
+             * @description Human-readable display name
+             */
+            display_name: string;
+            /**
+             * Email
+             * @description Email address associated with human user accounts
+             */
+            email?: string | null;
+            /**
+             * Handle
+             * @description Unique username or agent handle slug (required for USER and AGENT)
+             */
+            handle?: string | null;
+            /**
+             * Type
+             * @description Principal classification: USER for human accounts, GROUP for teams, AGENT for bots
+             * @enum {string}
+             */
+            type: "USER" | "GROUP" | "AGENT";
         };
         /**
          * ReactionSummary
@@ -2428,6 +8795,44 @@ export interface components {
              * @default false
              */
             reacted_by_me: boolean;
+        };
+        /**
+         * RedactedActorSummary
+         * @description Anonymized placeholder for out-of-boundary principals.
+         */
+        RedactedActorSummary: {
+            /**
+             * Label
+             * @description Redacted principal summary label
+             * @default 1 External Collaborator
+             */
+            label: string;
+            /**
+             * Redacted
+             * @description Always true for redacted principals
+             * @default true
+             * @constant
+             */
+            redacted: true;
+        };
+        /**
+         * RedactedCreatorSummary
+         * @description Redacted placeholder for principals outside the caller's visibility boundary.
+         */
+        RedactedCreatorSummary: {
+            /**
+             * Label
+             * @description Redacted label per Section 3.4
+             * @default 1 External Collaborator
+             */
+            label: string;
+            /**
+             * Redacted
+             * @description Always true for redacted placeholders
+             * @default true
+             * @constant
+             */
+            redacted: true;
         };
         /**
          * ResolvedRefResponse
@@ -2455,6 +8860,11 @@ export interface components {
              * @description Display title or name
              */
             title: string;
+            /**
+             * Workspace
+             * @description Workspace slug when resolved across or within workspace
+             */
+            workspace?: string | null;
         };
         /**
          * RestrictedEndpointOut
@@ -2483,14 +8893,169 @@ export interface components {
         RestrictedParentSummary: {
             /**
              * Label
+             * @description Masked placeholder label for parent issue outside caller visibility
              * @default 🔒 Restricted Parent Issue
              */
             label: string;
             /**
              * Restricted
+             * @description Always true for restricted parent issues
              * @default true
              */
             restricted: boolean;
+        };
+        /**
+         * RevokeAclEntryRequest
+         * @description Schema for revoking an ACL entry.
+         */
+        RevokeAclEntryRequest: {
+            /**
+             * Effect
+             * @description Effect filter matching the entry to revoke: ALLOW or DENY
+             * @enum {string}
+             */
+            effect: "ALLOW" | "DENY";
+            /**
+             * Object Id
+             * @description Target object UUID or canonical reference from which the ACL entry is revoked
+             */
+            object_id: string;
+            /**
+             * Principal Id
+             * @description Subject principal UUID whose capability entry is being removed
+             */
+            principal_id: string;
+        };
+        /**
+         * RevokeEphemeralTokenResponse
+         * @description Result returned after revoking execution tokens.
+         */
+        RevokeEphemeralTokenResponse: {
+            /** Revoked Count */
+            revoked_count: number;
+        };
+        /**
+         * RoleBindingRequest
+         * @description Schema for binding or unbinding an RBAC role.
+         */
+        RoleBindingRequest: {
+            /**
+             * Principal Id
+             * Format: uuid
+             * @description Target principal UUID receiving the role assignment
+             */
+            principal_id: string;
+            /**
+             * Role
+             * @description RBAC role name to bind (e.g. SERVER_ADMIN, WORKSPACE_ADMIN, PROJECT_ADMIN)
+             */
+            role: string;
+            /**
+             * Scope Id
+             * @description Optional scope target UUID (required when scope_type is project)
+             */
+            scope_id?: string | null;
+            /**
+             * Scope Type
+             * @description Hierarchy tier for the binding: server, workspace, or project
+             * @enum {string}
+             */
+            scope_type: "server" | "workspace" | "project";
+        };
+        /**
+         * SearchItem
+         * @description Unified search result item representing an issue, doc, page, or sticky.
+         */
+        SearchItem: {
+            /** Anchor */
+            anchor?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "issue" | "doc" | "page" | "sticky";
+            /** Match Spans */
+            match_spans?: [
+                number,
+                number
+            ][];
+            /** Project Identifier */
+            project_identifier?: string | null;
+            /** Score */
+            score: number;
+            /** Snippet */
+            snippet: string;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
+         * SearchResponse
+         * @description Response payload for multi-entity search endpoint.
+         */
+        SearchResponse: {
+            /**
+             * Executed Mode
+             * @default lexical
+             * @constant
+             */
+            executed_mode: "lexical";
+            /** Items */
+            items: components["schemas"]["SearchItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total */
+            total: number;
+        };
+        /**
+         * SetupClaimRequest
+         * @description Initial administrator provisioning request.
+         */
+        SetupClaimRequest: {
+            /**
+             * Display Name
+             * @description Display name for administrator account
+             */
+            display_name: string;
+            /**
+             * Email
+             * @description Optional administrator email (defaults to username@local.kanban)
+             */
+            email?: string | null;
+            /**
+             * Password
+             * @description Administrator password (minimum 14 characters)
+             */
+            password: string;
+            /**
+             * Token
+             * @description First-boot single-use setup claim token
+             */
+            token: string;
+            /**
+             * Username
+             * @description Lowercase administrator username
+             */
+            username: string;
+        };
+        /**
+         * SetupStatusResponse
+         * @description Status indicating whether first-boot setup has been completed.
+         */
+        SetupStatusResponse: {
+            /**
+             * Initialized
+             * @description True if initial administrator exists
+             */
+            initialized: boolean;
         };
         /**
          * SignedUrlResponse
@@ -2508,6 +9073,50 @@ export interface components {
              * @description HMAC-SHA256 signed content retrieval URL
              */
             signed_url: string;
+        };
+        /**
+         * SoftDeletedCommentSummary
+         * @description Tombstone metadata for a soft-deleted comment preventing body leakage.
+         */
+        SoftDeletedCommentSummary: {
+            /**
+             * Deleted
+             * @description Always true for deleted comments
+             * @default true
+             * @constant
+             */
+            deleted: true;
+            /**
+             * Id
+             * Format: uuid
+             * @description Comment UUID
+             */
+            id: string;
+        };
+        /**
+         * SortDir
+         * @description Sort direction.
+         * @enum {string}
+         */
+        SortDir: "asc" | "desc";
+        /**
+         * SortField
+         * @description Allowed sort fields for query engine.
+         * @enum {string}
+         */
+        SortField: "board_rank" | "sequence_id" | "created_at" | "updated_at" | "due_date" | "priority";
+        /**
+         * StandaloneBackupRequest
+         * @description Request payload for triggering an encrypted database backup.
+         */
+        StandaloneBackupRequest: {
+            /** Passphrase */
+            passphrase?: string | null;
+            /**
+             * Use Master Kek
+             * @default false
+             */
+            use_master_kek: boolean;
         };
         /**
          * StateCreate
@@ -2601,15 +9210,467 @@ export interface components {
          * @description Workflow state metadata for issue response representation.
          */
         StateSummary: {
-            /** Group */
+            /**
+             * Group
+             * @description Workflow state group: backlog, unstarted, started, completed, or cancelled
+             */
             group: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description Workflow state UUID
+             */
+            id: string;
+            /**
+             * Name
+             * @description Workflow state display name
+             */
+            name: string;
+        };
+        /**
+         * StickyColorToken
+         * @description 6-color palette tokens permitted for stickies on project and workspace surfaces.
+         * @enum {string}
+         */
+        StickyColorToken: "amber" | "mint" | "sky" | "lavender" | "coral" | "slate";
+        /**
+         * StickyCreate
+         * @description Payload for creating a project sticky note.
+         */
+        StickyCreate: {
+            /**
+             * Body Markdown
+             * @description Canonical Markdown body
+             * @default
+             */
+            body_markdown: string;
+            /**
+             * @description 6-color palette token
+             * @default amber
+             */
+            color_token: components["schemas"]["StickyColorToken"];
+            /**
+             * Sort Rank
+             * @description Optional custom sort rank
+             */
+            sort_rank?: string | null;
+        };
+        /**
+         * StickyList
+         * @description Keyset-paginated list of stickies.
+         */
+        StickyList: {
+            /**
+             * Items
+             * @description List of sticky responses
+             */
+            items: components["schemas"]["StickyResponse"][];
+            /**
+             * Next Cursor
+             * @description Opaque keyset cursor for fetching next page
+             */
+            next_cursor?: string | null;
+        };
+        /**
+         * StickyPromotePreviewResponse
+         * @description Response payload for Sticky -> Doc promotion preview.
+         */
+        StickyPromotePreviewResponse: {
+            /**
+             * Acl Preview
+             * @description Access manifest and direct ACL entries count preview
+             */
+            acl_preview: {
+                [key: string]: unknown;
+            };
+            /**
+             * Original Sha256
+             * @description SHA-256 digest of current sticky body at preview time
+             */
+            original_sha256: string;
+            /**
+             * Proposal
+             * @description Structured proposal adhering to kb-sticky-doc-proposal/v1
+             */
+            proposal: {
+                [key: string]: unknown;
+            };
+            /**
+             * Rendered Markdown
+             * @description Canonical GFM rendered representation of the proposal
+             */
+            rendered_markdown: string;
+            /**
+             * Warnings
+             * @description List of integrity or structural warnings (e.g. FENCED_BLOCK_MODIFIED)
+             */
+            warnings?: string[];
+        };
+        /**
+         * StickyPromoteRequest
+         * @description Payload for promoting a sticky note into a permanent document or page.
+         */
+        StickyPromoteRequest: {
+            /**
+             * Expected Sticky Sha256
+             * @description Optional expected sticky body SHA-256 for TOCTOU conflict prevention.
+             */
+            expected_sticky_sha256?: string | null;
+            /**
+             * Parent Doc Id
+             * @description Optional parent document to promote into as a page. Must match project scope.
+             */
+            parent_doc_id?: string | null;
+            /**
+             * Parent Page Id
+             * @description Optional parent page under parent_doc_id.
+             */
+            parent_page_id?: string | null;
+            /**
+             * Structured Body Markdown
+             * @description Optional structured or edited Markdown body confirming preview.
+             */
+            structured_body_markdown?: string | null;
+            /**
+             * Title
+             * @description Optional title for the promoted doc/page. If omitted, derived from content.
+             */
+            title?: string | null;
+        };
+        /**
+         * StickyResponse
+         * @description Full representation of a sticky note or promoted stub.
+         */
+        StickyResponse: {
+            /**
+             * Access Manifest
+             * @description Anti-enumeration access manifest metadata (S3.4)
+             */
+            access_manifest: {
+                [key: string]: unknown;
+            };
+            /**
+             * Body Markdown
+             * @description Canonical UTF-8 Markdown content
+             */
+            body_markdown: string;
+            /**
+             * Body Sha256
+             * @description Hex SHA-256 digest of body_markdown
+             */
+            body_sha256: string;
+            /**
+             * Capabilities
+             * @description Active capabilities caller holds on this sticky
+             */
+            capabilities: string[];
+            /**
+             * Color Token
+             * @description Color palette token
+             */
+            color_token: string;
+            /**
+             * Created At
+             * Format: date-time
+             * @description Creation timestamp
+             */
+            created_at: string;
+            /**
+             * Etag
+             * @description Quoted ETag header value matching body_sha256
+             */
+            etag: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description Unique sticky identifier
+             */
+            id: string;
+            /**
+             * Is Promoted Stub
+             * @description True if promoted to doc (renders compact [Open Doc] [Unarchive Copy] stub)
+             */
+            is_promoted_stub: boolean;
+            /**
+             * Project Id
+             * @description Owning project UUID, if any
+             */
+            project_id?: string | null;
+            /** @description Target document metadata or restricted summary */
+            promoted_to_doc?: components["schemas"]["PromotedDocSummary"] | null;
+            /**
+             * Promoted To Doc Id
+             * @description Target doc UUID if promoted
+             */
+            promoted_to_doc_id?: string | null;
+            /**
+             * Promotion Recommended
+             * @description Whether complexity heuristic recommends promotion to Doc
+             */
+            promotion_recommended: boolean;
+            /**
+             * Promotion Snoozed At Length
+             * @description Body length when promotion was snoozed, if snoozed
+             */
+            promotion_snoozed_at_length?: number | null;
+            /**
+             * Sort Rank
+             * @description C-collation sort rank
+             */
+            sort_rank: string;
+            /**
+             * Triggers
+             * @description Active complexity heuristic trigger names
+             */
+            triggers?: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             * @description Last update timestamp
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             * @description Owning workspace UUID
+             */
+            workspace_id: string;
+        };
+        /**
+         * StickyUpdate
+         * @description Payload for updating a sticky note.
+         */
+        StickyUpdate: {
+            /**
+             * Body Markdown
+             * @description Updated Markdown body
+             */
+            body_markdown?: string | null;
+            /** @description Updated 6-color palette token */
+            color_token?: components["schemas"]["StickyColorToken"] | null;
+            /**
+             * Sort Rank
+             * @description Updated sort rank
+             */
+            sort_rank?: string | null;
+        };
+        /**
+         * SubGroupResult
+         * @description A sub-group cell along the secondary grouping axis.
+         */
+        SubGroupResult: {
+            /** Count */
+            count: number;
+            /** Issue Ids */
+            issue_ids: string[];
+            /** Items */
+            items: string[];
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Sub Group Key */
+            sub_group_key: string;
+        };
+        /**
+         * SubscriptionPatch
+         * @description Payload for updating muted event types.
+         */
+        SubscriptionPatch: {
+            /**
+             * Muted Event Types
+             * @description Updated list of muted event types (max 7 entries, unique)
+             */
+            muted_event_types: string[];
+        };
+        /**
+         * SubscriptionPut
+         * @description Payload for idempotent issue subscription.
+         */
+        SubscriptionPut: {
+            /**
+             * Muted Event Types
+             * @description Optional initial list of muted event types
+             */
+            muted_event_types?: string[] | null;
+        };
+        /**
+         * SubscriptionResponse
+         * @description Current user subscription state for an issue.
+         */
+        SubscriptionResponse: {
+            /**
+             * Muted Event Types
+             * @description Event types muted by the user
+             */
+            muted_event_types?: string[];
+            /**
+             * Source
+             * @description Subscription source: manual, creator, assignee, mention, or null
+             */
+            source?: string | null;
+            /**
+             * Subscribed
+             * @description Whether the user is currently subscribed
+             */
+            subscribed: boolean;
+        };
+        /**
+         * SystemStatusResponse
+         * @description Runtime deployment mode, persistence indicator, and infrastructure topology.
+         */
+        SystemStatusResponse: {
+            /** Air Gap Mode */
+            air_gap_mode: boolean;
+            /**
+             * Allow Unlimited Mcp Keys
+             * @default true
+             */
+            allow_unlimited_mcp_keys: boolean;
+            /** Data Mount Fstype */
+            data_mount_fstype?: string | null;
+            /** Data Mount Point */
+            data_mount_point?: string | null;
+            /** Deployment Mode */
+            deployment_mode: string;
+            /** Is Server Admin */
+            is_server_admin: boolean;
+            /** Local Llm Endpoint Host */
+            local_llm_endpoint_host?: string | null;
+            /** Persistent Volume */
+            persistent_volume: boolean;
+            /** Tier B Sandbox Available */
+            tier_b_sandbox_available: boolean;
+        };
+        /**
+         * TimelineLink
+         * @description An active dependency link between issues in a timeline layout.
+         */
+        TimelineLink: {
+            /** Link Type */
+            link_type: string;
+            /** Source Key */
+            source_key: string;
+            /** Target Key */
+            target_key: string;
+        };
+        /**
+         * TotpConfirmRequest
+         * @description Payload for confirming a pending TOTP factor.
+         */
+        TotpConfirmRequest: {
+            /**
+             * Code
+             * @description 6-digit TOTP verification code
+             */
+            code: string;
+            /**
+             * Enrollment Id
+             * @description Optional setup enrollment session identifier for immediate AAL2 elevation
+             */
+            enrollment_id?: string | null;
+        };
+        /**
+         * TransitionRequest
+         * @description Request payload for executing an issue workflow transition.
+         */
+        TransitionRequest: {
+            /**
+             * Comment Markdown
+             * @description Optional transition comment
+             */
+            comment_markdown?: string | null;
+            /**
+             * To State
+             * @description Target workflow state name or UUID
+             */
+            to_state: string;
+        };
+        /**
+         * TransitionResponse
+         * @description Response payload for an approved workflow transition.
+         */
+        TransitionResponse: {
+            /**
+             * Execution Id
+             * Format: uuid
+             */
+            execution_id: string;
+            /** State */
+            state: string;
+            /** Status */
+            status: string;
+            /** Sync Duration Ms */
+            sync_duration_ms?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * TransitionRule
+         * @description Workflow hooks grouped by (from_state, to_state) transition.
+         */
+        TransitionRule: {
+            /** Active Hook Count */
+            active_hook_count: number;
+            /** From State */
+            from_state: string | null;
+            /** Hooks */
+            hooks: components["schemas"]["WorkflowHookResponse"][];
+            /** To State */
+            to_state: string;
+        };
+        /**
+         * TransitionTicketRequest
+         * @description Payload for transitioning issue state.
+         */
+        TransitionTicketRequest: {
+            /** Comment Markdown */
+            comment_markdown?: string | null;
+            /** To State */
+            to_state: string;
+            /** Verification Proof */
+            verification_proof?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * TrashedIssueItem
+         * @description Item representation in the project trash bin.
+         */
+        TrashedIssueItem: {
+            /** Capabilities */
+            capabilities?: string[];
+            /**
+             * Deleted At
+             * Format: date-time
+             */
+            deleted_at: string;
             /**
              * Id
              * Format: uuid
              */
             id: string;
-            /** Name */
-            name: string;
+            /** Key */
+            key: string;
+            priority?: components["schemas"]["PrioritySummary"] | null;
+            /**
+             * Purge After
+             * Format: date-time
+             */
+            purge_after: string;
+            state?: components["schemas"]["StateSummary"] | null;
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * TrashedIssueList
+         * @description Keyset-paginated listing of trashed issues.
+         */
+        TrashedIssueList: {
+            /** Items */
+            items: components["schemas"]["TrashedIssueItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /**
          * UnrestrictedEndpointOut
@@ -2638,6 +9699,22 @@ export interface components {
              */
             type: string;
         };
+        /**
+         * UpdatePrincipalRequest
+         * @description Schema for updating principal status or display name.
+         */
+        UpdatePrincipalRequest: {
+            /**
+             * Display Name
+             * @description Updated human-readable display name
+             */
+            display_name?: string | null;
+            /**
+             * Status
+             * @description Target operational status: active for normal access, deactivated for soft hold, disabled
+             */
+            status?: ("active" | "deactivated" | "disabled") | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -2651,6 +9728,483 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * ViewCreate
+         * @description Payload for creating a new saved view.
+         */
+        ViewCreate: {
+            /**
+             * Description Markdown
+             * @description Detailed Markdown description of the view
+             * @default
+             */
+            description_markdown: string;
+            /** @description Hierarchical issue filtering criteria */
+            filters?: components["schemas"]["FilterSpec"];
+            /** @description Group axis: none, state, priority, assignee, cycle, module, or label */
+            group_by?: components["schemas"]["GroupAxis"] | null;
+            /**
+             * Is Shared
+             * @description Whether view is shared across workspace or private to creator
+             * @default false
+             */
+            is_shared: boolean;
+            /**
+             * @description View layout mode: board, list, table, calendar, or timeline
+             * @default board
+             */
+            layout: components["schemas"]["ViewLayout"];
+            /**
+             * Name
+             * @description Saved view display name
+             */
+            name: string;
+            /** @description Secondary sub-grouping axis for 2D matrix rendering */
+            sub_group_by?: components["schemas"]["GroupAxis"] | null;
+            /**
+             * Visibility
+             * @description Explicit visibility classification token
+             */
+            visibility?: string | null;
+            /**
+             * Wip Limits Override
+             * @description Custom work-in-progress (WIP) soft/hard limits per bucket
+             */
+            wip_limits_override?: {
+                [key: string]: components["schemas"]["WipLimit"] | {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        /**
+         * ViewLayout
+         * @description Supported view layout formats.
+         * @enum {string}
+         */
+        ViewLayout: "board" | "list" | "table" | "calendar" | "timeline";
+        /**
+         * ViewList
+         * @description List of saved views for a project.
+         */
+        ViewList: {
+            /**
+             * Items
+             * @description List of saved view definitions
+             */
+            items: components["schemas"]["ViewResponse"][];
+        };
+        /**
+         * ViewOwnerSummary
+         * @description Owner summary for view serialization.
+         */
+        ViewOwnerSummary: {
+            /** Display Name */
+            display_name: string;
+            /** Handle */
+            handle?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+        };
+        /**
+         * ViewPatch
+         * @description Payload for updating an existing saved view.
+         */
+        ViewPatch: {
+            /**
+             * Description Markdown
+             * @description Updated Markdown description
+             */
+            description_markdown?: string | null;
+            /** @description Updated issue filtering criteria */
+            filters?: components["schemas"]["FilterSpec"] | null;
+            /** @description Updated primary grouping axis */
+            group_by?: components["schemas"]["GroupAxis"] | null;
+            /**
+             * Is Shared
+             * @description Updated view sharing toggle
+             */
+            is_shared?: boolean | null;
+            /** @description Updated layout mode: board, list, table, calendar, or timeline */
+            layout?: components["schemas"]["ViewLayout"] | null;
+            /**
+             * Name
+             * @description Updated view display name
+             */
+            name?: string | null;
+            /** @description Updated secondary grouping axis */
+            sub_group_by?: components["schemas"]["GroupAxis"] | null;
+            /**
+             * Visibility
+             * @description Updated visibility classification token
+             */
+            visibility?: string | null;
+            /**
+             * Wip Limits Override
+             * @description Updated custom WIP limits dictionary
+             */
+            wip_limits_override?: {
+                [key: string]: components["schemas"]["WipLimit"] | {
+                    [key: string]: unknown;
+                };
+            } | null;
+        };
+        /**
+         * ViewQueryResponse
+         * @description Complete query response including items, 2D swimlanes, and timeline links.
+         */
+        ViewQueryResponse: {
+            /** Groups */
+            groups?: components["schemas"]["GroupResult"][];
+            /** Items */
+            items: components["schemas"]["IssueResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Timeline Links */
+            timeline_links?: components["schemas"]["TimelineLink"][];
+            /** Total Matching */
+            total_matching: number;
+        };
+        /**
+         * ViewResponse
+         * @description Canonical representation of a saved view.
+         */
+        ViewResponse: {
+            /** @description Anti-enumeration access manifest metadata (S3.4) */
+            access_manifest: components["schemas"]["AccessManifest"];
+            /**
+             * Capabilities
+             * @description Effective capabilities held by the calling principal on this view
+             */
+            capabilities: string[];
+            /**
+             * Description Markdown
+             * @description Markdown description of the view
+             */
+            description_markdown: string;
+            /** @description Configured issue filtering criteria */
+            filters: components["schemas"]["FilterSpec"];
+            /**
+             * Group By
+             * @description Primary grouping axis slug
+             */
+            group_by: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description Unique saved view UUID identifier
+             */
+            id: string;
+            /**
+             * Is Shared
+             * @description Whether the view is shared with workspace collaborators
+             */
+            is_shared: boolean;
+            /** @description View layout mode format */
+            layout: components["schemas"]["ViewLayout"];
+            /**
+             * Name
+             * @description Saved view display name
+             */
+            name: string;
+            /** @description View owner principal summary */
+            owner: components["schemas"]["ViewOwnerSummary"];
+            /**
+             * Project Id
+             * @description Owning project UUID, or null for workspace-level views
+             */
+            project_id: string | null;
+            /**
+             * Sub Group By
+             * @description Secondary sub-grouping axis slug
+             */
+            sub_group_by: string;
+            /**
+             * Visibility
+             * @description Visibility classification string
+             */
+            visibility: string;
+            /**
+             * Wip Limits Override
+             * @description Active WIP limits overrides
+             */
+            wip_limits_override: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * WasmModuleResponse
+         * @description Projection of an approved WebAssembly module.
+         */
+        WasmModuleResponse: {
+            /** Name */
+            name: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /**
+         * WasmModuleUploadRequest
+         * @description Payload to upload and validate a WebAssembly module.
+         */
+        WasmModuleUploadRequest: {
+            /** Name */
+            name: string;
+            /**
+             * Wasm Base64
+             * @description Base64-encoded WebAssembly binary (max 1 MiB binary)
+             */
+            wasm_base64: string;
+        };
+        /**
+         * WipLimit
+         * @description Soft and hard WIP limits for a group bucket.
+         */
+        WipLimit: {
+            /** Hard */
+            hard?: number | null;
+            /** Soft */
+            soft?: number | null;
+        };
+        /**
+         * WipStatus
+         * @description WIP evaluation result for a group bucket.
+         */
+        WipStatus: {
+            /** Exceeded */
+            exceeded?: string | null;
+            /** Hard */
+            hard?: number | null;
+            /** Soft */
+            soft?: number | null;
+        };
+        /**
+         * WipWarning
+         * @description Soft WIP limit exceeded advisory warning.
+         */
+        WipWarning: {
+            /**
+             * Resulting Count
+             * @description Resulting active issue count in column
+             */
+            resulting_count: number;
+            /**
+             * Soft Limit
+             * @description Configured soft WIP limit on target state
+             */
+            soft_limit: number;
+        };
+        /**
+         * WorkflowHookCreateRequest
+         * @description Payload for creating/attaching a workflow hook.
+         */
+        WorkflowHookCreateRequest: {
+            /**
+             * Agent
+             * @description Agent definition UUID or slug (required for agent_interceptor)
+             */
+            agent?: string | null;
+            /**
+             * Allowed Mutable Fields
+             * @description List of fields this mutator is permitted to modify
+             */
+            allowed_mutable_fields?: string[];
+            /**
+             * Description
+             * @description Optional description of the hook's purpose
+             */
+            description?: string | null;
+            /**
+             * Failure Policy
+             * @description Failure policy: fail_closed or fail_open_warn
+             * @default fail_closed
+             * @enum {string}
+             */
+            failure_policy: "fail_closed" | "fail_open_warn";
+            /**
+             * From State
+             * @description Source state name, UUID, or null/'*' for wildcard
+             */
+            from_state?: string | null;
+            /**
+             * Hook Kind
+             * @description Hook kind: sync_validator, sync_mutator, or agent_interceptor
+             * @enum {string}
+             */
+            hook_kind: "sync_validator" | "sync_mutator" | "agent_interceptor";
+            /**
+             * Name
+             * @description Unique hook name
+             */
+            name: string;
+            /**
+             * Timeout Ms
+             * @description Optional timeout in milliseconds
+             */
+            timeout_ms?: number | null;
+            /**
+             * To State
+             * @description Target state name or UUID
+             */
+            to_state: string;
+            /**
+             * Wasm Module Sha256
+             * @description 32-byte hex SHA-256 of approved WASM module (required for sync hooks)
+             */
+            wasm_module_sha256?: string | null;
+        };
+        /**
+         * WorkflowHookReorderRequest
+         * @description Payload for atomically reordering hooks for a transition.
+         */
+        WorkflowHookReorderRequest: {
+            /**
+             * Ordered Hook Ids
+             * @description Exact list of all hook IDs for this transition in desired execution order
+             */
+            ordered_hook_ids: string[];
+            /**
+             * Transition
+             * @description Transition specification: {'from_state': ..., 'to_state': ...}
+             */
+            transition: {
+                [key: string]: string | null;
+            };
+        };
+        /**
+         * WorkflowHookResponse
+         * @description Serialized workflow hook representation.
+         */
+        WorkflowHookResponse: {
+            /** Agent Display Name */
+            agent_display_name?: string | null;
+            /** Agent Slug */
+            agent_slug?: string | null;
+            /** Allowed Mutable Fields */
+            allowed_mutable_fields: string[];
+            /** Cli Args */
+            cli_args?: string[] | null;
+            /** Cli Binary Allowlist Id */
+            cli_binary_allowlist_id?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Failure Policy */
+            failure_policy: string;
+            /** From State */
+            from_state: string | null;
+            /** Harness Kind */
+            harness_kind?: string | null;
+            /** Hook Kind */
+            hook_kind: string;
+            /** Id */
+            id: string;
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /** Mcp Access Summary */
+            mcp_access_summary?: string | null;
+            /** Model Id */
+            model_id?: string | null;
+            /** Name */
+            name: string;
+            /** Provider Kind */
+            provider_kind?: string | null;
+            /** Repo Access Mode */
+            repo_access_mode?: string | null;
+            /** Repo Binding Slug */
+            repo_binding_slug?: string | null;
+            /** Sort Rank */
+            sort_rank: string;
+            /** Target Latency Budget */
+            target_latency_budget?: string | null;
+            /** Timeout Ms */
+            timeout_ms?: number | null;
+            /** To State */
+            to_state: string;
+            /** Wasm Module Name */
+            wasm_module_name?: string | null;
+            /** Wasm Module Sha256 */
+            wasm_module_sha256?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * WorkflowHookUpdateRequest
+         * @description Payload for updating an existing workflow hook.
+         */
+        WorkflowHookUpdateRequest: {
+            /** Agent */
+            agent?: string | null;
+            /** Allowed Mutable Fields */
+            allowed_mutable_fields?: string[] | null;
+            /** Description */
+            description?: string | null;
+            /** Failure Policy */
+            failure_policy?: ("fail_closed" | "fail_open_warn") | null;
+            /** Name */
+            name?: string | null;
+            /** Timeout Ms */
+            timeout_ms?: number | null;
+            /** Wasm Module Sha256 */
+            wasm_module_sha256?: string | null;
+        };
+        /**
+         * WorkspaceSettingsResponse
+         * @description Schema representing current workspace settings.
+         */
+        WorkspaceSettingsResponse: {
+            /** Air Gap Mode */
+            air_gap_mode: boolean;
+            /**
+             * Default Project Visibility
+             * @enum {string}
+             */
+            default_project_visibility: "private" | "workspace";
+            /** Display Name */
+            display_name: string;
+            /** Mcp Key Max Ttl Days */
+            mcp_key_max_ttl_days: number;
+            /** Session Absolute Timeout Min */
+            session_absolute_timeout_min: number;
+            /** Session Idle Timeout Min */
+            session_idle_timeout_min: number;
+            /** Trash Retention Days */
+            trash_retention_days: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * WorkspaceSettingsUpdate
+         * @description Schema for updating workspace settings fields.
+         */
+        WorkspaceSettingsUpdate: {
+            /** Air Gap Mode */
+            air_gap_mode?: boolean | null;
+            /** Default Project Visibility */
+            default_project_visibility?: ("private" | "workspace") | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Mcp Key Max Ttl Days */
+            mcp_key_max_ttl_days?: number | null;
+            /** Session Absolute Timeout Min */
+            session_absolute_timeout_min?: number | null;
+            /** Session Idle Timeout Min */
+            session_idle_timeout_min?: number | null;
+            /** Trash Retention Days */
+            trash_retention_days?: number | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -2660,6 +10214,1688 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    oauth_as_metadata__well_known_oauth_authorization_server_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    grant_acl_entry_endpoint_api_v1_admin_acl_entries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantAclEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_acl_entry_endpoint_api_v1_admin_acl_entries_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeAclEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inspect_manifest_endpoint_api_v1_admin_acl_entries__object_id__manifest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessManifest"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_agent_definitions_api_v1_admin_agent_definitions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDefinitionResponse"][];
+                };
+            };
+        };
+    };
+    admin_create_agent_definition_api_v1_admin_agent_definitions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentDefinitionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_get_agent_definition_api_v1_admin_agent_definitions__agent__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_agent_definition_api_v1_admin_agent_definitions__agent__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_patch_agent_definition_api_v1_admin_agent_definitions__agent__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentDefinitionPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_budgets_api_v1_admin_ai_budgets_get: {
+        parameters: {
+            query: {
+                provider_config_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_budget_api_v1_admin_ai_budgets_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_providers_api_v1_admin_ai_providers_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_provider_api_v1_admin_ai_providers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderConfigCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_provider_api_v1_admin_ai_providers__provider_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_provider_api_v1_admin_ai_providers__provider_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_provider_api_v1_admin_ai_providers__provider_id__disable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_admin_cards_api_v1_admin_auth_cards_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthCardAdminListResponse"];
+                };
+            };
+        };
+    };
+    create_admin_card_api_v1_admin_auth_cards_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthCardCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthCardAdmin"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ldap_test_connection_api_v1_admin_auth_cards__card_id__ldap_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_admin_card_api_v1_admin_auth_cards__card_ref__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthCardAdmin"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_admin_card_api_v1_admin_auth_cards__card_ref__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthCardDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_admin_card_api_v1_admin_auth_cards__card_ref__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthCardUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthCardAdmin"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_admin_card_api_v1_admin_auth_cards__card_ref__disable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthCardAdmin"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enable_admin_card_api_v1_admin_auth_cards__card_ref__enable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthCardAdmin"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_admin_card_api_v1_admin_auth_cards__card_ref__reorder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthCardReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthCardAdmin"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_card_handshake_api_v1_admin_auth_cards__card_ref__test_handshake_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandshakeProbeResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_destructive_execute_api_v1_admin_destructive_execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DestructiveExecuteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestructiveExecuteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_destructive_request_api_v1_admin_destructive_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DestructiveRequestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestructiveRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_destructive_restore_api_v1_admin_destructive_restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DestructiveRestoreIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestructiveRestoreOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_group_member_endpoint_api_v1_admin_groups__group_id__members__principal_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+                principal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_group_member_endpoint_api_v1_admin_groups__group_id__members__principal_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+                principal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_plane_bundle_api_v1_admin_imports_plane_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPlaneImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDiffReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_keys_api_v1_admin_mcp_keys_get: {
+        parameters: {
+            query?: {
+                /** @description Optional surface filter */
+                surface?: string | null;
+                /** @description Optional scope tier filter */
+                scope_tier?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpApiKeyResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mint_key_api_v1_admin_mcp_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpApiKeyMintRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpApiKeyMintResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_key_api_v1_admin_mcp_keys__key_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_patch_oauth_client_api_v1_admin_oauth_clients__client_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthClientPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_revoke_oauth_grant_api_v1_admin_oauth_grants__grant_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_object_link_audits_api_v1_admin_object_links_audits_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by invalidity reason code */
+                reason_code?: string | null;
+                /** @description Filter by audit status ('unpurged', 'purged', 'resolved', 'all') */
+                status?: string;
+                /** @description Page limit (1..100) */
+                limit?: number;
+                /** @description Keyset pagination cursor */
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkAuditListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_audit_object_links_api_v1_admin_object_links_audit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkAuditScanResponse"];
+                };
+            };
+        };
+    };
+    post_purge_object_links_api_v1_admin_object_links_purge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkPurgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkPurgeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_principals_endpoint_api_v1_admin_principals_get: {
+        parameters: {
+            query?: {
+                /** @description USER, GROUP, AGENT, or SERVICE_PRINCIPAL */
+                filter?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    provision_principal_endpoint_api_v1_admin_principals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisionPrincipalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_principal_endpoint_api_v1_admin_principals__principal_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                principal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_principal_endpoint_api_v1_admin_principals__principal_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                principal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePrincipalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_project_blueprint_api_v1_admin_projects_blueprint_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlueprintApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlueprintApplyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_project_blueprint_api_v1_admin_projects_blueprint_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlueprintPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlueprintPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_blueprint_api_v1_admin_projects__project_ref__blueprint_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBlueprint"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bind_role_endpoint_api_v1_admin_role_bindings_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unbind_role_endpoint_api_v1_admin_role_bindings_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_standalone_backup_api_v1_admin_standalone_backup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandaloneBackupRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description AAL2 or SERVER_ADMIN required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not in standalone deployment mode */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid passphrase (< 16 characters) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_compose_export_endpoint_api_v1_admin_standalone_compose_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComposeExportResponse"];
+                };
+            };
+        };
+    };
+    get_workspace_settings_api_v1_admin_workspace_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceSettingsResponse"];
+                };
+            };
+        };
+    };
+    update_workspace_settings_api_v1_admin_workspace_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_agent_definition_api_v1_agent_definitions__agent__get: {
         parameters: {
             query?: never;
@@ -2824,6 +12060,248 @@ export interface operations {
             };
         };
     };
+    list_public_cards_api_v1_auth_cards_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthCardPublicListResponse"];
+                };
+            };
+        };
+    };
+    ldap_card_login_alias_api_v1_auth_cards__slug__ldap_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LdapLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_card_login_api_v1_auth_cards__slug__start_get: {
+        parameters: {
+            query?: {
+                next?: string | null;
+                return_to?: string | null;
+                link_intent_id?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_identities_api_v1_auth_identities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    link_ldap_identity_api_v1_auth_identities_link_ldap_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityLinkLdapRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_identity_link_api_v1_auth_identities_link_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityLinkStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_identity_api_v1_auth_identities__identity_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ldap_login_api_v1_auth_ldap__slug__login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LdapLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     local_login_api_v1_auth_local_login_post: {
         parameters: {
             query?: never;
@@ -2873,6 +12351,201 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_current_principal_api_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    regenerate_recovery_codes_api_v1_auth_mfa_recovery_regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    delete_totp_api_v1_auth_mfa_totp_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    confirm_totp_api_v1_auth_mfa_totp_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TotpConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enroll_totp_api_v1_auth_mfa_totp_enroll_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    verify_mfa_api_v1_auth_mfa_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_user_oauth_grants_api_v1_auth_oauth_grants_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthGrantResponse"][];
+                };
+            };
+        };
+    };
+    revoke_user_oauth_grant_api_v1_auth_oauth_grants__grant_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2949,6 +12622,137 @@ export interface operations {
         };
     };
     get_session_info_api_v1_auth_session_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    authenticate_options_api_v1_auth_webauthn_authenticate_options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    authenticate_verify_api_v1_auth_webauthn_authenticate_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_credentials_api_v1_auth_webauthn_credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    delete_credential_api_v1_auth_webauthn_credentials__credential_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_options_api_v1_auth_webauthn_register_options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    register_verify_api_v1_auth_webauthn_register_verify_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3084,6 +12888,429 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_escalation_api_v1_custom_field_approvals__approval_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomFieldApprovalApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldApprovalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_approval_request_api_v1_custom_fields__field_id__approval_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                field_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomFieldApprovalRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldApprovalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_approvals_api_v1_custom_fields__field_id__approvals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                field_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldApprovalResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cycle_api_v1_cycles__cycle_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cycle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_cycle_api_v1_cycles__cycle_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cycle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_cycle_api_v1_cycles__cycle_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cycle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CyclePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_cycle_api_v1_cycles__cycle_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cycle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_burndown_api_v1_cycles__cycle_id__burndown_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cycle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BurndownResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_cycle_api_v1_cycles__cycle_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cycle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CycleComplete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleCompleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_issue_to_cycle_api_v1_cycles__cycle_id__issues__issue_ref__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cycle_id: string;
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_issue_from_cycle_api_v1_cycles__cycle_id__issues__issue_ref__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cycle_id: string;
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rollover_cycle_api_v1_cycles__cycle_id__rollover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cycle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CycleRolloverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleRolloverResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_cycle_api_v1_cycles__cycle_id__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cycle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -3351,9 +13578,109 @@ export interface operations {
             };
         };
     };
-    get_issue_api_v1_issues__issue_key__get: {
+    mint_token_endpoint_api_v1_internal_v1_mcp_ephemeral_tokens_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MintEphemeralTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MintEphemeralTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_tokens_endpoint_api_v1_internal_v1_mcp_ephemeral_tokens_by_execution__execution_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeEphemeralTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    introspect_token_api_v1_internal_v1_mcp_introspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpIntrospectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpIntrospectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_issue_api_v1_issues__issue_key__get: {
+        parameters: {
+            query?: {
+                /** @description Optional workspace slug or UUID */
+                workspace?: string | null;
+            };
             header?: {
                 "if-none-match"?: string | null;
             };
@@ -3400,6 +13727,334 @@ export interface operations {
                 "application/json": components["schemas"]["IssuePatch"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_begin_work_api_v1_issues__issue_key__begin_work_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                issue_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BeginWorkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_complete_work_api_v1_issues__issue_key__complete_work_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                issue_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteWorkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_custom_fields_for_issue_api_v1_issues__issue_key__custom_fields_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldValueItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_custom_field_for_issue_api_v1_issues__issue_key__custom_fields__field_id__execute_post: {
+        parameters: {
+            query?: {
+                force_refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                issue_key: string;
+                field_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldValueItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_transition_ticket_api_v1_issues__issue_key__transition_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                issue_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransitionTicketRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_issue_transition_api_v1_issues__issue_key__transitions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                issue_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransitionResponse"];
+                };
+            };
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingGateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_issue_api_v1_issues__issue_ref__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Kb-Blast-Hash"?: string | null;
+            };
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueDeleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_issue_activity_api_v1_issues__issue_ref__activity_get: {
+        parameters: {
+            query?: {
+                /** @description Tab filter: all, comments, history, gates */
+                tab?: components["schemas"]["ActivityTab"];
+                /** @description Order by timestamp: desc or asc */
+                order?: components["schemas"]["ActivityOrder"];
+                /** @description Items per page (1..100) */
+                limit?: number;
+                /** @description Opaque HMAC keyset cursor */
+                cursor?: string | null;
+                /** @description Include cryptographic row/prev hashes */
+                include_hashes?: boolean;
+            };
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityFeedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_issue_api_v1_issues__issue_ref__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -3555,6 +14210,373 @@ export interface operations {
             };
         };
     };
+    copy_issue_endpoint_api_v1_issues__issue_ref__copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueCopyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueCopyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_issue_created_by_api_v1_issues__issue_ref__created_by_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueOverrideCreatorRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_preview_api_v1_issues__issue_ref__delete_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastRadiusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_issue_modules_api_v1_issues__issue_ref__modules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueModulesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueModulesUpdate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_issue_move_api_v1_issues__issue_ref__move_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueMoveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_issue_api_v1_issues__issue_ref__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_subscription_api_v1_issues__issue_ref__subscription_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    subscribe_issue_api_v1_issues__issue_ref__subscription_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionPut"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_issue_api_v1_issues__issue_ref__subscription_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_subscription_api_v1_issues__issue_ref__subscription_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unarchive_issue_api_v1_issues__issue_ref__unarchive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["IssueUnarchiveRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_object_link_endpoint_api_v1_links__link_id__delete: {
         parameters: {
             query?: never;
@@ -3591,6 +14613,311 @@ export interface operations {
                 u: string;
                 /** @description HMAC-SHA256 signature for media URL */
                 sig: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_module_api_v1_modules__module_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModuleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_module_api_v1_modules__module_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_module_api_v1_modules__module_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModulePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModuleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_issue_to_module_api_v1_modules__module_id__issues__issue_ref__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_issue_from_module_api_v1_modules__module_id__issues__issue_ref__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+                issue_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_notifications_api_v1_notifications_get: {
+        parameters: {
+            query?: {
+                /** @description Filter for unread notifications only */
+                unread?: boolean;
+                /** @description Keyset pagination cursor */
+                cursor?: string | null;
+                /** @description Page limit (1..100) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_all_read_api_v1_notifications_read_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkAllReadResponse"];
+                };
+            };
+        };
+    };
+    mark_notification_read_api_v1_notifications__notification_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_device_api_v1_oauth_device_activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceActivateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_device_info_api_v1_oauth_device_info_get: {
+        parameters: {
+            query: {
+                /** @description User code in format XXXX-XXXX */
+                user_code: string;
             };
             header?: never;
             path?: never;
@@ -4146,6 +15473,48 @@ export interface operations {
             };
         };
     };
+    list_project_activity_api_v1_projects__project_ref__activity_get: {
+        parameters: {
+            query?: {
+                /** @description Tab filter: all, comments, history, gates */
+                tab?: components["schemas"]["ActivityTab"];
+                /** @description Order by timestamp: desc or asc */
+                order?: components["schemas"]["ActivityOrder"];
+                /** @description Items per page (1..100) */
+                limit?: number;
+                /** @description Opaque HMAC keyset cursor */
+                cursor?: string | null;
+                /** @description Include cryptographic row/prev hashes */
+                include_hashes?: boolean;
+            };
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityFeedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_assignee_suggestions_api_v1_projects__project_ref__assignee_suggestions_get: {
         parameters: {
             query: {
@@ -4213,11 +15582,148 @@ export interface operations {
             };
         };
     };
+    list_cycles_api_v1_projects__project_ref__cycles_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by cycle status: upcoming, active, completed */
+                status?: string | null;
+            };
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_cycle_api_v1_projects__project_ref__cycles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CycleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_docs_tree_api_v1_projects__project_ref__docs_tree_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageTreeNode"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_issue_tree_api_v1_projects__project_ref__issue_trees_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueTreeNode"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueTreeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_issues_api_v1_projects__project_ref__issues_get: {
         parameters: {
             query?: {
                 cursor?: string | null;
                 limit?: number;
+                include_archived?: boolean;
+                only_archived?: boolean;
             };
             header?: never;
             path: {
@@ -4269,6 +15775,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssueResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    query_project_issues_adhoc_api_v1_projects__project_ref__issues_query_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdHocQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewQueryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4436,6 +15977,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_modules_api_v1_projects__project_ref__modules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModuleResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_module_api_v1_projects__project_ref__modules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModuleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModuleResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4717,6 +16324,477 @@ export interface operations {
             };
         };
     };
+    list_project_stickies_api_v1_projects__project_ref__stickies_get: {
+        parameters: {
+            query?: {
+                include_promoted?: boolean;
+            };
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StickyResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_sticky_api_v1_projects__project_ref__stickies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StickyCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StickyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_trash_api_v1_projects__project_ref__trash_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashedIssueList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_project_views_api_v1_projects__project_ref__views_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_view_api_v1_projects__project_ref__views_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ViewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_custom_fields_api_v1_projects__project__custom_fields_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_custom_field_api_v1_projects__project__custom_fields_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomFieldCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_custom_field_api_v1_projects__project__custom_fields__field_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                field_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_custom_field_api_v1_projects__project__custom_fields__field_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                field_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomFieldUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_wasm_module_api_v1_projects__project__wasm_modules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WasmModuleUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WasmModuleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_workflow_hooks_api_v1_projects__project__workflow_hooks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransitionRule"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_workflow_hook_api_v1_projects__project__workflow_hooks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowHookCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowHookResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dry_run_workflow_hooks_api_v1_projects__project__workflow_hooks_dry_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DryRunPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DryRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_workflow_hooks_api_v1_projects__project__workflow_hooks_reorder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowHookReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowHookResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     resolve_entity_api_v1_resolve_get: {
         parameters: {
             query: {
@@ -4726,6 +16804,8 @@ export interface operations {
                 ref: string;
                 /** @description Project key context required for project-scoped kinds */
                 project?: string | null;
+                /** @description Workspace slug or UUID filter to constrain resolution scope */
+                workspace?: string | null;
             };
             header?: never;
             path?: never;
@@ -4740,6 +16820,809 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResolvedRefResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_unified_api_v1_search_get: {
+        parameters: {
+            query?: {
+                /** @description Search query string */
+                q?: string;
+                /** @description Comma-separated entity kinds (issue,doc,page,sticky) */
+                kinds?: string | null;
+                /** @description Project identifier or UUID scope filter */
+                project?: string | null;
+                /** @description Page size (1..50) */
+                limit?: number;
+                /** @description Opaque HMAC-signed keyset pagination cursor */
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_issues_api_v1_search_issues_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_knowledge_api_v1_search_knowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_setup_api_v1_setup_claim_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_setup_status_api_v1_setup_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatusResponse"];
+                };
+            };
+        };
+    };
+    list_workspace_stickies_api_v1_stickies_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StickyList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sticky_api_v1_stickies__sticky_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-none-match"?: string | null;
+            };
+            path: {
+                sticky_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StickyResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_sticky_api_v1_stickies__sticky_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sticky_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_sticky_api_v1_stickies__sticky_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                sticky_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StickyUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StickyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_sticky_promotion_api_v1_stickies__sticky_id__promote_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sticky_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StickyPromotePreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    promote_sticky_to_doc_api_v1_stickies__sticky_id__promote_to_doc_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sticky_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StickyPromoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StickyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    snooze_sticky_promotion_api_v1_stickies__sticky_id__snooze_promotion_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sticky_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StickyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unarchive_sticky_copy_api_v1_stickies__sticky_id__unarchive_copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sticky_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StickyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_system_status_endpoint_api_v1_system_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemStatusResponse"];
+                };
+            };
+        };
+    };
+    cancel_transition_api_v1_transitions__execution_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelTransitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_view_api_v1_views__view_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_view_api_v1_views__view_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_view_api_v1_views__view_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ViewPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    query_view_issues_get_api_v1_views__view_id__issues_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewQueryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    query_view_issues_post_api_v1_views__view_id__issues_post: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewQueryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    query_view_issues_post_api_v1_views__view_id__query_post: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewQueryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_workflow_hook_api_v1_workflow_hooks__hook_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hook_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_workflow_hook_api_v1_workflow_hooks__hook_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hook_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowHookUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowHookResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_workflow_hook_api_v1_workflow_hooks__hook_id__disable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hook_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowHookResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enable_workflow_hook_api_v1_workflow_hooks__hook_id__enable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hook_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowHookResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4815,6 +17698,274 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mint_token_endpoint_internal_v1_mcp_ephemeral_tokens_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MintEphemeralTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MintEphemeralTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_tokens_endpoint_internal_v1_mcp_ephemeral_tokens_by_execution__execution_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeEphemeralTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    introspect_token_internal_v1_mcp_introspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpIntrospectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpIntrospectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    oauth_authorize_oauth_authorize_get: {
+        parameters: {
+            query: {
+                response_type: string;
+                client_id: string;
+                redirect_uri: string;
+                code_challenge: string;
+                code_challenge_method: string;
+                state: string;
+                resource: string;
+                scope?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    oauth_authorize_decision_oauth_authorize_decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    oauth_device_authorize_oauth_device_authorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    oauth_jwks_oauth_jwks_json_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    oauth_register_client_oauth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthClientRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    oauth_revoke_endpoint_oauth_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    oauth_token_endpoint_oauth_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

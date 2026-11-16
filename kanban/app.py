@@ -6,6 +6,7 @@ pre-compressed single page application static assets, and security middleware.
 
 from __future__ import annotations
 
+import importlib
 import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
@@ -55,6 +56,9 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncEngine
     from starlette.responses import Response
+    from starlette.types import ASGIApp, Receive, Scope, Send
+
+    from mcp.settings import McpSettings
 
 
 def _bootstrap_runtime_state(app: FastAPI) -> AsyncEngine | None:
@@ -139,7 +143,52 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await owned_engine.dispose()
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def _mount_mcp_surfaces(app: FastAPI, mcp_settings: McpSettings | None = None) -> None:
+    """Mount live MCP surfaces and RFC 9728 protected-resource metadata endpoints."""
+    mcp_app = getattr(app.state, "mcp_app", None)
+    if mcp_app is None:
+        try:
+            mcp_app_mod = importlib.import_module("mcp.app")
+            mcp_settings_mod = importlib.import_module("mcp.settings")
+            create_mcp_app = mcp_app_mod.create_mcp_app
+            mcp_settings_cls = mcp_settings_mod.McpSettings
+
+            active_settings = (
+                mcp_settings
+                if mcp_settings is not None
+                else mcp_settings_cls(mode="standalone_inprocess", auth_enabled=True)
+            )
+            mcp_app = create_mcp_app(active_settings, kanban_app=app)
+            app.state.mcp_app = mcp_app
+        except Exception:
+            logger.debug("Automatic live MCP application mounting skipped", exc_info=True)
+            return
+
+    class _McpProxyApp:
+        """ASGI proxy forwarding requests to the live MCP Starlette application."""
+
+        def __init__(self, owner_app: FastAPI, default_target: ASGIApp) -> None:
+            self._owner_app = owner_app
+            self._default_target = default_target
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            target = getattr(self._owner_app.state, "mcp_app", None) or self._default_target
+            if scope["type"] == "http":
+                scope_copy = dict(scope)
+                scope_copy["root_path"] = ""
+                await target(scope_copy, receive, send)
+            else:
+                await target(scope, receive, send)
+
+    proxy = _McpProxyApp(app, mcp_app)
+    app.mount("/.well-known/oauth-protected-resource/mcp", proxy)
+    app.mount("/mcp", proxy)
+
+
+def create_app(
+    settings: Settings | None = None,
+    mcp_settings: McpSettings | None = None,
+) -> FastAPI:
     """Create and configure the canonical Kanban ASGI FastAPI application."""
     if settings is None:
         settings = Settings()
@@ -218,23 +267,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def sse_endpoint(request: Request) -> Response:
         return await handle_sse_endpoint(request)
 
-    # MCP placeholders (/mcp/agent, /mcp/docs, /mcp/admin and subpaths): 501 Not Implemented
-    @app.api_route(
-        "/mcp/{surface:path}",
-        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
-        include_in_schema=False,
-    )
-    async def mcp_placeholder(surface: str) -> JSONResponse:
-        del surface
-        return JSONResponse(
-            status_code=501,
-            content={
-                "type": "about:blank",
-                "title": "Not Implemented",
-                "status": 501,
-            },
-            media_type="application/problem+json",
-        )
+    # Mount live MCP surfaces and RFC 9728 metadata endpoints
+    _mount_mcp_surfaces(app, mcp_settings)
 
     # SPA Static assets mounted at root
     app.mount("/", PrecompressedSPAStaticApp(dist_dir=settings.web_dist))

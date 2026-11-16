@@ -53,3 +53,30 @@ def test_export_openapi_cli_to_file(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert target_file.exists()
     content = target_file.read_text(encoding="utf-8")
     assert '"/api/v1/issues/{issue_key}"' in content
+
+
+def test_export_openapi_issue_and_activity_response_schemas() -> None:
+    """Verify IssueResponse and ActivityItemResponse schemas contain documented properties."""
+    raw = export_openapi()
+    data: dict[str, Any] = json.loads(raw)
+    schemas: dict[str, Any] = data["components"]["schemas"]
+
+    assert "IssueResponse" in schemas
+    issue_schema = schemas["IssueResponse"]
+    assert (
+        issue_schema.get("description")
+        == "Canonical issue representation returned by all issue endpoints."
+    )
+    assert "properties" in issue_schema
+    assert len(issue_schema["properties"]) >= 20
+    assert "id" in issue_schema["properties"]
+    assert "key" in issue_schema["properties"]
+
+    assert "ActivityItemResponse" in schemas
+    activity_schema = schemas["ActivityItemResponse"]
+    assert (
+        activity_schema.get("description")
+        == "A single activity feed item with actor and comment hydration."
+    )
+    assert "properties" in activity_schema
+    assert len(activity_schema["properties"]) >= 8

@@ -156,10 +156,14 @@ def assert_runtime_argv(
         val = defn.get("cli_binary_allowlist_id")
         binary_id = val if isinstance(val, str) else None
         raw_args = defn.get("cli_args_json")
+        if raw_args is None:
+            raw_args = defn.get("cli_args")
     else:
         val = getattr(defn, "cli_binary_allowlist_id", None)
         binary_id = val if isinstance(val, str) else None
         raw_args = getattr(defn, "cli_args_json", None)
+        if raw_args is None:
+            raw_args = getattr(defn, "cli_args", None)
 
     if binary_id is None:
         msg = "Agent definition has no CLI binary allowlist identifier configured"

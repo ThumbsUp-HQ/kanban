@@ -69,7 +69,10 @@ from kanban.api.v1.system_status import (
     admin_standalone_router,
     system_router,
 )
+from kanban.api.v1.transitions import router as transitions_router
 from kanban.api.v1.views import router as views_router
+from kanban.api.v1.workflow_hooks import router as workflow_hooks_router
+from kanban.api.v1.workspaces import router as workspaces_router
 
 
 def build_v1_router() -> APIRouter:  # noqa: PLR0915
@@ -84,6 +87,8 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(issues_router)
     v1.include_router(issue_trees_router)
     v1.include_router(issue_workflow_router)
+    v1.include_router(transitions_router)
+    v1.include_router(workflow_hooks_router)
     v1.include_router(issue_copy_router)
     v1.include_router(assignees_router)
     v1.include_router(links_router)
@@ -129,6 +134,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(notifications_router)
     v1.include_router(search_router)
     v1.include_router(custom_field_approvals_router)
+    v1.include_router(workspaces_router)
     v1.include_router(system_router)
     v1.include_router(admin_standalone_router)
     return v1

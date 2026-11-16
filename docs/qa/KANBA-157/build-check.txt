@@ -1,0 +1,40 @@
+=== RUFF CHECK ===
+All checks passed!
+EXIT_CODE=0
+
+=== RUFF FORMAT CHECK ===
+9 files already formatted
+EXIT_CODE=0
+
+=== MYPY STRICT CHECK ===
+Success: no issues found in 94 source files
+EXIT_CODE=0
+
+=== IMPORT LINTER ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 809 files, 2697 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT (44 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+EXIT_CODE=0
+
+=== ZERO SHELL AUDIT (shell=True & /bin/sh) ===
+NO shell=True FOUND (PASS)
+NO /bin/sh FOUND (PASS)

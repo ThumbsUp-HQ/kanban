@@ -67,18 +67,22 @@ export function McpConfigSnippetModal({
       2,
     );
   } else if (activeTab === 'antigravity') {
-    snippet = JSON.stringify(
+    const agyJson = JSON.stringify(
       {
         mcpServers: {
           kanban: {
-            command: 'agy',
-            args: ['mcp', 'connect', '--url', endpointUrl, '--token', effectiveKey],
+            serverUrl: endpointUrl,
+            headers: {
+              Authorization: `Bearer ${effectiveKey}`,
+            },
           },
         },
       },
       null,
       2,
     );
+    const agyCmd = `agy mcp add --header "Authorization: Bearer ${effectiveKey}" kanban ${endpointUrl}`;
+    snippet = `${agyJson}\n\n# Or add via agy CLI:\n${agyCmd}`;
   } else {
     snippet = JSON.stringify(
       {

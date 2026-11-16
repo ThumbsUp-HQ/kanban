@@ -13,15 +13,15 @@
             "inherited_scope": {
               "kind": "project",
               "scope_label": "Project: KAN",
-              "workspace_id": "01a1d7d6-5602-7674-aa89-bc5d45fc0b7d",
+              "workspace_id": "01a1e4d8-d599-72d8-b410-282c7d5d1bca",
               "workspace_name": "Platform Engineering",
-              "project_id": "01a1d7d6-560b-775c-a659-2275375602b2",
+              "project_id": "01a1e4d8-d5b2-73db-90c4-5086aed0bf7c",
               "project_key": "KAN",
               "project_name": "Kanban"
             },
             "users": [
               {
-                "principal_id": "01a1d7d6-5602-7721-ad2c-2463845a04e9",
+                "principal_id": "01a1e4d8-d59b-70e4-999a-0267360b3eba",
                 "handle": "@admin_user",
                 "display_name": "Admin User",
                 "capabilities": [
@@ -37,7 +37,7 @@
                 "grant_source": "project_owner"
               },
               {
-                "principal_id": "01a1d7d6-5603-754d-a767-af3aa431d93c",
+                "principal_id": "01a1e4d8-d5a2-7b80-bd44-e8c69cd43271",
                 "handle": "@viewer_user",
                 "display_name": "Viewer User",
                 "capabilities": [
@@ -50,7 +50,7 @@
                 "grant_source": "project_role"
               },
               {
-                "principal_id": "01a1d7d6-5606-7979-b20b-28ff414106e6",
+                "principal_id": "01a1e4d8-d5a8-7f9e-97c5-b07d541c05e7",
                 "handle": "@guest_ext",
                 "display_name": "Guest Partner",
                 "capabilities": [
@@ -59,7 +59,7 @@
                 "grant_source": "direct_share"
               },
               {
-                "principal_id": "01a1d7d6-5609-722e-9380-7603b66c0c8f",
+                "principal_id": "01a1e4d8-d5ac-795e-82a7-d1f28747ce1b",
                 "handle": "@core_member",
                 "display_name": "Core Member",
                 "capabilities": [
@@ -74,7 +74,7 @@
             ],
             "groups": [
               {
-                "principal_id": "01a1d7d6-5607-7666-91f5-1b29784d287e",
+                "principal_id": "01a1e4d8-d5ab-798c-a278-3dac33bfbee2",
                 "name": "Core Platform Team",
                 "member_count": 1,
                 "external_source": "LDAP",
@@ -87,7 +87,7 @@
             ],
             "agents": [
               {
-                "principal_id": "01a1d7d6-5607-72f8-bf21-ee7c196a19e9",
+                "principal_id": "01a1e4d8-d5aa-78b1-8b4c-ee52d8a613a6",
                 "display_name": "Codebot (openai/gpt-4o)",
                 "principal_type": "AGENT",
                 "provider_badge": "openai/gpt-4o",
@@ -100,7 +100,7 @@
             ],
             "deny_overrides": [
               {
-                "principal_id": "01a1d7d6-5608-7b84-824a-90f5ca75a8c4",
+                "principal_id": "01a1e4d8-d5ac-7ef5-b5a5-2440fba140ec",
                 "principal_type": "GROUP",
                 "display_name": "Third-Party Contractors",
                 "redacted": false,
@@ -115,7 +115,16 @@
                 "label": "1 External Collaborator"
               }
             ],
-            "redacted_count": 1
+            "redacted_count": 1,
+            "caller_capabilities": [
+              "VIEW",
+              "COMMENT",
+              "EDIT",
+              "TRANSITION",
+              "LINK"
+            ],
+            "canonical_key": "KAN-1",
+            "object_type": "issue"
           }
         },
         "404_NOT_FOUND": {
@@ -126,7 +135,7 @@
             "title": "Not Found",
             "status": 404,
             "code": "NOT_FOUND",
-            "request_id": "69e9f447c3714b1785f471b6f6664c98"
+            "request_id": "1ea3cde6a9014e769df26228b18724d8"
           }
         }
       }
@@ -142,7 +151,7 @@
             "title": "Insufficient Capability",
             "status": 403,
             "code": "INSUFFICIENT_CAPABILITY",
-            "request_id": "213c7d9aefac4a9d87314f8009621a1d"
+            "request_id": "034ec68c84de43a6a3f087202710bea2"
           }
         }
       }

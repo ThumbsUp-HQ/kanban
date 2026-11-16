@@ -1,0 +1,86 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
+INFO  [alembic.runtime.migration] Running upgrade p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
+INFO  [alembic.runtime.migration] Running upgrade p1_02_objects_spine -> p1_03_principals, Principals, users, groups, and cycle-safe principal_group_closure.
+INFO  [alembic.runtime.migration] Running upgrade p1_03_principals -> p1_04_projects, Projects, workflow_states, project_priorities, and project_labels.
+INFO  [alembic.runtime.migration] Running upgrade p1_04_projects -> p1_11_object_links, Object links, link_kind enum, and link_type_matrix allowlist.
+INFO  [alembic.runtime.migration] Running upgrade p1_11_object_links -> p1_10_views, Views table, view_layout enum, and filter/WIP JSON validators.
+INFO  [alembic.runtime.migration] Running upgrade p1_10_views -> p1_05_issues, Issues table, atomic sequence allocation, and build_markdown_tsvector.
+INFO  [alembic.runtime.migration] Running upgrade p1_05_issues -> p1_12_activity_ledger, Partitioned SHA-256 hash-chained activity_records, append_activity & verify_activity_chain.
+INFO  [alembic.runtime.migration] Running upgrade p1_12_activity_ledger -> p1_13_access_control, Role bindings, resource ACL entries, and effective_resource_access.
+INFO  [alembic.runtime.migration] Running upgrade p1_13_access_control -> p1_08_planning_joins, Cycles, modules, assignees, labels, and subscriptions join tables.
+INFO  [alembic.runtime.migration] Running upgrade p1_08_planning_joins -> p1_06_parent_dag, Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry.
+INFO  [alembic.runtime.migration] Running upgrade p1_06_parent_dag -> p1_09_prose_tables, Prose tables: issue_comments, docs, pages, page_versions, and stickies.
+INFO  [alembic.runtime.migration] Running upgrade p1_09_prose_tables -> p1_07_creator_provenance, Created-by provenance trigger with admin-only override and CREATOR_OVERRIDDEN ledger entry.
+INFO  [alembic.runtime.migration] Running upgrade p1_07_creator_provenance -> p1_14_force_rls, FORCE ROW LEVEL SECURITY policies, session context helpers, and schema-wide RLS catalog gate.
+INFO  [alembic.runtime.migration] Running upgrade p1_14_force_rls -> p1_15_link_auditor, audit_object_links() 6-reason detector, invalid_object_link_audits & incremental triggers.
+INFO  [alembic.runtime.migration] Running upgrade p1_15_link_auditor -> p1_16_link_purger, purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger.
+INFO  [alembic.runtime.migration] Running upgrade p1_16_link_purger -> p1_18_outbox, Transactional outbox_events, OutboxRelay (SKIP LOCKED) and RealtimeBroker.
+INFO  [alembic.runtime.migration] Running upgrade p1_18_outbox -> p5_06_object_embeddings, object_embeddings (pgvector HNSW + FORCE RLS).
+INFO  [alembic.runtime.migration] Running upgrade p5_06_object_embeddings -> p2_03_auth_provider_cards, auth_provider_cards DDL, kb_auth data boundary and envelope encryption (KB-P2-03).
+INFO  [alembic.runtime.migration] Running upgrade p2_03_auth_provider_cards -> p2_18_rate_limit_buckets, Rate limit buckets (PG-backed + Valkey-backed sliding window).
+INFO  [alembic.runtime.migration] Running upgrade p2_18_rate_limit_buckets -> p2_02_sessions, Server-side sessions, HMAC-signed __Host- cookies, rotation, timeouts and CSRF (KB-P2-02).
+INFO  [alembic.runtime.migration] Running upgrade p2_02_sessions -> p5_16_agent_definitions, agent_definitions registry (KB-P5-16).
+INFO  [alembic.runtime.migration] Running upgrade p5_16_agent_definitions -> p3_01b_workflow_state_wip_limits, Workflow states WIP limits (KB-P3-01b).
+INFO  [alembic.runtime.migration] Running upgrade p3_01b_workflow_state_wip_limits -> p2_15_attachments, attachments (FORCE RLS, metadata guards, content-addressed storage keys).
+INFO  [alembic.runtime.migration] Running upgrade p2_15_attachments -> p2_04_local_admin_credentials, Local Admin credentials and kb_auth functions (KB-P2-04).
+INFO  [alembic.runtime.migration] Running upgrade p2_04_local_admin_credentials -> p2_06_oidc_auth_requests, OIDC and OAuth2 authentication requests and state tracking (KB-P2-06).
+INFO  [alembic.runtime.migration] Running upgrade p2_06_oidc_auth_requests -> p3_05_comment_threads_reactions, Threaded comments, reactions, permalinks and access-checked mentions (KB-P3-05).
+INFO  [alembic.runtime.migration] Running upgrade p3_05_comment_threads_reactions -> p2_05a_mfa_totp_recovery, RFC 6238 TOTP, recovery codes, and kb_auth functions (KB-P2-05a).
+INFO  [alembic.runtime.migration] Running upgrade p2_05a_mfa_totp_recovery -> p3_10b_modules, Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
+INFO  [alembic.runtime.migration] Running upgrade p3_10b_modules -> p3_04_creator_override_reason, Add reason and old/new creator IDs to CREATOR_OVERRIDDEN activity payload (KB-P3-04).
+INFO  [alembic.runtime.migration] Running upgrade p3_04_creator_override_reason -> p4_02a_mcp_api_keys, Scoped kb_* API keys, surface binding, scopes & token introspection (KB-P4-02a).
+INFO  [alembic.runtime.migration] Running upgrade p4_02a_mcp_api_keys -> p2_07_ldap_group_mappings, LDAP group mappings table with FORCE RLS (KB-P2-07).
+INFO  [alembic.runtime.migration] Running upgrade p2_07_ldap_group_mappings -> p3_06_notifications, Issue subscriptions, auto-subscribe rules, per-event mute & notifications (KB-P3-06).
+INFO  [alembic.runtime.migration] Running upgrade p3_06_notifications -> p2_05b_webauthn_credentials, WebAuthn and Passkeys registration, assertion, credentials, and challenges (KB-P2-05b).
+INFO  [alembic.runtime.migration] Running upgrade p2_05b_webauthn_credentials -> p3_08_issue_copy, Make a copy issue subtree collector function (KB-P3-08).
+INFO  [alembic.runtime.migration] Running upgrade p3_08_issue_copy -> p3_09b_issue_delete_blast_radius, Security Definer helpers for issue blast radius calculation.
+INFO  [alembic.runtime.migration] Running upgrade p3_09b_issue_delete_blast_radius -> p5_11_custom_fields, Custom field definitions, Admin-only RBAC/RLS WITH CHECK gate & 7-format schema (KB-P5-11).
+INFO  [alembic.runtime.migration] Running upgrade p5_11_custom_fields -> p2_09_lockout_prevented, Add LOCKOUT_PREVENTED 3-layer safeguards and emergency unlock (KB-P2-09).
+INFO  [alembic.runtime.migration] Running upgrade p2_09_lockout_prevented -> p2_12_setup_claim_tokens, First-boot setup claim tokens and kb_auth functions (KB-P2-12).
+INFO  [alembic.runtime.migration] Running upgrade p2_12_setup_claim_tokens -> p3_17_search_indexes, Add search_tsv generated columns and GIN indexes for search (KB-P3-17).
+INFO  [alembic.runtime.migration] Running upgrade p3_17_search_indexes -> p4_02b_oauth_clients_codes, OAuth 2.1 authorization server, clients, codes, grants & tokens (KB-P4-02b).
+INFO  [alembic.runtime.migration] Running upgrade p4_02b_oauth_clients_codes -> p2_08_user_identities, Identity linking without email auto-merge: user_identities and identity_link_intents (KB-P2-08).
+INFO  [alembic.runtime.migration] Running upgrade p2_08_user_identities -> p2_10_auth_card_admin_ops, Auth card admin ops and public enabled projection (KB-P2-10).
+INFO  [alembic.runtime.migration] Running upgrade p2_10_auth_card_admin_ops -> p5_12_custom_field_approvals, Cryptographic manifest_sha256 escalation approvals (KB-P5-12, S13.2, S4.2, S3.2).
+INFO  [alembic.runtime.migration] Running upgrade p5_12_custom_field_approvals -> p6_01_import_entity_mappings, Lossless Plane importer entity mappings table (KB-P6-01, S1.3, S15.5).
+INFO  [alembic.runtime.migration] Running upgrade p6_01_import_entity_mappings -> p4_13_mcp_ephemeral_tokens, Ephemeral kb_agt_eph_* read-only MCP tokens (KB-P4-13).
+INFO  [alembic.runtime.migration] Running upgrade p4_13_mcp_ephemeral_tokens -> p4_09a_workspace_settings, DDL workspace_settings table, FORCE RLS, defaults & triggers (KB-P4-09a).
+INFO  [alembic.runtime.migration] Running upgrade p4_09a_workspace_settings -> p5_05a_ai_providers_and_ledgers, ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
+INFO  [alembic.runtime.migration] Running upgrade p5_05a_ai_providers_and_ledgers -> p4_16_oauth_device_codes, RFC 8628 Headless CLI Device Authorization Codes (KB-P4-16).
+INFO  [alembic.runtime.migration] Running upgrade p4_16_oauth_device_codes -> p4_12_destructive_tokens, Destructive confirmation tokens table (KB-P4-12, S11.4, S7.2, S12.3).
+INFO  [alembic.runtime.migration] Running upgrade p4_12_destructive_tokens -> p5_13_approved_wasm_modules, approved_wasm_modules table for sandboxed custom fields and sync hooks (KB-P5-13).
+INFO  [alembic.runtime.migration] Running upgrade p5_13_approved_wasm_modules -> p5_22a_remote_runners, remote_runners and enrollment tokens registry (KB-P5-22a, S14.2, S11.4).
+INFO  [alembic.runtime.migration] Running upgrade p5_22a_remote_runners -> p6_02_mcp_read_taint, MCP session and credential read-taint table (KB-P4-07, S3.5, S11.2).
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p5-157-f642f4c8/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p5-157-f642f4c8
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 21 items
+
+tests/security/test_stride_cli_pipe_injection.py::test_stride_row3_banned_flags_and_codex_read_only_enforced PASSED [  4%]
+tests/security/test_stride_cli_pipe_injection.py::test_stride_row3_zero_shell_execve_argv_and_delimiter_isolation PASSED [  9%]
+tests/security/test_stride_cli_pipe_injection.py::test_stride_row3_nsjail_mount_config_and_secret_whiteouts PASSED [ 14%]
+tests/security/test_stride_hostile_media.py::test_stride_row2_hostile_svg_sanitization_and_dag_bomb PASSED [ 19%]
+tests/security/test_stride_hostile_media.py::test_stride_row2_svg_download_headers_and_csp PASSED [ 23%]
+tests/security/test_stride_hostile_media.py::test_stride_row2_media_proxy_ssrf_and_airgap PASSED [ 28%]
+tests/security/test_stride_hostile_media.py::test_stride_row2_decompression_pixel_bomb PASSED [ 33%]
+tests/security/test_stride_prompt_injection.py::test_stride_row1_ingestion_pruner_hidden_dom_and_unicode_tags PASSED [ 38%]
+tests/security/test_stride_prompt_injection.py::test_stride_row1_prose_entities_ingestion_hygiene PASSED [ 42%]
+tests/security/test_stride_prompt_injection.py::test_stride_row1_mcp_read_taint_high_water_mark_cross_project PASSED [ 47%]
+tests/security/test_stride_prompt_injection.py::test_stride_row1_outbound_scrubber_redaction PASSED [ 52%]
+tests/security/test_stride_rls_and_invariants.py::test_stride_catalog_and_role_rls_invariants PASSED [ 57%]
+tests/security/test_stride_rls_and_invariants.py::test_stride_unset_context_zero_rows_across_all_tenant_tables PASSED [ 61%]
+tests/security/test_stride_rls_and_invariants.py::test_stride_zero_stored_html_and_ast_columns PASSED [ 66%]
+tests/security/test_stride_rls_and_invariants.py::test_stride_mcp_zero_database_imports_boundary PASSED [ 71%]
+tests/security/test_stride_rls_and_invariants.py::test_stride_anti_enumeration_byte_identical_404 PASSED [ 76%]
+tests/security/test_stride_standalone_misconfig.py::test_stride_row4_dockerfile_zero_hardcoded_secrets PASSED [ 80%]
+tests/security/test_stride_standalone_misconfig.py::test_stride_row4_standalone_keyring_permissions_and_parsing PASSED [ 85%]
+tests/security/test_stride_standalone_misconfig.py::test_stride_row4_fresh_db_zero_default_users_and_setup_token_hygiene PASSED [ 90%]
+tests/security/test_stride_standalone_misconfig.py::test_stride_row4_unix_socket_pg_and_setpriv_privilege_drop PASSED [ 95%]
+tests/security/test_stride_standalone_misconfig.py::test_stride_row4_tier_b_nsjail_fail_closed_standalone PASSED [100%]
+
+============================== 21 passed in 3.11s ==============================

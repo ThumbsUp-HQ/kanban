@@ -16,6 +16,7 @@ export interface SystemStatus {
   readonly air_gap_mode: boolean;
   readonly local_llm_endpoint_host: string | null;
   readonly is_server_admin?: boolean;
+  readonly allow_unlimited_mcp_keys?: boolean;
   readonly data_mount_point?: string | null;
   readonly data_mount_fstype?: string | null;
   readonly tier_b_sandbox_available?: boolean;

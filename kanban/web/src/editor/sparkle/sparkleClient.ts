@@ -5,6 +5,7 @@
  */
 
 import type { SparkleDoneStatus } from './sparkleMachine';
+import { safeRandomUUID } from '../../utils/uuid';
 
 export type EditorSurfaceKind =
   | 'summary'
@@ -106,13 +107,10 @@ export function parseSseEvents(
  * Generates a standard client request ID UUIDv4.
  */
 export function generateClientRequestId(): string {
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
-    return crypto.randomUUID();
+  if (typeof crypto === 'undefined') {
+    return '00000000-0000-4000-8000-000000000000';
   }
-  return '00000000-0000-4000-8000-000000000000';
+  return safeRandomUUID();
 }
 
 interface MutableStreamResult {

@@ -14,9 +14,12 @@ export interface McpApiKeyItem {
   scopes: string[];
   allowed_projects: string[] | null;
   created_at: string;
-  expires_at: string;
+  expires_at: string | null;
   last_used_at: string | null;
   revoked_at: string | null;
+  disabled_tools?: string[];
+  allowed_tools?: string[] | null;
+  allowed_cidrs?: string[] | null;
   raw_key?: string | undefined;
 }
 
@@ -29,7 +32,11 @@ export interface MintMcpKeyRequest {
   surface: 'agent' | 'docs' | 'admin';
   scopes: string[];
   allowed_projects?: string[] | undefined;
-  expires_in_days: number;
+  expires_in_days?: number | null | undefined;
+  unlimited?: boolean | undefined;
+  confirm_unlimited?: boolean | undefined;
+  disabled_tools?: string[] | undefined;
+  allowed_tools?: string[] | undefined;
 }
 
 export interface OAuthConnectedApp {
@@ -56,9 +63,11 @@ function normalizeMcpKeyItem(
     scopes: raw.scopes ?? [],
     allowed_projects: raw.allowed_projects ?? null,
     created_at: raw.created_at ?? '',
-    expires_at: raw.expires_at ?? '',
+    expires_at: raw.expires_at ?? null,
     last_used_at: raw.last_used_at ?? null,
     revoked_at: raw.revoked_at ?? null,
+    disabled_tools: raw.disabled_tools ?? [],
+    allowed_tools: raw.allowed_tools ?? null,
     ...(raw.raw_key !== undefined ? { raw_key: raw.raw_key } : {}),
   };
 }

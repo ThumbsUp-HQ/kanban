@@ -1,0 +1,4820 @@
+diff --git a/.agents/skills/kanban-agent-manager/SKILL.md b/.agents/skills/kanban-agent-manager/SKILL.md
+index 57b94ce..7165f78 100644
+--- a/.agents/skills/kanban-agent-manager/SKILL.md
++++ b/.agents/skills/kanban-agent-manager/SKILL.md
+@@ -15,37 +15,50 @@ All tickets managed under this workflow should conform to the companion [`kanban
+ 
+ ## Core Duties of the Agent Manager
+ 
+-1. **Assign Tickets to Implementation Sub-Agents**:
++1. **Ticket Deduplication & Creation Boundaries**:
++   - **Search Before Creating (`search_tickets`)**: Always search existing `Backlog`, `Todo`, and `In Progress` tickets before creating new ones. If an upcoming or open ticket already covers the same subsystem or feature, **update that ticket in-place (`update_ticket`)** rather than creating a duplicate ticket.
++   - **Parallel Specialist Consultation**: Before authoring tickets or designing implementations, consult relevant domain specialists (e.g., UX/Frontend Architect, Backend Architect, Security Engineer) **in parallel** to validate architecture, UX ergonomics, and security invariants.
++   - **Do Not Start Implementation Unprompted**: When the user asks to create, refine, or add tickets, stop after creating/updating the tickets and wait for explicit instruction before starting implementation (`begin_work`).
++2. **Use Small/Fast Models Instead of the Coordinator's Model**:
++   - Do **not** default all workers or sub-agents to the Coordinator's heavy flagship model. Preserve quota and reduce latency by pinning implementation builders, test-coverage agents, specialist reviewers, and `reality-checker` auditors to **smaller, faster models** (e.g., `flash`, `gemini-3.8-flash-medium`, `gemini-4-argon-low`, `claude-sonnet-5-5-medium`, `haiku`, or Codex fast tier).
++   - For **black-box human browser QA**, explicitly use a small/low-reasoning model (`gemini-4-argon-low` or `flash`) supplied only with user-level instructions so it tests the UI as a human would rather than reverse-engineering source code or working around bugs.
++3. **Reuse Persistent Sub-Agents & Swarm Workers for Context Caching**:
++   - Maintain long-lived references (`conversationId`s via `send_message`, or warm `waiting` swarm roster members such as `reality-checker`, `arch-reviewer`, `ui-specialist`, `sec-eng`, and `qa-eng` via board `@mentions`) across tickets instead of spawning fresh disposable sub-agents for every task.
++   - Reusing an existing agent conversation keeps system prompts, persona files, and codebase reads in the **cached-token tier (~1/100th input token cost)**, and `waiting` swarm workers consume zero tokens while asleep. Only `kill` temporary implementation builders after their wave is merged and certified.
++   - In Antigravity, when custom agent markdown files in `.agents/agents/*.md` declare CLI-only tool names in frontmatter, invoke sub-agents with `TypeName: "self"` (inheriting valid harness tools) and instruct them to read `.agents/agents/<specialist>.md` for their persona and rubric.
++4. **Assign Tickets to Implementation Sub-Agents**:
+    - Move the target ticket to `In Progress` via `begin_work` (or `transition_ticket`).
+-   - Delegate implementation to a dedicated sub-agent with the verbatim ticket text and forensic proof requirements.
+-2. **Update Comments & Status on Tickets**:
++   - Delegate implementation to a dedicated sub-agent or swarm worker (on a fast/medium model) with the verbatim ticket text and forensic proof requirements.
++5. **Update Comments & Status on Tickets**:
+    - Record sub-agent assignments, forensic proof locations, `reality-checker` QA reports, and remediation cycles on the ticket via Kanban MCP tools (`begin_work`, `transition_ticket`, `complete_work`, `update_ticket`). All comments are recorded under the user's identity.
+-3. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
++6. **Never Allow Premature Ticket Closure (Strict Open-Ticket Invariant)**:
+    - When an implementing sub-agent claims a ticket is done - or **even if the sub-agent closes the ticket itself** - you **MUST keep the ticket open** (immediately reopen/transition it back to `In Progress` via `transition_ticket` if a sub-agent closed it).
+-   - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after the `reality-checker` sub-agent certifies it as **grade-A `READY`**.
+-4. **Run the `reality-checker` QA Gate on a Fast Model**:
+-   - Invoke a dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
++   - A ticket may **ONLY** be transitioned to `Done` (`complete_work`) after required domain specialists (`ui-specialist-review.md`, `api-specialist-review.md`) and the `reality-checker` sub-agent certify it as **grade-A `READY`**.
++7. **Run the `reality-checker` QA Gate on a Fast Model**:
++   - Invoke or message the dedicated, read-only `reality-checker` sub-agent using a **fast, lightweight model** (e.g., Gemini Flash, Claude Haiku, or GPT-4o-mini / Codex fast tier) and the **full, unedited personality file** bundled at [`references/reality-checker.md`](./references/reality-checker.md).
+    - Provide **full forensic proofs, never summaries**. `reality-checker` is a pure quality assurance auditor and **must NOT run tests manually, execute shell commands to check results, or visit websites**.
+-5. **Route `reality-checker` Verdicts**:
++8. **Route `reality-checker` Verdicts**:
+    - **`FAILED` or `NEEDS WORK` (`NEEDS_WORK`)**: Keep the ticket open (`In Progress`), post the verdict to the ticket, and send the full `reality-checker` critique back to the implementing sub-agent to fix the defects and regenerate the proof bundle.
+    - **Grade-A `READY`**: Record the full `reality-checker` certification report in the ticket comments and complete the transition to `Done` (`complete_work`).
+-6. **Delegate Post-Completion >=95% Unit Test Coverage**:
++9. **Delegate Post-Completion >=95% Unit Test Coverage**:
+    - `reality-checker` does **not** audit unit test coverage percentages.
+-   - Once a feature ticket is implemented (or completed), assign a dedicated testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
+-7. **Continuous Gap Detection & Ticket Creation**:
+-   - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - immediately create a new Kanban ticket for it using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
++   - Once a feature ticket is implemented (or completed), assign a fast testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
++10. **Continuous Gap Detection & Ticket Creation**:
++    - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - first check `search_tickets` for an existing backlog item to update, or create a new Kanban ticket using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
+ 
+ ---
+ 
+ ## Cross-Harness Sub-Agent Mapping (Claude, Codex, Gemini)
+ 
+-Adapt sub-agent delegation to the active harness's native primitives while preserving identical workflow semantics:
++Adapt sub-agent delegation to the active harness's native primitives while preserving identical workflow semantics, **small/fast model selection**, and **persistent conversation reuse**:
+ 
+ | Action | Gemini CLI / Antigravity | Claude Code | OpenAI Codex / ChatGPT |
+ | :--- | :--- | :--- | :--- |
+-| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, write tools enabled) | `Task` tool (general-purpose sub-agent with edit/bash access) | Spawn worker/sub-agent task with workspace write permissions |
+-| **Spawn Read-Only `reality-checker`** | `define_subagent` (`EnableWriteTools: false`) + `invoke_subagent` (`Model: "flash"`) | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
+-| **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
++| **Consult Specialists Before Planning/Coding** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`, reads `.agents/agents/<role>.md`) or reuse `conversationId` via `send_message` | Parallel `Task` calls (`model: "haiku"` or `"sonnet"`) with `.agents/agents/<role>.md` | Parallel specialist workers on fast model tier |
++| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`) or `swarm` `add` (`model: "gemini-3.8-flash-medium"` / `"claude-sonnet-5-5-medium"`) | `Task` tool (`model: "sonnet"` or `"haiku"`, edit/bash access) | Spawn worker/sub-agent task on fast/medium model with workspace write permissions |
++| **Spawn / Reuse Read-Only `reality-checker`** | `invoke_subagent` (`Model: "flash"`) or reuse warm `reality-checker` via `send_message` / `@reality-checker` | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Reuse or spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
++| **Black-Box Browser QA** | `invoke_subagent` or `swarm` `add` pinned to `gemini-4-argon-low` / `flash` with user-level test plan only | `Task` tool (`model: "haiku"`) with browser MCP and user-level test plan | Fast/low-reasoning worker with browser harness and user-level test plan |
++| **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` or `@mention` on swarm board | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
+ 
+ ---
+ 
+diff --git a/.agents/skills/kanban-ticket/SKILL.md b/.agents/skills/kanban-ticket/SKILL.md
+index 97e577f..7ef86a6 100644
+--- a/.agents/skills/kanban-ticket/SKILL.md
++++ b/.agents/skills/kanban-ticket/SKILL.md
+@@ -15,6 +15,10 @@ Use this skill together with [`kanban-agent-manager`](../kanban-agent-manager/SK
+ 
+ ## Core Principles for Scoped Tickets
+ 
++0. **Deduplicate & Consult Specialists Before Creating Tickets**:
++   - **Search First (`search_tickets`)**: Always search `Backlog`, `Todo`, and `In Progress` before creating a new ticket. If an existing ticket already covers the target area or upcoming feature, **update that ticket in-place (`update_ticket`)** instead of creating a duplicate.
++   - **Consult Domain Specialists in Parallel**: Consult relevant specialists (UX/Frontend, Backend, Security) on fast models before finalizing ticket specifications.
++   - **Do Not Auto-Start Implementation**: When asked to create or update tickets, stop once the tickets are created/updated and wait for explicit instruction to begin implementation.
+ 1. **Single-Ticket Boundary (No Cross-Ticket Bleed)**:
+    - A ticket's **Definition of Done** and **Verification Proof** must only test artifacts, files, and behaviors that exist after completing *that specific ticket* (and its explicit prerequisites).
+    - Never require an early ticket to pass end-to-end checks against components built in later tickets.
+diff --git a/agent/harnesses/remote_runner.py b/agent/harnesses/remote_runner.py
+new file mode 100644
+index 0000000..2a31164
+--- /dev/null
++++ b/agent/harnesses/remote_runner.py
+@@ -0,0 +1,131 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""RemoteRunnerHarness for transition gate execution over WSS control hub (KB-P5-22a, S14.2)."""
++
++from __future__ import annotations
++
++import base64
++import uuid
++from typing import TYPE_CHECKING, Any
++
++from agent.gates.worker import Harness, HarnessRegistry
++from kanban.runners.hub import (
++    RunnerWssHub,
++    get_global_hub,
++)
++
++if TYPE_CHECKING:
++    from agent.context.transition_context import RenderedContext
++
++__all__ = [
++    "RemoteRunnerHarness",
++    "register_remote_runner_harness",
++]
++
++
++def _get_field(obj: object, name: str, default: Any = None) -> Any:  # noqa: ANN401
++    if isinstance(obj, dict):
++        val = obj.get(name)
++        return val if val is not None else default
++    return getattr(obj, name, default)
++
++
++def _resolve_workspace_id(agent_def: object, ctx: RenderedContext) -> uuid.UUID:
++    workspace_id = getattr(agent_def, "workspace_id", None)
++    if workspace_id is not None:
++        return workspace_id if isinstance(workspace_id, uuid.UUID) else uuid.UUID(str(workspace_id))
++    raw_ws = getattr(ctx, "workspace_id", None)
++    return raw_ws if isinstance(raw_ws, uuid.UUID) else uuid.UUID(int=0)
++
++
++def _encode_ephemeral_token(raw_token: object) -> str:
++    if not raw_token:
++        return ""
++    if isinstance(raw_token, str):
++        return raw_token
++    if isinstance(raw_token, (bytes, bytearray)):
++        try:
++            return raw_token.decode("utf-8")
++        except UnicodeDecodeError:
++            b64_part = base64.urlsafe_b64encode(raw_token).rstrip(b"=").decode("ascii")
++            return f"kb_agt_eph_{b64_part}"
++    return str(raw_token)
++
++
++def _build_agent_spec(agent_def: object, timeout_ms: int) -> dict[str, Any]:
++    cli_args = _get_field(agent_def, "cli_args_json") or _get_field(agent_def, "cli_args") or []
++    mcp_tools = _get_field(agent_def, "mcp_allowed_tools") or []
++    return {
++        "harness_mode": "remote_runner",
++        "provider_kind": _get_field(agent_def, "provider_kind"),
++        "model_id": _get_field(agent_def, "model_id"),
++        "cli_binary_allowlist_id": _get_field(agent_def, "cli_binary_allowlist_id"),
++        "cli_args": list(cli_args) if isinstance(cli_args, (list, tuple)) else [],
++        "repo_access_mode": _get_field(agent_def, "repo_access_mode", "none"),
++        "mcp_allowed_tools": list(mcp_tools) if isinstance(mcp_tools, (list, tuple)) else [],
++        "system_instructions_md": _get_field(agent_def, "system_instructions_md", ""),
++        "timeout_ms": timeout_ms,
++    }
++
++
++class RemoteRunnerHarness(Harness):
++    """Transition gate execution harness delegating work to remote runner hosts."""
++
++    def __init__(self, hub: RunnerWssHub | None = None) -> None:
++        """Initialize with provided RunnerWssHub or default global hub."""
++        self._hub = hub
++
++    @property
++    def hub(self) -> RunnerWssHub:
++        """Return active RunnerWssHub instance."""
++        if self._hub is not None:
++            return self._hub
++        return get_global_hub()
++
++    async def run(self, ctx: RenderedContext, agent_def: object) -> bytes:
++        """Dispatch transition context to remote runner pool and return stdout bytes."""
++        workspace_id = _resolve_workspace_id(agent_def, ctx)
++
++        pool_slug = _get_field(agent_def, "remote_runner_pool_slug")
++        if not pool_slug:
++            err_msg = "Agent definition must specify remote_runner_pool_slug"
++            raise ValueError(err_msg)
++
++        timeout_ms = _get_field(agent_def, "timeout_ms", 60_000) or 60_000
++        timeout_s = float(timeout_ms) / 1000.0
++
++        agent_spec = _build_agent_spec(agent_def, timeout_ms)
++        context_yaml_b64 = base64.b64encode(ctx.yaml_bytes).decode("ascii")
++        ephemeral_token_str = _encode_ephemeral_token(getattr(ctx, "ephemeral_token", None))
++
++        repo_context = getattr(ctx, "repo_context", None)
++        head_commit = getattr(repo_context, "head_commit", None) if repo_context else None
++
++        execution_id = getattr(ctx, "execution_id", None) or str(uuid.uuid4())
++        job_id = f"job-{uuid.uuid4()}"
++
++        job_spec = {
++            "job_id": job_id,
++            "execution_id": str(execution_id),
++            "agent_spec": agent_spec,
++            "context_yaml_b64": context_yaml_b64,
++            "ephemeral_mcp_token": ephemeral_token_str,
++            "head_commit": head_commit,
++        }
++
++        return await self.hub.dispatch_job(
++            workspace_id=workspace_id,
++            pool_slug=str(pool_slug),
++            job_spec=job_spec,
++            timeout_s=timeout_s,
++        )
++
++
++def register_remote_runner_harness(
++    registry: HarnessRegistry,
++    hub: RunnerWssHub | None = None,
++) -> RemoteRunnerHarness:
++    """Register RemoteRunnerHarness under kind name 'remote_runner'."""
++    harness = RemoteRunnerHarness(hub=hub)
++    registry.register("remote_runner", harness)
++    return harness
+diff --git a/agent/tests/harnesses/__init__.py b/agent/tests/harnesses/__init__.py
+new file mode 100644
+index 0000000..283dc63
+--- /dev/null
++++ b/agent/tests/harnesses/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for agent harness implementations."""
+diff --git a/agent/tests/harnesses/test_remote_runner_harness.py b/agent/tests/harnesses/test_remote_runner_harness.py
+new file mode 100644
+index 0000000..bbb1533
+--- /dev/null
++++ b/agent/tests/harnesses/test_remote_runner_harness.py
+@@ -0,0 +1,348 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for RemoteRunnerHarness and GateWorker integration (KB-P5-22a, S14.2)."""
++
++from __future__ import annotations
++
++import base64
++import contextlib
++import json
++import uuid
++from dataclasses import dataclass, field
++from types import SimpleNamespace
++from typing import TYPE_CHECKING, Any, cast
++
++import pytest
++import yaml
++
++from agent.context.transition_context import RepoContext
++from agent.gates.worker import GateWorker, HarnessRegistry
++from agent.harnesses.remote_runner import (
++    RemoteRunnerHarness,
++    register_remote_runner_harness,
++)
++from kanban.runners.hub import (
++    RemoteRunnerDisconnectedError,
++    RemoteRunnerRevokedError,
++    RemoteRunnerUnavailableError,
++    RunnerWssHub,
++    get_global_hub,
++)
++
++if TYPE_CHECKING:
++    from agent.context.transition_context import RenderedContext
++
++
++@dataclass
++class DummyContext:
++    """Mock RenderedContext matching agent.context.transition_context.RenderedContext."""
++
++    yaml_bytes: bytes = b"issue:\n  key: KAN-100\n"
++    ephemeral_token: bytes | str | None = b"kb_agt_eph_test_token"
++    workspace_id: uuid.UUID = field(default_factory=lambda: uuid.UUID(int=1))
++    execution_id: str = "exec-test-123"
++    repo_context: RepoContext | None = None
++
++
++class RecordingCoordinator:
++    """Mock GateCoordinator recording decisions and failures."""
++
++    def __init__(self) -> None:
++        """Initialize empty records."""
++        self.decisions: list[tuple[object, object, object]] = []
++        self.failures: list[tuple[object, object, str]] = []
++
++    async def record_decision(
++        self, execution_id: object, hook_id: object, decision: object
++    ) -> None:
++        """Record transition decision."""
++        self.decisions.append((execution_id, hook_id, decision))
++
++    async def record_failure(self, execution_id: object, hook_id: object, code: str) -> None:
++        """Record transition failure."""
++        self.failures.append((execution_id, hook_id, code))
++
++
++class FakeDispatchHub:
++    """In-memory mock hub recording dispatch calls and returning preset responses."""
++
++    def __init__(self) -> None:
++        """Initialize records and errors."""
++        self.dispatches: list[dict[str, Any]] = []
++        self.raise_exc: Exception | None = None
++
++    async def dispatch_job(
++        self,
++        workspace_id: uuid.UUID,
++        pool_slug: str,
++        job_spec: dict[str, Any],
++        timeout_s: float | None = None,
++    ) -> bytes:
++        """Record dispatch call and return mock payload or raise error."""
++        self.dispatches.append(
++            {
++                "workspace_id": workspace_id,
++                "pool_slug": pool_slug,
++                "job_spec": job_spec,
++                "timeout_s": timeout_s,
++            }
++        )
++        if self.raise_exc is not None:
++            raise self.raise_exc
++
++        nonce = "test-nonce-12345678"
++        raw_b64 = job_spec.get("context_yaml_b64")
++        if raw_b64:
++            with contextlib.suppress(Exception):
++                parsed = yaml.safe_load(base64.b64decode(raw_b64))
++                if isinstance(parsed, dict) and "verdict_nonce" in parsed:
++                    nonce = parsed["verdict_nonce"]
++
++        return json.dumps(
++            {
++                "schema": "kb-transition-verdict/v1",
++                "nonce": nonce,
++                "decision": "approve",
++                "reason_markdown": "Remote audit passed flawlessly.",
++            }
++        ).encode("utf-8")
++
++
++def test_harness_registration_and_hub_property() -> None:
++    """Verify register_remote_runner_harness registers under kind 'remote_runner'."""
++    registry = HarnessRegistry()
++    fake_hub = RunnerWssHub()
++
++    harness = register_remote_runner_harness(registry, hub=fake_hub)
++    assert "remote_runner" in registry
++    assert registry.get("remote_runner") is harness
++    assert harness.hub is fake_hub
++
++    # Default hub fallback
++    default_harness = RemoteRunnerHarness()
++    assert default_harness.hub is get_global_hub()
++
++
++@pytest.mark.asyncio
++async def test_harness_run_validates_pool_slug() -> None:
++    """Verify run raises ValueError when agent_def has no remote_runner_pool_slug."""
++    harness = RemoteRunnerHarness()
++    ctx = DummyContext()
++
++    # Empty agent def
++    with pytest.raises(ValueError, match="must specify remote_runner_pool_slug"):
++        await harness.run(cast("RenderedContext", ctx), {})
++
++    # Agent def with None slug
++    with pytest.raises(ValueError, match="must specify remote_runner_pool_slug"):
++        await harness.run(cast("RenderedContext", ctx), {"remote_runner_pool_slug": ""})
++
++
++@pytest.mark.asyncio
++async def test_harness_run_dispatches_with_mapped_spec() -> None:
++    """Verify context and agent_def fields are correctly mapped into JobDispatchFrame spec."""
++    fake_hub = FakeDispatchHub()
++    harness = RemoteRunnerHarness(hub=fake_hub)  # type: ignore[arg-type]
++
++    ws_id = uuid.uuid4()
++    repo_ctx = RepoContext(
++        head_commit="abcdef0123456789",
++    )
++    ctx = DummyContext(
++        yaml_bytes=b"issue_summary: Hello",
++        ephemeral_token=b"kb_agt_eph_xyz",
++        workspace_id=ws_id,
++        execution_id="exec-456",
++        repo_context=repo_ctx,
++    )
++
++    agent_def = {
++        "remote_runner_pool_slug": "gpu-fast",
++        "provider_kind": "custom",
++        "model_id": "model-v1",
++        "cli_binary_allowlist_id": "cli-1",
++        "cli_args_json": ["--verbose"],
++        "repo_access_mode": "read-only",
++        "mcp_allowed_tools": ["search", "fetch"],
++        "system_instructions_md": "Check thoroughly",
++        "timeout_ms": 30_000,
++    }
++
++    result = await harness.run(cast("RenderedContext", ctx), agent_def)
++    assert b"kb-transition-verdict/v1" in result
++
++    assert len(fake_hub.dispatches) == 1
++    dispatch = fake_hub.dispatches[0]
++    assert dispatch["workspace_id"] == ws_id
++    assert dispatch["pool_slug"] == "gpu-fast"
++    assert dispatch["timeout_s"] == 30.0
++
++    job_spec = dispatch["job_spec"]
++    assert job_spec["execution_id"] == "exec-456"
++    assert job_spec["ephemeral_mcp_token"] == "kb_agt_eph_xyz"
++    assert job_spec["head_commit"] == "abcdef0123456789"
++    assert job_spec["context_yaml_b64"] == base64.b64encode(b"issue_summary: Hello").decode("ascii")
++
++    spec = job_spec["agent_spec"]
++    assert spec["harness_mode"] == "remote_runner"
++    assert spec["provider_kind"] == "custom"
++    assert spec["cli_args"] == ["--verbose"]
++    assert spec["mcp_allowed_tools"] == ["search", "fetch"]
++
++
++@pytest.mark.asyncio
++async def test_gate_worker_positive_verdict_integration() -> None:
++    """Verify GateWorker receives stdout from RemoteRunnerHarness and records decision."""
++    fake_hub = FakeDispatchHub()
++    registry = HarnessRegistry()
++    register_remote_runner_harness(registry, hub=fake_hub)  # type: ignore[arg-type]
++
++    coordinator = RecordingCoordinator()
++    worker = GateWorker(registry=registry, coordinator=coordinator)
++
++    event = {
++        "execution_id": "exec-gate-1",
++        "hook_id": "hook-sec-1",
++        "agent_def": {
++            "harness_kind": "remote_runner",
++            "remote_runner_pool_slug": "audit-pool",
++        },
++        "execution": {
++            "id": "exec-gate-1",
++            "workspace_id": str(uuid.uuid4()),
++        },
++    }
++
++    await worker.handle_dispatch(event)
++
++    assert len(coordinator.decisions) == 1
++    exec_id, hook_id, decision = coordinator.decisions[0]
++    assert exec_id == "exec-gate-1"
++    assert hook_id == "hook-sec-1"
++    assert getattr(decision, "decision", None) == "approve"
++    assert len(coordinator.failures) == 0
++
++
++@pytest.mark.asyncio
++async def test_gate_worker_revoked_runner_records_failure() -> None:
++    """Verify GateWorker records REMOTE_RUNNER_REVOKED when runner is revoked during job."""
++    fake_hub = FakeDispatchHub()
++    fake_hub.raise_exc = RemoteRunnerRevokedError("REMOTE_RUNNER_REVOKED")
++
++    registry = HarnessRegistry()
++    register_remote_runner_harness(registry, hub=fake_hub)  # type: ignore[arg-type]
++
++    coordinator = RecordingCoordinator()
++    worker = GateWorker(registry=registry, coordinator=coordinator)
++
++    event = {
++        "execution_id": "exec-revoked-1",
++        "hook_id": "hook-sec-2",
++        "agent_def": {
++            "harness_kind": "remote_runner",
++            "remote_runner_pool_slug": "audit-pool",
++        },
++    }
++
++    await worker.handle_dispatch(event)
++
++    assert len(coordinator.decisions) == 0
++    assert len(coordinator.failures) == 1
++    exec_id, hook_id, code = coordinator.failures[0]
++    assert exec_id == "exec-revoked-1"
++    assert hook_id == "hook-sec-2"
++    assert "REMOTE_RUNNER_REVOKED" in code
++
++
++@pytest.mark.asyncio
++async def test_gate_worker_disconnected_and_pool_offline_records_failure() -> None:
++    """Verify GateWorker records failure on disconnect or pool offline."""
++    fake_hub = FakeDispatchHub()
++    registry = HarnessRegistry()
++    register_remote_runner_harness(registry, hub=fake_hub)  # type: ignore[arg-type]
++
++    coordinator = RecordingCoordinator()
++    worker = GateWorker(registry=registry, coordinator=coordinator)
++
++    # 1. Disconnected
++    fake_hub.raise_exc = RemoteRunnerDisconnectedError("REMOTE_RUNNER_DISCONNECTED")
++    event1 = {
++        "execution_id": "exec-disc-1",
++        "hook_id": "hook-1",
++        "agent_def": {
++            "harness_kind": "remote_runner",
++            "remote_runner_pool_slug": "pool-disc",
++        },
++    }
++    await worker.handle_dispatch(event1)
++    assert len(coordinator.failures) == 1
++    assert "REMOTE_RUNNER_DISCONNECTED" in coordinator.failures[0][2]
++
++    # 2. Pool offline
++    fake_hub.raise_exc = RemoteRunnerUnavailableError("REMOTE_RUNNER_POOL_OFFLINE")
++    event2 = {
++        "execution_id": "exec-offline-1",
++        "hook_id": "hook-2",
++        "agent_def": {
++            "harness_kind": "remote_runner",
++            "remote_runner_pool_slug": "empty-pool",
++        },
++    }
++    await worker.handle_dispatch(event2)
++    assert len(coordinator.failures) == 2
++    assert "REMOTE_RUNNER_POOL_OFFLINE" in coordinator.failures[1][2]
++
++
++@pytest.mark.asyncio
++async def test_remote_runner_harness_variations_and_branches() -> None:
++    """Verify object agent_def, token formats, default timeouts, and missing pool validation."""
++    fake_hub = FakeDispatchHub()
++    harness = RemoteRunnerHarness(hub=fake_hub)  # type: ignore[arg-type]
++
++    # 1. Missing pool slug -> ValueError
++    bad_def = SimpleNamespace(remote_runner_pool_slug=None)
++    with pytest.raises(ValueError, match="remote_runner_pool_slug"):
++        await harness.run(cast("RenderedContext", DummyContext()), bad_def)
++
++    # 2. Object agent_def + string token + default timeout
++    obj_def = SimpleNamespace(
++        workspace_id=uuid.uuid4(),
++        remote_runner_pool_slug="object-pool",
++        timeout_ms=None,
++        cli_args=["--obj-arg"],
++        mcp_allowed_tools=["read_ticket"],
++        repo_access_mode="ro_vfs_mount",
++        system_instructions_md="Follow all invariants.",
++        provider_kind=None,
++        model_id=None,
++        cli_binary_allowlist_id=None,
++    )
++    ctx_str = DummyContext(
++        ephemeral_token="kb_agt_eph_plaintext_string",  # noqa: S106
++    )
++    res = await harness.run(cast("RenderedContext", ctx_str), obj_def)
++    assert b"Remote audit passed" in res
++    assert fake_hub.dispatches[-1]["timeout_s"] == 60.0
++    assert (
++        fake_hub.dispatches[-1]["job_spec"]["ephemeral_mcp_token"] == "kb_agt_eph_plaintext_string"
++    )
++
++    # 3. None token + int token + None workspace in context
++    ctx_none = DummyContext(
++        ephemeral_token=None,
++        workspace_id=None,  # type: ignore[arg-type]
++    )
++    obj_no_ws = SimpleNamespace(
++        remote_runner_pool_slug="no-ws-pool",
++        timeout_ms=15000,
++    )
++    await harness.run(cast("RenderedContext", ctx_none), obj_no_ws)
++    assert fake_hub.dispatches[-1]["workspace_id"] == uuid.UUID(int=0)
++    assert fake_hub.dispatches[-1]["job_spec"]["ephemeral_mcp_token"] == ""
++
++    # 4. Int token branch
++    ctx_int = DummyContext(
++        ephemeral_token=99999,  # type: ignore[arg-type]
++    )
++    await harness.run(cast("RenderedContext", ctx_int), obj_no_ws)
++    assert fake_hub.dispatches[-1]["job_spec"]["ephemeral_mcp_token"] == "99999"
+diff --git a/database/migrations/sql/p5_22a_remote_runners.down.sql b/database/migrations/sql/p5_22a_remote_runners.down.sql
+new file mode 100644
+index 0000000..6858ffb
+--- /dev/null
++++ b/database/migrations/sql/p5_22a_remote_runners.down.sql
+@@ -0,0 +1,9 @@
++-- Phase 5 / Database + API: remote_runner registry and mTLS enrollment tokens (KB-P5-22a, S14.2, S11.4)
++
++DROP FUNCTION IF EXISTS register_remote_runner(UUID, UUID, TEXT, TEXT, BYTEA, TIMESTAMPTZ, JSONB, UUID);
++DROP FUNCTION IF EXISTS consume_runner_enrollment_token(BYTEA);
++DROP FUNCTION IF EXISTS touch_runner_heartbeat(UUID, TEXT);
++DROP FUNCTION IF EXISTS get_runner_by_cert_sha256(BYTEA);
++DROP FUNCTION IF EXISTS enroll_remote_runner(BYTEA, TEXT, BYTEA, TIMESTAMPTZ, JSONB);
++DROP TABLE IF EXISTS remote_runners CASCADE;
++DROP TABLE IF EXISTS remote_runner_enrollment_tokens CASCADE;
+diff --git a/database/migrations/sql/p5_22a_remote_runners.up.sql b/database/migrations/sql/p5_22a_remote_runners.up.sql
+new file mode 100644
+index 0000000..7d9d119
+--- /dev/null
++++ b/database/migrations/sql/p5_22a_remote_runners.up.sql
+@@ -0,0 +1,274 @@
++-- Phase 5 / Database + API: remote_runner registry and mTLS enrollment tokens (KB-P5-22a, S14.2, S11.4)
++
++CREATE TABLE remote_runner_enrollment_tokens (
++    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id          UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    pool_slug             TEXT NOT NULL CHECK (pool_slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'),
++    token_sha256          BYTEA NOT NULL UNIQUE CHECK (octet_length(token_sha256) = 32),
++    created_by_id         UUID NOT NULL REFERENCES principals(id),
++    expires_at            TIMESTAMPTZ NOT NULL,
++    consumed_at           TIMESTAMPTZ,
++    consumed_by_runner_id UUID,
++    created_at            TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++CREATE TABLE remote_runners (
++    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id          UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    pool_slug             TEXT NOT NULL CHECK (pool_slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'),
++    hostname              TEXT NOT NULL CHECK (char_length(btrim(hostname)) BETWEEN 1 AND 253),
++    client_cert_sha256    BYTEA NOT NULL UNIQUE CHECK (octet_length(client_cert_sha256) = 32),
++    cert_expires_at       TIMESTAMPTZ NOT NULL,
++    capabilities_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
++    status                TEXT NOT NULL DEFAULT 'offline' CHECK (status IN ('online', 'offline', 'revoked')),
++    last_heartbeat_at     TIMESTAMPTZ,
++    revoked_at            TIMESTAMPTZ,
++    revoked_by_id         UUID REFERENCES principals(id),
++    created_at            TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++-- Indexes
++CREATE INDEX idx_remote_runner_tokens_workspace_pool ON remote_runner_enrollment_tokens (workspace_id, pool_slug);
++CREATE INDEX idx_remote_runners_workspace_pool ON remote_runners (workspace_id, pool_slug, status);
++CREATE INDEX idx_remote_runners_client_cert_sha256 ON remote_runners (client_cert_sha256);
++
++-- RLS Enforcement
++ALTER TABLE remote_runner_enrollment_tokens ENABLE ROW LEVEL SECURITY;
++ALTER TABLE remote_runner_enrollment_tokens FORCE ROW LEVEL SECURITY;
++
++ALTER TABLE remote_runners ENABLE ROW LEVEL SECURITY;
++ALTER TABLE remote_runners FORCE ROW LEVEL SECURITY;
++
++-- Policies for remote_runner_enrollment_tokens
++CREATE POLICY remote_runner_enrollment_tokens_select_rls ON remote_runner_enrollment_tokens
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY remote_runner_enrollment_tokens_insert_rls ON remote_runner_enrollment_tokens
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY remote_runner_enrollment_tokens_update_rls ON remote_runner_enrollment_tokens
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY remote_runner_enrollment_tokens_delete_rls ON remote_runner_enrollment_tokens
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++-- Policies for remote_runners
++CREATE POLICY remote_runners_select_rls ON remote_runners
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY remote_runners_insert_rls ON remote_runners
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY remote_runners_update_rls ON remote_runners
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++CREATE POLICY remote_runners_delete_rls ON remote_runners
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++-- Grants
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE remote_runner_enrollment_tokens TO kanban_app;
++GRANT SELECT ON TABLE remote_runner_enrollment_tokens TO app_rls_reader;
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE remote_runners TO kanban_app;
++GRANT SELECT ON TABLE remote_runners TO app_rls_reader;
++
++-- Helper SECURITY DEFINER functions for unauthenticated enrollment and WSS authentication
++CREATE OR REPLACE FUNCTION consume_runner_enrollment_token(
++    p_token_sha256 BYTEA
++)
++RETURNS TABLE (
++    token_id UUID,
++    workspace_id UUID,
++    pool_slug TEXT
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    RETURN QUERY
++    UPDATE remote_runner_enrollment_tokens
++    SET consumed_at = clock_timestamp()
++    WHERE token_sha256 = p_token_sha256
++      AND consumed_at IS NULL
++      AND expires_at > clock_timestamp()
++    RETURNING id, remote_runner_enrollment_tokens.workspace_id, remote_runner_enrollment_tokens.pool_slug;
++END;
++$$;
++
++CREATE OR REPLACE FUNCTION register_remote_runner(
++    p_runner_id UUID,
++    p_workspace_id UUID,
++    p_pool_slug TEXT,
++    p_hostname TEXT,
++    p_client_cert_sha256 BYTEA,
++    p_cert_expires_at TIMESTAMPTZ,
++    p_capabilities_json JSONB,
++    p_token_id UUID
++)
++RETURNS VOID
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    INSERT INTO remote_runners (
++        id, workspace_id, pool_slug, hostname,
++        client_cert_sha256, cert_expires_at, capabilities_json, status
++    ) VALUES (
++        p_runner_id, p_workspace_id, p_pool_slug, p_hostname,
++        p_client_cert_sha256, p_cert_expires_at, COALESCE(p_capabilities_json, '{}'::jsonb), 'offline'
++    );
++
++    UPDATE remote_runner_enrollment_tokens
++    SET consumed_by_runner_id = p_runner_id
++    WHERE id = p_token_id;
++END;
++$$;
++
++CREATE OR REPLACE FUNCTION enroll_remote_runner(
++    p_token_sha256 BYTEA,
++    p_hostname TEXT,
++    p_client_cert_sha256 BYTEA,
++    p_cert_expires_at TIMESTAMPTZ,
++    p_capabilities_json JSONB
++)
++RETURNS TABLE (
++    runner_id UUID,
++    workspace_id UUID,
++    pool_slug TEXT
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_token_id UUID;
++    v_workspace_id UUID;
++    v_pool_slug TEXT;
++    v_runner_id UUID;
++BEGIN
++    -- Atomically consume token
++    UPDATE remote_runner_enrollment_tokens
++    SET consumed_at = clock_timestamp()
++    WHERE token_sha256 = p_token_sha256
++      AND consumed_at IS NULL
++      AND expires_at > clock_timestamp()
++    RETURNING id, remote_runner_enrollment_tokens.workspace_id, remote_runner_enrollment_tokens.pool_slug
++    INTO v_token_id, v_workspace_id, v_pool_slug;
++
++    IF v_token_id IS NULL THEN
++        RETURN;
++    END IF;
++
++    -- Insert new runner record
++    INSERT INTO remote_runners (
++        workspace_id,
++        pool_slug,
++        hostname,
++        client_cert_sha256,
++        cert_expires_at,
++        capabilities_json,
++        status
++    ) VALUES (
++        v_workspace_id,
++        v_pool_slug,
++        p_hostname,
++        p_client_cert_sha256,
++        p_cert_expires_at,
++        COALESCE(p_capabilities_json, '{}'::jsonb),
++        'offline'
++    )
++    RETURNING id INTO v_runner_id;
++
++    -- Record runner on consumed token
++    UPDATE remote_runner_enrollment_tokens
++    SET consumed_by_runner_id = v_runner_id
++    WHERE id = v_token_id;
++
++    runner_id := v_runner_id;
++    workspace_id := v_workspace_id;
++    pool_slug := v_pool_slug;
++    RETURN NEXT;
++END;
++$$;
++
++CREATE OR REPLACE FUNCTION get_runner_by_cert_sha256(
++    p_cert_sha256 BYTEA
++)
++RETURNS TABLE (
++    runner_id UUID,
++    workspace_id UUID,
++    pool_slug TEXT,
++    hostname TEXT,
++    status TEXT,
++    cert_expires_at TIMESTAMPTZ,
++    capabilities_json JSONB
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    RETURN QUERY
++    SELECT r.id, r.workspace_id, r.pool_slug, r.hostname, r.status, r.cert_expires_at, r.capabilities_json
++    FROM remote_runners r
++    WHERE r.client_cert_sha256 = p_cert_sha256;
++END;
++$$;
++
++CREATE OR REPLACE FUNCTION touch_runner_heartbeat(
++    p_runner_id UUID,
++    p_status TEXT DEFAULT NULL
++)
++RETURNS VOID
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    UPDATE remote_runners
++    SET last_heartbeat_at = clock_timestamp(),
++        status = CASE
++            WHEN status = 'revoked' THEN 'revoked'
++            WHEN p_status IS NOT NULL THEN p_status
++            ELSE status
++        END
++    WHERE id = p_runner_id;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION consume_runner_enrollment_token(BYTEA) TO kanban_app;
++GRANT EXECUTE ON FUNCTION register_remote_runner(UUID, UUID, TEXT, TEXT, BYTEA, TIMESTAMPTZ, JSONB, UUID) TO kanban_app;
++GRANT EXECUTE ON FUNCTION enroll_remote_runner(BYTEA, TEXT, BYTEA, TIMESTAMPTZ, JSONB) TO kanban_app;
++GRANT EXECUTE ON FUNCTION get_runner_by_cert_sha256(BYTEA) TO kanban_app;
++GRANT EXECUTE ON FUNCTION touch_runner_heartbeat(UUID, TEXT) TO kanban_app;
+diff --git a/database/migrations/versions/p5_22a_remote_runners.py b/database/migrations/versions/p5_22a_remote_runners.py
+new file mode 100644
+index 0000000..14b18e2
+--- /dev/null
++++ b/database/migrations/versions/p5_22a_remote_runners.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""remote_runners and enrollment tokens registry (KB-P5-22a, S14.2, S11.4).
++
++Revision ID: p5_22a_remote_runners
++Revises: p5_16_agent_definitions
++Create Date: 2026-11-15 00:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p5_22a_remote_runners"
++down_revision: str | None = "p5_13_approved_wasm_modules"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply remote_runners and enrollment tokens DDL, RLS, and functions."""
++    execute_sql_file("p5_22a_remote_runners.up.sql")
++
++
++def downgrade() -> None:
++    """Revert remote_runners and enrollment tokens DDL, RLS, and functions."""
++    execute_sql_file("p5_22a_remote_runners.down.sql")
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index 6ed69c4..0bb3748 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -75,6 +75,7 @@ from database.models.projects import (
+     WorkflowState,
+ )
+ from database.models.ratelimit import RateLimitBucket
++from database.models.remote_runner import RemoteRunner, RemoteRunnerEnrollmentToken
+ from database.models.spine import (
+     InvalidObjectLinkAudit,
+     LinkTypeMatrix,
+@@ -147,6 +148,8 @@ __all__ = [
+     "RateLimitBucket",
+     "RbacRole",
+     "RecoveryCode",
++    "RemoteRunner",
++    "RemoteRunnerEnrollmentToken",
+     "ResourceAclEntry",
+     "RoleBinding",
+     "SetupClaimToken",
+diff --git a/database/models/remote_runner.py b/database/models/remote_runner.py
+new file mode 100644
+index 0000000..c51079c
+--- /dev/null
++++ b/database/models/remote_runner.py
+@@ -0,0 +1,114 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""SQLAlchemy 2.0 ORM models for remote_runners and enrollment tokens (KB-P5-22a, S14.2, S11.4)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003
++from datetime import datetime  # noqa: TC003
++from typing import Any
++
++from sqlalchemy import (
++    CheckConstraint,
++    DateTime,
++    ForeignKey,
++    Text,
++    text,
++)
++from sqlalchemy.dialects.postgresql import BYTEA, JSONB, UUID
++from sqlalchemy.orm import Mapped, mapped_column
++
++from database.models.base import Base
++
++
++class RemoteRunnerEnrollmentToken(Base):
++    """Single-use enrollment tokens for remote runner mTLS registration."""
++
++    __tablename__ = "remote_runner_enrollment_tokens"
++    __table_args__ = (
++        CheckConstraint(
++            "pool_slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'",
++            name="chk_runner_token_pool_slug",
++        ),
++        CheckConstraint(
++            "octet_length(token_sha256) = 32",
++            name="chk_runner_token_sha256_len",
++        ),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True), primary_key=True, server_default=text("uuidv7()")
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workspaces.id", ondelete="CASCADE"),
++        nullable=False,
++    )
++    pool_slug: Mapped[str] = mapped_column(Text, nullable=False)
++    token_sha256: Mapped[bytes] = mapped_column(BYTEA, nullable=False, unique=True)
++    created_by_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("principals.id"),
++        nullable=False,
++    )
++    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
++    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
++    consumed_by_runner_id: Mapped[uuid.UUID | None] = mapped_column(
++        UUID(as_uuid=True), nullable=True
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
++
++
++class RemoteRunner(Base):
++    """Registered remote execution host authenticated via mTLS client certificates."""
++
++    __tablename__ = "remote_runners"
++    __table_args__ = (
++        CheckConstraint(
++            "pool_slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'",
++            name="chk_remote_runner_pool_slug",
++        ),
++        CheckConstraint(
++            "char_length(btrim(hostname)) BETWEEN 1 AND 253",
++            name="chk_remote_runner_hostname",
++        ),
++        CheckConstraint(
++            "octet_length(client_cert_sha256) = 32",
++            name="chk_remote_runner_cert_sha256_len",
++        ),
++        CheckConstraint(
++            "status IN ('online', 'offline', 'revoked')",
++            name="chk_remote_runner_status",
++        ),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True), primary_key=True, server_default=text("uuidv7()")
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workspaces.id", ondelete="CASCADE"),
++        nullable=False,
++    )
++    pool_slug: Mapped[str] = mapped_column(Text, nullable=False)
++    hostname: Mapped[str] = mapped_column(Text, nullable=False)
++    client_cert_sha256: Mapped[bytes] = mapped_column(BYTEA, nullable=False, unique=True)
++    cert_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
++    capabilities_json: Mapped[dict[str, Any]] = mapped_column(
++        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
++    )
++    status: Mapped[str] = mapped_column(
++        Text, nullable=False, default="offline", server_default=text("'offline'")
++    )
++    last_heartbeat_at: Mapped[datetime | None] = mapped_column(
++        DateTime(timezone=True), nullable=True
++    )
++    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
++    revoked_by_id: Mapped[uuid.UUID | None] = mapped_column(
++        UUID(as_uuid=True), ForeignKey("principals.id"), nullable=True
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 9ae747d..ea7092b 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -60,6 +60,7 @@ from kanban.api.v1.oauth import oauth_v1_router
+ from kanban.api.v1.objects_access import router as objects_access_router
+ from kanban.api.v1.project_config import router as project_config_router
+ from kanban.api.v1.projects import router as projects_router
++from kanban.api.v1.remote_runners import router as remote_runners_router
+ from kanban.api.v1.resolve import router as resolve_router
+ from kanban.api.v1.search import router as search_router
+ from kanban.api.v1.stickies import router as stickies_router
+@@ -105,6 +106,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(stickies_router)
+     v1.include_router(sticky_promo_ai_router)
+     v1.include_router(agent_definitions_router)
++    v1.include_router(remote_runners_router)
+     v1.include_router(attachments_router)
+     v1.include_router(views_router)
+     v1.include_router(archive_router)
+diff --git a/kanban/api/v1/agent_definitions.py b/kanban/api/v1/agent_definitions.py
+index 78faa9f..1b66d8c 100644
+--- a/kanban/api/v1/agent_definitions.py
++++ b/kanban/api/v1/agent_definitions.py
+@@ -15,6 +15,7 @@ from kanban.agents.schemas import (
+ from kanban.agents.service import AgentDefinitionService
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.timing import timing_floor
++from kanban.auth.mfa.policy import require_admin_aal2
+ 
+ router = APIRouter(tags=["agent-definitions"])
+ 
+@@ -100,3 +101,67 @@ async def delete_agent_definition(
+     async with timing_floor(floor_ms=25.0):
+         await AgentDefinitionService.delete(session, caller, agent)
+         return Response(status_code=status.HTTP_204_NO_CONTENT)
++
++
++admin_router = APIRouter(
++    prefix="/admin/agent-definitions",
++    tags=["admin-agent-definitions"],
++    dependencies=[Depends(require_admin_aal2)],
++)
++AdminCaller = Annotated[PrincipalContext, Depends(require_admin_aal2)]
++
++
++@admin_router.get("", response_model=list[AgentDefinitionResponse])
++async def admin_list_agent_definitions(
++    caller: AdminCaller, session: Session
++) -> list[AgentDefinitionResponse]:
++    """List agent definitions in caller's workspace under admin authority."""
++    return await AgentDefinitionService.list_definitions(session, caller, str(caller.workspace_id))
++
++
++@admin_router.post(
++    "",
++    status_code=status.HTTP_201_CREATED,
++    response_model=AgentDefinitionResponse,
++)
++async def admin_create_agent_definition(
++    body: AgentDefinitionCreate,
++    caller: AdminCaller,
++    session: Session,
++    response: Response,
++) -> AgentDefinitionResponse:
++    """Create a new agent definition in caller's workspace under admin authority."""
++    result = await AgentDefinitionService.create(session, caller, str(caller.workspace_id), body)
++    response.headers["Location"] = f"/api/v1/agent-definitions/{result.id}"
++    return result
++
++
++@admin_router.get("/{agent}", response_model=AgentDefinitionResponse)
++async def admin_get_agent_definition(
++    agent: str, caller: AdminCaller, session: Session
++) -> AgentDefinitionResponse:
++    """Retrieve an agent definition under admin authority."""
++    return await AgentDefinitionService.get(session, caller, agent)
++
++
++@admin_router.patch("/{agent}", response_model=AgentDefinitionResponse)
++async def admin_patch_agent_definition(
++    agent: str,
++    body: AgentDefinitionPatch,
++    caller: AdminCaller,
++    session: Session,
++) -> AgentDefinitionResponse:
++    """Update an existing agent definition under admin authority."""
++    return await AgentDefinitionService.patch(session, caller, agent, body)
++
++
++@admin_router.delete("/{agent}", status_code=status.HTTP_204_NO_CONTENT)
++async def admin_delete_agent_definition(
++    agent: str, caller: AdminCaller, session: Session
++) -> Response:
++    """Delete an agent definition under admin authority."""
++    await AgentDefinitionService.delete(session, caller, agent)
++    return Response(status_code=status.HTTP_204_NO_CONTENT)
++
++
++router.include_router(admin_router)
+diff --git a/kanban/api/v1/remote_runners.py b/kanban/api/v1/remote_runners.py
+new file mode 100644
+index 0000000..b1e58a7
+--- /dev/null
++++ b/kanban/api/v1/remote_runners.py
+@@ -0,0 +1,485 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""REST & WebSocket endpoints for remote runner registry and hub (KB-P5-22a, S14.2, S11.4)."""
++
++from __future__ import annotations
++
++import contextlib
++import hashlib
++import json
++import logging
++import re
++import secrets
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import Annotated, Any, Final
++
++from fastapi import APIRouter, Depends, Query, Request, status
++from pydantic import BaseModel, ConfigDict, Field
++from sqlalchemy import select, text
++from sqlalchemy.ext.asyncio import AsyncSession
++from starlette.websockets import WebSocket, WebSocketDisconnect
++
++from database.models.remote_runner import RemoteRunner, RemoteRunnerEnrollmentToken
++from database.session import RLSContext, RLSSessionFactory
++from kanban.api.deps import PrincipalContext, get_rls_session
++from kanban.api.problems import ProblemException, not_found
++from kanban.auth.mfa.policy import require_admin_aal2
++from kanban.runners.hub import (
++    MAX_FRAME_BYTES,
++    HelloAckFrame,
++    HelloFrame,
++    get_global_hub,
++)
++from kanban.runners.pki import (
++    CsrValidationError,
++    compute_cert_fingerprint,
++    validate_and_sign_csr,
++)
++from kanban.security.keys import KeyMaterial, load_key_material
++
++logger = logging.getLogger(__name__)
++
++_POOL_SLUG_REGEX: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")
++_ENROLL_TOKEN_PREFIX: Final[str] = "kb_rnr_enroll_"  # noqa: S105
++
++router = APIRouter(tags=["remote-runners"])
++admin_router = APIRouter(
++    prefix="/admin/agent-runners",
++    tags=["admin-agent-runners"],
++    dependencies=[Depends(require_admin_aal2)],
++)
++
++Caller = Annotated[PrincipalContext, Depends(require_admin_aal2)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++# --- Schemas ---
++
++
++class MintEnrollmentTokenRequest(BaseModel):
++    """Payload to mint a new runner enrollment token."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    pool_slug: str = Field(min_length=2, max_length=63)
++    ttl_seconds: int = Field(default=900, ge=60, le=900)
++
++
++class EnrollmentTokenResponse(BaseModel):
++    """Single-use enrollment token response returned only once at creation."""
++
++    id: uuid.UUID
++    pool_slug: str
++    enrollment_token: str
++    expires_at: datetime
++    created_at: datetime
++
++
++class RemoteRunnerResponse(BaseModel):
++    """Public representation of registered remote runner."""
++
++    id: uuid.UUID
++    workspace_id: uuid.UUID
++    pool_slug: str
++    hostname: str
++    client_cert_sha256_hex: str
++    cert_expires_at: datetime
++    capabilities: dict[str, Any]
++    status: str
++    last_heartbeat_at: datetime | None
++    revoked_at: datetime | None
++    created_at: datetime
++
++
++class EnrollRunnerRequest(BaseModel):
++    """Payload for runner CSR exchange."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    enrollment_token: str
++    csr_pem: str
++    hostname: str = Field(min_length=1, max_length=253)
++    capabilities: dict[str, Any] = Field(default_factory=dict)
++
++
++class EnrollRunnerResponse(BaseModel):
++    """Issued client certificates and WSS connection URL for runner."""
++
++    runner_id: uuid.UUID
++    client_cert_pem: str
++    ca_cert_pem: str
++    wss_url: str
++
++
++# --- Admin Routes (require_admin_aal2) ---
++
++
++@admin_router.post(
++    "/enrollment-tokens",
++    status_code=status.HTTP_201_CREATED,
++    response_model=EnrollmentTokenResponse,
++    summary="Mint a single-use mTLS runner enrollment token",
++)
++async def mint_enrollment_token(
++    body: MintEnrollmentTokenRequest,
++    caller: Caller,
++    session: Session,
++) -> EnrollmentTokenResponse:
++    """Mint single-use runner enrollment token valid for 60..900s."""
++    if not _POOL_SLUG_REGEX.match(body.pool_slug):
++        msg = f"Invalid pool slug '{body.pool_slug}': must match ^[a-z0-9][a-z0-9-]{{1,62}}$"
++        code = "POOL_SLUG_INVALID"
++        title = "Invalid Pool Slug"
++        raise ProblemException(
++            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
++            code=code,
++            title=title,
++            detail=msg,
++        )
++
++    b64_raw = secrets.token_urlsafe(32)
++    plaintext_token = f"{_ENROLL_TOKEN_PREFIX}{b64_raw}"
++    token_sha256 = hashlib.sha256(plaintext_token.encode("ascii")).digest()
++
++    now = datetime.now(UTC)
++    expires_at = now + timedelta(seconds=body.ttl_seconds)
++
++    record = RemoteRunnerEnrollmentToken(
++        workspace_id=caller.workspace_id,
++        pool_slug=body.pool_slug,
++        token_sha256=token_sha256,
++        created_by_id=caller.principal_id,
++        expires_at=expires_at,
++        created_at=now,
++    )
++    session.add(record)
++    await session.flush()
++
++    return EnrollmentTokenResponse(
++        id=record.id,
++        pool_slug=record.pool_slug,
++        enrollment_token=plaintext_token,
++        expires_at=record.expires_at,
++        created_at=record.created_at,
++    )
++
++
++@admin_router.get(
++    "",
++    response_model=list[RemoteRunnerResponse],
++    summary="List registered remote runners in workspace",
++)
++async def list_remote_runners(
++    caller: Caller,
++    session: Session,
++    pool_slug: Annotated[str | None, Query()] = None,
++    runner_status: Annotated[str | None, Query(alias="status")] = None,
++) -> list[RemoteRunnerResponse]:
++    """List registered runners with optional pool_slug and status filtering."""
++    stmt = (
++        select(RemoteRunner)
++        .where(RemoteRunner.workspace_id == caller.workspace_id)
++        .order_by(RemoteRunner.created_at.desc())
++    )
++    if pool_slug is not None:
++        stmt = stmt.where(RemoteRunner.pool_slug == pool_slug)
++    if runner_status is not None:
++        stmt = stmt.where(RemoteRunner.status == runner_status)
++
++    runners = (await session.execute(stmt)).scalars().all()
++    return [
++        RemoteRunnerResponse(
++            id=r.id,
++            workspace_id=r.workspace_id,
++            pool_slug=r.pool_slug,
++            hostname=r.hostname,
++            client_cert_sha256_hex=r.client_cert_sha256.hex(),
++            cert_expires_at=r.cert_expires_at,
++            capabilities=r.capabilities_json,
++            status=r.status,
++            last_heartbeat_at=r.last_heartbeat_at,
++            revoked_at=r.revoked_at,
++            created_at=r.created_at,
++        )
++        for r in runners
++    ]
++
++
++@admin_router.post(
++    "/{runner_id}:revoke",
++    response_model=dict[str, Any],
++    summary="Revoke remote runner certificate and disconnect active session",
++)
++async def revoke_remote_runner(
++    runner_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++) -> dict[str, Any]:
++    """Revoke runner credentials, disconnect active WebSocket, and cancel in-flight jobs."""
++    stmt = select(RemoteRunner).where(
++        RemoteRunner.id == runner_id,
++        RemoteRunner.workspace_id == caller.workspace_id,
++    )
++    runner = (await session.execute(stmt)).scalar_one_or_none()
++    if runner is None:
++        raise not_found()
++
++    now = datetime.now(UTC)
++    runner.status = "revoked"
++    runner.revoked_at = now
++    runner.revoked_by_id = caller.principal_id
++    await session.flush()
++
++    hub = get_global_hub()
++    await hub.revoke_runner(runner_id)
++
++    return {
++        "id": str(runner.id),
++        "status": "revoked",
++        "revoked_at": runner.revoked_at.isoformat(),
++    }
++
++
++# --- Public / Runner Routes ---
++
++
++@router.post(
++    "/agent-runners/enroll",
++    status_code=status.HTTP_201_CREATED,
++    response_model=EnrollRunnerResponse,
++    summary="Exchange enrollment token and CSR for mTLS leaf certificate",
++)
++async def enroll_remote_runner_endpoint(
++    body: EnrollRunnerRequest,
++    request: Request,
++) -> EnrollRunnerResponse:
++    """Consume single-use token, validate CSR, sign leaf cert, and register runner."""
++    raw_token = body.enrollment_token.strip()
++    token_sha256 = hashlib.sha256(raw_token.encode("ascii")).digest()
++
++    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
++    if session_factory is None:
++        msg = "RLS session factory not configured on app.state.session_factory"
++        raise RuntimeError(msg)
++
++    key_material: KeyMaterial | None = getattr(request.app.state, "key_material", None)
++    if key_material is None:
++        key_material = load_key_material()
++
++    anon_ctx = RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0))
++    async with session_factory.session(anon_ctx) as session:
++        # 1. Atomically consume token via SECURITY DEFINER helper
++        consume_stmt = text(
++            "SELECT token_id, workspace_id, pool_slug "
++            "FROM consume_runner_enrollment_token(:token_sha256)"
++        )
++        res = await session.execute(consume_stmt, {"token_sha256": token_sha256})
++        row = res.first()
++        if row is None:
++            code = "ENROLLMENT_TOKEN_INVALID"
++            title = "Enrollment Token Invalid"
++            detail = "Enrollment token is expired, already consumed, or invalid."
++            raise ProblemException(
++                status=status.HTTP_401_UNAUTHORIZED,
++                code=code,
++                title=title,
++                detail=detail,
++            )
++
++        token_id, workspace_id, pool_slug = row[0], row[1], row[2]
++        runner_id = uuid.uuid4()
++
++        # 2. Validate PKCS#10 CSR and sign leaf certificate
++        try:
++            cert_bundle = validate_and_sign_csr(
++                body.csr_pem,
++                workspace_id=workspace_id,
++                pool_slug=pool_slug,
++                runner_id=runner_id,
++                key_material=key_material,
++            )
++        except CsrValidationError as exc:
++            title = "CSR Validation Failed"
++            raise ProblemException(
++                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
++                code=exc.code,
++                title=title,
++                detail=exc.detail,
++            ) from exc
++
++        # 3. Register runner in remote_runners table
++        reg_stmt = text(
++            "SELECT register_remote_runner("
++            ":runner_id, :workspace_id, :pool_slug, :hostname, "
++            ":client_cert_sha256, :cert_expires_at, :capabilities_json, :token_id"
++            ")"
++        )
++        await session.execute(
++            reg_stmt,
++            {
++                "runner_id": runner_id,
++                "workspace_id": workspace_id,
++                "pool_slug": pool_slug,
++                "hostname": body.hostname.strip(),
++                "client_cert_sha256": cert_bundle.client_cert_sha256,
++                "cert_expires_at": cert_bundle.cert_expires_at,
++                "capabilities_json": json.dumps(body.capabilities),
++                "token_id": token_id,
++            },
++        )
++
++    return EnrollRunnerResponse(
++        runner_id=runner_id,
++        client_cert_pem=cert_bundle.client_cert_pem,
++        ca_cert_pem=cert_bundle.ca_cert_pem,
++        wss_url="/api/v1/agent-runners/ws",
++    )
++
++
++def _extract_peer_cert_fingerprint(websocket: WebSocket) -> bytes | None:
++    """Extract SHA-256 certificate fingerprint from verified proxy headers or TLS scope."""
++    for header in (
++        "x-client-cert-sha256",
++        "ssl-client-cert-sha256",
++        "x-forwarded-tls-client-cert-sha256",
++        "x-ssl-client-sha256",
++    ):
++        val = websocket.headers.get(header)
++        if val:
++            with contextlib.suppress(Exception):
++                return compute_cert_fingerprint(val)
++
++    client_cert = websocket.scope.get("client_cert") or websocket.scope.get("tls_client_cert")
++    if client_cert:
++        with contextlib.suppress(Exception):
++            return compute_cert_fingerprint(client_cert)
++
++    return None
++
++
++@router.websocket("/agent-runners/ws")
++async def remote_runner_websocket_endpoint(  # noqa: C901, PLR0911, PLR0912, PLR0915
++    websocket: WebSocket,
++) -> None:
++    """WebSocket control hub connection endpoint authenticated via mTLS peer certificate."""
++    cert_sha256 = _extract_peer_cert_fingerprint(websocket)
++    if cert_sha256 is None:
++        await websocket.close(code=4401, reason="peer certificate required")
++        return
++
++    session_factory: RLSSessionFactory | None = getattr(
++        websocket.app.state, "session_factory", None
++    )
++    if session_factory is None:
++        await websocket.close(code=1011, reason="internal server error")
++        return
++
++    anon_ctx = RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0))
++    async with session_factory.session(anon_ctx) as session:
++        lookup_stmt = text(
++            "SELECT runner_id, workspace_id, pool_slug, hostname, "
++            "status, cert_expires_at, capabilities_json "
++            "FROM get_runner_by_cert_sha256(:cert_sha256)"
++        )
++        res = await session.execute(lookup_stmt, {"cert_sha256": cert_sha256})
++        row = res.first()
++
++    if row is None:
++        await websocket.close(code=4401, reason="unregistered certificate")
++        return
++
++    runner_id, workspace_id, pool_slug, hostname, runner_status, cert_expires_at, capabilities = (
++        row[0],
++        row[1],
++        row[2],
++        row[3],
++        row[4],
++        row[5],
++        row[6],
++    )
++
++    if runner_status == "revoked":
++        await websocket.close(code=4003, reason="runner revoked")
++        return
++
++    if cert_expires_at <= datetime.now(UTC):
++        await websocket.close(code=4401, reason="certificate expired")
++        return
++
++    await websocket.accept()
++
++    try:
++        raw_hello = await websocket.receive_text()
++    except WebSocketDisconnect:
++        return
++
++    if len(raw_hello.encode("utf-8")) > MAX_FRAME_BYTES:
++        await websocket.close(code=1009, reason="frame too large")
++        return
++
++    try:
++        hello_data = json.loads(raw_hello)
++        hello = HelloFrame.model_validate(hello_data)
++    except (json.JSONDecodeError, ValueError, KeyError):
++        await websocket.close(code=4401, reason="invalid handshake frame")
++        return
++
++    if hello.runner_id != runner_id:
++        await websocket.close(code=4401, reason="runner_id mismatch")
++        return
++
++    ack = HelloAckFrame()
++    await websocket.send_text(ack.model_dump_json())
++
++    hub = get_global_hub()
++    hub.register_runner(
++        runner_id=runner_id,
++        workspace_id=workspace_id,
++        pool_slug=pool_slug,
++        hostname=hostname,
++        websocket=websocket,
++        max_concurrency=hello.max_concurrency,
++        capabilities=capabilities,
++    )
++
++    with contextlib.suppress(Exception):
++        async with session_factory.session(anon_ctx) as session:
++            await session.execute(
++                text("SELECT touch_runner_heartbeat(:runner_id, 'online')"),
++                {"runner_id": runner_id},
++            )
++
++    try:
++        while True:
++            raw_msg = await websocket.receive_text()
++            if len(raw_msg.encode("utf-8")) > MAX_FRAME_BYTES:
++                await websocket.close(code=1009, reason="frame too large")
++                break
++            try:
++                frame_data = json.loads(raw_msg)
++            except json.JSONDecodeError:
++                continue
++
++            hub.handle_frame(runner_id, frame_data)
++
++            if frame_data.get("type") == "heartbeat":
++                with contextlib.suppress(Exception):
++                    async with session_factory.session(anon_ctx) as session:
++                        await session.execute(
++                            text("SELECT touch_runner_heartbeat(:runner_id)"),
++                            {"runner_id": runner_id},
++                        )
++    except WebSocketDisconnect:
++        pass
++    finally:
++        hub.unregister_runner(runner_id)
++        with contextlib.suppress(Exception):
++            async with session_factory.session(anon_ctx) as session:
++                await session.execute(
++                    text("SELECT touch_runner_heartbeat(:runner_id, 'offline')"),
++                    {"runner_id": runner_id},
++                )
++
++
++router.include_router(admin_router)
+diff --git a/kanban/auth/sessions/csrf.py b/kanban/auth/sessions/csrf.py
+index ba29317..71f6f92 100644
+--- a/kanban/auth/sessions/csrf.py
++++ b/kanban/auth/sessions/csrf.py
+@@ -60,6 +60,8 @@ CSRF_EXEMPT_PATHS: Final[tuple[str, ...]] = (
+     # Internal MCP introspection
+     "/internal/v1/mcp/introspect",
+     "/internal/mcp/introspect",
++    # Headless machine endpoints
++    "/api/v1/agent-runners/enroll",
+ )
+ 
+ 
+diff --git a/kanban/runners/__init__.py b/kanban/runners/__init__.py
+new file mode 100644
+index 0000000..94361a1
+--- /dev/null
++++ b/kanban/runners/__init__.py
+@@ -0,0 +1,53 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Remote runner orchestration, mTLS PKI, and WebSocket hub (KB-P5-22a, S14.2)."""
++
++from kanban.runners.hub import (
++    MAX_FRAME_BYTES,
++    ConnectedRunner,
++    HeartbeatFrame,
++    HelloAckFrame,
++    HelloFrame,
++    JobCancelFrame,
++    JobDispatchFrame,
++    JobResultFrame,
++    JobToolEventFrame,
++    RemoteRunnerDisconnectedError,
++    RemoteRunnerError,
++    RemoteRunnerExecutionError,
++    RemoteRunnerRevokedError,
++    RemoteRunnerUnavailableError,
++    RunnerWssHub,
++    get_global_hub,
++)
++from kanban.runners.pki import (
++    CsrValidationError,
++    IssuedCertificate,
++    compute_cert_fingerprint,
++    derive_runner_ca,
++    validate_and_sign_csr,
++)
++
++__all__ = [
++    "MAX_FRAME_BYTES",
++    "ConnectedRunner",
++    "CsrValidationError",
++    "HeartbeatFrame",
++    "HelloAckFrame",
++    "HelloFrame",
++    "IssuedCertificate",
++    "JobCancelFrame",
++    "JobDispatchFrame",
++    "JobResultFrame",
++    "JobToolEventFrame",
++    "RemoteRunnerDisconnectedError",
++    "RemoteRunnerError",
++    "RemoteRunnerExecutionError",
++    "RemoteRunnerRevokedError",
++    "RemoteRunnerUnavailableError",
++    "RunnerWssHub",
++    "compute_cert_fingerprint",
++    "derive_runner_ca",
++    "get_global_hub",
++    "validate_and_sign_csr",
++]
+diff --git a/kanban/runners/hub.py b/kanban/runners/hub.py
+new file mode 100644
+index 0000000..53d00a5
+--- /dev/null
++++ b/kanban/runners/hub.py
+@@ -0,0 +1,434 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""WSS Hub: Connection pool, heartbeat tracking, dispatch & cancellation (KB-P5-22a, S14.2)."""
++
++from __future__ import annotations
++
++import asyncio
++import base64
++import contextlib
++import json
++import time
++import uuid
++from dataclasses import dataclass, field
++from typing import TYPE_CHECKING, Any, Final, Literal
++
++from pydantic import BaseModel, ConfigDict, Field, model_validator
++
++if TYPE_CHECKING:
++    from collections.abc import Callable
++
++    from starlette.websockets import WebSocket
++
++__all__ = [
++    "MAX_FRAME_BYTES",
++    "ConnectedRunner",
++    "HeartbeatFrame",
++    "HelloAckFrame",
++    "HelloFrame",
++    "JobCancelFrame",
++    "JobDispatchFrame",
++    "JobResultFrame",
++    "JobToolEventFrame",
++    "RemoteRunnerDisconnectedError",
++    "RemoteRunnerError",
++    "RemoteRunnerExecutionError",
++    "RemoteRunnerRevokedError",
++    "RemoteRunnerUnavailableError",
++    "RunnerWssHub",
++    "get_global_hub",
++]
++
++MAX_FRAME_BYTES: Final[int] = 1_310_720
++HEARTBEAT_INTERVAL_S: Final[int] = 15
++DEAD_EVICTION_S: Final[float] = 45.0
++
++
++# --- Exceptions ---
++
++
++class RemoteRunnerError(Exception):
++    """Base exception for remote runner infrastructure errors."""
++
++    def __init__(self, code: str, detail: str = "") -> None:
++        """Initialize with machine-readable code and optional explanation."""
++        super().__init__(detail or code)
++        self.code = code
++        self.detail = detail or code
++
++
++class RemoteRunnerUnavailableError(RemoteRunnerError):
++    """Raised when no online runners are available in the requested pool."""
++
++
++class RemoteRunnerDisconnectedError(RemoteRunnerError):
++    """Raised when runner disconnects or heartbeat times out during execution."""
++
++
++class RemoteRunnerRevokedError(RemoteRunnerError):
++    """Raised when runner certificate is revoked during job execution."""
++
++
++class RemoteRunnerExecutionError(RemoteRunnerError):
++    """Raised when runner returns an error status payload."""
++
++    def __init__(
++        self,
++        code: str,
++        detail: str = "",
++        exit_code: int = 1,
++        stdout_bytes: bytes = b"",
++    ) -> None:
++        """Initialize with execution error attributes."""
++        super().__init__(code, detail)
++        self.exit_code = exit_code
++        self.stdout_bytes = stdout_bytes
++
++
++# --- Typed Protocol Frames (extra="forbid") ---
++
++
++class HelloFrame(BaseModel):
++    """Inbound handshake frame from runner to server."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    type: Literal["hello"] = "hello"
++    schema_version: Literal["kb-runner-ws/v1"] = Field(alias="schema")
++    runner_id: uuid.UUID
++    max_concurrency: int = Field(default=1, ge=1, le=8)
++    capabilities: dict[str, Any] = Field(default_factory=dict)
++
++
++class HelloAckFrame(BaseModel):
++    """Outbound handshake acknowledgement from server to runner."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    type: Literal["hello_ack"] = "hello_ack"
++    heartbeat_interval_s: int = HEARTBEAT_INTERVAL_S
++
++
++class HeartbeatFrame(BaseModel):
++    """Periodic health beacon from runner."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    type: Literal["heartbeat"] = "heartbeat"
++    runner_id: uuid.UUID
++    active_jobs: list[str] = Field(default_factory=list)
++
++
++class JobToolEventFrame(BaseModel):
++    """Granular progress event reported during tool execution."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    type: Literal["job.tool_event"] = "job.tool_event"
++    job_id: str
++    tool_name: str
++    duration_ms: int = Field(ge=0)
++    status: str
++
++
++class JobResultFrame(BaseModel):
++    """Final job completion or failure frame from runner."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    type: Literal["job.result"] = "job.result"
++    job_id: str
++    status: Literal["ok", "error"] = "ok"
++    exit_code: int = 0
++    stdout_b64: str | None = None
++    error_code: str | None = None
++
++    @model_validator(mode="before")
++    @classmethod
++    def _compute_status(cls, data: Any) -> Any:  # noqa: ANN401
++        if isinstance(data, dict):
++            if "status" not in data:
++                exit_code = data.get("exit_code", 0)
++                data["status"] = "ok" if exit_code == 0 else "error"
++            if "error_code" not in data and data.get("status") == "error":
++                data["error_code"] = "REMOTE_RUNNER_ERROR"
++        return data
++
++
++class JobDispatchFrame(BaseModel):
++    """Job assignment frame dispatched to runner."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    type: Literal["job.dispatch"] = "job.dispatch"
++    job_id: str
++    execution_id: str
++    agent_spec: dict[str, Any]
++    context_yaml_b64: str
++    ephemeral_mcp_token: str
++    head_commit: str | None = None
++
++
++class JobCancelFrame(BaseModel):
++    """Job cancellation notice sent to runner."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    type: Literal["job.cancel"] = "job.cancel"
++    job_id: str
++    reason: str
++
++
++# --- Hub Architecture ---
++
++
++@dataclass
++class ConnectedRunner:
++    """State tracking for an active WebSocket connection to a remote runner."""
++
++    runner_id: uuid.UUID
++    workspace_id: uuid.UUID
++    pool_slug: str
++    hostname: str
++    websocket: WebSocket
++    max_concurrency: int = 1
++    capabilities: dict[str, Any] = field(default_factory=dict)
++    active_jobs: set[str] = field(default_factory=set)
++    last_heartbeat_at: float = field(default_factory=time.monotonic)
++    status: str = "online"
++
++
++class RunnerWssHub:
++    """Central server-side control hub managing connected remote runner WebSockets."""
++
++    def __init__(self, time_func: Callable[[], float] | None = None) -> None:
++        """Initialize empty hub registry."""
++        self._runners: dict[uuid.UUID, ConnectedRunner] = {}
++        self._pending_jobs: dict[str, asyncio.Future[dict[str, Any]]] = {}
++        self._job_to_runner: dict[str, uuid.UUID] = {}
++        self._time_func: Callable[[], float] = (
++            time_func if time_func is not None else time.monotonic
++        )
++        self._tool_events: list[dict[str, Any]] = []
++
++    def set_time_func(self, time_func: Callable[[], float]) -> None:
++        """Override clock source for deterministic timeout testing."""
++        self._time_func = time_func
++
++    def register_runner(  # noqa: PLR0913, PLR0917
++        self,
++        runner_id: uuid.UUID,
++        workspace_id: uuid.UUID,
++        pool_slug: str,
++        hostname: str,
++        websocket: WebSocket,
++        max_concurrency: int = 1,
++        capabilities: dict[str, Any] | None = None,
++    ) -> ConnectedRunner:
++        """Register newly connected runner socket."""
++        runner = ConnectedRunner(
++            runner_id=runner_id,
++            workspace_id=workspace_id,
++            pool_slug=pool_slug,
++            hostname=hostname,
++            websocket=websocket,
++            max_concurrency=max(1, min(max_concurrency, 8)),
++            capabilities=capabilities or {},
++            last_heartbeat_at=self._time_func(),
++            status="online",
++        )
++        self._runners[runner_id] = runner
++        return runner
++
++    def unregister_runner(self, runner_id: uuid.UUID, reason: str = "disconnected") -> None:
++        """Unregister runner socket and fail any in-flight jobs."""
++        runner = self._runners.pop(runner_id, None)
++        if runner is None:
++            return
++        runner.status = "offline"
++        exc_cls = RemoteRunnerRevokedError if reason == "revoked" else RemoteRunnerDisconnectedError
++        fail_code = "REMOTE_RUNNER_REVOKED" if reason == "revoked" else "REMOTE_RUNNER_DISCONNECTED"
++        for job_id in list(runner.active_jobs):
++            fut = self._pending_jobs.pop(job_id, None)
++            self._job_to_runner.pop(job_id, None)
++            if fut and not fut.done():
++                fut.set_exception(exc_cls(fail_code, f"Runner {reason} during execution"))
++        runner.active_jobs.clear()
++
++    async def revoke_runner(self, runner_id: uuid.UUID) -> None:
++        """Immediately close active runner socket with 4003 and cancel in-flight jobs."""
++        runner = self._runners.get(runner_id)
++        if runner is not None:
++            ws = runner.websocket
++            self.unregister_runner(runner_id, reason="revoked")
++            with contextlib.suppress(Exception):
++                await ws.close(code=4003, reason="runner revoked")
++
++    def get_pool_runners(self, workspace_id: uuid.UUID, pool_slug: str) -> list[ConnectedRunner]:
++        """Return online runners belonging to workspace and pool."""
++        return [
++            r
++            for r in self._runners.values()
++            if r.workspace_id == workspace_id and r.pool_slug == pool_slug and r.status == "online"
++        ]
++
++    def select_runner(self, workspace_id: uuid.UUID, pool_slug: str) -> ConnectedRunner | None:
++        """Select least-loaded eligible runner with available concurrency."""
++        eligible = [
++            r
++            for r in self.get_pool_runners(workspace_id, pool_slug)
++            if len(r.active_jobs) < r.max_concurrency
++        ]
++        if not eligible:
++            return None
++        return min(eligible, key=lambda r: len(r.active_jobs) / max(1, r.max_concurrency))
++
++    def notify_runner_revoked(self, runner_id: uuid.UUID) -> None:
++        """Notify that runner certificate was revoked, failing in-flight jobs."""
++        self.unregister_runner(runner_id, reason="revoked")
++
++    async def cancel_job(self, job_id: str, reason: str = "cancelled") -> bool:
++        """Cancel a pending job and notify runner socket."""
++        fut = self._pending_jobs.pop(job_id, None)
++        runner_id = self._job_to_runner.pop(job_id, None)
++        if runner_id and runner_id in self._runners:
++            runner = self._runners[runner_id]
++            runner.active_jobs.discard(job_id)
++            cancel_frame = JobCancelFrame(job_id=job_id, reason=reason)
++            with contextlib.suppress(Exception):
++                await self._send_frame(runner.websocket, cancel_frame)
++        if fut and not fut.done():
++            fut.cancel()
++            return True
++        return False
++
++    def evict_stale_runners(self, now: float | None = None) -> list[uuid.UUID]:
++        """Evict runners whose heartbeat has exceeded DEAD_EVICTION_S (45s)."""
++        current_time = now if now is not None else self._time_func()
++        evicted: list[uuid.UUID] = []
++        for runner_id, runner in list(self._runners.items()):
++            elapsed = current_time - runner.last_heartbeat_at
++            if runner.status == "online" and (elapsed > DEAD_EVICTION_S):
++                evicted.append(runner_id)
++                self.unregister_runner(runner_id, reason="heartbeat_timeout")
++        return evicted
++
++    def handle_frame(
++        self,
++        runner_id: uuid.UUID,
++        frame_data: dict[str, Any] | None = None,
++        *,
++        frame: dict[str, Any] | None = None,
++    ) -> None:
++        """Handle incoming parsed JSON frame from a runner."""
++        runner = self._runners.get(runner_id)
++        if runner is None:
++            return
++
++        payload = frame if frame is not None else (frame_data or {})
++        frame_type = payload.get("type")
++        if frame_type == "heartbeat":
++            hb = HeartbeatFrame.model_validate(payload)
++            runner.last_heartbeat_at = self._time_func()
++            runner.active_jobs = set(hb.active_jobs)
++        elif frame_type == "job.tool_event":
++            event = JobToolEventFrame.model_validate(payload)
++            self._tool_events.append(event.model_dump())
++        elif frame_type == "job.result":
++            res = JobResultFrame.model_validate(payload)
++            fut = self._pending_jobs.get(res.job_id)
++            if fut and not fut.done():
++                fut.set_result(res.model_dump())
++
++    async def _send_frame(self, ws: WebSocket, frame: BaseModel) -> None:
++        """Serialize and send typed frame over WebSocket."""
++        payload = frame.model_dump(by_alias=True)
++        raw_text = json.dumps(payload)
++        await ws.send_text(raw_text)
++
++    async def dispatch_job(
++        self,
++        workspace_id: uuid.UUID,
++        pool_slug: str,
++        job_spec: dict[str, Any],
++        timeout_s: float | None = None,
++    ) -> bytes:
++        """Dispatch job to least-loaded online runner in pool and await result bytes."""
++        self.evict_stale_runners()
++
++        eligible = [
++            r
++            for r in self._runners.values()
++            if r.workspace_id == workspace_id and r.pool_slug == pool_slug and r.status == "online"
++        ]
++        if not eligible:
++            msg = "REMOTE_RUNNER_POOL_OFFLINE"
++            raise RemoteRunnerUnavailableError(msg)
++
++        # Select least-loaded runner by active_jobs / max_concurrency ratio
++        runner = min(eligible, key=lambda r: len(r.active_jobs) / max(1, r.max_concurrency))
++
++        job_id = str(job_spec.get("job_id") or f"job-{uuid.uuid4()}")
++        runner.active_jobs.add(job_id)
++        self._job_to_runner[job_id] = runner.runner_id
++
++        loop = asyncio.get_running_loop()
++        future: asyncio.Future[dict[str, Any]] = loop.create_future()
++        self._pending_jobs[job_id] = future
++
++        dispatch_frame = JobDispatchFrame(
++            job_id=job_id,
++            execution_id=str(job_spec.get("execution_id", "")),
++            agent_spec=job_spec.get("agent_spec", {}),
++            context_yaml_b64=job_spec.get("context_yaml_b64", ""),
++            ephemeral_mcp_token=job_spec.get("ephemeral_mcp_token", ""),
++            head_commit=job_spec.get("head_commit"),
++        )
++
++        try:
++            await self._send_frame(runner.websocket, dispatch_frame)
++        except Exception as exc:
++            runner.active_jobs.discard(job_id)
++            self._pending_jobs.pop(job_id, None)
++            self._job_to_runner.pop(job_id, None)
++            msg = "REMOTE_RUNNER_DISCONNECTED"
++            raise RemoteRunnerDisconnectedError(msg) from exc
++
++        try:
++            if timeout_s is not None and timeout_s > 0:
++                async with asyncio.timeout(timeout_s):
++                    result = await future
++            else:
++                result = await future
++        except (TimeoutError, asyncio.CancelledError) as err:
++            cancel_frame = JobCancelFrame(
++                job_id=job_id,
++                reason="timeout" if isinstance(err, TimeoutError) else "cancelled",
++            )
++            with contextlib.suppress(Exception):
++                await self._send_frame(runner.websocket, cancel_frame)
++            raise
++        finally:
++            runner.active_jobs.discard(job_id)
++            self._pending_jobs.pop(job_id, None)
++            self._job_to_runner.pop(job_id, None)
++
++        status = result.get("status")
++        if status == "ok":
++            stdout_b64 = result.get("stdout_b64") or ""
++            return base64.b64decode(stdout_b64.encode("ascii"))
++        error_code = result.get("error_code") or "REMOTE_RUNNER_ERROR"
++        exit_code = int(result.get("exit_code") or 1)
++        raw_stdout = base64.b64decode((result.get("stdout_b64") or "").encode("ascii"))
++        raise RemoteRunnerExecutionError(error_code, exit_code=exit_code, stdout_bytes=raw_stdout)
++
++
++_GLOBAL_HUB: RunnerWssHub | None = None
++
++
++def get_global_hub() -> RunnerWssHub:
++    """Retrieve or initialize singleton RunnerWssHub."""
++    global _GLOBAL_HUB  # noqa: PLW0603
++    if _GLOBAL_HUB is None:
++        _GLOBAL_HUB = RunnerWssHub()
++    return _GLOBAL_HUB
+diff --git a/kanban/runners/pki.py b/kanban/runners/pki.py
+new file mode 100644
+index 0000000..737cf9a
+--- /dev/null
++++ b/kanban/runners/pki.py
+@@ -0,0 +1,272 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Runner PKI: CSR validation, ECDSA leaf cert issuance & fingerprint pinning (KB-P5-22a, S14.2)."""
++
++from __future__ import annotations
++
++import base64
++import uuid  # noqa: TC003
++from dataclasses import dataclass
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING, Final
++
++from cryptography import x509
++from cryptography.hazmat.primitives import hashes, serialization
++from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
++from cryptography.x509.oid import ExtendedKeyUsageOID, ExtensionOID, NameOID
++
++from kanban.security.keys import derive_subkey
++
++if TYPE_CHECKING:
++    from kanban.security.keys import KeyMaterial
++
++__all__ = [
++    "CsrValidationError",
++    "IssuedCertificate",
++    "compute_cert_fingerprint",
++    "derive_runner_ca",
++    "validate_and_sign_csr",
++]
++
++_MIN_RSA_KEY_SIZE: Final[int] = 3072
++_CERT_VALIDITY_DAYS: Final[int] = 30
++_CA_VALIDITY_DAYS: Final[int] = 3650
++_HEX_FINGERPRINT_LEN: Final[int] = 64
++_DIGEST_BYTES_LEN: Final[int] = 32
++_SECP256R1_ORDER: Final[int] = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
++_ALLOWED_EC_CURVES: Final[tuple[type[ec.EllipticCurve], ...]] = (
++    ec.SECP256R1,
++    ec.SECP384R1,
++    ec.SECP521R1,
++)
++
++
++class CsrValidationError(ValueError):
++    """Raised when a PKCS#10 Certificate Signing Request fails validation."""
++
++    def __init__(self, code: str, detail: str) -> None:
++        """Initialize with machine-readable error code and human description."""
++        super().__init__(f"{code}: {detail}")
++        self.code = code
++        self.detail = detail
++        self.status = 422
++
++
++def _csr_err(detail: str) -> CsrValidationError:
++    """Construct CsrValidationError with standard CSR_INVALID code."""
++    code = "CSR_INVALID"
++    return CsrValidationError(code, detail)
++
++
++@dataclass(frozen=True, slots=True)
++class IssuedCertificate:
++    """Bundle containing leaf certificate, CA certificate, fingerprint and expiry."""
++
++    runner_id: uuid.UUID
++    client_cert_pem: str
++    ca_cert_pem: str
++    client_cert_sha256: bytes
++    cert_expires_at: datetime
++
++
++def compute_cert_fingerprint(cert_data: str | bytes) -> bytes:  # noqa: PLR0911
++    """Compute 32-byte SHA-256 fingerprint from PEM or DER certificate bytes."""
++    if isinstance(cert_data, str):
++        cleaned = cert_data.strip()
++        if cleaned.startswith("-----BEGIN"):
++            cert = x509.load_pem_x509_certificate(cleaned.encode("utf-8"))
++            return cert.fingerprint(hashes.SHA256())
++        if len(cleaned) == _HEX_FINGERPRINT_LEN:
++            return bytes.fromhex(cleaned)
++        raw = base64.b64decode(cleaned)
++        if len(raw) == _DIGEST_BYTES_LEN:
++            return raw
++        cert = x509.load_der_x509_certificate(raw)
++        return cert.fingerprint(hashes.SHA256())
++
++    if cert_data.startswith(b"-----BEGIN"):
++        cert = x509.load_pem_x509_certificate(cert_data)
++        return cert.fingerprint(hashes.SHA256())
++    if len(cert_data) == _DIGEST_BYTES_LEN:
++        return cert_data
++    cert = x509.load_der_x509_certificate(cert_data)
++    return cert.fingerprint(hashes.SHA256())
++
++
++_CA_CACHE: dict[tuple[bytes, uuid.UUID], tuple[x509.Certificate, ec.EllipticCurvePrivateKey]] = {}
++
++
++def derive_runner_ca(
++    key_material: KeyMaterial, workspace_id: uuid.UUID
++) -> tuple[x509.Certificate, ec.EllipticCurvePrivateKey]:
++    """Derive deterministic workspace runner CA key and self-signed CA certificate."""
++    cache_key = (key_material.master_kek, workspace_id)
++    if cache_key in _CA_CACHE:
++        return _CA_CACHE[cache_key]
++
++    ca_seed = derive_subkey(key_material.master_kek, f"runner-ca/{workspace_id}")
++    curve = ec.SECP256R1()
++    scalar = (int.from_bytes(ca_seed, "big") % (_SECP256R1_ORDER - 1)) + 1
++    ca_private_key = ec.derive_private_key(scalar, curve)
++
++    ca_name = x509.Name(
++        [
++            x509.NameAttribute(NameOID.COMMON_NAME, f"👍kanban Runner CA {workspace_id}"),
++            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "👍kanban Platform"),
++        ]
++    )
++    fixed_start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
++    fixed_serial = int.from_bytes(ca_seed[:16], "big")
++    ca_cert = (
++        x509.CertificateBuilder()
++        .subject_name(ca_name)
++        .issuer_name(ca_name)
++        .public_key(ca_private_key.public_key())
++        .serial_number(fixed_serial)
++        .not_valid_before(fixed_start)
++        .not_valid_after(fixed_start + timedelta(days=_CA_VALIDITY_DAYS))
++        .add_extension(
++            x509.BasicConstraints(ca=True, path_length=0),
++            critical=True,
++        )
++        .add_extension(
++            x509.KeyUsage(
++                digital_signature=True,
++                key_cert_sign=True,
++                crl_sign=True,
++                content_commitment=False,
++                key_encipherment=False,
++                data_encipherment=False,
++                key_agreement=False,
++                encipher_only=False,
++                decipher_only=False,
++            ),
++            critical=True,
++        )
++        .add_extension(
++            x509.SubjectKeyIdentifier.from_public_key(ca_private_key.public_key()),
++            critical=False,
++        )
++        .sign(ca_private_key, hashes.SHA256())
++    )
++    _CA_CACHE[cache_key] = (ca_cert, ca_private_key)
++    return ca_cert, ca_private_key
++
++
++def validate_and_sign_csr(
++    csr_pem: str | bytes,
++    workspace_id: uuid.UUID,
++    pool_slug: str,
++    runner_id: uuid.UUID,
++    key_material: KeyMaterial,
++) -> IssuedCertificate:
++    """Validate PKCS#10 CSR signature, key strength, and sign 30-day leaf certificate."""
++    csr_bytes = csr_pem.strip().encode("utf-8") if isinstance(csr_pem, str) else csr_pem
++
++    try:
++        csr = x509.load_pem_x509_csr(csr_bytes)
++    except Exception as exc:
++        msg = f"Failed to parse PKCS#10 CSR: {exc}"
++        raise _csr_err(msg) from exc
++
++    if not csr.is_signature_valid:
++        msg = "CSR cryptographic signature verification failed"
++        raise _csr_err(msg)
++
++    pubkey = csr.public_key()
++    if isinstance(pubkey, ec.EllipticCurvePublicKey):
++        if not isinstance(pubkey.curve, _ALLOWED_EC_CURVES):
++            msg = (
++                f"Curve {pubkey.curve.name} is not permitted. "
++                "Only NIST P-256, P-384, or P-521 are allowed."
++            )
++            raise _csr_err(msg)
++    elif isinstance(pubkey, ed25519.Ed25519PublicKey):
++        pass
++    elif isinstance(pubkey, rsa.RSAPublicKey):
++        if pubkey.key_size < _MIN_RSA_KEY_SIZE:
++            msg = f"RSA key length {pubkey.key_size} is below mandatory 3072-bit minimum"
++            raise _csr_err(msg)
++    else:
++        msg = f"Unsupported asymmetric key algorithm {type(pubkey).__name__}"
++        raise _csr_err(msg)
++
++    try:
++        bc_ext = csr.extensions.get_extension_for_oid(ExtensionOID.BASIC_CONSTRAINTS)
++        bc_val = bc_ext.value
++        if isinstance(bc_val, x509.BasicConstraints) and bc_val.ca is True:
++            msg = "CSR requested basicConstraints CA:TRUE forbidden for leaf certificates"
++            raise _csr_err(msg)
++    except x509.ExtensionNotFound:
++        pass
++
++    ca_cert, ca_private_key = derive_runner_ca(key_material, workspace_id)
++
++    now = datetime.now(UTC)
++    not_before = now - timedelta(minutes=5)
++    cert_expires_at = now + timedelta(days=_CERT_VALIDITY_DAYS)
++    san_uri = f"spiffe://kanban.internal/ws/{workspace_id}/pool/{pool_slug}/runner/{runner_id}"
++
++    builder = (
++        x509.CertificateBuilder()
++        .subject_name(
++            x509.Name(
++                [
++                    x509.NameAttribute(NameOID.COMMON_NAME, f"runner-{runner_id}"),
++                    x509.NameAttribute(NameOID.ORGANIZATION_NAME, "👍kanban Remote Runners"),
++                ]
++            )
++        )
++        .issuer_name(ca_cert.subject)
++        .public_key(pubkey)
++        .serial_number(x509.random_serial_number())
++        .not_valid_before(not_before)
++        .not_valid_after(cert_expires_at)
++        .add_extension(
++            x509.BasicConstraints(ca=False, path_length=None),
++            critical=True,
++        )
++        .add_extension(
++            x509.KeyUsage(
++                digital_signature=True,
++                key_encipherment=isinstance(pubkey, rsa.RSAPublicKey),
++                key_agreement=isinstance(pubkey, ec.EllipticCurvePublicKey),
++                content_commitment=False,
++                data_encipherment=False,
++                key_cert_sign=False,
++                crl_sign=False,
++                encipher_only=False,
++                decipher_only=False,
++            ),
++            critical=True,
++        )
++        .add_extension(
++            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]),
++            critical=False,
++        )
++        .add_extension(
++            x509.SubjectAlternativeName([x509.UniformResourceIdentifier(san_uri)]),
++            critical=False,
++        )
++        .add_extension(
++            x509.SubjectKeyIdentifier.from_public_key(pubkey),
++            critical=False,
++        )
++        .add_extension(
++            x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_private_key.public_key()),
++            critical=False,
++        )
++    )
++
++    leaf_cert = builder.sign(ca_private_key, hashes.SHA256())
++    client_cert_sha256 = leaf_cert.fingerprint(hashes.SHA256())
++    client_cert_pem = leaf_cert.public_bytes(serialization.Encoding.PEM).decode("ascii")
++    ca_cert_pem = ca_cert.public_bytes(serialization.Encoding.PEM).decode("ascii")
++
++    return IssuedCertificate(
++        runner_id=runner_id,
++        client_cert_pem=client_cert_pem,
++        ca_cert_pem=ca_cert_pem,
++        client_cert_sha256=client_cert_sha256,
++        cert_expires_at=cert_expires_at,
++    )
+diff --git a/kanban/tests/runners/__init__.py b/kanban/tests/runners/__init__.py
+new file mode 100644
+index 0000000..4f55237
+--- /dev/null
++++ b/kanban/tests/runners/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for remote runner infrastructure, PKI, and WebSocket hub."""
+diff --git a/kanban/tests/runners/test_pki_and_enrollment.py b/kanban/tests/runners/test_pki_and_enrollment.py
+new file mode 100644
+index 0000000..a7f50a7
+--- /dev/null
++++ b/kanban/tests/runners/test_pki_and_enrollment.py
+@@ -0,0 +1,562 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for remote runner PKI and CSR enrollment (KB-P5-22a, S14.2, S11.4)."""
++
++from __future__ import annotations
++
++import base64
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING
++
++import pytest
++from cryptography import x509
++from cryptography.hazmat.primitives import hashes, serialization
++from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
++from cryptography.x509.oid import ExtendedKeyUsageOID, ExtensionOID, NameOID
++from sqlalchemy import select, text, update
++
++from database.models.remote_runner import RemoteRunner, RemoteRunnerEnrollmentToken
++from kanban.runners.pki import (
++    CsrValidationError,
++    compute_cert_fingerprint,
++    derive_runner_ca,
++    validate_and_sign_csr,
++)
++from kanban.security.keys import KeyMaterial
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _b64(raw: bytes) -> str:
++    return base64.b64encode(raw).decode("ascii")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++async def _enroll_totp(session: AsyncSession, p_id: uuid.UUID) -> None:
++    """Enroll and confirm active TOTP factor to satisfy require_admin_aal2."""
++    await session.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'kek-v1')"),
++        {
++            "p_id": p_id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await session.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": p_id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await session.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await session.commit()
++
++
++def _generate_csr(
++    key: ec.EllipticCurvePrivateKey | ed25519.Ed25519PrivateKey | rsa.RSAPrivateKey,
++    cn: str = "runner-node-1",
++    *,
++    is_ca: bool = False,
++) -> str:
++    """Generate PKCS#10 CSR in PEM format."""
++    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
++    builder = x509.CertificateSigningRequestBuilder().subject_name(name)
++    if is_ca:
++        builder = builder.add_extension(
++            x509.BasicConstraints(ca=True, path_length=None), critical=True
++        )
++
++    hash_algo = None if isinstance(key, ed25519.Ed25519PrivateKey) else hashes.SHA256()
++    csr = builder.sign(key, hash_algo)
++    return csr.public_bytes(serialization.Encoding.PEM).decode("ascii")
++
++
++def test_pki_compute_fingerprint_variants() -> None:
++    """Unit test compute_cert_fingerprint with PEM, DER bytes, 64-char hex, and 32-byte raw."""
++    priv = ec.generate_private_key(ec.SECP256R1())
++    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "test")])
++    now = datetime.now(UTC)
++    cert = (
++        x509.CertificateBuilder()
++        .subject_name(name)
++        .issuer_name(name)
++        .public_key(priv.public_key())
++        .serial_number(1)
++        .not_valid_before(now - timedelta(days=1))
++        .not_valid_after(now + timedelta(days=1))
++        .sign(priv, hashes.SHA256())
++    )
++    expected_fp = cert.fingerprint(hashes.SHA256())
++    pem_str = cert.public_bytes(serialization.Encoding.PEM).decode("ascii")
++    der_bytes = cert.public_bytes(serialization.Encoding.DER)
++
++    assert compute_cert_fingerprint(pem_str) == expected_fp
++    assert compute_cert_fingerprint(der_bytes) == expected_fp
++    assert compute_cert_fingerprint(expected_fp.hex()) == expected_fp
++    assert compute_cert_fingerprint(expected_fp) == expected_fp
++    b64_str = base64.b64encode(expected_fp).decode("ascii")
++    assert compute_cert_fingerprint(b64_str) == expected_fp
++
++
++def test_pki_derive_ca_deterministic() -> None:
++    """Verify derive_runner_ca produces stable certificate for same workspace."""
++    km = KeyMaterial(
++        master_kek=b"\x01" * 32,
++        auth_pepper=b"\x02" * 32,
++        session_hmac_key=b"\x03" * 32,
++    )
++    ws_id = uuid.uuid4()
++    ca1, key1 = derive_runner_ca(km, ws_id)
++    ca2, key2 = derive_runner_ca(km, ws_id)
++
++    assert ca1.fingerprint(hashes.SHA256()) == ca2.fingerprint(hashes.SHA256())
++    assert key1.private_numbers().private_value == key2.private_numbers().private_value
++
++
++@pytest.mark.asyncio
++async def test_case_1_positive_mint_and_enroll(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 1: Positive flow - admin mints token, runner calls /enroll, receives leaf cert."""
++    admin = await make_user("runner-admin", workspace_role="WORKSPACE_ADMIN")
++    await _enroll_totp(api_env.seed, admin.id)
++    admin_client = as_principal(admin, aal_level=2)
++
++    # 1. Admin mints token
++    mint_resp = await admin_client.post(
++        "/api/v1/admin/agent-runners/enrollment-tokens",
++        json={"pool_slug": "gpu-pool-a", "ttl_seconds": 600},
++    )
++    assert mint_resp.status_code == 201, mint_resp.text
++    mint_data = mint_resp.json()
++    token = mint_data["enrollment_token"]
++    assert token.startswith("kb_rnr_enroll_")
++    assert mint_data["pool_slug"] == "gpu-pool-a"
++
++    # 2. Runner generates P-256 key & CSR
++    runner_key = ec.generate_private_key(ec.SECP256R1())
++    csr_pem = _generate_csr(runner_key, cn="runner-box-1")
++
++    # 3. Unauthenticated runner enrolls
++    api_env.resolver.principal = None
++    anon_client = api_env.client
++    enroll_resp = await anon_client.post(
++        "/api/v1/agent-runners/enroll",
++        json={
++            "enrollment_token": token,
++            "csr_pem": csr_pem,
++            "hostname": "runner-box-1.internal",
++            "capabilities": {"gpu": "a100", "ram_gb": 64},
++        },
++    )
++    assert enroll_resp.status_code == 201, enroll_resp.text
++    enroll_data = enroll_resp.json()
++    runner_id_str = enroll_data["runner_id"]
++    client_cert_pem = enroll_data["client_cert_pem"]
++    ca_cert_pem = enroll_data["ca_cert_pem"]
++    assert enroll_data["wss_url"] == "/api/v1/agent-runners/ws"
++
++    # Parse leaf cert and verify invariants
++    leaf_cert = x509.load_pem_x509_certificate(client_cert_pem.encode("ascii"))
++    ca_cert = x509.load_pem_x509_certificate(ca_cert_pem.encode("ascii"))
++
++    # Verify signature
++    ca_pub = ca_cert.public_key()
++    assert isinstance(ca_pub, ec.EllipticCurvePublicKey)
++    ca_pub.verify(
++        leaf_cert.signature,
++        leaf_cert.tbs_certificate_bytes,
++        ec.ECDSA(hashes.SHA256()),
++    )
++
++    # Verify SAN URI
++    san_ext = leaf_cert.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
++    assert isinstance(san_ext.value, x509.SubjectAlternativeName)
++    uris = [n.value for n in san_ext.value if isinstance(n, x509.UniformResourceIdentifier)]
++    expected_uri = (
++        f"spiffe://kanban.internal/ws/{api_env.workspace_id}/pool/gpu-pool-a/runner/{runner_id_str}"
++    )
++    assert expected_uri in uris
++
++    # Verify ExtendedKeyUsage
++    eku_ext = leaf_cert.extensions.get_extension_for_oid(ExtensionOID.EXTENDED_KEY_USAGE)
++    assert isinstance(eku_ext.value, x509.ExtendedKeyUsage)
++    assert ExtendedKeyUsageOID.CLIENT_AUTH in eku_ext.value
++
++    # Verify database state
++    runner_uuid = uuid.UUID(runner_id_str)
++    r_row = (
++        (await api_env.seed.execute(select(RemoteRunner).where(RemoteRunner.id == runner_uuid)))
++        .scalars()
++        .first()
++    )
++    assert r_row is not None
++    assert r_row.pool_slug == "gpu-pool-a"
++    assert r_row.hostname == "runner-box-1.internal"
++    assert r_row.status == "offline"
++    assert r_row.client_cert_sha256 == leaf_cert.fingerprint(hashes.SHA256())
++
++    t_row = (
++        (
++            await api_env.seed.execute(
++                select(RemoteRunnerEnrollmentToken).where(
++                    RemoteRunnerEnrollmentToken.id == uuid.UUID(mint_data["id"])
++                )
++            )
++        )
++        .scalars()
++        .first()
++    )
++    assert t_row is not None
++    assert t_row.consumed_at is not None
++    assert t_row.consumed_by_runner_id == runner_uuid
++
++
++@pytest.mark.asyncio
++async def test_case_2_security_single_use_expiry_and_bad_csr(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 2: Security checks - single-use replay, expired token, CA:TRUE & tampered CSR."""
++    admin = await make_user("runner-admin-2", workspace_role="WORKSPACE_ADMIN")
++    await _enroll_totp(api_env.seed, admin.id)
++
++    # 1. Mint token and enroll once
++    admin_client = as_principal(admin, aal_level=2)
++    mint_resp = await admin_client.post(
++        "/api/v1/admin/agent-runners/enrollment-tokens",
++        json={"pool_slug": "pool-replay", "ttl_seconds": 300},
++    )
++    assert mint_resp.status_code == 201, mint_resp.text
++    token = mint_resp.json()["enrollment_token"]
++    key1 = ec.generate_private_key(ec.SECP256R1())
++    csr1 = _generate_csr(key1, cn="node-1")
++
++    api_env.resolver.principal = None
++    resp1 = await api_env.client.post(
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token, "csr_pem": csr1, "hostname": "node-1"},
++    )
++    assert resp1.status_code == 201
++
++    # Replay: same token second time -> 401 ENROLLMENT_TOKEN_INVALID
++    resp_replay = await api_env.client.post(
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token, "csr_pem": csr1, "hostname": "node-1-replay"},
++    )
++    assert resp_replay.status_code == 401
++    assert resp_replay.json()["code"] == "ENROLLMENT_TOKEN_INVALID"
++
++    # 2. Expired token: mint token and force expires_at to the past
++    admin_client = as_principal(admin, aal_level=2)
++    mint_resp2 = await admin_client.post(
++        "/api/v1/admin/agent-runners/enrollment-tokens",
++        json={"pool_slug": "pool-expired", "ttl_seconds": 60},
++    )
++    assert mint_resp2.status_code == 201, mint_resp2.text
++    token2_id = uuid.UUID(mint_resp2.json()["id"])
++    token2 = mint_resp2.json()["enrollment_token"]
++
++    await api_env.seed.execute(
++        update(RemoteRunnerEnrollmentToken)
++        .where(RemoteRunnerEnrollmentToken.id == token2_id)
++        .values(expires_at=datetime.now(UTC) - timedelta(seconds=10))
++    )
++    await api_env.seed.commit()
++
++    api_env.resolver.principal = None
++    resp_expired = await api_env.client.post(
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token2, "csr_pem": csr1, "hostname": "node-expired"},
++    )
++    assert resp_expired.status_code == 401
++    assert resp_expired.json()["code"] == "ENROLLMENT_TOKEN_INVALID"
++
++    # 3. CSR requesting basicConstraints CA:TRUE -> 422 CSR_INVALID
++    admin_client = as_principal(admin, aal_level=2)
++    mint_resp3 = await admin_client.post(
++        "/api/v1/admin/agent-runners/enrollment-tokens",
++        json={"pool_slug": "pool-bad-csr", "ttl_seconds": 300},
++    )
++    assert mint_resp3.status_code == 201, mint_resp3.text
++    token3 = mint_resp3.json()["enrollment_token"]
++    ca_csr = _generate_csr(key1, cn="fake-ca", is_ca=True)
++
++    api_env.resolver.principal = None
++    resp_ca = await api_env.client.post(
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token3, "csr_pem": ca_csr, "hostname": "fake-ca-node"},
++    )
++    assert resp_ca.status_code == 422
++    assert resp_ca.json()["code"] == "CSR_INVALID"
++
++    # 4. Tampered CSR signature -> 422 CSR_INVALID
++    tampered_csr = csr1.replace("A", "B", 10)
++    resp_tampered = await api_env.client.post(
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token3, "csr_pem": tampered_csr, "hostname": "tampered-node"},
++    )
++    assert resp_tampered.status_code == 422
++    assert resp_tampered.json()["code"] == "CSR_INVALID"
++
++    # 5. Weak RSA key (< 3072, e.g. 2048) -> 422 CSR_INVALID
++    weak_rsa = rsa.generate_private_key(public_exponent=65537, key_size=2048)
++    weak_csr = _generate_csr(weak_rsa, cn="weak-rsa-node")
++    resp_weak = await api_env.client.post(
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token3, "csr_pem": weak_csr, "hostname": "weak-rsa-node"},
++    )
++    assert resp_weak.status_code == 422
++    assert resp_weak.json()["code"] == "CSR_INVALID"
++
++
++@pytest.mark.asyncio
++async def test_case_3_ed25519_and_p384_csr_support(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify Ed25519 and P-384 CSRs are accepted and signed properly."""
++    admin = await make_user("runner-admin-3", workspace_role="WORKSPACE_ADMIN")
++    await _enroll_totp(api_env.seed, admin.id)
++
++    # 1. Ed25519 CSR
++    admin_client = as_principal(admin, aal_level=2)
++    mint1 = await admin_client.post(
++        "/api/v1/admin/agent-runners/enrollment-tokens",
++        json={"pool_slug": "ed25519-pool", "ttl_seconds": 300},
++    )
++    assert mint1.status_code == 201, mint1.text
++    ed_key = ed25519.Ed25519PrivateKey.generate()
++    ed_csr = _generate_csr(ed_key, cn="ed25519-node")
++
++    api_env.resolver.principal = None
++    token_ed = mint1.json()["enrollment_token"]
++    resp_ed = await api_env.client.post(
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token_ed, "csr_pem": ed_csr, "hostname": "ed-box"},
++    )
++    assert resp_ed.status_code == 201
++
++    # 2. P-384 CSR
++    admin_client = as_principal(admin, aal_level=2)
++    mint2 = await admin_client.post(
++        "/api/v1/admin/agent-runners/enrollment-tokens",
++        json={"pool_slug": "p384-pool", "ttl_seconds": 300},
++    )
++    assert mint2.status_code == 201, mint2.text
++    p384_key = ec.generate_private_key(ec.SECP384R1())
++    p384_csr = _generate_csr(p384_key, cn="p384-node")
++
++    api_env.resolver.principal = None
++    token_p384 = mint2.json()["enrollment_token"]
++    resp_p384 = await api_env.client.post(
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token_p384, "csr_pem": p384_csr, "hostname": "p384-box"},
++    )
++    assert resp_p384.status_code == 201
++
++
++@pytest.mark.asyncio
++async def test_case_4_admin_list_and_revoke_routes(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify admin listing with filters and revoke endpoint."""
++    admin = await make_user("runner-admin-4", workspace_role="WORKSPACE_ADMIN")
++    await _enroll_totp(api_env.seed, admin.id)
++
++    # Enroll a runner in pool-alpha
++    admin_client = as_principal(admin, aal_level=2)
++    m = await admin_client.post(
++        "/api/v1/admin/agent-runners/enrollment-tokens",
++        json={"pool_slug": "pool-alpha", "ttl_seconds": 300},
++    )
++    assert m.status_code == 201, m.text
++    k = ec.generate_private_key(ec.SECP256R1())
++    c = _generate_csr(k, cn="alpha-node")
++
++    api_env.resolver.principal = None
++    token_alpha = m.json()["enrollment_token"]
++    e = await api_env.client.post(
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token_alpha, "csr_pem": c, "hostname": "alpha-node"},
++    )
++    assert e.status_code == 201
++    runner_id = e.json()["runner_id"]
++
++    # 1. List with filter
++    admin_client = as_principal(admin, aal_level=2)
++    list_resp = await admin_client.get(
++        "/api/v1/admin/agent-runners",
++        params={"pool_slug": "pool-alpha", "status": "offline"},
++    )
++    assert list_resp.status_code == 200
++    runners = list_resp.json()
++    assert any(r["id"] == runner_id for r in runners)
++
++    # List with non-matching pool
++    empty_resp = await admin_client.get(
++        "/api/v1/admin/agent-runners",
++        params={"pool_slug": "other-pool"},
++    )
++    assert empty_resp.status_code == 200
++    assert not any(r["id"] == runner_id for r in empty_resp.json())
++
++    # 2. Revoke runner
++    revoke_resp = await admin_client.post(f"/api/v1/admin/agent-runners/{runner_id}:revoke")
++    assert revoke_resp.status_code == 200
++    assert revoke_resp.json()["status"] == "revoked"
++
++    # Revoke non-existent runner -> 404
++    non_existent = str(uuid.uuid4())
++    rev_404 = await admin_client.post(f"/api/v1/admin/agent-runners/{non_existent}:revoke")
++    assert rev_404.status_code == 404
++
++    # 3. Invalid pool slug on mint -> 422
++    bad_mint = await admin_client.post(
++        "/api/v1/admin/agent-runners/enrollment-tokens",
++        json={"pool_slug": "BAD_SLUG!", "ttl_seconds": 300},
++    )
++    assert bad_mint.status_code == 422
++    assert bad_mint.json()["code"] == "POOL_SLUG_INVALID"
++
++
++def test_compute_cert_fingerprint_formats() -> None:
++    """Verify compute_cert_fingerprint across formats."""
++    k = ec.generate_private_key(ec.SECP256R1())
++    csr_pem = _generate_csr(k, cn="fp-test")
++    km = KeyMaterial(
++        master_kek=b"k" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++        master_kek_kid="test-kid-1",
++    )
++    ws_id = uuid.uuid4()
++    issued = validate_and_sign_csr(csr_pem, ws_id, "gpu-pool", uuid.uuid4(), km)
++    leaf_pem, fp = issued.client_cert_pem, issued.client_cert_sha256
++
++    cert = x509.load_pem_x509_certificate(leaf_pem.encode("utf-8"))
++    der_bytes = cert.public_bytes(serialization.Encoding.DER)
++    pem_bytes = cert.public_bytes(serialization.Encoding.PEM)
++
++    # 1. bytes PEM
++    assert compute_cert_fingerprint(pem_bytes) == fp
++    # 2. bytes DER
++    assert compute_cert_fingerprint(der_bytes) == fp
++    # 3. base64 DER string
++    b64_der = base64.b64encode(der_bytes).decode("ascii")
++    assert compute_cert_fingerprint(b64_der) == fp
++    # 4. hex string
++    assert compute_cert_fingerprint(fp.hex()) == fp
++    # 5. raw bytes
++    assert compute_cert_fingerprint(fp) == fp
++
++
++def test_csr_crypto_and_policy_rejections() -> None:
++    """Verify CSR rejection on weak RSA, invalid curves, CA basicConstraints, and bad signatures."""
++    km = KeyMaterial(
++        master_kek=b"k" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++        master_kek_kid="test-kid-1",
++    )
++    ws_id = uuid.uuid4()
++
++    # 1. Weak RSA key (< 3072)
++    rsa_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
++    builder = x509.CertificateSigningRequestBuilder().subject_name(
++        x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "weak-rsa")])
++    )
++    weak_rsa_csr = (
++        builder.sign(rsa_key, hashes.SHA256())
++        .public_bytes(serialization.Encoding.PEM)
++        .decode("ascii")
++    )
++    with pytest.raises(CsrValidationError, match="3072-bit minimum"):
++        validate_and_sign_csr(weak_rsa_csr, ws_id, "pool", uuid.uuid4(), km)
++
++    # 2. Disallowed curve (SECP224R1)
++    curve_key = ec.generate_private_key(ec.SECP224R1())
++    curve_csr = _generate_csr(curve_key, cn="bad-curve")
++    with pytest.raises(CsrValidationError, match="not permitted"):
++        validate_and_sign_csr(curve_csr, ws_id, "pool", uuid.uuid4(), km)
++
++    # 3. CA:TRUE basic constraints
++    ec_key = ec.generate_private_key(ec.SECP256R1())
++    ca_builder = (
++        x509.CertificateSigningRequestBuilder()
++        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "ca-sub")]))
++        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
++    )
++    ca_csr = (
++        ca_builder.sign(ec_key, hashes.SHA256())
++        .public_bytes(serialization.Encoding.PEM)
++        .decode("ascii")
++    )
++    with pytest.raises(CsrValidationError, match="CA:TRUE forbidden"):
++        validate_and_sign_csr(ca_csr, ws_id, "pool", uuid.uuid4(), km)
++
++    # 4. Tampered signature
++    valid_pem = _generate_csr(ec_key, cn="tamper-test")
++    valid_csr = x509.load_pem_x509_csr(valid_pem.encode("ascii"))
++    der = bytearray(valid_csr.public_bytes(serialization.Encoding.DER))
++    der[-5] ^= 0xFF
++    b64_tampered = base64.encodebytes(der).decode("ascii")
++    tampered_pem = (
++        f"-----BEGIN CERTIFICATE REQUEST-----\n{b64_tampered}-----END CERTIFICATE REQUEST-----\n"
++    )
++    with pytest.raises(CsrValidationError, match="signature verification failed"):
++        validate_and_sign_csr(tampered_pem, ws_id, "pool", uuid.uuid4(), km)
++
++    # 5. Valid RSA 3072-bit key CSR succeeds
++    rsa_3072 = rsa.generate_private_key(public_exponent=65537, key_size=3072)
++    rsa_builder = x509.CertificateSigningRequestBuilder().subject_name(
++        x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "valid-rsa")])
++    )
++    valid_rsa_csr = (
++        rsa_builder.sign(rsa_3072, hashes.SHA256())
++        .public_bytes(serialization.Encoding.PEM)
++        .decode("ascii")
++    )
++    issued_rsa = validate_and_sign_csr(valid_rsa_csr, ws_id, "pool", uuid.uuid4(), km)
++    assert issued_rsa.client_cert_sha256
++
++    # 6. BasicConstraints ca=False succeeds
++    leaf_bc_builder = (
++        x509.CertificateSigningRequestBuilder()
++        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "leaf-bc")]))
++        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=False)
++    )
++    leaf_bc_csr = (
++        leaf_bc_builder.sign(ec_key, hashes.SHA256())
++        .public_bytes(serialization.Encoding.PEM)
++        .decode("ascii")
++    )
++    issued_bc = validate_and_sign_csr(leaf_bc_csr, ws_id, "pool", uuid.uuid4(), km)
++    assert issued_bc.client_cert_sha256
+diff --git a/kanban/tests/runners/test_wss_hub.py b/kanban/tests/runners/test_wss_hub.py
+new file mode 100644
+index 0000000..90a97af
+--- /dev/null
++++ b/kanban/tests/runners/test_wss_hub.py
+@@ -0,0 +1,773 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for RunnerWssHub and WebSocket endpoint (KB-P5-22a, S14.2)."""
++
++from __future__ import annotations
++
++import asyncio
++import base64
++import json
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING, Any, cast
++
++import pytest
++from cryptography import x509
++from cryptography.hazmat.primitives import hashes, serialization
++from cryptography.hazmat.primitives.asymmetric import ec
++from cryptography.x509.oid import NameOID
++from sqlalchemy import text, update
++from starlette.websockets import WebSocket
++
++from database.models.remote_runner import RemoteRunner
++from kanban.api.v1.remote_runners import (
++    EnrollRunnerRequest,
++    _extract_peer_cert_fingerprint,
++    enroll_remote_runner_endpoint,
++    remote_runner_websocket_endpoint,
++)
++from kanban.runners.hub import (
++    MAX_FRAME_BYTES,
++    RemoteRunnerDisconnectedError,
++    RemoteRunnerExecutionError,
++    RemoteRunnerRevokedError,
++    RemoteRunnerUnavailableError,
++    RunnerWssHub,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _b64(raw: bytes) -> str:
++    return base64.b64encode(raw).decode("ascii")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++async def _enroll_totp(session: AsyncSession, p_id: uuid.UUID) -> None:
++    """Enroll and confirm active TOTP factor to satisfy require_admin_aal2."""
++    await session.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'kek-v1')"),
++        {
++            "p_id": p_id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await session.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": p_id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await session.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await session.commit()
++
++
++def _generate_csr(key: ec.EllipticCurvePrivateKey, cn: str = "runner-node-1") -> str:
++    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
++    builder = x509.CertificateSigningRequestBuilder().subject_name(name)
++    csr = builder.sign(key, hashes.SHA256())
++    return csr.public_bytes(serialization.Encoding.PEM).decode("ascii")
++
++
++class MockWebSocket:
++    """In-memory mock WebSocket implementing send_text, receive_text and close."""
++
++    def __init__(self) -> None:
++        """Initialize sent and closed message records."""
++        self.sent: list[str] = []
++        self.closed: list[tuple[int, str]] = []
++        self.sent_event = asyncio.Event()
++
++    async def send_text(self, text_data: str) -> None:
++        """Record outbound message."""
++        self.sent.append(text_data)
++        self.sent_event.set()
++
++    def clear(self) -> None:
++        """Clear sent history and reset sent event."""
++        self.sent.clear()
++        self.sent_event.clear()
++
++    async def close(self, code: int = 1000, reason: str = "") -> None:
++        """Record close invocation."""
++        self.closed.append((code, reason))
++
++
++# ==============================================================================
++# Unit Tests for RunnerWssHub
++# ==============================================================================
++
++
++def test_hub_register_unregister_and_eviction() -> None:
++    """Verify runner registration, heartbeat tracking and 45s dead eviction."""
++    hub = RunnerWssHub()
++    ws_id = uuid.uuid4()
++    r1_id = uuid.uuid4()
++    r2_id = uuid.uuid4()
++
++    mock_ws1 = MockWebSocket()
++    mock_ws2 = MockWebSocket()
++
++    curr_time = 1000.0
++    hub.set_time_func(lambda: curr_time)
++
++    # 1. Register r1 and r2
++    hub.register_runner(
++        runner_id=r1_id,
++        workspace_id=ws_id,
++        pool_slug="linux-pool",
++        hostname="node-1.box",
++        websocket=mock_ws1,  # type: ignore[arg-type]
++        max_concurrency=4,
++    )
++    hub.register_runner(
++        runner_id=r2_id,
++        workspace_id=ws_id,
++        pool_slug="linux-pool",
++        hostname="node-2.box",
++        websocket=mock_ws2,  # type: ignore[arg-type]
++        max_concurrency=2,
++    )
++
++    runners = hub.get_pool_runners(ws_id, "linux-pool")
++    assert len(runners) == 2
++
++    # 2. Advance time 20s, send heartbeat for r1
++    curr_time += 20.0
++    hub.handle_frame(
++        runner_id=r1_id,
++        frame={"type": "heartbeat", "runner_id": str(r1_id), "active_jobs": []},
++    )
++
++    # 3. Advance time 30s more (total 50s since r2 heartbeat)
++    curr_time += 30.0
++    evicted = hub.evict_stale_runners()
++    assert r2_id in evicted
++
++    runners_after = hub.get_pool_runners(ws_id, "linux-pool")
++    assert len(runners_after) == 1
++    assert runners_after[0].runner_id == r1_id
++
++    # 4. Explicit unregister
++    hub.unregister_runner(r1_id)
++    assert len(hub.get_pool_runners(ws_id, "linux-pool")) == 0
++
++
++def test_hub_least_loaded_selection() -> None:
++    """Verify dispatch selects runner with lowest active_jobs / max_concurrency ratio."""
++    hub = RunnerWssHub()
++    ws_id = uuid.uuid4()
++    r1_id = uuid.uuid4()
++    r2_id = uuid.uuid4()
++
++    mock_ws1 = MockWebSocket()
++    mock_ws2 = MockWebSocket()
++
++    r1 = hub.register_runner(
++        runner_id=r1_id,
++        workspace_id=ws_id,
++        pool_slug="gpu-pool",
++        hostname="node-gpu-1",
++        websocket=mock_ws1,  # type: ignore[arg-type]
++        max_concurrency=2,
++    )
++    r1.active_jobs.add("job-running-1")  # load: 1/2 = 0.5
++
++    hub.register_runner(
++        runner_id=r2_id,
++        workspace_id=ws_id,
++        pool_slug="gpu-pool",
++        hostname="node-gpu-2",
++        websocket=mock_ws2,  # type: ignore[arg-type]
++        max_concurrency=4,
++    )
++    # r2 load: 0/4 = 0.0
++
++    selected = hub.select_runner(ws_id, "gpu-pool")
++    assert selected is not None
++    assert selected.runner_id == r2_id
++
++    # Add 2 jobs to r2: load 2/4 = 0.5; add 1 more: load 3/4 = 0.75
++    selected.active_jobs.add("job-gpu-a")
++    selected.active_jobs.add("job-gpu-b")
++    selected.active_jobs.add("job-gpu-c")
++
++    # Now r1 (0.5) is less loaded than r2 (0.75)
++    selected_next = hub.select_runner(ws_id, "gpu-pool")
++    assert selected_next is not None
++    assert selected_next.runner_id == r1_id
++
++    # Fill both to max concurrency
++    r1.active_jobs.add("job-running-2")  # 2/2 = 1.0
++    selected.active_jobs.add("job-gpu-d")  # 4/4 = 1.0
++
++    assert hub.select_runner(ws_id, "gpu-pool") is None
++
++
++@pytest.mark.asyncio
++async def test_hub_job_dispatch_and_tool_event() -> None:
++    """Verify dispatch_job, frame streaming, tool event recording, and result delivery."""
++    hub = RunnerWssHub()
++    ws_id = uuid.uuid4()
++    r_id = uuid.uuid4()
++    mock_ws = MockWebSocket()
++
++    hub.register_runner(
++        runner_id=r_id,
++        workspace_id=ws_id,
++        pool_slug="ci-pool",
++        hostname="ci-worker-1",
++        websocket=mock_ws,  # type: ignore[arg-type]
++        max_concurrency=2,
++    )
++
++    job_spec = {
++        "job_id": "job-test-101",
++        "execution_id": "exec-abc-123",
++        "agent_spec": {"model_id": "gemini-2.5-flash"},
++        "context_yaml_b64": base64.b64encode(b"issue:\n  title: Test\n").decode("ascii"),
++        "ephemeral_mcp_token": "kb_agt_eph_sample",
++        "head_commit": "aabbcc1122",
++    }
++
++    async def _runner_simulation() -> None:
++        await mock_ws.sent_event.wait()
++        raw_dispatch = mock_ws.sent[0]
++        dispatch_frame = json.loads(raw_dispatch)
++        assert dispatch_frame["type"] == "job.dispatch"
++        assert dispatch_frame["job_id"] == "job-test-101"
++
++        # 1. Stream tool event frame
++        hub.handle_frame(
++            runner_id=r_id,
++            frame={
++                "type": "job.tool_event",
++                "job_id": "job-test-101",
++                "tool_name": "pytest_runner",
++                "duration_ms": 120,
++                "status": "passed",
++            },
++        )
++
++        # 2. Return result frame
++        b64_stdout = base64.b64encode(b"all tests passed").decode("ascii")
++        hub.handle_frame(
++            runner_id=r_id,
++            frame={
++                "type": "job.result",
++                "job_id": "job-test-101",
++                "exit_code": 0,
++                "stdout_b64": b64_stdout,
++            },
++        )
++
++    task = asyncio.create_task(_runner_simulation())
++    res = await hub.dispatch_job(
++        workspace_id=ws_id,
++        pool_slug="ci-pool",
++        job_spec=job_spec,
++        timeout_s=5.0,
++    )
++    await task
++    assert res == b"all tests passed"
++    assert len(hub._tool_events) == 1  # noqa: SLF001
++    assert hub._tool_events[0]["tool_name"] == "pytest_runner"  # noqa: SLF001
++
++
++@pytest.mark.asyncio
++async def test_hub_dispatch_job_error_cases() -> None:
++    """Verify dispatch_job error paths: pool offline, timeout, execution error, disconnect."""
++    hub = RunnerWssHub()
++    ws_id = uuid.uuid4()
++    r_id = uuid.uuid4()
++    mock_ws = MockWebSocket()
++
++    # 1. Empty pool -> RemoteRunnerUnavailableError
++    with pytest.raises(RemoteRunnerUnavailableError, match="REMOTE_RUNNER_POOL_OFFLINE"):
++        await hub.dispatch_job(
++            workspace_id=ws_id,
++            pool_slug="non-existent",
++            job_spec={"job_id": "j1", "execution_id": "e1"},
++            timeout_s=1.0,
++        )
++
++    hub.register_runner(
++        runner_id=r_id,
++        workspace_id=ws_id,
++        pool_slug="error-pool",
++        hostname="err-node",
++        websocket=mock_ws,  # type: ignore[arg-type]
++        max_concurrency=1,
++    )
++
++    # 2. Non-zero exit code -> RemoteRunnerExecutionError
++    async def _fail_job() -> None:
++        await mock_ws.sent_event.wait()
++        mock_ws.clear()
++        hub.handle_frame(
++            runner_id=r_id,
++            frame={
++                "type": "job.result",
++                "job_id": "j-fail",
++                "exit_code": 2,
++                "stdout_b64": base64.b64encode(b"assertion failure").decode("ascii"),
++            },
++        )
++
++    t_fail = asyncio.create_task(_fail_job())
++    with pytest.raises(RemoteRunnerExecutionError) as exc_info:
++        await hub.dispatch_job(
++            workspace_id=ws_id,
++            pool_slug="error-pool",
++            job_spec={"job_id": "j-fail", "execution_id": "e-fail"},
++            timeout_s=2.0,
++        )
++    await t_fail
++    assert exc_info.value.exit_code == 2
++    assert b"assertion failure" in exc_info.value.stdout_bytes
++
++    # 3. Timeout -> TimeoutError and cancel frame sent
++    with pytest.raises(TimeoutError):
++        await hub.dispatch_job(
++            workspace_id=ws_id,
++            pool_slug="error-pool",
++            job_spec={"job_id": "j-timeout", "execution_id": "e-timeout"},
++            timeout_s=0.05,
++        )
++    assert any(
++        json.loads(msg).get("type") == "job.cancel" and json.loads(msg).get("job_id") == "j-timeout"
++        for msg in mock_ws.sent
++    )
++
++    # 4. Runner unregisters while job is pending -> RemoteRunnerDisconnectedError
++    mock_ws.clear()
++
++    async def _unregister_during_job() -> None:
++        await mock_ws.sent_event.wait()
++        hub.unregister_runner(r_id)
++
++    t_unreg = asyncio.create_task(_unregister_during_job())
++    with pytest.raises(RemoteRunnerDisconnectedError):
++        await hub.dispatch_job(
++            workspace_id=ws_id,
++            pool_slug="error-pool",
++            job_spec={"job_id": "j-unreg", "execution_id": "e-unreg"},
++            timeout_s=2.0,
++        )
++    await t_unreg
++
++
++@pytest.mark.asyncio
++async def test_hub_cancel_job_explicit() -> None:
++    """Verify explicit cancel_job sends job.cancel frame and cancels waiter."""
++    hub = RunnerWssHub()
++    ws_id = uuid.uuid4()
++    r_id = uuid.uuid4()
++    mock_ws = MockWebSocket()
++
++    hub.register_runner(
++        runner_id=r_id,
++        workspace_id=ws_id,
++        pool_slug="cancel-pool",
++        hostname="cancel-worker",
++        websocket=mock_ws,  # type: ignore[arg-type]
++        max_concurrency=2,
++    )
++
++    dispatch_task = asyncio.create_task(
++        hub.dispatch_job(
++            workspace_id=ws_id,
++            pool_slug="cancel-pool",
++            job_spec={"job_id": "job-to-cancel", "execution_id": "exec-99"},
++            timeout_s=10.0,
++        )
++    )
++
++    await mock_ws.sent_event.wait()
++
++    # Call cancel_job
++    cancelled = await hub.cancel_job("job-to-cancel")
++    assert cancelled is True
++
++    # Check cancel frame sent
++    cancel_frames = [
++        json.loads(m) for m in mock_ws.sent if json.loads(m).get("type") == "job.cancel"
++    ]
++    assert len(cancel_frames) == 1
++    assert cancel_frames[0]["job_id"] == "job-to-cancel"
++
++    with pytest.raises(asyncio.CancelledError):
++        await dispatch_task
++
++
++@pytest.mark.asyncio
++async def test_hub_notify_runner_revoked() -> None:
++    """Verify notify_runner_revoked cancels pending jobs with RemoteRunnerRevokedError."""
++    hub = RunnerWssHub()
++    ws_id = uuid.uuid4()
++    r_id = uuid.uuid4()
++    mock_ws = MockWebSocket()
++
++    hub.register_runner(
++        runner_id=r_id,
++        workspace_id=ws_id,
++        pool_slug="revoke-pool",
++        hostname="revoke-worker",
++        websocket=mock_ws,  # type: ignore[arg-type]
++        max_concurrency=2,
++    )
++
++    # Manually associate a pending job waiter
++    loop = asyncio.get_running_loop()
++    fut: asyncio.Future[dict[str, Any]] = loop.create_future()
++    hub._pending_jobs["job-rev-1"] = fut  # noqa: SLF001
++    runner_ref = hub.get_pool_runners(ws_id, "revoke-pool")[0]
++    runner_ref.active_jobs.add("job-rev-1")
++
++    hub.notify_runner_revoked(r_id)
++
++    assert r_id not in hub._runners  # noqa: SLF001
++    assert fut.done()
++    with pytest.raises(RemoteRunnerRevokedError) as exc_info:
++        fut.result()
++    assert exc_info.value.code == "REMOTE_RUNNER_REVOKED"
++
++
++# ==============================================================================
++# Endpoint Integration Tests for /api/v1/agent-runners/ws
++# ==============================================================================
++
++
++class AsyncWebSocketSession:
++    """Async ASGI WebSocket session simulator for direct in-loop endpoint testing."""
++
++    def __init__(self, app: object, headers: dict[str, str] | None = None) -> None:
++        """Initialize session with scope and queues."""
++        raw_headers = [
++            (k.lower().encode("ascii"), v.encode("ascii")) for k, v in (headers or {}).items()
++        ]
++        self.scope = {
++            "type": "websocket",
++            "asgi": {"version": "3.0"},
++            "headers": raw_headers,
++            "subprotocols": [],
++            "app": app,
++        }
++        self.inbound: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
++        self.inbound.put_nowait({"type": "websocket.connect"})
++        self.outbound: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
++        self.ws = WebSocket(self.scope, receive=self.inbound.get, send=self.outbound.put)  # type: ignore[arg-type]
++
++    async def send_text(self, text: str) -> None:
++        """Send message text to inbound queue."""
++        await self.inbound.put({"type": "websocket.receive", "text": text})
++
++    async def disconnect(self, code: int = 1000) -> None:
++        """Enqueue disconnect event."""
++        await self.inbound.put({"type": "websocket.disconnect", "code": code})
++
++    async def receive_msg(self) -> dict[str, Any]:
++        """Receive message from outbound queue."""
++        return await self.outbound.get()
++
++
++@pytest.mark.asyncio
++async def test_endpoint_missing_and_unregistered_cert(api_env: ApiEnv) -> None:
++    """Verify /ws closes with 4401 on missing or unregistered certificate header."""
++    transport = cast("Any", api_env.client._transport)  # noqa: SLF001
++    app = transport.app
++
++    # 1. Missing peer certificate -> 4401
++    session1 = AsyncWebSocketSession(app)
++    await remote_runner_websocket_endpoint(session1.ws)
++    msg1 = await session1.receive_msg()
++    assert msg1["type"] == "websocket.close"
++    assert msg1["code"] == 4401
++
++    # 2. Unregistered fingerprint -> 4401
++    session2 = AsyncWebSocketSession(app, headers={"x-client-cert-sha256": "00" * 32})
++    await remote_runner_websocket_endpoint(session2.ws)
++    msg2 = await session2.receive_msg()
++    assert msg2["type"] == "websocket.close"
++    assert msg2["code"] == 4401
++
++
++async def _setup_enrolled_runner(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> tuple[str, uuid.UUID, str, object]:
++    """Mint token and enroll runner returning (runner_id_str, runner_uuid, fp_hex, app)."""
++    admin = await make_user(f"rnr-adm-{uuid.uuid4().hex[:6]}", workspace_role="WORKSPACE_ADMIN")
++    await _enroll_totp(api_env.seed, admin.id)
++
++    admin_client = as_principal(admin, aal_level=2)
++    mint_resp = await admin_client.post(
++        "/api/v1/admin/agent-runners/enrollment-tokens",
++        json={"pool_slug": "ws-pool", "ttl_seconds": 300},
++    )
++    token = mint_resp.json()["enrollment_token"]
++
++    runner_key = ec.generate_private_key(ec.SECP256R1())
++    csr_pem = _generate_csr(runner_key, cn="ws-node-1")
++    api_env.resolver.principal = None
++    enroll_resp = await api_env.client.post(
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token, "csr_pem": csr_pem, "hostname": "ws-node-1"},
++    )
++    assert enroll_resp.status_code == 201
++    enroll_data = enroll_resp.json()
++    runner_id_str = enroll_data["runner_id"]
++    runner_uuid = uuid.UUID(runner_id_str)
++    leaf_cert = x509.load_pem_x509_certificate(enroll_data["client_cert_pem"].encode("ascii"))
++    fp_hex = leaf_cert.fingerprint(hashes.SHA256()).hex()
++    transport = cast("Any", api_env.client._transport)  # noqa: SLF001
++    app = transport.app
++    return runner_id_str, runner_uuid, fp_hex, app
++
++
++@pytest.mark.asyncio
++async def test_endpoint_handshake_and_valid_lifecycle(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test full valid WebSocket handshake, heartbeat interval, and clean disconnect."""
++    runner_id_str, _, fp_hex, app = await _setup_enrolled_runner(api_env, make_user, as_principal)
++
++    s_valid = AsyncWebSocketSession(app, headers={"x-client-cert-sha256": fp_hex})
++    t_valid = asyncio.create_task(remote_runner_websocket_endpoint(s_valid.ws))
++    acc_valid = await s_valid.receive_msg()
++    assert acc_valid["type"] == "websocket.accept"
++
++    valid_hello = {
++        "type": "hello",
++        "schema": "kb-runner-ws/v1",
++        "runner_id": runner_id_str,
++        "max_concurrency": 2,
++        "capabilities": {"os": "linux"},
++    }
++    await s_valid.send_text(json.dumps(valid_hello))
++    ack_msg = await s_valid.receive_msg()
++    assert ack_msg["type"] == "websocket.send"
++    ack = json.loads(ack_msg["text"])
++    assert ack["type"] == "hello_ack"
++    assert ack["heartbeat_interval_s"] == 15
++
++    # Send heartbeat and tool event
++    await s_valid.send_text(
++        json.dumps({"type": "heartbeat", "runner_id": runner_id_str, "active_jobs": []})
++    )
++    await s_valid.send_text(
++        json.dumps(
++            {
++                "type": "job.tool_event",
++                "job_id": "job-100",
++                "tool_name": "bash",
++                "duration_ms": 50,
++                "status": "passed",
++            }
++        )
++    )
++
++    # Disconnect cleanly
++    await s_valid.disconnect()
++    await t_valid
++
++
++@pytest.mark.asyncio
++async def test_endpoint_rejections_and_limits(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test error rejections: id mismatch, expired cert, revoked, frame size, bad json."""
++    _runner_id_str, runner_uuid, fp_hex, app = await _setup_enrolled_runner(
++        api_env, make_user, as_principal
++    )
++
++    # 1. Connect with runner_id mismatch in hello frame -> closes 4401
++    s_mismatch = AsyncWebSocketSession(app, headers={"x-client-cert-sha256": fp_hex})
++    t_mismatch = asyncio.create_task(remote_runner_websocket_endpoint(s_mismatch.ws))
++    acc_msg = await s_mismatch.receive_msg()
++    assert acc_msg["type"] == "websocket.accept"
++    bad_hello = {
++        "type": "hello",
++        "schema": "kb-runner-ws/v1",
++        "runner_id": str(uuid.uuid4()),  # mismatch
++        "max_concurrency": 2,
++    }
++    await s_mismatch.send_text(json.dumps(bad_hello))
++    close_mismatch = await s_mismatch.receive_msg()
++    assert close_mismatch["type"] == "websocket.close"
++    assert close_mismatch["code"] == 4401
++    await t_mismatch
++
++    # 2. Expired certificate rejection
++    await api_env.seed.execute(
++        update(RemoteRunner)
++        .where(RemoteRunner.id == runner_uuid)
++        .values(cert_expires_at=datetime.now(UTC) - timedelta(seconds=1))
++    )
++    await api_env.seed.commit()
++
++    s_expired = AsyncWebSocketSession(app, headers={"x-client-cert-sha256": fp_hex})
++    await remote_runner_websocket_endpoint(s_expired.ws)
++    msg_expired = await s_expired.receive_msg()
++    assert msg_expired["type"] == "websocket.close"
++    assert msg_expired["code"] == 4401
++
++    # 3. Revoked runner rejection
++    await api_env.seed.execute(
++        update(RemoteRunner)
++        .where(RemoteRunner.id == runner_uuid)
++        .values(
++            status="revoked",
++            cert_expires_at=datetime.now(UTC) + timedelta(days=1),
++        )
++    )
++    await api_env.seed.commit()
++
++    s_revoked = AsyncWebSocketSession(app, headers={"x-client-cert-sha256": fp_hex})
++    await remote_runner_websocket_endpoint(s_revoked.ws)
++    msg_revoked = await s_revoked.receive_msg()
++    assert msg_revoked["type"] == "websocket.close"
++    assert msg_revoked["code"] == 4003
++
++    # 4. Max frame bytes check: frame > MAX_FRAME_BYTES closes with 1009
++    await api_env.seed.execute(
++        update(RemoteRunner)
++        .where(RemoteRunner.id == runner_uuid)
++        .values(
++            status="offline",
++            cert_expires_at=datetime.now(UTC) + timedelta(days=1),
++        )
++    )
++    await api_env.seed.commit()
++
++    s_large = AsyncWebSocketSession(app, headers={"x-client-cert-sha256": fp_hex})
++    t_large = asyncio.create_task(remote_runner_websocket_endpoint(s_large.ws))
++    await s_large.receive_msg()
++    oversized = "X" * (MAX_FRAME_BYTES + 10)
++    await s_large.send_text(oversized)
++    close_large = await s_large.receive_msg()
++    assert close_large["type"] == "websocket.close"
++    assert close_large["code"] == 1009
++    await t_large
++
++    # 5. Invalid JSON handshake frame closes with 4401
++    s_bad_json = AsyncWebSocketSession(app, headers={"x-client-cert-sha256": fp_hex})
++    t_bad_json = asyncio.create_task(remote_runner_websocket_endpoint(s_bad_json.ws))
++    await s_bad_json.receive_msg()
++    await s_bad_json.send_text("not a valid json frame")
++    close_bad = await s_bad_json.receive_msg()
++    assert close_bad["type"] == "websocket.close"
++    assert close_bad["code"] == 4401
++    await t_bad_json
++
++    # 6. WebSocketDisconnect during handshake
++    s_dc = AsyncWebSocketSession(app, headers={"x-client-cert-sha256": fp_hex})
++    s_dc.inbound.put_nowait({"type": "websocket.disconnect", "code": 1000})
++    await remote_runner_websocket_endpoint(s_dc.ws)
++
++
++@pytest.mark.asyncio
++async def test_hub_branches_and_error_cases() -> None:
++    """Verify hub clock overrides, unregister, handle_frame, and dispatch send errors."""
++    hub = RunnerWssHub()
++
++    # 1. set_time_func
++    clock_val = 5000.0
++    hub.set_time_func(lambda: clock_val)
++
++    # 2. unregister unknown runner -> safe no-op
++    hub.unregister_runner(uuid.uuid4())
++
++    # 3. handle_frame unknown runner -> safe no-op
++    hub.handle_frame(uuid.uuid4(), {"type": "heartbeat"})
++
++    # 4. dispatch_job send error raises RemoteRunnerDisconnectedError
++    class BrokenWebSocket:
++        async def send_text(self, _text: str) -> None:
++            err_msg = "network severed"
++            raise ConnectionResetError(err_msg)
++
++    ws_id = uuid.uuid4()
++    r_id = uuid.uuid4()
++    hub.register_runner(
++        runner_id=r_id,
++        workspace_id=ws_id,
++        pool_slug="broken-pool",
++        hostname="broken.host",
++        websocket=BrokenWebSocket(),  # type: ignore[arg-type]
++    )
++    with pytest.raises(RemoteRunnerDisconnectedError):
++        await hub.dispatch_job(
++            workspace_id=ws_id,
++            pool_slug="broken-pool",
++            job_spec={"job_id": "test-send-err", "execution_id": "exec-1"},
++            timeout_s=5.0,
++        )
++
++    # 5. _extract_peer_cert_fingerprint via scope["client_cert"]
++    class ScopeCertWS:
++        def __init__(self, client_cert: bytes) -> None:
++            self.headers: dict[str, str] = {}
++            self.scope = {"client_cert": client_cert}
++
++    raw_32 = b"\xaa" * 32
++    assert _extract_peer_cert_fingerprint(ScopeCertWS(raw_32)) == raw_32  # type: ignore[arg-type]
++
++    # 6. Session factory missing error branch in /enroll
++    class DummyApp:
++        class State:
++            session_factory = None
++            key_material = None
++
++        state = State()
++
++    class DummyReq:
++        app = DummyApp()
++
++    with pytest.raises(RuntimeError, match="RLS session factory not configured"):
++        await enroll_remote_runner_endpoint(
++            EnrollRunnerRequest(enrollment_token="kb_rnr_enroll_test", csr_pem="bad", hostname="h"),  # noqa: S106
++            DummyReq(),  # type: ignore[arg-type]
++        )
++
++    # 7. Session factory missing error branch in /ws
++    class DummyWSMissingFactory:
++        def __init__(self) -> None:
++            self.headers = {"x-client-cert-sha256": "aa" * 32}
++            self.scope: dict[str, Any] = {}
++            self.app = DummyApp()
++            self.closed_code: int | None = None
++
++        async def close(self, code: int = 1000, reason: str = "") -> None:
++            del reason
++            self.closed_code = code
++
++    ws_no_fac = DummyWSMissingFactory()
++    await remote_runner_websocket_endpoint(ws_no_fac)  # type: ignore[arg-type]
++    assert ws_no_fac.closed_code == 1011
+diff --git a/mcp/admin/tools/manage_ai_and_agent_runners.py b/mcp/admin/tools/manage_ai_and_agent_runners.py
+index 40701ea..ba4f331 100644
+--- a/mcp/admin/tools/manage_ai_and_agent_runners.py
++++ b/mcp/admin/tools/manage_ai_and_agent_runners.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Implementation of the manage_ai_and_agent_runners MCP tool (KB-P5-05b, S10.2, S11.4)."""
++"""Implementation of manage_ai_and_agent_runners MCP tool (KB-P5-05b, KB-P5-22a)."""
+ 
+ from __future__ import annotations
+ 
+@@ -18,6 +18,16 @@ __all__ = [
+     "manage_ai_and_agent_runners",
+ ]
+ 
++_BANNED_CLI_FLAGS: Final[frozenset[str]] = frozenset(
++    {
++        "--yolo",
++        "--dangerously-bypass-approvals-and-sandbox",
++        "--dangerously-skip-permissions",
++        "--full-auto",
++        "--allow-all-tools",
++    }
++)
++
+ _ALLOWED_TOP_LEVEL_KEYS: Final[frozenset[str]] = frozenset(
+     {
+         "action",
+@@ -35,6 +45,22 @@ _ALLOWED_TOP_LEVEL_KEYS: Final[frozenset[str]] = frozenset(
+         "provider_config_id",
+         "period_kind",
+         "token_cap",
++        "slug",
++        "agent",
++        "harness_kind",
++        "model_id",
++        "cli_binary_allowlist_id",
++        "cli_args",
++        "remote_runner_pool_slug",
++        "repo_access_mode",
++        "mcp_allowed_tools",
++        "system_instructions_md",
++        "timeout_ms",
++        "pool_slug",
++        "ttl_seconds",
++        "status",
++        "runner_id",
++        "confirm",
+         "lod",
+     }
+ )
+@@ -48,19 +74,14 @@ _VALID_ACTIONS: Final[frozenset[str]] = frozenset(
+         "get_budget_usage",
+         "upsert_agent_definition",
+         "list_agent_definitions",
++        "delete_agent_definition",
+         "mint_runner_enrollment_token",
++        "list_remote_runners",
++        "revoke_remote_runner",
+         "help",
+     }
+ )
+ 
+-_DEFERRED_ACTIONS: Final[frozenset[str]] = frozenset(
+-    {
+-        "upsert_agent_definition",
+-        "list_agent_definitions",
+-        "mint_runner_enrollment_token",
+-    }
+-)
+-
+ MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA: Final[dict[str, Any]] = {
+     "type": "object",
+     "properties": {
+@@ -74,14 +95,17 @@ MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA: Final[dict[str, Any]] = {
+                 "get_budget_usage",
+                 "upsert_agent_definition",
+                 "list_agent_definitions",
++                "delete_agent_definition",
+                 "mint_runner_enrollment_token",
++                "list_remote_runners",
++                "revoke_remote_runner",
+                 "help",
+             ],
+             "description": "Operation to perform on AI providers, budgets, or agent runners",
+         },
+         "id": {
+             "type": "string",
+-            "description": "Provider configuration UUID (for update or disable)",
++            "description": "Entity identifier UUID (provider, agent definition, or runner)",
+         },
+         "provider_kind": {
+             "type": "string",
+@@ -90,7 +114,7 @@ MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA: Final[dict[str, Any]] = {
+         },
+         "display_name": {
+             "type": "string",
+-            "description": "Human-readable provider configuration label",
++            "description": "Human-readable label for provider or agent definition",
+         },
+         "base_url": {
+             "type": "string",
+@@ -123,7 +147,7 @@ MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA: Final[dict[str, Any]] = {
+         },
+         "project_id": {
+             "type": "string",
+-            "description": "Optional project UUID for project-scoped provider configuration",
++            "description": "Optional project UUID for project-scoped entities",
+         },
+         "provider_config_id": {
+             "type": "string",
+@@ -140,6 +164,79 @@ MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA: Final[dict[str, Any]] = {
+             "maximum": 10000000000,
+             "description": "Maximum token budget cap (0..10000000000)",
+         },
++        "slug": {
++            "type": "string",
++            "description": "Unique slug for agent definition",
++        },
++        "agent": {
++            "type": "string",
++            "description": "Agent definition slug or UUID",
++        },
++        "harness_kind": {
++            "type": "string",
++            "enum": ["in_app_sdk", "cli_pipe", "remote_runner"],
++            "description": "Execution harness mode",
++        },
++        "model_id": {
++            "type": "string",
++            "description": "Target model identifier for in_app_sdk harness",
++        },
++        "cli_binary_allowlist_id": {
++            "type": "string",
++            "enum": ["agy", "codex", "gemini-cli", "claude-code"],
++            "description": "Allowlisted CLI binary identifier for cli_pipe harness",
++        },
++        "cli_args": {
++            "type": "array",
++            "items": {"type": "string"},
++            "description": "Validated CLI arguments array for cli_pipe harness",
++        },
++        "remote_runner_pool_slug": {
++            "type": "string",
++            "description": "Pool slug for remote_runner harness",
++        },
++        "repo_access_mode": {
++            "type": "string",
++            "enum": ["none", "bare_git_tools", "ro_vfs_mount"],
++            "description": "Repository access mode for agent execution",
++        },
++        "mcp_allowed_tools": {
++            "type": "array",
++            "items": {"type": "string"},
++            "description": "Allowed MCP tools subset for agent execution",
++        },
++        "system_instructions_md": {
++            "type": "string",
++            "description": "Markdown system instructions for agent definition",
++        },
++        "timeout_ms": {
++            "type": "integer",
++            "minimum": 1000,
++            "maximum": 300000,
++            "description": "Agent execution timeout in milliseconds",
++        },
++        "pool_slug": {
++            "type": "string",
++            "description": "Target runner pool slug",
++        },
++        "ttl_seconds": {
++            "type": "integer",
++            "minimum": 60,
++            "maximum": 900,
++            "description": "Single-use enrollment token TTL in seconds (60..900)",
++        },
++        "status": {
++            "type": "string",
++            "description": "Runner status filter ('online', 'offline', 'revoked')",
++        },
++        "runner_id": {
++            "type": "string",
++            "description": "Remote runner UUID for revocation",
++        },
++        "confirm": {
++            "type": "boolean",
++            "description": "Two-stage confirmation flag required for destructive actions",
++        },
+         "lod": {
+             "type": "string",
+             "enum": ["summary", "standard", "full"],
+@@ -169,7 +266,6 @@ def _project_provider(p: dict[str, Any], lod: str) -> dict[str, Any]:
+             "api_key_set": p.get("api_key_set"),
+             "project_id": p.get("project_id"),
+         }
+-    # summary
+     return {
+         "id": p.get("id"),
+         "provider_kind": p.get("provider_kind"),
+@@ -183,7 +279,6 @@ def _project_budget(rows: list[dict[str, Any]], lod: str) -> Any:  # noqa: ANN40
+     """Project budget usage rows according to requested LOD."""
+     if lod in ("standard", "full"):
+         return rows
+-    # summary: dense operational metrics
+     projected = [
+         {
+             "period_kind": r.get("period_kind"),
+@@ -198,8 +293,56 @@ def _project_budget(rows: list[dict[str, Any]], lod: str) -> Any:  # noqa: ANN40
+     return projected
+ 
+ 
++def _project_agent_definition(a: dict[str, Any], lod: str) -> dict[str, Any]:
++    """Project agent definition dictionary according to requested LOD."""
++    if lod == "full":
++        return a
++    if lod == "standard":
++        return {
++            "id": a.get("id"),
++            "slug": a.get("slug"),
++            "display_name": a.get("display_name"),
++            "harness_kind": a.get("harness_kind"),
++            "provider_kind": a.get("provider_kind"),
++            "model_id": a.get("model_id"),
++            "cli_binary_allowlist_id": a.get("cli_binary_allowlist_id"),
++            "remote_runner_pool_slug": a.get("remote_runner_pool_slug"),
++            "repo_access_mode": a.get("repo_access_mode"),
++            "timeout_ms": a.get("timeout_ms"),
++            "project_id": a.get("project_id"),
++        }
++    return {
++        "id": a.get("id"),
++        "slug": a.get("slug"),
++        "display_name": a.get("display_name"),
++        "harness_kind": a.get("harness_kind"),
++    }
++
++
++def _project_runner(r: dict[str, Any], lod: str) -> dict[str, Any]:
++    """Project remote runner dictionary according to requested LOD."""
++    if lod == "full":
++        return r
++    if lod == "standard":
++        return {
++            "id": r.get("id"),
++            "pool_slug": r.get("pool_slug"),
++            "hostname": r.get("hostname"),
++            "status": r.get("status"),
++            "last_heartbeat_at": r.get("last_heartbeat_at"),
++            "cert_expires_at": r.get("cert_expires_at"),
++            "client_cert_sha256_hex": r.get("client_cert_sha256_hex"),
++        }
++    return {
++        "id": r.get("id"),
++        "pool_slug": r.get("pool_slug"),
++        "hostname": r.get("hostname"),
++        "status": r.get("status"),
++    }
++
++
+ async def manage_ai_and_agent_runners(arguments: dict[str, Any]) -> str:  # noqa: C901, PLR0911, PLR0912, PLR0915
+-    """Read, configure, or disable AI providers and manage token budgets."""
++    """Read, configure, or disable AI providers, budgets, agent definitions, and remote runners."""
+     for key in arguments:
+         if key not in _ALLOWED_TOP_LEVEL_KEYS:
+             msg = f"Unknown parameter '{key}'. Allowed: {sorted(_ALLOWED_TOP_LEVEL_KEYS)}"
+@@ -216,41 +359,56 @@ async def manage_ai_and_agent_runners(arguments: dict[str, Any]) -> str:  # noqa
+             params_summary={
+                 "action": (
+                     "list_providers | upsert_provider | disable_provider | "
+-                    "set_budget | get_budget_usage"
++                    "set_budget | get_budget_usage | upsert_agent_definition | "
++                    "list_agent_definitions | delete_agent_definition | "
++                    "mint_runner_enrollment_token | list_remote_runners | revoke_remote_runner"
+                 ),
+                 "lod": "summary | standard | full",
+             },
+         )
+         return dump_yaml(help_doc)
+ 
+-    if action in _DEFERRED_ACTIONS:
+-        return dump_yaml(
+-            {
+-                "error": "ACTION_NOT_AVAILABLE",
+-                "message": (
+-                    f"Action '{action}' is reserved for future implementation "
+-                    f"(KB-P5-16 / KB-P5-22)."
+-                ),
+-            }
+-        )
+-
+     ctx = get_current_mcp_context()
+     if ctx is None or ctx.client is None:
+         msg = "Internal API client unavailable"
+         raise KbMcpError(McpErrorCode.UPSTREAM_UNAVAILABLE, msg)
+ 
++    # Invariant: kb_agt_* key rejected on admin surface
++    if ctx.subject_token and ctx.subject_token.startswith("kb_agt_"):
++        msg = "Agent API keys (kb_agt_*) cannot access /mcp/admin tool (kb_agt_* key rejected)"
++        raise KbMcpError(McpErrorCode.SURFACE_KEY_MISMATCH, msg)
++
+     lod = arguments.get("lod", "summary")
+ 
+     # Authorize caller scopes
+     if ctx.caller_scopes is not None:
+-        if action in ("list_providers", "get_budget_usage"):
++        read_actions = (
++            "list_providers",
++            "get_budget_usage",
++            "list_agent_definitions",
++            "list_remote_runners",
++        )
++        write_actions = (
++            "upsert_provider",
++            "disable_provider",
++            "set_budget",
++            "upsert_agent_definition",
++            "mint_runner_enrollment_token",
++        )
++        if action in read_actions:
+             if not any(
+                 s in ctx.caller_scopes for s in ("admin:read", "admin:write", "admin:destructive")
+             ):
+                 msg = f"Action '{action}' requires 'admin:read' scope"
+                 raise KbMcpError(McpErrorCode.INSUFFICIENT_SCOPE, msg)
+-        elif not any(s in ctx.caller_scopes for s in ("admin:write", "admin:destructive")):
+-            msg = f"Action '{action}' requires 'admin:write' scope"
++        elif action in write_actions:
++            if not any(s in ctx.caller_scopes for s in ("admin:write", "admin:destructive")):
++                msg = f"Action '{action}' requires 'admin:write' scope"
++                raise KbMcpError(McpErrorCode.INSUFFICIENT_SCOPE, msg)
++        elif action in ("delete_agent_definition", "revoke_remote_runner") and not any(
++            s in ctx.caller_scopes for s in ("admin:destructive", "admin:write")
++        ):
++            msg = f"Action '{action}' requires 'admin:destructive' scope"
+             raise KbMcpError(McpErrorCode.INSUFFICIENT_SCOPE, msg)
+ 
+     if action == "list_providers":
+@@ -382,24 +540,250 @@ async def manage_ai_and_agent_runners(arguments: dict[str, Any]) -> str:  # noqa
+ 
+         return dump_yaml(_project_budget([res], lod), strip_nulls=True)
+ 
+-    # get_budget_usage
+-    provider_config_id = arguments.get("provider_config_id")
+-    if not provider_config_id:
+-        msg = "'provider_config_id' is required for action 'get_budget_usage'"
+-        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++    if action == "get_budget_usage":
++        provider_config_id = arguments.get("provider_config_id")
++        if not provider_config_id:
++            msg = "'provider_config_id' is required for action 'get_budget_usage'"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+ 
+-    res = await ctx.client.request(
+-        "GET",
+-        "/api/v1/admin/ai/budgets",
+-        params={"provider_config_id": provider_config_id},
+-        subject_token=ctx.subject_token,
+-        mcp_session_id=ctx.session_id,
+-    )
+-    if not isinstance(res, list):
+-        msg = "Unexpected response from AI budgets API"
+-        raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++        res = await ctx.client.request(
++            "GET",
++            "/api/v1/admin/ai/budgets",
++            params={"provider_config_id": provider_config_id},
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++        )
++        if not isinstance(res, list):
++            msg = "Unexpected response from AI budgets API"
++            raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++        return dump_yaml(_project_budget(res, lod), strip_nulls=True)
++
++    if action == "upsert_agent_definition":
++        slug = arguments.get("slug") or arguments.get("id")
++        if not slug:
++            msg = "'slug' is required for action 'upsert_agent_definition'"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++        # Validate cli_args for banned flags
++        cli_args = arguments.get("cli_args")
++        if isinstance(cli_args, list):
++            for arg in cli_args:
++                if isinstance(arg, str):
++                    folded = arg.casefold()
++                    if (
++                        folded in _BANNED_CLI_FLAGS
++                        or any(folded.startswith(f"{b}=") for b in _BANNED_CLI_FLAGS)
++                        or folded.startswith("--dangerously")
++                    ):
++                        msg = f"BANNED_CLI_FLAG: CLI argument {arg!r} violates sandbox policy"
++                        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++        # Check if definition already exists
++        existing: dict[str, Any] | None = None
++        try:
++            get_res = await ctx.client.request(
++                "GET",
++                f"/api/v1/admin/agent-definitions/{slug}",
++                subject_token=ctx.subject_token,
++                mcp_session_id=ctx.session_id,
++            )
++            if isinstance(get_res, dict):
++                existing = get_res
++        except Exception:  # noqa: BLE001
++            existing = None
++
++        if existing is not None:
++            # Update definition (harness_kind is immutable after creation)
++            patch_keys = [
++                "display_name",
++                "provider_kind",
++                "model_id",
++                "cli_binary_allowlist_id",
++                "cli_args",
++                "remote_runner_pool_slug",
++                "repo_access_mode",
++                "mcp_allowed_tools",
++                "system_instructions_md",
++                "timeout_ms",
++            ]
++            patch_payload: dict[str, Any] = {
++                k: arguments[k] for k in patch_keys if k in arguments and arguments[k] is not None
++            }
++            res = await ctx.client.request(
++                "PATCH",
++                f"/api/v1/admin/agent-definitions/{slug}",
++                json_data=patch_payload,
++                subject_token=ctx.subject_token,
++                mcp_session_id=ctx.session_id,
++            )
++        else:
++            # Create new definition
++            create_keys = [
++                "slug",
++                "display_name",
++                "harness_kind",
++                "provider_kind",
++                "model_id",
++                "cli_binary_allowlist_id",
++                "cli_args",
++                "remote_runner_pool_slug",
++                "repo_access_mode",
++                "mcp_allowed_tools",
++                "system_instructions_md",
++                "timeout_ms",
++                "project_id",
++            ]
++            create_payload = {
++                k: arguments[k] for k in create_keys if k in arguments and arguments[k] is not None
++            }
++            if "slug" not in create_payload:
++                create_payload["slug"] = slug
++            if "display_name" not in create_payload:
++                create_payload["display_name"] = slug.replace("-", " ").title()
++            if "harness_kind" not in create_payload:
++                create_payload["harness_kind"] = "in_app_sdk"
++
++            res = await ctx.client.request(
++                "POST",
++                "/api/v1/admin/agent-definitions",
++                json_data=create_payload,
++                subject_token=ctx.subject_token,
++                mcp_session_id=ctx.session_id,
++            )
++
++        if not isinstance(res, dict):
++            msg = "Unexpected response from agent definitions API"
++            raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++        return dump_yaml(_project_agent_definition(res, lod), strip_nulls=True)
++
++    if action == "list_agent_definitions":
++        res = await ctx.client.request(
++            "GET",
++            "/api/v1/admin/agent-definitions",
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++        )
++        if not isinstance(res, list):
++            msg = "Unexpected response from agent definitions API"
++            raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++        projected = [_project_agent_definition(a, lod) for a in res]
++        return dump_yaml(projected, strip_nulls=True)
++
++    if action == "delete_agent_definition":
++        agent_ref = arguments.get("slug") or arguments.get("id") or arguments.get("agent")
++        if not agent_ref:
++            msg = "'slug' or 'id' is required for action 'delete_agent_definition'"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++        confirm = arguments.get("confirm", False)
++        if confirm is not True:
++            return dump_yaml(
++                {
++                    "status": "confirmation_required",
++                    "action": "delete_agent_definition",
++                    "agent": agent_ref,
++                    "message": (
++                        "Permanent deletion of agent definition. "
++                        "Re-run with confirm=true to proceed."
++                    ),
++                }
++            )
++
++        await ctx.client.request(
++            "DELETE",
++            f"/api/v1/admin/agent-definitions/{agent_ref}",
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++        )
++        return dump_yaml(
++            {
++                "status": "deleted",
++                "action": "delete_agent_definition",
++                "agent": agent_ref,
++            }
++        )
++
++    if action == "mint_runner_enrollment_token":
++        pool_slug = arguments.get("pool_slug")
++        if not pool_slug:
++            msg = "'pool_slug' is required for action 'mint_runner_enrollment_token'"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++        mint_payload: dict[str, Any] = {"pool_slug": pool_slug}
++        if "ttl_seconds" in arguments and arguments["ttl_seconds"] is not None:
++            mint_payload["ttl_seconds"] = arguments["ttl_seconds"]
++
++        res = await ctx.client.request(
++            "POST",
++            "/api/v1/admin/agent-runners/enrollment-tokens",
++            json_data=mint_payload,
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++        )
++        if not isinstance(res, dict):
++            msg = "Unexpected response from runner enrollment tokens API"
++            raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++        return dump_yaml(res, strip_nulls=True)
++
++    if action == "list_remote_runners":
++        params = {}
++        if arguments.get("pool_slug"):
++            params["pool_slug"] = arguments["pool_slug"]
++        if arguments.get("status"):
++            params["status"] = arguments["status"]
++
++        res = await ctx.client.request(
++            "GET",
++            "/api/v1/admin/agent-runners",
++            params=params,
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++        )
++        if not isinstance(res, list):
++            msg = "Unexpected response from remote runners API"
++            raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++        projected = [_project_runner(r, lod) for r in res]
++        return dump_yaml(projected, strip_nulls=True)
++
++    if action == "revoke_remote_runner":
++        runner_id = arguments.get("id") or arguments.get("runner_id")
++        if not runner_id:
++            msg = "'id' or 'runner_id' is required for action 'revoke_remote_runner'"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
++        confirm = arguments.get("confirm", False)
++        if confirm is not True:
++            return dump_yaml(
++                {
++                    "status": "confirmation_required",
++                    "action": "revoke_remote_runner",
++                    "runner_id": runner_id,
++                    "message": (
++                        "Permanent revocation of remote runner credentials. "
++                        "Re-run with confirm=true to proceed."
++                    ),
++                }
++            )
++
++        res = await ctx.client.request(
++            "POST",
++            f"/api/v1/admin/agent-runners/{runner_id}:revoke",
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++        )
++        if not isinstance(res, dict):
++            msg = "Unexpected response from remote runners API"
++            raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
++
++        return dump_yaml(res, strip_nulls=True)
+ 
+-    return dump_yaml(_project_budget(res, lod), strip_nulls=True)
++    msg = f"Unhandled action '{action}'"
++    raise KbMcpError(McpErrorCode.INTERNAL, msg)
+ 
+ 
+ def create_manage_ai_and_agent_runners_tool() -> ToolSpec:
+@@ -408,7 +792,7 @@ def create_manage_ai_and_agent_runners_tool() -> ToolSpec:
+         name="manage_ai_and_agent_runners",
+         description=(
+             "Manage AI providers, envelope-encrypted API keys, token budgets, "
+-            "and agent runner infrastructure."
++            "agent execution definitions, and remote agent runner infrastructure."
+         ),
+         input_schema=MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA,
+         surface=Surface.ADMIN,
+diff --git a/mcp/tests/admin/test_manage_ai_and_agent_runners_full.py b/mcp/tests/admin/test_manage_ai_and_agent_runners_full.py
+new file mode 100644
+index 0000000..df335df
+--- /dev/null
++++ b/mcp/tests/admin/test_manage_ai_and_agent_runners_full.py
+@@ -0,0 +1,407 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for /mcp/admin tool: manage_ai_and_agent_runners (KB-P5-22a full actions)."""
++
++from __future__ import annotations
++
++import base64
++from typing import TYPE_CHECKING, Any, cast
++
++import httpx
++import pytest
++import yaml
++from cryptography import x509
++from cryptography.hazmat.primitives import hashes, serialization
++from cryptography.hazmat.primitives.asymmetric import ec
++from cryptography.x509.oid import NameOID
++
++from mcp.app import create_mcp_app
++from mcp.auth import McpAuthMiddleware
++from mcp.registry import Surface
++from mcp.settings import McpSettings
++
++if TYPE_CHECKING:
++    from mcp.tests.admin.conftest import AdminTestEnv
++
++pytestmark = pytest.mark.committed_db
++
++
++def _b64(raw: bytes) -> str:
++    return base64.b64encode(raw).decode("ascii")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++async def _call_manage_tool(
++    env: AdminTestEnv,
++    arguments: dict[str, Any],
++    *,
++    subject_token: str | None = None,
++) -> dict[str, Any]:
++    """Invoke manage_ai_and_agent_runners via JSON-RPC 2.0 tools/call on /mcp/admin."""
++    token = subject_token if subject_token is not None else env.token_server_admin_full
++    init_resp = await env.mcp_client.post(
++        "/mcp/admin",
++        json={
++            "jsonrpc": "2.0",
++            "id": 999,
++            "method": "initialize",
++            "params": {
++                "protocolVersion": "2025-06-18",
++                "capabilities": {},
++                "clientInfo": {"name": "test-admin", "version": "1.0"},
++            },
++        },
++        headers={"X-KB-Subject-Token": token} if token else {},
++    )
++    assert init_resp.status_code == 200, init_resp.text
++    session_id = init_resp.headers["mcp-session-id"]
++
++    req_payload = {
++        "jsonrpc": "2.0",
++        "id": 1,
++        "method": "tools/call",
++        "params": {
++            "name": "manage_ai_and_agent_runners",
++            "arguments": arguments,
++        },
++    }
++    resp = await env.mcp_client.post(
++        "/mcp/admin",
++        json=req_payload,
++        headers={"mcp-session-id": session_id, "X-KB-Subject-Token": token},
++    )
++    assert resp.status_code == 200, resp.text
++    return cast("dict[str, Any]", resp.json())
++
++
++@pytest.mark.asyncio
++async def test_mcp_agent_definition_crud_and_yolo_rejection(admin_env: AdminTestEnv) -> None:
++    """Verify upsert, list, delete agent_definition and --yolo rejection."""
++    # 1. Reject --yolo flag in cli_args
++    yolo_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "upsert_agent_definition",
++            "slug": "yolo-agent",
++            "display_name": "YOLO Agent",
++            "harness_kind": "cli_pipe",
++            "cli_args": ["--yolo", "--verbose"],
++        },
++    )
++    assert "error" in yolo_call or yolo_call.get("result", {}).get("isError") is True
++
++    # 2. Valid create: upsert_agent_definition for remote_runner
++    create_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "upsert_agent_definition",
++            "slug": "sec-gate-auditor",
++            "display_name": "Security Gate Auditor",
++            "harness_kind": "remote_runner",
++            "remote_runner_pool_slug": "audit-pool",
++            "timeout_ms": 45000,
++            "system_instructions_md": "Performs remote security gate audits.",
++            "lod": "standard",
++        },
++    )
++    assert "result" in create_call
++    create_data = yaml.safe_load(create_call["result"]["content"][0]["text"])
++    assert create_data["slug"] == "sec-gate-auditor"
++    assert create_data["harness_kind"] == "remote_runner"
++    assert create_data["remote_runner_pool_slug"] == "audit-pool"
++    assert create_data["timeout_ms"] == 45000
++
++    # 3. List definitions: verify created agent is returned
++    list_call = await _call_manage_tool(admin_env, {"action": "list_agent_definitions"})
++    assert "result" in list_call
++    list_data = yaml.safe_load(list_call["result"]["content"][0]["text"])
++    assert any(a["slug"] == "sec-gate-auditor" for a in list_data)
++
++    # 4. Update: modify display_name
++    update_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "upsert_agent_definition",
++            "slug": "sec-gate-auditor",
++            "display_name": "Updated Security Gate Auditor",
++            "harness_kind": "remote_runner",
++            "remote_runner_pool_slug": "audit-pool",
++        },
++    )
++    assert "result" in update_call
++    update_data = yaml.safe_load(update_call["result"]["content"][0]["text"])
++    assert update_data["display_name"] == "Updated Security Gate Auditor"
++
++    # 5. Delete without confirm: true -> returns confirmation required preview
++    preview_del = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "delete_agent_definition",
++            "slug": "sec-gate-auditor",
++        },
++    )
++    assert "result" in preview_del
++    prev_data = yaml.safe_load(preview_del["result"]["content"][0]["text"])
++    assert prev_data["status"] == "confirmation_required"
++    assert prev_data["agent"] == "sec-gate-auditor"
++
++    # 6. Delete with confirm: true -> performs deletion
++    confirmed_del = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "delete_agent_definition",
++            "slug": "sec-gate-auditor",
++            "confirm": True,
++        },
++    )
++    assert "result" in confirmed_del
++    del_data = yaml.safe_load(confirmed_del["result"]["content"][0]["text"])
++    assert del_data["status"] == "deleted"
++
++    # 7. List definitions: verify sec-gate-auditor is gone
++    list_call_after = await _call_manage_tool(admin_env, {"action": "list_agent_definitions"})
++    list_data_after = yaml.safe_load(list_call_after["result"]["content"][0]["text"])
++    assert not any(a["slug"] == "sec-gate-auditor" for a in list_data_after)
++
++
++@pytest.mark.asyncio
++async def test_mcp_mint_enrollment_token_and_list_runners(admin_env: AdminTestEnv) -> None:
++    """Verify mint_runner_enrollment_token and list_remote_runners via MCP."""
++    # 1. Invalid pool slug -> error
++    bad_slug_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "mint_runner_enrollment_token",
++            "pool_slug": "INVALID_SLUG!",
++            "ttl_seconds": 300,
++        },
++    )
++    assert "error" in bad_slug_call or bad_slug_call.get("result", {}).get("isError") is True
++
++    # 2. Mint valid token: token returned once in plaintext
++    mint_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "mint_runner_enrollment_token",
++            "pool_slug": "mcp-gpu-pool",
++            "ttl_seconds": 600,
++        },
++    )
++    assert "result" in mint_call
++    mint_data = yaml.safe_load(mint_call["result"]["content"][0]["text"])
++    token = mint_data["enrollment_token"]
++    assert token.startswith("kb_rnr_enroll_")
++    assert mint_data["pool_slug"] == "mcp-gpu-pool"
++
++    # 3. List runners with pool filter
++    list_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "list_remote_runners",
++            "pool_slug": "mcp-gpu-pool",
++        },
++    )
++    assert "result" in list_call
++    runners_data = yaml.safe_load(list_call["result"]["content"][0]["text"])
++    assert isinstance(runners_data, list)
++
++
++@pytest.mark.asyncio
++async def test_mcp_revoke_remote_runner_confirmation_lifecycle(admin_env: AdminTestEnv) -> None:
++    """Verify revoke_remote_runner preview vs confirm: true execution."""
++    mint_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "mint_runner_enrollment_token",
++            "pool_slug": "mcp-revoke-pool",
++            "ttl_seconds": 300,
++        },
++    )
++    token = yaml.safe_load(mint_call["result"]["content"][0]["text"])["enrollment_token"]
++
++    k = ec.generate_private_key(ec.SECP256R1())
++    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "revoke-target")])
++    csr = (
++        x509.CertificateSigningRequestBuilder()
++        .subject_name(name)
++        .sign(k, hashes.SHA256())
++        .public_bytes(serialization.Encoding.PEM)
++        .decode("ascii")
++    )
++
++    # We can call internal client enroll endpoint
++    enroll_resp = await admin_env.internal_client._client.post(  # noqa: SLF001
++        "/api/v1/agent-runners/enroll",
++        json={"enrollment_token": token, "csr_pem": csr, "hostname": "revoke-target.box"},
++    )
++    assert enroll_resp.status_code == 201
++    runner_id = enroll_resp.json()["runner_id"]
++
++    # 1. Revoke preview without confirm: true
++    preview_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "revoke_remote_runner",
++            "runner_id": runner_id,
++        },
++    )
++    assert "result" in preview_call
++    prev_data = yaml.safe_load(preview_call["result"]["content"][0]["text"])
++    assert prev_data["status"] == "confirmation_required"
++    assert prev_data["runner_id"] == runner_id
++
++    # 2. Confirmed revocation with confirm: true
++    confirm_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "revoke_remote_runner",
++            "runner_id": runner_id,
++            "confirm": True,
++        },
++    )
++    assert "result" in confirm_call
++    rev_data = yaml.safe_load(confirm_call["result"]["content"][0]["text"])
++    assert rev_data["status"] == "revoked"
++    assert rev_data["id"] == str(runner_id)
++
++    # 3. List runners and verify status is 'revoked'
++    list_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "list_remote_runners",
++            "pool_slug": "mcp-revoke-pool",
++        },
++    )
++    runners = yaml.safe_load(list_call["result"]["content"][0]["text"])
++    match = [r for r in runners if r["id"] == runner_id]
++    assert len(match) == 1
++    assert match[0]["status"] == "revoked"
++
++
++@pytest.mark.asyncio
++async def test_mcp_agent_key_rejected_on_admin_surface(admin_env: AdminTestEnv) -> None:
++    """Verify kb_agt_* key is rejected on /mcp/admin with SURFACE_KEY_MISMATCH."""
++    settings = McpSettings(mode="standalone_inprocess", auth_enabled=True)
++    mcp_app_auth = create_mcp_app(settings, kanban_app=admin_env.fastapi_app)
++
++    mw = McpAuthMiddleware(
++        mcp_app_auth,
++        surface=Surface.ADMIN,
++        internal_client=admin_env.internal_client,
++        settings=settings,
++    )
++    transport = httpx.ASGITransport(app=mw)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        agent_key = "kb_agt_" + "9" * 32
++        resp = await client.post(
++            "/mcp/admin",
++            headers={"Authorization": f"Bearer {agent_key}"},
++            json={
++                "jsonrpc": "2.0",
++                "id": 1,
++                "method": "tools/call",
++                "params": {
++                    "name": "manage_ai_and_agent_runners",
++                    "arguments": {"action": "list_remote_runners"},
++                },
++            },
++        )
++        assert resp.status_code == 403
++        data = resp.json()
++        assert data["error"] == "SURFACE_KEY_MISMATCH"
++
++
++@pytest.mark.asyncio
++async def test_mcp_ai_provider_and_budget_actions(admin_env: AdminTestEnv) -> None:
++    """Verify actions 1-5 (upsert, list, disable provider, set/get budget)."""
++    # 1. Upsert (create) provider
++    upsert_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "upsert_provider",
++            "provider_kind": "ollama",
++            "display_name": "Full Tool 9 Ollama",
++            "base_url": "http://127.0.0.1:11434",
++            "model_allowlist": ["llama3:8b", "mistral:7b"],
++            "residency_tier": "default",
++            "priority": 10,
++            "lod": "full",
++        },
++    )
++    assert "result" in upsert_call
++    created_data = yaml.safe_load(upsert_call["result"]["content"][0]["text"])
++    config_id = created_data["id"]
++    assert config_id is not None
++    assert created_data["display_name"] == "Full Tool 9 Ollama"
++
++    # 2. List providers with LOD tiers
++    list_std = await _call_manage_tool(admin_env, {"action": "list_providers", "lod": "standard"})
++    assert "result" in list_std
++    std_data = yaml.safe_load(list_std["result"]["content"][0]["text"])
++    assert any(p["id"] == config_id for p in std_data)
++
++    list_sum = await _call_manage_tool(admin_env, {"action": "list_providers", "lod": "summary"})
++    assert "result" in list_sum
++
++    # 3. Update provider
++    update_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "upsert_provider",
++            "id": config_id,
++            "display_name": "Full Tool 9 Ollama Updated",
++            "lod": "summary",
++        },
++    )
++    assert "result" in update_call
++    updated_data = yaml.safe_load(update_call["result"]["content"][0]["text"])
++    assert updated_data["display_name"] == "Full Tool 9 Ollama Updated"
++
++    # 4. Set budget
++    budget_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "set_budget",
++            "provider_config_id": config_id,
++            "period_kind": "daily",
++            "token_cap": 100000,
++        },
++    )
++    assert "result" in budget_call
++    budget_data = yaml.safe_load(budget_call["result"]["content"][0]["text"])
++    assert budget_data["token_cap"] == 100000
++
++    # 5. Get budget usage
++    usage_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "get_budget_usage",
++            "provider_config_id": config_id,
++        },
++    )
++    assert "result" in usage_call
++
++    # 6. Disable provider
++    disable_call = await _call_manage_tool(
++        admin_env,
++        {
++            "action": "disable_provider",
++            "id": config_id,
++        },
++    )
++    assert "result" in disable_call
++    dis_data = yaml.safe_load(disable_call["result"]["content"][0]["text"])
++    assert dis_data.get("is_enabled") is False
++
++    # 7. Validation errors
++    bad_action = await _call_manage_tool(admin_env, {"action": "unhandled_unknown_action"})
++    assert "error" in bad_action or bad_action.get("result", {}).get("isError") is True

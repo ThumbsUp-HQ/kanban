@@ -27,7 +27,9 @@ export interface EmojiHintProps {
   label?: string;
   variant?: 'tooltip' | 'interactive';
   onActivate?: () => void;
+  onAction?: () => void;
   activateLabel?: string;
+  actionLabel?: string;
   testId?: string;
   controller?: HintController;
 }
@@ -41,7 +43,9 @@ export function EmojiHint({
   label,
   variant = 'tooltip',
   onActivate,
+  onAction,
   activateLabel,
+  actionLabel,
   testId,
   controller,
 }: EmojiHintProps): JSX.Element {
@@ -184,6 +188,9 @@ export function EmojiHint({
     ctrl.blur(popupId);
   };
 
+  const effectiveAction = onAction ?? onActivate;
+  const effectiveActionLabel = actionLabel ?? activateLabel ?? 'Open';
+
   const handleClick = (): void => {
     isPointerDownRef.current = false;
     if (isTouchRef.current) {
@@ -193,8 +200,8 @@ export function EmojiHint({
         ctrl.close(popupId);
       }
     } else {
-      if (onActivate) {
-        onActivate();
+      if (effectiveAction) {
+        effectiveAction();
       } else {
         ctrl.tap(popupId);
       }
@@ -286,7 +293,12 @@ export function EmojiHint({
 
   const handleActionClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
     e.stopPropagation();
-    onActivate?.();
+    if (onAction) {
+      onAction();
+      ctrl.close(popupId);
+    } else if (onActivate) {
+      onActivate();
+    }
   };
 
   const effectiveLabel = label ?? safeEntry.ariaLabel;
@@ -336,14 +348,17 @@ export function EmojiHint({
             onKeyDown={handlePopupKeyDown}
           >
             <div className="emoji-hint-popup-content">{resolvedContent}</div>
-            {onActivate && (
+            {effectiveAction && (
               <button
                 type="button"
                 className="emoji-hint-action-btn"
                 data-testid={testId ? `${testId}-action-btn` : 'emoji-hint-action-btn'}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                }}
                 onClick={handleActionClick}
               >
-                {activateLabel ?? 'Open'}
+                {effectiveActionLabel}
               </button>
             )}
           </div>

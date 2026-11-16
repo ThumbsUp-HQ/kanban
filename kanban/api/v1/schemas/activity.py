@@ -6,15 +6,20 @@ from __future__ import annotations
 
 import uuid  # noqa: TC003  # Runtime import required for Pydantic v2 type evaluation
 from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic v2 type evaluation
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    GetJsonSchemaHandler,
     SerializerFunctionWrapHandler,
     model_serializer,
 )
+
+if TYPE_CHECKING:
+    from pydantic.json_schema import JsonSchemaValue
+    from pydantic_core import core_schema
 
 from kanban.api.v1.schemas.comments import ReactionSummary  # noqa: TC001
 from kanban.services.activity import ActivityCategory  # noqa: TC001
@@ -129,6 +134,20 @@ class ActivityItemResponse(BaseModel):
         if data.get("comment") is None:
             data.pop("comment", None)
         return data
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, cs: core_schema.CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Preserve full field schema in OpenAPI serialization mode despite wrap serializer."""
+        if cs.get("serialization"):
+            stripped_cs = dict(cs)
+            stripped_cs.pop("serialization", None)
+            cs = cast("core_schema.CoreSchema", stripped_cs)
+        schema = handler(cs)
+        if cls.__doc__ and "description" not in schema:
+            schema["description"] = cls.__doc__.strip()
+        return schema
 
 
 class ActivityFeedResponse(BaseModel):

@@ -1,0 +1,11 @@
+cassette_version: 1
+matcher:
+  transition_to: Done
+simulated_ttft_ms: 10.0
+final_verdict:
+  schema: kb-transition-verdict/v1
+  decision: approve
+  reason_markdown: "Verified all DoD criteria. Approving transition to Done."
+  field_updates: {}
+  add_labels: ["qa-verified"]
+  add_links: []

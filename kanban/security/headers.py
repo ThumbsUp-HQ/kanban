@@ -7,6 +7,7 @@ standalone cleartext loopback protections.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import TYPE_CHECKING, Final
 
@@ -60,6 +61,63 @@ def _extract_host(host_header: str) -> str:
     return host
 
 
+def _has_forwarded_https_proto(forwarded: str) -> bool:
+    """Check RFC 7239 Forwarded header for proto=https."""
+    for element in forwarded.split(","):
+        for param in element.split(";"):
+            key, sep, val = param.strip().partition("=")
+            if sep and key.strip().lower() == "proto" and val.strip().strip('"').lower() == "https":
+                return True
+    return False
+
+
+def _is_https_request(scope: Scope, headers: Headers) -> bool:
+    """Determine whether request was received over HTTPS (direct or reverse proxy)."""
+    if scope.get("scheme", "").lower() == "https":
+        return True
+
+    xf_proto = headers.get("x-forwarded-proto")
+    if xf_proto and any(p.strip().lower() == "https" for p in xf_proto.split(",")):
+        return True
+
+    xf_scheme = headers.get("x-forwarded-scheme")
+    if xf_scheme and any(s.strip().lower() == "https" for s in xf_scheme.split(",")):
+        return True
+
+    forwarded = headers.get("forwarded")
+    return bool(forwarded and _has_forwarded_https_proto(forwarded))
+
+
+def _normalize_host_idna(host_name: str) -> set[str]:
+    """Generate canonical ASCII Punycode and Unicode representations of a host name."""
+    seeds = {host_name}
+    # Handle UTF-8 host header bytes decoded as latin-1 by ASGI/Starlette
+    with contextlib.suppress(UnicodeError):
+        seeds.add(host_name.encode("latin-1").decode("utf-8"))
+
+    candidates = set(seeds)
+    for seed in seeds:
+        with contextlib.suppress(UnicodeError):
+            idna_ascii = seed.encode("idna").decode("ascii")
+            candidates.add(idna_ascii)
+            candidates.add(idna_ascii.encode("ascii").decode("idna"))
+    return candidates
+
+
+def _is_host_allowed(host_name: str, allowed_hosts: frozenset[str] | set[str]) -> bool:
+    """Check if host matches allowed cleartext hosts under IDN / Punycode normalization."""
+    candidates = _normalize_host_idna(host_name)
+    if any(h in allowed_hosts for h in candidates):
+        return True
+
+    for allowed in allowed_hosts:
+        with contextlib.suppress(UnicodeError):
+            if allowed.encode("idna").decode("ascii") in candidates:
+                return True
+
+    return False
+
+
 class SecurityHeadersMiddleware:
     """Pure ASGI middleware enforcing hardening headers and standalone Host rules."""
 
@@ -75,31 +133,32 @@ class SecurityHeadersMiddleware:
             return
 
         # Check standalone cleartext block
-        if self.settings.deployment_mode == "standalone" and scope.get("scheme", "http") == "http":
+        if self.settings.deployment_mode == "standalone":
             headers = Headers(scope=scope)
-            host_header = headers.get("host")
-            if not host_header:
-                await self._send_problem(
-                    send,
-                    status=400,
-                    title="Bad Request",
-                    detail="Host header is required",
-                )
-                return
+            if not _is_https_request(scope, headers):
+                host_header = headers.get("host")
+                if not host_header:
+                    await self._send_problem(
+                        send,
+                        status=400,
+                        title="Bad Request",
+                        detail="Host header is required",
+                    )
+                    return
 
-            host_name = _extract_host(host_header)
-            if host_name not in self.settings.standalone_cleartext_hosts:
-                await self._send_problem(
-                    send,
-                    status=403,
-                    title="CLEARTEXT_HTTP_BLOCKED",
-                    detail=(
-                        "Standalone mode serves cleartext HTTP only to localhost. "
-                        "Put a TLS reverse proxy in front or add the host to "
-                        "KB_STANDALONE_CLEARTEXT_HOSTS."
-                    ),
-                )
-                return
+                host_name = _extract_host(host_header)
+                if not _is_host_allowed(host_name, self.settings.standalone_cleartext_hosts):
+                    await self._send_problem(
+                        send,
+                        status=403,
+                        title="CLEARTEXT_HTTP_BLOCKED",
+                        detail=(
+                            "Standalone mode serves cleartext HTTP only to localhost. "
+                            "Put a TLS reverse proxy in front or add the host to "
+                            "KB_STANDALONE_CLEARTEXT_HOSTS."
+                        ),
+                    )
+                    return
 
         # Wrap send to inject security headers
         async def send_wrapper(message: Message) -> None:

@@ -102,9 +102,11 @@ class ValidationReport(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["kb-cli-validation-report/v1", "kb-sparkle-report/v1"] = (
-        "kb-cli-validation-report/v1"
-    )
+    schema_version: Literal[
+        "kb-cli-validation-report/v1",
+        "kb-sparkle-report/v1",
+        "kb-validate-transition-report/v1",
+    ] = "kb-cli-validation-report/v1"
     command: str
     rendered_context: str
     tool_trace: tuple[ToolCallStep, ...] = ()
@@ -112,6 +114,7 @@ class ValidationReport(BaseModel):
     schema_status: SchemaStatus
     qa_verdict: object = None
     sparkle_details: dict[str, Any] | None = None
+    transition_details: dict[str, Any] | None = None
 
 
 def _render_tool_trace(

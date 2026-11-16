@@ -12,13 +12,17 @@
 
 ## Table of Contents
 
-1. [Mission, `Apache-2.0` Positioning & Plane Paywall Gap Analysis](#1-mission-apache-20-positioning--plane-paywall-gap-analysis)
+1. [Mission, `Apache-2.0` Positioning & Enterprise Paywall Gap Analysis](#1-mission-apache-20-positioning--enterprise-paywall-gap-analysis)
+   - [1.1 Upstream Agent-First Post-Mortem & Core Thesis](#11-upstream-agent-first-post-mortem--core-thesis)
+   - [1.2 Global Competitive Paywall Gap Matrix vs. `👍kanban`](#12-global-competitive-paywall-gap-matrix-vs-kanban-apache-20-day-1-core)
+   - [1.3 Research Synthesis: Modern Kanban & Ticketing Expectations](#13-research-synthesis-modern-kanban--ticketing-expectations-9i-9j)
+   - [1.4 GitHub Issue #1 Resolution: Four Core Pillars & Architectural Commitments](#14-github-issue-1-resolution-four-core-pillars--architectural-commitments)
 2. [System Topology, Container Architecture (`docker run` Standalone + Prod) & Web Server Stack](#2-system-topology-container-architecture-docker-run-standalone--prod--web-server-stack)
 3. [Zero-Trust Security Architecture & Explicit Sharing Visibility (`#1`)](#3-zero-trust-security-architecture--explicit-sharing-visibility-1)
 4. [Multi-Card Pluggable Authentication Studio (`#6`)](#4-multi-card-pluggable-authentication-studio-6)
 5. [Auto-Converted Canonical Markdown Pipeline & Safe Mermaid, Pictures & SVG (`#5`, `#10`)](#5-auto-converted-canonical-markdown-pipeline--safe-mermaid-pictures--svg-5-10)
 6. [Breathable Enterprise Whitespace, `<EmojiHint>` Hover System & Kanban Board (`#9`, `#15`)](#6-breathable-enterprise-whitespace-emojihint-hover-system--kanban-board-9-15)
-7. [Plane-Parity Ticket Screen & Complete 17-Feature Specification (`#8a` - `#8q`)](#7-plane-parity-ticket-screen--complete-17-feature-specification-8a---8q)
+7. [Enterprise Ticket Screen & Complete 17-Feature Specification (`#8a` - `#8q`)](#7-enterprise-ticket-screen--complete-17-feature-specification-8a---8q)
 8. [Hierarchical Docs, Pages & Project Stickies with Smart Promotion (`#11`)](#8-hierarchical-docs-pages--project-stickies-with-smart-promotion-11)
 9. [Blinking Cursor Sparkle (`✨`) Completion & Surgical Right-Click Engine (`#7`)](#9-blinking-cursor-sparkle--completion--surgical-right-click-engine-7)
 10. [Multi-Provider AI Engine (`#2`: `agent/` - OpenAI, Ollama, Gemini & CLI/Remote Harnesses)](#10-multi-provider-ai-engine-2-agent---openai-ollama-gemini--cliremote-harnesses)
@@ -43,7 +47,7 @@
 | **6. OAuth / LDAP + Local Admin; multiple cards, enable/disable/reorder** | Section 4.1 - 4.3 | `auth_provider_cards` with AES-256-GCM wrapped DEKs, PKCE `S256`, LDAPS ephemeral bind, Argon2id + WebAuthn, zero implicit email auto-linking, `COLLATE "C"` card ordering, and `LOCKOUT_PREVENTED` triggers. |
 | **7. Sparkle (`✨`) blinks at cursor + right-click completes** | Section 9.1 - 9.3 | ProseMirror `coordsAtPos` zero-reflow portal + `Decoration.widget` ghost text + 6-row surgical `contextmenu` matrix (preserving spellcheck & Copy/Paste) + `<150ms` RLS-filtered FIM pipeline. |
 | **8. Kanban ticket features (`8a` - `8q`)** | Section 7.1 - 7.2, Section 12.2 | All 17 features (`Summary`, hybrid `Assignees` + free-text `🏷️`, per-project `Priority`, Admin-override `Created by` `🔄`, `Dates`, conditional `Modules` omitted when unused + defaults, `Cycle`, DAG `Parent`, `Labels`, 4-tab `Activity`, `Comments`, `Subscribe`, `Link`, `Copy`, `Full Screen`, rule-explained `Archive`, blast-radius `Delete`). |
-| **9 & 15. Plane-parity UX + Breathable Whitespace & Emoji Hover-Elaboration** | Section 6.1 - 6.4, Section 7.1 | Generous breathable whitespace (`52px` topbar, `46px` rows, `324px` columns, `16px x 18px` cards, `960px` drawer with `40px` margins) + standardized `<EmojiHint>` rich hover/focus tooltips replacing noisy repetitive text labels. |
+| **9 & 15. Global Enterprise UX + Breathable Whitespace & Emoji Hover-Elaboration** | Section 6.1 - 6.4, Section 7.1 | Generous breathable whitespace (`52px` topbar, `46px` rows, `324px` columns, `16px x 18px` cards, `960px` drawer with `40px` margins) + standardized `<EmojiHint>` rich hover/focus tooltips replacing noisy repetitive text labels. |
 | **11. Docs in Docs tab; Stickies on Project tab + smart promotion** | Section 8.1 - 8.2 | `Pages`/`Docs` `ltree` hierarchy in Docs tab; Project Overview `Stickies` grid with complexity heuristics (`>600` chars / `>10` lines / `>=2` headings / tables / code), snooze, and 1-click ACL-preserving Doc promotion (`💡📄`). |
 | **12. MCP (`agent`, `docs`, `admin`; 100% admin tasks via refined intent tools)** | Section 11.1 - 11.4 | `/mcp/agent` (8 tools), `/mcp/docs` (6 tools), `/mcp/admin` (12 orthogonal intent tools covering 100% of admin, workflow-interceptor, and runner tasks + 2-stage `request_delete` -> `execute_delete`). |
 | **13. Universal Object Graph (`a` - `i`) + Invalid Link Audit & Delete (`13j`)** | Section 12.1 - 12.3 | Shared-PK UUIDv7 `objects` spine + composite type-pinned FKs (`ON DELETE RESTRICT`) + `object_links` snapshots + `audit_object_links()` 6-reason detector + `invalid_object_link_audits` ledger + `purge_invalid_object_links()`. |
@@ -53,23 +57,23 @@
 
 ---
 
-## 1. Mission, `Apache-2.0` Positioning & Plane Paywall Gap Analysis
+## 1. Mission, `Apache-2.0` Positioning & Enterprise Paywall Gap Analysis
 
-### 1.1 Upstream Post-Mortem (`makeplane/plane-mcp-server`) & Core Thesis
+### 1.1 Upstream Agent-First Post-Mortem & Core Thesis
 
-Autonomous coding agents (`Gemini CLI / Antigravity`, `Claude Code`, `OpenAI Codex`) and security-conscious engineering teams need a workspace where **access boundaries are unmistakable** and **agents are first-class protocol citizens**. Existing "open-core" trackers fail on three structural fronts:
+Autonomous coding agents (`Gemini CLI / Antigravity`, `Claude Code`, `OpenAI Codex`) and security-conscious engineering teams need a workspace where **access boundaries are unmistakable** and **agents are first-class protocol citizens**. Competing platforms globally (Jira, Vibe Kanban, and legacy open-core trackers) fail on three structural fronts:
 
-1. **Restrictive Licensing & Enterprise Paywalls:** Plane Community uses copyleft `AGPLv3` while locking SSO (`OIDC`/`LDAP`), granular RBAC, audit logs, custom properties, workflow gates, and metered AI credits behind commercial Pro (`~\$6/seat`), Business (`~\$13/seat`), and Enterprise tiers.
+1. **Restrictive Licensing & Enterprise Paywalls:** Legacy commercial and open-core boards rely on proprietary licensing or copyleft `AGPLv3` while locking SSO (`OIDC`/`LDAP`), granular RBAC, audit logs, custom properties, workflow gates, and metered AI credits behind commercial per-seat tiers.
 2. **CRUD-Wrapper MCP Context Collapse (`Issues #29`, `#87`):** Generating 1:1 MCP tools from REST endpoints dumps `70-120+` tools (`45,000+` schema tokens) into context, returns bloated unpruned JSON full of `null`s and raw UUIDs, and exposes single-step hard deletes without friction gates.
-3. **Rejection of Intent-Based Multi-Surface MCP (`PRs #99`, `#268`):** Scoped intent surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`), `EntityResolver` human keys (`KAN-42`), `summary`/`standard`/`full` LOD tiers, and `InlineSafeDumper` YAML (`~89%` schema token savings) were ignored or rejected upstream.
+3. **Lack of Intent-Based Multi-Surface MCP:** Scoped intent surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`), `EntityResolver` human keys (`KAN-42`), `summary`/`standard`/`full` LOD tiers, and `InlineSafeDumper` YAML (`~89%` schema token savings) solve agent context bloat natively rather than treating AI as an afterthought.
 
-**Our Mandate:** Build **`👍kanban`** (`thumbs-up-kanban`), a clean-sheet **`Apache-2.0`** platform where **Security is Priority #0**, **Native Agent-First Ergonomics & Scriptable Workflows are Priority #1**, and **Breathable Whitespace + Emoji Hover-Elaboration UX is Priority #2** - with zero seat taxes and zero AI paywalls.
+**Our Mandate:** Build **`👍kanban`** (`thumbs-up-kanban`), a clean-sheet **`Apache-2.0`** platform competing globally against Jira, Vibe Kanban, and legacy enterprise suites where **Security is Priority #0**, **Native Agent-First Ergonomics & Scriptable Workflows are Priority #1**, and **Breathable Whitespace + Emoji Hover-Elaboration UX is Priority #2** - with zero seat taxes and zero AI paywalls.
 
 ---
 
-### 1.2 Plane Paywall Gap Matrix vs. `👍kanban` (`Apache-2.0` Day-1 Core)
+### 1.2 Global Competitive Paywall Gap Matrix vs. `👍kanban` (`Apache-2.0` Day-1 Core)
 
-| Capability Domain | Plane Community (`AGPLv3`) | Plane Pro / Business / Enterprise | `👍kanban` (`Apache-2.0` Day-1 Core) |
+| Capability Domain | Legacy Open-Core Trackers (`AGPLv3` / Entry) | Commercial Enterprise SaaS (Jira / Paid Tiers) | `👍kanban` (`Apache-2.0` Day-1 Core) |
 | :--- | :--- | :--- | :--- |
 | **License & Deployment** | `AGPLv3` multi-container stack | Commercial proprietary license | **`Apache-2.0`:** Both hardened multi-container `docker-compose.yml` AND 1-command `docker run -p 8080:8080 thumbs-up-kanban:latest` standalone mode. |
 | **Authentication & Identity** | Basic email/password & single OAuth; no LDAP/AD | **Pro:** OIDC<br>**Bus/Ent:** SAML, LDAP/AD, Group Sync | **Multi-Card Auth Studio:** Simultaneous OIDC, OAuth2, LDAPS/StartTLS, WebAuthn/Passkeys, & Local Break-Glass Admin with enable/disable/reordering. |
@@ -83,10 +87,40 @@ Autonomous coding agents (`Gemini CLI / Antigravity`, `Claude Code`, `OpenAI Cod
 
 ### 1.3 Research Synthesis: Modern Kanban & Ticketing Expectations (`9.i`, `9.j`)
 
-1. **Plane-Parity Spatial Muscle Memory with Generous Whitespace:** Preserves Plane's clean navigation rail, breathable `324px` board lanes, `960px` right-docked Ticket Drawer (`640px` spacious prose + `320px` properties rail), and zero-remount Full Screen expansion - replacing verbose text clutter with crisp semantic emojis (`🛡️`, `🔥`, `🤖`, `⏳🤖`, `✨`) backed by rich hover/focus elaboration tooltips.
+1. **Superior Spatial Muscle Memory with Generous Whitespace:** Surpasses Jira and Vibe Kanban with a clean navigation rail, breathable `324px` board lanes, `960px` right-docked Ticket Drawer (`640px` spacious prose + `320px` properties rail), and zero-remount Full Screen expansion - replacing verbose text clutter with crisp semantic emojis (`🛡️`, `🔥`, `🤖`, `⏳🤖`, `✨`) backed by rich hover/focus elaboration tooltips.
 2. **Sub-16ms Optimistic Interactions + Non-Blocking Gate States:** Drag-and-drop (`@atlaskit/pragmatic-drag-and-drop` + Base-62 `COLLATE "C"` fractional ranks) updates locally in `<12ms`. Transitions intercepted by an async agent gate (`agy -p`, `codex -p`, `gemini`, `ollama`) enter a non-blocking provisional `⏳🤖` state rather than freezing the UI with a spinner, snapping back smoothly (`240ms`) with a `🛑🤖` veto badge and comment if rejected.
 3. **Five Native Views, 2D Swimlanes, WIP Limits & Full Keyboard Parity:** Native `List`, `Board`, `Table`, `Calendar`, and `Timeline (Gantt)` layouts; orthogonal `Group By` x `Sub-Group By` swimlanes; Soft/Hard column WIP limits; and complete single-key shortcuts (`Cmd/Ctrl+K`, `C`, `J/K/H/L`, `S`, `P`, `A`, `I`, `L`, `M`, `D`, `X`).
-4. **Bootstrap Cutover (`https://kanban.hackedyour.info/kanban/`):** Initial build tickets will be tracked on `https://kanban.hackedyour.info/kanban/` (after spec approval) and migrated losslessly (`kanban-ctl import plane`) with `100%` `KANBA-*` key, comment, and QA proof preservation once self-hosting cutover is reached.
+4. **Bootstrap Cutover (`https://kanban.hackedyour.info/kanban/`):** Initial build tickets will be tracked on the bootstrap board (after spec approval) and migrated losslessly (`kanban-ctl import ...`) with `100%` `KANBA-*` key, comment, and QA proof preservation once self-hosting cutover is reached.
+
+---
+
+### 1.4 GitHub Issue #1 Resolution: Four Core Pillars & Architectural Commitments
+
+Addressing **GitHub Issue #1** ("World-Class Kanban Platform: Security-First, Agent-First"), `👍kanban` provides full enterprise competitive parity and superiority over legacy tools (Jira, Plane, Vibe Kanban) across four uncompromising pillars:
+
+#### Pillar 1: Native Agent-First Architecture
+- **Three Intent-Driven MCP Surfaces:** Replaces monolithic, context-collapsing CRUD-wrapper tools with `/mcp/agent` (8 orthogonal execution tools), `/mcp/docs` (6 knowledge management tools), and `/mcp/admin` (12 administrative tools with two-stage deletion confirmation). Total schema payload is slashed from 45,000+ tokens to <= 1,800 tokens.
+- **Level of Detail (LOD) Token Budgets:** Every entity supports `summary`, `standard`, and `full` LOD projections. Summary responses stay strictly under 1,000 tokens (< 4,000 characters) to prevent context exhaustion in autonomous coding agents.
+- **Agent Ecosystem Support:** Native out-of-the-box integration for Claude Code, OpenAI Codex, and Gemini CLI / Antigravity via zero-shell stdin CLI pipes (`agy -p`, `codex -p`), vendor-neutral LLM engines (`openai`, `ollama`, `gemini`), and outbound mTLS remote runners (`:ro` repository mounts).
+
+#### Pillar 2: Priority #0 Hardened Security
+- **PostgreSQL 16 FORCE ROW LEVEL SECURITY:** Hardware-enforced `FORCE ROW LEVEL SECURITY` (`NOBYPASSRLS`) across 100% of public tenant tables. Unauthenticated and zero-context queries fail closed returning zero rows.
+- **Hostile Input & Unicode Sanitization:** Active rejection of UTF-16 lone surrogates (`0xD800 <= ord(c) <= 0xDFFF` -> `INVALID_UTF8_SURROGATE`) before UTF-8 encoding, stripping invisible formatting and zero-width attack payloads, and hidden-DOM paste-jacking pruning.
+- **Zero Plaintext Secrets:** AES-256-GCM envelope encryption with ephemeral in-memory zeroing for all API keys, client secrets, and LDAP credentials.
+- **Mandatory Admin AAL2 Protection:** All administrative REST routes under `/api/v1/admin/*` and tools on `/mcp/admin` enforce `Depends(require_admin_aal2)`.
+
+#### Pillar 3: Friction-Free FOSS Deployment
+- **Permissive Open Source:** Pure `Apache-2.0` licensing with zero commercial AI paywalls, zero seat taxes, zero cloud telemetry, and zero phone-home tracking.
+- **Dual Deployment Topologies:**
+  1. *Zero-Config Standalone:* Single-container evaluation and homelab runtime (`docker run -p 8080:8080 thumbs-up-kanban:latest`) with embedded Unix-socket PostgreSQL 16 and sub-3-second startup.
+  2. *Hardened Production Stack:* Five-network container architecture (`docker compose up -d`) isolating edge, app, database, sandbox, and egress traffic.
+- **Lossless Upgrade Promotion:** Standalone instances can be promoted losslessly to multi-container production via AES-256-GCM streaming backup archives (`KBBAK1`).
+
+#### Pillar 4: Enterprise Whitespace & High-Ergonomics UI
+- **Spatial Ergonomics:** Breathable layout featuring a 52px topbar, 324px board lanes, 46px list rows, and a 960px peek drawer (640px spacious prose + 320px properties rail) with zero-remount 3-pane expansion.
+- **Optimistic Interactions:** Sub-16ms smooth drag-and-drop state updates with non-blocking provisional gate transitions (`⏳🤖` -> `✅🤖`/`🛑🤖`).
+- **Semantic Hover Elaboration:** Standardized 21-emoji `<EmojiHint>` tooltips eliminate noisy text badges while providing instant operational clarity.
+- **Canonical Markdown & Sparkle:** 100% canonical UTF-8 Markdown storage with ProseMirror cursor-blinking Sparkle (`✨`) completion and surgical right-click contextmenu accept.
 
 ---
 
@@ -427,7 +461,7 @@ Content-Security-Policy:
 
 ### 6.1 Generous Breathable Whitespace Spatial Tokens (`#15`)
 
-Rather than squeezing noisy metadata into cramped rows, the UI combines **generous Jira/Plane breathable whitespace** with **crisp semantic emojis whose hover/focus tooltips carry rich technical elaboration** (`kanban/web/src/styles/tokens.css`):
+Rather than squeezing noisy metadata into cramped rows, the UI combines **generous Jira-surpassing breathable whitespace** with **crisp semantic emojis whose hover/focus tooltips carry rich technical elaboration** (`kanban/web/src/styles/tokens.css`):
 
 ```css
 :root {
@@ -445,7 +479,7 @@ Rather than squeezing noisy metadata into cramped rows, the UI combines **genero
   --board-col-gap: 20px;          /* Clear visual gutter between state columns */
   --card-pad: 16px 18px;          /* Airy internal card padding */
   --card-gap: 12px;               /* Vertical breathing room between cards */
-  --list-row-h: 46px;             /* Calm Plane-style list row height */
+  --list-row-h: 46px;             /* Calm spacious list row height */
 
   /* Ticket Drawer & Full-Screen Editorial Breathing Room */
   --drawer-w: min(960px, 68vw);   /* 640px spacious prose + 320px properties rail */
@@ -520,7 +554,7 @@ Verbose inline status text (`"Shared with 14 users (Inherited from Project)"`, `
 
 ---
 
-## 7. Plane-Parity Ticket Screen & Complete 17-Feature Specification (`#8a` - `#8q`)
+## 7. Enterprise Ticket Screen & Complete 17-Feature Specification (`#8a` - `#8q`)
 
 ### 7.1 Breathable Split Ticket Drawer (`960px`) & Zero-Remount Full Screen (`#9i`, `#8o`)
 
@@ -566,7 +600,7 @@ Clicking any issue opens the spacious `960px` right-docked Drawer (`640px` left 
 | :--- | :--- | :--- |
 | **8a** | **Summary** | `issues.summary TEXT NOT NULL CHECK (char_length(btrim(summary)) BETWEEN 1 AND 500)`. Inline-editable `H1`; `Enter` focuses description; sanitized to plain text + `✨` Sparkle support. |
 | **8b** | **Assignees (Hybrid Access-Filtered + Free-Text `🏷️`)** | Autocompletes **exclusively** principals holding `VIEW` on the project (`effective_resource_access` join - zero cross-project user enumeration!), **plus** accepts arbitrary free-text (`issue_assignees.free_text_assignee`, e.g., `"Vendor: NCC Group"`), rendered as a dashed pill with `🏷️` (`Hover: "External free-text label - grants zero access and sends zero notifications"`). |
-| **8c** | **Priority (Per-Project)** | Backed by `project_priorities(project_id, slug, label, emoji, color_hex, sort_order, is_default)` seeded with Plane defaults (`Urgent 🔥`, `High ⚡`, `Medium 🔹`, `Low 💤`, `None`) and fully customizable per project. |
+| **8c** | **Priority (Per-Project)** | Backed by `project_priorities(project_id, slug, label, emoji, color_hex, sort_order, is_default)` seeded with standard enterprise defaults (`Urgent 🔥`, `High ⚡`, `Medium 🔹`, `Low 💤`, `None`) and fully customizable per project. |
 | **8d** | **Created By (Fixed + Admin Override `🔄`)** | Immutable for standard users; DB trigger permits mutation **only** when caller holds `PROJECT_ADMIN` or `SERVER_ADMIN`, preserving `original_created_by_id`, displaying `🔄` (`Hover: provenance tooltip`), and appending an immutable `CREATOR_OVERRIDDEN` audit entry. |
 | **8e** | **Start Date / Due Date** | `DATE` columns with `CHECK (due_date IS NULL OR start_date IS NULL OR due_date >= start_date)`. Powers Gantt/Calendar views and localized overdue pills (suppressed once in `completed`/`cancelled`). |
 | **8f** | **Modules (Conditional + Admin Defaults)** | **Zero Clutter:** When `projects.modules_enabled = FALSE` (and `0` project modules exist), the `Modules` row, sidebar tab, and filter facet are **100% unmounted**. When enabled, Project Admins configure `default_module_ids[]` (`project_module_defaults`) pre-applied on creation. |
@@ -579,7 +613,7 @@ Clicking any issue opens the spacious `960px` right-docked Drawer (`640px` left 
 | **8m** | **Link to Issue & Graph** | `[🔗]` copies canonical URL (`Cmd+Shift+C` copies `[KAN-142](url)`) **and** creates typed `object_links` (`BLOCKS`, `BLOCKED_BY`, `RELATES_TO`, `DUPLICATES`, `VERIFIED_BY_DOC`, `DERIVED_FROM_STICKY`). |
 | **8n** | **Make a Copy** | Clones Summary (`[Copy] ...`), `description_markdown`, Priority, Labels, Modules, and Custom Field inputs into a fresh `sequence_id` with an interactive checklist (`Include sub-issues`, `Include attachments`, `Link as RELATES_TO`), setting `Created by` to the cloner. |
 | **8o** | **Full Screen** | Zero-remount transition between Drawer (`?peek=KAN-142`) and dedicated route (`/projects/KAN/issues/KAN-142`) via `[↗]` or `Cmd+Shift+F`. |
-| **8p** | **Archive** | Mirrors Plane's exact rule: enabled **only** when `state.group IN ('completed', 'cancelled')`; otherwise disabled with explicit inline reason (`"Only completed or canceled work items can be archived"`). Supports per-project auto-archive after $N$ days. |
+| **8p** | **Archive** | Guarded archive rule: enabled **only** when `state.group IN ('completed', 'cancelled')`; otherwise disabled with explicit inline reason (`"Only completed or canceled work items can be archived"`). Supports per-project auto-archive after $N$ days. |
 | **8q** | **Delete** | Confirmation modal showing exact blast radius (`N sub-issues unparented, M inbound object_links flagged`). Soft-trashes for a configurable retention window (`default 30d`) before Admin/2-stage MCP hard purge. |
 
 ---
@@ -683,7 +717,7 @@ Blindly calling `event.preventDefault()` on every `contextmenu` destroys browser
 
 ### 11.1 Surface Separation, Auth (`OAuth 2.1 + PKCE` & `kb_*` Keys) & Token-Lean Wire Format
 
-Instead of Plane's `70-120+` 1:1 CRUD wrappers, `mcp/` mounts **three isolated Streamable HTTP (`2025-06-18`) surfaces** authenticating via **OAuth 2.1 + PKCE (`S256`)** or scoped API keys (`kb_agt_*`, `kb_doc_*`, `kb_adm_*` stored as `SHA-256` digests):
+Instead of conventional `70-120+` 1:1 CRUD wrappers, `mcp/` mounts **three isolated Streamable HTTP (`2025-06-18`) surfaces** authenticating via **OAuth 2.1 + PKCE (`S256`)** or scoped API keys (`kb_agt_*`, `kb_doc_*`, `kb_adm_*` stored as `SHA-256` digests):
 
 | Surface | Key Prefix | Tool Count | Schema Budget | Target Persona & Hard Boundary |
 | :--- | :--- | :---: | :---: | :--- |
@@ -703,7 +737,7 @@ Instead of Plane's `70-120+` 1:1 CRUD wrappers, `mcp/` mounts **three isolated S
    - **Workspace + Project Route / Header:** `/mcp/{surface}/w/{workspace_slug}/p/{project_key}` (or `X-Workspace-Slug` + `X-Project-Key`) -> narrows the MCP session strictly to that single project and auto-defaults `project` on tool calls. URL/headers can **only narrow** (never widen) the token's cryptographic `scope_tier` (`403 KEY_SCOPE_VIOLATION` on mismatch).
 3. **Approval-Based OAuth + Headless Device Flow + Multi-Layer Deauth:** Supports browser OAuth 2.1 + PKCE `S256` with interactive scope/project narrowing (`/oauth/authorize`), headless SSH/CLI approval via **RFC 8628 Device Authorization Grant** (`/oauth/device/authorize` -> `/activate`), optional Admin client approval (`require_admin_oauth_client_approval`), **RFC 7009 `/oauth/revoke`**, and self-service/Admin grant & key revocation (`<= 15s` global cache bound).
 
-**Shared Token-Efficiency Pillars (Inherited & Upgraded from User's Plane MCP Architecture):**
+**Shared Token-Efficiency Pillars (Intent-Based MCP Architecture):**
 1. **`EntityResolver` Everywhere:** Every parameter accepts human keys (`"KAN"`, `"KAN-142"`, `"In Progress"`, `"@adam"`, `"Cycle 4"`, `"sec-review-gate"`) or UUIDs interchangeably.
 2. **Progressive Disclosure (`action="help"`):** Passing `identifier="help"` or `action="help"` returns live project-specific valid states, priorities, custom fields, and registered agents JIT.
 3. **`InlineSafeDumper` YAML + 3 LOD Tiers (`summary` | `standard` | `full`):** Strips `null`/`[]`/`{}` recursively and formats scalars inline (`~78-89%` fewer tokens than raw REST JSON).
@@ -1173,7 +1207,7 @@ Every ticket executed on this repository enforces five non-bypassable gates:
 1. **Phase 0 - Monorepo Skeleton, `Apache-2.0` CI, Standalone `docker run` & Clean-DB `95%` Harness:** Root `LICENSE`, `[database, kanban, mcp, agent]` workspace, `Dockerfile` (`runtime-slim` + `standalone` Unix-socket PG16), `Caddyfile`, `tmpfs` `SAVEPOINT` test harness, `FixtureLLMProvider`, and Dash CI pipeline.
 2. **Phase 1 - Universal Object Graph, Canonical Markdown DDL, `FORCE RLS` & Link Auditor (`database/`):** All 9 object classes (`*_markdown` + `STORED` `sha256` + `tsvector`), `principals`, `effective_resource_access`, `activity_records` hash chain, and `audit_object_links()` / `purge_invalid_object_links()`.
 3. **Phase 2 - Multi-Card Auth Studio & Sanitization/Media Shield (`kanban/`):** Envelope-encrypted `OIDC`/`OAuth2`/`LDAPS`/`Local Admin` cards, `LOCKOUT_PREVENTED`, Rust `nh3` + hidden-DOM pruner, SVG scrubber, and `/api/v1/media-proxy`.
-4. **Phase 3 - Breathable Whitespace UI, `<EmojiHint>`, Plane-Parity Board/Ticket & Safe Mermaid/Pictures/SVG (`kanban/web`):** Spatial tokens, 21-emoji `<EmojiHint>` system, 5 board views, `960px` Drawer + Full Screen (`8a`-`8q`), `beautiful-mermaid` Worker, `<MediaViewport>`, and `Docs` + `Stickies` (`💡📄`).
+4. **Phase 3 - Breathable Whitespace UI, `<EmojiHint>`, Enterprise Board/Ticket & Safe Mermaid/Pictures/SVG (`kanban/web`):** Spatial tokens, 21-emoji `<EmojiHint>` system, 5 board views, `960px` Drawer + Full Screen (`8a`-`8q`), `beautiful-mermaid` Worker, `<MediaViewport>`, and `Docs` + `Stickies` (`💡📄`).
 5. **Phase 4 - Three-Surface Intent MCP Server (`mcp/`):** `/mcp/agent` (8 tools), `/mcp/docs` (6 tools), `/mcp/admin` (12 tools + 2-stage `destructive_lifecycle`), OAuth 2.1 + PKCE, `EntityResolver`, and `InlineSafeDumper` YAML.
 6. **Phase 5 - Multi-Provider AI, `<150ms` `✨` Sparkle, Custom Scripted Fields & ScriptRunner/CLI Transition Interceptors (`agent/` + `kanban/`):** `OpenAI`/`Ollama`/`Gemini` adapters, Sparkle right-click engine, Tier A `Wasmtime` + Tier B `nsjail`, `${context} | agy -p` / `codex -p` & remote `WSS` workflow gates, and `kanban-agent validate-*` local CLI testbench.
 7. **Phase 6 - Cutover Import from `https://kanban.hackedyour.info/kanban/`:** Lossless `KANBA-*` migration, Link Auditor zero-invalid check, and full self-hosted dogfooding.

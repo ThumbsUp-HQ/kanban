@@ -1,0 +1,26 @@
+Dry-run Table Row Count Invariance Verification Dump
+============================================================
+Simulating execution of dry-run pipeline with validator, mutator, and agent interceptor hooks
+
+Table: issues
+  Before: 14
+  After:  14
+  Delta:  0 (INVARIANT HELD)
+Table: workflow_transition_executions
+  Before: 0
+  After:  0
+  Delta:  0 (INVARIANT HELD)
+Table: workflow_hook_invocations
+  Before: 0
+  After:  0
+  Delta:  0 (INVARIANT HELD)
+Table: activity_records
+  Before: 14
+  After:  14
+  Delta:  0 (INVARIANT HELD)
+Table: objects
+  Before: 14
+  After:  14
+  Delta:  0 (INVARIANT HELD)
+============================================================
+ALL DATABASE COUNTS IDENTICAL. Zero mutations persisted during dry-run.

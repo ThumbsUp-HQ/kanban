@@ -1,0 +1,95 @@
+========================================================================================
+👍kanban PostgreSQL RLS Catalog & Role Privilege Forensic Audit (Spec S3.5 / KB-P6-03)
+========================================================================================
+
+--- 1. Public Schema Tables & Partitions: Row-Level Security Verification ---
+Table Name                          | Kind   | relrowsecurity   | relforcerowsecurity  | Status  
+-------------------------------------------------------------------------------------------------
+activity_chain_heads                | b'r'   | True             | True                 | PASS    
+activity_records                    | b'p'   | True             | True                 | PASS    
+activity_records_y2026m10           | b'r'   | True             | True                 | PASS    
+activity_records_y2026m11           | b'r'   | True             | True                 | PASS    
+activity_records_y2026m12           | b'r'   | True             | True                 | PASS    
+activity_records_y2027m01           | b'r'   | True             | True                 | PASS    
+activity_records_y2027m02           | b'r'   | True             | True                 | PASS    
+activity_records_y2027m03           | b'r'   | True             | True                 | PASS    
+activity_records_y2027m04           | b'r'   | True             | True                 | PASS    
+activity_records_y2027m05           | b'r'   | True             | True                 | PASS    
+agent_definitions                   | b'r'   | True             | True                 | PASS    
+ai_provider_configs                 | b'r'   | True             | True                 | PASS    
+ai_token_ledgers                    | b'r'   | True             | True                 | PASS    
+alembic_version                     | b'r'   | False            | False                | EXEMPT  
+approved_wasm_modules               | b'r'   | True             | True                 | PASS    
+attachments                         | b'r'   | True             | True                 | PASS    
+auth_provider_cards                 | b'r'   | True             | True                 | PASS    
+comment_reactions                   | b'r'   | True             | True                 | PASS    
+custom_field_approvals              | b'r'   | True             | True                 | PASS    
+custom_field_definitions            | b'r'   | True             | True                 | PASS    
+custom_field_values                 | b'r'   | True             | True                 | PASS    
+cycles                              | b'r'   | True             | True                 | PASS    
+destructive_confirmation_tokens     | b'r'   | True             | True                 | PASS    
+docs                                | b'r'   | True             | True                 | PASS    
+effective_resource_access           | b'r'   | True             | True                 | PASS    
+groups                              | b'r'   | True             | True                 | PASS    
+identity_link_intents               | b'r'   | True             | True                 | PASS    
+import_entity_mappings              | b'r'   | True             | True                 | PASS    
+invalid_object_link_audits          | b'r'   | True             | True                 | PASS    
+issue_assignees                     | b'r'   | True             | True                 | PASS    
+issue_comments                      | b'r'   | True             | True                 | PASS    
+issue_labels                        | b'r'   | True             | True                 | PASS    
+issue_modules                       | b'r'   | True             | True                 | PASS    
+issue_subscriptions                 | b'r'   | True             | True                 | PASS    
+issues                              | b'r'   | True             | True                 | PASS    
+ldap_group_mappings                 | b'r'   | True             | True                 | PASS    
+link_type_matrix                    | b'r'   | False            | False                | EXEMPT  
+local_admin_credentials             | b'r'   | True             | True                 | PASS    
+mcp_api_keys                        | b'r'   | True             | True                 | PASS    
+mcp_ephemeral_tokens                | b'r'   | True             | True                 | PASS    
+mcp_read_taint                      | b'r'   | True             | True                 | PASS    
+modules                             | b'r'   | True             | True                 | PASS    
+notifications                       | b'r'   | True             | True                 | PASS    
+oauth_authorization_codes           | b'r'   | True             | True                 | PASS    
+oauth_clients                       | b'r'   | True             | True                 | PASS    
+oauth_device_codes                  | b'r'   | True             | True                 | PASS    
+oauth_grants                        | b'r'   | True             | True                 | PASS    
+oauth_refresh_tokens                | b'r'   | True             | True                 | PASS    
+oauth_revoked_jtis                  | b'r'   | True             | True                 | PASS    
+object_embeddings                   | b'r'   | True             | True                 | PASS    
+object_links                        | b'r'   | True             | True                 | PASS    
+objects                             | b'r'   | True             | True                 | PASS    
+oidc_auth_requests                  | b'r'   | True             | True                 | PASS    
+outbox_events                       | b'r'   | True             | True                 | PASS    
+page_versions                       | b'r'   | True             | True                 | PASS    
+pages                               | b'r'   | True             | True                 | PASS    
+principal_group_closure             | b'r'   | True             | True                 | PASS    
+principal_group_edges               | b'r'   | True             | True                 | PASS    
+principals                          | b'r'   | True             | True                 | PASS    
+project_labels                      | b'r'   | True             | True                 | PASS    
+project_module_defaults             | b'r'   | True             | True                 | PASS    
+project_priorities                  | b'r'   | True             | True                 | PASS    
+projects                            | b'r'   | True             | True                 | PASS    
+rate_limit_buckets                  | b'r'   | True             | True                 | PASS    
+recovery_codes                      | b'r'   | True             | True                 | PASS    
+remote_runner_enrollment_tokens     | b'r'   | True             | True                 | PASS    
+remote_runners                      | b'r'   | True             | True                 | PASS    
+resource_acl_entries                | b'r'   | True             | True                 | PASS    
+role_bindings                       | b'r'   | True             | True                 | PASS    
+sessions                            | b'r'   | True             | True                 | PASS    
+setup_claim_tokens                  | b'r'   | True             | True                 | PASS    
+stickies                            | b'r'   | True             | True                 | PASS    
+totp_factors                        | b'r'   | True             | True                 | PASS    
+user_identities                     | b'r'   | True             | True                 | PASS    
+users                               | b'r'   | True             | True                 | PASS    
+views                               | b'r'   | True             | True                 | PASS    
+webauthn_challenges                 | b'r'   | True             | True                 | PASS    
+webauthn_credentials                | b'r'   | True             | True                 | PASS    
+workflow_states                     | b'r'   | True             | True                 | PASS    
+workspace_settings                  | b'r'   | True             | True                 | PASS    
+workspaces                          | b'r'   | True             | True                 | PASS    
+
+--- 2. Database Role Privilege & BYPASSRLS Forensic Audit ---
+Role Name            | Superuser  | Create Role  | Create DB  | Bypass RLS   | Status  
+---------------------------------------------------------------------------------------
+app_rls_reader       | False      | False        | False      | False        | PASS    
+kanban_app           | False      | False        | False      | False        | PASS    
+kanban_migrator      | False      | True         | False      | True         | PASS    

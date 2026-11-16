@@ -305,6 +305,84 @@ The `agent.sticky_promo` module implements read-only AI proposal generation and 
   - Emits standard 4-section report with deterministic exit codes (`0` ok, `1` runtime error, `2` policy/schema violation).
   - Audits optional `--acl-fixture` for verbatim ACL preservation.
 
+## In-App SDK Transition Harness (`agent.harnesses.in_app_sdk`, KB-P5-20, S14.2, S14.3)
+
+The `InAppSdkHarness` implements an in-process, sandboxed SDK execution harness for evaluating workflow transition gates against spotlighted context payloads:
+
+### Core Architecture & Tool Loop
+- Bounded Multi-Turn Execution:
+  - Strict loop caps: maximum 8 turns (`MAX_TURNS_LIMIT = 8`) and maximum 20 tool calls (`MAX_TOOL_CALLS_LIMIT = 20`).
+  - Breaches fail closed immediately raising `RepoToolPolicyError("TOOL_LOOP_LIMIT_EXCEEDED")`.
+- Hardened System Prompt & Security Nonce:
+  - Injects `HARDENED_GATE_PREAMBLE` treating all data inside dynamic delimiter tokens (`<<<UNTRUSTED_CONTEXT_<token>>>>`) as hostile untrusted input.
+  - Generates verdicts conforming to schema `kb-transition-verdict/v1` and injects `ctx.verdict_nonce` into serialized JSON output before returning raw bytes.
+- Token Budget Integration:
+  - Atomically reserves tokens before execution via `BudgetEnforcer.reserve()`.
+  - On success, settles actual prompt and completion tokens via `settle()`.
+  - On failure or policy exception, releases reserved tokens via `release()`.
+
+### Bare-Git Read-Only Tools (`agent.tools.repo_tools`, S14.2)
+- Sandboxed Subprocess Execution:
+  - Invokes `git` with `--git-dir=<bare_mirror>`, `core.hooksPath=/dev/null`, `protocol.allow=never`, `GIT_CONFIG_NOSYSTEM=1`, `PATH=/usr/bin:/bin`, and clean environment.
+  - Per-command timeout strictly capped at 5.0s (`REPO_TIMEOUT`).
+  - Output strictly capped at 64 KiB (`MAX_OUTPUT_BYTES = 65_536`) with secret scrubbing via `scrub_text()`.
+- 5 Sandboxed Tools:
+  1. `repo_tree(path="", max_depth=3)`: Lists repository trees up to max depth (1..6) and max entries (500), filtering secret file paths.
+  2. `repo_read_file(path, start_line=1, end_line=200)`: Slices 1-indexed lines from commit-pinned text files up to 400 lines. Rejects binary files containing NUL bytes in the first 8 KiB with `REPO_BINARY_FILE_UNSUPPORTED`.
+  3. `repo_grep(pattern, path="")`: Literal fixed-string search up to 200 characters across non-secret files, capped at 50 matches.
+  4. `repo_git_log(path="", max_commits=20)`: Retrieves commit log history (up to 50 commits) leading up to `head_commit`.
+  5. `repo_git_diff(base_ref, path="")`: Generates unified 3-line diff between `base_ref` commit and `head_commit`, excluding secret path patterns.
+- Path and Option Injection Defense (`agent.tools.repo_path_guard`):
+  - Normalizes relative paths, rejecting traversal segments (`..`, `.`), empty segments, absolute paths (`/`), leading dash option injections (`-`), backslashes, NUL bytes, and newlines (`REPO_PATH_INVALID`).
+  - Filters secret file patterns (`.env*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*id_rsa*`, `*id_ed25519*`, `*id_ecdsa*`, `.git/*`, `.netrc`, `.npmrc`) with `REPO_SECRET_PATH_DENIED`.
+
+### Ephemeral MCP Read Tools (`agent.tools.mcp_read_tools`, S14.2)
+- Scoped Ephemeral Client:
+  - Supports 4 read tools: `search_tickets`, `read_ticket`, `search_knowledge`, `read_doc`.
+  - Enforces client-side call cap of 25 calls (`MAX_MCP_CALLS = 25`). Further calls fail closed with `MCP_CALL_CAP_EXCEEDED`.
+  - Undeclared or mutation tools fail immediately with `TOOL_NOT_PERMITTED` without making network calls.
+  - Ephemeral bearer tokens are injected into headers without persistence.
+  - All returned payloads are recursively scrubbed for secrets and credentials.
+
+## Transition Interceptor Validation Workbench (`kanban-agent validate-transition`, KB-P5-23, S15.3)
+
+The `kanban-agent validate-transition` subcommand provides an end-to-end, multi-harness offline and loopback validation workbench for workflow transition interceptors across `in_app_sdk`, `cli_pipe`, and `remote_runner` harnesses:
+
+### Supported Harnesses & Modes
+- `in_app_sdk`: Sandboxed in-process LLM loop execution with bare-Git read tools and ephemeral MCP tools. Supported offline via `--cassette` (replayed via `ExplicitFixtureLLMProvider`) and `--mcp-fixture`.
+- `cli_pipe`: Subprocess pipe harness (`context | agy -p` / `codex -p`) with zero-shell execve and read-only working tree snapshot. Supported offline via `--cassette` (replayed via `ExplicitFixtureCLIRunner`).
+- `remote_runner`: Remote outbound runner execution over WebSocket control hub. Supported offline via `--remote-loopback` which starts an ephemeral in-process TLS 1.3 mTLS server (`websockets.serve`) with freshly generated X.509 EC certificates, spins up a local `RunnerDaemon` with `LoopbackJobExecutor`, and dispatches the transition job through `RemoteRunnerHarness`.
+
+### CLI Arguments & Options
+- `--agent-config <path>` (required): Path to agent YAML or JSON definition file (e.g. `examples/agents/agy-gate.yaml`, `codex-gate.yaml`, `ollama-gate.yaml`, `remote-gate.yaml`).
+- `--ticket-file <path>` (required): Path to ticket file in YAML, JSON, or Markdown with frontmatter format.
+- `--repo-path <path>`: Local repository path (required when `repo_access_mode != "none"`). Validates clean commit state without mutating the repository working tree.
+- `--from-state <name>`: Source workflow state (default `"In Review"`).
+- `--to-state <name>`: Target workflow state (default `"Done"`).
+- `--cassette <path>`: Path to AI cassette YAML fixture for deterministic replay.
+- `--mcp-fixture <path>`: Path to YAML or JSON file containing canned MCP tool responses.
+- `--remote-loopback`: Start in-process TLS 1.3 mTLS WSS hub and loopback runner daemon for self-contained `remote_runner` testing.
+- `--print-stdin-context`: Display the exact spotlighted YAML context passed to the harness in section 1.
+- `--verbose-tools`: Output full tool execution trace, including redacted arguments and return values.
+- `--require-approve`: Enforce that the transition verdict must be `approve`. If verdict is `reject`, exits with code `2`.
+- `--head-ref <ref>`: Git reference or commit SHA for context rendering (default `"HEAD"`).
+- `--report <text|json>`: Output format (`text` standard 4-section report, or `json` conforming to `kb-validate-transition-report/v1`).
+
+### 4-Section Validation Report & Exit Codes
+1. `=== 1. RENDERED CONTEXT ===`: Rendered transition context YAML (spotlighted with security nonces and delimiters) or ticket summary.
+2. `=== 2. TOOL TRACE ===`: Summary count or full tool call trace (`read_ticket`, `repo_grep`, `repo_git_diff`, etc.) with durations and redacted arguments.
+3. `=== 3. LATENCY & TOKENS ===`: TTFT (ms), total execution latency (ms), prompt tokens, and completion tokens.
+4. `=== 4. SCHEMA & POLICY STATUS ===`: Validity flag (`valid: true/false`), status string, error code, and error detail.
+
+Structured JSON report includes `transition_details` with keys: `harness`, `delimiter`, `head_commit`, `redaction_count`, `verdict`, and `tool_trace`.
+
+Deterministic Exit Codes:
+- `0` (`ExitCode.OK`): Transition validated successfully and schema/policy constraints passed.
+- `1` (`ExitCode.RUNTIME_ERROR`): Missing flags, unreadable files, missing cassette, or runtime infrastructure failure.
+- `2` (`ExitCode.SCHEMA_OR_POLICY_VIOLATION`): Malformed agent stdout, invalid verdict schema, nonce mismatch, forged candidates, or reject verdict with `--require-approve`.
+
+
+
 
 
 

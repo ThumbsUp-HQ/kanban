@@ -54,7 +54,7 @@ async def create_module(
     session: Session,
     response: Response,
 ) -> ModuleResponse:
-    """Create a module in a project (project ADMIN required)."""
+    """Create a new module within a project (project ADMIN capability required)."""
     async with timing_floor(floor_ms=25.0):
         result = await svc.create_module(session, caller, project_ref, body)
         response.headers["Location"] = f"/api/v1/modules/{result.id}"
@@ -71,7 +71,7 @@ async def get_module(
     caller: Caller,
     session: Session,
 ) -> ModuleResponse:
-    """Get module details by ID (project VIEW required)."""
+    """Retrieve detailed module metadata and status by unique ID (project VIEW required)."""
     async with timing_floor(floor_ms=25.0):
         return await svc.get_module(session, caller, module_id)
 
@@ -87,7 +87,7 @@ async def patch_module(
     caller: Caller,
     session: Session,
 ) -> ModuleResponse:
-    """Update a module partially (project ADMIN required)."""
+    """Update mutable module fields such as name, status, or lead (project ADMIN required)."""
     async with timing_floor(floor_ms=25.0):
         return await svc.patch_module(session, caller, module_id, body)
 
@@ -119,7 +119,7 @@ async def put_issue_modules(
     caller: Caller,
     session: Session,
 ) -> IssueModulesUpdate:
-    """Replace all module assignments on an issue (issue EDIT required)."""
+    """Replace all module assignments on an issue in a single operation (issue EDIT required)."""
     async with timing_floor(floor_ms=25.0):
         updated = await svc.update_issue_modules(session, caller, issue_ref, body.module_ids)
         return IssueModulesUpdate(module_ids=updated)
@@ -136,7 +136,7 @@ async def add_issue_to_module(
     caller: Caller,
     session: Session,
 ) -> Response:
-    """Add a single issue to a module (issue EDIT required)."""
+    """Add a single issue to a module assignment link (issue EDIT required)."""
     async with timing_floor(floor_ms=25.0):
         await svc.add_issue_to_module(session, caller, module_id, issue_ref)
         return Response(status_code=204)
@@ -153,7 +153,7 @@ async def remove_issue_from_module(
     caller: Caller,
     session: Session,
 ) -> Response:
-    """Remove a single issue from a module (issue EDIT required)."""
+    """Remove a single issue from a module assignment link (issue EDIT required)."""
     async with timing_floor(floor_ms=25.0):
         await svc.remove_issue_from_module(session, caller, module_id, issue_ref)
         return Response(status_code=204)

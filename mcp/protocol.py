@@ -300,11 +300,13 @@ class McpProtocolHandler:
             return Response("Session not found or expired; please re-initialize", status_code=404)
 
         raw_auth = request.headers.get("x-kb-subject-token") or request.headers.get("authorization")
-        subject_token = (
-            raw_auth[7:].strip()
-            if raw_auth and raw_auth.lower().startswith("bearer ")
-            else raw_auth
-        )
+        subject_token: str | None = None
+        if raw_auth:
+            parts = raw_auth.strip().split(maxsplit=1)
+            if len(parts) == 2 and parts[0].lower() == "bearer":  # noqa: PLR2004
+                subject_token = parts[1].strip()
+            else:
+                subject_token = raw_auth.strip()
 
         current_token_sha256 = getattr(request.state, "mcp_token_sha256", None)
         if current_token_sha256 is None and subject_token:
@@ -405,11 +407,13 @@ class McpProtocolHandler:
                 raw_auth = request.headers.get("x-kb-subject-token") or request.headers.get(
                     "authorization"
                 )
-                subject_token = (
-                    raw_auth[7:].strip()
-                    if raw_auth and raw_auth.lower().startswith("bearer ")
-                    else raw_auth
-                )
+                subject_token: str | None = None
+                if raw_auth:
+                    parts = raw_auth.strip().split(maxsplit=1)
+                    if len(parts) == 2 and parts[0].lower() == "bearer":  # noqa: PLR2004
+                        subject_token = parts[1].strip()
+                    else:
+                        subject_token = raw_auth.strip()
                 if subject_token:
                     token_sha256 = hash_mcp_api_key(subject_token)
 
@@ -527,9 +531,14 @@ class McpProtocolHandler:
                     or SCOPE_REQUIREMENTS[s.name].issubset(caller_scopes)
                 )
             ]
-        if auth_context is not None and auth_context.token_kind == "ephemeral":  # noqa: S105
-            allowed = auth_context.allowed_tools or frozenset()
-            specs = [s for s in specs if s.name in allowed]
+        if auth_context is not None:
+            if auth_context.token_kind == "ephemeral":  # noqa: S105
+                allowed = auth_context.allowed_tools or frozenset()
+                specs = [s for s in specs if s.name in allowed]
+            elif auth_context.allowed_tools is not None:
+                specs = [s for s in specs if s.name in auth_context.allowed_tools]
+            if auth_context.disabled_tools:
+                specs = [s for s in specs if s.name not in auth_context.disabled_tools]
 
         tools_list: list[dict[str, Any]] = [
             {
@@ -633,6 +642,44 @@ class McpProtocolHandler:
             )
 
         req_scopes = SCOPE_REQUIREMENTS.get(tool_name)
+
+        # Standard API key disabled_tools and allowed_tools narrowing (KB-P4-14)
+        if auth_context is not None and auth_context.token_kind != "ephemeral":  # noqa: S105
+            if auth_context.disabled_tools and tool_name in auth_context.disabled_tools:
+                err = KbMcpError(
+                    code=McpErrorCode.INSUFFICIENT_SCOPE,
+                    message=f"Tool '{tool_name}' is disabled for this API key",
+                    hint="Key administrator has disabled this tool via disabled_tools narrowing.",
+                )
+                return JSONResponse(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "result": {
+                            "content": [{"type": "text", "text": err.to_yaml()}],
+                            "isError": True,
+                        },
+                    }
+                )
+            if (
+                auth_context.allowed_tools is not None
+                and tool_name not in auth_context.allowed_tools
+            ):
+                err = KbMcpError(
+                    code=McpErrorCode.INSUFFICIENT_SCOPE,
+                    message=f"Tool '{tool_name}' is not in allowed_tools for this API key",
+                    hint=("Tool narrowing is active; only tools in allowed_tools may be called."),
+                )
+                return JSONResponse(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "result": {
+                            "content": [{"type": "text", "text": err.to_yaml()}],
+                            "isError": True,
+                        },
+                    }
+                )
 
         # Ephemeral token allowlist and atomic call budget consumption
         if auth_context is not None and auth_context.token_kind == "ephemeral":  # noqa: S105

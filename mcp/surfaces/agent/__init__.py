@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 from mcp.registry import Surface, ToolRegistry, ToolSpec
+from mcp.surfaces.agent.add_comment import ADD_COMMENT_SCHEMA, add_comment
 from mcp.surfaces.agent.begin_work import BEGIN_WORK_SCHEMA, begin_work
 from mcp.surfaces.agent.complete_work import COMPLETE_WORK_SCHEMA, complete_work
 from mcp.surfaces.agent.create_ticket import CREATE_TICKET_SCHEMA, create_ticket
+from mcp.surfaces.agent.link_objects import LINK_OBJECTS_SCHEMA, link_objects
 from mcp.surfaces.agent.read_ticket import READ_TICKET_SCHEMA, read_ticket
 from mcp.surfaces.agent.search_tickets import SEARCH_TICKETS_SCHEMA, search_tickets
 from mcp.surfaces.agent.transition_ticket import (
@@ -17,17 +19,21 @@ from mcp.surfaces.agent.transition_ticket import (
 from mcp.surfaces.agent.update_ticket import UPDATE_TICKET_SCHEMA, update_ticket
 
 __all__ = [
+    "ADD_COMMENT_SCHEMA",
     "BEGIN_WORK_SCHEMA",
     "COMPLETE_WORK_SCHEMA",
     "CREATE_TICKET_SCHEMA",
+    "LINK_OBJECTS_SCHEMA",
     "READ_TICKET_SCHEMA",
     "SEARCH_TICKETS_SCHEMA",
     "TRANSITION_TICKET_SCHEMA",
     "UPDATE_TICKET_SCHEMA",
+    "add_comment",
     "begin_work",
     "complete_work",
     "create_agent_registry",
     "create_ticket",
+    "link_objects",
     "read_ticket",
     "search_tickets",
     "transition_ticket",
@@ -41,9 +47,7 @@ def create_agent_registry() -> ToolRegistry:
     registry.register(
         ToolSpec(
             name="search_tickets",
-            description=(
-                "Search and filter tickets by query text, lifecycle attributes, or assignees."
-            ),
+            description="Search tickets.",
             input_schema=SEARCH_TICKETS_SCHEMA,
             surface=Surface.AGENT,
             handler=search_tickets,
@@ -52,9 +56,7 @@ def create_agent_registry() -> ToolRegistry:
     registry.register(
         ToolSpec(
             name="read_ticket",
-            description=(
-                "Read full ticket details, child hierarchy, comments, activities, or blockers."
-            ),
+            description="Read ticket.",
             input_schema=READ_TICKET_SCHEMA,
             surface=Surface.AGENT,
             handler=read_ticket,
@@ -63,9 +65,7 @@ def create_agent_registry() -> ToolRegistry:
     registry.register(
         ToolSpec(
             name="create_ticket",
-            description=(
-                "Create a single ticket or parent-child issue tree atomically with human names."
-            ),
+            description="Create ticket.",
             input_schema=CREATE_TICKET_SCHEMA,
             surface=Surface.AGENT,
             handler=create_ticket,
@@ -74,9 +74,7 @@ def create_agent_registry() -> ToolRegistry:
     registry.register(
         ToolSpec(
             name="update_ticket",
-            description=(
-                "Apply an atomic patch or append description under description ETag concurrency."
-            ),
+            description="Update ticket.",
             input_schema=UPDATE_TICKET_SCHEMA,
             surface=Surface.AGENT,
             handler=update_ticket,
@@ -85,9 +83,7 @@ def create_agent_registry() -> ToolRegistry:
     registry.register(
         ToolSpec(
             name="begin_work",
-            description=(
-                "Atomically assign caller, bind cycle, move to started state, and post plan."
-            ),
+            description="Begin work.",
             input_schema=BEGIN_WORK_SCHEMA,
             surface=Surface.AGENT,
             handler=begin_work,
@@ -96,7 +92,7 @@ def create_agent_registry() -> ToolRegistry:
     registry.register(
         ToolSpec(
             name="transition_ticket",
-            description="Transition ticket to intermediate workflow state under gate evaluation.",
+            description="Transition ticket.",
             input_schema=TRANSITION_TICKET_SCHEMA,
             surface=Surface.AGENT,
             handler=transition_ticket,
@@ -105,10 +101,28 @@ def create_agent_registry() -> ToolRegistry:
     registry.register(
         ToolSpec(
             name="complete_work",
-            description="Verify blockers and QA gate, transition to completed, and log proof.",
+            description="Complete work.",
             input_schema=COMPLETE_WORK_SCHEMA,
             surface=Surface.AGENT,
             handler=complete_work,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="add_comment",
+            description="Add comment.",
+            input_schema=ADD_COMMENT_SCHEMA,
+            surface=Surface.AGENT,
+            handler=add_comment,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="link_objects",
+            description="Link objects.",
+            input_schema=LINK_OBJECTS_SCHEMA,
+            surface=Surface.AGENT,
+            handler=link_objects,
         )
     )
     return registry

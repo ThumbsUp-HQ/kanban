@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KANBA-149 Workflow Hook Management & Dry-Run REST API Contract Samples",
+  "description": "Representative request/response payloads for workflow hook CRUD, ordering, dry-run, and error problem+json envelopes.",
+  "endpoints": {
+    "list_hooks": {
+      "method": "GET",
+      "path": "/api/v1/projects/KAN/workflow-hooks",
+      "headers": {
+        "Authorization": "Bearer kb_usr_admin_token"
+      },
+      "response_200": {
+        "project_id": "a0000000-0000-0000-0000-000000000001",
+        "project_key": "KAN",
+        "transitions": [
+          {
+            "from_state": {
+              "id": "b0000000-0000-0000-0000-000000000001",
+              "name": "In Progress"
+            },
+            "to_state": {
+              "id": "b0000000-0000-0000-0000-000000000002",
+              "name": "In QA"
+            },
+            "active_hook_count": 2,
+            "hooks": [
+              {
+                "id": "c0000000-0000-0000-0000-000000000001",
+                "name": "require-qa-proof-link",
+                "hook_kind": "sync_validator",
+                "is_enabled": true,
+                "sort_rank": "0000000000000001",
+                "wasm_module_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "agent_definition_id": null,
+                "allowed_mutable_fields": [],
+                "failure_policy": "fail_closed",
+                "manifest_sha256": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b"
+              },
+              {
+                "id": "c0000000-0000-0000-0000-000000000002",
+                "name": "qa-gatekeeper",
+                "hook_kind": "agent_interceptor",
+                "is_enabled": true,
+                "sort_rank": "0000000000000002",
+                "wasm_module_sha256": null,
+                "agent_definition_id": "d0000000-0000-0000-0000-000000000001",
+                "agent_slug": "reality-checker",
+                "allowed_mutable_fields": [],
+                "failure_policy": "fail_closed",
+                "manifest_sha256": "2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "attach_hook_validator": {
+      "method": "POST",
+      "path": "/api/v1/projects/KAN/workflow-hooks",
+      "headers": {
+        "Authorization": "Bearer kb_usr_admin_token",
+        "Content-Type": "application/json"
+      },
+      "request_body": {
+        "name": "require-qa-proof-link",
+        "from_state": "In Progress",
+        "to_state": "In QA",
+        "hook_kind": "sync_validator",
+        "wasm_module_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "failure_policy": "fail_closed"
+      },
+      "response_201": {
+        "id": "c0000000-0000-0000-0000-000000000001",
+        "name": "require-qa-proof-link",
+        "project_id": "a0000000-0000-0000-0000-000000000001",
+        "from_state_id": "b0000000-0000-0000-0000-000000000001",
+        "to_state_id": "b0000000-0000-0000-0000-000000000002",
+        "hook_kind": "sync_validator",
+        "is_enabled": true,
+        "sort_rank": "0000000000000001",
+        "wasm_module_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "agent_definition_id": null,
+        "allowed_mutable_fields": [],
+        "failure_policy": "fail_closed",
+        "manifest_sha256": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b"
+      }
+    },
+    "attach_hook_mutator": {
+      "method": "POST",
+      "path": "/api/v1/projects/KAN/workflow-hooks",
+      "request_body": {
+        "name": "auto-set-priority-urgent",
+        "from_state": "In Progress",
+        "to_state": "In QA",
+        "hook_kind": "sync_mutator",
+        "wasm_module_sha256": "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000000",
+        "allowed_mutable_fields": ["priority"],
+        "failure_policy": "fail_closed"
+      },
+      "response_201": {
+        "id": "c0000000-0000-0000-0000-000000000003",
+        "name": "auto-set-priority-urgent",
+        "hook_kind": "sync_mutator",
+        "allowed_mutable_fields": ["priority"],
+        "failure_policy": "fail_closed",
+        "is_enabled": true,
+        "sort_rank": "0000000000000003"
+      }
+    },
+    "reorder_hooks": {
+      "method": "POST",
+      "path": "/api/v1/projects/KAN/workflow-hooks/reorder",
+      "request_body": {
+        "transition": {
+          "from_state": "In Progress",
+          "to_state": "In QA"
+        },
+        "ordered_hook_ids": [
+          "c0000000-0000-0000-0000-000000000002",
+          "c0000000-0000-0000-0000-000000000001"
+        ]
+      },
+      "response_200": {
+        "status": "reordered",
+        "transition": {
+          "from_state": "In Progress",
+          "to_state": "In QA"
+        },
+        "ordered_hooks": [
+          {
+            "id": "c0000000-0000-0000-0000-000000000002",
+            "sort_rank": "0000000000000001"
+          },
+          {
+            "id": "c0000000-0000-0000-0000-000000000001",
+            "sort_rank": "0000000000000002"
+          }
+        ]
+      }
+    },
+    "dry_run": {
+      "method": "POST",
+      "path": "/api/v1/projects/KAN/workflow-hooks/dry-run",
+      "request_body": {
+        "from_state": "In Progress",
+        "to_state": "In QA",
+        "sample_ticket": {
+          "summary": "Implement feature X",
+          "description_markdown": "Complete with unit test evidence",
+          "priority": "medium",
+          "labels": ["feature"]
+        }
+      },
+      "response_200": {
+        "would_commit": true,
+        "from_state": "In Progress",
+        "to_state": "In QA",
+        "duration_us": 1420,
+        "steps": [
+          {
+            "order": 1,
+            "hook_id": "c0000000-0000-0000-0000-000000000001",
+            "name": "require-qa-proof-link",
+            "hook_kind": "sync_validator",
+            "result": "allowed",
+            "reason": null,
+            "field_updates": null,
+            "cli_command": null,
+            "duration_us": 320
+          },
+          {
+            "order": 2,
+            "hook_id": "c0000000-0000-0000-0000-000000000003",
+            "name": "auto-set-priority-urgent",
+            "hook_kind": "sync_mutator",
+            "result": "mutated",
+            "reason": "Priority elevated to urgent",
+            "field_updates": {
+              "priority": "urgent"
+            },
+            "cli_command": null,
+            "duration_us": 410
+          },
+          {
+            "order": 3,
+            "hook_id": "c0000000-0000-0000-0000-000000000002",
+            "name": "qa-gatekeeper",
+            "hook_kind": "agent_interceptor",
+            "result": "skipped_async",
+            "reason": "Agent interceptors execute asynchronously post-commit. Dry run evaluates sync validators/mutators only.",
+            "field_updates": null,
+            "cli_command": "kanban-agent validate-transition --project KAN --from \"In Progress\" --to \"In QA\" --agent reality-checker",
+            "duration_us": 10
+          }
+        ]
+      }
+    },
+    "errors": {
+      "403_aal2_required": {
+        "status": 403,
+        "type": "https://kanban.internal/errors/AAL2_REQUIRED",
+        "title": "AAL2 Authentication Required",
+        "detail": "Workflow hook modification requires Step-Up Authenticator Assurance Level 2 (AAL2)."
+      },
+      "404_anti_enumeration": {
+        "status": 404,
+        "type": "https://kanban.internal/errors/NOT_FOUND",
+        "title": "Resource Not Found",
+        "detail": "Project KAN not found or caller lacks administrative permissions."
+      },
+      "422_wasm_module_not_approved": {
+        "status": 422,
+        "type": "https://kanban.internal/errors/WASM_MODULE_NOT_APPROVED",
+        "title": "WASM Module Not Approved",
+        "detail": "SHA-256 e3b0c442... does not match any approved Tier A WebAssembly module in this workspace."
+      },
+      "422_agent_not_found": {
+        "status": 422,
+        "type": "https://kanban.internal/errors/AGENT_NOT_FOUND",
+        "title": "Agent Definition Not Found",
+        "detail": "Agent 'non-existent-agent' does not exist in workspace."
+      },
+      "422_mutable_field_not_allowed": {
+        "status": 422,
+        "type": "https://kanban.internal/errors/MUTABLE_FIELD_NOT_ALLOWED",
+        "title": "Disallowed Mutable Field",
+        "detail": "Field 'state' is not in MUTABLE_FIELD_UNIVERSE ('priority', 'estimate_points', 'labels', 'custom_fields'). State transitions must not be mutated by sync mutators."
+      },
+      "422_reorder_set_mismatch": {
+        "status": 422,
+        "type": "https://kanban.internal/errors/REORDER_SET_MISMATCH",
+        "title": "Reorder Set Mismatch",
+        "detail": "Reorder hook ID set must exactly match the existing hooks for transition ('In Progress' -> 'In QA')."
+      },
+      "422_invalid_dry_run_input": {
+        "status": 422,
+        "type": "https://kanban.internal/errors/INVALID_DRY_RUN_INPUT",
+        "title": "Invalid Dry Run Input",
+        "detail": "Exactly one of 'issue_key' or 'sample_ticket' must be provided."
+      },
+      "422_description_too_large": {
+        "status": 422,
+        "type": "https://kanban.internal/errors/DESCRIPTION_TOO_LARGE",
+        "title": "Payload Too Large",
+        "detail": "description_markdown exceeds maximum allowed size of 1,048,576 bytes (1 MiB)."
+      }
+    }
+  }
+}

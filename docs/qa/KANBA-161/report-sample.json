@@ -1,0 +1,87 @@
+{
+  "schema_version": "kb-validate-transition-report/v1",
+  "command": "validate-transition",
+  "rendered_context": "# Summary: kb-transition-context/v1 | Delimiter: <<<UNTRUSTED_TICKET_DATA_a0a1c58db664a9f7>>> | Head commit: 220a355024833812f0cd0d50e0966c47368a6cfd | Secret redactions: 0",
+  "tool_trace": [
+    {
+      "tool": "read_ticket",
+      "args": {
+        "identifier": "KAN-100"
+      },
+      "result": {
+        "status": "ok",
+        "duration_ms": 0.08454399994661799,
+        "output_bytes": 200
+      }
+    },
+    {
+      "tool": "repo_grep",
+      "args": {
+        "pattern": "FORCE ROW LEVEL SECURITY",
+        "path": "database/"
+      },
+      "result": {
+        "status": "ok",
+        "duration_ms": 9.326427999894804,
+        "output_bytes": 13351
+      }
+    }
+  ],
+  "metrics": {
+    "ttft_ms": 18.0,
+    "total_latency_ms": 16.979170000013255,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "route_trace": [],
+    "iterations": null,
+    "p50_latency_ms": null,
+    "p90_latency_ms": null,
+    "p95_latency_ms": null,
+    "p99_latency_ms": null
+  },
+  "schema_status": {
+    "valid": true,
+    "status": "passed",
+    "error_code": null,
+    "detail": "decision: reject, verdict_sha256: 4b8dd03b914927c9466b1f3f6e202a3e3e06c9973817676e9aeb4f86beeb3f2e, forged_candidates: 0"
+  },
+  "qa_verdict": null,
+  "sparkle_details": null,
+  "transition_details": {
+    "harness": "in_app_sdk",
+    "delimiter": "<<<UNTRUSTED_TICKET_DATA_a0a1c58db664a9f7>>>",
+    "head_commit": "220a355024833812f0cd0d50e0966c47368a6cfd",
+    "redaction_count": 0,
+    "verdict": {
+      "decision": "reject",
+      "reason_markdown": "Missing `FORCE ROW LEVEL SECURITY` on `auth_card_group_mappings` migration.",
+      "verdict_sha256": "4b8dd03b914927c9466b1f3f6e202a3e3e06c9973817676e9aeb4f86beeb3f2e",
+      "forged_candidates": 0,
+      "field_updates": {},
+      "add_labels": [
+        "qa-needs-work"
+      ]
+    },
+    "tool_trace": [
+      {
+        "tool": "read_ticket",
+        "args": {
+          "identifier": "KAN-100"
+        },
+        "duration_ms": 0.08454399994661799,
+        "status": "ok",
+        "output_bytes": 200
+      },
+      {
+        "tool": "repo_grep",
+        "args": {
+          "pattern": "FORCE ROW LEVEL SECURITY",
+          "path": "database/"
+        },
+        "duration_ms": 9.326427999894804,
+        "status": "ok",
+        "output_bytes": 13351
+      }
+    ]
+  }
+}

@@ -47,6 +47,7 @@ export function CalendarView({
   initialYear,
   initialMonth,
   today,
+  onOpenPeek,
 }: CalendarViewProps): JSX.Element {
   const todayDate = useMemo(() => {
     return today ?? new Date().toISOString().slice(0, 10);
@@ -391,6 +392,12 @@ export function CalendarView({
                       draggable
                       onDragStart={(e) => { handleDragStart(e, issue.key); }}
                       onKeyDown={(e) => { handlePillKeyDown(e, issue, cell.date); }}
+                      onClick={(e) => {
+                        if (onOpenPeek) {
+                          e.preventDefault();
+                          onOpenPeek(issue.key);
+                        }
+                      }}
                       title={`${issue.key}: ${issue.summary}`}
                       data-issue-key={issue.key}
                       data-testid={`calendar-pill-${issue.key}`}
@@ -453,6 +460,12 @@ export function CalendarView({
                         className={pillClass}
                         draggable
                         onDragStart={(e) => { handleDragStart(e, issue.key); }}
+                        onClick={(e) => {
+                          if (onOpenPeek) {
+                            e.preventDefault();
+                            onOpenPeek(issue.key);
+                          }
+                        }}
                         data-issue-key={issue.key}
                       >
                         <span className="calendar-issue-pill-key">{issue.key}</span>
@@ -514,6 +527,12 @@ export function CalendarView({
                 href={`?layout=calendar&peek=${encodeURIComponent(issue.key)}`}
                 className={rowClass}
                 data-testid={`agenda-row-${issue.key}`}
+                onClick={(e) => {
+                  if (onOpenPeek) {
+                    e.preventDefault();
+                    onOpenPeek(issue.key);
+                  }
+                }}
               >
                 <span className="calendar-issue-pill-key">{issue.key}</span>
                 <EmojiHint kind={priorityKind} />

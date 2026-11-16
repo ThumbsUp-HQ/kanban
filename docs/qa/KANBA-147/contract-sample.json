@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "ticket": "KANBA-147",
+  "endpoint": "POST /api/v1/issues/{issue_key}/transitions",
+  "samples": {
+    "200_ok": {
+      "status": 200,
+      "description": "Synchronous transition approved after executing Tier A hooks",
+      "body": {
+        "execution_id": "018d40a2-bf39-7164-9a8c-6878b273b189",
+        "status": "approved",
+        "issue_id": "018d40a2-be8a-7023-8cfb-3e583c44840e",
+        "from_state": {
+          "id": "018d40a2-bddb-7fd1-9f93-4e414c3e34b1",
+          "name": "In Progress"
+        },
+        "to_state": {
+          "id": "018d40a2-bde1-789a-8eb0-f925b642646b",
+          "name": "Done"
+        },
+        "applied_mutations": {
+          "labels": ["verified", "qa-passed"]
+        },
+        "completed_at": "2026-11-15T19:00:00.000000Z"
+      }
+    },
+    "409_transition_pending": {
+      "status": 409,
+      "description": "Conflict: another transition execution is currently running synchronously or pending asynchronously for this issue",
+      "body": {
+        "type": "https://errors.kanban.dev/transition-pending",
+        "title": "Transition Pending",
+        "status": 409,
+        "detail": "A transition for this issue is already in progress: execution 018d40a2-bf39-7164-9a8c-6878b273b189",
+        "code": "TRANSITION_PENDING",
+        "existing_execution_id": "018d40a2-bf39-7164-9a8c-6878b273b189"
+      }
+    },
+    "409_agent_gate_not_configured": {
+      "status": 409,
+      "description": "Conflict: transition requires Tier B agent interceptors, but agent dispatcher is not yet configured (handled in Phase 5 / KB-P5-18)",
+      "body": {
+        "type": "https://errors.kanban.dev/agent-gate-not-configured",
+        "title": "Agent Gate Not Configured",
+        "status": 409,
+        "detail": "Transition requires agent gate dispatcher which is not yet active",
+        "code": "AGENT_GATE_NOT_CONFIGURED",
+        "execution_id": "018d40a2-c011-7c98-b80c-9a2df7a76043"
+      }
+    },
+    "412_precondition_failed": {
+      "status": 412,
+      "description": "Precondition Failed: If-Match ETag mismatch with issue description_sha256 (zero-TOCTOU optimistic concurrency)",
+      "body": {
+        "type": "https://errors.kanban.dev/precondition-failed",
+        "title": "Precondition Failed",
+        "status": 412,
+        "detail": "If-Match ETag mismatch: issue description was concurrently modified",
+        "code": "PRECONDITION_FAILED",
+        "current_etag": "\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
+      }
+    },
+    "422_transition_rejected_by_hook": {
+      "status": 422,
+      "description": "Unprocessable Entity: Synchronous validator hook rejected the transition",
+      "body": {
+        "type": "https://errors.kanban.dev/transition-rejected-by-hook",
+        "title": "Transition Rejected By Hook",
+        "status": 422,
+        "detail": "Validator hook 'require-qa-proof-link' rejected transition: Description must include docs/qa/ link",
+        "code": "TRANSITION_REJECTED_BY_HOOK",
+        "hook_id": "018d40a2-be12-7814-9ad9-2bb67327ef3e",
+        "hook_name": "require-qa-proof-link",
+        "reason": "Description must include docs/qa/ link"
+      }
+    },
+    "422_sync_hook_budget_exceeded": {
+      "status": 422,
+      "description": "Unprocessable Entity: Cumulative execution time of Tier A synchronous hooks exceeded the 25ms budget",
+      "body": {
+        "type": "https://errors.kanban.dev/sync-hook-budget-exceeded",
+        "title": "Sync Hook Budget Exceeded",
+        "status": 422,
+        "detail": "Tier A synchronous hooks exceeded the 25ms budget (elapsed: 26.40ms)",
+        "code": "SYNC_HOOK_BUDGET_EXCEEDED"
+      }
+    },
+    "422_hook_mutation_not_allowed": {
+      "status": 422,
+      "description": "Unprocessable Entity: Mutator hook attempted to mutate an unauthorized field or an immutable field",
+      "body": {
+        "type": "https://errors.kanban.dev/hook-mutation-not-allowed",
+        "title": "Hook Mutation Not Allowed",
+        "status": 422,
+        "detail": "Mutator hook 'auto-prioritize' attempted to update disallowed field 'priority' (not in hook's allowed_mutable_fields)",
+        "code": "HOOK_MUTATION_NOT_ALLOWED"
+      }
+    },
+    "422_hop_depth_exceeded": {
+      "status": 422,
+      "description": "Unprocessable Entity: Cascading workflow transition exceeded maximum hop depth of 3",
+      "body": {
+        "type": "https://errors.kanban.dev/hop-depth-exceeded",
+        "title": "Hop Depth Exceeded",
+        "status": 422,
+        "detail": "Transition cascading depth exceeded maximum allowable hop depth (3)",
+        "code": "HOP_DEPTH_EXCEEDED"
+      }
+    }
+  }
+}

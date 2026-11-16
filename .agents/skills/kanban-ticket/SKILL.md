@@ -15,6 +15,10 @@ Use this skill together with [`kanban-agent-manager`](../kanban-agent-manager/SK
 
 ## Core Principles for Scoped Tickets
 
+0. **Deduplicate & Consult Specialists Before Creating Tickets**:
+   - **Search First (`search_tickets`)**: Always search `Backlog`, `Todo`, and `In Progress` before creating a new ticket. If an existing ticket already covers the target area or upcoming feature, **update that ticket in-place (`update_ticket`)** instead of creating a duplicate.
+   - **Consult Domain Specialists in Parallel**: Consult relevant specialists (UX/Frontend, Backend, Security) on fast models before finalizing ticket specifications.
+   - **Do Not Auto-Start Implementation**: When asked to create or update tickets, stop once the tickets are created/updated and wait for explicit instruction to begin implementation.
 1. **Single-Ticket Boundary (No Cross-Ticket Bleed)**:
    - A ticket's **Definition of Done** and **Verification Proof** must only test artifacts, files, and behaviors that exist after completing *that specific ticket* (and its explicit prerequisites).
    - Never require an early ticket to pass end-to-end checks against components built in later tickets.

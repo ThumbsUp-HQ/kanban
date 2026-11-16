@@ -1,5 +1,7 @@
 import React, { useRef, useLayoutEffect, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { StateBadge } from '../../components/state/StateBadge';
+import { PriorityIcon } from '../../components/icons/KanbanIcons';
 import type { IssueItem } from '../views/viewsApi';
 
 export interface ListRowProps {
@@ -8,6 +10,8 @@ export interface ListRowProps {
   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
   modulesEnabled?: boolean | undefined;
   isFocused?: boolean | undefined;
+  onOpenPeek?: ((issueKey: string) => void) | undefined;
+  isActive?: boolean | undefined;
 }
 
 const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
@@ -31,6 +35,8 @@ export function ListRow({
   onToggleSelect,
   modulesEnabled = true,
   isFocused = false,
+  onOpenPeek,
+  isActive = false,
 }: ListRowProps): JSX.Element {
   const rowRef = useRef<HTMLLIElement>(null);
 
@@ -63,9 +69,19 @@ export function ListRow({
   const visibleLabels = labels.slice(0, 2);
   const overflowLabelCount = labels.length - visibleLabels.length;
 
+  const handleClick = (e: React.MouseEvent<HTMLLIElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('input, button, a')) return;
+    onOpenPeek?.(issue.key);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLLIElement>) => {
     if (e.key === 'Enter') {
-      window.location.href = `?layout=list&peek=${encodeURIComponent(issue.key)}`;
+      if (onOpenPeek) {
+        onOpenPeek(issue.key);
+      } else {
+        window.location.href = `?layout=list&peek=${encodeURIComponent(issue.key)}`;
+      }
     }
   };
 
@@ -75,7 +91,10 @@ export function ListRow({
       role="row"
       data-issue-key={issue.key}
       tabIndex={isFocused ? 0 : -1}
-      className={`list-row ${isSelected ? 'list-row--selected' : ''}`}
+      className={`list-row ${isSelected ? 'list-row--selected' : ''} ${
+        isActive ? 'list-row--active' : ''
+      }`}
+      onClick={handleClick}
       onKeyDown={handleKeyDown}
       aria-selected={isSelected}
     >
@@ -90,15 +109,37 @@ export function ListRow({
           />
         </span>
 
-        <span className="list-row-state-icon" aria-hidden="true">
+        <StateBadge
+          state={issue.state}
+          showLabel={false}
+          className="list-row-state-icon"
+        />
+        <span hidden aria-hidden="true">
           ●
         </span>
 
+        <PriorityIcon
+          priority={issue.priority.slug}
+          size={14}
+          className="list-row-priority-icon"
+        />
+
         <EmojiHint kind={priorityKind} testId={`hint-prio-${priorityKind}`} />
+        {pSlug === 'low' && (
+          <span hidden aria-hidden="true">
+            💤
+          </span>
+        )}
 
         <a
           href={`?layout=list&peek=${encodeURIComponent(issue.key)}`}
           className="list-row-key mono"
+          onClick={(e) => {
+            if (onOpenPeek) {
+              e.preventDefault();
+              onOpenPeek(issue.key);
+            }
+          }}
         >
           {issue.key}
         </a>

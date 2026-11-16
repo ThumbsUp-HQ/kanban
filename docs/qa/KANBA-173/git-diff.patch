@@ -1,0 +1,1127 @@
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 6deb83c..2b45db4 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -6,6 +6,7 @@
+ 
+ import React, {
+   createContext,
++  useCallback,
+   useContext,
+   useEffect,
+   useState,
+@@ -39,19 +40,23 @@ import { RailStory } from '../dev/RailStory';
+ import { DrawerActionsStory } from '../dev/DrawerActionsStory';
+ import { DocsWorkspaceView } from '../features/docs/DocsWorkspaceView';
+ import { StickiesStory } from '../dev/StickiesStory';
++import { IconStory } from '../dev/IconStory';
+ import { ProjectOverviewView } from '../features/stickies/ProjectOverviewView';
+ import { WorkspaceStickiesView } from '../features/stickies/WorkspaceStickiesView';
+ import ProjectCustomFieldsSettingsRoute from '../routes/projects/settings/custom-fields';
+ import { apiClient } from '../api/client';
++import { RouteErrorBoundary } from '../components/error/AppErrorModal';
+ import type { IssueDetail } from '../features/drawer/slots';
+ import { LoginPage } from '../features/auth/LoginPage';
+ import { SetupClaimPage } from '../features/auth/SetupClaimPage';
+ import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
+ import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
+ import { McpAccessStudio } from '../features/settings/McpAccessStudio';
++import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
+ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+ import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
+ import { useSessionGuard } from '../features/auth/useSessionGuard';
++import { useDrafts, deleteDraft, type IssueDraft } from '../features/drafts/draftsStore';
+ 
+ export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
+ 
+@@ -106,9 +111,18 @@ export function ProjectIssuesRoute(): JSX.Element {
+   const { projectKey: paramKey } = useParams<{ projectKey: string }>();
+   const ctx = useContext(ProjectRouteContext);
+   const queryClient = useQueryClient();
+-  const [searchParams] = useSearchParams();
++  const [searchParams, setSearchParams] = useSearchParams();
+   const navigate = useNavigate();
+ 
++  const handleOpenPeek = useCallback(
++    (issueKey: string) => {
++      const next = new URLSearchParams(searchParams);
++      next.set('peek', issueKey);
++      setSearchParams(next);
++    },
++    [searchParams, setSearchParams],
++  );
++
+   const resolvedProjectKey = paramKey ?? ctx.projectKey;
+   const rawLayout = searchParams.get('layout');
+   const createTrigger = searchParams.get('create');
+@@ -165,6 +179,7 @@ export function ProjectIssuesRoute(): JSX.Element {
+         modulesEnabled={modulesEnabled}
+         initialLayout={normalizedLayout}
+         queryClient={queryClient}
++        onOpenPeek={handleOpenPeek}
+       />
+     </div>
+   );
+@@ -346,11 +361,116 @@ export function WorkspaceHomeView(): JSX.Element {
+ }
+ 
+ export function DraftsWorkspaceView(): JSX.Element {
++  const drafts = useDrafts();
++  const navigate = useNavigate();
++
++  const handlePublishOrResume = async (draft: IssueDraft): Promise<void> => {
++    try {
++      const payload: Record<string, unknown> = {
++        summary: draft.summary,
++      };
++      if (draft.description) {
++        payload.description_markdown = draft.description;
++      }
++      if (draft.stateId) {
++        payload.state_id = draft.stateId;
++      }
++      if (draft.prioritySlug) {
++        payload.priority_slug = draft.prioritySlug;
++      }
++      if (draft.moduleIds && draft.moduleIds.length > 0) {
++        payload.module_ids = draft.moduleIds;
++      }
++
++      const res = await fetch(`/api/v1/projects/${draft.projectKey}/issues`, {
++        method: 'POST',
++        headers: {
++          'Content-Type': 'application/json',
++          Accept: 'application/json',
++        },
++        credentials: 'same-origin',
++        body: JSON.stringify(payload),
++      });
++
++      if (res.ok) {
++        deleteDraft(draft.id);
++        void navigate(`/projects/${draft.projectKey}/issues`);
++        return;
++      }
++    } catch {
++      // Fallback on network error
++    }
++
++    deleteDraft(draft.id);
++    void navigate(`/projects/${draft.projectKey}/issues?create=1`);
++  };
++
++  const handleDelete = (id: string): void => {
++    deleteDraft(id);
++  };
++
+   return (
+     <section data-testid="drafts-view" className="kb-workspace-section">
+-      <h1>Drafts</h1>
+-      <p>Work item drafts saved before publishing to a project.</p>
+-      <Link to="/projects/KAN/issues?create=1">Create a new work item →</Link>
++      <div className="kb-workspace-section-header">
++        <h1>Drafts</h1>
++        <p>Work item drafts saved before publishing to a project.</p>
++      </div>
++
++      {drafts.length === 0 ? (
++        <div data-testid="drafts-empty" className="drafts-empty-notice">
++          <p>No work item drafts found.</p>
++          <Link to="/projects/KAN/issues?create=1">Create a new work item →</Link>
++        </div>
++      ) : (
++        <div className="drafts-grid" data-testid="drafts-list">
++          {drafts.map((draft) => (
++            <div key={draft.id} className="draft-card" data-testid="draft-card">
++              <div className="draft-card-header">
++                <span className="mono draft-project-badge">{draft.projectKey}</span>
++                <span className="draft-timestamp">
++                  {new Date(draft.createdAt).toLocaleDateString()}
++                </span>
++              </div>
++              <h3 className="draft-card-title">{draft.summary}</h3>
++              {draft.description && (
++                <p className="draft-card-desc">{draft.description}</p>
++              )}
++              <div className="draft-card-meta">
++                {draft.prioritySlug && (
++                  <span className="draft-meta-pill">
++                    Priority: {draft.prioritySlug}
++                  </span>
++                )}
++                {draft.stateId && (
++                  <span className="draft-meta-pill">State: {draft.stateId}</span>
++                )}
++              </div>
++              <div className="draft-card-actions">
++                <button
++                  type="button"
++                  className="quick-create-btn-submit draft-resume-btn"
++                  data-testid="draft-resume-btn"
++                  onClick={() => {
++                    void handlePublishOrResume(draft);
++                  }}
++                >
++                  Resume / Publish to Board
++                </button>
++                <button
++                  type="button"
++                  className="quick-create-btn-cancel draft-delete-btn"
++                  data-testid="draft-delete-btn"
++                  onClick={() => {
++                    handleDelete(draft.id);
++                  }}
++                >
++                  Delete
++                </button>
++              </div>
++            </div>
++          ))}
++        </div>
++      )}
+     </section>
+   );
+ }
+@@ -469,6 +589,7 @@ export function DevStoryRoute(): JSX.Element {
+   if (loc.pathname === '/__dev/drawer-rail' || loc.pathname === '/__dev/rail') return <RailStory />;
+   if (loc.pathname === '/__dev/drawer-actions') return <DrawerActionsStory />;
+   if (loc.pathname === '/__dev/stickies') return <StickiesStory />;
++  if (loc.pathname === '/__dev/icons') return <IconStory />;
+   return <NotFoundView />;
+ }
+ 
+@@ -533,6 +654,7 @@ export function RootShellLayout(): JSX.Element {
+ export const appRoutes: RouteObject[] = [
+   {
+     path: '/',
++    errorElement: <RouteErrorBoundary />,
+     children: [
+       {
+         path: 'projects/:projectKey',
+@@ -578,6 +700,10 @@ export const appRoutes: RouteObject[] = [
+             path: 'settings/custom-fields',
+             element: <ProjectCustomFieldsSettingsRoute />,
+           },
++          {
++            path: 'settings/workflows',
++            element: <WorkflowStudioPage />,
++          },
+         ],
+       },
+       {
+diff --git a/kanban/web/src/features/drafts/draftsStore.ts b/kanban/web/src/features/drafts/draftsStore.ts
+new file mode 100644
+index 0000000..f755bb0
+--- /dev/null
++++ b/kanban/web/src/features/drafts/draftsStore.ts
+@@ -0,0 +1,133 @@
++/**
++ * Reactive Client-side Drafts Store for Work Items.
++ * Backed by localStorage key `kb.drafts.v1` and dispatched events.
++ */
++
++import { useState, useEffect } from 'react';
++import { safeRandomUUID } from '../../utils/uuid';
++
++export const DRAFTS_STORAGE_KEY = 'kb.drafts.v1';
++export const DRAFTS_CHANGED_EVENT = 'kb:drafts-changed';
++
++export interface IssueDraft {
++  readonly id: string;
++  readonly projectKey: string;
++  readonly summary: string;
++  readonly description?: string | undefined;
++  readonly stateId: string;
++  readonly prioritySlug: string;
++  readonly moduleIds?: string[] | undefined;
++  readonly createdAt: string;
++  readonly updatedAt: string;
++}
++
++export type DraftInput = Omit<IssueDraft, 'id' | 'createdAt' | 'updatedAt'> & {
++  id?: string | undefined;
++};
++
++/**
++ * Loads all drafts from localStorage.
++ */
++export function getDrafts(): IssueDraft[] {
++  if (typeof window === 'undefined') {
++    return [];
++  }
++  try {
++    const raw = window.localStorage.getItem(DRAFTS_STORAGE_KEY);
++    if (!raw) return [];
++    const parsed = JSON.parse(raw) as unknown;
++    if (!Array.isArray(parsed)) return [];
++    return parsed as IssueDraft[];
++  } catch {
++    return [];
++  }
++}
++
++/**
++ * Saves or updates a draft in localStorage and emits `kb:drafts-changed`.
++ */
++export function saveDraft(input: DraftInput): IssueDraft {
++  const now = new Date().toISOString();
++  const existingDrafts = getDrafts();
++
++  let targetDraft: IssueDraft;
++  let nextDrafts: IssueDraft[];
++
++  if (input.id && existingDrafts.some((d) => d.id === input.id)) {
++    targetDraft = {
++      ...input,
++      id: input.id,
++      createdAt:
++        existingDrafts.find((d) => d.id === input.id)?.createdAt ?? now,
++      updatedAt: now,
++    };
++    nextDrafts = existingDrafts.map((d) =>
++      d.id === input.id ? targetDraft : d,
++    );
++  } else {
++    targetDraft = {
++      ...input,
++      id: input.id ?? safeRandomUUID(),
++      createdAt: now,
++      updatedAt: now,
++    };
++    nextDrafts = [targetDraft, ...existingDrafts];
++  }
++
++  if (typeof window !== 'undefined') {
++    try {
++      window.localStorage.setItem(
++        DRAFTS_STORAGE_KEY,
++        JSON.stringify(nextDrafts),
++      );
++    } catch {
++      // Ignore quota errors in constrained environments
++    }
++    window.dispatchEvent(new CustomEvent(DRAFTS_CHANGED_EVENT));
++  }
++
++  return targetDraft;
++}
++
++/**
++ * Deletes a draft by id and emits `kb:drafts-changed`.
++ */
++export function deleteDraft(id: string): void {
++  const existingDrafts = getDrafts();
++  const nextDrafts = existingDrafts.filter((d) => d.id !== id);
++
++  if (typeof window !== 'undefined') {
++    try {
++      window.localStorage.setItem(
++        DRAFTS_STORAGE_KEY,
++        JSON.stringify(nextDrafts),
++      );
++    } catch {
++      // Ignore
++    }
++    window.dispatchEvent(new CustomEvent(DRAFTS_CHANGED_EVENT));
++  }
++}
++
++/**
++ * React hook for reactive subscription to saved drafts.
++ */
++export function useDrafts(): IssueDraft[] {
++  const [drafts, setDrafts] = useState<IssueDraft[]>(() => getDrafts());
++
++  useEffect(() => {
++    const handleUpdate = (): void => {
++      setDrafts(getDrafts());
++    };
++
++    window.addEventListener(DRAFTS_CHANGED_EVENT, handleUpdate);
++    window.addEventListener('storage', handleUpdate);
++
++    return () => {
++      window.removeEventListener(DRAFTS_CHANGED_EVENT, handleUpdate);
++      window.removeEventListener('storage', handleUpdate);
++    };
++  }, []);
++
++  return drafts;
++}
+diff --git a/kanban/web/src/features/timeline/TimelineView.test.tsx b/kanban/web/src/features/timeline/TimelineView.test.tsx
+index d7d5678..a667a55 100644
+--- a/kanban/web/src/features/timeline/TimelineView.test.tsx
++++ b/kanban/web/src/features/timeline/TimelineView.test.tsx
+@@ -790,4 +790,49 @@ describe('TimelineView', () => {
+ 
+     expect(screen.getByRole('status').textContent).toContain('rolled back');
+   });
++
++  it('verifies timeline date column spacing classes, vertical gridlines, and quarter grouped headers (KANBA-173)', () => {
++    const { container } = render(
++      <TimelineView
++        issues={TEST_ISSUES}
++        projectKey="KAN"
++        initialZoom="day"
++        initialStartDate="2026-11-01"
++        today="2026-11-12"
++      />
++    );
++
++    // In 'day' mode, cells have timeline-scale-cell--day and canvas has timeline-right-canvas--day
++    const dayCanvas = container.querySelector('.timeline-right-canvas');
++    expect(dayCanvas?.classList.contains('timeline-right-canvas--day')).toBe(true);
++    const dayCells = container.querySelectorAll('.timeline-scale-cell--day');
++    expect(dayCells.length).toBeGreaterThan(0);
++    // Zero style attribute on scale cells (CSP strict)
++    expect(dayCells[0]?.getAttribute('style')).toBeNull();
++
++    // Switch to 'week' mode
++    const weekBtn = screen.getByRole('radio', { name: /^week$/i });
++    fireEvent.click(weekBtn);
++    expect(dayCanvas?.classList.contains('timeline-right-canvas--week')).toBe(true);
++    const weekCells = container.querySelectorAll('.timeline-scale-cell--week');
++    expect(weekCells.length).toBeGreaterThan(0);
++    expect(weekCells[0]?.getAttribute('style')).toBeNull();
++
++    // Switch to 'quarter' mode
++    const quarterBtn = screen.getByRole('radio', { name: /^quarter$/i });
++    fireEvent.click(quarterBtn);
++    expect(dayCanvas?.classList.contains('timeline-right-canvas--quarter')).toBe(true);
++    const quarterCells = container.querySelectorAll('.timeline-scale-cell--quarter');
++    expect(quarterCells.length).toBeGreaterThan(0);
++    expect(quarterCells[0]?.getAttribute('style')).toBeNull();
++
++    // In quarter mode, grouped headers avoid running dates together
++    // 2026-11-01 should show month abbreviation 'Nov'
++    const novCell = container.querySelector('[data-date="2026-11-01"]');
++    expect(novCell?.textContent.trim()).toBe('Nov');
++
++    // Day 2 (not day 1 or modulo 7 == 1) should have empty label to prevent collision
++    const emptyCell = container.querySelector('[data-date="2026-11-02"]');
++    expect(emptyCell?.textContent.trim()).toBe('');
++  });
+ });
+diff --git a/kanban/web/src/features/timeline/TimelineView.tsx b/kanban/web/src/features/timeline/TimelineView.tsx
+index 2b964d2..3e29229 100644
+--- a/kanban/web/src/features/timeline/TimelineView.tsx
++++ b/kanban/web/src/features/timeline/TimelineView.tsx
+@@ -188,6 +188,7 @@ export function TimelineView({
+   initialStartDate,
+   today,
+   links,
++  onOpenPeek,
+ }: TimelineViewProps): JSX.Element {
+   const todayDate = useMemo(() => {
+     return today ?? new Date().toISOString().slice(0, 10);
+@@ -295,6 +296,17 @@ export function TimelineView({
+       let label = dayNum;
+       if (zoomScale === 'day') {
+         label = d.slice(5); // MM-DD
++      } else if (zoomScale === 'quarter') {
++        // Grouped headers in quarter mode (16px per cell) so dates never run together
++        if (dayNum === '01') {
++          const monthNum = parseInt(d.slice(5, 7), 10);
++          const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
++          label = monthNames[monthNum] ?? dayNum;
++        } else if (parseInt(dayNum, 10) % 7 === 1) {
++          label = dayNum;
++        } else {
++          label = '';
++        }
+       }
+       cells.push({ date: d, label, isToday });
+     }
+@@ -607,11 +619,22 @@ export function TimelineView({
+                   className="timeline-left-row"
+                   data-issue-key={issue.key}
+                   data-testid={`timeline-left-row-${issue.key}`}
++                  onClick={(e) => {
++                    const target = e.target as HTMLElement | null;
++                    if (target?.closest('a, button, input')) return;
++                    onOpenPeek?.(issue.key);
++                  }}
+                 >
+                   <EmojiHint kind={priorityKind} />
+                   <a
+                     href={`?layout=timeline&peek=${encodeURIComponent(issue.key)}`}
+                     className="timeline-left-row-key"
++                    onClick={(e) => {
++                      if (onOpenPeek) {
++                        e.preventDefault();
++                        onOpenPeek(issue.key);
++                      }
++                    }}
+                   >
+                     {issue.key}
+                   </a>
+@@ -635,13 +658,13 @@ export function TimelineView({
+ 
+         {/* Right Scrollable Timeline Canvas */}
+         <div ref={canvasWrapperRef} className="timeline-right-canvas-wrapper">
+-          <div ref={canvasRef} className="timeline-right-canvas">
++          <div ref={canvasRef} className={`timeline-right-canvas timeline-right-canvas--${zoomScale}`}>
+             {/* Scale Header Row */}
+             <div className="timeline-scale-header" role="row">
+               {scaleCells.map((c) => (
+                 <div
+                   key={c.date}
+-                  className={`timeline-scale-cell ${c.isToday ? 'timeline-scale-cell--today' : ''}`}
++                  className={`timeline-scale-cell timeline-scale-cell--${zoomScale} ${c.isToday ? 'timeline-scale-cell--today' : ''}`}
+                   role="columnheader"
+                   title={c.date}
+                   data-date={c.date}
+diff --git a/kanban/web/src/features/timeline/calendarTimeline.css b/kanban/web/src/features/timeline/calendarTimeline.css
+index 0bba32e..72bc719 100644
+--- a/kanban/web/src/features/timeline/calendarTimeline.css
++++ b/kanban/web/src/features/timeline/calendarTimeline.css
+@@ -558,6 +558,36 @@
+   flex-direction: column;
+ }
+ 
++.timeline-right-canvas--day {
++  background-image: repeating-linear-gradient(
++    to right,
++    transparent,
++    transparent 62px,
++    var(--border-subtle, rgba(0, 0, 0, 0.08)) 62px,
++    var(--border-subtle, rgba(0, 0, 0, 0.08)) 64px
++  );
++}
++
++.timeline-right-canvas--week {
++  background-image: repeating-linear-gradient(
++    to right,
++    transparent,
++    transparent 34px,
++    var(--border-subtle, rgba(0, 0, 0, 0.08)) 34px,
++    var(--border-subtle, rgba(0, 0, 0, 0.08)) 36px
++  );
++}
++
++.timeline-right-canvas--quarter {
++  background-image: repeating-linear-gradient(
++    to right,
++    transparent,
++    transparent 14px,
++    var(--border-subtle, rgba(0, 0, 0, 0.08)) 14px,
++    var(--border-subtle, rgba(0, 0, 0, 0.08)) 16px
++  );
++}
++
+ .timeline-scale-header {
+   height: 40px;
+   min-height: 40px;
+@@ -573,7 +603,8 @@
+   display: flex;
+   align-items: center;
+   justify-content: center;
+-  border-right: 1px solid var(--border-subtle);
++  border-right: 2px solid var(--border-strong, #cbd5e1);
++  padding: 6px 8px;
+   font-family: var(--font-mono, monospace);
+   font-size: 0.75rem;
+   color: var(--fg-muted);
+@@ -582,6 +613,26 @@
+   user-select: none;
+ }
+ 
++.timeline-scale-cell--day {
++  width: 64px;
++  min-width: 64px;
++  max-width: 64px;
++}
++
++.timeline-scale-cell--week {
++  width: 36px;
++  min-width: 36px;
++  max-width: 36px;
++}
++
++.timeline-scale-cell--quarter {
++  width: 16px;
++  min-width: 16px;
++  max-width: 16px;
++  padding: 6px 2px;
++  overflow: hidden;
++}
++
+ .timeline-scale-cell--today {
+   font-weight: 700;
+   color: var(--color-primary, #2563eb);
+diff --git a/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx b/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx
+index a0b37a8..bdfaa33 100644
+--- a/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx
++++ b/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx
+@@ -1,10 +1,15 @@
+-import { describe, it, expect, vi } from 'vitest';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent } from '@testing-library/react';
+ import React from 'react';
+ import { QuickCreateIssueModal } from './QuickCreateIssueModal';
++import { getDrafts } from '../drafts/draftsStore';
+ import type { IssueItem } from './viewsApi';
+ 
+-describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
++describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
++  beforeEach(() => {
++    localStorage.clear();
++  });
++
+   it('does not render when isOpen is false', () => {
+     const { container } = render(
+       <QuickCreateIssueModal
+@@ -18,8 +23,8 @@ describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
+     expect(container.firstChild).toBeNull();
+   });
+ 
+-  it('renders summary, description, state, priority, and module fields when open', () => {
+-    const handleCreate = vi.fn();
++  it('renders summary, description, state, priority, and module fields when open and transitions to post-dialog on create', () => {
++    const handleCreate = vi.fn().mockReturnValue({ key: 'KAN-99', summary: 'New Test Task' });
+     const handleClose = vi.fn();
+ 
+     render(
+@@ -38,6 +43,7 @@ describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
+     expect(screen.getByLabelText(/^state$/i)).toBeDefined();
+     expect(screen.getByLabelText(/^priority$/i)).toBeDefined();
+     expect(screen.getByLabelText(/^module$/i)).toBeDefined();
++    expect(screen.getByTestId('quick-create-draft-checkbox')).toBeDefined();
+ 
+     // Fill in summary and submit
+     const summaryInput = screen.getByLabelText(/summary/i);
+@@ -51,6 +57,15 @@ describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
+         summary: 'New Test Task',
+       })
+     );
++
++    // Verify post-creation confirmation dialog state
++    const postDialog = screen.getByTestId('quick-create-post-dialog');
++    expect(postDialog).toBeDefined();
++    expect(screen.getByText('🎉 Work Item Created')).toBeDefined();
++    expect(screen.getByText('KAN-99')).toBeDefined();
++
++    // Clicking Done closes modal
++    fireEvent.click(screen.getByTestId('post-create-done-btn'));
+     expect(handleClose).toHaveBeenCalled();
+   });
+ 
+@@ -212,4 +227,114 @@ describe('QuickCreateIssueModal (KB-P3-40, S6.4 item 4, S7.2 8f)', () => {
+     expect(created.state?.name).toBe('Todo');
+     expect(created.module_ids).toEqual([]);
+   });
++
++  it('saves draft to draftsStore when ✍️ Keep work-in-progress is checked', () => {
++    const handleCreate = vi.fn();
++    const handleClose = vi.fn();
++
++    render(
++      <QuickCreateIssueModal
++        isOpen={true}
++        onClose={handleClose}
++        onCreate={handleCreate}
++        projectKey="KAN"
++        modulesEnabled={true}
++      />
++    );
++
++    const checkbox = screen.getByTestId('quick-create-draft-checkbox');
++    expect(checkbox).toBeDefined();
++
++    // Fill fields
++    fireEvent.change(screen.getByLabelText(/summary/i), {
++      target: { value: 'Draft Feature Spec' },
++    });
++    fireEvent.change(screen.getByLabelText(/description/i), {
++      target: { value: 'Needs more investigation' },
++    });
++
++    // Toggle draft checkbox
++    fireEvent.click(checkbox);
++
++    // Button should now say Save Draft
++    expect(screen.getByRole('button', { name: /save draft/i })).toBeDefined();
++
++    // Click Save Draft
++    fireEvent.click(screen.getByRole('button', { name: /save draft/i }));
++
++    // onCreate should NOT be called for drafts
++    expect(handleCreate).not.toHaveBeenCalled();
++
++    // Saved to draftsStore
++    const drafts = getDrafts();
++    expect(drafts).toHaveLength(1);
++    expect(drafts[0]?.summary).toBe('Draft Feature Spec');
++    expect(drafts[0]?.projectKey).toBe('KAN');
++
++    // Post-creation dialog for draft is visible
++    expect(screen.getByText('✍️ Draft Saved')).toBeDefined();
++    expect(screen.getByText(/Saved in Drafts \(\/drafts\)/i)).toBeDefined();
++
++    // View Issue button navigates or dismisses
++    fireEvent.click(screen.getByTestId('post-create-view-btn'));
++    expect(handleClose).toHaveBeenCalled();
++  });
++
++  it('post-create dialog View Issue opens peek drawer when onOpenPeek is provided', () => {
++    const handleOpenPeek = vi.fn();
++    const handleClose = vi.fn();
++    const handleCreate = vi.fn().mockReturnValue({ key: 'KAN-42' });
++
++    render(
++      <QuickCreateIssueModal
++        isOpen={true}
++        onClose={handleClose}
++        onCreate={handleCreate}
++        projectKey="KAN"
++        onOpenPeek={handleOpenPeek}
++      />
++    );
++
++    fireEvent.change(screen.getByLabelText(/summary/i), {
++      target: { value: 'Peek Target Issue' },
++    });
++    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++
++    expect(screen.getByTestId('quick-create-post-dialog')).toBeDefined();
++
++    fireEvent.click(screen.getByTestId('post-create-view-btn'));
++    expect(handleOpenPeek).toHaveBeenCalledWith('KAN-42');
++    expect(handleClose).toHaveBeenCalled();
++  });
++
++  it('post-create dialog Create Another resets form and stays in modal', () => {
++    const handleCreate = vi.fn();
++    const handleClose = vi.fn();
++
++    render(
++      <QuickCreateIssueModal
++        isOpen={true}
++        onClose={handleClose}
++        onCreate={handleCreate}
++        projectKey="KAN"
++      />
++    );
++
++    fireEvent.change(screen.getByLabelText(/summary/i), {
++      target: { value: 'First Task' },
++    });
++    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++
++    expect(screen.getByTestId('quick-create-post-dialog')).toBeDefined();
++
++    // Click Create Another
++    fireEvent.click(screen.getByTestId('post-create-another-btn'));
++
++    // Modal did not close
++    expect(handleClose).not.toHaveBeenCalled();
++
++    // Form is back and summary is reset
++    const summaryInput = screen.getByLabelText<HTMLInputElement>(/summary/i);
++    expect(summaryInput.value).toBe('');
++  });
+ });
+diff --git a/kanban/web/src/features/views/QuickCreateIssueModal.tsx b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+index 8d15e8b..e58a451 100644
+--- a/kanban/web/src/features/views/QuickCreateIssueModal.tsx
++++ b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+@@ -1,18 +1,33 @@
+ import React, { useState, useEffect, useRef, type JSX } from 'react';
+ import type { IssueItem } from './viewsApi';
++import { saveDraft } from '../drafts/draftsStore';
+ import './filterBulk.css';
+ 
+ export interface QuickCreateIssueModalProps {
+   isOpen: boolean;
+   onClose: () => void;
+-  onCreate: (newIssue: Partial<IssueItem>) => void;
++  onCreate: (newIssue: Partial<IssueItem>) => unknown;
+   projectKey: string;
+   modulesEnabled?: boolean;
+   defaultStateId?: string;
+   defaultPrioritySlug?: string;
+   defaultModuleIds?: string[];
++  modules?: { id: string; name: string; emoji?: string }[];
++  onOpenPeek?: (issueKey: string) => void;
+ }
+ 
++interface PostCreateState {
++  key: string;
++  summary: string;
++  isDraft: boolean;
++  draftId?: string;
++}
++
++const DEFAULT_QUICK_MODULES: { id: string; name: string; emoji?: string }[] = [
++  { id: 'mod-1', name: 'Auth Core', emoji: '🔒' },
++  { id: 'mod-2', name: 'Kanban Board', emoji: '📋' },
++];
++
+ export function QuickCreateIssueModal({
+   isOpen,
+   onClose,
+@@ -22,69 +37,147 @@ export function QuickCreateIssueModal({
+   defaultStateId = 'state-todo',
+   defaultPrioritySlug = 'medium',
+   defaultModuleIds = ['mod-1'],
++  modules,
++  onOpenPeek,
+ }: QuickCreateIssueModalProps): JSX.Element | null {
+   const [summary, setSummary] = useState('');
+   const [description, setDescription] = useState('');
+   const [stateId, setStateId] = useState(defaultStateId);
+   const [prioritySlug, setPrioritySlug] = useState(defaultPrioritySlug);
+   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>(
+-    modulesEnabled ? defaultModuleIds : []
++    modulesEnabled ? defaultModuleIds : [],
+   );
++  const [isDraft, setIsDraft] = useState(false);
++  const [postCreateData, setPostCreateData] = useState<PostCreateState | null>(null);
+ 
+   const summaryInputRef = useRef<HTMLInputElement>(null);
+ 
+-  // Focus input on open
++  // Focus input on open or when resetting to form
+   useEffect(() => {
+-    if (isOpen) {
++    if (isOpen && !postCreateData) {
+       setTimeout(() => {
+         summaryInputRef.current?.focus();
+       }, 50);
+     }
+-  }, [isOpen]);
++  }, [isOpen, postCreateData]);
+ 
+   // Listen for custom event 'kb:create-issue'
+   useEffect(() => {
+-    const handleCustomCreate = () => {
++    const handleCustomCreate = (): void => {
+       // Triggered by external buttons / CommandPalette
+     };
+     window.addEventListener('kb:create-issue', handleCustomCreate);
+-    return () => { window.removeEventListener('kb:create-issue', handleCustomCreate); };
++    return () => {
++      window.removeEventListener('kb:create-issue', handleCustomCreate);
++    };
+   }, []);
+ 
+   // Escape key handler
+   useEffect(() => {
+     if (!isOpen) return;
+ 
+-    const handleKeyDown = (e: KeyboardEvent) => {
++    const handleKeyDown = (e: KeyboardEvent): void => {
+       if (e.key === 'Escape') {
+         e.stopPropagation();
++        setPostCreateData(null);
+         onClose();
+       }
+     };
+ 
+     window.addEventListener('keydown', handleKeyDown);
+-    return () => { window.removeEventListener('keydown', handleKeyDown); };
++    return () => {
++      window.removeEventListener('keydown', handleKeyDown);
++    };
+   }, [isOpen, onClose]);
+ 
+   if (!isOpen) {
+     return null;
+   }
+ 
+-  const handleSubmit = (e: React.SyntheticEvent) => {
++  const handleDone = (): void => {
++    setSummary('');
++    setDescription('');
++    setIsDraft(false);
++    setPostCreateData(null);
++    onClose();
++  };
++
++  const handleCreateAnother = (): void => {
++    setSummary('');
++    setDescription('');
++    setIsDraft(false);
++    setPostCreateData(null);
++  };
++
++  const handleViewIssue = (): void => {
++    if (postCreateData?.isDraft) {
++      if (typeof window !== 'undefined') {
++        window.location.href = '/drafts';
++      }
++    } else if (postCreateData?.key) {
++      if (onOpenPeek) {
++        onOpenPeek(postCreateData.key);
++      } else if (typeof window !== 'undefined') {
++        const url = new URL(window.location.href);
++        url.searchParams.set('peek', postCreateData.key);
++        window.history.pushState({}, '', url.toString());
++        window.dispatchEvent(new PopStateEvent('popstate'));
++      }
++    }
++    handleDone();
++  };
++
++  const handleSubmit = (e: React.SyntheticEvent): void => {
+     e.preventDefault();
+     if (!summary.trim()) return;
+ 
++    if (isDraft) {
++      const draft = saveDraft({
++        projectKey,
++        summary: summary.trim(),
++        description: description.trim() || undefined,
++        stateId,
++        prioritySlug,
++        moduleIds: modulesEnabled ? selectedModuleIds : undefined,
++      });
++
++      setPostCreateData({
++        key: 'Draft',
++        summary: draft.summary,
++        isDraft: true,
++        draftId: draft.id,
++      });
++      return;
++    }
++
+     const payload: Partial<IssueItem> = {
+       summary: summary.trim(),
+       state: {
+         id: stateId,
+-        name: stateId.includes('progress') ? 'In Progress' : stateId.includes('todo') ? 'Todo' : 'Backlog',
+-        group: stateId.includes('progress') ? 'started' : stateId.includes('todo') ? 'unstarted' : 'backlog',
++        name: stateId.includes('progress')
++          ? 'In Progress'
++          : stateId.includes('todo')
++            ? 'Todo'
++            : 'Backlog',
++        group: stateId.includes('progress')
++          ? 'started'
++          : stateId.includes('todo')
++            ? 'unstarted'
++            : 'backlog',
+       },
+       priority: {
+         slug: prioritySlug,
+         label: prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1),
+-        emoji: prioritySlug === 'urgent' ? '🔥' : prioritySlug === 'high' ? '⚡' : '🔹',
++        emoji:
++          prioritySlug === 'urgent'
++            ? '🔥'
++            : prioritySlug === 'high'
++              ? '⚡'
++              : prioritySlug === 'low'
++                ? '🔽'
++                : prioritySlug === 'none'
++                  ? '➖'
++                  : '🔹',
+       },
+     };
+ 
+@@ -95,13 +188,92 @@ export function QuickCreateIssueModal({
+       payload.module_ids = selectedModuleIds;
+     }
+ 
+-    onCreate(payload);
++    const res = onCreate(payload) as Partial<IssueItem> | undefined;
++    const resolvedKey =
++      res && typeof res === 'object' && typeof res.key === 'string'
++        ? res.key
++        : `${projectKey}-NEW`;
+ 
+-    setSummary('');
+-    setDescription('');
+-    onClose();
++    setPostCreateData({
++      key: resolvedKey,
++      summary: summary.trim(),
++      isDraft: false,
++    });
+   };
+ 
++  // --------------------------------------------------------------------------
++  // Post-Create "View Issue / Create Another / Done" Dialog
++  // --------------------------------------------------------------------------
++  if (postCreateData) {
++    return (
++      <div
++        className="quick-create-modal-overlay"
++        role="dialog"
++        aria-modal="true"
++        aria-labelledby="quick-create-post-title"
++        data-testid="quick-create-post-dialog"
++      >
++        <div className="quick-create-modal quick-create-modal--post">
++          <div className="quick-create-header">
++            <h2 id="quick-create-post-title" className="quick-create-title">
++              {postCreateData.isDraft ? '✍️ Draft Saved' : '🎉 Work Item Created'}
++            </h2>
++            <button
++              type="button"
++              className="filter-chip-remove"
++              onClick={handleDone}
++              aria-label="Close modal"
++            >
++              ×
++            </button>
++          </div>
++
++          <div className="quick-create-post-body">
++            <div className="quick-create-post-badge">
++              <span className="mono quick-create-post-key">{postCreateData.key}</span>
++              <span className="quick-create-post-summary">{postCreateData.summary}</span>
++            </div>
++            <p className="quick-create-post-desc">
++              {postCreateData.isDraft
++                ? 'Saved in Drafts (/drafts). You can resume or publish it to the board anytime.'
++                : `Successfully created ${postCreateData.key} in ${projectKey}.`}
++            </p>
++          </div>
++
++          <div className="quick-create-footer">
++            <button
++              type="button"
++              className="quick-create-btn-cancel quick-create-btn-view"
++              data-testid="post-create-view-btn"
++              onClick={handleViewIssue}
++            >
++              View Issue
++            </button>
++            <button
++              type="button"
++              className="quick-create-btn-cancel quick-create-btn-another"
++              data-testid="post-create-another-btn"
++              onClick={handleCreateAnother}
++            >
++              Create Another
++            </button>
++            <button
++              type="button"
++              className="quick-create-btn-submit"
++              data-testid="post-create-done-btn"
++              onClick={handleDone}
++            >
++              Done
++            </button>
++          </div>
++        </div>
++      </div>
++    );
++  }
++
++  // --------------------------------------------------------------------------
++  // Main Quick Create Form
++  // --------------------------------------------------------------------------
+   return (
+     <div
+       className="quick-create-modal-overlay"
+@@ -136,7 +308,9 @@ export function QuickCreateIssueModal({
+               className="quick-create-input"
+               placeholder="What needs to be done?"
+               value={summary}
+-              onChange={(e) => { setSummary(e.target.value); }}
++              onChange={(e) => {
++                setSummary(e.target.value);
++              }}
+               required
+             />
+           </div>
+@@ -153,7 +327,9 @@ export function QuickCreateIssueModal({
+               className="quick-create-textarea"
+               placeholder="Add details, acceptance criteria, or Mermaid diagrams..."
+               value={description}
+-              onChange={(e) => { setDescription(e.target.value); }}
++              onChange={(e) => {
++                setDescription(e.target.value);
++              }}
+             />
+           </div>
+ 
+@@ -166,7 +342,9 @@ export function QuickCreateIssueModal({
+                 id="quick-create-state"
+                 className="quick-create-select"
+                 value={stateId}
+-                onChange={(e) => { setStateId(e.target.value); }}
++                onChange={(e) => {
++                  setStateId(e.target.value);
++                }}
+               >
+                 <option value="state-backlog">Backlog</option>
+                 <option value="state-todo">Todo</option>
+@@ -186,13 +364,15 @@ export function QuickCreateIssueModal({
+                 id="quick-create-priority"
+                 className="quick-create-select"
+                 value={prioritySlug}
+-                onChange={(e) => { setPrioritySlug(e.target.value); }}
++                onChange={(e) => {
++                  setPrioritySlug(e.target.value);
++                }}
+               >
+                 <option value="urgent">🔥 Urgent</option>
+                 <option value="high">⚡ High</option>
+                 <option value="medium">🔹 Medium</option>
+-                <option value="low">💤 Low</option>
+-                <option value="none">None</option>
++                <option value="low">🔽 Low</option>
++                <option value="none">➖ None</option>
+               </select>
+             </div>
+ 
+@@ -209,17 +389,42 @@ export function QuickCreateIssueModal({
+                   id="quick-create-module"
+                   className="quick-create-select"
+                   value={selectedModuleIds[0] ?? ''}
+-                  onChange={(e) => { setSelectedModuleIds(e.target.value ? [e.target.value] : []); }
+-                  }
++                  onChange={(e) => {
++                    setSelectedModuleIds(e.target.value ? [e.target.value] : []);
++                  }}
+                 >
+                   <option value="">No Module</option>
+-                  <option value="mod-1">Auth Core</option>
+-                  <option value="mod-2">Kanban Board</option>
++                  {(modules ?? DEFAULT_QUICK_MODULES).map((mod) => (
++                    <option key={mod.id} value={mod.id}>
++                      {`${mod.emoji ?? '🧩'} ${mod.name}`}
++                    </option>
++                  ))}
+                 </select>
+               </div>
+             )}
+           </div>
+ 
++          {/* ✍️ Keep work-in-progress Draft Checkbox */}
++          <div className="quick-create-draft-row">
++            <label
++              htmlFor="quick-create-draft"
++              className="quick-create-draft-label"
++              title="This will be saved in Drafts (/drafts) so you can finish and publish it later."
++            >
++              <input
++                id="quick-create-draft"
++                type="checkbox"
++                className="quick-create-draft-checkbox"
++                data-testid="quick-create-draft-checkbox"
++                checked={isDraft}
++                onChange={(e) => {
++                  setIsDraft(e.target.checked);
++                }}
++              />
++              <span>✍️ Keep work-in-progress</span>
++            </label>
++          </div>
++
+           <div className="quick-create-footer">
+             <button
+               type="button"
+@@ -233,7 +438,7 @@ export function QuickCreateIssueModal({
+               className="quick-create-btn-submit"
+               disabled={!summary.trim()}
+             >
+-              Create
++              {isDraft ? 'Save Draft' : 'Create'}
+             </button>
+           </div>
+         </form>

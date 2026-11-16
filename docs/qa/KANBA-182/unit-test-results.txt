@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 3 items
+
+kanban/tests/platform/test_world_class_standards.py::test_mcp_compact_token_budget PASSED [ 33%]
+kanban/tests/platform/test_world_class_standards.py::test_security_rls_and_sanitizer_invariants PASSED [ 66%]
+kanban/tests/platform/test_world_class_standards.py::test_standalone_readiness_and_platform_summary PASSED [100%]
+
+============================== 3 passed in 0.17s ===============================

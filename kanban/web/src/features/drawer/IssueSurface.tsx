@@ -6,7 +6,13 @@ import React, {
   type ComponentType,
   type JSX,
 } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import {
+  useInRouterContext,
+  useLocation,
+  useNavigate,
+  type Location,
+  type NavigateFunction,
+} from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient, type ApiFetchOptions } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
@@ -21,6 +27,7 @@ import {
 import { getOpenerElement } from './IssueKeyLink';
 import { useIssueSurfaceSlots, type IssueDetail } from './slots';
 import { IssueHeader } from './IssueHeader';
+import { AccessPill } from './AccessPill';
 import { SummaryField } from './SummaryField';
 import { useFocusTrap } from './useFocusTrap';
 import {
@@ -28,6 +35,7 @@ import {
   fetchProjectStates,
   type StateSummary,
 } from '../views/viewsApi';
+import { safeRandomUUID } from '../../utils/uuid';
 import './IssueSurface.css';
 
 let moduleMountCounter = 0;
@@ -43,61 +51,72 @@ export function normalizeIssueDetail(
   if (!raw || typeof raw !== 'object') {
     return raw as unknown as IssueDetail;
   }
-  if (raw.project_key && raw.object_id && raw.etag) {
-    return raw;
+  const rawWithItems = raw as { items?: IssueDetail[] };
+  const candidate: IssueDetail =
+    Array.isArray(rawWithItems.items) && rawWithItems.items[0]
+      ? rawWithItems.items[0]
+      : raw;
+
+  if (candidate.project_key && candidate.object_id && candidate.etag) {
+    return candidate;
   }
-  const keyStr = typeof raw.key === 'string' ? raw.key : '';
+  const keyStr = typeof candidate.key === 'string' ? candidate.key : '';
   const nonEmptyProjectKey =
-    typeof raw.project_key === 'string' && raw.project_key.length > 0
-      ? raw.project_key
+    typeof candidate.project_key === 'string' && candidate.project_key.length > 0
+      ? candidate.project_key
       : undefined;
   const inferredProject =
     nonEmptyProjectKey ??
     fallbackProjectKey ??
     (keyStr.includes('-') ? (keyStr.split('-')[0] ?? 'KAN') : 'KAN');
 
-  const rawId = typeof raw.id === 'string' ? raw.id : undefined;
+  const rawId = typeof candidate.id === 'string' ? candidate.id : undefined;
   const rawSha =
-    typeof raw.description_sha256 === 'string' && raw.description_sha256.length > 0
-      ? `"${raw.description_sha256}"`
+    typeof candidate.description_sha256 === 'string' && candidate.description_sha256.length > 0
+      ? `"${candidate.description_sha256}"`
       : undefined;
 
-  const rawLabels = Array.isArray(raw.labels) ? raw.labels : undefined;
+  const rawLabels = Array.isArray(candidate.labels) ? candidate.labels : undefined;
   const derivedLabelIds =
-    raw.label_ids ??
+    candidate.label_ids ??
     (rawLabels
       ? rawLabels.map((lbl) => (typeof lbl === 'string' ? lbl : lbl.id))
       : undefined);
 
   return {
-    ...raw,
+    ...candidate,
     project_key: inferredProject,
-    object_id: raw.object_id ?? rawId,
-    etag: raw.etag ?? rawSha,
+    object_id: candidate.object_id ?? rawId,
+    etag: candidate.etag ?? rawSha,
     label_ids: derivedLabelIds,
-    capabilities: raw.capabilities ?? ['EDIT', 'TRANSITION', 'COMMENT'],
+    capabilities: candidate.capabilities ?? ['EDIT', 'TRANSITION', 'COMMENT'],
   };
 }
 
-interface IssueSurfaceRootProps {
-  mode: 'drawer' | 'full';
+export interface IssueSurfaceRootProps {
+  mode: 'drawer' | 'full' | 'split';
   issueKey: string;
   projectKey: string | null;
 }
 
-function IssueSurfaceRoot({
+interface IssueSurfaceContentProps extends IssueSurfaceRootProps {
+  location: Location | { pathname: string; search: string };
+  navigate: NavigateFunction;
+}
+
+function IssueSurfaceContent({
   mode,
   issueKey,
   projectKey,
-}: IssueSurfaceRootProps): JSX.Element {
-  const [mountId] = useState(() => crypto.randomUUID());
+  location,
+  navigate,
+}: IssueSurfaceContentProps): JSX.Element {
+  const [mountId] = useState(() => safeRandomUUID());
   const [mountSeq] = useState(() => {
     moduleMountCounter += 1;
     return moduleMountCounter;
   });
 
-  const location = useLocation();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const rootRef = useRef<HTMLElement | null>(null);
   const descRef = useRef<HTMLElement | null>(null);
@@ -110,6 +129,30 @@ function IssueSurfaceRoot({
   const isEditingDescription = editingIssueKey === issueKey;
   const [descriptionDraft, setDescriptionDraft] = useState('');
   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
+
+  const [isNavHidden, setIsNavHidden] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('kb.sidebar') === 'collapsed';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handleSidebarChange = (e: Event): void => {
+      const custom = e as CustomEvent<{ collapsed: 'open' | 'collapsed' }>;
+      setIsNavHidden(custom.detail.collapsed === 'collapsed');
+    };
+    window.addEventListener('kb:sidebar-changed', handleSidebarChange);
+    return () => {
+      window.removeEventListener('kb:sidebar-changed', handleSidebarChange);
+    };
+  }, []);
+
+  const handleToggleNav = useCallback((): void => {
+    window.dispatchEvent(new CustomEvent('kb:toggle-sidebar'));
+    setIsNavHidden((prev) => !prev);
+  }, []);
 
   useFocusTrap(isMobile && mode === 'drawer', rootRef);
 
@@ -232,16 +275,33 @@ function IssueSurfaceRoot({
     if (isLoading) {
       return (
         <>
-          <div className="surface__header">
-            <button
-              type="button"
-              className="issue-header__btn"
-              aria-label="Close issue panel"
-              onClick={handleClose}
-            >
-              <span aria-hidden="true" className="issue-header__glyph">→</span>
-            </button>
-            <span className="mono issue-header__key">{issueKey}</span>
+          <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
+            {mode === 'split' ? (
+              <button
+                type="button"
+                className="issue-header__btn issue-header__nav-toggle"
+                aria-label={isNavHidden ? 'Show Nav' : 'Hide Nav'}
+                title={isNavHidden ? 'Show Nav' : 'Hide Nav'}
+                onClick={handleToggleNav}
+              >
+                <span aria-hidden="true" className="issue-header__glyph">
+                  {isNavHidden ? '⇥' : '⇤'}
+                </span>
+                <span className="issue-header__btn-label">
+                  {isNavHidden ? 'Show Nav' : 'Hide Nav'}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="issue-header__btn"
+                aria-label="Close issue panel"
+                onClick={handleClose}
+              >
+                <span aria-hidden="true" className="issue-header__glyph">→</span>
+              </button>
+            )}
+            <span className="mono issue-header__key">{mode === 'split' ? `#${issueKey}` : issueKey}</span>
           </div>
           <div className="surface__body">
             <div className="surface__prose">
@@ -259,25 +319,44 @@ function IssueSurfaceRoot({
     if (error) {
       return (
         <>
-          <div className="surface__header">
-            <button
-              type="button"
-              className="issue-header__btn"
-              aria-label="Close issue panel"
-              onClick={handleClose}
-            >
-              <span aria-hidden="true" className="issue-header__glyph">→</span>
-            </button>
-            <button
-              type="button"
-              className="issue-header__btn"
-              aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
-              aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
-              onClick={handleToggleFullScreen}
-            >
-              <span aria-hidden="true" className="issue-header__glyph">↗</span>
-            </button>
-            <span className="mono issue-header__key">{issueKey}</span>
+          <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
+            {mode === 'split' ? (
+              <button
+                type="button"
+                className="issue-header__btn issue-header__nav-toggle"
+                aria-label={isNavHidden ? 'Show Nav' : 'Hide Nav'}
+                title={isNavHidden ? 'Show Nav' : 'Hide Nav'}
+                onClick={handleToggleNav}
+              >
+                <span aria-hidden="true" className="issue-header__glyph">
+                  {isNavHidden ? '⇥' : '⇤'}
+                </span>
+                <span className="issue-header__btn-label">
+                  {isNavHidden ? 'Show Nav' : 'Hide Nav'}
+                </span>
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="issue-header__btn"
+                  aria-label="Close issue panel"
+                  onClick={handleClose}
+                >
+                  <span aria-hidden="true" className="issue-header__glyph">→</span>
+                </button>
+                <button
+                  type="button"
+                  className="issue-header__btn"
+                  aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
+                  aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
+                  onClick={handleToggleFullScreen}
+                >
+                  <span aria-hidden="true" className="issue-header__glyph">↗</span>
+                </button>
+              </>
+            )}
+            <span className="mono issue-header__key">{mode === 'split' ? `#${issueKey}` : issueKey}</span>
           </div>
           <div className="surface__body">
             <div className="surface__prose">
@@ -438,12 +517,46 @@ function IssueSurfaceRoot({
 
     return (
       <>
-        <IssueHeader
-          issue={currentIssue}
-          mode={mode}
-          onClose={handleClose}
-          toggleFullScreen={handleToggleFullScreen}
-        />
+        {mode === 'split' ? (
+          <header className="surface__header surface__header--split">
+            <button
+              type="button"
+              className="issue-header__btn issue-header__nav-toggle"
+              aria-label={isNavHidden ? 'Show Nav' : 'Hide Nav'}
+              title={isNavHidden ? 'Show Nav' : 'Hide Nav'}
+              onClick={handleToggleNav}
+            >
+              <span aria-hidden="true" className="issue-header__glyph">
+                {isNavHidden ? '⇥' : '⇤'}
+              </span>
+              <span className="issue-header__btn-label">
+                {isNavHidden ? 'Show Nav' : 'Hide Nav'}
+              </span>
+            </button>
+
+            <a
+              href={`/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="issue-header__btn issue-header__new-tab-link"
+              aria-label="Open in new tab"
+              title="Open in new tab (↗)"
+            >
+              <span aria-hidden="true" className="issue-header__glyph">↗</span>
+              <span className="sr-only">Open in new tab</span>
+            </a>
+
+            <span className="mono issue-header__key">#{currentIssue.key}</span>
+            <AccessPill issue={currentIssue} />
+          </header>
+        ) : (
+          <IssueHeader
+            issue={currentIssue}
+            mode={mode}
+            onClose={handleClose}
+            toggleFullScreen={handleToggleFullScreen}
+          />
+        )}
         <div className="surface__body">
           <div className="surface__prose">
             <div className="surface__prose-inner">{proseBody}</div>
@@ -471,6 +584,21 @@ function IssueSurfaceRoot({
       </>
     );
   };
+
+  if (mode === 'split') {
+    return (
+      <section
+        ref={rootRef}
+        className="surface--split"
+        aria-labelledby={`issue-summary-${issueKey}`}
+        tabIndex={-1}
+        data-mount-id={mountId}
+        data-mount-seq={mountSeq}
+      >
+        {renderContent()}
+      </section>
+    );
+  }
 
   if (mode === 'full') {
     return (
@@ -501,6 +629,37 @@ function IssueSurfaceRoot({
       {renderContent()}
     </section>
   );
+}
+
+function IssueSurfaceWithRouter(props: IssueSurfaceRootProps): JSX.Element {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return <IssueSurfaceContent {...props} location={location} navigate={navigate} />;
+}
+
+function IssueSurfaceWithoutRouter(props: IssueSurfaceRootProps): JSX.Element {
+  const fallbackLocation = React.useMemo<Location | { pathname: string; search: string }>(
+    () => ({
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      search: typeof window !== 'undefined' ? window.location.search : '',
+    }),
+    [],
+  );
+  const fallbackNavigate = React.useCallback((to: unknown) => {
+    if (typeof window !== 'undefined' && typeof to === 'string') {
+      window.location.assign(to);
+    }
+  }, []) as NavigateFunction;
+
+  return <IssueSurfaceContent {...props} location={fallbackLocation} navigate={fallbackNavigate} />;
+}
+
+export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
+  const inRouter = useInRouterContext();
+  if (inRouter) {
+    return <IssueSurfaceWithRouter {...props} />;
+  }
+  return <IssueSurfaceWithoutRouter {...props} />;
 }
 
 export function IssueSurface(): JSX.Element | null {

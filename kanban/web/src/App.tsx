@@ -9,6 +9,7 @@ import { createAppRouter, IssuesWorkspaceRoute } from './app/routes';
 import { FIXTURE_12_ISSUES } from './features/views/fixtures';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ShellPanelsProvider } from './app/shellPanels';
+import { GlobalErrorBoundary } from './components/error/AppErrorModal';
 import './App.css';
 
 const appQueryClient = new QueryClient({
@@ -25,7 +26,7 @@ export function isStoryEnabled(devMode: boolean, storyEnv?: string): boolean {
   return storyEnv === '1';
 }
 
-export function App(): JSX.Element {
+function AppContent(): JSX.Element {
   const isEnabled = isStoryEnabled(
     import.meta.env.DEV,
     import.meta.env.VITE_ENABLE_STORY,
@@ -91,5 +92,13 @@ export function App(): JSX.Element {
         <RouterProvider router={router} />
       </ShellPanelsProvider>
     </QueryClientProvider>
+  );
+}
+
+export function App(): JSX.Element {
+  return (
+    <GlobalErrorBoundary>
+      <AppContent />
+    </GlobalErrorBoundary>
   );
 }

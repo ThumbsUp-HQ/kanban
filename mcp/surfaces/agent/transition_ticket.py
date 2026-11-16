@@ -30,19 +30,19 @@ TRANSITION_TICKET_SCHEMA: Final[dict[str, Any]] = {
     "properties": {
         "identifier": {
             "type": "string",
-            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
+            "description": "Issue ref",
         },
         "to_state": {
             "type": "string",
-            "description": "Target workflow state name or UUID (cannot be a completed state)",
+            "description": "Target state",
         },
         "comment_markdown": {
             "type": "string",
-            "description": "Optional comment markdown (<= 65536 bytes)",
+            "description": "Comment",
         },
         "verification_proof": {
             "type": "object",
-            "description": "Optional structured VerificationProof packet",
+            "description": "Proof packet",
         },
     },
     "required": ["identifier", "to_state"],

@@ -45,6 +45,9 @@ class LdapCardConfig(BaseModel):
     display_name_attribute: str = "cn"
     member_of_attribute: str = "memberOf"
     group_dn_map: dict[str, str] = Field(default_factory=dict)
+    access_mode: Literal["any_user", "group_restricted"] = "any_user"
+    admin_groups: list[str] = Field(default_factory=list)
+    user_groups: list[str] = Field(default_factory=list)
     timeout_seconds: float = Field(default=5.0, ge=1.0, le=15.0)
 
     @field_validator("url")

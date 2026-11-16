@@ -8,6 +8,14 @@ import { MemoryRouter, Routes, Route } from 'react-router';
 import { McpAccessStudio } from '../McpAccessStudio';
 import * as settingsApi from '../settingsApi';
 
+vi.mock('../../../app/useSystemStatus', () => ({
+  useSystemStatus: vi.fn(() => ({
+    data: { allow_unlimited_mcp_keys: true },
+    isLoading: false,
+    error: null,
+  })),
+}));
+
 describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   const mockKeys: settingsApi.McpApiKeyItem[] = [
     {
@@ -247,7 +255,8 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     // Switch to Antigravity tab
     fireEvent.click(screen.getByTestId('tab-antigravity'));
-    expect(snippetCode.textContent).toContain('"command": "agy"');
+    expect(snippetCode.textContent).toContain('"serverUrl":');
+    expect(snippetCode.textContent).toContain('agy mcp add --header');
 
     // Switch to Claude tab
     fireEvent.click(screen.getByTestId('tab-claude'));
@@ -457,5 +466,145 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     const backdrop = screen.getByTestId('mint-modal-backdrop');
     fireEvent.click(backdrop);
     expect(screen.queryByTestId('mint-label-input')).toBeNull();
+  });
+
+  it('supports unlimited key minting with friction checkbox and disables button until confirmed', async () => {
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
+      id: 'key-unlimited',
+      label: 'Unlimited Token',
+      display_hint: 'unl1',
+      surface: 'agent',
+      scope_tier: 'personal_user',
+      scopes: ['agent:read', 'agent:write'],
+      allowed_projects: null,
+      created_at: new Date().toISOString(),
+      expires_at: null,
+      last_used_at: null,
+      revoked_at: null,
+      raw_key: 'kb_agt_unlimited_secret',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+
+    const labelInput = screen.getByTestId('mint-label-input');
+    fireEvent.change(labelInput, { target: { value: 'Unlimited Token' } });
+
+    const expirySelect = screen.getByTestId('mint-expiry-select');
+    expect(screen.getByTestId('option-unlimited')).not.toBeNull();
+    fireEvent.change(expirySelect, { target: { value: 'unlimited' } });
+
+    // Warning box should be visible
+    expect(screen.getByTestId('unlimited-warning-box')).not.toBeNull();
+
+    // Submit button should be disabled until confirm checkbox is checked
+    const submitBtn = screen.getByTestId('mint-submit-btn');
+    expect((submitBtn as HTMLButtonElement).disabled).toBe(true);
+
+    // Check confirmation checkbox
+    const confirmCheckbox = screen.getByTestId('confirm-unlimited-checkbox');
+    fireEvent.click(confirmCheckbox);
+    expect((submitBtn as HTMLButtonElement).disabled).toBe(false);
+
+    // Submit form
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(mintSpy).toHaveBeenCalledWith({
+        label: 'Unlimited Token',
+        surface: 'agent',
+        scopes: ['agent:read', 'agent:write'],
+        unlimited: true,
+        confirm_unlimited: true,
+      });
+    });
+
+    // Keys table should render 'Never (Unlimited)' for expires_at: null
+    expect(screen.getByTestId('key-unlimited-key-unlimited')).not.toBeNull();
+    expect(screen.getByTestId('key-unlimited-key-unlimited').textContent).toContain('Never (Unlimited)');
+  });
+
+  it('hides unlimited option when allow_unlimited_mcp_keys is false', async () => {
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" allowUnlimitedKeys={false} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    expect(screen.queryByTestId('option-unlimited')).toBeNull();
+  });
+
+  it('supports granular tool disabling into disabled_tools on minting', async () => {
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
+      id: 'key-narrow',
+      label: 'Narrowed Agent Key',
+      display_hint: 'nar1',
+      surface: 'agent',
+      scope_tier: 'personal_user',
+      scopes: ['agent:read', 'agent:write'],
+      allowed_projects: null,
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 86400000 * 30).toISOString(),
+      disabled_tools: ['complete_work', 'add_comment'],
+      last_used_at: null,
+      revoked_at: null,
+      raw_key: 'kb_agt_narrow_secret',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    fireEvent.change(screen.getByTestId('mint-label-input'), { target: { value: 'Narrowed Agent Key' } });
+
+    // Tools selection grid should have tools
+    expect(screen.getByTestId('tools-selection-grid')).not.toBeNull();
+    const completeWorkCheckbox = screen.getByTestId('disable-tool-complete_work');
+    const addCommentCheckbox = screen.getByTestId('disable-tool-add_comment');
+
+    fireEvent.click(completeWorkCheckbox);
+    fireEvent.click(addCommentCheckbox);
+
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+    await waitFor(() => {
+      expect(mintSpy).toHaveBeenCalledWith({
+        label: 'Narrowed Agent Key',
+        surface: 'agent',
+        scopes: ['agent:read', 'agent:write'],
+        expires_in_days: 60,
+        disabled_tools: ['complete_work', 'add_comment'],
+      });
+    });
   });
 });

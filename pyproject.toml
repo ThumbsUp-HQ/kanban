@@ -104,6 +104,10 @@ layers = [
     "kanban",
     "database",
 ]
+ignore_imports = [
+    "kanban.app -> mcp.settings",
+    "kanban.tests.mcp.** -> mcp.**",
+]
 
 [[tool.importlinter.contracts]]
 name = "mcp forbidden from importing database"

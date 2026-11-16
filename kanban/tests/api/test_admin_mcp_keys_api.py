@@ -245,3 +245,206 @@ async def test_internal_mcp_introspect_missing_session_factory() -> None:
     with pytest.raises(RuntimeError, match="Session factory not configured"):
         async for _ in get_internal_session(req):
             pass
+
+
+@pytest.mark.asyncio
+async def test_admin_mcp_keys_hierarchical_and_unlimited_minting(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    contract_recorder: ContractRecorder,
+) -> None:
+    """Test admin endpoints with unlimited keys, disabled tools, and CIDRs."""
+    admin_user = await make_user("hier_admin", workspace_role="WORKSPACE_ADMIN")
+    await api_env.seed.execute(
+        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
+        {
+            "p_id": admin_user.id,
+            "blob": b"\x01" + b"\x00" * 28,
+            "dek": b"\x01" + b"\x00" * 44,
+        },
+    )
+    res = await api_env.seed.execute(
+        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
+        {"p_id": admin_user.id},
+    )
+    p_row = res.mappings().first()
+    if p_row:
+        await api_env.seed.execute(
+            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
+            {"p_fid": p_row["id"]},
+        )
+    await api_env.seed.commit()
+
+    client = api_env.client
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=admin_user.id,
+        workspace_id=admin_user.workspace_id,
+        aal_level=2,
+    )
+
+    # 1. Mint key with unlimited=True and confirm_unlimited=True
+    resp = await client.post(
+        "/api/v1/admin/mcp-keys",
+        json={
+            "surface": "agent",
+            "scopes": ["agent:read"],
+            "scope_tier": "workspace",
+            "unlimited": True,
+            "confirm_unlimited": True,
+            "disabled_tools": ["complete_work"],
+            "allowed_cidrs": ["10.0.0.0/8"],
+        },
+    )
+    assert resp.status_code == 201
+    contract_recorder.record("mint_admin_mcp_key_hierarchical_201", resp.request, resp)
+    data = resp.json()
+    assert data["scope_tier"] == "workspace"
+    assert data["expires_at"] is None
+    assert data["disabled_tools"] == ["complete_work"]
+    assert data["allowed_cidrs"] == ["10.0.0.0/8"]
+    key_id = data["id"]
+
+    # 2. List with surface filter
+    resp_list = await client.get("/api/v1/admin/mcp-keys?surface=agent&include_revoked=false")
+    assert resp_list.status_code == 200
+    assert any(k["id"] == key_id for k in resp_list.json())
+
+    # 3. Revoke via DELETE /api/v1/admin/mcp-keys/{id}
+    resp_del = await client.delete(f"/api/v1/admin/mcp-keys/{key_id}")
+    assert resp_del.status_code == 204
+
+    # 4. Revoke non-existent key returns 404
+    resp_del_nf = await client.delete("/api/v1/admin/mcp-keys/00000000-0000-0000-0000-000000000000")
+    assert resp_del_nf.status_code == 404
+
+    # 5. SERVER_ADMIN listing with scope_tier filter and revoking global key
+    server_admin = await make_user("global_sa", workspace_role="WORKSPACE_ADMIN")
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
+            "VALUES (:ws_id, :pid, 'SERVER_ADMIN', 'server', NULL)"
+        ),
+        {"ws_id": server_admin.workspace_id, "pid": server_admin.id},
+    )
+    await api_env.seed.execute(
+        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
+        {"p_id": server_admin.id, "blob": b"\x01" + b"\x00" * 28, "dek": b"\x01" + b"\x00" * 44},
+    )
+    res_totp = await api_env.seed.execute(
+        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
+        {"p_id": server_admin.id},
+    )
+    p_row = res_totp.mappings().first()
+    if p_row:
+        await api_env.seed.execute(
+            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
+            {"p_fid": p_row["id"]},
+        )
+    await api_env.seed.commit()
+
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=server_admin.id,
+        workspace_id=server_admin.workspace_id,
+        aal_level=2,
+    )
+    resp_global = await client.post(
+        "/api/v1/admin/mcp-keys",
+        json={
+            "surface": "agent",
+            "scopes": ["agent:read"],
+            "scope_tier": "global",
+            "owner_kind": "service_bot",
+        },
+    )
+    assert resp_global.status_code == 201
+    global_key_id = resp_global.json()["id"]
+
+    resp_list_global = await client.get("/api/v1/admin/mcp-keys?scope_tier=global")
+    assert resp_list_global.status_code == 200
+    assert any(k["id"] == global_key_id for k in resp_list_global.json())
+
+    # Regular admin cannot delete global key (404)
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=admin_user.id,
+        workspace_id=admin_user.workspace_id,
+        aal_level=2,
+    )
+    resp_del_denied = await client.delete(f"/api/v1/admin/mcp-keys/{global_key_id}")
+    assert resp_del_denied.status_code == 404
+
+    # Server admin can delete global key (204)
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=server_admin.id,
+        workspace_id=server_admin.workspace_id,
+        aal_level=2,
+    )
+    resp_del_allowed = await client.delete(f"/api/v1/admin/mcp-keys/{global_key_id}")
+    assert resp_del_allowed.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_personal_mcp_keys_api_lifecycle(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    contract_recorder: ContractRecorder,
+) -> None:
+    """Test personal self-service MCP key endpoints (mint, list, revoke, and authorization)."""
+    user_a = await make_user("user_a", workspace_role="WORKSPACE_MEMBER")
+    user_b = await make_user("user_b", workspace_role="WORKSPACE_MEMBER")
+
+    client = api_env.client
+
+    # 1. User A mints a personal MCP key
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=user_a.id,
+        workspace_id=user_a.workspace_id,
+        aal_level=1,
+    )
+    resp_mint = await client.post(
+        "/api/v1/auth/mcp-keys",
+        json={
+            "surface": "agent",
+            "scopes": ["agent:read"],
+            "scope_tier": "workspace",
+            "disabled_tools": ["complete_work"],
+        },
+    )
+    assert resp_mint.status_code == 201
+    contract_recorder.record("mint_personal_mcp_key_201", resp_mint.request, resp_mint)
+    mint_data = resp_mint.json()
+    key_id = mint_data["id"]
+    assert mint_data["owner_kind"] == "personal_user"
+    assert mint_data["disabled_tools"] == ["complete_work"]
+
+    # 2. User A lists their personal keys
+    resp_list = await client.get("/api/v1/auth/mcp-keys")
+    assert resp_list.status_code == 200
+    contract_recorder.record("list_personal_mcp_keys_200", resp_list.request, resp_list)
+    keys = resp_list.json()["keys"]
+    assert any(k["id"] == key_id for k in keys)
+
+    # 3. User B cannot see or revoke User A's key (404)
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=user_b.id,
+        workspace_id=user_b.workspace_id,
+        aal_level=1,
+    )
+    resp_b_list = await client.get("/api/v1/auth/mcp-keys")
+    assert not any(k["id"] == key_id for k in resp_b_list.json()["keys"])
+
+    resp_b_del = await client.delete(f"/api/v1/auth/mcp-keys/{key_id}")
+    assert resp_b_del.status_code == 404
+
+    # 4. User A revokes their key (204)
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=user_a.id,
+        workspace_id=user_a.workspace_id,
+        aal_level=1,
+    )
+    resp_del = await client.delete(f"/api/v1/auth/mcp-keys/{key_id}")
+    assert resp_del.status_code == 204
+    contract_recorder.record("revoke_personal_mcp_key_204", resp_del.request, resp_del)
+
+    # 5. Revoking non-existent key returns 404
+    resp_del_nf = await client.delete("/api/v1/auth/mcp-keys/00000000-0000-0000-0000-000000000000")
+    assert resp_del_nf.status_code == 404

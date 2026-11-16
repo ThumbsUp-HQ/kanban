@@ -80,6 +80,11 @@ describe('McpConfigSnippetModal direct unit tests', () => {
 
     // Switch tabs
     fireEvent.click(screen.getByTestId('tab-antigravity'));
+    const snippetBox = screen.getByTestId('snippet-code-box');
+    expect(snippetBox.textContent).toContain('serverUrl');
+    expect(snippetBox.textContent).toContain('headers');
+    expect(snippetBox.textContent).toContain('agy mcp add --header');
+
     fireEvent.click(screen.getByTestId('tab-claude'));
     fireEvent.click(screen.getByTestId('tab-gemini'));
 

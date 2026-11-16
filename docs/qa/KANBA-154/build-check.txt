@@ -1,0 +1,35 @@
+=== 1. RUFF CHECK ===
+All checks passed!
+
+=== 2. RUFF FORMAT CHECK ===
+16 files already formatted
+
+=== 3. MYPY STRICT ===
+Success: no issues found in 816 source files
+
+=== 4. IMPORT LINTER (LAYER INTEGRITY) ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 816 files, 2715 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT
+mcp forbidden from importing database KEPT (45 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+
+=== 5. ZERO SHELL=TRUE SECURITY AUDIT ===
+0 occurrences of shell=True found in scope

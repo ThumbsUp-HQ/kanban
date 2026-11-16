@@ -263,25 +263,28 @@ def pytest_configure(config: pytest.Config) -> None:
 
     socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     user = os.environ.get("KB_TEST_PGUSER", "kanban_test")
+    tmpl_db = os.environ.get("KB_TEST_TEMPLATE_DB", "kanban_template")
 
     if not check_pg_ready(socket_dir=socket_dir, user=user, timeout_seconds=10.0):
         pytest.exit(f"PG test server unavailable at {socket_dir}; run make testdb-up", returncode=3)
 
-    asyncio.run(ensure_template(socket_dir=socket_dir, user=user))
+    asyncio.run(ensure_template(socket_dir=socket_dir, user=user, template_db_name=tmpl_db))
 
 
 @pytest.fixture(scope="session")
 async def pg_worker_db(request: pytest.FixtureRequest) -> AsyncGenerator[AsyncEngine, None]:
     """Provide an isolated worker database cloned from golden kanban_template."""
     worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
-    db_name = f"kanban_test_{worker_id}"
+    prefix = os.environ.get("KB_TEST_DB_PREFIX", "kanban_test")
+    db_name = f"{prefix}_{worker_id}"
     socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     user = os.environ.get("KB_TEST_PGUSER", "kanban_test")
+    tmpl_db = os.environ.get("KB_TEST_TEMPLATE_DB", "kanban_template")
 
     admin_conn = await asyncpg.connect(user=user, database="postgres", host=socket_dir)
     try:
         await admin_conn.execute(f"DROP DATABASE IF EXISTS {db_name} WITH (FORCE)")
-        await admin_conn.execute(f"CREATE DATABASE {db_name} TEMPLATE kanban_template")
+        await admin_conn.execute(f"CREATE DATABASE {db_name} TEMPLATE {tmpl_db}")
     finally:
         await admin_conn.close()
 

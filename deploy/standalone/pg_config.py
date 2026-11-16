@@ -32,7 +32,7 @@ listen_addresses = ''
 unix_socket_directories = '{run_dir}'
 unix_socket_permissions = 0770
 unix_socket_group = 'kanban'
-shared_buffers = 128MB
+shared_buffers = 32MB
 fsync = on
 """
 

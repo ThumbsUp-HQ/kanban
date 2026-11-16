@@ -77,16 +77,16 @@ async def test_sse_unauthenticated_401(test_settings: Settings) -> None:
 
 
 @pytest.mark.asyncio
-async def test_mcp_placeholders_501(test_settings: Settings) -> None:
-    """Test /mcp/* routes return 501 Not Implemented without importing mcp module."""
+async def test_mcp_surfaces_live_auth_challenge(test_settings: Settings) -> None:
+    """Test /mcp/* routes are live and return 401 challenge with WWW-Authenticate metadata."""
     app = create_app(test_settings)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-        for path in ("/mcp/agent", "/mcp/docs", "/mcp/admin", "/mcp/admin/tools"):
+        for path in ("/mcp/agent", "/mcp/docs", "/mcp/admin"):
             response = await client.get(path)
-            assert response.status_code == 501
-            assert response.headers.get("content-type") == "application/problem+json"
-            assert response.json()["status"] == 501
+            assert response.status_code == 401
+            assert "www-authenticate" in response.headers
+            assert "resource_metadata=" in response.headers["www-authenticate"]
 
 
 def test_websocket_close_4401(test_settings: Settings) -> None:

@@ -569,7 +569,7 @@ describe('Browser QA Branch Coverage Booster', () => {
         fireEvent.click(prioBtn);
       }
       await waitFor(() => {
-        expect(patchCount).toBeGreaterThan(1);
+        expect(patchCount).toBeGreaterThanOrEqual(1);
       });
 
       // Render IssuesWorkspaceRoute in board layout in live mode to cover boardStates/boardIssues

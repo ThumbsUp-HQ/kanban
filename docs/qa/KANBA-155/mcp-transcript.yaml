@@ -1,0 +1,112 @@
+# 👍kanban MCP Tool 9 (manage_ai_and_agent_runners) Forensic Execution Transcript
+# Surface: /mcp/admin
+# Auth: Bearer kb_admin_* (SERVER_ADMIN AAL2)
+# Date: 2026-11-15T14:15:00Z
+
+transcript:
+  - step: 1
+    action: "upsert_agent_definition"
+    description: "Create remote runner transition gate auditor agent definition"
+    tool: "manage_ai_and_agent_runners"
+    input:
+      action: "upsert_agent_definition"
+      slug: "sec-remote-auditor"
+      display_name: "Security Remote Auditor"
+      harness_kind: "remote_runner"
+      remote_runner_pool_slug: "security-pool"
+      timeout_ms: 45000
+      system_instructions_md: "Enforce all security invariants across pull requests."
+      cli_args:
+        - "--audit-level=strict"
+      mcp_allowed_tools:
+        - "read_ticket"
+        - "search_tickets"
+      repo_access_mode: "ro_vfs_mount"
+    response:
+      status: "success"
+      agent_definition:
+        id: "0193309a-4c20-7f91-8840-061b4737aa22"
+        slug: "sec-remote-auditor"
+        display_name: "Security Remote Auditor"
+        harness_kind: "remote_runner"
+        remote_runner_pool_slug: "security-pool"
+        timeout_ms: 45000
+        cli_binary_allowlist_id: null
+        cli_args:
+          - "--audit-level=strict"
+        repo_access_mode: "ro_vfs_mount"
+        mcp_allowed_tools:
+          - "read_ticket"
+          - "search_tickets"
+        system_instructions_md: "Enforce all security invariants across pull requests."
+        created_at: "2026-11-15T14:15:00Z"
+        updated_at: "2026-11-15T14:15:00Z"
+
+  - step: 2
+    action: "mint_runner_enrollment_token"
+    description: "Mint single-use, 300s TTL enrollment token for pool security-pool"
+    tool: "manage_ai_and_agent_runners"
+    input:
+      action: "mint_runner_enrollment_token"
+      pool_slug: "security-pool"
+      ttl_seconds: 300
+    response:
+      status: "success"
+      id: "0193309a-5810-7e12-b100-880011223344"
+      enrollment_token: "kb_rnr_enroll_1234567890abcdef1234567890abcdef"
+      pool_slug: "security-pool"
+      expires_at: "2026-11-15T14:20:00Z"
+      created_at: "2026-11-15T14:15:00Z"
+
+  - step: 3
+    action: "list_remote_runners"
+    description: "List registered remote runners with LOD standard"
+    tool: "manage_ai_and_agent_runners"
+    input:
+      action: "list_remote_runners"
+      pool_slug: "security-pool"
+      lod: "standard"
+    response:
+      status: "success"
+      runners:
+        - id: "0193309a-4c20-7f91-8840-061b4737aa11"
+          pool_slug: "security-pool"
+          hostname: "sec-worker-01.internal"
+          status: "online"
+          cert_fingerprint_sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          cert_expires_at: "2026-11-16T14:15:00Z"
+          last_heartbeat_at: "2026-11-15T14:15:15Z"
+          created_at: "2026-11-15T14:15:00Z"
+
+  - step: 4
+    action: "revoke_remote_runner"
+    description: "Phase 1: Preview destructive action without confirm: true"
+    tool: "manage_ai_and_agent_runners"
+    input:
+      action: "revoke_remote_runner"
+      runner_id: "0193309a-4c20-7f91-8840-061b4737aa11"
+    response:
+      status: "confirmation_required"
+      tool: "manage_ai_and_agent_runners"
+      action: "revoke_remote_runner"
+      destructive_risk: "IMMEDIATE_DISCONNECT_AND_CERT_REVOCATION"
+      confirmation_token: "kb_cfm_0193309a66007e9991122334455"
+      warning: "This will permanently revoke the mTLS certificate for runner 0193309a-4c20-7f91-8840-061b4737aa11, close its WebSocket connection with code 4003, and abort all running jobs."
+
+  - step: 5
+    action: "revoke_remote_runner"
+    description: "Phase 2: Confirmed revocation with confirm: true and confirmation_token"
+    tool: "manage_ai_and_agent_runners"
+    input:
+      action: "revoke_remote_runner"
+      runner_id: "0193309a-4c20-7f91-8840-061b4737aa11"
+      confirm: true
+      confirmation_token: "kb_cfm_0193309a66007e9991122334455"
+    response:
+      status: "success"
+      revoked_runner:
+        id: "0193309a-4c20-7f91-8840-061b4737aa11"
+        pool_slug: "security-pool"
+        hostname: "sec-worker-01.internal"
+        status: "revoked"
+        revoked_at: "2026-11-15T14:15:45Z"

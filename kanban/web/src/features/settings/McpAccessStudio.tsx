@@ -15,13 +15,58 @@ import {
 } from './settingsApi';
 import { McpConfigSnippetModal } from './McpConfigSnippetModal';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { useSystemStatus } from '../../app/useSystemStatus';
 import './McpAccessStudio.css';
+
+export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]> = {
+  agent: [
+    'ping_agent',
+    'search_tickets',
+    'read_ticket',
+    'create_ticket',
+    'update_ticket',
+    'begin_work',
+    'transition_ticket',
+    'complete_work',
+    'add_comment',
+    'link_objects',
+  ],
+  docs: [
+    'ping_docs',
+    'search_docs',
+    'search_knowledge',
+    'read_doc',
+    'create_doc',
+    'update_doc',
+    'upsert_doc',
+    'manage_stickies',
+    'promote_sticky_to_doc',
+    'link_knowledge',
+  ],
+  admin: [
+    'manage_principals_and_groups',
+    'manage_access_policies',
+    'audit_links',
+    'override_ticket_provenance',
+    'audit_and_purge_object_links',
+    'manage_ai_and_agent_runners',
+    'destructive_lifecycle',
+  ],
+};
 
 export interface McpAccessStudioProps {
   tier?: ('personal' | 'project' | 'workspace' | 'global') | undefined;
+  allowUnlimitedKeys?: boolean | undefined;
 }
 
-export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JSX.Element {
+export function McpAccessStudio({
+  tier = 'personal',
+  allowUnlimitedKeys,
+}: McpAccessStudioProps): JSX.Element {
+  const systemStatusQuery = useSystemStatus();
+  const allowUnlimited =
+    allowUnlimitedKeys ?? systemStatusQuery.data?.allow_unlimited_mcp_keys ?? true;
+
   const { projectKey = 'KANBA' } = useParams<{ projectKey?: string }>();
   const [keys, setKeys] = useState<McpApiKeyItem[]>([]);
   const [connectedApps, setConnectedApps] = useState<OAuthConnectedApp[]>([]);
@@ -32,6 +77,9 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
   const [newKeyLabel, setNewKeyLabel] = useState<string>('');
   const [newKeySurface, setNewKeySurface] = useState<'agent' | 'docs' | 'admin'>('agent');
   const [newKeyExpiry, setNewKeyExpiry] = useState<number>(60);
+  const [isUnlimited, setIsUnlimited] = useState<boolean>(false);
+  const [confirmUnlimited, setConfirmUnlimited] = useState<boolean>(false);
+  const [disabledTools, setDisabledTools] = useState<string[]>([]);
   const [minting, setMinting] = useState<boolean>(false);
 
   // Snippet modal state (ephemeral secret)
@@ -72,14 +120,20 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
     if (!newKeyLabel.trim()) {
       return;
     }
+    if (isUnlimited && !confirmUnlimited) {
+      return;
+    }
     setMinting(true);
     try {
       const minted = await mintPersonalMcpKey({
         label: newKeyLabel.trim(),
         surface: newKeySurface,
         scopes: [`${newKeySurface}:read`, `${newKeySurface}:write`],
-        allowed_projects: tier === 'project' ? [projectKey] : undefined,
-        expires_in_days: newKeyExpiry,
+        ...(tier === 'project' ? { allowed_projects: [projectKey] } : {}),
+        ...(isUnlimited
+          ? { unlimited: true, confirm_unlimited: confirmUnlimited }
+          : { expires_in_days: newKeyExpiry }),
+        ...(disabledTools.length > 0 ? { disabled_tools: disabledTools } : {}),
       });
 
       // Update keys table (table receives key item with display_hint only)
@@ -90,6 +144,10 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
       setShowMintModal(false);
       setShowSnippetModal(true);
       setNewKeyLabel('');
+      setIsUnlimited(false);
+      setConfirmUnlimited(false);
+      setDisabledTools([]);
+      setNewKeyExpiry(60);
     } catch {
       // Handle error
     } finally {
@@ -193,6 +251,7 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
                 <th className="kb-mcp-th">Key Hint</th>
                 <th className="kb-mcp-th">Scope Tier</th>
                 <th className="kb-mcp-th">Surface</th>
+                <th className="kb-mcp-th">Expires</th>
                 <th className="kb-mcp-th">Status</th>
                 <th className="kb-mcp-th">Actions</th>
               </tr>
@@ -200,7 +259,7 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
             <tbody>
               {keys.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={6} className="kb-mcp-empty-state">
+                  <td colSpan={7} className="kb-mcp-empty-state">
                     No active MCP keys configured. Click "+ Mint MCP Key" to create one.
                   </td>
                 </tr>
@@ -222,6 +281,15 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
                     </td>
                     <td className="kb-mcp-td">{getTierBadge(k.scope_tier)}</td>
                     <td className="kb-mcp-td">{k.surface.toUpperCase()}</td>
+                    <td className="kb-mcp-td" data-testid={`key-expires-${k.id}`}>
+                      {k.expires_at ? (
+                        new Date(k.expires_at).toLocaleDateString()
+                      ) : (
+                        <span className="kb-mcp-unlimited-pill" data-testid={`key-unlimited-${k.id}`}>
+                          Never (Unlimited)
+                        </span>
+                      )}
+                    </td>
                     <td className="kb-mcp-td">
                       {isRevoked ? (
                         <span className="kb-mcp-status-revoked" data-testid="status-revoked">Revoked</span>
@@ -430,6 +498,7 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
                   value={newKeySurface}
                   onChange={(e) => {
                     setNewKeySurface(e.target.value as 'agent' | 'docs' | 'admin');
+                    setDisabledTools([]);
                   }}
                 >
                   <option value="agent">/mcp/agent (Standard Tools)</option>
@@ -446,16 +515,78 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
                   id="mint-expiry-select"
                   className="kb-mcp-form-select"
                   data-testid="mint-expiry-select"
-                  value={newKeyExpiry}
+                  value={isUnlimited ? 'unlimited' : newKeyExpiry}
                   onChange={(e) => {
-                    setNewKeyExpiry(Number(e.target.value));
+                    if (e.target.value === 'unlimited') {
+                      setIsUnlimited(true);
+                    } else {
+                      setIsUnlimited(false);
+                      setNewKeyExpiry(Number(e.target.value));
+                      setConfirmUnlimited(false);
+                    }
                   }}
                 >
                   <option value={30}>30 Days</option>
                   <option value={60}>60 Days</option>
                   <option value={90}>90 Days</option>
                   <option value={365}>1 Year</option>
+                  {allowUnlimited && (
+                    <option value="unlimited" data-testid="option-unlimited">
+                      Unlimited (not recommended)
+                    </option>
+                  )}
                 </select>
+              </div>
+
+              {isUnlimited && (
+                <div
+                  className="kb-mcp-unlimited-warning"
+                  data-testid="unlimited-warning-box"
+                  data-test-banner="unlimited-warning-banner"
+                >
+                  <p className="kb-mcp-warning-text">
+                    ⚠️ <strong>Are you sure?</strong> Unlimited keys never expire. This poses a significant security risk if the token is leaked or compromised.
+                  </p>
+                  <label className="kb-mcp-confirm-unlimited-label">
+                    <input
+                      type="checkbox"
+                      data-testid="confirm-unlimited-checkbox"
+                      checked={confirmUnlimited}
+                      onChange={(e) => {
+                        setConfirmUnlimited(e.target.checked);
+                      }}
+                    />
+                    <span>I understand the security risk and confirm creating an unlimited key</span>
+                  </label>
+                </div>
+              )}
+
+              <div className="kb-mcp-form-row">
+                <label className="kb-mcp-form-label">
+                  Narrow Tools (Disable specific capabilities):
+                </label>
+                <div className="kb-mcp-tools-grid" data-testid="tools-selection-grid">
+                  {SURFACE_TOOLS[newKeySurface].map((toolName) => {
+                    const isDisabled = disabledTools.includes(toolName);
+                    return (
+                      <label key={toolName} className="kb-mcp-tool-checkbox-label">
+                        <input
+                          type="checkbox"
+                          data-testid={`disable-tool-${toolName}`}
+                          checked={isDisabled}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setDisabledTools([...disabledTools, toolName]);
+                            } else {
+                              setDisabledTools(disabledTools.filter((t) => t !== toolName));
+                            }
+                          }}
+                        />
+                        <span><code>{toolName}</code> (disable)</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="kb-mcp-form-actions">
@@ -464,6 +595,9 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
                   className="kb-snippet-copy-btn"
                   onClick={() => {
                     setShowMintModal(false);
+                    setIsUnlimited(false);
+                    setConfirmUnlimited(false);
+                    setDisabledTools([]);
                   }}
                 >
                   Cancel
@@ -472,7 +606,7 @@ export function McpAccessStudio({ tier = 'personal' }: McpAccessStudioProps): JS
                   type="submit"
                   className="kb-snippet-done-btn"
                   data-testid="mint-submit-btn"
-                  disabled={minting || !newKeyLabel.trim()}
+                  disabled={minting || !newKeyLabel.trim() || (isUnlimited && !confirmUnlimited)}
                 >
                   {minting ? 'Minting...' : 'Mint Key'}
                 </button>

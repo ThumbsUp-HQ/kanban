@@ -1,0 +1,19 @@
+slug: agy-gate
+display_name: "Antigravity CLI Transition Gate"
+harness_kind: cli_pipe
+cli_binary_allowlist_id: agy
+cli_args:
+  - "-p"
+repo_access_mode: ro_vfs_mount
+mcp_allowed_tools:
+  - search_tickets
+  - read_ticket
+  - search_knowledge
+  - read_doc
+allowed_mutable_fields:
+  - labels
+  - priority
+system_instructions_md: |
+  You are an automated code quality and architecture transition gate reviewer.
+  Inspect diffs and specifications to determine if the ticket satisfies definition of done.
+timeout_ms: 60000

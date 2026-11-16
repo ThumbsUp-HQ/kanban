@@ -11,6 +11,12 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException
 from kanban.api.timing import timing_floor
 from kanban.api.v1.schemas.issues import IssueCreate, IssueList, IssuePatch, IssueResponse
+from kanban.security.read_taint import (
+    TaintGuard,
+    TaintRecorder,
+    get_taint_guard,
+    get_taint_recorder,
+)
 from kanban.services import issues as svc
 
 router = APIRouter(tags=["issues"])
@@ -51,6 +57,7 @@ async def get_issue(  # noqa: PLR0913, PLR0917
     session: Session,
     response: Response,
     request: Request,
+    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
     workspace: Annotated[str | None, Query(description="Optional workspace slug or UUID")] = None,
     if_none_match: Annotated[str | None, Header()] = None,
 ) -> IssueResponse | Response:
@@ -58,6 +65,7 @@ async def get_issue(  # noqa: PLR0913, PLR0917
     workspace_ref = workspace or request.headers.get("x-kb-scope-workspace")
     async with timing_floor(floor_ms=25.0):
         issue = await svc.get_issue_or_404(session, caller, issue_key, workspace_ref=workspace_ref)
+        await taint_recorder.record_project_ids([issue.project_id])
         sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
         etag = f'"{sha256_hex}"'
 
@@ -84,10 +92,13 @@ async def patch_issue(  # noqa: PLR0913, PLR0917
     caller: Caller,
     session: Session,
     response: Response,
+    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> IssueResponse:
     """Update issue fields under description ETag concurrency check."""
     async with timing_floor(floor_ms=25.0):
+        issue = await svc.get_issue_or_404(session, caller, issue_key)
+        await taint_guard.check_write(issue.project_id, tool_name="update_ticket")
         result, new_etag = await svc.update_issue(session, caller, issue_key, body, if_match)
         response.headers["ETag"] = new_etag
         return result
@@ -102,6 +113,7 @@ async def list_issues(  # noqa: PLR0913
     project_ref: str,
     caller: Caller,
     session: Session,
+    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
     *,
     cursor: Annotated[str | None, Query(max_length=64)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -117,7 +129,7 @@ async def list_issues(  # noqa: PLR0913
             detail="Cannot filter only_archived=true when include_archived=false",
         )
     async with timing_floor(floor_ms=25.0):
-        return await svc.list_issues(
+        res = await svc.list_issues(
             session,
             caller,
             project_ref,
@@ -126,3 +138,5 @@ async def list_issues(  # noqa: PLR0913
             include_archived=include_archived,
             only_archived=only_archived,
         )
+        await taint_recorder.record_project_ids([project_ref])
+        return res

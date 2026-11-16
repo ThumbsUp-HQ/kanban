@@ -1,0 +1,19 @@
+=== Backend Ruff Lint Check (All KANBA-176 Files) ===
+Command: uv run ruff check kanban/api/v1/admin/auth_cards.py kanban/api/v1/admin/principals.py kanban/admin/principal_service.py kanban/auth/oidc/config.py kanban/auth/oidc/flow.py kanban/auth/ldap/config.py kanban/auth/ldap/service.py kanban/auth/local/service.py kanban/auth/identity_service.py kanban/tests/auth/test_auth_use_cases.py
+Output: All checks passed!
+
+=== Web ESLint Check (All KANBA-176 Files) ===
+Command: cd kanban/web && npx eslint src/features/admin-auth/AuthCardEditorDrawer.tsx src/features/admin-auth/AuthStudioPage.tsx src/features/admin-auth/adminAuthApi.ts src/features/admin-auth/AuthCardEditorDrawer.test.tsx src/features/admin-auth/AuthStudioPage.test.tsx
+Output: All checks passed! (0 errors, 0 warnings)
+
+=== Web Production Build Check (Vite) ===
+Command: cd kanban/web && pnpm run build
+Output:
+vite v8.3.8 building client environment for production...
+✓ 639 modules transformed.
+rendering chunks (1)...computing gzip size...
+dist/index.html                             0.39 kB │ gzip:   0.27 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-CinjamPR.css            235.21 kB │ gzip:  35.01 kB
+dist/assets/index-BcKSHK_X.js           1,495.74 kB │ gzip: 427.64 kB
+✓ built in 1.40s

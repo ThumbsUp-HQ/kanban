@@ -60,6 +60,8 @@ CSRF_EXEMPT_PATHS: Final[tuple[str, ...]] = (
     # Internal MCP introspection
     "/internal/v1/mcp/introspect",
     "/internal/mcp/introspect",
+    # Headless machine endpoints
+    "/api/v1/agent-runners/enroll",
 )
 
 

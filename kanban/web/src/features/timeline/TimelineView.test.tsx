@@ -790,4 +790,49 @@ describe('TimelineView', () => {
 
     expect(screen.getByRole('status').textContent).toContain('rolled back');
   });
+
+  it('verifies timeline date column spacing classes, vertical gridlines, and quarter grouped headers (KANBA-173)', () => {
+    const { container } = render(
+      <TimelineView
+        issues={TEST_ISSUES}
+        projectKey="KAN"
+        initialZoom="day"
+        initialStartDate="2026-11-01"
+        today="2026-11-12"
+      />
+    );
+
+    // In 'day' mode, cells have timeline-scale-cell--day and canvas has timeline-right-canvas--day
+    const dayCanvas = container.querySelector('.timeline-right-canvas');
+    expect(dayCanvas?.classList.contains('timeline-right-canvas--day')).toBe(true);
+    const dayCells = container.querySelectorAll('.timeline-scale-cell--day');
+    expect(dayCells.length).toBeGreaterThan(0);
+    // Zero style attribute on scale cells (CSP strict)
+    expect(dayCells[0]?.getAttribute('style')).toBeNull();
+
+    // Switch to 'week' mode
+    const weekBtn = screen.getByRole('radio', { name: /^week$/i });
+    fireEvent.click(weekBtn);
+    expect(dayCanvas?.classList.contains('timeline-right-canvas--week')).toBe(true);
+    const weekCells = container.querySelectorAll('.timeline-scale-cell--week');
+    expect(weekCells.length).toBeGreaterThan(0);
+    expect(weekCells[0]?.getAttribute('style')).toBeNull();
+
+    // Switch to 'quarter' mode
+    const quarterBtn = screen.getByRole('radio', { name: /^quarter$/i });
+    fireEvent.click(quarterBtn);
+    expect(dayCanvas?.classList.contains('timeline-right-canvas--quarter')).toBe(true);
+    const quarterCells = container.querySelectorAll('.timeline-scale-cell--quarter');
+    expect(quarterCells.length).toBeGreaterThan(0);
+    expect(quarterCells[0]?.getAttribute('style')).toBeNull();
+
+    // In quarter mode, grouped headers avoid running dates together
+    // 2026-11-01 should show month abbreviation 'Nov'
+    const novCell = container.querySelector('[data-date="2026-11-01"]');
+    expect(novCell?.textContent.trim()).toBe('Nov');
+
+    // Day 2 (not day 1 or modulo 7 == 1) should have empty label to prevent collision
+    const emptyCell = container.querySelector('[data-date="2026-11-02"]');
+    expect(emptyCell?.textContent.trim()).toBe('');
+  });
 });

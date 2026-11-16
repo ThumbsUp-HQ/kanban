@@ -154,7 +154,8 @@ async def problem_exception_handler(
     """Format an explicit ProblemException into application/problem+json."""
     del request
     req_id = get_request_id()
-    extra_fields = exc.extra or {}
+    extra_fields = dict(exc.extra or {})
+    extra_field = extra_fields.pop("field", None)
     problem = Problem(
         type=exc.type_uri or f"urn:kanban:problem:{exc.code}",
         title=exc.title,
@@ -164,7 +165,7 @@ async def problem_exception_handler(
         request_id=req_id,
         errors=exc.errors,
         current_etag=exc.current_etag,
-        field=exc.field,
+        field=exc.field or extra_field,
         candidates=exc.candidates,
         unauthorized_mentions=exc.unauthorized_mentions,
         state_group=exc.state_group,

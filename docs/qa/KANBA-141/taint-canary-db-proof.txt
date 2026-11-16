@@ -1,0 +1,40 @@
+================================================================================
+FORENSIC EVIDENCE: TAINT CANARY EXFILTRATION DEFENSE AUDIT (KB-P4-07)
+================================================================================
+Timestamp: 2026-11-16T00:26:37.314725+00:00
+Workspace ID: 01a1e1bf-a8d0-7222-a5dc-d28111caee23
+Restricted Project (SEC): 01a1e1bf-a8e3-7805-b35b-4f0ea6970596
+Public Project (PUB): 01a1e1bf-a8de-70bc-93ec-a801a0596e7f
+Canary String: CANARY-7f3a
+
+--------------------------------------------------------------------------------
+QUERY 1: Assert 0 comments containing secret canary in public or restricted issues
+--------------------------------------------------------------------------------
+SQL: SELECT id, workspace_id, issue_id, author_id, body_markdown, created_at
+     FROM issue_comments WHERE body_markdown LIKE '%CANARY-7f3a%';
+Result row count: 0
+(0 rows returned - canary leak prevented)
+
+--------------------------------------------------------------------------------
+QUERY 2: Audit log showing MCP_TAINT_BLOCKED security events
+--------------------------------------------------------------------------------
+SQL: SELECT id, workspace_id, actor_principal_id, event_type, payload, created_at
+     FROM activity_records WHERE event_type = 'MCP_TAINT_BLOCKED' ORDER BY created_at ASC;
+Result row count: 2
+  - Event: MCP_TAINT_BLOCKED | Actor: 01a1e1bf-a8d1-725f-8bce-d48ad6688b04 | Target Object: 01a1e1bf-a8d0-7222-a5dc-d28111caee23 | Created: 2026-11-16 00:26:37.157328+00:00
+    Payload: {'tool': 'add_comment', 'tool_name': 'add_comment', 'session_key_hash': 'a1e9f085b8fa92a3213ef5fc0a985a7dc5f50fc0d3d43a24af53d23d67a719de', 'source_project_id': '01a1e1bf-a8e3-7805-b35b-4f0ea6970596', 'target_project_id': '01a1e1bf-a8de-70bc-93ec-a801a0596e7f'}
+  - Event: MCP_TAINT_BLOCKED | Actor: 01a1e1bf-a8d1-725f-8bce-d48ad6688b04 | Target Object: 01a1e1bf-a8d0-7222-a5dc-d28111caee23 | Created: 2026-11-16 00:26:37.232537+00:00
+    Payload: {'tool': 'add_comment', 'tool_name': 'add_comment', 'session_key_hash': 'fc39ce3238005463dc14712242b9040dc924e5970dbdc1d15c695b4950614a63', 'source_project_id': '01a1e1bf-a8e3-7805-b35b-4f0ea6970596', 'target_project_id': '01a1e1bf-a8de-70bc-93ec-a801a0596e7f'}
+
+--------------------------------------------------------------------------------
+QUERY 3: mcp_read_taint table records (session and credential taints)
+--------------------------------------------------------------------------------
+SQL: SELECT encode(taint_key, 'hex') AS taint_key_hex, key_kind, project_id, first_read_at, expires_at
+     FROM mcp_read_taint WHERE project_id = :proj_sec_id;
+Result row count: 2
+  - Key Kind: session | Taint Key SHA256: 05c812880ef436a5... | Project: 01a1e1bf-a8e3-7805-b35b-4f0ea6970596 | Expires: 2026-11-16 01:26:37.008935+00:00
+  - Key Kind: credential | Taint Key SHA256: 9472ca479c7c775f... | Project: 01a1e1bf-a8e3-7805-b35b-4f0ea6970596 | Expires: 2026-11-16 08:26:37.008935+00:00
+
+================================================================================
+AUDIT VERDICT: PASS - EXFILTRATION BLOCKED, ZERO LEAKS, AUDIT LOGS RECORDED
+================================================================================

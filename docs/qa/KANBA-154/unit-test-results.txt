@@ -1,0 +1,87 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p5-154-ba6133af/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p5-154-ba6133af
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 64 items
+
+kanban/tests/repos/test_mirror_manager.py::test_fake_runner_records_calls_and_isolated_env PASSED [  1%]
+kanban/tests/repos/test_mirror_manager.py::test_fetch_called_when_mirror_head_exists PASSED [  3%]
+kanban/tests/repos/test_mirror_manager.py::test_credential_decryption_and_zeroization_https PASSED [  4%]
+kanban/tests/repos/test_mirror_manager.py::test_credential_decryption_and_zeroization_ssh PASSED [  6%]
+kanban/tests/repos/test_mirror_manager.py::test_git_execution_failure_records_error PASSED [  7%]
+kanban/tests/repos/test_mirror_manager.py::test_git_timeout_handling PASSED [  9%]
+kanban/tests/repos/test_mirror_manager.py::test_mirror_size_limit_enforcement PASSED [ 10%]
+kanban/tests/repos/test_mirror_manager.py::test_real_git_clone_and_fetch_with_canary_hook_defense PASSED [ 12%]
+kanban/tests/repos/test_repo_bindings_api.py::test_create_repo_binding_admin_aal2_success PASSED [ 14%]
+kanban/tests/repos/test_repo_bindings_api.py::test_member_gets_404_anti_enumeration PASSED [ 15%]
+kanban/tests/repos/test_repo_bindings_api.py::test_aal1_admin_rejected_with_403_aal2_required PASSED [ 17%]
+kanban/tests/repos/test_repo_bindings_api.py::test_rejected_malicious_refs_and_urls PASSED [ 18%]
+kanban/tests/repos/test_repo_bindings_api.py::test_refresh_and_delete_repo_binding PASSED [ 20%]
+kanban/tests/repos/test_repo_bindings_api.py::test_delete_returns_409_when_in_use_by_hook PASSED [ 21%]
+kanban/tests/repos/test_repo_bindings_api.py::test_duplicate_slug_rejected_with_409 PASSED [ 23%]
+kanban/tests/repos/test_repo_bindings_api.py::test_nonexistent_binding_operations_return_404 PASSED [ 25%]
+kanban/tests/repos/test_repo_bindings_api.py::test_mirror_failure_handled_gracefully PASSED [ 26%]
+kanban/tests/repos/test_repo_bindings_api.py::test_refresh_or_delete_by_non_admin_returns_404 PASSED [ 28%]
+kanban/tests/repos/test_repo_bindings_api.py::test_schema_validators_and_get_kek PASSED [ 29%]
+kanban/tests/repos/test_url_policy.py::test_validate_valid_https_url PASSED [ 31%]
+kanban/tests/repos/test_url_policy.py::test_validate_valid_scp_ssh_url PASSED [ 32%]
+kanban/tests/repos/test_url_policy.py::test_validate_valid_ssh_custom_port PASSED [ 34%]
+kanban/tests/repos/test_url_policy.py::test_reject_empty_or_whitespace_only PASSED [ 35%]
+kanban/tests/repos/test_url_policy.py::test_reject_option_injection PASSED [ 37%]
+kanban/tests/repos/test_url_policy.py::test_reject_control_characters_or_whitespace PASSED [ 39%]
+kanban/tests/repos/test_url_policy.py::test_reject_too_long PASSED       [ 40%]
+kanban/tests/repos/test_url_policy.py::test_reject_disallowed_schemes[file:///etc/passwd-SCHEME_FILE_DISALLOWED] PASSED [ 42%]
+kanban/tests/repos/test_url_policy.py::test_reject_disallowed_schemes[ext::sh -c evil-SCHEME_EXT_DISALLOWED] PASSED [ 43%]
+kanban/tests/repos/test_url_policy.py::test_reject_disallowed_schemes[fd::123-SCHEME_FD_DISALLOWED] PASSED [ 45%]
+kanban/tests/repos/test_url_policy.py::test_reject_disallowed_schemes[git://github.com/repo.git-SCHEME_GIT_DISALLOWED] PASSED [ 46%]
+kanban/tests/repos/test_url_policy.py::test_reject_disallowed_schemes[http://github.com/repo.git-INSECURE_HTTP_SCHEME] PASSED [ 48%]
+kanban/tests/repos/test_url_policy.py::test_reject_disallowed_schemes[ftp://ftp.example.com/repo.git-DISALLOWED_SCHEME] PASSED [ 50%]
+kanban/tests/repos/test_url_policy.py::test_reject_disallowed_schemes[ftps://ftp.example.com/repo.git-DISALLOWED_SCHEME] PASSED [ 51%]
+kanban/tests/repos/test_url_policy.py::test_reject_disallowed_schemes[gopher://gopher.example.com/1-DISALLOWED_SCHEME] PASSED [ 53%]
+kanban/tests/repos/test_url_policy.py::test_reject_embedded_credentials PASSED [ 54%]
+kanban/tests/repos/test_url_policy.py::test_reject_missing_host PASSED   [ 56%]
+kanban/tests/repos/test_url_policy.py::test_reject_host_resolution_failed PASSED [ 57%]
+kanban/tests/repos/test_url_policy.py::test_reject_invalid_resolved_ip PASSED [ 59%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[127.0.0.1-LOOPBACK_ADDRESS_FORBIDDEN] PASSED [ 60%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[127.0.0.2-LOOPBACK_ADDRESS_FORBIDDEN] PASSED [ 62%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[::1-LOOPBACK_ADDRESS_FORBIDDEN] PASSED [ 64%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[::ffff:127.0.0.1-LOOPBACK_ADDRESS_FORBIDDEN] PASSED [ 65%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[169.254.169.254-METADATA_OR_LINK_LOCAL_ADDRESS] PASSED [ 67%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[169.254.1.1-METADATA_OR_LINK_LOCAL_ADDRESS] PASSED [ 68%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[fd00:ec2::254-METADATA_OR_LINK_LOCAL_ADDRESS] PASSED [ 70%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[fe80::1-METADATA_OR_LINK_LOCAL_ADDRESS] PASSED [ 71%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[10.0.0.1-RFC1918_ADDRESS_FORBIDDEN] PASSED [ 73%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[172.16.5.10-RFC1918_ADDRESS_FORBIDDEN] PASSED [ 75%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[192.168.1.1-RFC1918_ADDRESS_FORBIDDEN] PASSED [ 76%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[224.0.0.1-DISALLOWED_IP_RANGE] PASSED [ 78%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[0.0.0.0-DISALLOWED_IP_RANGE] PASSED [ 79%]
+kanban/tests/repos/test_url_policy.py::test_ssrf_forbidden_ips[240.0.0.1-DISALLOWED_IP_RANGE] PASSED [ 81%]
+kanban/tests/repos/test_url_policy.py::test_allowed_cidrs_permits_private_ip PASSED [ 82%]
+kanban/tests/repos/test_url_policy.py::test_air_gap_mode_enforcement PASSED [ 84%]
+kanban/tests/repos/test_url_policy.py::test_classify_ip_address_direct PASSED [ 85%]
+kanban/tests/repos/test_url_policy.py::test_resolve_host_ips_helper PASSED [ 87%]
+mcp/tests/admin/test_bind_project_repo.py::test_mcp_bind_project_repo_lifecycle PASSED [ 89%]
+mcp/tests/admin/test_bind_project_repo.py::test_mcp_bind_project_repo_rejections PASSED [ 90%]
+mcp/tests/admin/test_bind_project_repo.py::test_mcp_bind_project_repo_dns_rebinding_pinned PASSED [ 92%]
+agent/tests/context/test_repo_context.py::test_resolve_repo_context_success PASSED [ 93%]
+agent/tests/context/test_repo_context.py::test_resolve_repo_context_explicit_ref PASSED [ 95%]
+agent/tests/context/test_repo_context.py::test_resolve_repo_context_git_failure_raises PASSED [ 96%]
+agent/tests/context/test_repo_context.py::test_resolve_repo_context_invalid_commit_format_raises PASSED [ 98%]
+agent/tests/context/test_repo_context.py::test_resolve_repo_context_real_git PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+agent/context/repo_context.py       35      0      4      0   100%
+kanban/api/v1/repo_bindings.py     184      6     38      6    95%   294, 353, 365, 421, 439, 442
+kanban/repos/__init__.py             3      0      0      0   100%
+kanban/repos/mirror.py             180      8     42      3    95%   102-105, 181, 269-271, 373->378, 375->378
+kanban/repos/url_policy.py         168      3     64      3    97%   94->91, 134, 137-138, 264->243
+----------------------------------------------------------------------------
+TOTAL                              570     17    148     12    96%
+Required test coverage of 95% reached. Total coverage: 95.96%
+============================== 64 passed in 5.16s ==============================

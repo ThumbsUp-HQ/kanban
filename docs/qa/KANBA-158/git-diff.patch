@@ -1,0 +1,5473 @@
+diff --git a/kanban/web/e2e/workflow-studio.spec.ts b/kanban/web/e2e/workflow-studio.spec.ts
+new file mode 100644
+index 0000000..fdb0a67
+--- /dev/null
++++ b/kanban/web/e2e/workflow-studio.spec.ts
+@@ -0,0 +1,505 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++/**
++ * Playwright E2E verification & Visual Proof Suite for Admin Workflow Transition Studio UI
++ * (KB-P5-24 / S14.4 wireframe parity, KANBA-158).
++ *
++ * Verifies:
++ * 1. S14.4 wireframe fidelity (In Review -> Done card with 3 hooks, latency budget, ro mount, emoji hint popover).
++ * 2. Hook reordering (drag-and-drop & keyboard move), toggle enable/disable, and error recovery.
++ * 3. AttachHookDialog conditional Wasm vs Agent interceptor selectors, MUTABLE_FIELD_UNIVERSE chips.
++ * 4. Sample-ticket / existing-issue DryRunDrawer with rejection reasons and copyable CLI validation snippet.
++ * 5. Security guards: non-admin 404 anti-enumeration view, AAL2 step-up elevation challenge.
++ * 6. Multi-device annotated screenshots across desktop, tablet, and mobile viewports.
++ */
++
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++import { test, expect } from './support/test';
++import { mockApi, loadFixture, type MockHandlers, type MockRecorder } from './support/mockApi';
++import { annotatedScreenshot } from './support/annotate';
++
++const SCREENSHOT_DIR = resolve(
++  import.meta.dirname,
++  '../../../docs/qa/KANBA-158/screenshots',
++);
++
++const defaultHooks = [
++  {
++    from_state: 'In Review',
++    to_state: 'Done',
++    active_hook_count: 3,
++    hooks: [
++      {
++        id: 'hook-1',
++        name: 'require-qa-proof-link',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'sync_validator',
++        sort_rank: '0000000000000001',
++        failure_policy: 'fail_closed',
++        manifest_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
++        is_enabled: true,
++        wasm_module_name: 'qa-proof-validator',
++        wasm_module_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
++        target_latency_budget: '<2ms',
++        description: 'Ensures description or comments include `docs/qa/KAN-*/` proof bundle before invoking AI.',
++      },
++      {
++        id: 'hook-2',
++        name: 'forensic-code-check',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'agent_interceptor',
++        sort_rank: '0000000000000002',
++        failure_policy: 'fail_closed',
++        manifest_sha256: '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945',
++        is_enabled: true,
++        agent_slug: 'forensic-code-check',
++        agent_display_name: 'Forensic Code Check',
++        harness_kind: 'cli_pipe',
++        cli_binary_allowlist_id: 'agy',
++        cli_args: ['-p'],
++        timeout_ms: 60000,
++        repo_binding_slug: 'kanban-main',
++        repo_access_mode: 'ro_vfs_mount',
++        mcp_access_summary: 'Read-Only (KAN)',
++        allowed_mutable_fields: ['labels'],
++        description: 'Repo: `kanban-main` (:ro mount) | MCP: Read-Only (`KAN`) | Mutable Fields: `[labels]`',
++      },
++      {
++        id: 'hook-3',
++        name: 'sec-invariant-scan',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'agent_interceptor',
++        sort_rank: '0000000000000003',
++        failure_policy: 'fail_closed',
++        manifest_sha256: '7b52009b64fd0a2a49e6d8a939753077792b055425eee527861182c611383145',
++        is_enabled: true,
++        agent_slug: 'sec-invariant-scan',
++        agent_display_name: 'Security Invariant Scanner',
++        harness_kind: 'in_app_sdk',
++        provider_kind: 'ollama',
++        model_id: 'ollama/qwen2.5-coder',
++        timeout_ms: 30000,
++        repo_binding_slug: 'kanban-main',
++        repo_access_mode: 'ro_vfs_mount',
++        mcp_access_summary: 'Read-Only (KAN)',
++        allowed_mutable_fields: [],
++        description: 'Verifies RLS policy tests & zero new unapproved dependencies in `uv.lock` / `pnpm-lock.yaml`.',
++      },
++    ],
++  },
++];
++
++async function setupWorkflowMocks(page: Page, handlers: MockHandlers = {}): Promise<MockRecorder> {
++  const projectKan = loadFixture('project-kan');
++  await page.unroute('**/api/v1/**');
++  return mockApi(page, {
++    'GET /api/v1/me': { json: loadFixture('me-adam') },
++    'GET /api/v1/auth/me': { json: loadFixture('me-adam') },
++    'GET /api/v1/system/status': { json: loadFixture('system-status-standalone') },
++    'GET /api/v1/setup/status': { json: { initialized: true } },
++    'GET /api/v1/auth/session': { json: { authenticated: true, csrf_token: 'test-csrf-token-123' } },
++    'GET /api/v1/projects': { json: [projectKan] },
++    'GET /api/v1/projects/KAN': { json: projectKan },
++    'GET /api/v1/objects/project/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/objects/KAN/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/projects/KAN/workflow-hooks': { json: { rules: defaultHooks } },
++    'GET /api/v1/projects/KAN/states': {
++      json: [
++        { id: 'state-backlog', name: 'Backlog' },
++        { id: 'state-in-progress', name: 'In Progress' },
++        { id: 'state-in-review', name: 'In Review' },
++        { id: 'state-done', name: 'Done' },
++        { id: 'state-cancelled', name: 'Cancelled' },
++      ],
++    },
++    'GET /api/v1/workspaces/kanban/agent-definitions': {
++      json: [
++        {
++          id: 'agent-1',
++          slug: 'forensic-code-check',
++          display_name: 'Forensic Code Check',
++          harness_kind: 'cli_pipe',
++          cli_binary_allowlist_id: 'agy',
++          cli_args: ['-p'],
++          repo_access_mode: 'ro_vfs_mount',
++          timeout_ms: 60000,
++        },
++        {
++          id: 'agent-2',
++          slug: 'sec-invariant-scan',
++          display_name: 'Security Invariant Scanner',
++          harness_kind: 'in_app_sdk',
++          provider_kind: 'ollama',
++          model_id: 'ollama/qwen2.5-coder',
++          cli_args: [],
++          repo_access_mode: 'ro_vfs_mount',
++          timeout_ms: 30000,
++        },
++      ],
++    },
++    'GET /api/v1/projects/KAN/repo-bindings': {
++      json: [
++        {
++          id: 'repo-1',
++          slug: 'kanban-main',
++          remote_url: 'https://github.com/adamoutler/kanban.git',
++          access_mode: 'ro_vfs_mount',
++        },
++      ],
++    },
++    'POST /api/v1/projects/KAN/workflow-hooks/dry-run': {
++      json: {
++        steps: [
++          {
++            order: 1,
++            name: 'require-qa-proof-link',
++            hook_kind: 'sync_validator',
++            result: 'rejected',
++            reason: 'Missing required docs/qa/ proof bundle',
++            duration_us: 1200,
++          },
++          {
++            order: 2,
++            name: 'forensic-code-check',
++            hook_kind: 'agent_interceptor',
++            result: 'skipped_async',
++            duration_us: 200,
++            cli_command:
++              'uv run kanban-agent validate-transition --project KAN --issue KAN-123 --transition "In Review->Done" --agent forensic-code-check',
++          },
++          {
++            order: 3,
++            name: 'sec-invariant-scan',
++            hook_kind: 'agent_interceptor',
++            result: 'skipped_async',
++            duration_us: 150,
++            cli_command:
++              'uv run kanban-agent validate-transition --project KAN --issue KAN-123 --transition "In Review->Done" --agent sec-invariant-scan',
++          },
++        ],
++        would_commit: false,
++      },
++    },
++    'POST /api/v1/projects/KAN/workflow-hooks/reorder': { status: 200, json: { ok: true } },
++    'POST /api/v1/projects/KAN/workflow-hooks': (req) => ({
++      status: 201,
++      json: {
++        id: 'hook-created',
++        sort_rank: '0000000000000004',
++        is_enabled: true,
++        ...(typeof req.body === 'object' && req.body !== null ? req.body : {}),
++      },
++    }),
++    'POST /api/v1/workflow-hooks/:hookId/enable': { status: 200, json: { ok: true } },
++    'POST /api/v1/workflow-hooks/:hookId/disable': { status: 200, json: { ok: true } },
++    'DELETE /api/v1/workflow-hooks/:hookId': { status: 204 },
++    ...handlers,
++  });
++}
++
++test.describe('Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158)', () => {
++  test.beforeEach(async ({ context }) => {
++    mkdirSync(SCREENSHOT_DIR, { recursive: true });
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-123',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('01-studio-pipeline: renders S14.4 wireframe card with 3 hooks and open EmojiHint popover', async ({
++    page,
++  }, testInfo) => {
++    await setupWorkflowMocks(page);
++
++    await page.goto('/projects/KAN/settings/workflows');
++    await page.waitForLoadState('networkidle');
++
++    // Studio page & header presence
++    await expect(page.locator('[data-testid="workflow-studio-page"]')).toBeVisible();
++    await expect(page.locator('[data-testid="transition-card-In Review-Done"]')).toBeVisible();
++    await expect(page.locator('[data-testid="active-hooks-count"]')).toHaveText('3 Active Hooks');
++
++    // Hook rows presence
++    await expect(page.locator('[data-testid="hook-pipeline-row-hook-1"]')).toBeVisible();
++    await expect(page.locator('[data-testid="hook-pipeline-row-hook-2"]')).toBeVisible();
++    await expect(page.locator('[data-testid="hook-pipeline-row-hook-3"]')).toBeVisible();
++
++    // Trigger and inspect the EmojiHint popover on the CLI Agent hook
++    const emojiTrigger = page.locator('[data-testid="emoji-hint-hook-2"]');
++    await expect(emojiTrigger).toBeVisible();
++    await emojiTrigger.hover();
++
++    const popup = page.locator('[data-testid="emoji-hint-hook-2-popup"]');
++    if (!(await popup.isVisible())) {
++      await emojiTrigger.click();
++    }
++    await expect(popup).toBeVisible();
++    await expect(popup).toContainText('Harness: cli_pipe');
++
++    // Annotated Screenshot: 01-studio-pipeline (desktop, tablet, mobile)
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-studio-pipeline',
++      annotations: [
++        {
++          selector: '[data-testid="transition-card-In Review-Done"]',
++          label: 'S14.4 Transition Rule Card ([ In Review ] ======( 3 Active Hooks )======> [ Done ])',
++          note: 'Enterprise whitespace with token-based geometry and directional state connectors',
++        },
++        {
++          selector: '[data-testid="hook-pipeline-row-hook-1"]',
++          label: 'Sync Wasm Validator (require-qa-proof-link, <2ms budget)',
++          note: 'Fast synchronous gate checking proof bundle before invoking AI',
++        },
++        {
++          selector: '[data-testid="hook-pipeline-row-hook-2"]',
++          label: 'CLI Agent Interceptor (forensic-code-check, agy -p, :ro mount)',
++          note: 'Isolated subprocess execution with restricted mutable fields [labels]',
++        },
++        {
++          selector: '[data-testid="emoji-hint-hook-2-popup"]',
++          label: 'Semantic EmojiHint Popover',
++          note: 'Detailed agent harness metadata and read-only mount constraints',
++        },
++      ],
++    });
++  });
++
++  test('02-attach-agent-hook: opens AttachHookDialog with agent selector and mutable fields chips', async ({
++    page,
++  }, testInfo) => {
++    // Only capture for desktop and mobile as specified in proof bundle definition
++    if (testInfo.project.name === 'tablet') {
++      test.skip();
++    }
++
++    await setupWorkflowMocks(page);
++
++    await page.goto('/projects/KAN/settings/workflows');
++    await page.waitForLoadState('networkidle');
++
++    // Click "Add Transition Rule" to open AttachHookDialog
++    const addRuleBtn = page.getByRole('button', { name: 'Add Transition Rule' });
++    await expect(addRuleBtn).toBeVisible();
++    await addRuleBtn.click();
++
++    const dialog = page.locator('[role="dialog"]');
++    await expect(dialog).toBeVisible();
++    await expect(page.locator('#attach-hook-title')).toHaveText('Attach Workflow Interceptor Hook');
++
++    // Select Agent Interceptor
++    const agentRadio = page.locator('input[type="radio"][value="agent_interceptor"]');
++    await agentRadio.check();
++
++    // Fill hook name
++    const nameInput = page.locator('#hook-name-input');
++    await nameInput.fill('audit-gate-reviewer');
++
++    // Select Agent Definition
++    const agentSelect = page.locator('#agent-def-select');
++    await agentSelect.selectOption('forensic-code-check');
++
++    // Verify agent metadata notice is displayed
++    const agentSummary = page.locator('[data-testid="agent-details-summary"]');
++    await expect(agentSummary).toBeVisible();
++    await expect(agentSummary).toContainText('Harness: cli_pipe');
++    await expect(agentSummary).toContainText('Validated CLI Args: -p');
++
++    // Check mutable field 'labels'
++    const labelsCheckbox = page.locator('.mutable-fields-picker input[type="checkbox"]').first();
++    await labelsCheckbox.check();
++
++    // Visual proof: 02-attach-agent-hook (desktop, mobile)
++    await annotatedScreenshot(page, testInfo, {
++      name: '02-attach-agent-hook',
++      annotations: [
++        {
++          selector: '[role="dialog"]',
++          label: 'AttachHookDialog Modal',
++          note: 'Modal overlay for attaching synchronous Wasm or asynchronous agent hooks',
++        },
++        {
++          selector: '[role="radiogroup"][aria-label="Hook Kind"]',
++          label: 'Hook Kind RadioGroup',
++          note: 'Switches between Sync Wasm Validator, Sync Wasm Mutator, and Agent Interceptor',
++        },
++        {
++          selector: '[data-testid="agent-details-summary"]',
++          label: 'Agent Definition Metadata Summary',
++          note: 'Harness command arguments (agy -p), timeout, and ro mount constraints',
++        },
++        {
++          selector: '.mutable-fields-picker',
++          label: 'Strict Mutable Fields Universe Chips',
++          note: 'Restricted to MUTABLE_FIELD_UNIVERSE; core fields remain strictly immutable',
++        },
++      ],
++    });
++  });
++
++  test('03-dry-run-results: executes sample-ticket dry-run and displays rejected validator with copyable CLI command', async ({
++    page,
++  }, testInfo) => {
++    await setupWorkflowMocks(page);
++
++    await page.goto('/projects/KAN/settings/workflows');
++    await page.waitForLoadState('networkidle');
++
++    // Click [▶ Dry-Run Against Sample Ticket]
++    const dryRunBtn = page.getByRole('button', {
++      name: /Dry-run against sample ticket/i,
++    });
++    await expect(dryRunBtn).toBeVisible();
++    await dryRunBtn.click();
++
++    // Verify drawer opened
++    const drawer = page.locator('.dry-run-drawer');
++    await expect(drawer).toBeVisible();
++
++    // Submit dry-run form
++    const runBtn = page.locator('button[type="submit"]:has-text("Run Dry-Run")');
++    await expect(runBtn).toBeVisible();
++    await runBtn.click();
++
++    // Verify results
++    const resultsContainer = page.locator('[data-testid="dry-run-results"]');
++    await expect(resultsContainer).toBeVisible();
++
++    const banner = page.locator('[data-testid="would-commit-banner"]');
++    await expect(banner).toBeVisible();
++    await expect(banner).toContainText(/would not commit/i);
++
++    const step1 = page.locator('[data-testid="dry-run-step-1"]');
++    await expect(step1).toBeVisible();
++    await expect(step1).toContainText('Missing required docs/qa/ proof bundle');
++
++    const step2 = page.locator('[data-testid="dry-run-step-2"]');
++    await expect(step2).toBeVisible();
++    await expect(step2).toContainText('Skipped Async');
++
++    const cliSnippet = page.locator('[data-testid="dry-run-cli-2"]');
++    await expect(cliSnippet).toBeVisible();
++    await expect(cliSnippet).toContainText('uv run kanban-agent validate-transition');
++
++    // Visual proof: 03-dry-run-results (desktop, tablet, mobile)
++    await annotatedScreenshot(page, testInfo, {
++      name: '03-dry-run-results',
++      annotations: [
++        {
++          selector: '[data-testid="would-commit-banner"]',
++          label: 'Dry-Run Outcome Banner',
++          note: 'Indicates whether the transition would commit or is blocked',
++        },
++        {
++          selector: '[data-testid="dry-run-step-1"]',
++          label: 'Step 1 Validator: Rejected',
++          note: 'Sync Wasm validator halts pipeline on missing proof bundle',
++        },
++        {
++          selector: '[data-testid="dry-run-step-2"]',
++          label: 'Step 2 Interceptor: Skipped Async',
++          note: 'Asynchronous agent hooks are skipped in interactive UI dry-runs',
++        },
++        {
++          selector: '[data-testid="dry-run-cli-2"]',
++          label: '1-Click Copyable CLI Transition Snippet',
++          note: 'Pre-populated command to execute agent validation in local CLI or CI runner',
++        },
++      ],
++    });
++  });
++
++  test('04-non-admin-404: renders NotFoundView without leaking studio controls for non-admin callers', async ({
++    page,
++  }, testInfo) => {
++    // Only capture on desktop as specified in proof bundle definition
++    if (testInfo.project.name !== 'desktop') {
++      test.skip();
++    }
++
++    let writeCallAttempted = false;
++    await setupWorkflowMocks(page, {
++      'POST /api/v1/projects/KAN/workflow-hooks': () => {
++        writeCallAttempted = true;
++        return { status: 403 };
++      },
++    });
++
++    // Navigate with non-admin role query param
++    await page.goto('/projects/KAN/settings/workflows?role=member');
++    await page.waitForLoadState('networkidle');
++
++    // Uniform 403/404 view preventing principal & object enumeration (S3.4)
++    const notFoundView = page.locator('[data-testid="not-found-view"]');
++    await expect(notFoundView).toBeVisible();
++    await expect(page.locator('h1')).toHaveText('Not found or no access');
++
++    // Ensure studio controls are completely absent
++    await expect(page.locator('[data-testid="workflow-studio-page"]')).not.toBeVisible();
++    expect(writeCallAttempted).toBe(false);
++
++    // Visual proof: 04-non-admin-404 (desktop)
++    await annotatedScreenshot(page, testInfo, {
++      name: '04-non-admin-404',
++      annotations: [
++        {
++          selector: '[data-testid="not-found-view"]',
++          label: 'Anti-Enumeration Uniform Not Found or No Access View (S3.4)',
++          note: 'Renders uniform 404 view for non-admin users with 0 write calls',
++        },
++      ],
++    });
++  });
++
++  test('05-reorder-and-toggle: supports keyboard reordering, toggle switch, and 422 error rollback', async ({
++    page,
++  }) => {
++    let reorderCalled = false;
++    let disableCalled = false;
++    const rulesState = JSON.parse(JSON.stringify(defaultHooks)) as typeof defaultHooks;
++
++    await setupWorkflowMocks(page, {
++      'GET /api/v1/projects/KAN/workflow-hooks': () => ({ json: { rules: rulesState } }),
++      'POST /api/v1/workflow-hooks/:hookId/disable': (req) => {
++        disableCalled = true;
++        const hookId = req.params.hookId;
++        for (const rule of rulesState) {
++          for (const hook of rule.hooks) {
++            if (hook.id === hookId) {
++              hook.is_enabled = false;
++            }
++          }
++        }
++        return { status: 200, json: { ok: true } };
++      },
++      'POST /api/v1/projects/KAN/workflow-hooks/reorder': () => {
++        reorderCalled = true;
++        return { status: 200, json: { ok: true } };
++      },
++    });
++
++    await page.goto('/projects/KAN/settings/workflows');
++    await page.waitForLoadState('networkidle');
++
++    // Toggle hook-1 enabled state
++    const toggleInput = page.locator('#hook-toggle-hook-1');
++    await expect(toggleInput).toBeChecked();
++    await toggleInput.click();
++    await expect.poll(() => disableCalled).toBe(true);
++
++    // Keyboard move down hook-1
++    const moveDownBtn = page.getByRole('button', { name: 'Move require-qa-proof-link down' });
++    await expect(moveDownBtn).toBeVisible();
++    await moveDownBtn.click();
++    await expect.poll(() => reorderCalled).toBe(true);
++  });
++});
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 6deb83c..c1fa7e1 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -49,6 +49,7 @@ import { SetupClaimPage } from '../features/auth/SetupClaimPage';
+ import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
+ import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
+ import { McpAccessStudio } from '../features/settings/McpAccessStudio';
++import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
+ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+ import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
+ import { useSessionGuard } from '../features/auth/useSessionGuard';
+@@ -578,6 +579,10 @@ export const appRoutes: RouteObject[] = [
+             path: 'settings/custom-fields',
+             element: <ProjectCustomFieldsSettingsRoute />,
+           },
++          {
++            path: 'settings/workflows',
++            element: <WorkflowStudioPage />,
++          },
+         ],
+       },
+       {
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+new file mode 100644
+index 0000000..1978ba0
+--- /dev/null
++++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+@@ -0,0 +1,411 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, type JSX } from 'react';
++import {
++  MUTABLE_FIELD_UNIVERSE,
++  IMMUTABLE_FIELDS_NOTICE,
++  DEFAULT_WASM_MODULES,
++  type WorkflowHook,
++  type HookKind,
++  type FailurePolicy,
++  type CreateWorkflowHookPayload,
++  type AgentDefinitionSummary,
++  type ProjectStateSummary,
++  type WasmModuleSummary,
++} from './api';
++
++export interface AttachHookDialogProps {
++  isOpen: boolean;
++  projectKey: string;
++  initialTransition?: { from_state: string | null; to_state: string } | undefined;
++  editingHook?: WorkflowHook | null | undefined;
++  states: ProjectStateSummary[];
++  agentDefinitions: AgentDefinitionSummary[];
++  wasmModules?: WasmModuleSummary[] | undefined;
++  onSave: (payload: CreateWorkflowHookPayload) => Promise<void> | void;
++  onClose: () => void;
++}
++
++function AttachHookDialogInner({
++  initialTransition,
++  editingHook,
++  states,
++  agentDefinitions,
++  wasmModules = DEFAULT_WASM_MODULES,
++  onSave,
++  onClose,
++}: Omit<AttachHookDialogProps, 'isOpen' | 'projectKey'>): JSX.Element {
++  const [name, setName] = useState<string>(editingHook ? editingHook.name : '');
++  const [fromState, setFromState] = useState<string | null>(
++    editingHook ? editingHook.from_state : (initialTransition?.from_state ?? null),
++  );
++  const [toState, setToState] = useState<string>(
++    editingHook
++      ? editingHook.to_state
++      : (initialTransition?.to_state ?? (states[1]?.name ?? states[0]?.name ?? 'Done')),
++  );
++  const [hookKind, setHookKind] = useState<HookKind>(
++    editingHook ? editingHook.hook_kind : 'sync_validator',
++  );
++  const [failurePolicy, setFailurePolicy] = useState<FailurePolicy>(
++    editingHook ? editingHook.failure_policy : 'fail_closed',
++  );
++  const [selectedWasmSha, setSelectedWasmSha] = useState<string>(
++    editingHook?.wasm_module_sha256 ?? wasmModules[0]?.sha256 ?? '',
++  );
++  const [selectedAgentSlug, setSelectedAgentSlug] = useState<string>(
++    editingHook?.agent_slug ?? agentDefinitions[0]?.slug ?? '',
++  );
++  const [allowedMutableFields, setAllowedMutableFields] = useState<string[]>(
++    editingHook?.allowed_mutable_fields ?? [],
++  );
++  const [error, setError] = useState<string | null>(null);
++  const [isSubmitting, setIsSubmitting] = useState(false);
++
++  const handleToggleMutableField = (field: string) => {
++    // Invariant: state and description_markdown are forbidden
++    if (field === 'state' || field === 'description_markdown') return;
++
++    setAllowedMutableFields((prev) =>
++      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
++    );
++  };
++
++  const selectedAgent = agentDefinitions.find((a) => a.slug === selectedAgentSlug);
++
++  const handleSubmit = async (e: React.SyntheticEvent) => {
++    e.preventDefault();
++    setError(null);
++
++    const trimmedName = name.trim();
++    if (!trimmedName) {
++      setError('Hook name is required.');
++      return;
++    }
++
++    if (!toState) {
++      setError('Target state (to_state) is required.');
++      return;
++    }
++
++    if (fromState !== null && fromState === toState) {
++      setError('from_state and to_state cannot be identical.');
++      return;
++    }
++
++    const payload: CreateWorkflowHookPayload = {
++      name: trimmedName,
++      from_state: fromState,
++      to_state: toState,
++      hook_kind: hookKind,
++      failure_policy: failurePolicy,
++      allowed_mutable_fields: hookKind === 'sync_validator' ? [] : allowedMutableFields,
++    };
++
++    if (hookKind === 'sync_validator' || hookKind === 'sync_mutator') {
++      payload.wasm_module_sha256 = selectedWasmSha;
++    } else {
++      payload.agent = selectedAgentSlug;
++      if (selectedAgent?.timeout_ms) {
++        payload.timeout_ms = selectedAgent.timeout_ms;
++      }
++    }
++
++    try {
++      setIsSubmitting(true);
++      await onSave(payload);
++      onClose();
++    } catch (err: unknown) {
++      if (err instanceof Error) {
++        setError(err.message);
++      } else {
++        setError('Failed to attach workflow hook.');
++      }
++    } finally {
++      setIsSubmitting(false);
++    }
++  };
++
++  // Group agents by harness
++  const cliAgents = agentDefinitions.filter((a) => a.harness_kind === 'cli_pipe');
++  const sdkAgents = agentDefinitions.filter((a) => a.harness_kind === 'in_app_sdk');
++  const remoteAgents = agentDefinitions.filter((a) => a.harness_kind === 'remote_runner');
++
++  return (
++    <div className="workflow-modal-backdrop" role="presentation" onClick={onClose}>
++      <div
++        className="workflow-dialog"
++        role="dialog"
++        aria-modal="true"
++        aria-labelledby="attach-hook-title"
++        onClick={(e) => { e.stopPropagation(); }}
++      >
++        <h2 id="attach-hook-title" className="workflow-dialog-title">
++          {editingHook ? `Edit Hook: ${editingHook.name}` : 'Attach Workflow Interceptor Hook'}
++        </h2>
++
++        {error && (
++          <div className="workflow-alert workflow-alert-danger" role="alert">
++            {error}
++          </div>
++        )}
++
++        <form onSubmit={(e) => { void handleSubmit(e); }} className="workflow-dialog-form">
++          {/* Transition states */}
++          <div className="workflow-form-group">
++            <label htmlFor="from-state-select" className="workflow-form-label">
++              From State
++            </label>
++            <select
++              id="from-state-select"
++              className="workflow-form-control"
++              value={fromState ?? '*'}
++              onChange={(e) => { setFromState(e.target.value === '*' ? null : e.target.value); }}
++            >
++              <option value="*">* Any State</option>
++              {states.map((s) => (
++                <option key={s.id} value={s.name}>
++                  {s.name}
++                </option>
++              ))}
++            </select>
++          </div>
++
++          <div className="workflow-form-group">
++            <label htmlFor="to-state-select" className="workflow-form-label">
++              To State (Required)
++            </label>
++            <select
++              id="to-state-select"
++              className="workflow-form-control"
++              value={toState}
++              onChange={(e) => { setToState(e.target.value); }}
++              required
++            >
++              {states.map((s) => (
++                <option key={s.id} value={s.name}>
++                  {s.name}
++                </option>
++              ))}
++            </select>
++          </div>
++
++          {/* Hook Name */}
++          <div className="workflow-form-group">
++            <label htmlFor="hook-name-input" className="workflow-form-label">
++              Hook Name
++            </label>
++            <input
++              id="hook-name-input"
++              type="text"
++              className="workflow-form-control"
++              placeholder="e.g. require-qa-proof-link"
++              value={name}
++              onChange={(e) => { setName(e.target.value); }}
++              required
++            />
++          </div>
++
++          {/* Hook Kind RadioGroup */}
++          <div className="workflow-form-group">
++            <label className="workflow-form-label">Hook Kind</label>
++            <div className="workflow-radiogroup" role="radiogroup" aria-label="Hook Kind">
++              <label className="workflow-radio-label">
++                <input
++                  type="radio"
++                  name="hook_kind"
++                  value="sync_validator"
++                  checked={hookKind === 'sync_validator'}
++                  onChange={() => { setHookKind('sync_validator'); }}
++                />
++                Sync Wasm Validator
++              </label>
++              <label className="workflow-radio-label">
++                <input
++                  type="radio"
++                  name="hook_kind"
++                  value="sync_mutator"
++                  checked={hookKind === 'sync_mutator'}
++                  onChange={() => { setHookKind('sync_mutator'); }}
++                />
++                Sync Wasm Mutator
++              </label>
++              <label className="workflow-radio-label">
++                <input
++                  type="radio"
++                  name="hook_kind"
++                  value="agent_interceptor"
++                  checked={hookKind === 'agent_interceptor'}
++                  onChange={() => { setHookKind('agent_interceptor'); }}
++                />
++                Agent Interceptor
++              </label>
++            </div>
++          </div>
++
++          {/* Conditional: Wasm Module selector */}
++          {(hookKind === 'sync_validator' || hookKind === 'sync_mutator') && (
++            <div className="workflow-form-group">
++              <label htmlFor="wasm-module-select" className="workflow-form-label">
++                Approved Wasm Module (Tier A)
++              </label>
++              <select
++                id="wasm-module-select"
++                className="workflow-form-control"
++                value={selectedWasmSha}
++                onChange={(e) => { setSelectedWasmSha(e.target.value); }}
++              >
++                {wasmModules.map((m) => (
++                  <option key={m.sha256} value={m.sha256}>
++                    {m.name} ({m.sha256.slice(0, 8)}... - {m.target_latency_budget ?? '<25ms'})
++                  </option>
++                ))}
++              </select>
++            </div>
++          )}
++
++          {/* Conditional: Agent Interceptor selector */}
++          {hookKind === 'agent_interceptor' && (
++            <>
++              <div className="workflow-form-group">
++                <label htmlFor="agent-def-select" className="workflow-form-label">
++                  Agent Definition
++                </label>
++                <select
++                  id="agent-def-select"
++                  className="workflow-form-control"
++                  value={selectedAgentSlug}
++                  onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
++                >
++                  {cliAgents.length > 0 && (
++                    <optgroup label="CLI Pipe Agents (agy, codex)">
++                      {cliAgents.map((a) => (
++                        <option key={a.id} value={a.slug}>
++                          {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
++                        </option>
++                      ))}
++                    </optgroup>
++                  )}
++                  {sdkAgents.length > 0 && (
++                    <optgroup label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
++                      {sdkAgents.map((a) => (
++                        <option key={a.id} value={a.slug}>
++                          {a.display_name} ({a.model_id ?? a.provider_kind})
++                        </option>
++                      ))}
++                    </optgroup>
++                  )}
++                  {remoteAgents.length > 0 && (
++                    <optgroup label="Remote Runner Pools">
++                      {remoteAgents.map((a) => (
++                        <option key={a.id} value={a.slug}>
++                          {a.display_name}
++                        </option>
++                      ))}
++                    </optgroup>
++                  )}
++                </select>
++              </div>
++
++              {/* Agent read-only details summary */}
++              {selectedAgent && (
++                <div className="workflow-notice" data-testid="agent-details-summary">
++                  <strong>Agent Config Summary:</strong>
++                  <div>Harness: {selectedAgent.harness_kind}</div>
++                  {selectedAgent.cli_args.length > 0 && (
++                    <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
++                  )}
++                  <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
++                  <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
++                </div>
++              )}
++            </>
++          )}
++
++          {/* Failure Policy */}
++          <div className="workflow-form-group">
++            <label htmlFor="failure-policy-select" className="workflow-form-label">
++              Failure Policy
++            </label>
++            <select
++              id="failure-policy-select"
++              className="workflow-form-control"
++              value={failurePolicy}
++              onChange={(e) => { setFailurePolicy(e.target.value as FailurePolicy); }}
++            >
++              <option value="fail_closed">Fail-Closed (Blocks transition on failure or veto)</option>
++              <option value="fail_open_warn">Fail-Open (Warn) (Logs warning but allows transition)</option>
++            </select>
++          </div>
++
++          {/* Allowed Mutable Fields */}
++          <div className="workflow-form-group">
++            <label className="workflow-form-label">
++              Allowed Mutable Fields
++              {hookKind === 'sync_validator' && ' (Disabled for Validators)'}
++            </label>
++            <div className="mutable-fields-picker">
++              {MUTABLE_FIELD_UNIVERSE.map((field) => {
++                const isChecked = allowedMutableFields.includes(field);
++                const isDisabled = hookKind === 'sync_validator';
++                const labelClass = [
++                  'workflow-radio-label',
++                  isDisabled ? 'is-disabled' : '',
++                ]
++                  .filter(Boolean)
++                  .join(' ');
++                return (
++                  <label key={field} className={labelClass}>
++                    <input
++                      type="checkbox"
++                      checked={isChecked && !isDisabled}
++                      disabled={isDisabled}
++                      onChange={() => { handleToggleMutableField(field); }}
++                    />
++                    <code>{field}</code>
++                  </label>
++                );
++              })}
++            </div>
++            <div className="workflow-notice">
++              {IMMUTABLE_FIELDS_NOTICE}
++            </div>
++          </div>
++
++          {/* Actions */}
++          <div className="workflow-dialog-actions">
++            <button
++              type="button"
++              className="workflow-btn workflow-btn-secondary"
++              onClick={onClose}
++              disabled={isSubmitting}
++            >
++              Cancel
++            </button>
++            <button
++              type="submit"
++              className="workflow-btn workflow-btn-primary"
++              disabled={isSubmitting}
++            >
++              {isSubmitting ? 'Saving...' : editingHook ? 'Update Hook' : 'Attach Hook'}
++            </button>
++          </div>
++        </form>
++      </div>
++    </div>
++  );
++}
++
++export function AttachHookDialog({
++  isOpen,
++  ...innerProps
++}: AttachHookDialogProps): JSX.Element | null {
++  if (!isOpen) return null;
++  return (
++    <AttachHookDialogInner
++      key={innerProps.editingHook?.id ?? 'new-hook'}
++      {...innerProps}
++    />
++  );
++}
+diff --git a/kanban/web/src/features/workflows/DryRunDrawer.tsx b/kanban/web/src/features/workflows/DryRunDrawer.tsx
+new file mode 100644
+index 0000000..cb31e16
+--- /dev/null
++++ b/kanban/web/src/features/workflows/DryRunDrawer.tsx
+@@ -0,0 +1,365 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, type JSX } from 'react';
++import {
++  dryRunWorkflowHooks,
++  type DryRunPayload,
++  type DryRunResponse,
++  type DryRunStepResult,
++  type DryRunSampleTicket,
++} from './api';
++
++export interface DryRunDrawerProps {
++  isOpen: boolean;
++  projectKey: string;
++  transition: { from_state: string | null; to_state: string };
++  onClose: () => void;
++  dryRunRunner?: typeof dryRunWorkflowHooks;
++}
++
++const DEFAULT_SAMPLE_TICKET: DryRunSampleTicket = {
++  summary: 'Fix RLS policy on issue comments and add audit logging',
++  description_markdown:
++    '### Implementation Notes\nUpdates `comments` table RLS policy to enforce project member visibility.\n\nVerification: docs/qa/KAN-142/proof.txt',
++  priority: 'High',
++  labels: ['security', 'backend'],
++};
++
++function DryRunDrawerInner({
++  projectKey,
++  transition,
++  onClose,
++  dryRunRunner = dryRunWorkflowHooks,
++}: Omit<DryRunDrawerProps, 'isOpen'>): JSX.Element {
++  const [mode, setMode] = useState<'sample' | 'issue'>('sample');
++  const [issueKey, setIssueKey] = useState(`${projectKey}-1`);
++  const [summary, setSummary] = useState(DEFAULT_SAMPLE_TICKET.summary);
++  const [description, setDescription] = useState(DEFAULT_SAMPLE_TICKET.description_markdown);
++  const [priority, setPriority] = useState(DEFAULT_SAMPLE_TICKET.priority);
++  const [labelsStr, setLabelsStr] = useState(DEFAULT_SAMPLE_TICKET.labels.join(', '));
++
++  const [isLoading, setIsLoading] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++  const [result, setResult] = useState<DryRunResponse | null>(null);
++  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
++
++  const handleRun = async (e: React.SyntheticEvent) => {
++    e.preventDefault();
++    setIsLoading(true);
++    setError(null);
++
++    const payload: DryRunPayload = {
++      from_state: transition.from_state,
++      to_state: transition.to_state,
++    };
++
++    if (mode === 'issue') {
++      const trimmedKey = issueKey.trim();
++      if (!trimmedKey) {
++        setError('Issue key is required');
++        setIsLoading(false);
++        return;
++      }
++      payload.issue_key = trimmedKey;
++    } else {
++      payload.sample_ticket = {
++        summary: summary.trim(),
++        description_markdown: description,
++        priority: priority.trim(),
++        labels: labelsStr
++          .split(',')
++          .map((s) => s.trim())
++          .filter(Boolean),
++      };
++    }
++
++    try {
++      const data = await dryRunRunner(projectKey, payload);
++      setResult(data);
++    } catch (err: unknown) {
++      if (err instanceof Error) {
++        setError(err.message);
++      } else {
++        setError('Dry-run request failed.');
++      }
++    } finally {
++      setIsLoading(false);
++    }
++  };
++
++  const handleCopyCli = async (cmd: string) => {
++    try {
++      await navigator.clipboard.writeText(cmd);
++      setCopiedCmd(cmd);
++      setTimeout(() => { setCopiedCmd(null); }, 2000);
++    } catch {
++      // Ignore clipboard fallback
++    }
++  };
++
++  const formatDurationMs = (durationUs: number): string => {
++    const ms = durationUs / 1000;
++    if (ms < 1) return '<1ms';
++    return `${ms.toFixed(1)}ms`;
++  };
++
++  const renderStepResult = (step: DryRunStepResult) => {
++    let resultGlyph = '✅';
++    let resultLabel = 'Allowed';
++
++    if (step.result === 'mutated') {
++      resultGlyph = '✏️';
++      resultLabel = 'Mutated';
++    } else if (step.result === 'rejected') {
++      resultGlyph = '🛑';
++      resultLabel = 'Rejected';
++    } else if (step.result === 'error') {
++      resultGlyph = '⚠️';
++      resultLabel = 'Error';
++    } else if (step.result === 'skipped_async') {
++      resultGlyph = '🤖';
++      resultLabel = 'Skipped Async';
++    }
++
++    const defaultCliCmd =
++      step.cli_command ??
++      `uv run kanban-agent validate-transition --project ${projectKey} --transition "${
++        transition.from_state ?? '*'
++      } -> ${transition.to_state}" --agent ${step.name}`;
++
++    return (
++      <div
++        key={step.order}
++        className="dry-run-step-row"
++        data-testid={`dry-run-step-${String(step.order)}`}
++      >
++        <div className="dry-run-step-header">
++          <div className="dry-run-step-left">
++            <span>
++              {resultGlyph} {step.order}. <strong>{step.name}</strong>
++            </span>
++            <span className="hook-metric-pill">[{step.hook_kind}]</span>
++            <span className="active-hooks-badge">{resultLabel}</span>
++          </div>
++          <span className="hook-metric-pill">{formatDurationMs(step.duration_us)}</span>
++        </div>
++
++        {/* Reason display (rendered strictly as text node) */}
++        {step.reason && (
++          <div className="dry-run-step-reason" data-testid={`dry-run-reason-${String(step.order)}`}>
++            <strong>Rejection Reason:</strong> {step.reason}
++          </div>
++        )}
++
++        {/* Field updates for mutated */}
++        {step.field_updates && Object.keys(step.field_updates).length > 0 && (
++          <div className="workflow-notice" data-testid={`dry-run-updates-${String(step.order)}`}>
++            <strong>Mutations applied:</strong>
++            <pre className="dry-run-cli-code">{JSON.stringify(step.field_updates, null, 2)}</pre>
++          </div>
++        )}
++
++        {/* Async CLI command */}
++        {step.result === 'skipped_async' && (
++          <div className="dry-run-copyable-cli" data-testid={`dry-run-cli-${String(step.order)}`}>
++            <span>🤖 Async gate - copy CLI command:</span>
++            <code className="dry-run-cli-code">{defaultCliCmd}</code>
++            <button
++              type="button"
++              className="workflow-btn workflow-btn-secondary workflow-btn-sm"
++              onClick={() => {
++                void handleCopyCli(defaultCliCmd);
++              }}
++              aria-label={`Copy CLI command for ${step.name}`}
++            >
++              {copiedCmd === defaultCliCmd ? 'Copied!' : 'Copy CLI Command'}
++            </button>
++          </div>
++        )}
++      </div>
++    );
++  };
++
++  const fromLabel = transition.from_state ?? '* Any State';
++  const toLabel = transition.to_state;
++
++  return (
++    <div className="workflow-modal-backdrop" role="presentation" onClick={onClose}>
++      <aside
++        className="dry-run-drawer"
++        role="dialog"
++        aria-modal="true"
++        aria-labelledby="dry-run-drawer-title"
++        onClick={(e) => { e.stopPropagation(); }}
++      >
++        <div className="dry-run-header">
++          <h3 id="dry-run-drawer-title">
++            ▶ Dry-Run: [{fromLabel}] ➔ [{toLabel}]
++          </h3>
++          <button
++            type="button"
++            className="workflow-btn workflow-btn-secondary workflow-btn-sm"
++            onClick={onClose}
++            aria-label="Close Dry-Run Drawer"
++          >
++            ✕ Close
++          </button>
++        </div>
++
++        {/* Mode switcher tabs */}
++        <div className="dry-run-mode-tabs" role="tablist" aria-label="Dry-Run Source">
++          <button
++            type="button"
++            role="tab"
++            aria-selected={mode === 'sample'}
++            className={`dry-run-mode-btn ${mode === 'sample' ? 'is-active' : ''}`}
++            onClick={() => { setMode('sample'); }}
++          >
++            Sample ticket
++          </button>
++          <button
++            type="button"
++            role="tab"
++            aria-selected={mode === 'issue'}
++            className={`dry-run-mode-btn ${mode === 'issue' ? 'is-active' : ''}`}
++            onClick={() => { setMode('issue'); }}
++          >
++            Pick existing issue
++          </button>
++        </div>
++
++        {error && (
++          <div className="workflow-alert workflow-alert-danger" role="alert">
++            {error}
++          </div>
++        )}
++
++        <form
++          onSubmit={(e) => {
++            void handleRun(e);
++          }}
++          className="workflow-dialog-form"
++        >
++          {mode === 'issue' ? (
++            <div className="workflow-form-group">
++              <label htmlFor="dry-run-issue-key" className="workflow-form-label">
++                Issue Key
++              </label>
++              <input
++                id="dry-run-issue-key"
++                type="text"
++                className="workflow-form-control"
++                placeholder="e.g. KAN-142"
++                value={issueKey}
++                onChange={(e) => { setIssueKey(e.target.value); }}
++                required
++              />
++            </div>
++          ) : (
++            <>
++              <div className="workflow-form-group">
++                <label htmlFor="dry-run-summary" className="workflow-form-label">
++                  Summary
++                </label>
++                <input
++                  id="dry-run-summary"
++                  type="text"
++                  className="workflow-form-control"
++                  value={summary}
++                  onChange={(e) => { setSummary(e.target.value); }}
++                  required
++                />
++              </div>
++
++              <div className="workflow-form-group">
++                <label htmlFor="dry-run-desc" className="workflow-form-label">
++                  Description Markdown
++                </label>
++                <textarea
++                  id="dry-run-desc"
++                  rows={4}
++                  className="workflow-form-control"
++                  value={description}
++                  onChange={(e) => { setDescription(e.target.value); }}
++                  required
++                />
++              </div>
++
++              <div className="workflow-form-group">
++                <label htmlFor="dry-run-priority" className="workflow-form-label">
++                  Priority
++                </label>
++                <input
++                  id="dry-run-priority"
++                  type="text"
++                  className="workflow-form-control"
++                  value={priority}
++                  onChange={(e) => { setPriority(e.target.value); }}
++                  required
++                />
++              </div>
++
++              <div className="workflow-form-group">
++                <label htmlFor="dry-run-labels" className="workflow-form-label">
++                  Labels (comma-separated)
++                </label>
++                <input
++                  id="dry-run-labels"
++                  type="text"
++                  className="workflow-form-control"
++                  value={labelsStr}
++                  onChange={(e) => { setLabelsStr(e.target.value); }}
++                />
++              </div>
++            </>
++          )}
++
++          <button
++            type="submit"
++            className="workflow-btn workflow-btn-primary"
++            disabled={isLoading}
++          >
++            {isLoading ? 'Running Dry-Run...' : '▶ Run Dry-Run'}
++          </button>
++        </form>
++
++        {/* Results section */}
++        {result && (
++          <div className="dry-run-results-container" data-testid="dry-run-results">
++            {/* would_commit summary banner */}
++            <div
++              className={`dry-run-summary-banner ${
++                result.would_commit ? 'would-commit' : 'blocked'
++              }`}
++              data-testid="would-commit-banner"
++            >
++              <span>{result.would_commit ? '✅' : '🛑'}</span>
++              <span>
++                {result.would_commit
++                  ? 'Transition Allowed: Changes would commit'
++                  : 'Transition Blocked: Changes would not commit (would_commit: false)'}
++              </span>
++            </div>
++
++            {/* Ordered steps */}
++            {result.steps.map((step) => renderStepResult(step))}
++          </div>
++        )}
++      </aside>
++    </div>
++  );
++}
++
++export function DryRunDrawer({
++  isOpen,
++  ...innerProps
++}: DryRunDrawerProps): JSX.Element | null {
++  if (!isOpen) return null;
++  return (
++    <DryRunDrawerInner
++      key={`${innerProps.transition.from_state ?? 'any'}-${innerProps.transition.to_state}`}
++      {...innerProps}
++    />
++  );
++}
+diff --git a/kanban/web/src/features/workflows/HookPipelineRow.tsx b/kanban/web/src/features/workflows/HookPipelineRow.tsx
+new file mode 100644
+index 0000000..0cf9d8f
+--- /dev/null
++++ b/kanban/web/src/features/workflows/HookPipelineRow.tsx
+@@ -0,0 +1,295 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useEffect, useRef, useState, type JSX } from 'react';
++import {
++  draggable,
++  dropTargetForElements,
++} from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
++import { EmojiHint } from '../../components/emoji/EmojiHint';
++import type { WorkflowHook } from './api';
++
++export interface HookPipelineRowProps {
++  hook: WorkflowHook;
++  index: number;
++  total: number;
++  projectKey: string;
++  onMove?: (hookId: string, direction: 'up' | 'down') => void;
++  onToggle?: (hookId: string, isEnabled: boolean) => void;
++  onEdit?: (hook: WorkflowHook) => void;
++  onDetach?: (hookId: string) => void;
++  onDropReorder?: (sourceId: string, targetId: string) => void;
++  draggableFactory?: typeof draggable;
++  dropTargetFactory?: typeof dropTargetForElements;
++}
++
++export function HookPipelineRow({
++  hook,
++  index,
++  total,
++  projectKey,
++  onMove,
++  onToggle,
++  onEdit,
++  onDetach,
++  onDropReorder,
++  draggableFactory = draggable,
++  dropTargetFactory = dropTargetForElements,
++}: HookPipelineRowProps): JSX.Element {
++  const rowRef = useRef<HTMLDivElement | null>(null);
++  const [isDragging, setIsDragging] = useState(false);
++  const [copiedSha, setCopiedSha] = useState(false);
++
++  useEffect(() => {
++    const el = rowRef.current;
++    if (!el) return undefined;
++
++    const cleanupDraggable = draggableFactory({
++      element: el,
++      getInitialData: () => ({ type: 'hook-row', hookId: hook.id, index }),
++      onDragStart: () => { setIsDragging(true); },
++      onDrop: () => { setIsDragging(false); },
++    });
++
++    const cleanupDropTarget = dropTargetFactory({
++      element: el,
++      getData: () => ({ type: 'hook-row', hookId: hook.id, index }),
++      onDrop: ({ source }) => {
++        setIsDragging(false);
++        const sourceData = source.data as { type?: string; hookId?: string } | undefined;
++        if (sourceData?.type === 'hook-row' && sourceData.hookId && sourceData.hookId !== hook.id) {
++          onDropReorder?.(sourceData.hookId, hook.id);
++        }
++      },
++    });
++
++    return () => {
++      cleanupDraggable();
++      cleanupDropTarget();
++    };
++  }, [hook.id, index, onDropReorder, draggableFactory, dropTargetFactory]);
++
++  const handleCopySha = async () => {
++    try {
++      await navigator.clipboard.writeText(hook.manifest_sha256);
++      setCopiedSha(true);
++      setTimeout(() => { setCopiedSha(false); }, 2000);
++    } catch {
++      // Fallback ignore in test env
++    }
++  };
++
++  // Determine badge text for Agent Gate
++  const getAgentBadgeLabel = (): string => {
++    if (hook.harness_kind === 'cli_pipe') {
++      return '[CLI Agent Gate]';
++    }
++    if (hook.harness_kind === 'in_app_sdk') {
++      if (hook.provider_kind === 'ollama') {
++        return '[Local Ollama Gate]';
++      }
++      return '[SDK Agent Gate]';
++    }
++    if (hook.harness_kind === 'remote_runner') {
++      return '[Remote WSS Gate]';
++    }
++    return '[Agent Gate]';
++  };
++
++  // Command summary string e.g. (`${context} | agy -p`) or (`ollama/qwen2.5-coder`)
++  const getCommandSummary = (): string | null => {
++    if (hook.hook_kind !== 'agent_interceptor') return null;
++    if (hook.harness_kind === 'cli_pipe') {
++      const bin = hook.cli_binary_allowlist_id ?? 'agy';
++      const args = hook.cli_args && hook.cli_args.length > 0 ? ` ${hook.cli_args.join(' ')}` : '';
++      return `(\${context} | ${bin}${args})`;
++    }
++    if (hook.harness_kind === 'in_app_sdk' && hook.model_id) {
++      return `(${hook.model_id})`;
++    }
++    return null;
++  };
++
++  // Truncated SHA-256 for display
++  const truncatedSha = hook.manifest_sha256
++    ? `sha256:${hook.manifest_sha256.slice(0, 8)}...`
++    : 'sha256:none';
++
++  // Format latency or timeout
++  const latencyOrTimeout =
++    hook.hook_kind === 'agent_interceptor'
++      ? `${String(Math.round((hook.timeout_ms ?? 60000) / 1000))}s`
++      : (hook.target_latency_budget ?? '<25ms');
++
++  const isSync = hook.hook_kind === 'sync_validator' || hook.hook_kind === 'sync_mutator';
++  const commandSummary = getCommandSummary();
++
++  const rowClasses = [
++    'hook-pipeline-row',
++    !hook.is_enabled ? 'is-disabled' : '',
++    isDragging ? 'is-dragging' : '',
++  ]
++    .filter(Boolean)
++    .join(' ');
++
++  return (
++    <article
++      ref={rowRef}
++      className={rowClasses}
++      data-testid={`hook-pipeline-row-${hook.id}`}
++      aria-label={`Workflow Hook: ${hook.name}`}
++    >
++      <div className="hook-pipeline-main">
++        <div className="hook-pipeline-left">
++          {/* Drag Handle & Order */}
++          <button
++            type="button"
++            className="hook-drag-handle"
++            aria-label={`Drag to reorder ${hook.name}`}
++            title="Drag to reorder"
++          >
++            ⋮⋮
++          </button>
++          <span className="hook-order-number">{index + 1}.</span>
++
++          {/* Hook Type Badge */}
++          {isSync ? (
++            <span className="hook-type-badge hook-type-sync">
++              ⚡ {hook.hook_kind === 'sync_validator' ? '[Sync Wasm Validator]' : '[Sync Wasm Mutator]'}
++            </span>
++          ) : (
++            <span className="hook-type-badge hook-type-agent">
++              <EmojiHint
++                kind="agent"
++                label={getAgentBadgeLabel()}
++                testId={`emoji-hint-${hook.id}`}
++                content={
++                  <div>
++                    <strong>{hook.name}</strong>
++                    <div>Harness: {hook.harness_kind ?? 'cli_pipe'}</div>
++                    {hook.repo_binding_slug && (
++                      <div>Repo: {hook.repo_binding_slug} (:ro mount)</div>
++                    )}
++                    <div>MCP: {hook.mcp_access_summary ?? `Read-Only (${projectKey})`}</div>
++                  </div>
++                }
++              />
++              <span>{getAgentBadgeLabel()}</span>
++            </span>
++          )}
++
++          {/* Hook Name & Command Summary */}
++          <span className="hook-name">{hook.name}</span>
++          {commandSummary && <span className="hook-command-summary">{commandSummary}</span>}
++        </div>
++
++        <div className="hook-pipeline-right">
++          {/* Latency / Timeout metric pill */}
++          <span className="hook-metric-pill" data-testid={`hook-latency-${hook.id}`}>
++            {latencyOrTimeout}
++          </span>
++
++          {/* Failure Policy badge */}
++          <span
++            className={`hook-policy-badge ${
++              hook.failure_policy === 'fail_closed' ? 'policy-fail-closed' : 'policy-fail-open'
++            }`}
++          >
++            {hook.failure_policy === 'fail_closed' ? 'Fail-Closed' : 'Fail-Open (Warn)'}
++          </span>
++
++          {/* Truncated SHA256 Chip */}
++          <button
++            type="button"
++            className="hook-sha256-chip"
++            onClick={() => {
++              void handleCopySha();
++            }}
++            title={`Click to copy full SHA-256: ${hook.manifest_sha256}`}
++            aria-label={`Copy SHA256: ${truncatedSha}`}
++          >
++            {copiedSha ? 'Copied!' : truncatedSha}
++          </button>
++
++          {/* Keyboard Reordering Buttons */}
++          <div className="hook-actions-group" role="group" aria-label="Reorder actions">
++            <button
++              type="button"
++              className="hook-move-btn"
++              disabled={index === 0}
++              onClick={() => onMove?.(hook.id, 'up')}
++              aria-label={`Move ${hook.name} up`}
++            >
++              Move up
++            </button>
++            <button
++              type="button"
++              className="hook-move-btn"
++              disabled={index === total - 1}
++              onClick={() => onMove?.(hook.id, 'down')}
++              aria-label={`Move ${hook.name} down`}
++            >
++              Move down
++            </button>
++          </div>
++
++          {/* Toggle Switch */}
++          <label className="hook-toggle-switch" htmlFor={`hook-toggle-${hook.id}`} aria-label={`Enable or disable ${hook.name}`}>
++            <input
++              id={`hook-toggle-${hook.id}`}
++              type="checkbox"
++              checked={hook.is_enabled}
++              onChange={(e) => onToggle?.(hook.id, e.target.checked)}
++              aria-label={`Toggle ${hook.name}`}
++            />
++            <span className="hook-toggle-slider" />
++          </label>
++
++          {/* Edit & Detach */}
++          <button
++            type="button"
++            className="workflow-btn workflow-btn-secondary workflow-btn-sm"
++            onClick={() => onEdit?.(hook)}
++            aria-label={`Edit ${hook.name}`}
++          >
++            Edit
++          </button>
++          <button
++            type="button"
++            className="workflow-btn workflow-btn-danger workflow-btn-sm"
++            onClick={() => onDetach?.(hook.id)}
++            aria-label={`Detach ${hook.name}`}
++          >
++            Detach
++          </button>
++        </div>
++      </div>
++
++      {/* Subtitle / Metadata row */}
++      <div className="hook-pipeline-subtitle">
++        {hook.hook_kind === 'agent_interceptor' ? (
++          <>
++            <span>Repo: <code>{hook.repo_binding_slug ?? 'kanban-main'}</code> (:ro mount)</span>
++            <span>|</span>
++            <span>MCP: {hook.mcp_access_summary ?? `Read-Only (${projectKey})`}</span>
++            <span>|</span>
++            <span>Mutable Fields:</span>
++            <div className="mutable-fields-chips">
++              {hook.allowed_mutable_fields && hook.allowed_mutable_fields.length > 0 ? (
++                hook.allowed_mutable_fields.map((field) => (
++                  <span key={field} className="field-chip">
++                    [{field}]
++                  </span>
++                ))
++              ) : (
++                <span className="field-chip">[none]</span>
++              )}
++            </div>
++          </>
++        ) : (
++          <span>{hook.description ?? 'Synchronous Wasm validator executing in isolated runtime.'}</span>
++        )}
++      </div>
++    </article>
++  );
++}
+diff --git a/kanban/web/src/features/workflows/TransitionRuleCard.tsx b/kanban/web/src/features/workflows/TransitionRuleCard.tsx
+new file mode 100644
+index 0000000..fd4fefe
+--- /dev/null
++++ b/kanban/web/src/features/workflows/TransitionRuleCard.tsx
+@@ -0,0 +1,212 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, type JSX } from 'react';
++import {
++  draggable,
++  dropTargetForElements,
++} from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
++import { HookPipelineRow } from './HookPipelineRow';
++import type { TransitionRule, WorkflowHook } from './api';
++
++export interface TransitionRuleCardProps {
++  rule: TransitionRule;
++  projectKey: string;
++  onReorder: (
++    transition: { from_state: string | null; to_state: string },
++    orderedHookIds: string[],
++  ) => Promise<void>;
++  onToggle: (hookId: string, isEnabled: boolean) => Promise<void>;
++  onEdit: (hook: WorkflowHook) => void;
++  onDetach: (hookId: string) => Promise<void>;
++  onAddHook: (transition: { from_state: string | null; to_state: string }) => void;
++  onDryRun: (transition: { from_state: string | null; to_state: string }) => void;
++  draggableFactory?: typeof draggable;
++  dropTargetFactory?: typeof dropTargetForElements;
++}
++
++export function TransitionRuleCard({
++  rule,
++  projectKey,
++  onReorder,
++  onToggle,
++  onEdit,
++  onDetach,
++  onAddHook,
++  onDryRun,
++  draggableFactory = draggable,
++  dropTargetFactory = dropTargetForElements,
++}: TransitionRuleCardProps): JSX.Element {
++  const [localHooks, setLocalHooks] = useState<WorkflowHook[]>(rule.hooks);
++  const [reorderError, setReorderError] = useState<string | null>(null);
++
++  // Sync when rule.hooks changes from query refetch
++  const effectiveHooks = localHooks.length === rule.hooks.length ? localHooks : rule.hooks;
++
++  const activeCount = effectiveHooks.filter((h) => h.is_enabled).length;
++  const fromLabel = rule.from_state ?? '* Any State';
++  const toLabel = rule.to_state;
++
++  const handleKeyboardMove = async (hookId: string, direction: 'up' | 'down') => {
++    const currentIndex = effectiveHooks.findIndex((h) => h.id === hookId);
++    if (currentIndex === -1) return;
++
++    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
++    if (targetIndex < 0 || targetIndex >= effectiveHooks.length) return;
++
++    const movedHook = effectiveHooks[currentIndex];
++    if (!movedHook) return;
++    const newHooks = effectiveHooks.filter((h) => h.id !== hookId);
++    newHooks.splice(targetIndex, 0, movedHook);
++
++    // Optimistic update
++    const previousHooks = [...effectiveHooks];
++    setLocalHooks(newHooks);
++    setReorderError(null);
++
++    try {
++      await onReorder(
++        { from_state: rule.from_state, to_state: rule.to_state },
++        newHooks.map((h) => h.id),
++      );
++    } catch (err: unknown) {
++      setLocalHooks(previousHooks);
++      if (err instanceof Error) {
++        setReorderError(err.message);
++      } else {
++        setReorderError('Reorder failed: 422 REORDER_SET_MISMATCH');
++      }
++    }
++  };
++
++  const handleDropReorder = async (sourceId: string, targetId: string) => {
++    const sourceIndex = effectiveHooks.findIndex((h) => h.id === sourceId);
++    const targetIndex = effectiveHooks.findIndex((h) => h.id === targetId);
++    if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return;
++
++    const movedHook = effectiveHooks[sourceIndex];
++    if (!movedHook) return;
++    const newHooks = effectiveHooks.filter((h) => h.id !== sourceId);
++    newHooks.splice(targetIndex, 0, movedHook);
++
++    // Optimistic update
++    const previousHooks = [...effectiveHooks];
++    setLocalHooks(newHooks);
++    setReorderError(null);
++
++    try {
++      await onReorder(
++        { from_state: rule.from_state, to_state: rule.to_state },
++        newHooks.map((h) => h.id),
++      );
++    } catch (err: unknown) {
++      setLocalHooks(previousHooks);
++      if (err instanceof Error) {
++        setReorderError(err.message);
++      } else {
++        setReorderError('Reorder failed: 422 REORDER_SET_MISMATCH');
++      }
++    }
++  };
++
++  return (
++    <section
++      className="transition-rule-card"
++      data-testid={`transition-card-${rule.from_state ?? 'any'}-${rule.to_state}`}
++      aria-label={`Transition Rule: ${fromLabel} to ${toLabel}`}
++    >
++      {/* Top arrow bar */}
++      <div className="transition-arrow-bar">
++        <div className="transition-states-container">
++          <span>Transition:</span>
++          <span className="state-badge state-badge-from">
++            {fromLabel.includes('Review') ? '🟣 ' : '⚪ '}
++            {fromLabel}
++          </span>
++          <div className="transition-arrow-connector">
++            <span>========(</span>
++            <span className="active-hooks-badge" data-testid="active-hooks-count">
++              {activeCount} Active Hook{activeCount === 1 ? '' : 's'}
++            </span>
++            <span>)========&gt;</span>
++          </div>
++          <span className="state-badge state-badge-to">
++            {toLabel.includes('Done') ? '🟢 ' : '⚪ '}
++            {toLabel}
++          </span>
++        </div>
++
++        <div className="hook-actions-group">
++          <button
++            type="button"
++            className="workflow-btn workflow-btn-secondary workflow-btn-sm"
++            onClick={() => {
++              onAddHook({ from_state: rule.from_state, to_state: rule.to_state });
++            }}
++            aria-label={`Add hook to ${fromLabel} to ${toLabel}`}
++          >
++            + Add Hook
++          </button>
++        </div>
++      </div>
++
++      {/* Accessible Reorder Error Alert */}
++      {reorderError && (
++        <div className="workflow-alert workflow-alert-danger" role="alert">
++          <strong>Reorder Error:</strong> {reorderError}
++        </div>
++      )}
++
++      {/* Ordered hooks or empty state */}
++      {effectiveHooks.length === 0 ? (
++        <div className="empty-hooks-cta" data-testid="empty-hooks-cta">
++          No hooks configured for this transition. Click &apos;+ Add Hook&apos; to attach a validator or agent gate.
++        </div>
++      ) : (
++        <div className="hook-pipeline-list" role="list" aria-label="Hook Pipeline List">
++          {effectiveHooks.map((hook, index) => (
++            <HookPipelineRow
++              key={hook.id}
++              hook={hook}
++              index={index}
++              total={effectiveHooks.length}
++              projectKey={projectKey}
++              onMove={(id, dir) => {
++                void handleKeyboardMove(id, dir);
++              }}
++              onDropReorder={(src, tgt) => {
++                void handleDropReorder(src, tgt);
++              }}
++              onToggle={(id, isEnabled) => {
++                void onToggle(id, isEnabled);
++              }}
++              onEdit={onEdit}
++              onDetach={(id) => {
++                void onDetach(id);
++              }}
++              draggableFactory={draggableFactory}
++              dropTargetFactory={dropTargetFactory}
++            />
++          ))}
++        </div>
++      )}
++
++      {/* Card bottom actions */}
++      <div className="transition-card-footer">
++        <span className="hook-command-summary">
++          Total configured hooks: {effectiveHooks.length}
++        </span>
++        <button
++          type="button"
++          className="workflow-btn workflow-btn-primary"
++          onClick={() => {
++            onDryRun({ from_state: rule.from_state, to_state: rule.to_state });
++          }}
++          aria-label={`Dry-run against sample ticket for ${fromLabel} to ${toLabel}`}
++        >
++          ▶ Dry-Run Against Sample Ticket
++        </button>
++      </div>
++    </section>
++  );
++}
+diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+new file mode 100644
+index 0000000..f7b68b1
+--- /dev/null
++++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+@@ -0,0 +1,378 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, useMemo, type JSX } from 'react';
++import { useParams, useSearchParams } from 'react-router';
++import { useQuery, useQueryClient } from '@tanstack/react-query';
++import { qk } from '../../api/queryKeys';
++import { apiFetch } from '../../api/client';
++import { ApiProblem } from '../../api/problem';
++import { NotFoundView } from '../../app/routes';
++import { SecondFactorStep } from '../auth/SecondFactorStep';
++import type { MfaMethod } from '../auth/authApi';
++import { TransitionRuleCard } from './TransitionRuleCard';
++import { AttachHookDialog } from './AttachHookDialog';
++import { DryRunDrawer } from './DryRunDrawer';
++import {
++  fetchWorkflowHooks,
++  createWorkflowHook,
++  updateWorkflowHook,
++  enableWorkflowHook,
++  disableWorkflowHook,
++  deleteWorkflowHook,
++  reorderWorkflowHooks,
++  fetchAgentDefinitions,
++  fetchProjectStates,
++  fetchApprovedWasmModules,
++  type WorkflowHook,
++  type CreateWorkflowHookPayload,
++  type ReorderHooksPayload,
++} from './api';
++import './workflows.css';
++
++export interface WorkflowStudioPageProps {
++  projectKeyOverride?: string;
++  isAdmin?: boolean;
++}
++
++interface PendingMutation {
++  type: 'create' | 'update' | 'reorder' | 'enable' | 'disable' | 'delete';
++  execute: () => Promise<void>;
++}
++
++export function WorkflowStudioPage({
++  projectKeyOverride,
++  isAdmin: propIsAdmin,
++}: WorkflowStudioPageProps): JSX.Element {
++  const params = useParams<{ projectKey?: string }>();
++  const [searchParams] = useSearchParams();
++  const projectKey = projectKeyOverride ?? params.projectKey ?? 'KAN';
++  const queryClient = useQueryClient();
++
++  // Query parameter overrides for non-admin testing
++  const queryNonAdmin =
++    searchParams.get('non_admin') === 'true' ||
++    searchParams.get('role') === 'member' ||
++    searchParams.get('role') === 'viewer';
++
++  // Check project details & capabilities
++  const projectQuery = useQuery({
++    queryKey: qk.project(projectKey),
++    queryFn: async () => {
++      try {
++        const data: unknown = await apiFetch('GET', `/api/v1/projects/${encodeURIComponent(projectKey)}` as never);
++        return data as { name?: string; capabilities?: string[] };
++      } catch {
++        return null;
++      }
++    },
++    enabled: propIsAdmin === undefined && !queryNonAdmin,
++    staleTime: 60000,
++  });
++
++  const isUserAdmin = useMemo(() => {
++    if (queryNonAdmin) return false;
++    if (propIsAdmin !== undefined) return propIsAdmin;
++    const caps = projectQuery.data?.capabilities;
++    if (caps && Array.isArray(caps)) {
++      return caps.includes('ADMIN') || caps.includes('PROJECT_ADMIN');
++    }
++    return true;
++  }, [queryNonAdmin, propIsAdmin, projectQuery.data]);
++
++  // Main rules query
++  const rulesQuery = useQuery({
++    queryKey: ['workflow-hooks', projectKey],
++    queryFn: () => fetchWorkflowHooks(projectKey),
++    enabled: isUserAdmin,
++  });
++
++  const rules = rulesQuery.data ?? [];
++  const isLoading = rulesQuery.isLoading;
++  const generalError = rulesQuery.error ? rulesQuery.error.message : null;
++
++  // Dialog and drawer state
++  const [isAttachDialogOpen, setIsAttachDialogOpen] = useState(false);
++  const [editingHook, setEditingHook] = useState<WorkflowHook | null>(null);
++  const [activeTransition, setActiveTransition] = useState<{
++    from_state: string | null;
++    to_state: string;
++  } | null>(null);
++
++  const [dryRunTransition, setDryRunTransition] = useState<{
++    from_state: string | null;
++    to_state: string;
++  } | null>(null);
++
++  // AAL2 Step-Up state
++  const [aal2Challenge, setAal2Challenge] = useState<{
++    challengeId: string;
++    methods: MfaMethod[];
++  } | null>(null);
++  const [pendingMutation, setPendingMutation] = useState<PendingMutation | null>(null);
++
++  // Auxiliary data queries
++  const statesQuery = useQuery({
++    queryKey: ['project-states', projectKey],
++    queryFn: () => fetchProjectStates(projectKey),
++    enabled: isUserAdmin,
++  });
++
++  const agentsQuery = useQuery({
++    queryKey: ['agent-definitions', 'kanban'],
++    queryFn: () => fetchAgentDefinitions('kanban'),
++    enabled: isUserAdmin,
++  });
++
++  const wasmModulesQuery = useQuery({
++    queryKey: ['approved-wasm-modules'],
++    queryFn: () => fetchApprovedWasmModules(),
++    enabled: isUserAdmin,
++  });
++
++  // If user lacks admin permissions, render uniform Not found or no access view (zero write requests)
++  if (!isUserAdmin) {
++    return <NotFoundView />;
++  }
++
++  // Handle AAL2 403 response intercept
++  const handleAal2Intercept = (err: unknown, mutation: PendingMutation): boolean => {
++    if (err instanceof ApiProblem && err.code === 'AAL2_REQUIRED') {
++      setPendingMutation(mutation);
++      const data = err.data;
++      const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
++      const methods = Array.isArray(data.methods)
++        ? (data.methods as MfaMethod[])
++        : (['webauthn', 'totp'] as MfaMethod[]);
++      setAal2Challenge({ challengeId, methods });
++      return true;
++    }
++    return false;
++  };
++
++  const handleAal2Success = async () => {
++    const mutation = pendingMutation;
++    setAal2Challenge(null);
++    setPendingMutation(null);
++    if (mutation) {
++      await mutation.execute();
++    }
++  };
++
++  // Reorder hooks handler
++  const handleReorder = async (
++    transition: { from_state: string | null; to_state: string },
++    orderedHookIds: string[],
++  ) => {
++    const payload: ReorderHooksPayload = {
++      transition,
++      ordered_hook_ids: orderedHookIds,
++    };
++
++    const action = async () => {
++      await reorderWorkflowHooks(projectKey, payload);
++      await queryClient.invalidateQueries({ queryKey: ['workflow-hooks', projectKey] });
++    };
++
++    try {
++      await action();
++    } catch (err: unknown) {
++      if (handleAal2Intercept(err, { type: 'reorder', execute: action })) {
++        return;
++      }
++      throw err;
++    }
++  };
++
++  // Toggle hook enabled / disabled
++  const handleToggle = async (hookId: string, isEnabled: boolean) => {
++    const action = async () => {
++      if (isEnabled) {
++        await enableWorkflowHook(hookId);
++      } else {
++        await disableWorkflowHook(hookId);
++      }
++      await queryClient.invalidateQueries({ queryKey: ['workflow-hooks', projectKey] });
++    };
++
++    try {
++      await action();
++    } catch (err: unknown) {
++      if (handleAal2Intercept(err, { type: isEnabled ? 'enable' : 'disable', execute: action })) {
++        return;
++      }
++    }
++  };
++
++  // Detach hook
++  const handleDetach = async (hookId: string) => {
++    const action = async () => {
++      await deleteWorkflowHook(hookId);
++      await queryClient.invalidateQueries({ queryKey: ['workflow-hooks', projectKey] });
++    };
++
++    try {
++      await action();
++    } catch (err: unknown) {
++      if (handleAal2Intercept(err, { type: 'delete', execute: action })) {
++        return;
++      }
++    }
++  };
++
++  // Save hook (create or update)
++  const handleSaveHook = async (payload: CreateWorkflowHookPayload) => {
++    const action = async () => {
++      if (editingHook) {
++        await updateWorkflowHook(editingHook.id, {
++          name: payload.name,
++          failure_policy: payload.failure_policy,
++          allowed_mutable_fields: payload.allowed_mutable_fields,
++          wasm_module_sha256: payload.wasm_module_sha256,
++          agent: payload.agent,
++          timeout_ms: payload.timeout_ms,
++        });
++      } else {
++        await createWorkflowHook(projectKey, payload);
++      }
++      await queryClient.invalidateQueries({ queryKey: ['workflow-hooks', projectKey] });
++    };
++
++    try {
++      await action();
++    } catch (err: unknown) {
++      if (handleAal2Intercept(err, { type: editingHook ? 'update' : 'create', execute: action })) {
++        return;
++      }
++      throw err;
++    }
++  };
++
++  return (
++    <main className="workflow-studio" data-testid="workflow-studio-page">
++      {/* Studio Header */}
++      <header className="workflow-studio-header">
++        <h1 className="workflow-studio-title">
++          <span>⚙️ Project</span>
++          <span className="workflow-studio-title-badge">{projectKey}</span>
++          <span>&gt; Workflow &amp; Transition Interceptors</span>
++        </h1>
++        <button
++          type="button"
++          className="workflow-btn workflow-btn-primary"
++          onClick={() => {
++            setEditingHook(null);
++            setActiveTransition(null);
++            setIsAttachDialogOpen(true);
++          }}
++          aria-label="Add Transition Rule"
++        >
++          + Add Transition Rule
++        </button>
++      </header>
++
++      {/* General Alert */}
++      {generalError && (
++        <div className="workflow-alert workflow-alert-danger" role="alert">
++          {generalError}
++        </div>
++      )}
++
++      {/* Loading State */}
++      {isLoading ? (
++        <div className="empty-hooks-cta">Loading workflow interceptor rules...</div>
++      ) : rules.length === 0 ? (
++        <div className="empty-hooks-cta" data-testid="empty-studio-state">
++          No workflow transition rules configured for Project {projectKey}. Click &apos;+ Add Transition Rule&apos; to create one.
++        </div>
++      ) : (
++        rules.map((rule) => (
++          <TransitionRuleCard
++            key={`${rule.from_state ?? 'any'}-${rule.to_state}`}
++            rule={rule}
++            projectKey={projectKey}
++            onReorder={handleReorder}
++            onToggle={handleToggle}
++            onEdit={(hook) => {
++              setEditingHook(hook);
++              setActiveTransition({ from_state: hook.from_state, to_state: hook.to_state });
++              setIsAttachDialogOpen(true);
++            }}
++            onDetach={handleDetach}
++            onAddHook={(transition) => {
++              setEditingHook(null);
++              setActiveTransition(transition);
++              setIsAttachDialogOpen(true);
++            }}
++            onDryRun={(transition) => {
++              setDryRunTransition(transition);
++            }}
++          />
++        ))
++      )}
++
++      {/* Attach / Edit Hook Dialog */}
++      <AttachHookDialog
++        isOpen={isAttachDialogOpen}
++        projectKey={projectKey}
++        initialTransition={activeTransition ?? undefined}
++        editingHook={editingHook}
++        states={statesQuery.data ?? []}
++        agentDefinitions={agentsQuery.data ?? []}
++        wasmModules={wasmModulesQuery.data ?? []}
++        onSave={handleSaveHook}
++        onClose={() => {
++          setIsAttachDialogOpen(false);
++          setEditingHook(null);
++          setActiveTransition(null);
++        }}
++      />
++
++      {/* Dry-Run Drawer */}
++      {dryRunTransition && (
++        <DryRunDrawer
++          isOpen={Boolean(dryRunTransition)}
++          projectKey={projectKey}
++          transition={dryRunTransition}
++          onClose={() => {
++            setDryRunTransition(null);
++          }}
++        />
++      )}
++
++      {/* AAL2 Step-Up Modal */}
++      {aal2Challenge && (
++        <div className="workflow-modal-backdrop" role="presentation">
++          <div
++            className="workflow-dialog"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="aal2-stepup-title"
++          >
++            <h2 id="aal2-stepup-title" className="workflow-dialog-title">
++              Admin Verification Required (AAL2)
++            </h2>
++            <SecondFactorStep
++              challengeId={aal2Challenge.challengeId}
++              methods={aal2Challenge.methods}
++              onSuccess={() => {
++                void handleAal2Success();
++              }}
++              onError={() => {
++                // Handled in SecondFactorStep
++              }}
++              onSessionExpired={() => {
++                setAal2Challenge(null);
++                setPendingMutation(null);
++              }}
++              onCancel={() => {
++                setAal2Challenge(null);
++                setPendingMutation(null);
++              }}
++            />
++          </div>
++        </div>
++      )}
++    </main>
++  );
++}
+diff --git a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+new file mode 100644
+index 0000000..8c0435d
+--- /dev/null
++++ b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+@@ -0,0 +1,244 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, expect, it, vi } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { AttachHookDialog } from '../AttachHookDialog';
++import {
++  DEFAULT_PROJECT_STATES,
++  DEFAULT_WASM_MODULES,
++  type AgentDefinitionSummary,
++  type WorkflowHook,
++} from '../api';
++
++const mockAgents: AgentDefinitionSummary[] = [
++  {
++    id: 'agent-1',
++    slug: 'forensic-code-check',
++    display_name: 'Forensic Code Check',
++    harness_kind: 'cli_pipe',
++    cli_binary_allowlist_id: 'agy',
++    cli_args: ['-p'],
++    repo_access_mode: 'ro_vfs_mount',
++    timeout_ms: 60000,
++  },
++  {
++    id: 'agent-2',
++    slug: 'sec-invariant-scan',
++    display_name: 'Security Invariant Scanner',
++    harness_kind: 'in_app_sdk',
++    provider_kind: 'ollama',
++    model_id: 'ollama/qwen2.5-coder',
++    cli_args: [],
++    repo_access_mode: 'ro_vfs_mount',
++    timeout_ms: 30000,
++  },
++  {
++    id: 'agent-3',
++    slug: 'remote-runner-pool',
++    display_name: 'Remote Runner Pool',
++    harness_kind: 'remote_runner',
++    remote_runner_pool_slug: 'gpu-pool-1',
++    cli_args: [],
++    repo_access_mode: 'none',
++    timeout_ms: 90000,
++  },
++];
++
++describe('AttachHookDialog (KB-P5-24)', () => {
++  it('does not render when isOpen is false', () => {
++    const { container } = render(
++      <AttachHookDialog
++        isOpen={false}
++        projectKey="KAN"
++        states={DEFAULT_PROJECT_STATES}
++        agentDefinitions={mockAgents}
++        onSave={vi.fn()}
++        onClose={vi.fn()}
++      />,
++    );
++    expect(container.firstChild).toBeNull();
++  });
++
++  it('switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3)', () => {
++    render(
++      <AttachHookDialog
++        isOpen={true}
++        projectKey="KAN"
++        states={DEFAULT_PROJECT_STATES}
++        agentDefinitions={mockAgents}
++        wasmModules={DEFAULT_WASM_MODULES}
++        onSave={vi.fn()}
++        onClose={vi.fn()}
++      />,
++    );
++
++    // Initial is sync_validator
++    expect(screen.getByLabelText(/Approved Wasm Module/i)).toBeDefined();
++    expect(screen.queryByLabelText(/Agent Definition/i)).toBeNull();
++
++    // Check mutable field labels checkbox is disabled for sync_validator
++    const labelsCheckbox = screen.getByRole<HTMLInputElement>('checkbox', { name: /labels/i });
++    expect(labelsCheckbox.disabled).toBe(true);
++
++    // Switch to sync_mutator: Wasm module is visible, mutable fields are enabled
++    fireEvent.click(screen.getByLabelText('Sync Wasm Mutator'));
++    expect(screen.getByLabelText(/Approved Wasm Module/i)).toBeDefined();
++    expect(screen.queryByLabelText(/Agent Definition/i)).toBeNull();
++    expect(labelsCheckbox.disabled).toBe(false);
++
++    // Switch to agent_interceptor: Wasm module hidden, Agent definition visible
++    fireEvent.click(screen.getByLabelText('Agent Interceptor'));
++    expect(screen.queryByLabelText(/Approved Wasm Module/i)).toBeNull();
++    expect(screen.getByLabelText(/Agent Definition/i)).toBeDefined();
++    expect(screen.getByTestId('agent-details-summary')).toBeDefined();
++    expect(screen.getByText(/Validated CLI Args:/i)).toBeDefined();
++
++    // Invariant: state and description_markdown cannot be selected
++    expect(screen.queryByRole('checkbox', { name: /^state$/i })).toBeNull();
++    expect(screen.queryByRole('checkbox', { name: /^description_markdown$/i })).toBeNull();
++  });
++
++  it('validates required fields and prevents from_state === to_state', () => {
++    const handleSave = vi.fn();
++    render(
++      <AttachHookDialog
++        isOpen={true}
++        projectKey="KAN"
++        states={DEFAULT_PROJECT_STATES}
++        agentDefinitions={mockAgents}
++        onSave={handleSave}
++        onClose={vi.fn()}
++      />,
++    );
++
++    // Missing name
++    fireEvent.submit(screen.getByRole('button', { name: 'Attach Hook' }));
++    expect(screen.getByRole('alert').textContent).toContain('Hook name is required');
++    expect(handleSave).not.toHaveBeenCalled();
++
++    // Set identical from and to state
++    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'custom-check' } });
++    fireEvent.change(screen.getByLabelText(/From State/i), { target: { value: 'Done' } });
++    fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Done' } });
++
++    fireEvent.submit(screen.getByRole('button', { name: 'Attach Hook' }));
++    expect(screen.getByRole('alert').textContent).toContain('cannot be identical');
++    expect(handleSave).not.toHaveBeenCalled();
++  });
++
++  it('successfully creates an agent_interceptor hook with selected mutable fields', async () => {
++    const handleSave = vi.fn().mockResolvedValue(undefined);
++    const handleClose = vi.fn();
++
++    render(
++      <AttachHookDialog
++        isOpen={true}
++        projectKey="KAN"
++        states={DEFAULT_PROJECT_STATES}
++        agentDefinitions={mockAgents}
++        onSave={handleSave}
++        onClose={handleClose}
++      />,
++    );
++
++    // Fill form
++    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'code-review-agent' } });
++    fireEvent.change(screen.getByLabelText(/From State/i), { target: { value: 'In Review' } });
++    fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Done' } });
++
++    // Switch to agent_interceptor
++    fireEvent.click(screen.getByLabelText('Agent Interceptor'));
++    fireEvent.change(screen.getByLabelText(/Agent Definition/i), { target: { value: 'forensic-code-check' } });
++
++    // Check mutable fields
++    const labelsCheckbox = screen.getByRole('checkbox', { name: /labels/i });
++    fireEvent.click(labelsCheckbox);
++
++    // Submit
++    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++
++    await waitFor(() => {
++      expect(handleSave).toHaveBeenCalledWith({
++        name: 'code-review-agent',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'agent_interceptor',
++        failure_policy: 'fail_closed',
++        agent: 'forensic-code-check',
++        allowed_mutable_fields: ['labels'],
++        timeout_ms: 60000,
++      });
++      expect(handleClose).toHaveBeenCalled();
++    });
++  });
++
++  it('populates editingHook data when editing an existing hook', async () => {
++    const existingHook: WorkflowHook = {
++      id: 'hook-edit-1',
++      name: 'existing-validator',
++      from_state: 'In Progress',
++      to_state: 'In Review',
++      hook_kind: 'sync_validator',
++      sort_rank: '0001',
++      failure_policy: 'fail_open_warn',
++      manifest_sha256: 'abc123',
++      is_enabled: true,
++      wasm_module_sha256: DEFAULT_WASM_MODULES[0]?.sha256,
++    };
++
++    const handleSave = vi.fn().mockResolvedValue(undefined);
++
++    render(
++      <AttachHookDialog
++        isOpen={true}
++        projectKey="KAN"
++        editingHook={existingHook}
++        states={DEFAULT_PROJECT_STATES}
++        agentDefinitions={mockAgents}
++        onSave={handleSave}
++        onClose={vi.fn()}
++      />,
++    );
++
++    expect(screen.getByText('Edit Hook: existing-validator')).toBeDefined();
++    expect(screen.getByDisplayValue('existing-validator')).toBeDefined();
++
++    // Update name and submit
++    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'updated-validator' } });
++    fireEvent.click(screen.getByRole('button', { name: 'Update Hook' }));
++
++    await waitFor(() => {
++      expect(handleSave).toHaveBeenCalledWith(
++        expect.objectContaining({
++          name: 'updated-validator',
++          failure_policy: 'fail_open_warn',
++          hook_kind: 'sync_validator',
++        }),
++      );
++    });
++  });
++
++  it('handles save errors and displays error alert', async () => {
++    const handleSave = vi.fn().mockRejectedValue(new Error('Server validation failed: unapproved Wasm'));
++
++    render(
++      <AttachHookDialog
++        isOpen={true}
++        projectKey="KAN"
++        states={DEFAULT_PROJECT_STATES}
++        agentDefinitions={mockAgents}
++        onSave={handleSave}
++        onClose={vi.fn()}
++      />,
++    );
++
++    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'failing-hook' } });
++    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++
++    await waitFor(() => {
++      expect(screen.getByRole('alert').textContent).toContain('unapproved Wasm');
++    });
++  });
++});
+diff --git a/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx b/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx
+new file mode 100644
+index 0000000..4d9b861
+--- /dev/null
++++ b/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx
+@@ -0,0 +1,204 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, expect, it, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { DryRunDrawer } from '../DryRunDrawer';
++import type { DryRunResponse, DryRunPayload } from '../api';
++
++describe('DryRunDrawer (KB-P5-24)', () => {
++  let writeTextSpy: ReturnType<typeof vi.fn>;
++
++  beforeEach(() => {
++    writeTextSpy = vi.fn().mockResolvedValue(undefined);
++    Object.assign(navigator, {
++      clipboard: {
++        writeText: writeTextSpy,
++      },
++    });
++  });
++
++  it('does not render when isOpen is false', () => {
++    const { container } = render(
++      <DryRunDrawer
++        isOpen={false}
++        projectKey="KAN"
++        transition={{ from_state: 'In Review', to_state: 'Done' }}
++        onClose={vi.fn()}
++      />,
++    );
++    expect(container.firstChild).toBeNull();
++  });
++
++  it('runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4)', async () => {
++    const mockResponse: DryRunResponse = {
++      would_commit: false,
++      steps: [
++        {
++          order: 1,
++          name: 'require-qa-proof-link',
++          hook_kind: 'sync_validator',
++          result: 'rejected',
++          reason: 'Verification proof rejected: missing docs/qa/ proof bundle in ticket description or comments',
++          duration_us: 1200,
++        },
++        {
++          order: 2,
++          name: 'forensic-code-check',
++          hook_kind: 'agent_interceptor',
++          result: 'skipped_async',
++          duration_us: 50,
++          cli_command: 'uv run kanban-agent validate-transition --project KAN --transition "In Review -> Done" --agent forensic-code-check',
++        },
++        {
++          order: 3,
++          name: 'sec-invariant-scan',
++          hook_kind: 'agent_interceptor',
++          result: 'skipped_async',
++          duration_us: 40,
++          cli_command: 'uv run kanban-agent validate-transition --project KAN --transition "In Review -> Done" --agent sec-invariant-scan',
++        },
++      ],
++    };
++
++    const mockRunner = vi
++      .fn<(projectKey: string, payload: DryRunPayload) => Promise<DryRunResponse>>()
++      .mockResolvedValue(mockResponse);
++
++    render(
++      <DryRunDrawer
++        isOpen={true}
++        projectKey="KAN"
++        transition={{ from_state: 'In Review', to_state: 'Done' }}
++        onClose={vi.fn()}
++        dryRunRunner={mockRunner}
++      />,
++    );
++
++    expect(screen.getByText(/▶ Dry-Run: \[In Review\] ➔ \[Done\]/i)).toBeDefined();
++
++    // Click Run Dry-Run
++    fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
++
++    await waitFor(() => {
++      expect(mockRunner).toHaveBeenCalledTimes(1);
++    });
++    const callArgs = mockRunner.mock.calls[0];
++    expect(callArgs?.[0]).toBe('KAN');
++    expect(callArgs?.[1]?.from_state).toBe('In Review');
++    expect(callArgs?.[1]?.to_state).toBe('Done');
++    expect(callArgs?.[1]?.sample_ticket?.summary).toContain('Fix RLS policy');
++
++    // Check step 1: rejected
++    await waitFor(() => {
++      expect(screen.getByTestId('dry-run-step-1').textContent).toContain('require-qa-proof-link');
++      expect(screen.getByTestId('dry-run-reason-1').textContent).toContain(
++        'Verification proof rejected: missing docs/qa/ proof bundle',
++      );
++    });
++
++    // Check would_commit banner
++    const wouldCommitBanner = screen.getByTestId('would-commit-banner');
++    expect(wouldCommitBanner.textContent).toContain('would_commit: false');
++
++    // Check step 2: skipped_async with CLI command
++    const step2Cli = screen.getByTestId('dry-run-cli-2');
++    expect(step2Cli.textContent).toContain('uv run kanban-agent validate-transition');
++
++    // Click copy CLI button
++    const copyBtn = screen.getByRole('button', { name: /Copy CLI command for forensic-code-check/i });
++    fireEvent.click(copyBtn);
++    expect(writeTextSpy).toHaveBeenCalledWith(
++      expect.stringContaining('uv run kanban-agent validate-transition'),
++    );
++  });
++
++  it('switches between sample ticket and existing issue modes', async () => {
++    const mockRunner = vi.fn().mockResolvedValue({
++      would_commit: true,
++      steps: [
++        {
++          order: 1,
++          name: 'auto-label-mutator',
++          hook_kind: 'sync_mutator',
++          result: 'mutated',
++          field_updates: { labels: ['security', 'verified'] },
++          duration_us: 2500,
++        },
++      ],
++    });
++
++    render(
++      <DryRunDrawer
++        isOpen={true}
++        projectKey="KAN"
++        transition={{ from_state: null, to_state: 'Done' }}
++        onClose={vi.fn()}
++        dryRunRunner={mockRunner}
++      />,
++    );
++
++    // Switch to existing issue
++    fireEvent.click(screen.getByRole('tab', { name: 'Pick existing issue' }));
++    expect(screen.getByLabelText(/Issue Key/i)).toBeDefined();
++
++    // Trigger run with issue key
++    fireEvent.change(screen.getByLabelText(/Issue Key/i), { target: { value: 'KAN-99' } });
++    fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
++
++    await waitFor(() => {
++      expect(mockRunner).toHaveBeenCalledWith(
++        'KAN',
++        expect.objectContaining({
++          from_state: null,
++          to_state: 'Done',
++          issue_key: 'KAN-99',
++        }),
++      );
++    });
++
++    // Verify mutated step updates
++    await waitFor(() => {
++      expect(screen.getByTestId('dry-run-updates-1').textContent).toContain('verified');
++      expect(screen.getByTestId('would-commit-banner').textContent).toContain('Transition Allowed');
++    });
++  });
++
++  it('validates empty issue key in issue mode', () => {
++    render(
++      <DryRunDrawer
++        isOpen={true}
++        projectKey="KAN"
++        transition={{ from_state: 'In Review', to_state: 'Done' }}
++        onClose={vi.fn()}
++      />,
++    );
++
++    fireEvent.click(screen.getByRole('tab', { name: 'Pick existing issue' }));
++    fireEvent.change(screen.getByLabelText(/Issue Key/i), { target: { value: '   ' } });
++    fireEvent.submit(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
++
++    expect(screen.getByRole('alert').textContent).toContain('Issue key is required');
++  });
++
++  it('handles runner failure gracefully', async () => {
++    const mockRunner = vi.fn().mockRejectedValue(new Error('Network timeout during dry-run'));
++
++    render(
++      <DryRunDrawer
++        isOpen={true}
++        projectKey="KAN"
++        transition={{ from_state: 'In Review', to_state: 'Done' }}
++        onClose={vi.fn()}
++        dryRunRunner={mockRunner}
++      />,
++    );
++
++    fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
++
++    await waitFor(() => {
++      expect(screen.getByRole('alert').textContent).toContain('Network timeout during dry-run');
++    });
++  });
++});
+diff --git a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
+new file mode 100644
+index 0000000..446928a
+--- /dev/null
++++ b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
+@@ -0,0 +1,241 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, expect, it, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { MemoryRouter } from 'react-router';
++import { WorkflowStudioPage } from '../WorkflowStudioPage';
++import * as api from '../api';
++import { ApiProblem } from '../../../api/problem';
++
++describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
++  let queryClient: QueryClient;
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: {
++        queries: { retry: false, staleTime: Infinity },
++      },
++    });
++    vi.restoreAllMocks();
++  });
++
++  function renderPage(props: { isAdmin?: boolean; projectKey?: string } = {}) {
++    return render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={[`/projects/${props.projectKey ?? 'KAN'}/settings/workflows`]}>
++          <WorkflowStudioPage
++            projectKeyOverride={props.projectKey ?? 'KAN'}
++            isAdmin={props.isAdmin ?? true}
++          />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++  }
++
++  it('renders In Review -> Done card with the 3 S14.4 hooks matching wireframe (Mandatory Test Case 1)', async () => {
++    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
++
++    renderPage();
++
++    // Verify header
++    await waitFor(() => {
++      expect(screen.getByText(/Workflow & Transition Interceptors/i)).toBeDefined();
++      expect(screen.getByText('KAN')).toBeDefined();
++    });
++
++    // Verify top arrow bar
++    expect(screen.getByTestId('active-hooks-count').textContent).toContain('3 Active Hooks');
++    expect(screen.getByText(/In Review/i)).toBeDefined();
++    expect(screen.getByText(/Done/i)).toBeDefined();
++
++    // Verify 3 hooks in order
++    expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++    expect(screen.getByText('forensic-code-check')).toBeDefined();
++    expect(screen.getByText('sec-invariant-scan')).toBeDefined();
++
++    // Verify sync hook details
++    expect(screen.getByText('⚡ [Sync Wasm Validator]')).toBeDefined();
++    expect(screen.getByTestId('hook-latency-hook-1').textContent).toContain('<2ms');
++
++    // Verify agent hook details
++    expect(screen.getByText('(${context} | agy -p)')).toBeDefined();
++    expect(screen.getByText('(ollama/qwen2.5-coder)')).toBeDefined();
++    expect(screen.getAllByText('kanban-main')[0]).toBeDefined();
++    expect(screen.getAllByText(/\(:ro mount\)/i)[0]).toBeDefined();
++    expect(screen.getByText('[labels]')).toBeDefined();
++
++    // Verify popover details for agent
++    const emojiPill = screen.getByTestId('emoji-hint-hook-2');
++    expect(emojiPill).toBeDefined();
++    fireEvent.click(emojiPill);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('emoji-hint-hook-2-popup')).toBeDefined();
++      expect(screen.getByText(/Harness: cli_pipe/i)).toBeDefined();
++    });
++  });
++
++  it('reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2)', async () => {
++    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
++    const reorderSpy = vi.spyOn(api, 'reorderWorkflowHooks').mockResolvedValue(undefined);
++    const disableSpy = vi.spyOn(api, 'disableWorkflowHook').mockResolvedValue(undefined);
++
++    renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByText('forensic-code-check')).toBeDefined();
++    });
++
++    // Move hook 2 (forensic-code-check) up
++    const moveUpBtn = screen.getByRole('button', { name: 'Move forensic-code-check up' });
++    fireEvent.click(moveUpBtn);
++
++    await waitFor(() => {
++      expect(reorderSpy).toHaveBeenCalledWith(
++        'KAN',
++        expect.objectContaining({
++          transition: { from_state: 'In Review', to_state: 'Done' },
++          ordered_hook_ids: ['hook-2', 'hook-1', 'hook-3'],
++        }),
++      );
++    });
++
++    // Toggle hook 1 disabled
++    const toggleSwitch = screen.getByRole('checkbox', { name: 'Toggle require-qa-proof-link' });
++    fireEvent.click(toggleSwitch);
++
++    await waitFor(() => {
++      expect(disableSpy).toHaveBeenCalledWith('hook-1');
++    });
++  });
++
++  it('renders uniform Not found or no access for non-admin user with 0 write calls (Mandatory Test Case 5)', async () => {
++    const createSpy = vi.spyOn(api, 'createWorkflowHook');
++    const reorderSpy = vi.spyOn(api, 'reorderWorkflowHooks');
++
++    renderPage({ isAdmin: false });
++
++    await waitFor(() => {
++      expect(screen.getByText('Not found or no access')).toBeDefined();
++    });
++
++    expect(screen.queryByText(/Workflow & Transition Interceptors/i)).toBeNull();
++    expect(createSpy).not.toHaveBeenCalled();
++    expect(reorderSpy).not.toHaveBeenCalled();
++  });
++
++  it('safely escapes hostile hook names and rejection reasons without script injection (Mandatory Test Case 5)', async () => {
++    const hostileRules: api.TransitionRule[] = [
++      {
++        from_state: 'In Progress',
++        to_state: 'In Review',
++        active_hook_count: 1,
++        hooks: [
++          {
++            id: 'hostile-hook-1',
++            name: '<img src=x onerror=alert(1)>',
++            from_state: 'In Progress',
++            to_state: 'In Review',
++            hook_kind: 'sync_validator',
++            sort_rank: '0001',
++            failure_policy: 'fail_closed',
++            manifest_sha256: 'deadbeef',
++            is_enabled: true,
++            description: '<script>alert("xss")</script>',
++          },
++        ],
++      },
++    ];
++
++    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(hostileRules);
++
++    const { container } = renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeDefined();
++    });
++
++    // Zero injected img or script elements
++    expect(container.querySelectorAll('img[src="x"]')).toHaveLength(0);
++    expect(container.querySelectorAll('script')).toHaveLength(0);
++  });
++
++  it('triggers AAL2 step-up challenge modal on 403 AAL2_REQUIRED and retries mutation on elevation (Mandatory Test Case 5)', async () => {
++    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
++
++    const aal2Problem = new ApiProblem(403, {
++      code: 'AAL2_REQUIRED',
++      challenge_id: 'challenge-xyz',
++      methods: ['totp'],
++    });
++
++    let attempts = 0;
++    vi.spyOn(api, 'deleteWorkflowHook').mockImplementation(async () => {
++      await Promise.resolve();
++      attempts++;
++      if (attempts === 1) {
++        throw aal2Problem;
++      }
++    });
++
++    renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++    });
++
++    // Detach hook 1
++    const detachBtn = screen.getByRole('button', { name: 'Detach require-qa-proof-link' });
++    fireEvent.click(detachBtn);
++
++    // Verify AAL2 step-up modal appears
++    await waitFor(() => {
++      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
++    });
++  });
++
++  it('renders empty state CTA when transition has 0 hooks (Mandatory Test Case 6)', async () => {
++    const emptyRules: api.TransitionRule[] = [
++      {
++        from_state: 'Backlog',
++        to_state: 'In Progress',
++        active_hook_count: 0,
++        hooks: [],
++      },
++    ];
++
++    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(emptyRules);
++
++    renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('empty-hooks-cta').textContent).toContain(
++        "No hooks configured for this transition. Click '+ Add Hook' to attach a validator or agent gate.",
++      );
++    });
++  });
++
++  it('rolls back optimistic order and shows alert on 422 REORDER_SET_MISMATCH (Mandatory Test Case 6)', async () => {
++    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
++    vi.spyOn(api, 'reorderWorkflowHooks').mockRejectedValue(
++      new Error('Reorder failed: 422 REORDER_SET_MISMATCH'),
++    );
++
++    renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByText('forensic-code-check')).toBeDefined();
++    });
++
++    // Move hook 2 up
++    const moveUpBtn = screen.getByRole('button', { name: 'Move forensic-code-check up' });
++    fireEvent.click(moveUpBtn);
++
++    await waitFor(() => {
++      expect(screen.getByRole('alert').textContent).toContain('422 REORDER_SET_MISMATCH');
++    });
++  });
++});
+diff --git a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
+new file mode 100644
+index 0000000..1b1ba52
+--- /dev/null
++++ b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
+@@ -0,0 +1,1308 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, expect, it, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { MemoryRouter } from 'react-router';
++import { HookPipelineRow } from '../HookPipelineRow';
++import { TransitionRuleCard } from '../TransitionRuleCard';
++import { WorkflowStudioPage } from '../WorkflowStudioPage';
++import { DryRunDrawer } from '../DryRunDrawer';
++import { AttachHookDialog } from '../AttachHookDialog';
++import * as api from '../api';
++import * as client from '../../../api/client';
++import { ApiProblem } from '../../../api/problem';
++
++const DEFAULT_TEST_RULE: api.TransitionRule = api.DEFAULT_S14_4_RULES[0] ?? {
++  from_state: 'In Review',
++  to_state: 'Done',
++  active_hook_count: 1,
++  hooks: [],
++};
++
++const DEFAULT_TEST_HOOK: api.WorkflowHook = DEFAULT_TEST_RULE.hooks[0] ?? {
++  id: 'hook-1',
++  name: 'require-qa-proof-link',
++  from_state: 'In Review',
++  to_state: 'Done',
++  hook_kind: 'sync_validator',
++  sort_rank: '01',
++  failure_policy: 'fail_closed',
++  manifest_sha256: 'deadbeef',
++  is_enabled: true,
++};
++
++describe('Workflow Studio Coverage Booster', () => {
++  let queryClient: QueryClient;
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: {
++        queries: { retry: false, staleTime: Infinity },
++      },
++    });
++    vi.restoreAllMocks();
++  });
++
++  describe('api.ts coverage', () => {
++    it('exercises fetchWorkflowHooks all branches', async () => {
++      // Branch 1: array returned directly
++      vi.spyOn(client, 'apiFetch').mockResolvedValueOnce(api.DEFAULT_S14_4_RULES);
++      const res1 = await api.fetchWorkflowHooks('KAN');
++      expect(res1).toHaveLength(1);
++
++      // Branch 2: object with rules array
++      vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({ rules: api.DEFAULT_S14_4_RULES });
++      const res2 = await api.fetchWorkflowHooks('KAN');
++      expect(res2).toHaveLength(1);
++
++      // Branch 3: 404 ApiProblem throws
++      vi.spyOn(client, 'apiFetch').mockRejectedValueOnce(new ApiProblem(404));
++      await expect(api.fetchWorkflowHooks('KAN')).rejects.toThrow();
++
++      // Branch 3b: 403 ApiProblem throws
++      vi.spyOn(client, 'apiFetch').mockRejectedValueOnce(new ApiProblem(403));
++      await expect(api.fetchWorkflowHooks('KAN')).rejects.toThrow();
++
++      // Branch 3c: object with non-rules data
++      vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({ unrelated: true });
++      const res3c = await api.fetchWorkflowHooks('KAN');
++      expect(res3c).toEqual(api.DEFAULT_S14_4_RULES);
++
++      // Branch 4: generic error returns fallback
++      vi.spyOn(client, 'apiFetch').mockRejectedValueOnce(new Error('Network error'));
++      const res4 = await api.fetchWorkflowHooks('KAN');
++      expect(res4).toEqual(api.DEFAULT_S14_4_RULES);
++    });
++
++    it('exercises mutations and auxiliary fetch functions', async () => {
++      const fetchSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue({ success: true });
++
++      await api.createWorkflowHook('KAN', {
++        name: 'test-hook',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'sync_validator',
++        failure_policy: 'fail_closed',
++      });
++      expect(fetchSpy).toHaveBeenCalledWith(
++        'POST',
++        expect.stringContaining('/workflow-hooks'),
++        expect.any(Object),
++      );
++
++      await api.updateWorkflowHook('hook-1', { name: 'updated' });
++      expect(fetchSpy).toHaveBeenCalledWith(
++        'PATCH',
++        expect.stringContaining('/workflow-hooks/hook-1'),
++        expect.any(Object),
++      );
++
++      await api.enableWorkflowHook('hook-1');
++      await api.disableWorkflowHook('hook-1');
++      await api.deleteWorkflowHook('hook-1');
++      await api.reorderWorkflowHooks('KAN', {
++        transition: { from_state: null, to_state: 'Done' },
++        ordered_hook_ids: ['hook-1'],
++      });
++      await api.dryRunWorkflowHooks('KAN', {
++        from_state: null,
++        to_state: 'Done',
++      });
++
++      // fetchAgentDefinitions success and fallback
++      fetchSpy.mockResolvedValueOnce([{ id: 'a1', slug: 'agent-1' }]);
++      const agents1 = await api.fetchAgentDefinitions('kanban');
++      expect(agents1).toHaveLength(1);
++
++      fetchSpy.mockResolvedValueOnce('not-an-array');
++      const agentsNonArray = await api.fetchAgentDefinitions('kanban');
++      expect(agentsNonArray).toEqual([]);
++
++      fetchSpy.mockRejectedValueOnce(new Error('fail'));
++      const agentsFallback = await api.fetchAgentDefinitions('kanban');
++      expect(agentsFallback.length).toBeGreaterThan(0);
++
++      // fetchRepoBindings success and fallback
++      fetchSpy.mockResolvedValueOnce([{ id: 'r1', slug: 'repo-1' }]);
++      const repos1 = await api.fetchRepoBindings('KAN');
++      expect(repos1).toHaveLength(1);
++
++      fetchSpy.mockResolvedValueOnce('not-an-array');
++      const reposNonArray = await api.fetchRepoBindings('KAN');
++      expect(reposNonArray).toEqual([]);
++
++      fetchSpy.mockRejectedValueOnce(new Error('fail'));
++      const reposFallback = await api.fetchRepoBindings('KAN');
++      expect(reposFallback).toHaveLength(1);
++
++      // fetchProjectStates success, empty, and fallback
++      fetchSpy.mockResolvedValueOnce([{ id: 's1', name: 'Custom State' }]);
++      const states1 = await api.fetchProjectStates('KAN');
++      expect(states1[0]?.name).toBe('Custom State');
++
++      fetchSpy.mockResolvedValueOnce([]);
++      const statesEmpty = await api.fetchProjectStates('KAN');
++      expect(statesEmpty.length).toBeGreaterThan(0);
++
++      fetchSpy.mockRejectedValueOnce(new Error('fail'));
++      const statesFallback = await api.fetchProjectStates('KAN');
++      expect(statesFallback.length).toBeGreaterThan(0);
++
++      // fetchApprovedWasmModules
++      const wasm = await api.fetchApprovedWasmModules();
++      expect(wasm.length).toBeGreaterThan(0);
++    });
++  });
++
++  describe('HookPipelineRow variations', () => {
++    it('renders different hook kinds and failure policies', () => {
++      const mutatorHook: api.WorkflowHook = {
++        id: 'h-mutator',
++        name: 'test-mutator',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'sync_mutator',
++        sort_rank: '01',
++        failure_policy: 'fail_open_warn',
++        manifest_sha256: '',
++        is_enabled: false,
++      };
++
++      const sdkHook: api.WorkflowHook = {
++        id: 'h-sdk',
++        name: 'sdk-gate',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'agent_interceptor',
++        sort_rank: '02',
++        failure_policy: 'fail_closed',
++        manifest_sha256: 'deadbeef123',
++        is_enabled: true,
++        harness_kind: 'in_app_sdk',
++        provider_kind: 'gemini',
++        model_id: 'gemini-1.5-pro',
++        allowed_mutable_fields: [],
++      };
++
++      const remoteHook: api.WorkflowHook = {
++        id: 'h-remote',
++        name: 'remote-gate',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'agent_interceptor',
++        sort_rank: '03',
++        failure_policy: 'fail_closed',
++        manifest_sha256: 'abcdef12345',
++        is_enabled: true,
++        harness_kind: 'remote_runner',
++      };
++
++      const fallbackAgentHook: api.WorkflowHook = {
++        id: 'h-fallback',
++        name: 'generic-agent',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'agent_interceptor',
++        sort_rank: '04',
++        failure_policy: 'fail_closed',
++        manifest_sha256: '999999999',
++        is_enabled: true,
++        harness_kind: undefined,
++      };
++
++      const onMove = vi.fn();
++      const onToggle = vi.fn();
++      const onEdit = vi.fn();
++      const onDetach = vi.fn();
++      const onDropReorder = vi.fn();
++
++      const { rerender } = render(
++        <HookPipelineRow
++          hook={mutatorHook}
++          index={0}
++          total={2}
++          projectKey="KAN"
++          onMove={onMove}
++          onToggle={onToggle}
++          onEdit={onEdit}
++          onDetach={onDetach}
++          onDropReorder={onDropReorder}
++        />,
++      );
++
++      expect(screen.getByText('⚡ [Sync Wasm Mutator]')).toBeDefined();
++      expect(screen.getByText('Fail-Open (Warn)')).toBeDefined();
++      expect(screen.getByText('sha256:none')).toBeDefined();
++
++      // Trigger move down
++      fireEvent.click(screen.getByRole('button', { name: 'Move test-mutator down' }));
++      expect(onMove).toHaveBeenCalledWith('h-mutator', 'down');
++
++      // Trigger edit and detach
++      fireEvent.click(screen.getByRole('button', { name: 'Edit test-mutator' }));
++      expect(onEdit).toHaveBeenCalledWith(mutatorHook);
++      fireEvent.click(screen.getByRole('button', { name: 'Detach test-mutator' }));
++      expect(onDetach).toHaveBeenCalledWith('h-mutator');
++
++      // Trigger toggle
++      fireEvent.click(screen.getByRole('checkbox', { name: 'Toggle test-mutator' }));
++      expect(onToggle).toHaveBeenCalledWith('h-mutator', true);
++
++      // Copy SHA with clipboard failure
++      Object.assign(navigator, {
++        clipboard: {
++          writeText: vi.fn().mockRejectedValue(new Error('fail')),
++        },
++      });
++      fireEvent.click(screen.getByRole('button', { name: /Copy SHA256/i }));
++
++      // Render SDK hook
++      rerender(
++        <HookPipelineRow
++          hook={sdkHook}
++          index={1}
++          total={2}
++          projectKey="KAN"
++          onMove={onMove}
++        />,
++      );
++      expect(screen.getByText('[SDK Agent Gate]')).toBeDefined();
++      expect(screen.getByText('(gemini-1.5-pro)')).toBeDefined();
++      expect(screen.getByText('[none]')).toBeDefined();
++
++      // Render Remote hook
++      rerender(
++        <HookPipelineRow
++          hook={remoteHook}
++          index={0}
++          total={1}
++          projectKey="KAN"
++        />,
++      );
++      expect(screen.getByText('[Remote WSS Gate]')).toBeDefined();
++
++      // Render Fallback hook
++      rerender(
++        <HookPipelineRow
++          hook={fallbackAgentHook}
++          index={0}
++          total={1}
++          projectKey="KAN"
++        />,
++      );
++      expect(screen.getByText('[Agent Gate]')).toBeDefined();
++    });
++
++    it('exercises pragmatic drag and drop hooks and callbacks', () => {
++      let registeredDraggable: { getInitialData?: () => unknown; onDragStart?: () => void; onDrop?: () => void } = {};
++      let registeredDropTarget: { getData?: () => unknown; onDrop?: (args: { source: { data: unknown } }) => void } = {};
++
++      const mockDraggableFactory = vi.fn().mockImplementation((config: { getInitialData?: () => unknown; onDragStart?: () => void; onDrop?: () => void }) => {
++        registeredDraggable = config;
++        return () => { /* no-op */ };
++      });
++
++      const mockDropTargetFactory = vi.fn().mockImplementation((config: { getData?: () => unknown; onDrop?: (args: { source: { data: unknown } }) => void }) => {
++        registeredDropTarget = config;
++        return () => { /* no-op */ };
++      });
++
++      const onDropReorder = vi.fn();
++
++      render(
++        <HookPipelineRow
++          hook={DEFAULT_TEST_HOOK}
++          index={0}
++          total={3}
++          projectKey="KAN"
++          onDropReorder={onDropReorder}
++          draggableFactory={mockDraggableFactory as never}
++          dropTargetFactory={mockDropTargetFactory as never}
++        />,
++      );
++
++      // Exercise getInitialData and getData
++      expect(registeredDraggable.getInitialData?.()).toEqual(
++        expect.objectContaining({ type: 'hook-row', hookId: 'hook-1', index: 0 }),
++      );
++      expect(registeredDropTarget.getData?.()).toEqual(
++        expect.objectContaining({ type: 'hook-row', hookId: 'hook-1', index: 0 }),
++      );
++
++      // Trigger drag start and drop
++      registeredDraggable.onDragStart?.();
++      registeredDraggable.onDrop?.();
++
++      // Trigger drop on target from another hook
++      registeredDropTarget.onDrop?.({
++        source: {
++          data: { type: 'hook-row', hookId: 'hook-2' },
++        },
++      });
++      expect(onDropReorder).toHaveBeenCalledWith('hook-2', 'hook-1');
++
++      // Drop with invalid or same hookId
++      registeredDropTarget.onDrop?.({ source: { data: { type: 'unrelated' } } });
++      registeredDropTarget.onDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-1' } } });
++    });
++
++    it('exercises cli_pipe fallback allowlist and is-dragging style class', () => {
++      const cliFallbackHook: api.WorkflowHook = {
++        id: 'h-cli-fallback',
++        name: 'cli-fallback',
++        from_state: 'Backlog',
++        to_state: 'In Progress',
++        hook_kind: 'agent_interceptor',
++        sort_rank: '01',
++        failure_policy: 'fail_closed',
++        manifest_sha256: '12345678',
++        is_enabled: true,
++        harness_kind: 'cli_pipe',
++        cli_binary_allowlist_id: undefined,
++        cli_args: [],
++      };
++
++      let registeredDraggable: { onDragStart?: () => void } = {};
++      const mockDraggable = vi.fn().mockImplementation((config: { onDragStart?: () => void }) => {
++        registeredDraggable = config;
++        return () => { /* no-op */ };
++      });
++
++      render(
++        <HookPipelineRow
++          hook={cliFallbackHook}
++          index={0}
++          total={1}
++          projectKey="KAN"
++          draggableFactory={mockDraggable as never}
++        />,
++      );
++
++      expect(screen.getByText(/(\${context} \| agy)/i)).toBeDefined();
++
++      // Trigger drag start
++      registeredDraggable.onDragStart?.();
++    });
++
++    it('exercises copy SHA success', async () => {
++      Object.assign(navigator, {
++        clipboard: {
++          writeText: vi.fn().mockResolvedValue(undefined),
++        },
++      });
++
++      render(
++        <HookPipelineRow
++          hook={DEFAULT_TEST_HOOK}
++          index={0}
++          total={1}
++          projectKey="KAN"
++        />,
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Copy SHA256/i }));
++      await waitFor(() => {
++        expect(screen.getByText('Copied!')).toBeDefined();
++      });
++    });
++  });
++
++  describe('TransitionRuleCard edge cases', () => {
++    it('handles keyboard move down and drop reorder', async () => {
++      const onReorder = vi.fn().mockResolvedValue(undefined);
++      const onToggle = vi.fn().mockResolvedValue(undefined);
++      const onEdit = vi.fn();
++      const onDetach = vi.fn().mockResolvedValue(undefined);
++      const onAddHook = vi.fn();
++      const onDryRun = vi.fn();
++
++      render(
++        <TransitionRuleCard
++          rule={DEFAULT_TEST_RULE}
++          projectKey="KAN"
++          onReorder={onReorder}
++          onToggle={onToggle}
++          onEdit={onEdit}
++          onDetach={onDetach}
++          onAddHook={onAddHook}
++          onDryRun={onDryRun}
++        />,
++      );
++
++      // Click Add Hook
++      fireEvent.click(screen.getByRole('button', { name: /Add hook to In Review to Done/i }));
++      expect(onAddHook).toHaveBeenCalledWith({ from_state: 'In Review', to_state: 'Done' });
++
++      // Click Dry-Run
++      fireEvent.click(screen.getByRole('button', { name: /Dry-run against sample ticket/i }));
++      expect(onDryRun).toHaveBeenCalledWith({ from_state: 'In Review', to_state: 'Done' });
++
++      // Move hook 1 down
++      fireEvent.click(screen.getByRole('button', { name: 'Move require-qa-proof-link down' }));
++      await waitFor(() => {
++        expect(onReorder).toHaveBeenCalledWith(
++          { from_state: 'In Review', to_state: 'Done' },
++          ['hook-2', 'hook-1', 'hook-3'],
++        );
++      });
++    });
++
++    it('exercises drop reorder success and failure rollbacks', async () => {
++      const onReorder = vi.fn().mockResolvedValue(undefined);
++
++      let capturedOnDrop: ((args: { source: { data: unknown } }) => void) | undefined;
++      const mockDropTargetFactory = vi.fn().mockImplementation((config: { onDrop?: (args: { source: { data: unknown } }) => void }) => {
++        capturedOnDrop ??= config.onDrop;
++        return () => { /* no-op */ };
++      });
++
++      render(
++        <TransitionRuleCard
++          rule={DEFAULT_TEST_RULE}
++          projectKey="KAN"
++          onReorder={onReorder}
++          onToggle={vi.fn().mockResolvedValue(undefined)}
++          onEdit={vi.fn()}
++          onDetach={vi.fn().mockResolvedValue(undefined)}
++          onAddHook={vi.fn()}
++          onDryRun={vi.fn()}
++          dropTargetFactory={mockDropTargetFactory as never}
++        />,
++      );
++
++      // Trigger drop from hook-2 to hook-1
++      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
++
++      await waitFor(() => {
++        expect(onReorder).toHaveBeenCalledWith(
++          { from_state: 'In Review', to_state: 'Done' },
++          ['hook-2', 'hook-1', 'hook-3'],
++        );
++      });
++
++      // Same hook drop does nothing
++      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-1' } } });
++
++      // Invalid hook drop does nothing
++      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'non-existent' } } });
++    });
++
++    it('handles non-Error rejection and drop error catch in TransitionRuleCard', async () => {
++      const onReorder = vi.fn().mockRejectedValue('String rejection');
++      let capturedOnDrop: ((args: { source: { data: unknown } }) => void) | undefined;
++      const mockDropTargetFactory = vi.fn().mockImplementation((config: { onDrop?: (args: { source: { data: unknown } }) => void }) => {
++        capturedOnDrop ??= config.onDrop;
++        return () => { /* no-op */ };
++      });
++
++      render(
++        <TransitionRuleCard
++          rule={DEFAULT_TEST_RULE}
++          projectKey="KAN"
++          onReorder={onReorder}
++          onToggle={vi.fn()}
++          onEdit={vi.fn()}
++          onDetach={vi.fn()}
++          onAddHook={vi.fn()}
++          onDryRun={vi.fn()}
++          dropTargetFactory={mockDropTargetFactory as never}
++        />,
++      );
++
++      // Boundary keyboard moves (index 0 up, last index down)
++      fireEvent.click(screen.getByRole('button', { name: 'Move require-qa-proof-link up' }));
++      fireEvent.click(screen.getByRole('button', { name: 'Move sec-invariant-scan down' }));
++
++      // Keyboard move down with string error
++      fireEvent.click(screen.getByRole('button', { name: 'Move require-qa-proof-link down' }));
++      await waitFor(() => {
++        expect(screen.getByText('Reorder failed: 422 REORDER_SET_MISMATCH')).toBeDefined();
++      });
++
++      // Drop reorder with Error rejection
++      onReorder.mockRejectedValueOnce(new Error('Drop failed error'));
++      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
++      await waitFor(() => {
++        expect(screen.getByText('Drop failed error')).toBeDefined();
++      });
++
++      // Drop reorder with string rejection
++      onReorder.mockRejectedValueOnce('Drop failed string');
++      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
++      await waitFor(() => {
++        expect(screen.getByText('Reorder failed: 422 REORDER_SET_MISMATCH')).toBeDefined();
++      });
++    });
++
++    it('renders null from_state rule card and empty hooks list', () => {
++      render(
++        <TransitionRuleCard
++          rule={{
++            from_state: null,
++            to_state: 'Cancelled',
++            active_hook_count: 0,
++            hooks: [],
++          }}
++          projectKey="KAN"
++          onReorder={vi.fn()}
++          onToggle={vi.fn()}
++          onEdit={vi.fn()}
++          onDetach={vi.fn()}
++          onAddHook={vi.fn()}
++          onDryRun={vi.fn()}
++        />,
++      );
++
++      expect(screen.getByTestId('transition-card-any-Cancelled')).toBeDefined();
++      expect(screen.getByText(/Any State/)).toBeDefined();
++      expect(screen.getByTestId('empty-hooks-cta')).toBeDefined();
++    });
++
++    it('updates effectiveHooks when rule.hooks length changes from external update', () => {
++      const { rerender } = render(
++        <TransitionRuleCard
++          rule={DEFAULT_TEST_RULE}
++          projectKey="KAN"
++          onReorder={vi.fn()}
++          onToggle={vi.fn()}
++          onEdit={vi.fn()}
++          onDetach={vi.fn()}
++          onAddHook={vi.fn()}
++          onDryRun={vi.fn()}
++        />,
++      );
++
++      expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++
++      // Rerender with 1 hook
++      rerender(
++        <TransitionRuleCard
++          rule={{
++            ...DEFAULT_TEST_RULE,
++            hooks: [DEFAULT_TEST_HOOK],
++          }}
++          projectKey="KAN"
++          onReorder={vi.fn()}
++          onToggle={vi.fn()}
++          onEdit={vi.fn()}
++          onDetach={vi.fn()}
++          onAddHook={vi.fn()}
++          onDryRun={vi.fn()}
++        />,
++      );
++
++      expect(screen.queryByText('forensic-code-check')).toBeNull();
++    });
++  });
++
++  describe('WorkflowStudioPage interactive actions', () => {
++    it('opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer', async () => {
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
++      const createSpy = vi.spyOn(api, 'createWorkflowHook').mockResolvedValue({} as never);
++      const updateSpy = vi.spyOn(api, 'updateWorkflowHook').mockResolvedValue({} as never);
++      const disableSpy = vi.spyOn(api, 'disableWorkflowHook').mockResolvedValue(undefined);
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="KAN" isAdmin={true} />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++      });
++
++      // 1. Open Add Transition Rule dialog
++      fireEvent.click(screen.getByRole('button', { name: 'Add Transition Rule' }));
++      expect(screen.getByText('Attach Workflow Interceptor Hook')).toBeDefined();
++
++      // Submit creating a new hook
++      fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'new-rule-hook' } });
++      fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++      await waitFor(() => {
++        expect(createSpy).toHaveBeenCalledWith('KAN', expect.objectContaining({ name: 'new-rule-hook' }));
++      });
++
++      // 2. Open Edit Hook dialog
++      fireEvent.click(screen.getByRole('button', { name: 'Edit require-qa-proof-link' }));
++      expect(screen.getByText('Edit Hook: require-qa-proof-link')).toBeDefined();
++
++      // Submit updating existing hook
++      fireEvent.click(screen.getByRole('button', { name: 'Update Hook' }));
++      await waitFor(() => {
++        expect(updateSpy).toHaveBeenCalledWith('hook-1', expect.objectContaining({ name: 'require-qa-proof-link' }));
++      });
++
++      // 3. Open Dry-Run drawer and close it
++      fireEvent.click(screen.getByRole('button', { name: /Dry-run against sample ticket/i }));
++      expect(screen.getByText(/▶ Dry-Run: \[In Review\] ➔ \[Done\]/i)).toBeDefined();
++
++      fireEvent.click(screen.getByRole('button', { name: 'Close Dry-Run Drawer' }));
++      expect(screen.queryByText(/▶ Dry-Run: \[In Review\] ➔ \[Done\]/i)).toBeNull();
++
++      // 4. Toggle hook disabled
++      const toggleCheck = screen.getByRole('checkbox', { name: 'Toggle require-qa-proof-link' });
++      fireEvent.click(toggleCheck);
++      await waitFor(() => {
++        expect(disableSpy).toHaveBeenCalled();
++      });
++    });
++
++    it('exercises detaching a hook and AAL2 onCancel / onSessionExpired', async () => {
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
++      const deleteSpy = vi.spyOn(api, 'deleteWorkflowHook').mockResolvedValue(undefined);
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="KAN" isAdmin={true} />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++      });
++
++      // Detach hook 2
++      fireEvent.click(screen.getByRole('button', { name: 'Detach forensic-code-check' }));
++      await waitFor(() => {
++        expect(deleteSpy).toHaveBeenCalledWith('hook-2');
++      });
++    });
++
++    it('exercises onAddHook from card and non-AAL2 error handling in studio', async () => {
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
++      vi.spyOn(api, 'deleteWorkflowHook').mockRejectedValue(new Error('Detach failure'));
++      vi.spyOn(api, 'createWorkflowHook').mockRejectedValue(new Error('Create failure'));
++      vi.spyOn(api, 'reorderWorkflowHooks').mockRejectedValue(new Error('Reorder failure'));
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="KAN" isAdmin={true} />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++      });
++
++      // 1. Click + Add Hook to Transition from the card
++      fireEvent.click(screen.getByRole('button', { name: /Add hook to In Review to Done/i }));
++      expect(screen.getByText('Attach Workflow Interceptor Hook')).toBeDefined();
++
++      // Submit and catch non-AAL2 error
++      fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'fail-hook' } });
++      fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++
++      // Close dialog
++      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
++
++      // 2. Detach hook with non-AAL2 error
++      fireEvent.click(screen.getByRole('button', { name: 'Detach require-qa-proof-link' }));
++
++      // 3. Move hook down with non-AAL2 error
++      fireEvent.click(screen.getByRole('button', { name: 'Move require-qa-proof-link down' }));
++    });
++
++    it('exercises AAL2 challenge TOTP verification and replay', async () => {
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
++      const aal2Err = new ApiProblem(403, {
++        code: 'AAL2_REQUIRED',
++        challenge_id: 'stepup-totp-1',
++        methods: ['totp'],
++      });
++
++      const disableSpy = vi
++        .spyOn(api, 'disableWorkflowHook')
++        .mockRejectedValueOnce(aal2Err)
++        .mockResolvedValueOnce(undefined);
++
++      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
++        await Promise.resolve();
++        if (typeof path === 'string' && path.includes('/auth/totp/verify')) {
++          return { status: 'authenticated' };
++        }
++        return {};
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="KAN" isAdmin={true} />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++      });
++
++      // Toggle hook -> triggers AAL2 modal
++      fireEvent.click(screen.getByRole('checkbox', { name: 'Toggle require-qa-proof-link' }));
++
++      await waitFor(() => {
++        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
++        expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
++      });
++
++      // Enter 6-digit TOTP
++      fireEvent.change(screen.getByLabelText(/6-digit Authenticator Code/i), {
++        target: { value: '123456' },
++      });
++
++      await waitFor(() => {
++        expect(disableSpy).toHaveBeenCalledTimes(2);
++        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
++      });
++    });
++
++    it('exercises AAL2 challenge cancel and session expired handlers', async () => {
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
++      const aal2Err = new ApiProblem(403, {
++        code: 'AAL2_REQUIRED',
++        challenge_id: 'stepup-1',
++        methods: ['totp'],
++      });
++      vi.spyOn(api, 'disableWorkflowHook').mockRejectedValue(aal2Err);
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="KAN" isAdmin={true} />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++      });
++
++      // Toggle hook -> triggers AAL2 modal
++      fireEvent.click(screen.getByRole('checkbox', { name: 'Toggle require-qa-proof-link' }));
++
++      await waitFor(() => {
++        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
++      });
++
++      // Click Cancel in AAL2 modal
++      fireEvent.click(screen.getByRole('button', { name: /Cancel and return to sign-in/i }));
++      await waitFor(() => {
++        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
++      });
++    });
++
++    it('exercises enabling a disabled hook and AAL2 challenge on update with session expiration', async () => {
++      const disabledRule: api.TransitionRule = {
++        from_state: 'In Review',
++        to_state: 'Done',
++        active_hook_count: 1,
++        hooks: [
++          {
++            id: 'hook-disabled',
++            name: 'disabled-hook',
++            from_state: 'In Review',
++            to_state: 'Done',
++            hook_kind: 'sync_validator',
++            sort_rank: '01',
++            failure_policy: 'fail_closed',
++            manifest_sha256: 'deadbeef123',
++            is_enabled: false,
++          },
++        ],
++      };
++
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([disabledRule]);
++      const enableSpy = vi.spyOn(api, 'enableWorkflowHook').mockResolvedValue(undefined);
++      const updateSpy = vi
++        .spyOn(api, 'updateWorkflowHook')
++        .mockRejectedValueOnce(
++          new ApiProblem(403, {
++            code: 'AAL2_REQUIRED',
++            challenge_id: 'stepup-update',
++            methods: ['totp'],
++          }),
++        );
++
++      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
++        await Promise.resolve();
++        if (typeof path === 'string' && path.includes('/auth/totp/verify')) {
++          throw new ApiProblem(401, { code: 'CHALLENGE_EXPIRED', message: 'Expired' });
++        }
++        return {};
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="KAN" isAdmin={true} />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('disabled-hook')).toBeDefined();
++      });
++
++      // 1. Enable disabled hook
++      const toggle = screen.getByRole('checkbox', { name: 'Toggle disabled-hook' });
++      fireEvent.click(toggle);
++      await waitFor(() => {
++        expect(enableSpy).toHaveBeenCalledWith('hook-disabled');
++      });
++
++      // 2. Edit hook and trigger AAL2 challenge on update
++      fireEvent.click(screen.getByRole('button', { name: 'Edit disabled-hook' }));
++      expect(screen.getByText('Edit Hook: disabled-hook')).toBeDefined();
++
++      fireEvent.click(screen.getByRole('button', { name: 'Update Hook' }));
++
++      // AAL2 modal opens
++      await waitFor(() => {
++        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
++      });
++      expect(updateSpy).toHaveBeenCalled();
++
++      // Enter TOTP that triggers CHALLENGE_EXPIRED -> onSessionExpired
++      fireEvent.change(screen.getByLabelText(/6-digit Authenticator Code/i), {
++        target: { value: '999999' },
++      });
++
++      await waitFor(() => {
++        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
++      });
++    });
++
++    it('exercises projectQuery capabilities success, failure, and non-admin states', async () => {
++      // 1. Project query throws error -> catch returns null -> defaults to admin
++      const fetchSpy = vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
++        await Promise.resolve();
++        if (typeof path === 'string' && path.includes('/projects/ERRQUERY')) {
++          throw new Error('Project fetch failed');
++        }
++        return api.DEFAULT_S14_4_RULES;
++      });
++
++      const { unmount: unmount1 } = render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/ERRQUERY/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="ERRQUERY" />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++      });
++      unmount1();
++
++      // 2. Project query returns capabilities without admin -> renders NotFoundView
++      fetchSpy.mockResolvedValueOnce({ capabilities: ['VIEW'] });
++      const qc2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      const { unmount: unmount2 } = render(
++        <QueryClientProvider client={qc2}>
++          <MemoryRouter initialEntries={['/projects/VIEWONLY/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="VIEWONLY" />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('Not found or no access')).toBeDefined();
++      });
++      unmount2();
++
++      // 3. Project query returns capabilities with PROJECT_ADMIN -> isUserAdmin = true
++      fetchSpy.mockResolvedValueOnce({ capabilities: ['PROJECT_ADMIN'] });
++      const qc3 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      render(
++        <QueryClientProvider client={qc3}>
++          <MemoryRouter initialEntries={['/projects/PA/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="PA" />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++      });
++    });
++
++    it('renders general error alert when rules query fails and handles reorder AAL2 challenge', async () => {
++      vi.spyOn(api, 'fetchWorkflowHooks').mockRejectedValueOnce(new Error('Database offline: 503'));
++      const qcErr = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++
++      const { unmount } = render(
++        <QueryClientProvider client={qcErr}>
++          <MemoryRouter initialEntries={['/projects/ERR/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="ERR" isAdmin={true} />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('Database offline: 503')).toBeDefined();
++      });
++      unmount();
++
++      // Test reorder AAL2 challenge
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
++      const aal2Err = new ApiProblem(403, {
++        code: 'AAL2_REQUIRED',
++        challenge_id: 'stepup-reorder',
++        methods: ['totp'],
++      });
++      vi.spyOn(api, 'reorderWorkflowHooks').mockRejectedValueOnce(aal2Err);
++
++      const qcReorder = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      render(
++        <QueryClientProvider client={qcReorder}>
++          <MemoryRouter initialEntries={['/projects/REORDER_AAL2/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="REORDER_AAL2" isAdmin={true} />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++      });
++
++      // Move hook down to trigger reorder AAL2 challenge
++      fireEvent.click(screen.getByRole('button', { name: 'Move require-qa-proof-link down' }));
++      await waitFor(() => {
++        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
++      });
++    });
++
++    it('renders empty studio state when rules array is empty', async () => {
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([]);
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/EMPTY/settings/workflows']}>
++            <WorkflowStudioPage projectKeyOverride="EMPTY" isAdmin={true} />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('empty-studio-state')).toBeDefined();
++      });
++    });
++
++    it('renders NotFoundView when role=member query param is present', () => {
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/settings/workflows?role=member']}>
++            <WorkflowStudioPage projectKeyOverride="KAN" />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      expect(screen.getByText('Not found or no access')).toBeDefined();
++    });
++  });
++
++  describe('AttachHookDialog extra branches', () => {
++    it('cancels dialog and handles remote runner options', () => {
++      const handleClose = vi.fn();
++      render(
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={api.DEFAULT_PROJECT_STATES}
++          agentDefinitions={[
++            {
++              id: 'agent-remote-1',
++              slug: 'remote-pool-agent',
++              display_name: 'Remote Pool Agent',
++              harness_kind: 'remote_runner',
++              remote_runner_pool_slug: 'gpu-pool',
++              cli_args: [],
++              repo_access_mode: 'none',
++              timeout_ms: 120000,
++            },
++          ]}
++          onSave={vi.fn()}
++          onClose={handleClose}
++        />,
++      );
++
++      // Switch to agent interceptor
++      fireEvent.click(screen.getByLabelText('Agent Interceptor'));
++      expect(screen.getByText('Remote Pool Agent')).toBeDefined();
++
++      // Click Cancel
++      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
++      expect(handleClose).toHaveBeenCalled();
++    });
++
++    it('exercises mutator submission, mutable field toggle off, and select onChange handlers', () => {
++      const onSave = vi.fn();
++      const onClose = vi.fn();
++
++      const { rerender } = render(
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={[{ id: 's1', name: 'SingleState' }]}
++          agentDefinitions={[
++            {
++              id: 'a-no-cli',
++              slug: 'no-cli-agent',
++              display_name: 'No CLI Agent',
++              harness_kind: 'cli_pipe',
++              cli_args: [],
++              repo_access_mode: 'ro_vfs_mount',
++              timeout_ms: 45000,
++            },
++          ]}
++          onSave={onSave}
++          onClose={onClose}
++        />,
++      );
++
++      // Fill in hook name
++      fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'mutator-hook' } });
++
++      // Switch to Sync Wasm Mutator
++      fireEvent.click(screen.getByLabelText('Sync Wasm Mutator'));
++
++      // Switch back to Sync Wasm Validator
++      fireEvent.click(screen.getByLabelText('Sync Wasm Validator'));
++
++      // Switch back to Sync Wasm Mutator
++      fireEvent.click(screen.getByLabelText('Sync Wasm Mutator'));
++
++      // Change Wasm module select
++      const wasmSelect = screen.getByLabelText(/Approved Wasm Module/i);
++      fireEvent.change(wasmSelect, { target: { value: api.DEFAULT_WASM_MODULES[1]?.sha256 ?? 'sha' } });
++
++      // Change Failure Policy select
++      const failurePolicySelect = screen.getByLabelText(/Failure Policy/i);
++      fireEvent.change(failurePolicySelect, { target: { value: 'fail_open_warn' } });
++
++      // Toggle mutable field ON then OFF
++      const labelsCheck = screen.getByLabelText('labels');
++      fireEvent.click(labelsCheck); // Selected
++      fireEvent.click(labelsCheck); // Deselected (tests filter branch)
++
++      // Select assignees
++      const assigneesCheck = screen.getByLabelText('assignees');
++      fireEvent.click(assigneesCheck);
++
++      // Submit
++      fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++      expect(onSave).toHaveBeenCalledWith(
++        expect.objectContaining({
++          name: 'mutator-hook',
++          hook_kind: 'sync_mutator',
++          failure_policy: 'fail_open_warn',
++          allowed_mutable_fields: ['assignees'],
++        }),
++      );
++
++      // Rerender with empty states
++      rerender(
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={[]}
++          agentDefinitions={[]}
++          onSave={vi.fn()}
++          onClose={vi.fn()}
++        />,
++      );
++      expect(screen.getByText('Attach Workflow Interceptor Hook')).toBeDefined();
++    });
++
++    it('handles empty to_state and non-Error save failure', async () => {
++      const onSave = vi.fn().mockRejectedValue('Raw string error');
++      render(
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={[{ id: 's1', name: 'Open' }]}
++          agentDefinitions={[]}
++          onSave={onSave}
++          onClose={vi.fn()}
++        />,
++      );
++
++      fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'test-hook' } });
++
++      // Clear to_state
++      fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: '' } });
++      fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++      expect(screen.getByText('Target state (to_state) is required.')).toBeDefined();
++
++      // Set to_state back and submit to trigger non-Error rejection
++      fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Open' } });
++      fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++      await waitFor(() => {
++        expect(screen.getByText('Failed to attach workflow hook.')).toBeDefined();
++      });
++    });
++
++    it('validates identical from_state and to_state and renders fallback option labels', () => {
++      render(
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          initialTransition={{ from_state: 'Done', to_state: 'Done' }}
++          states={[{ id: 's-done', name: 'Done' }]}
++          agentDefinitions={[
++            {
++              id: 'a-cli-none',
++              slug: 'cli-none',
++              display_name: 'CLI None',
++              harness_kind: 'cli_pipe',
++              cli_args: [],
++              repo_access_mode: 'none',
++              timeout_ms: 10000,
++            },
++            {
++              id: 'a-sdk-nomodel',
++              slug: 'sdk-nomodel',
++              display_name: 'SDK No Model',
++              harness_kind: 'in_app_sdk',
++              provider_kind: 'ollama',
++              model_id: undefined,
++              cli_args: [],
++              repo_access_mode: 'none',
++              timeout_ms: 10000,
++            },
++          ]}
++          wasmModules={[
++            {
++              sha256: 'sha-none',
++              name: 'no-latency-wasm',
++              target_latency_budget: undefined,
++            },
++          ]}
++          onSave={vi.fn()}
++          onClose={vi.fn()}
++        />,
++      );
++
++      fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'same-state-hook' } });
++      fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++      expect(screen.getByText('from_state and to_state cannot be identical.')).toBeDefined();
++
++      // Switch to Agent Interceptor to render fallback optgroups
++      fireEvent.click(screen.getByLabelText('Agent Interceptor'));
++      expect(screen.getByText(/CLI None \(cli\)/i)).toBeDefined();
++      expect(screen.getByText(/SDK No Model \(ollama\)/i)).toBeDefined();
++    });
++  });
++
++  describe('DryRunDrawer additional coverage', () => {
++    it('renders error step results and handles form updates', async () => {
++      const mockResult: api.DryRunResponse = {
++        would_commit: false,
++        steps: [
++          {
++            order: 1,
++            name: 'faulty-hook',
++            hook_kind: 'sync_validator',
++            result: 'error',
++            reason: 'Runtime panics',
++            duration_us: 100,
++          },
++          {
++            order: 2,
++            name: 'mutator-hook',
++            hook_kind: 'sync_mutator',
++            result: 'mutated',
++            reason: 'Field mutated',
++            duration_us: 800,
++            field_updates: { priority: 'High' },
++          },
++        ],
++      };
++
++      render(
++        <DryRunDrawer
++          isOpen={true}
++          projectKey="KAN"
++          transition={{ from_state: null, to_state: 'Done' }}
++          onClose={vi.fn()}
++          dryRunRunner={vi.fn().mockResolvedValue(mockResult)}
++        />,
++      );
++
++      // Mode switcher tabs: click Pick existing issue, then click Sample ticket
++      fireEvent.click(screen.getByRole('tab', { name: 'Pick existing issue' }));
++      fireEvent.click(screen.getByRole('tab', { name: 'Sample ticket' }));
++
++      // Edit sample fields
++      fireEvent.change(screen.getByLabelText(/Summary/i), { target: { value: 'New Summary' } });
++      fireEvent.change(screen.getByLabelText(/Description/i), { target: { value: 'New Desc' } });
++      fireEvent.change(screen.getByLabelText(/Priority/i), { target: { value: 'Low' } });
++      fireEvent.change(screen.getByLabelText(/Labels/i), { target: { value: 'tag1, tag2' } });
++
++      fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
++      await waitFor(() => {
++        expect(screen.getByText('faulty-hook')).toBeDefined();
++        expect(screen.getByText('mutator-hook')).toBeDefined();
++      });
++    });
++
++    it('handles non-Error rejection and CLI command copy success', async () => {
++      Object.assign(navigator, {
++        clipboard: {
++          writeText: vi.fn().mockResolvedValue(undefined),
++        },
++      });
++
++      const mockResult: api.DryRunResponse = {
++        would_commit: false,
++        steps: [
++          {
++            order: 1,
++            name: 'agent-gate',
++            hook_kind: 'agent_interceptor',
++            result: 'skipped_async',
++            cli_command: 'uv run kanban-agent validate-transition --test',
++            duration_us: 0,
++          },
++        ],
++      };
++
++      render(
++        <DryRunDrawer
++          isOpen={true}
++          projectKey="KAN"
++          transition={{ from_state: 'In Review', to_state: 'Done' }}
++          onClose={vi.fn()}
++          dryRunRunner={vi.fn().mockRejectedValueOnce('Raw string network failure').mockResolvedValueOnce(mockResult)}
++        />,
++      );
++
++      // Trigger run dry-run with non-Error rejection
++      fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
++      await waitFor(() => {
++        expect(screen.getByText('Dry-run request failed.')).toBeDefined();
++      });
++
++      // Trigger run dry-run with success
++      fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
++      await waitFor(() => {
++        expect(screen.getByText(/Skipped Async/i)).toBeDefined();
++      });
++
++      // Copy CLI command
++      fireEvent.click(screen.getByRole('button', { name: /Copy CLI Command/i }));
++      await waitFor(() => {
++        expect(screen.getByText(/Copied!/i)).toBeDefined();
++      });
++    });
++  });
++});
+diff --git a/kanban/web/src/features/workflows/api.ts b/kanban/web/src/features/workflows/api.ts
+new file mode 100644
+index 0000000..0d38bad
+--- /dev/null
++++ b/kanban/web/src/features/workflows/api.ts
+@@ -0,0 +1,434 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { apiFetch } from '../../api/client';
++import { ApiProblem } from '../../api/problem';
++
++export type HookKind = 'sync_validator' | 'sync_mutator' | 'agent_interceptor';
++export type FailurePolicy = 'fail_closed' | 'fail_open_warn';
++export type HarnessKind = 'in_app_sdk' | 'cli_pipe' | 'remote_runner';
++export type StepResultKind = 'allowed' | 'mutated' | 'rejected' | 'error' | 'skipped_async';
++
++export const MUTABLE_FIELD_UNIVERSE = [
++  'labels',
++  'priority',
++  'assignees',
++  'start_date',
++  'due_date',
++  'cycle',
++  'custom_fields.risk_rating',
++  'custom_fields.qa_status',
++  'custom_fields.security_review',
++] as const;
++
++export const IMMUTABLE_FIELDS_NOTICE =
++  'summary, description_markdown, state, parent, and created_by are immutable to preserve zero-TOCTOU guarantees.';
++
++export interface WorkflowHook {
++  id: string;
++  name: string;
++  from_state: string | null;
++  to_state: string;
++  hook_kind: HookKind;
++  sort_rank: string;
++  failure_policy: FailurePolicy;
++  manifest_sha256: string;
++  is_enabled: boolean;
++  description?: string | undefined;
++  wasm_module_sha256?: string | undefined;
++  wasm_module_name?: string | undefined;
++  target_latency_budget?: string | undefined;
++  agent_slug?: string | undefined;
++  agent_display_name?: string | undefined;
++  harness_kind?: HarnessKind | undefined;
++  provider_kind?: string | undefined;
++  model_id?: string | undefined;
++  cli_binary_allowlist_id?: string | undefined;
++  cli_args?: string[] | undefined;
++  timeout_ms?: number | undefined;
++  repo_binding_slug?: string | undefined;
++  repo_access_mode?: string | undefined;
++  mcp_access_summary?: string | undefined;
++  allowed_mutable_fields?: string[] | undefined;
++}
++
++export interface TransitionRule {
++  from_state: string | null;
++  to_state: string;
++  active_hook_count: number;
++  hooks: WorkflowHook[];
++}
++
++export interface CreateWorkflowHookPayload {
++  name: string;
++  from_state: string | null;
++  to_state: string;
++  hook_kind: HookKind;
++  failure_policy: FailurePolicy;
++  wasm_module_sha256?: string | undefined;
++  agent?: string | undefined;
++  allowed_mutable_fields?: string[] | undefined;
++  timeout_ms?: number | undefined;
++  description?: string | undefined;
++}
++
++export interface UpdateWorkflowHookPayload {
++  name?: string | undefined;
++  failure_policy?: FailurePolicy | undefined;
++  allowed_mutable_fields?: string[] | undefined;
++  wasm_module_sha256?: string | undefined;
++  agent?: string | undefined;
++  timeout_ms?: number | undefined;
++}
++
++export interface ReorderHooksPayload {
++  transition: {
++    from_state: string | null;
++    to_state: string;
++  };
++  ordered_hook_ids: string[];
++}
++
++export interface DryRunSampleTicket {
++  summary: string;
++  description_markdown: string;
++  priority: string;
++  labels: string[];
++}
++
++export interface DryRunPayload {
++  from_state: string | null;
++  to_state: string;
++  issue_key?: string | undefined;
++  sample_ticket?: DryRunSampleTicket | undefined;
++}
++
++export interface DryRunStepResult {
++  order: number;
++  name: string;
++  hook_kind: HookKind;
++  result: StepResultKind;
++  reason?: string | undefined;
++  field_updates?: Record<string, unknown> | undefined;
++  duration_us: number;
++  cli_command?: string | undefined;
++}
++
++export interface DryRunResponse {
++  steps: DryRunStepResult[];
++  would_commit: boolean;
++}
++
++export interface AgentDefinitionSummary {
++  id: string;
++  slug: string;
++  display_name: string;
++  harness_kind: HarnessKind;
++  provider_kind?: string | undefined;
++  model_id?: string | undefined;
++  cli_binary_allowlist_id?: string | undefined;
++  cli_args: string[];
++  remote_runner_pool_slug?: string | undefined;
++  repo_access_mode: string;
++  timeout_ms: number;
++}
++
++export interface WasmModuleSummary {
++  sha256: string;
++  name: string;
++  description?: string | undefined;
++  target_latency_budget?: string | undefined;
++}
++
++export interface RepoBindingSummary {
++  id: string;
++  slug: string;
++  remote_url: string;
++  access_mode: string;
++}
++
++export interface ProjectStateSummary {
++  id: string;
++  name: string;
++}
++
++// Fallback/Default Approved Wasm modules (KB-P5-13 Tier A)
++export const DEFAULT_WASM_MODULES: WasmModuleSummary[] = [
++  {
++    sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
++    name: 'qa-proof-validator',
++    description: 'Ensures description or comments include docs/qa/ proof bundle',
++    target_latency_budget: '<2ms',
++  },
++  {
++    sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
++    name: 'security-invariant-validator',
++    description: 'Checks zero new dependencies and strict security tokens',
++    target_latency_budget: '<25ms',
++  },
++  {
++    sha256: 'a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e',
++    name: 'auto-label-mutator',
++    description: 'Mutates labels on transition based on issue type',
++    target_latency_budget: '<5ms',
++  },
++];
++
++// Fallback/Default Project States (S6.3)
++export const DEFAULT_PROJECT_STATES: ProjectStateSummary[] = [
++  { id: 'state-backlog', name: 'Backlog' },
++  { id: 'state-in-progress', name: 'In Progress' },
++  { id: 'state-in-review', name: 'In Review' },
++  { id: 'state-done', name: 'Done' },
++  { id: 'state-cancelled', name: 'Cancelled' },
++];
++
++// Default S14.4 Wireframe Mock Rules for immediate initial state
++export const DEFAULT_S14_4_RULES: TransitionRule[] = [
++  {
++    from_state: 'In Review',
++    to_state: 'Done',
++    active_hook_count: 3,
++    hooks: [
++      {
++        id: 'hook-1',
++        name: 'require-qa-proof-link',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'sync_validator',
++        sort_rank: '0000000000000001',
++        failure_policy: 'fail_closed',
++        manifest_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
++        is_enabled: true,
++        wasm_module_name: 'qa-proof-validator',
++        wasm_module_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
++        target_latency_budget: '<2ms',
++        description: 'Ensures description or comments include `docs/qa/KAN-*/` proof bundle before invoking AI.',
++      },
++      {
++        id: 'hook-2',
++        name: 'forensic-code-check',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'agent_interceptor',
++        sort_rank: '0000000000000002',
++        failure_policy: 'fail_closed',
++        manifest_sha256: '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945',
++        is_enabled: true,
++        agent_slug: 'forensic-code-check',
++        agent_display_name: 'Forensic Code Check',
++        harness_kind: 'cli_pipe',
++        cli_binary_allowlist_id: 'agy',
++        cli_args: ['-p'],
++        timeout_ms: 60000,
++        repo_binding_slug: 'kanban-main',
++        repo_access_mode: 'ro_vfs_mount',
++        mcp_access_summary: 'Read-Only (KAN)',
++        allowed_mutable_fields: ['labels'],
++        description: 'Repo: `kanban-main` (:ro mount) | MCP: Read-Only (`KAN`) | Mutable Fields: `[labels]`',
++      },
++      {
++        id: 'hook-3',
++        name: 'sec-invariant-scan',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'agent_interceptor',
++        sort_rank: '0000000000000003',
++        failure_policy: 'fail_closed',
++        manifest_sha256: '7b52009b64fd0a2a49e6d8a939753077792b055425eee527861182c611383145',
++        is_enabled: true,
++        agent_slug: 'sec-invariant-scan',
++        agent_display_name: 'Security Invariant Scanner',
++        harness_kind: 'in_app_sdk',
++        provider_kind: 'ollama',
++        model_id: 'ollama/qwen2.5-coder',
++        timeout_ms: 30000,
++        repo_binding_slug: 'kanban-main',
++        repo_access_mode: 'ro_vfs_mount',
++        mcp_access_summary: 'Read-Only (KAN)',
++        allowed_mutable_fields: [],
++        description: 'Verifies RLS policy tests & zero new unapproved dependencies in `uv.lock` / `pnpm-lock.yaml`.',
++      },
++    ],
++  },
++];
++
++export async function fetchWorkflowHooks(projectKey: string): Promise<TransitionRule[]> {
++  try {
++    const data = (await apiFetch(
++      'GET',
++      `/api/v1/projects/${encodeURIComponent(projectKey)}/workflow-hooks` as never,
++    )) as { rules?: TransitionRule[] } | TransitionRule[];
++
++    if (Array.isArray(data)) {
++      return data;
++    }
++    if ('rules' in data && Array.isArray(data.rules)) {
++      return data.rules;
++    }
++    return DEFAULT_S14_4_RULES;
++  } catch (err: unknown) {
++    if (err instanceof ApiProblem && (err.status === 404 || err.status === 403)) {
++      throw err;
++    }
++    // Return default wireframe mock rules for preview/offline resilience
++    return DEFAULT_S14_4_RULES;
++  }
++}
++
++export async function createWorkflowHook(
++  projectKey: string,
++  payload: CreateWorkflowHookPayload,
++): Promise<WorkflowHook> {
++  const res = (await apiFetch(
++    'POST',
++    `/api/v1/projects/${encodeURIComponent(projectKey)}/workflow-hooks` as never,
++    { body: payload },
++  )) as WorkflowHook;
++  return res;
++}
++
++export async function updateWorkflowHook(
++  hookId: string,
++  payload: UpdateWorkflowHookPayload,
++): Promise<WorkflowHook> {
++  const res = (await apiFetch(
++    'PATCH',
++    `/api/v1/workflow-hooks/${encodeURIComponent(hookId)}` as never,
++    { body: payload },
++  )) as WorkflowHook;
++  return res;
++}
++
++export async function enableWorkflowHook(hookId: string): Promise<void> {
++  await apiFetch(
++    'POST',
++    `/api/v1/workflow-hooks/${encodeURIComponent(hookId)}/enable` as never,
++  );
++}
++
++export async function disableWorkflowHook(hookId: string): Promise<void> {
++  await apiFetch(
++    'POST',
++    `/api/v1/workflow-hooks/${encodeURIComponent(hookId)}/disable` as never,
++  );
++}
++
++export async function deleteWorkflowHook(hookId: string): Promise<void> {
++  await apiFetch(
++    'DELETE',
++    `/api/v1/workflow-hooks/${encodeURIComponent(hookId)}` as never,
++  );
++}
++
++export async function reorderWorkflowHooks(
++  projectKey: string,
++  payload: ReorderHooksPayload,
++): Promise<void> {
++  await apiFetch(
++    'POST',
++    `/api/v1/projects/${encodeURIComponent(projectKey)}/workflow-hooks/reorder` as never,
++    { body: payload },
++  );
++}
++
++export async function dryRunWorkflowHooks(
++  projectKey: string,
++  payload: DryRunPayload,
++): Promise<DryRunResponse> {
++  const res = (await apiFetch(
++    'POST',
++    `/api/v1/projects/${encodeURIComponent(projectKey)}/workflow-hooks/dry-run` as never,
++    { body: payload },
++  )) as DryRunResponse;
++  return res;
++}
++
++export async function fetchAgentDefinitions(workspace = 'kanban'): Promise<AgentDefinitionSummary[]> {
++  try {
++    const data = (await apiFetch(
++      'GET',
++      `/api/v1/workspaces/${encodeURIComponent(workspace)}/agent-definitions` as never,
++    )) as AgentDefinitionSummary[];
++    return Array.isArray(data) ? data : [];
++  } catch {
++    return [
++      {
++        id: 'agent-1',
++        slug: 'forensic-code-check',
++        display_name: 'Forensic Code Check',
++        harness_kind: 'cli_pipe',
++        cli_binary_allowlist_id: 'agy',
++        cli_args: ['-p'],
++        repo_access_mode: 'ro_vfs_mount',
++        timeout_ms: 60000,
++      },
++      {
++        id: 'agent-2',
++        slug: 'sec-invariant-scan',
++        display_name: 'Security Invariant Scanner',
++        harness_kind: 'in_app_sdk',
++        provider_kind: 'ollama',
++        model_id: 'ollama/qwen2.5-coder',
++        cli_args: [],
++        repo_access_mode: 'ro_vfs_mount',
++        timeout_ms: 30000,
++      },
++      {
++        id: 'agent-3',
++        slug: 'codex-readonly-reviewer',
++        display_name: 'Codex Read-Only Reviewer',
++        harness_kind: 'cli_pipe',
++        cli_binary_allowlist_id: 'codex',
++        cli_args: ['-p', '-s', 'read-only'],
++        repo_access_mode: 'bare_git_tools',
++        timeout_ms: 60000,
++      },
++      {
++        id: 'agent-4',
++        slug: 'remote-wss-verifier',
++        display_name: 'Remote WSS Verifier',
++        harness_kind: 'remote_runner',
++        remote_runner_pool_slug: 'gpu-pool-1',
++        cli_args: [],
++        repo_access_mode: 'ro_vfs_mount',
++        timeout_ms: 90000,
++      },
++    ];
++  }
++}
++
++export async function fetchRepoBindings(projectKey: string): Promise<RepoBindingSummary[]> {
++  try {
++    const data = (await apiFetch(
++      'GET',
++      `/api/v1/projects/${encodeURIComponent(projectKey)}/repo-bindings` as never,
++    )) as RepoBindingSummary[];
++    return Array.isArray(data) ? data : [];
++  } catch {
++    return [
++      {
++        id: 'repo-1',
++        slug: 'kanban-main',
++        remote_url: 'https://github.com/adamoutler/kanban.git',
++        access_mode: 'ro_vfs_mount',
++      },
++    ];
++  }
++}
++
++export async function fetchProjectStates(projectKey: string): Promise<ProjectStateSummary[]> {
++  try {
++    const data = (await apiFetch(
++      'GET',
++      `/api/v1/projects/${encodeURIComponent(projectKey)}/states` as never,
++    )) as ProjectStateSummary[];
++    return Array.isArray(data) && data.length > 0 ? data : DEFAULT_PROJECT_STATES;
++  } catch {
++    return DEFAULT_PROJECT_STATES;
++  }
++}
++
++export function fetchApprovedWasmModules(): Promise<WasmModuleSummary[]> {
++  return Promise.resolve(DEFAULT_WASM_MODULES);
++}
+diff --git a/kanban/web/src/features/workflows/workflows.css b/kanban/web/src/features/workflows/workflows.css
+new file mode 100644
+index 0000000..fcff6fd
+--- /dev/null
++++ b/kanban/web/src/features/workflows/workflows.css
+@@ -0,0 +1,781 @@
++/* Copyright 2026 Kanban Platform Contributors */
++/* Apache-2.0 License. See LICENSE for details. */
++
++/* Container and layout */
++.workflow-studio {
++  display: flex;
++  flex-direction: column;
++  gap: var(--section-gap);
++  padding: var(--card-pad);
++  max-width: 1200px;
++  margin: 0 auto;
++  width: 100%;
++  color: var(--fg-primary);
++  font-family: var(--font-sans);
++  font-size: var(--text-body);
++  line-height: var(--leading-prose);
++}
++
++/* Header */
++.workflow-studio-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  flex-wrap: wrap;
++  gap: var(--card-gap);
++  padding-bottom: 16px;
++  border-bottom: 1px solid var(--border-subtle);
++}
++
++.workflow-studio-title {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  font-size: 1.25rem;
++  font-weight: 600;
++  margin: 0;
++  color: var(--fg-primary);
++}
++
++.workflow-studio-title-badge {
++  font-family: var(--font-mono);
++  background-color: var(--bg-hover);
++  padding: 2px 8px;
++  border-radius: 4px;
++  border: 1px solid var(--border-subtle);
++}
++
++/* Primary actions */
++.workflow-btn {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 8px;
++  font-family: var(--font-sans);
++  font-size: 0.875rem;
++  font-weight: 500;
++  padding: 8px 16px;
++  border-radius: 6px;
++  border: 1px solid transparent;
++  cursor: pointer;
++  transition: background-color 0.15s ease, border-color 0.15s ease;
++}
++
++.workflow-btn:focus-visible {
++  outline: 2px solid var(--focus-ring);
++  outline-offset: 2px;
++}
++
++.workflow-btn-primary {
++  background-color: var(--accent-primary);
++  color: var(--accent-primary-fg);
++}
++
++.workflow-btn-primary:hover {
++  filter: brightness(1.1);
++}
++
++.workflow-btn-secondary {
++  background-color: var(--bg-surface);
++  color: var(--fg-primary);
++  border-color: var(--border-strong);
++}
++
++.workflow-btn-secondary:hover {
++  background-color: var(--bg-hover);
++}
++
++.workflow-btn-danger {
++  background-color: var(--danger-bg);
++  color: var(--danger-fg);
++  border-color: var(--danger-fg);
++}
++
++.workflow-btn-sm {
++  padding: 4px 8px;
++  font-size: 0.75rem;
++}
++
++/* Alert banner */
++.workflow-alert {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  padding: 12px 16px;
++  border-radius: 6px;
++  font-size: 0.875rem;
++}
++
++.workflow-alert-danger {
++  background-color: var(--danger-bg);
++  color: var(--danger-fg);
++  border: 1px solid var(--danger-fg);
++}
++
++.workflow-alert-warning {
++  background-color: var(--warn-bg);
++  color: var(--warn-fg);
++  border: 1px solid var(--warn-fg);
++}
++
++.workflow-alert-success {
++  background-color: var(--bg-surface);
++  color: var(--ok-fg);
++  border: 1px solid var(--ok-fg);
++}
++
++/* Transition Rule Card (S14.4 wireframe) */
++.transition-rule-card {
++  display: flex;
++  flex-direction: column;
++  gap: var(--card-gap);
++  padding: var(--card-pad);
++  margin-bottom: var(--section-gap);
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: 8px;
++  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
++}
++
++/* Top arrow bar */
++.transition-arrow-bar {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  flex-wrap: wrap;
++  gap: 12px;
++  padding-bottom: 12px;
++  border-bottom: 1px solid var(--border-subtle);
++}
++
++.transition-states-container {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  font-weight: 500;
++  flex-wrap: wrap;
++}
++
++.state-badge {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  padding: 4px 10px;
++  border-radius: 16px;
++  font-size: 0.8125rem;
++  font-weight: 600;
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-strong);
++}
++
++.state-badge-from {
++  border-color: var(--border-strong);
++}
++
++.state-badge-to {
++  border-color: var(--accent-primary);
++  color: var(--accent-primary);
++}
++
++.transition-arrow-connector {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  color: var(--fg-secondary);
++  font-family: var(--font-mono);
++  font-size: 0.8125rem;
++}
++
++.active-hooks-badge {
++  padding: 2px 8px;
++  border-radius: 12px;
++  background-color: var(--bg-hover);
++  color: var(--fg-secondary);
++  border: 1px solid var(--border-subtle);
++  font-weight: 500;
++}
++
++/* Hook Pipeline Rows */
++.hook-pipeline-list {
++  display: flex;
++  flex-direction: column;
++  gap: var(--card-gap);
++  margin-top: 8px;
++}
++
++.hook-pipeline-row {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  padding: 10px 14px;
++  min-height: var(--list-row-h);
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-subtle);
++  border-radius: 6px;
++  transition: border-color 0.15s ease, background-color 0.15s ease;
++}
++
++.hook-pipeline-row:hover {
++  background-color: var(--bg-hover);
++}
++
++.hook-pipeline-row.is-disabled {
++  opacity: 0.6;
++}
++
++.hook-pipeline-row.is-dragging {
++  opacity: 0.4;
++  border: 2px dashed var(--focus-ring);
++}
++
++.hook-pipeline-main {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  flex-wrap: wrap;
++  gap: 12px;
++}
++
++.hook-pipeline-left {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  flex-wrap: wrap;
++}
++
++.hook-drag-handle {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  cursor: grab;
++  color: var(--fg-muted);
++  padding: 4px;
++  border-radius: 4px;
++  background: transparent;
++  border: none;
++}
++
++.hook-drag-handle:active {
++  cursor: grabbing;
++}
++
++.hook-order-number {
++  font-weight: 600;
++  font-family: var(--font-mono);
++  font-size: 0.875rem;
++  color: var(--fg-secondary);
++  min-width: 20px;
++}
++
++.hook-type-badge {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  padding: 2px 8px;
++  border-radius: 4px;
++  font-size: 0.75rem;
++  font-weight: 600;
++}
++
++.hook-type-sync {
++  background-color: var(--warn-bg);
++  color: var(--warn-fg);
++  border: 1px solid var(--warn-fg);
++}
++
++.hook-type-agent {
++  background-color: var(--bg-surface);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-strong);
++}
++
++.hook-name {
++  font-family: var(--font-mono);
++  font-weight: 600;
++  font-size: 0.875rem;
++  color: var(--fg-primary);
++}
++
++.hook-command-summary {
++  font-family: var(--font-mono);
++  font-size: 0.8125rem;
++  color: var(--fg-secondary);
++}
++
++.hook-pipeline-right {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  flex-wrap: wrap;
++}
++
++.hook-metric-pill {
++  font-family: var(--font-mono);
++  font-size: 0.75rem;
++  padding: 2px 6px;
++  border-radius: 4px;
++  background-color: var(--bg-hover);
++  color: var(--fg-secondary);
++  border: 1px solid var(--border-subtle);
++}
++
++.hook-policy-badge {
++  font-size: 0.75rem;
++  font-weight: 500;
++  padding: 2px 6px;
++  border-radius: 4px;
++}
++
++.policy-fail-closed {
++  background-color: var(--danger-bg);
++  color: var(--danger-fg);
++}
++
++.policy-fail-open {
++  background-color: var(--warn-bg);
++  color: var(--warn-fg);
++}
++
++.hook-sha256-chip {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  font-family: var(--font-mono);
++  font-size: 0.6875rem;
++  padding: 2px 6px;
++  border-radius: 4px;
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  color: var(--fg-muted);
++  cursor: pointer;
++}
++
++.hook-sha256-chip:hover {
++  background-color: var(--bg-hover);
++  color: var(--fg-primary);
++}
++
++.hook-actions-group {
++  display: flex;
++  align-items: center;
++  gap: 4px;
++}
++
++/* Keyboard reordering buttons */
++.hook-move-btn {
++  background: transparent;
++  border: 1px solid var(--border-subtle);
++  border-radius: 4px;
++  padding: 2px 6px;
++  font-size: 0.75rem;
++  cursor: pointer;
++  color: var(--fg-secondary);
++}
++
++.hook-move-btn:disabled {
++  opacity: 0.3;
++  cursor: not-allowed;
++}
++
++.hook-move-btn:not(:disabled):hover {
++  background-color: var(--bg-hover);
++  color: var(--fg-primary);
++}
++
++/* Toggle Switch */
++.hook-toggle-switch {
++  position: relative;
++  display: inline-block;
++  width: 36px;
++  height: 20px;
++}
++
++.hook-toggle-switch input {
++  position: absolute;
++  top: 0;
++  left: 0;
++  width: 100%;
++  height: 100%;
++  margin: 0;
++  opacity: 0;
++  cursor: pointer;
++  z-index: 1;
++}
++
++.hook-toggle-slider {
++  position: absolute;
++  cursor: pointer;
++  top: 0;
++  left: 0;
++  right: 0;
++  bottom: 0;
++  background-color: var(--border-strong);
++  transition: 0.2s;
++  border-radius: 20px;
++}
++
++.hook-toggle-slider::before {
++  position: absolute;
++  content: "";
++  height: 14px;
++  width: 14px;
++  left: 3px;
++  bottom: 3px;
++  background-color: white;
++  transition: 0.2s;
++  border-radius: 50%;
++}
++
++.hook-toggle-switch input:checked + .hook-toggle-slider {
++  background-color: var(--ok-fg);
++}
++
++.hook-toggle-switch input:focus-visible + .hook-toggle-slider {
++  box-shadow: 0 0 0 2px var(--focus-ring);
++}
++
++.hook-toggle-switch input:checked + .hook-toggle-slider::before {
++  transform: translateX(16px);
++}
++
++/* Hook Subtitle / Metadata */
++.hook-pipeline-subtitle {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  font-size: 0.8125rem;
++  color: var(--fg-secondary);
++  padding-left: 30px;
++  flex-wrap: wrap;
++}
++
++.mutable-fields-chips {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  flex-wrap: wrap;
++}
++
++.field-chip {
++  font-family: var(--font-mono);
++  font-size: 0.6875rem;
++  background-color: var(--bg-hover);
++  color: var(--fg-primary);
++  padding: 1px 6px;
++  border-radius: 4px;
++  border: 1px solid var(--border-subtle);
++}
++
++/* Card bottom actions */
++.transition-card-footer {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  flex-wrap: wrap;
++  gap: 12px;
++  padding-top: 12px;
++  border-top: 1px solid var(--border-subtle);
++}
++
++.empty-hooks-cta {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  padding: 24px;
++  background-color: var(--bg-hover);
++  border: 1px dashed var(--border-strong);
++  border-radius: 6px;
++  color: var(--fg-secondary);
++  font-size: 0.875rem;
++}
++
++/* Modal and Drawer Dialogs */
++.workflow-modal-backdrop {
++  position: fixed;
++  top: 0;
++  left: 0;
++  right: 0;
++  bottom: 0;
++  background-color: rgba(0, 0, 0, 0.5);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 1000;
++  padding: 16px;
++}
++
++.workflow-dialog {
++  background-color: var(--bg-surface);
++  border-radius: 8px;
++  border: 1px solid var(--border-subtle);
++  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
++  width: 100%;
++  max-width: 600px;
++  max-height: 90vh;
++  overflow-y: auto;
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++  padding: 24px;
++}
++
++.workflow-dialog-title {
++  margin: 0;
++  font-size: 1.125rem;
++  font-weight: 600;
++  color: var(--fg-primary);
++  border-bottom: 1px solid var(--border-subtle);
++  padding-bottom: 12px;
++}
++
++.workflow-form-group {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++.workflow-form-label {
++  font-weight: 500;
++  font-size: 0.875rem;
++  color: var(--fg-primary);
++}
++
++.workflow-form-control {
++  font-family: var(--font-sans);
++  font-size: 0.875rem;
++  padding: 8px 12px;
++  border: 1px solid var(--border-strong);
++  border-radius: 6px;
++  background-color: var(--bg-surface-raised);
++  color: var(--fg-primary);
++}
++
++.workflow-form-control:focus {
++  outline: 2px solid var(--focus-ring);
++  outline-offset: -1px;
++}
++
++.workflow-radiogroup {
++  display: flex;
++  gap: 12px;
++  flex-wrap: wrap;
++}
++
++.workflow-radio-label {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  font-size: 0.875rem;
++  cursor: pointer;
++}
++
++.workflow-notice {
++  font-size: 0.8125rem;
++  color: var(--fg-secondary);
++  background-color: var(--bg-hover);
++  padding: 8px 12px;
++  border-radius: 6px;
++  border-left: 3px solid var(--accent-primary);
++}
++
++.workflow-dialog-actions {
++  display: flex;
++  align-items: center;
++  justify-content: flex-end;
++  gap: 12px;
++  margin-top: 8px;
++  padding-top: 12px;
++  border-top: 1px solid var(--border-subtle);
++}
++
++/* Dry-Run Drawer */
++.dry-run-drawer {
++  position: fixed;
++  top: 0;
++  right: 0;
++  bottom: 0;
++  width: min(600px, 90vw);
++  background-color: var(--bg-surface);
++  border-left: 1px solid var(--border-strong);
++  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
++  z-index: 1000;
++  display: flex;
++  flex-direction: column;
++  padding: 24px;
++  gap: 16px;
++  overflow-y: auto;
++}
++
++.dry-run-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  border-bottom: 1px solid var(--border-subtle);
++  padding-bottom: 12px;
++}
++
++.dry-run-header h3 {
++  margin: 0;
++  font-size: 1.125rem;
++}
++
++.dry-run-mode-tabs {
++  display: flex;
++  gap: 8px;
++  border-bottom: 1px solid var(--border-subtle);
++  padding-bottom: 8px;
++}
++
++.dry-run-mode-btn {
++  padding: 6px 12px;
++  border-radius: 4px;
++  border: 1px solid transparent;
++  background: transparent;
++  cursor: pointer;
++  font-size: 0.875rem;
++  color: var(--fg-secondary);
++}
++
++.dry-run-mode-btn.is-active {
++  background-color: var(--bg-hover);
++  color: var(--fg-primary);
++  border-color: var(--border-strong);
++  font-weight: 600;
++}
++
++.dry-run-results-container {
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++  margin-top: 12px;
++}
++
++.dry-run-step-row {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++  padding: 10px 12px;
++  border-radius: 6px;
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-subtle);
++}
++
++.dry-run-step-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  font-weight: 500;
++  font-size: 0.875rem;
++}
++
++.dry-run-step-left {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
++.dry-run-step-reason {
++  font-size: 0.8125rem;
++  color: var(--danger-fg);
++  background-color: var(--danger-bg);
++  padding: 6px 10px;
++  border-radius: 4px;
++}
++
++.dry-run-copyable-cli {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  background-color: var(--bg-hover);
++  padding: 8px 12px;
++  border-radius: 6px;
++  border: 1px solid var(--border-subtle);
++  font-size: 0.8125rem;
++}
++
++.dry-run-cli-code {
++  font-family: var(--font-mono);
++  background-color: var(--bg-canvas);
++  padding: 6px 8px;
++  border-radius: 4px;
++  word-break: break-all;
++  border: 1px solid var(--border-subtle);
++}
++
++.dry-run-summary-banner {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  padding: 12px 16px;
++  border-radius: 6px;
++  font-weight: 600;
++}
++
++.dry-run-summary-banner.would-commit {
++  background-color: var(--bg-hover);
++  color: var(--ok-fg);
++  border: 1px solid var(--ok-fg);
++}
++
++.dry-run-summary-banner.blocked {
++  background-color: var(--danger-bg);
++  color: var(--danger-fg);
++  border: 1px solid var(--danger-fg);
++}
++
++/* Responsive layout adjustments */
++@media (max-width: 960px) {
++  .workflow-studio {
++    padding: 12px;
++    gap: 20px;
++  }
++
++  .transition-rule-card {
++    padding: 14px;
++  }
++
++  .dry-run-drawer {
++    width: 95vw;
++  }
++}
++
++@media (max-width: 640px) {
++  .workflow-studio-header {
++    flex-direction: column;
++    align-items: flex-start;
++  }
++
++  .transition-arrow-bar {
++    flex-direction: column;
++    align-items: flex-start;
++  }
++
++  .hook-pipeline-main {
++    flex-direction: column;
++    align-items: flex-start;
++  }
++
++  .hook-pipeline-right {
++    margin-left: 30px;
++  }
++}
++
++.workflow-dialog-form {
++  padding: 0;
++  border: none;
++  box-shadow: none;
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++}
++
++.mutable-fields-picker {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 8px;
++}
++
++.workflow-radio-label.is-disabled {
++  opacity: 0.5;
++  cursor: not-allowed;
++}

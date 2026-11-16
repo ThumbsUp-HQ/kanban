@@ -1,6 +1,6 @@
-# Cutover Runbook: Lossless Migration from Plane to 👍kanban
+# Cutover Runbook: Lossless Migration from Legacy Trackers to 👍kanban
 
-This runbook specifies the operator procedures for executing the live, lossless cutover from bootstrap Plane (`https://kanban.hackedyour.info/kanban/`) to self-hosted 👍kanban (`thumbs-up-kanban`).
+This runbook specifies the operator procedures for executing the live, lossless cutover from an existing bootstrap tracker (`https://kanban.hackedyour.info/kanban/`, or legacy Jira/issue-board exports) to self-hosted 👍kanban (`thumbs-up-kanban`).
 
 All steps in this runbook enforce strict continuity for issue keys (`KANBA-*`), workflow states, priorities, cycles, modules, comments, attachments, and typed object links with cryptographic hash-chain verification and a deterministic rollback window under 5 minutes.
 
@@ -9,30 +9,30 @@ All steps in this runbook enforce strict continuity for issue keys (`KANBA-*`), 
 ## 1. Cutover Architecture and Principles
 
 1. **Exact Key Continuity**: All historical issue keys (`KANBA-1` through `KANBA-N`) preserve their sequence identifiers without compaction or renumbering.
-2. **Zero Unverified Auto-Merge**: Plane users map explicitly to 👍kanban principals via `user-map.yaml`. Unmapped accounts map to deactivated placeholders or external collaborator pills (`🏷️`).
+2. **Zero Unverified Auto-Merge**: Source tracker users map explicitly to 👍kanban principals via `user-map.yaml`. Unmapped accounts map to deactivated placeholders or external collaborator pills (`🏷️`).
 3. **Canonical Markdown Purity**: Plain text, HTML descriptions, and comments are converted to canonical Markdown. No `*_html` or `*_ast` storage columns are permitted.
 4. **Link Auditor Zero-Invalid Gate**: The cutover transaction passes `audit_object_links()` with 0 invalid links before commit.
-5. **Deterministic Rollback**: The system supports immediate traffic reversion to Plane within 5 minutes if post-migration verification fails.
+5. **Deterministic Rollback**: The system supports immediate traffic reversion to the legacy tracker within 5 minutes if post-migration verification fails.
 
 ---
 
 ## 2. Phase 1: Pre-Cutover Write Freeze and Snapshot Fetch
 
-Notify all team members and agents of the migration maintenance window. Put Plane into maintenance mode to prevent concurrent edits.
+Notify all team members and agents of the migration maintenance window. Put the source tracker into maintenance mode to prevent concurrent edits.
 
 ```bash
-# Set Plane API credentials and base environment
-export PLANE_BASE_URL="https://kanban.hackedyour.info/kanban/"
-export PLANE_WORKSPACE_SLUG="kanban"
-export PLANE_PROJECT_IDENTIFIER="KANBA"
-export PLANE_API_KEY="<OPERATOR_PLANE_API_KEY>"
-export SNAPSHOT_DIR="/var/lib/kanban/imports/plane-cutover-$(date +%Y%m%d%H%M%S)"
+# Set source tracker API credentials and base environment (using legacy snapshot importer `import plane`)
+export SOURCE_BASE_URL="https://kanban.hackedyour.info/kanban/"
+export SOURCE_WORKSPACE_SLUG="kanban"
+export SOURCE_PROJECT_IDENTIFIER="KANBA"
+export SOURCE_API_KEY="<OPERATOR_SOURCE_API_KEY>"
+export SNAPSHOT_DIR="/var/lib/kanban/imports/cutover-$(date +%Y%m%d%H%M%S)"
 
-# 1. Fetch complete Plane snapshot bundle
+# 1. Fetch complete snapshot bundle from source tracker
 uv run kanban-ctl import plane fetch-snapshot \
-  --base-url "${PLANE_BASE_URL}" \
-  --workspace-slug "${PLANE_WORKSPACE_SLUG}" \
-  --project-identifier "${PLANE_PROJECT_IDENTIFIER}" \
+  --base-url "${SOURCE_BASE_URL}" \
+  --workspace-slug "${SOURCE_WORKSPACE_SLUG}" \
+  --project-identifier "${SOURCE_PROJECT_IDENTIFIER}" \
   --out-dir "${SNAPSHOT_DIR}"
 
 # 2. Compute cryptographic manifest checksums
@@ -71,7 +71,7 @@ Audit the snapshot against target workspace users to ensure every key stakeholde
 ```bash
 # 1. Create or inspect the explicit user mapping file
 cat <<'EOF' > /tmp/user-map.yaml
-# Plane Member UUID -> Kanban Principal Handle
+# Source Member UUID -> Kanban Principal Handle
 "3fa85f64-5717-4562-b3fc-2c963f66afa6": "adamoutler"
 "018e3271-8bc2-7b19-9402-985faefcb501": "alex"
 EOF
@@ -79,7 +79,7 @@ EOF
 # 2. Execute dry-run import
 uv run kanban-ctl import plane \
   --bundle-dir "${SNAPSHOT_DIR}" \
-  --workspace "${PLANE_WORKSPACE_SLUG}" \
+  --workspace "${SOURCE_WORKSPACE_SLUG}" \
   --user-map /tmp/user-map.yaml \
   --dry-run \
   --report-out /tmp/dry-run-report.json
@@ -99,21 +99,21 @@ Verify that `invalid_link_count` is 0 and `unmapped_members` contains only expec
 
 ---
 
-## 5. Phase 4: Live Plane Import Execution
+## 5. Phase 4: Live Snapshot Import Execution
 
-Execute the authoritative transactional Plane import into the target workspace.
+Execute the authoritative transactional import into the target workspace.
 
 ```bash
 # Execute live import (runs inside an atomic transaction with audit_object_links gate)
 uv run kanban-ctl import plane \
   --bundle-dir "${SNAPSHOT_DIR}" \
-  --workspace "${PLANE_WORKSPACE_SLUG}" \
+  --workspace "${SOURCE_WORKSPACE_SLUG}" \
   --user-map /tmp/user-map.yaml \
   --report-out /var/log/kanban/cutover-import-report.json
 
 # Confirm exit code 0
 if [ $? -eq 0 ]; then
-  echo "Plane import completed successfully."
+  echo "Snapshot import completed successfully."
 else
   echo "Import failed! Rolled back automatically."
   exit 1
@@ -137,8 +137,8 @@ Run the scripted verifier to mathematically validate the imported dataset agains
 # Run verification CLI
 uv run kanban-ctl cutover verify \
   --bundle-dir "${SNAPSHOT_DIR}" \
-  --workspace "${PLANE_WORKSPACE_SLUG}" \
-  --project "${PLANE_PROJECT_IDENTIFIER}" \
+  --workspace "${SOURCE_WORKSPACE_SLUG}" \
+  --project "${SOURCE_PROJECT_IDENTIFIER}" \
   --qa-root ./docs/qa \
   --json-out /var/log/kanban/cutover-audit-report.json
 
@@ -166,12 +166,12 @@ caddy reload --config /etc/caddy/Caddyfile
 
 # 2. Provision new MCP server connection tokens for agents
 uv run kanban-ctl auth create-token \
-  --workspace "${PLANE_WORKSPACE_SLUG}" \
+  --workspace "${SOURCE_WORKSPACE_SLUG}" \
   --name "cutover-agent-runtime" \
   --role "AGENT"
 
-# 3. Mark Plane as read-only / archived
-# Update Plane frontend notice banner: "Archived. Read-only. Please use https://kanban.hackedyour.info"
+# 3. Mark legacy tracker as read-only / archived
+# Update legacy frontend notice banner: "Archived. Read-only. Please use https://kanban.hackedyour.info"
 ```
 
 ---
@@ -181,7 +181,7 @@ uv run kanban-ctl auth create-token \
 If any critical failure, data discrepancy, or unexpected regression occurs post-switch:
 
 ```bash
-# [STEP 1 - 30 seconds] Revert Caddy proxy upstream back to Plane
+# [STEP 1 - 30 seconds] Revert Caddy proxy upstream back to legacy tracker
 sed -i 's|127.0.0.1:8000|127.0.0.1:8080|g' /etc/caddy/Caddyfile
 caddy reload --config /etc/caddy/Caddyfile
 
@@ -193,7 +193,7 @@ pg_restore -h /tmp/kb-pgsock -U kanban_migrator -d kanban_app "${BACKUP_OUT}"
 # [STEP 3 - 1 minute] Verify restored database health
 uv run kanban-ctl ops healthcheck
 
-# [STEP 4 - 30 seconds] Remove maintenance banner on Plane
-# Unfreeze Plane writes and notify users
-echo "Rollback completed within 4 minutes. Plane restored to pre-cutover state."
+# [STEP 4 - 30 seconds] Remove maintenance banner on source tracker
+# Unfreeze source tracker writes and notify users
+echo "Rollback completed within 4 minutes. Source tracker restored to pre-cutover state."
 ```

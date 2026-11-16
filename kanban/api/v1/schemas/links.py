@@ -56,7 +56,10 @@ class RestrictedEndpointOut(BaseModel):
 
 type EndpointOut = Annotated[
     RestrictedEndpointOut | UnrestrictedEndpointOut,
-    Field(union_mode="left_to_right"),
+    Field(
+        union_mode="left_to_right",
+        description="Link endpoint representation (unrestricted or masked restricted placeholder)",
+    ),
 ]
 
 

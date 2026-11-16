@@ -143,7 +143,7 @@ async def list_providers(
     session: Session,
     project_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> list[ProviderConfigPublic]:
-    """List AI provider configurations for workspace or project."""
+    """List AI provider configurations for workspace or project with API keys omitted."""
     async with timing_floor(floor_ms=25.0):
         await _assert_admin_for_scope(session, caller, project_id)
         service = AIProviderConfigService(session)
@@ -164,7 +164,7 @@ async def get_provider(
     caller: Caller,
     session: Session,
 ) -> ProviderConfigPublic:
-    """Retrieve single AI provider configuration by ID."""
+    """Retrieve public metadata and status for a specific AI provider configuration by UUID."""
     async with timing_floor(floor_ms=25.0):
         stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
         res = await session.execute(stmt)
@@ -187,7 +187,7 @@ async def create_provider(
     session: Session,
     response: Response,
 ) -> ProviderConfigPublic:
-    """Create a new AI provider configuration with write-only key custody."""
+    """Create an AI provider configuration enforcing residency tier, air gap, and custody."""
     async with timing_floor(floor_ms=25.0):
         await _assert_admin_for_scope(session, caller, body.project_id)
 
@@ -255,7 +255,7 @@ async def update_provider(
     caller: Caller,
     session: Session,
 ) -> ProviderConfigPublic:
-    """Update an existing AI provider configuration."""
+    """Update settings, model allowlist, URL, priority, or credentials on an AI provider."""
     async with timing_floor(floor_ms=25.0):
         stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
         res = await session.execute(stmt)
@@ -332,7 +332,7 @@ async def disable_provider(
     caller: Caller,
     session: Session,
 ) -> ProviderConfigPublic:
-    """Disable an AI provider configuration."""
+    """Disable an active AI provider configuration, preventing subsequent completions."""
     async with timing_floor(floor_ms=25.0):
         stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
         res = await session.execute(stmt)
@@ -369,7 +369,7 @@ async def get_budgets(
     caller: Caller,
     session: Session,
 ) -> list[BudgetRecord]:
-    """List budget ledger records for provider configuration."""
+    """List token consumption ledger records and caps for a provider configuration."""
     async with timing_floor(floor_ms=25.0):
         stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_config_id)
         res = await session.execute(stmt)
@@ -406,7 +406,7 @@ async def set_budget(
     caller: Caller,
     session: Session,
 ) -> BudgetRecord:
-    """Set or update token cap for provider configuration."""
+    """Configure or update maximum token budget limits for an AI provider configuration."""
     async with timing_floor(floor_ms=25.0):
         stmt = select(AIProviderConfig).where(AIProviderConfig.id == body.provider_config_id)
         res = await session.execute(stmt)

@@ -60,7 +60,7 @@ async def unarchive_issue(
     session: Session,
     body: IssueUnarchiveRequest | None = None,
 ) -> IssueResponse:
-    """Unarchive an archived issue restoring active state."""
+    """Unarchive an archived issue restoring active board state and workflow participation."""
     async with timing_floor(floor_ms=25.0):
         reason = body.reason if body else None
         admin_override = body.admin_override if body else False

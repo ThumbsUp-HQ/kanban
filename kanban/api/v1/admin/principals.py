@@ -37,19 +37,66 @@ class ProvisionPrincipalRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["USER", "GROUP", "AGENT"]
-    display_name: str = Field(min_length=1, max_length=120)
-    handle: str | None = Field(default=None, pattern=r"^@?[a-z0-9][a-z0-9._-]{1,38}$")
-    email: str | None = None
+    type: Literal["USER", "GROUP", "AGENT"] = Field(
+        description=(
+            "Principal classification: USER for human accounts, GROUP for teams, AGENT for bots"
+        )
+    )
+    display_name: str = Field(
+        min_length=1, max_length=120, description="Human-readable display name"
+    )
+    handle: str | None = Field(
+        default=None,
+        pattern=r"^@?[a-z0-9][a-z0-9._-]{1,38}$",
+        description="Unique username or agent handle slug (required for USER and AGENT)",
+    )
+    email: str | None = Field(
+        default=None, description="Email address associated with human user accounts"
+    )
+    password: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=1024,
+        description="Optional initial password for local user credentials",
+    )
+    role: str | None = Field(
+        default=None,
+        description="Initial RBAC role (e.g. WORKSPACE_MEMBER, SERVER_ADMIN)",
+    )
 
 
-class UpdatePrincipalRequest(BaseModel):
-    """Schema for updating principal status or display name."""
+class ResetPasswordRequest(BaseModel):
+    """Schema for resetting user password credentials."""
 
     model_config = ConfigDict(extra="forbid")
 
-    status: Literal["active", "deactivated", "disabled"] | None = None
-    display_name: str | None = Field(default=None, min_length=1, max_length=120)
+    password: str = Field(min_length=8, max_length=1024, description="New user password")
+
+
+class UpdatePrincipalRequest(BaseModel):
+    """Schema for updating principal status, display name, or password."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["active", "deactivated", "disabled"] | None = Field(
+        default=None,
+        description=(
+            "Target operational status: active for normal access, deactivated for soft hold,"
+            " disabled"
+        ),
+    )
+    display_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=120,
+        description="Updated human-readable display name",
+    )
+    password: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=1024,
+        description="Optional password update for local credentials",
+    )
 
 
 class RoleBindingRequest(BaseModel):
@@ -57,13 +104,25 @@ class RoleBindingRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    principal_id: uuid.UUID
-    role: str
-    scope_type: Literal["server", "workspace", "project"]
-    scope_id: uuid.UUID | None = None
+    principal_id: uuid.UUID = Field(
+        description="Target principal UUID receiving the role assignment"
+    )
+    role: str = Field(
+        description="RBAC role name to bind (e.g. SERVER_ADMIN, WORKSPACE_ADMIN, PROJECT_ADMIN)"
+    )
+    scope_type: Literal["server", "workspace", "project"] = Field(
+        description="Hierarchy tier for the binding: server, workspace, or project"
+    )
+    scope_id: uuid.UUID | None = Field(
+        default=None,
+        description="Optional scope target UUID (required when scope_type is project)",
+    )
 
 
-@router.get("/admin/principals")
+@router.get(
+    "/admin/principals",
+    summary="List workspace principals",
+)
 async def list_principals_endpoint(
     caller: Caller,
     session: Session,
@@ -73,7 +132,7 @@ async def list_principals_endpoint(
     ] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> list[dict[str, object]]:
-    """List principals in the current workspace."""
+    """List principals in the current workspace with optional type filtering."""
     return await principal_service.list_principals(
         session,
         caller.workspace_id,
@@ -82,13 +141,17 @@ async def list_principals_endpoint(
     )
 
 
-@router.post("/admin/principals", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/admin/principals",
+    status_code=status.HTTP_201_CREATED,
+    summary="Provision principal",
+)
 async def provision_principal_endpoint(
     body: ProvisionPrincipalRequest,
     caller: Caller,
     session: Session,
 ) -> dict[str, object]:
-    """Provision a new USER, GROUP, or AGENT principal."""
+    """Provision a new USER, GROUP, or AGENT principal within the current workspace."""
     if body.type == "USER":
         if not body.handle:
             msg = "handle is required for USER provisioning"
@@ -115,6 +178,8 @@ async def provision_principal_endpoint(
             handle=body.handle,
             display_name=body.display_name,
             email=body.email,
+            password=body.password,
+            role=body.role,
         )
     if body.type == "GROUP":
         return await principal_service.provision_group(
@@ -134,13 +199,16 @@ async def provision_principal_endpoint(
     )
 
 
-@router.get("/admin/principals/{principal_id}")
+@router.get(
+    "/admin/principals/{principal_id}",
+    summary="Get principal details",
+)
 async def get_principal_endpoint(
     principal_id: str,
     caller: Caller,
     session: Session,
 ) -> dict[str, object]:
-    """Get full details of a principal by UUID or reference."""
+    """Retrieve administrative metadata and group memberships for a principal by UUID or handle."""
     return await principal_service.get_principal_detail(
         session,
         caller.workspace_id,
@@ -148,14 +216,25 @@ async def get_principal_endpoint(
     )
 
 
-@router.patch("/admin/principals/{principal_id}")
+@router.patch(
+    "/admin/principals/{principal_id}",
+    summary="Update principal status or display name",
+)
 async def patch_principal_endpoint(
     principal_id: uuid.UUID,
     body: UpdatePrincipalRequest,
     caller: Caller,
     session: Session,
 ) -> dict[str, object]:
-    """Update principal status or display name."""
+    """Update principal operational status, display name, or password credentials."""
+    if body.password:
+        await principal_service.reset_password(
+            session,
+            caller.workspace_id,
+            caller.principal_id,
+            principal_id,
+            body.password,
+        )
     return await principal_service.update_principal(
         session,
         caller.workspace_id,
@@ -166,14 +245,37 @@ async def patch_principal_endpoint(
     )
 
 
-@router.post("/admin/groups/{group_id}/members/{principal_id}")
+@router.post(
+    "/admin/principals/{principal_id}/password",
+    summary="Reset principal local password",
+)
+async def reset_password_endpoint(
+    principal_id: uuid.UUID,
+    body: ResetPasswordRequest,
+    caller: Caller,
+    session: Session,
+) -> dict[str, object]:
+    """Reset password credentials for a local user principal."""
+    return await principal_service.reset_password(
+        session,
+        caller.workspace_id,
+        caller.principal_id,
+        principal_id,
+        body.password,
+    )
+
+
+@router.post(
+    "/admin/groups/{group_id}/members/{principal_id}",
+    summary="Add group member",
+)
 async def add_group_member_endpoint(
     group_id: uuid.UUID,
     principal_id: uuid.UUID,
     caller: Caller,
     session: Session,
 ) -> dict[str, object]:
-    """Add a principal as a member of a group."""
+    """Add an existing principal (user or agent) as a member of the administrative group."""
     return await principal_service.add_group_member(
         session,
         caller.workspace_id,
@@ -183,14 +285,17 @@ async def add_group_member_endpoint(
     )
 
 
-@router.delete("/admin/groups/{group_id}/members/{principal_id}")
+@router.delete(
+    "/admin/groups/{group_id}/members/{principal_id}",
+    summary="Remove group member",
+)
 async def remove_group_member_endpoint(
     group_id: uuid.UUID,
     principal_id: uuid.UUID,
     caller: Caller,
     session: Session,
 ) -> dict[str, object]:
-    """Remove a principal from a group."""
+    """Remove a member principal from the specified administrative group."""
     return await principal_service.remove_group_member(
         session,
         caller.workspace_id,
@@ -200,13 +305,16 @@ async def remove_group_member_endpoint(
     )
 
 
-@router.post("/admin/role-bindings")
+@router.post(
+    "/admin/role-bindings",
+    summary="Bind RBAC role to principal",
+)
 async def bind_role_endpoint(
     body: RoleBindingRequest,
     caller: Caller,
     session: Session,
 ) -> dict[str, object]:
-    """Bind an RBAC role to a principal."""
+    """Bind an RBAC role to a principal at server, workspace, or project scope."""
     return await principal_service.bind_role(
         session,
         caller.workspace_id,
@@ -218,13 +326,16 @@ async def bind_role_endpoint(
     )
 
 
-@router.delete("/admin/role-bindings")
+@router.delete(
+    "/admin/role-bindings",
+    summary="Unbind RBAC role from principal",
+)
 async def unbind_role_endpoint(
     body: RoleBindingRequest,
     caller: Caller,
     session: Session,
 ) -> dict[str, object]:
-    """Unbind an RBAC role from a principal."""
+    """Unbind an RBAC role from a principal at server, workspace, or project scope."""
     return await principal_service.unbind_role(
         session,
         caller.workspace_id,

@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 class GateEventType(StrEnum):
     """Event types for asynchronous transition gates."""
 
+    DISPATCH = "workflow.gate.dispatch"
     PENDING = "workflow.gate.pending"
     APPROVED = "workflow.gate.approved"
     REJECTED = "workflow.gate.rejected"

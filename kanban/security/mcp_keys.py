@@ -1,6 +1,9 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Scoped kb_* API keys, surface binding, scopes and token introspection (KB-P4-02a)."""
+"""Scoped kb_* API keys, hierarchical scoping, narrowing and token introspection.
+
+Implementation for KB-P4-02a and KB-P4-14.
+"""
 
 from __future__ import annotations
 
@@ -8,20 +11,23 @@ import base64
 import contextlib
 import hashlib
 import hmac
+import ipaddress
 import secrets
 import time
 import uuid  # Runtime import required for Pydantic / dataclass type annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from database.models.mcp_api_key import McpApiKey
 from database.models.principals import Principal
 from kanban.api.problems import ProblemException, not_found
 from kanban.security.keys import derive_subkey, load_key_material
 from kanban.services.activity import ActivityEventType, record_activity
+from kanban.settings import get_settings
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +44,7 @@ __all__ = [
     "McpIntrospectionResult",
     "create_internal_mcp_auth_header",
     "derive_internal_mcp_auth_key",
+    "evaluate_key_boundary",
     "generate_mcp_api_key",
     "hash_mcp_api_key",
     "introspect_subject_token",
@@ -65,6 +72,8 @@ SURFACE_ALLOWED_SCOPES: Final[dict[str, frozenset[str]]] = {
 ALL_SCOPES: Final[frozenset[str]] = frozenset().union(*SURFACE_ALLOWED_SCOPES.values())
 
 MAX_KEY_TTL_DAYS: Final[int] = 365
+REQUIRED_SERVICE_BOT_AAL: Final[int] = 2
+MAX_CAPABILITY_MASK: Final[int] = 255
 KEY_RANDOM_BYTES_COUNT: Final[int] = 32
 KEY_TOKEN_TOTAL_LENGTH: Final[int] = 50  # 7-char prefix + 43-char unpadded base64url
 DISPLAY_HINT_LENGTH: Final[int] = 4
@@ -87,11 +96,18 @@ class McpIntrospectionResult:
     reason: str | None = None
     allowed_projects: list[uuid.UUID] | None = None
     allowed_tools: list[str] | None = None
+    disabled_tools: list[str] | None = None
     calls_used: int | None = None
     max_calls: int | None = None
     expires_at: datetime | str | None = None
+    scope_tier: str | None = None
+    owner_kind: str | None = None
+    allowed_workspace_ids: list[uuid.UUID] | None = None
+    allowed_project_ids: list[uuid.UUID] | None = None
+    capability_mask: int | None = None
+    allowed_cidrs: list[str] | None = None
 
-    def to_dict(self) -> dict[str, Any]:  # noqa: C901
+    def to_dict(self) -> dict[str, Any]:  # noqa: C901, PLR0912
         """Convert introspection result to API JSON payload."""
         if not self.active:
             res: dict[str, Any] = {"active": False}
@@ -104,8 +120,8 @@ class McpIntrospectionResult:
             return res
         payload: dict[str, Any] = {
             "active": True,
-            "principal_id": str(self.principal_id),
-            "workspace_id": str(self.workspace_id),
+            "principal_id": str(self.principal_id) if self.principal_id else None,
+            "workspace_id": str(self.workspace_id) if self.workspace_id else None,
             "surface": self.surface,
             "scopes": self.scopes or [],
             "token_kind": self.token_kind,
@@ -116,10 +132,24 @@ class McpIntrospectionResult:
             payload["project_id"] = str(self.project_id)
         if self.execution_id is not None:
             payload["execution_id"] = str(self.execution_id)
+        if self.scope_tier is not None:
+            payload["scope_tier"] = self.scope_tier
+        if self.owner_kind is not None:
+            payload["owner_kind"] = self.owner_kind
+        if self.allowed_workspace_ids is not None:
+            payload["allowed_workspace_ids"] = [str(w) for w in self.allowed_workspace_ids]
+        if self.allowed_project_ids is not None:
+            payload["allowed_project_ids"] = [str(p) for p in self.allowed_project_ids]
         if self.allowed_projects is not None:
             payload["allowed_projects"] = [str(p) for p in self.allowed_projects]
+        if self.capability_mask is not None:
+            payload["capability_mask"] = self.capability_mask
         if self.allowed_tools is not None:
             payload["allowed_tools"] = self.allowed_tools
+        if self.disabled_tools is not None:
+            payload["disabled_tools"] = self.disabled_tools
+        if self.allowed_cidrs is not None:
+            payload["allowed_cidrs"] = self.allowed_cidrs
         if self.calls_used is not None:
             payload["calls_used"] = self.calls_used
         if self.max_calls is not None:
@@ -206,18 +236,30 @@ def verify_internal_mcp_auth_header(
     return hmac.compare_digest(header_val, expected_direct)
 
 
-async def mint_mcp_api_key(  # noqa: PLR0913
+async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
     session: AsyncSession,
     *,
-    workspace_id: uuid.UUID,
+    workspace_id: uuid.UUID | None = None,
     principal_id: uuid.UUID,
     surface: str,
     scopes: list[str],
     created_by_id: uuid.UUID,
     expires_at: datetime | None = None,
     expires_in_days: int | None = None,
+    scope_tier: Literal["global", "workspace", "project"] = "workspace",
+    owner_kind: Literal["personal_user", "service_bot"] = "service_bot",
+    project_id: uuid.UUID | None = None,
+    allowed_workspace_ids: list[uuid.UUID] | None = None,
+    allowed_project_ids: list[uuid.UUID] | None = None,
+    capability_mask: int = 7,
+    allowed_tools: list[str] | None = None,
+    disabled_tools: list[str] | None = None,
+    allowed_cidrs: list[str] | None = None,
+    unlimited: bool = False,
+    confirm_unlimited: bool = False,
+    caller_aal_level: int | None = None,
 ) -> tuple[McpApiKey, str]:
-    """Mint an MCP API key, enforce surface and role constraints, and persist digest."""
+    """Mint an MCP API key, enforce surface, tier, and role constraints, and persist digest."""
     if surface not in ALLOWED_SURFACES:
         raise ProblemException(
             code="INVALID_SURFACE",
@@ -248,38 +290,237 @@ async def mint_mcp_api_key(  # noqa: PLR0913
                 detail="admin:destructive scope requires SERVER_ADMIN role.",
             )
 
-    now = datetime.now(UTC)
-    if expires_at is None:
-        days = expires_in_days if expires_in_days is not None else 30
-        effective_expires = now + timedelta(days=days)
-    else:
-        effective_expires = (
-            expires_at if expires_at.tzinfo is not None else expires_at.replace(tzinfo=UTC)
-        )
-
-    stmt_ttl = text(
-        "SELECT mcp_key_max_ttl_days FROM workspace_settings WHERE workspace_id = :ws_id"
-    )
-    max_ttl_days = (
-        await session.execute(stmt_ttl, {"ws_id": workspace_id})
-    ).scalar_one_or_none() or MAX_KEY_TTL_DAYS
-
-    if effective_expires <= now or effective_expires > (now + timedelta(days=max_ttl_days)):
+    # 1. Tier and shape validation
+    if scope_tier not in ("global", "workspace", "project"):
         raise ProblemException(
-            code="INVALID_EXPIRATION",
+            code="INVALID_SCOPE_TIER",
             status=422,
-            title="Invalid Expiration",
-            detail=f"Key expiration must be in the future and within {max_ttl_days} days.",
+            title="Invalid Scope Tier",
+            detail="scope_tier must be one of ('global', 'workspace', 'project').",
         )
 
-    # Validate target principal
+    if scope_tier == "global":
+        if workspace_id is not None or project_id is not None:
+            raise ProblemException(
+                code="INVALID_TIER_SHAPE",
+                status=422,
+                title="Invalid Tier Shape",
+                detail="Global keys must have workspace_id=None and project_id=None.",
+            )
+    elif scope_tier == "workspace":
+        if workspace_id is None or project_id is not None:
+            raise ProblemException(
+                code="INVALID_TIER_SHAPE",
+                status=422,
+                title="Invalid Tier Shape",
+                detail="Workspace keys must have workspace_id set and project_id=None.",
+            )
+    elif scope_tier == "project":
+        if workspace_id is None or project_id is None:
+            raise ProblemException(
+                code="INVALID_TIER_SHAPE",
+                status=422,
+                title="Invalid Tier Shape",
+                detail="Project keys must have both workspace_id and project_id set.",
+            )
+        if allowed_project_ids is None or not allowed_project_ids:
+            allowed_project_ids = [project_id]
+        elif project_id not in allowed_project_ids:
+            allowed_project_ids = [*allowed_project_ids, project_id]
+
+    # Resolve effective AAL level
+    if caller_aal_level is None:
+        try:
+            stmt_aal = text("SELECT NULLIF(current_setting('app.aal_level', true), '')::integer")
+            sess_aal = (await session.execute(stmt_aal)).scalar_one_or_none()
+            effective_aal = sess_aal if sess_aal is not None else REQUIRED_SERVICE_BOT_AAL
+        except SQLAlchemyError:
+            effective_aal = REQUIRED_SERVICE_BOT_AAL
+    else:
+        effective_aal = caller_aal_level
+
+    # 2. Authorization and Privilege Checks
+    if owner_kind == "service_bot":
+        if effective_aal < REQUIRED_SERVICE_BOT_AAL:
+            raise ProblemException(
+                code="AAL2_REQUIRED",
+                status=403,
+                title="AAL2 Required",
+                detail="Minting service bot keys requires AAL2 authentication.",
+            )
+        if scope_tier == "global":
+            stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+            if not bool((await session.execute(stmt_sa)).scalar_one()):
+                raise ProblemException(
+                    code="INSUFFICIENT_CAPABILITY",
+                    status=403,
+                    title="Insufficient Capability",
+                    detail="Minting global service bot keys requires SERVER_ADMIN role.",
+                )
+        elif scope_tier == "workspace":
+            stmt_wa = text(
+                "SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])"
+            )
+            if not bool((await session.execute(stmt_wa)).scalar_one()):
+                raise ProblemException(
+                    code="INSUFFICIENT_CAPABILITY",
+                    status=403,
+                    title="Insufficient Capability",
+                    detail=(
+                        "Minting workspace service bot keys requires "
+                        "WORKSPACE_ADMIN or SERVER_ADMIN role."
+                    ),
+                )
+        elif scope_tier == "project":
+            stmt_pa = text(
+                "SELECT app_principal_has_role("
+                ":p_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"
+            )
+            if not bool((await session.execute(stmt_pa, {"p_id": project_id})).scalar_one()):
+                raise ProblemException(
+                    code="INSUFFICIENT_CAPABILITY",
+                    status=403,
+                    title="Insufficient Capability",
+                    detail=(
+                        "Minting project service bot keys requires "
+                        "PROJECT_ADMIN, WORKSPACE_ADMIN, or SERVER_ADMIN role."
+                    ),
+                )
+    elif owner_kind == "personal_user":
+        if principal_id != created_by_id:
+            raise ProblemException(
+                code="CANNOT_MINT_FOR_OTHER_USER",
+                status=403,
+                title="Forbidden",
+                detail="Personal user keys cannot be minted for another user.",
+            )
+        if (
+            surface == "admin" or (capability_mask & 8)
+        ) and effective_aal < REQUIRED_SERVICE_BOT_AAL:
+            raise ProblemException(
+                code="AAL2_REQUIRED",
+                status=403,
+                title="AAL2 Required",
+                detail="Minting admin surface or delete capability personal keys requires AAL2.",
+            )
+        if scope_tier == "workspace":
+            stmt_ws_view = text(
+                "SELECT app_has_object_capability(:ws_id, 1) OR "
+                "app_principal_has_role(NULL, "
+                "ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', "
+                "'WORKSPACE_GUEST', 'MEMBER', 'VIEWER'])"
+            )
+            can_view = bool(
+                (await session.execute(stmt_ws_view, {"ws_id": workspace_id})).scalar_one()
+            )
+            if not can_view:
+                raise ProblemException(
+                    code="INSUFFICIENT_CAPABILITY",
+                    status=403,
+                    title="Insufficient Capability",
+                    detail="User lacks VIEW permission in target workspace.",
+                )
+        elif scope_tier == "project":
+            stmt_proj_view = text(
+                "SELECT app_has_object_capability(:p_id, 1) OR "
+                "app_principal_has_role(:p_id, "
+                "ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN', "
+                "'WORKSPACE_MEMBER', 'MEMBER', 'VIEWER'])"
+            )
+            can_view = bool(
+                (await session.execute(stmt_proj_view, {"p_id": project_id})).scalar_one()
+            )
+            if not can_view:
+                raise ProblemException(
+                    code="INSUFFICIENT_CAPABILITY",
+                    status=403,
+                    title="Insufficient Capability",
+                    detail="User lacks VIEW permission on target project.",
+                )
+
+    # 3. CIDR Validation
+    if allowed_cidrs:
+        for c in allowed_cidrs:
+            try:
+                ipaddress.ip_network(c, strict=False)
+            except ValueError as exc:
+                raise ProblemException(
+                    code="INVALID_CIDR",
+                    status=422,
+                    title="Invalid CIDR",
+                    detail=f"Invalid CIDR string: {c}",
+                ) from exc
+
+    # 4. Capability Mask Validation
+    if not (1 <= capability_mask <= MAX_CAPABILITY_MASK):
+        raise ProblemException(
+            code="INVALID_CAPABILITY_MASK",
+            status=422,
+            title="Invalid Capability Mask",
+            detail="capability_mask must be between 1 and 255.",
+        )
+
+    # 5. Expiration & Unlimited Keys Validation
+    now = datetime.now(UTC)
+    effective_expires: datetime | None = None
+    if unlimited:
+        settings = get_settings()
+        if settings.disable_unlimited_mcp_keys:
+            raise ProblemException(
+                code="UNLIMITED_KEY_FORBIDDEN",
+                status=422,
+                title="Unlimited Key Forbidden",
+                detail="Unlimited MCP API keys are forbidden on this instance.",
+            )
+        if not confirm_unlimited:
+            raise ProblemException(
+                code="UNLIMITED_CONFIRMATION_REQUIRED",
+                status=422,
+                title="Confirmation Required",
+                detail="Explicit confirmation required to mint an unlimited MCP API key.",
+            )
+        effective_expires = None
+    else:
+        if expires_at is None:
+            days = expires_in_days if expires_in_days is not None else 30
+            effective_expires = now + timedelta(days=days)
+        else:
+            effective_expires = (
+                expires_at if expires_at.tzinfo is not None else expires_at.replace(tzinfo=UTC)
+            )
+
+        max_ttl_days = MAX_KEY_TTL_DAYS
+        if workspace_id is not None:
+            stmt_ttl = text(
+                "SELECT mcp_key_max_ttl_days FROM workspace_settings WHERE workspace_id = :ws_id"
+            )
+            ws_ttl = (await session.execute(stmt_ttl, {"ws_id": workspace_id})).scalar_one_or_none()
+            if ws_ttl is not None:
+                max_ttl_days = ws_ttl
+
+        if effective_expires <= now or effective_expires > (now + timedelta(days=max_ttl_days)):
+            raise ProblemException(
+                code="INVALID_EXPIRATION",
+                status=422,
+                title="Invalid Expiration",
+                detail=f"Key expiration must be in the future and within {max_ttl_days} days.",
+            )
+
+    # 6. Target Principal Validation
     principal = await session.get(Principal, principal_id)
-    if principal is None or principal.workspace_id != workspace_id or principal.status != "ACTIVE":
+    if principal is None or principal.status != "ACTIVE":
         raise ProblemException(
             code="INVALID_PRINCIPAL",
             status=422,
             title="Invalid Principal",
-            detail="Target principal must be an active principal in the current workspace.",
+            detail="Target principal must be an active principal.",
+        )
+    if scope_tier in ("workspace", "project") and principal.workspace_id != workspace_id:
+        raise ProblemException(
+            code="INVALID_PRINCIPAL",
+            status=422,
+            title="Invalid Principal",
+            detail="Target principal must belong to the workspace.",
         )
 
     token, prefix, key_sha256, display_hint = generate_mcp_api_key(surface)
@@ -292,6 +533,15 @@ async def mint_mcp_api_key(  # noqa: PLR0913
         key_sha256=key_sha256,
         display_hint=display_hint,
         scopes=scopes,
+        scope_tier=scope_tier,
+        owner_kind=owner_kind,
+        project_id=project_id,
+        allowed_workspace_ids=allowed_workspace_ids,
+        allowed_project_ids=allowed_project_ids,
+        capability_mask=capability_mask,
+        allowed_tools=allowed_tools,
+        disabled_tools=disabled_tools or [],
+        allowed_cidrs=allowed_cidrs,
         created_by_id=created_by_id,
         created_at=now,
         expires_at=effective_expires,
@@ -301,21 +551,26 @@ async def mint_mcp_api_key(  # noqa: PLR0913
     await session.refresh(key_record)
 
     # Emit MCP_KEY_MINTED activity
-    await record_activity(
-        session,
-        workspace_id=workspace_id,
-        object_id=None,
-        actor_principal_id=created_by_id,
-        event_type=ActivityEventType.MCP_KEY_MINTED,
-        payload={
-            "key_id": str(key_record.id),
-            "principal_id": str(principal_id),
-            "surface": surface,
-            "display_hint": display_hint,
-            "scopes": scopes,
-            "expires_at": effective_expires.isoformat(),
-        },
-    )
+    ws_target = workspace_id or principal.workspace_id
+    if ws_target is not None:
+        await record_activity(
+            session,
+            workspace_id=ws_target,
+            object_id=None,
+            actor_principal_id=created_by_id,
+            event_type=ActivityEventType.MCP_KEY_MINTED,
+            payload={
+                "key_id": str(key_record.id),
+                "principal_id": str(principal_id),
+                "surface": surface,
+                "display_hint": display_hint,
+                "scopes": scopes,
+                "scope_tier": scope_tier,
+                "owner_kind": owner_kind,
+                "project_id": str(project_id) if project_id else None,
+                "expires_at": effective_expires.isoformat() if effective_expires else None,
+            },
+        )
 
     return key_record, token
 
@@ -335,20 +590,27 @@ async def revoke_mcp_api_key(
         key.revoked_at = datetime.now(UTC)
         await session.flush()
 
-        await record_activity(
-            session,
-            workspace_id=key.workspace_id,
-            object_id=None,
-            actor_principal_id=caller_principal_id,
-            event_type=ActivityEventType.MCP_KEY_REVOKED,
-            payload={
-                "key_id": str(key.id),
-                "principal_id": str(key.principal_id),
-                "surface": key.surface,
-                "display_hint": key.display_hint,
-                "revoked_by": str(caller_principal_id),
-            },
-        )
+        ws_target = key.workspace_id
+        if ws_target is None and key.principal_id is not None:
+            principal = await session.get(Principal, key.principal_id)
+            if principal is not None:
+                ws_target = principal.workspace_id
+
+        if ws_target is not None:
+            await record_activity(
+                session,
+                workspace_id=ws_target,
+                object_id=None,
+                actor_principal_id=caller_principal_id,
+                event_type=ActivityEventType.MCP_KEY_REVOKED,
+                payload={
+                    "key_id": str(key.id),
+                    "principal_id": str(key.principal_id),
+                    "surface": key.surface,
+                    "display_hint": key.display_hint,
+                    "revoked_by": str(caller_principal_id),
+                },
+            )
 
     return key
 
@@ -447,7 +709,6 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
 
         scope_str = claims.get("scope", "")
         scopes_list = scope_str.split() if scope_str else []
-
         allowed_projects_raw = claims.get("allowed_projects")
         allowed_projects: list[uuid.UUID] | None = None
         if allowed_projects_raw and isinstance(allowed_projects_raw, list):
@@ -462,6 +723,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
             scopes=scopes_list,
             token_kind="oauth",  # noqa: S106
             allowed_projects=allowed_projects,
+            allowed_project_ids=allowed_projects,
         )
 
     digest = hash_mcp_api_key(token)
@@ -471,7 +733,9 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
 
     stmt = text(
         "SELECT id, workspace_id, principal_id, surface, key_prefix, "
-        "scopes, created_at, expires_at, revoked_at, last_used_at, principal_status "
+        "scopes, created_at, expires_at, revoked_at, last_used_at, principal_status, "
+        "scope_tier, owner_kind, project_id, allowed_workspace_ids, allowed_project_ids, "
+        "capability_mask, allowed_tools, disabled_tools, allowed_cidrs "
         "FROM introspect_mcp_api_key(:digest)"
     )
     result = await session.execute(stmt, {"digest": digest})
@@ -495,13 +759,22 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         revoked_at,
         _last_used_at,
         principal_status,
+        scope_tier,
+        owner_kind,
+        project_id,
+        allowed_workspace_ids,
+        allowed_project_ids,
+        capability_mask,
+        allowed_tools,
+        disabled_tools,
+        allowed_cidrs,
     ) = row
 
     if revoked_at is not None:
         return McpIntrospectionResult(active=False)
 
     now = datetime.now(UTC)
-    if expires_at <= now:
+    if expires_at is not None and expires_at <= now:
         return McpIntrospectionResult(active=False)
 
     if principal_status != "ACTIVE":
@@ -522,4 +795,150 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         surface=key_surface,
         scopes=list(key_scopes),
         token_kind="api_key",  # noqa: S106
+        scope_tier=scope_tier,
+        owner_kind=owner_kind,
+        project_id=project_id,
+        allowed_workspace_ids=list(allowed_workspace_ids) if allowed_workspace_ids else None,
+        allowed_project_ids=list(allowed_project_ids) if allowed_project_ids else None,
+        allowed_projects=list(allowed_project_ids) if allowed_project_ids else None,
+        capability_mask=capability_mask if capability_mask is not None else 7,
+        allowed_tools=list(allowed_tools) if allowed_tools is not None else None,
+        disabled_tools=list(disabled_tools) if disabled_tools is not None else [],
+        allowed_cidrs=[str(c) for c in allowed_cidrs] if allowed_cidrs else None,
+        expires_at=expires_at,
     )
+
+
+def evaluate_key_boundary(  # noqa: C901, PLR0912, PLR0913
+    key: McpApiKey | McpIntrospectionResult,
+    *,
+    target_workspace_id: uuid.UUID | None = None,
+    target_project_id: uuid.UUID | None = None,
+    client_ip: str | None = None,
+    tool_name: str | None = None,
+    required_capability: int | None = None,
+) -> None:
+    """Evaluate key boundary constraints: CIDR, scope tier, tools, and capability mask."""
+    # 1. CIDR Pin Check
+    allowed_cidrs = getattr(key, "allowed_cidrs", None)
+    if allowed_cidrs and client_ip:
+        ip = ipaddress.ip_address(client_ip)
+        matched = any(ip in ipaddress.ip_network(str(c), strict=False) for c in allowed_cidrs)
+        if not matched:
+            raise ProblemException(
+                code="KEY_CIDR_DENIED",
+                status=403,
+                title="CIDR Denied",
+                detail=f"Client IP '{client_ip}' is outside allowed CIDRs.",
+            )
+
+    # 2. Scope Tier & Hierarchy Boundary Check
+    scope_tier = getattr(key, "scope_tier", "workspace")
+    key_ws = getattr(key, "workspace_id", None)
+    key_proj = getattr(key, "project_id", None)
+    allowed_ws = getattr(key, "allowed_workspace_ids", None)
+    allowed_projs = getattr(key, "allowed_project_ids", None) or getattr(
+        key, "allowed_projects", None
+    )
+
+    if scope_tier == "global":
+        if target_workspace_id is not None and allowed_ws:
+            ws_matches = target_workspace_id in allowed_ws or str(target_workspace_id) in [
+                str(w) for w in allowed_ws
+            ]
+            if not ws_matches:
+                raise ProblemException(
+                    code="KEY_SCOPE_VIOLATION",
+                    status=403,
+                    title="Key Scope Violation",
+                    detail=f"Workspace '{target_workspace_id}' is outside allowed workspaces.",
+                )
+        if target_project_id is not None and allowed_projs:
+            proj_matches = target_project_id in allowed_projs or str(target_project_id) in [
+                str(p) for p in allowed_projs
+            ]
+            if not proj_matches:
+                raise ProblemException(
+                    code="KEY_SCOPE_VIOLATION",
+                    status=403,
+                    title="Key Scope Violation",
+                    detail=f"Project '{target_project_id}' is outside allowed projects.",
+                )
+    elif scope_tier == "workspace":
+        if (
+            target_workspace_id is not None
+            and key_ws is not None
+            and str(target_workspace_id) != str(key_ws)
+        ):
+            raise ProblemException(
+                code="KEY_SCOPE_VIOLATION",
+                status=403,
+                title="Key Scope Violation",
+                detail=f"Workspace '{target_workspace_id}' is outside key workspace '{key_ws}'.",
+            )
+        if target_project_id is not None and allowed_projs:
+            proj_matches = target_project_id in allowed_projs or str(target_project_id) in [
+                str(p) for p in allowed_projs
+            ]
+            if not proj_matches:
+                raise ProblemException(
+                    code="KEY_SCOPE_VIOLATION",
+                    status=403,
+                    title="Key Scope Violation",
+                    detail=f"Project '{target_project_id}' is outside allowed projects.",
+                )
+    elif scope_tier == "project":
+        if (
+            target_workspace_id is not None
+            and key_ws is not None
+            and str(target_workspace_id) != str(key_ws)
+        ):
+            raise ProblemException(
+                code="KEY_SCOPE_VIOLATION",
+                status=403,
+                title="Key Scope Violation",
+                detail=f"Workspace '{target_workspace_id}' is outside key workspace '{key_ws}'.",
+            )
+        if (
+            target_project_id is not None
+            and key_proj is not None
+            and str(target_project_id) != str(key_proj)
+        ):
+            raise ProblemException(
+                code="KEY_SCOPE_VIOLATION",
+                status=403,
+                title="Key Scope Violation",
+                detail=f"Project '{target_project_id}' is outside key project '{key_proj}'.",
+            )
+
+    # 3. Tool Narrowing Check
+    if tool_name:
+        disabled_tools = getattr(key, "disabled_tools", None) or []
+        if tool_name in disabled_tools:
+            raise ProblemException(
+                code="INSUFFICIENT_SCOPE",
+                status=403,
+                title="Insufficient Scope",
+                detail=f"Tool '{tool_name}' is disabled for this key.",
+            )
+        allowed_tools = getattr(key, "allowed_tools", None)
+        if allowed_tools is not None and tool_name not in allowed_tools:
+            raise ProblemException(
+                code="INSUFFICIENT_SCOPE",
+                status=403,
+                title="Insufficient Scope",
+                detail=f"Tool '{tool_name}' is not in allowed_tools for this key.",
+            )
+
+    # 4. Capability Mask Check
+    if required_capability is not None:
+        mask = getattr(key, "capability_mask", 7)
+        if mask is None:
+            mask = 7
+        if (mask & required_capability) != required_capability:
+            raise ProblemException(
+                code="INSUFFICIENT_CAPABILITY",
+                status=403,
+                title="Insufficient Capability",
+                detail=f"Key capability mask {mask} lacks required bit {required_capability}.",
+            )

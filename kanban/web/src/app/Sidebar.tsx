@@ -16,7 +16,25 @@ import React, {
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { registerShortcut } from './shortcuts';
 import { CreateProjectModal } from '../features/projects/CreateProjectModal';
+import { CreateWorkspaceModal, type CreatedWorkspace } from '../features/workspaces/CreateWorkspaceModal';
+import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
+import {
+  ListTodo,
+  Kanban,
+  Table2,
+  CalendarDays,
+  GanttChart,
+  PanelLeftClose,
+} from '../components/icons/KanbanIcons';
 import './Sidebar.css';
+
+export interface WorkspaceNavData {
+  id: string;
+  name: string;
+  slug: string;
+  is_current?: boolean;
+  role?: string | null;
+}
 
 export interface ProjectNavData {
   key: string;
@@ -55,12 +73,24 @@ export function Sidebar({
   triggerButtonRef,
 }: SidebarProps): JSX.Element {
   let locationPathname = '';
+  let locationSearch = '';
   try {
     const loc = useLocation();
     locationPathname = loc.pathname;
+    locationSearch = loc.search;
   } catch {
     // Outside Router
   }
+
+  const currentLayout = useMemo(() => {
+    try {
+      const search = locationSearch || (typeof window !== 'undefined' ? window.location.search : '');
+      const params = new URLSearchParams(search);
+      return params.get('layout') ?? 'list';
+    } catch {
+      return 'list';
+    }
+  }, [locationSearch]);
 
   let navigateFn: ((to: string) => void) | null = null;
   try {
@@ -87,9 +117,113 @@ export function Sidebar({
   const [projectExpanded, setProjectExpanded] = useState(true);
   const [fetchedProjects, setFetchedProjects] = useState<ProjectNavData[]>([]);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [workspaces, setWorkspaces] = useState<WorkspaceNavData[]>([]);
+  const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
+  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
 
   const sidebarRef = useRef<HTMLElement>(null);
   const firstItemRef = useRef<HTMLButtonElement>(null);
+  const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadWorkspaces(): Promise<void> {
+      try {
+        const res = await fetch('/api/v1/workspaces', {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        });
+        if (res.ok && active) {
+          const data = (await res.json()) as WorkspaceNavData[];
+          if (Array.isArray(data)) {
+            setWorkspaces(data);
+          }
+        }
+      } catch {
+        // Offline / unit test fallback
+      }
+    }
+
+    void loadWorkspaces();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceDropdownOpen) return;
+    const handleOutsideClick = (e: MouseEvent): void => {
+      if (
+        workspaceSwitcherRef.current &&
+        !workspaceSwitcherRef.current.contains(e.target as Node)
+      ) {
+        setWorkspaceDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e: globalThis.KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        setWorkspaceDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [workspaceDropdownOpen]);
+
+  const handleSwitchWorkspace = async (targetId: string): Promise<void> => {
+    setWorkspaceDropdownOpen(false);
+    try {
+      const csrfToken = await ensureSessionCsrfToken();
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+      };
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+      const res = await fetch(`/api/v1/workspaces/${targetId}/switch`, {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+      });
+      if (res.ok) {
+        if (navigateFn) {
+          navigateFn('/');
+        } else if (typeof window !== 'undefined') {
+          window.location.assign('/');
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleWorkspaceCreated = (created: CreatedWorkspace): void => {
+    setWorkspaces((prev) => [
+      ...prev,
+      {
+        id: created.id,
+        name: created.name,
+        slug: created.slug,
+        is_current: false,
+      },
+    ]);
+    void handleSwitchWorkspace(created.id);
+  };
+
+  const currentWorkspace = useMemo(() => {
+    return (
+      workspaces.find((w) => w.is_current) ?? {
+        id: '',
+        name: '👍kanban',
+        slug: 'kanban',
+      }
+    );
+  }, [workspaces]);
 
   useEffect(() => {
     let active = true;
@@ -188,6 +322,13 @@ export function Sidebar({
       const next = prev === 'open' ? 'collapsed' : 'open';
       try {
         localStorage.setItem(SIDEBAR_STORAGE_KEY, next);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('kb:sidebar-changed', {
+              detail: { collapsed: next },
+            }),
+          );
+        }
       } catch {
         // Ignore storage errors
       }
@@ -195,6 +336,17 @@ export function Sidebar({
     });
     onToggleCollapse?.();
   }, [onToggleCollapse]);
+
+  // Listen for external toggle events (e.g. from IssueSurface header Hide Nav / Show Nav)
+  useEffect(() => {
+    const handleExternalToggle = (): void => {
+      toggleCollapsed();
+    };
+    window.addEventListener('kb:toggle-sidebar', handleExternalToggle);
+    return () => {
+      window.removeEventListener('kb:toggle-sidebar', handleExternalToggle);
+    };
+  }, [toggleCollapsed]);
 
   // Register '[' shortcut to toggle sidebar collapse
   useEffect(() => {
@@ -286,20 +438,62 @@ export function Sidebar({
         }`}
         onKeyDown={handleMobileKeyDown}
       >
-        {/* Workspace Brand & New Item Button */}
+        {/* Workspace Brand & Switcher & New Item Button */}
         <div className="kb-sidebar-header">
-          <button
-            ref={firstItemRef}
-            type="button"
-            className="kb-workspace-switcher"
-            aria-label="Workspace switcher: [👍] 👍kanban"
-          >
-            <span className="kb-workspace-brand">
-              <span aria-hidden="true">[👍]</span>
-              <span>👍kanban</span>
-            </span>
-            <span aria-hidden="true">▾</span>
-          </button>
+          <div className="kb-workspace-switcher-wrapper" ref={workspaceSwitcherRef}>
+            <button
+              ref={firstItemRef}
+              type="button"
+              className="kb-workspace-switcher"
+              aria-label={`Workspace switcher: [👍] ${currentWorkspace.name}`}
+              aria-expanded={workspaceDropdownOpen}
+              aria-haspopup="true"
+              onClick={() => {
+                setWorkspaceDropdownOpen((prev) => !prev);
+              }}
+            >
+              <span className="kb-workspace-brand">
+                <span aria-hidden="true">[👍]</span>
+                <span>{currentWorkspace.name}</span>
+              </span>
+              <span aria-hidden="true">▾</span>
+            </button>
+
+            {workspaceDropdownOpen && (
+              <div className="kb-workspace-dropdown" role="menu">
+                {workspaces.map((ws) => (
+                  <button
+                    key={ws.id}
+                    type="button"
+                    role="menuitem"
+                    className={`kb-workspace-dropdown-item ${
+                      ws.is_current ? 'kb-workspace-dropdown-item-active' : ''
+                    }`}
+                    onClick={() => void handleSwitchWorkspace(ws.id)}
+                  >
+                    <span className="kb-workspace-dropdown-name">
+                      <span aria-hidden="true">[👍]</span>
+                      <span>{ws.name}</span>
+                    </span>
+                    {ws.is_current && <span className="kb-workspace-dropdown-check">✓</span>}
+                  </button>
+                ))}
+                {workspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="kb-workspace-dropdown-create-btn"
+                  onClick={() => {
+                    setWorkspaceDropdownOpen(false);
+                    setCreateWorkspaceOpen(true);
+                  }}
+                >
+                  <span aria-hidden="true">+</span>
+                  <span>Create New Workspace</span>
+                </button>
+              </div>
+            )}
+          </div>
 
           <button
             type="button"
@@ -424,6 +618,95 @@ export function Sidebar({
                           </span>
                           <span>Work Items</span>
                         </NavLink>
+
+                        {/* Project Layout Views (KANBA-174) */}
+                        <ul className="kb-project-views-list" aria-label="Project views">
+                          <li>
+                            <NavLink
+                              to={`/projects/${proj.key}/issues?layout=list`}
+                              className={`kb-sidebar-nav-item kb-sidebar-subnav-item ${
+                                currentPath.startsWith(`/projects/${proj.key}/issues`) &&
+                                currentLayout === 'list'
+                                  ? 'kb-subnav-active'
+                                  : ''
+                              }`}
+                              aria-label="List view"
+                            >
+                              <span className="kb-sidebar-icon" aria-hidden="true">
+                                <ListTodo size={14} />
+                              </span>
+                              <span>📋 List</span>
+                            </NavLink>
+                          </li>
+                          <li>
+                            <NavLink
+                              to={`/projects/${proj.key}/issues?layout=board`}
+                              className={`kb-sidebar-nav-item kb-sidebar-subnav-item ${
+                                currentPath.startsWith(`/projects/${proj.key}/issues`) &&
+                                currentLayout === 'board'
+                                  ? 'kb-subnav-active'
+                                  : ''
+                              }`}
+                              aria-label="Board view"
+                            >
+                              <span className="kb-sidebar-icon" aria-hidden="true">
+                                <Kanban size={14} />
+                              </span>
+                              <span>📊 Board</span>
+                            </NavLink>
+                          </li>
+                          <li>
+                            <NavLink
+                              to={`/projects/${proj.key}/issues?layout=table`}
+                              className={`kb-sidebar-nav-item kb-sidebar-subnav-item ${
+                                currentPath.startsWith(`/projects/${proj.key}/issues`) &&
+                                currentLayout === 'table'
+                                  ? 'kb-subnav-active'
+                                  : ''
+                              }`}
+                              aria-label="Table view"
+                            >
+                              <span className="kb-sidebar-icon" aria-hidden="true">
+                                <Table2 size={14} />
+                              </span>
+                              <span>📑 Table</span>
+                            </NavLink>
+                          </li>
+                          <li>
+                            <NavLink
+                              to={`/projects/${proj.key}/issues?layout=calendar`}
+                              className={`kb-sidebar-nav-item kb-sidebar-subnav-item ${
+                                currentPath.startsWith(`/projects/${proj.key}/issues`) &&
+                                currentLayout === 'calendar'
+                                  ? 'kb-subnav-active'
+                                  : ''
+                              }`}
+                              aria-label="Calendar view"
+                            >
+                              <span className="kb-sidebar-icon" aria-hidden="true">
+                                <CalendarDays size={14} />
+                              </span>
+                              <span>📅 Calendar</span>
+                            </NavLink>
+                          </li>
+                          <li>
+                            <NavLink
+                              to={`/projects/${proj.key}/issues?layout=timeline`}
+                              className={`kb-sidebar-nav-item kb-sidebar-subnav-item ${
+                                currentPath.startsWith(`/projects/${proj.key}/issues`) &&
+                                currentLayout === 'timeline'
+                                  ? 'kb-subnav-active'
+                                  : ''
+                              }`}
+                              aria-label="Timeline view"
+                            >
+                              <span className="kb-sidebar-icon" aria-hidden="true">
+                                <GanttChart size={14} />
+                              </span>
+                              <span>📈 Timeline</span>
+                            </NavLink>
+                          </li>
+                        </ul>
                       </li>
                       <li>
                         <NavLink
@@ -525,11 +808,13 @@ export function Sidebar({
           <button
             type="button"
             className="kb-sidebar-collapse-btn"
-            aria-label="Collapse sidebar"
+            aria-label="Collapse sidebar (Hide Nav)"
             onClick={toggleCollapsed}
           >
-            <span aria-hidden="true">◀</span>
-            <span>Collapse</span>
+            <span aria-hidden="true">
+              <PanelLeftClose size={14} />
+            </span>
+            <span>Hide Nav</span>
             <kbd className="kb-sidebar-collapse-kbd">[</kbd>
           </button>
         </div>
@@ -554,6 +839,14 @@ export function Sidebar({
             ];
           });
         }}
+      />
+
+      <CreateWorkspaceModal
+        isOpen={createWorkspaceOpen}
+        onClose={() => {
+          setCreateWorkspaceOpen(false);
+        }}
+        onCreated={handleWorkspaceCreated}
       />
     </>
   );

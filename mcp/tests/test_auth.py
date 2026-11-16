@@ -690,3 +690,61 @@ async def test_upstream_introspection_error_paths() -> None:
     async with c5:
         resp5 = await c5.post("/mcp/agent", headers={"Authorization": f"Bearer {token}"}, json={})
         assert resp5.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_authorization_bearer_whitespace_handling() -> None:
+    """Ensure whitespace around and inside Authorization: Bearer <token> is cleanly handled."""
+    token = "kb_agt_valid_whitespace_token"
+
+    def mock_introspect(request: httpx.Request) -> httpx.Response:
+        data = json.loads(request.content.decode("utf-8"))
+        assert data["token"] == token
+        return httpx.Response(
+            200,
+            json={
+                "active": True,
+                "principal_id": "018f-0000",
+                "workspace_id": "018f-0001",
+                "surface": "agent",
+                "scopes": ["agent:read"],
+            },
+        )
+
+    mock_transport = httpx.MockTransport(mock_introspect)
+    client, _reg = _build_test_app_with_tools(Surface.AGENT, mock_transport)
+
+    async with client:
+        # 1. Leading whitespace and multiple spaces between Bearer and token
+        resp1 = await client.post(
+            "/mcp/agent",
+            headers={"Authorization": f"   Bearer    {token}   "},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test-client", "version": "1.0"},
+                },
+            },
+        )
+        assert resp1.status_code == 200
+
+        # 2. Tab separation between Bearer and token
+        resp2 = await client.post(
+            "/mcp/agent",
+            headers={"Authorization": f"Bearer\t{token}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test-client", "version": "1.0"},
+                },
+            },
+        )
+        assert resp2.status_code == 200

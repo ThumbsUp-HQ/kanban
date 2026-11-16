@@ -275,4 +275,45 @@ describe('HeaderPills', () => {
     const accessPill = screen.queryByRole('button', { name: /Access:/ });
     expect(accessPill).toBeNull();
   });
+
+  it('allows dismissing the standalone warning pill in the current session', () => {
+    sessionStorage.clear();
+    const standaloneStatus: SystemStatus = {
+      deployment_mode: 'standalone',
+      persistent_volume: false,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+    };
+
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <ShellPanelsProvider>
+          <HeaderPills systemStatus={standaloneStatus} />
+        </ShellPanelsProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Standalone mode warning' })).toBeDefined();
+    const dismissBtn = screen.getByTestId('standalone-dismiss-btn');
+    expect(dismissBtn).toBeDefined();
+
+    act(() => {
+      dismissBtn.click();
+    });
+
+    expect(screen.queryByRole('button', { name: 'Standalone mode warning' })).toBeNull();
+    expect(sessionStorage.getItem('kb_dismiss_standalone_warning')).toBe('true');
+    unmount();
+
+    // Re-rendering in same session honors dismissal
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ShellPanelsProvider>
+          <HeaderPills systemStatus={standaloneStatus} />
+        </ShellPanelsProvider>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByRole('button', { name: 'Standalone mode warning' })).toBeNull();
+    sessionStorage.clear();
+  });
 });

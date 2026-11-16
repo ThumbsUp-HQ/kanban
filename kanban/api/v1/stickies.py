@@ -39,7 +39,10 @@ async def list_project_stickies(
     *,
     include_promoted: Annotated[bool, Query()] = True,
 ) -> list[StickyResponse]:
-    """List stickies for a project ordered by sort_rank COLLATE 'C'."""
+    """List stickies for a project ordered by sort rank.
+
+    Orders rank using COLLATE 'C', with optional inclusion of promoted stubs.
+    """
     return await svc.list_project_stickies(
         session, caller, project_ref, include_promoted=include_promoted
     )
@@ -59,7 +62,10 @@ async def create_sticky(
     session: Session,
     response: Response,
 ) -> StickyResponse:
-    """Create a new sticky note in the specified project."""
+    """Create a new sticky note in the specified project.
+
+    Supports auto-detected Markdown, color token, and sets ETag response header.
+    """
     async with timing_floor(floor_ms=25.0):
         result, etag = await svc.create_sticky(session, caller, project_ref, body)
         response.headers["ETag"] = etag
@@ -79,7 +85,10 @@ async def list_workspace_stickies(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> StickyList:
-    """Keyset-paginated listing of stickies across the workspace."""
+    """Keyset-paginated listing of stickies across the workspace.
+
+    Returns stickies visible to the caller under row-level security.
+    """
     return await svc.list_workspace_stickies(session, caller, cursor=cursor, limit=limit)
 
 
@@ -97,7 +106,10 @@ async def get_sticky(
     *,
     if_none_match: Annotated[str | None, Header()] = None,
 ) -> Response | StickyResponse:
-    """Retrieve a sticky note by UUID with ETag caching."""
+    """Retrieve a sticky note by UUID with ETag caching.
+
+    Returns 304 Not Modified when matching If-None-Match header.
+    """
     result, etag = await svc.get_sticky(session, caller, sticky_id)
     if if_none_match and (if_none_match.strip() in (etag, etag.strip('"'), "*")):
         return Response(status_code=304, headers={"ETag": etag})
@@ -119,7 +131,10 @@ async def update_sticky(  # noqa: PLR0913
     response: Response,
     if_match: Annotated[str | None, Header()] = None,
 ) -> StickyResponse:
-    """Update a sticky note with ETag optimistic concurrency enforcement."""
+    """Update a sticky note with ETag optimistic concurrency enforcement.
+
+    Enforces concurrency using the If-Match request header.
+    """
     async with timing_floor(floor_ms=25.0):
         result, etag = await svc.update_sticky(session, caller, sticky_id, body, if_match)
         response.headers["ETag"] = etag
@@ -136,7 +151,10 @@ async def delete_sticky(
     caller: Caller,
     session: Session,
 ) -> dict[str, Any]:
-    """Soft-delete a sticky note."""
+    """Soft-delete a sticky note into the project trash bin.
+
+    Preserves activity audit ledger history.
+    """
     async with timing_floor(floor_ms=25.0):
         return await svc.delete_sticky(session, caller, sticky_id)
 

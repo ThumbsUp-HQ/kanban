@@ -140,7 +140,7 @@ export function DatesCycleModulesRows({
               <option value="">None</option>
               {projectModules.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name}
+                  {`${m.emoji ?? '🧩'} ${m.name}`}
                 </option>
               ))}
             </select>

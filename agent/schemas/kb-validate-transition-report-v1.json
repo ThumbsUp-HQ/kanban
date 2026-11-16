@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kanban.hackedyour.info/schemas/kb-validate-transition-report-v1.json",
+  "title": "ValidateTransitionReport",
+  "description": "Validation report emitted by kanban-agent validate-transition CLI.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "command",
+    "rendered_context",
+    "tool_trace",
+    "metrics",
+    "schema_status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "kb-validate-transition-report/v1"
+    },
+    "command": {
+      "type": "string",
+      "const": "validate-transition"
+    },
+    "rendered_context": {
+      "type": "string"
+    },
+    "tool_trace": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tool", "args"],
+        "additionalProperties": false,
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "args": {
+            "type": "object"
+          },
+          "result": {
+            "type": ["object", "string", "null"]
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["total_latency_ms", "prompt_tokens", "completion_tokens", "route_trace"],
+      "additionalProperties": false,
+      "properties": {
+        "ttft_ms": {
+          "type": ["number", "null"]
+        },
+        "total_latency_ms": {
+          "type": "number"
+        },
+        "prompt_tokens": {
+          "type": "integer"
+        },
+        "completion_tokens": {
+          "type": "integer"
+        },
+        "route_trace": {
+          "type": "array"
+        },
+        "iterations": {
+          "type": ["integer", "null"]
+        },
+        "p50_latency_ms": {
+          "type": ["number", "null"]
+        },
+        "p90_latency_ms": {
+          "type": ["number", "null"]
+        },
+        "p95_latency_ms": {
+          "type": ["number", "null"]
+        },
+        "p99_latency_ms": {
+          "type": ["number", "null"]
+        }
+      }
+    },
+    "schema_status": {
+      "type": "object",
+      "required": ["valid", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "valid": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string"
+        },
+        "error_code": {
+          "type": ["string", "null"]
+        },
+        "detail": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "qa_verdict": {
+      "type": ["null", "object"]
+    },
+    "sparkle_details": {
+      "type": ["null", "object"]
+    },
+    "transition_details": {
+      "type": ["null", "object"],
+      "additionalProperties": false,
+      "properties": {
+        "harness": {
+          "type": ["string", "null"],
+          "enum": ["in_app_sdk", "cli_pipe", "remote_runner", null]
+        },
+        "delimiter": {
+          "type": ["string", "null"]
+        },
+        "head_commit": {
+          "type": ["string", "null"]
+        },
+        "redaction_count": {
+          "type": "integer"
+        },
+        "verdict": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "decision": {
+              "type": "string",
+              "enum": ["approve", "reject"]
+            },
+            "reason_markdown": {
+              "type": "string"
+            },
+            "verdict_sha256": {
+              "type": "string"
+            },
+            "forged_candidates": {
+              "type": "integer"
+            },
+            "field_updates": {
+              "type": "object"
+            },
+            "add_labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "tool_trace": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tool", "args", "duration_ms", "status", "output_bytes"],
+            "additionalProperties": false,
+            "properties": {
+              "tool": {
+                "type": "string"
+              },
+              "args": {
+                "type": "object"
+              },
+              "duration_ms": {
+                "type": "number"
+              },
+              "status": {
+                "type": "string"
+              },
+              "output_bytes": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -24,7 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-from database.models.mcp_api_key import McpApiKey
 from database.models.oauth import (
     OAuthAuthorizationCode,
     OAuthClient,
@@ -61,10 +60,6 @@ from kanban.oauth.server import (
     validate_redirect_uri,
     validate_registration_redirect_uris,
     verify_pkce_s256,
-)
-from kanban.security.mcp_keys import (
-    mint_mcp_api_key,
-    revoke_mcp_api_key,
 )
 
 
@@ -1050,16 +1045,41 @@ async def admin_patch_oauth_client(
 
 
 class DeviceActivateRequest(BaseModel):
-    user_code: str
-    approved: bool
-    scopes: list[str] | None = None
-    allowed_projects: list[uuid.UUID] | None = None
+    """Payload for RFC 8628 OAuth 2.0 device authorization activation."""
+
+    user_code: str = Field(
+        description="Normalized 8-character device verification user code (e.g. WDFG-BTRJ)"
+    )
+    approved: bool = Field(
+        description="Whether the authenticating user approves or denies authorization"
+    )
+    scopes: list[str] | None = Field(
+        default=None, description="Optional narrowed scopes granted to the device session"
+    )
+    allowed_projects: list[uuid.UUID] | None = Field(
+        default=None, description="Optional list of project UUIDs granted to the device session"
+    )
 
 
 class PersonalMcpKeyMintRequest(BaseModel):
-    surface: Literal["agent", "docs", "admin"]
-    scopes: list[str]
-    expires_in_days: int | None = Field(default=30, ge=1, le=365)
+    """Payload for minting a personal Model Context Protocol (MCP) API access key."""
+
+    surface: Literal["agent", "docs", "admin"] = Field(
+        description="Target MCP surface tier: agent, docs, or admin"
+    )
+    scopes: list[str] = Field(description="List of capability scope tokens granted to this key")
+    expires_in_days: int | None = Field(
+        default=30, ge=1, le=365, description="Token validity duration in days"
+    )
+    unlimited: bool = Field(
+        default=False, description="Whether to request an unlimited lifetime key"
+    )
+    confirm_unlimited: bool = Field(
+        default=False, description="Explicit confirmation for minting an unlimited lifetime key"
+    )
+    disabled_tools: list[str] = Field(
+        default_factory=list, description="Tool names explicitly narrowed and disabled on this key"
+    )
 
 
 @oauth_v1_router.get(
@@ -1100,7 +1120,7 @@ async def activate_device(
     caller: Caller,
     session: Session,
 ) -> JSONResponse:
-    """Approve or deny a device authorization request."""
+    """Approve or deny a device authorization request with optional scope and project narrowing."""
     client_ip = request.client.host if request.client else "unknown"
     is_aal2 = caller.aal_level == _REQUIRED_AAL_LEVEL
     grant = await activate_device_code(
@@ -1115,104 +1135,3 @@ async def activate_device(
         is_aal2=is_aal2,
     )
     return JSONResponse({"status": "approved" if grant is not None else "denied"})
-
-
-@oauth_v1_router.get(
-    "/auth/mcp-keys",
-    summary="List personal MCP API keys",
-)
-async def list_personal_mcp_keys(
-    caller: Caller,
-    session: Session,
-) -> JSONResponse:
-    """List all active and revoked personal MCP API keys for the current caller."""
-    stmt = (
-        select(McpApiKey)
-        .where(
-            McpApiKey.principal_id == caller.principal_id,
-            McpApiKey.workspace_id == caller.workspace_id,
-        )
-        .order_by(McpApiKey.created_at.desc())
-    )
-    keys = (await session.execute(stmt)).scalars().all()
-    return JSONResponse(
-        {
-            "keys": [
-                {
-                    "id": str(k.id),
-                    "surface": k.surface,
-                    "key_prefix": k.key_prefix,
-                    "display_hint": k.display_hint,
-                    "scopes": k.scopes,
-                    "created_at": k.created_at.isoformat(),
-                    "expires_at": k.expires_at.isoformat(),
-                    "revoked_at": k.revoked_at.isoformat() if k.revoked_at else None,
-                }
-                for k in keys
-            ]
-        }
-    )
-
-
-@oauth_v1_router.post(
-    "/auth/mcp-keys",
-    status_code=201,
-    summary="Mint a personal MCP API key",
-)
-async def mint_personal_mcp_key_endpoint(
-    body: PersonalMcpKeyMintRequest,
-    caller: Caller,
-    session: Session,
-) -> JSONResponse:
-    """Mint a new personal MCP API key, returning the plaintext key once."""
-    key_record, raw_key = await mint_mcp_api_key(
-        session,
-        workspace_id=caller.workspace_id,
-        principal_id=caller.principal_id,
-        surface=body.surface,
-        scopes=body.scopes,
-        created_by_id=caller.principal_id,
-        expires_in_days=body.expires_in_days,
-    )
-    await session.commit()
-    return JSONResponse(
-        {
-            "id": str(key_record.id),
-            "raw_key": raw_key,
-            "surface": key_record.surface,
-            "key_prefix": key_record.key_prefix,
-            "display_hint": key_record.display_hint,
-            "scopes": key_record.scopes,
-            "created_at": key_record.created_at.isoformat(),
-            "expires_at": key_record.expires_at.isoformat(),
-        },
-        status_code=201,
-    )
-
-
-@oauth_v1_router.delete(
-    "/auth/mcp-keys/{key_id}",
-    status_code=204,
-    summary="Revoke personal MCP API key",
-)
-async def revoke_personal_mcp_key_endpoint(
-    key_id: uuid.UUID,
-    caller: Caller,
-    session: Session,
-) -> Response:
-    """Revoke a personal MCP API key owned by the caller."""
-    stmt = select(McpApiKey).where(
-        McpApiKey.id == key_id,
-        McpApiKey.principal_id == caller.principal_id,
-        McpApiKey.workspace_id == caller.workspace_id,
-    )
-    key = (await session.execute(stmt)).scalar_one_or_none()
-    if key is None:
-        raise not_found()
-    await revoke_mcp_api_key(
-        session,
-        key_id=key_id,
-        caller_principal_id=caller.principal_id,
-    )
-    await session.commit()
-    return Response(status_code=204)

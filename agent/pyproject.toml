@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 kanban-agent = "agent.cli:main"
+kanban-agent-runner = "agent.remote_runner.cli:main"
 
 [tool.hatch.build.targets.wheel.sources]
 "" = "agent"

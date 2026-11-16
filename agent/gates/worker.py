@@ -55,9 +55,27 @@ class GateCoordinatorProtocol(Protocol):
 class HarnessRegistry:
     """Registry of pluggable execution harnesses keyed by harness_kind."""
 
-    def __init__(self) -> None:
-        """Initialize empty harness registry."""
+    def __init__(
+        self,
+        *,
+        auto_register_defaults: bool = True,
+        register_defaults: bool | None = None,
+    ) -> None:
+        """Initialize harness registry."""
         self._harnesses: dict[str, Harness] = {}
+        should_register = (
+            register_defaults if register_defaults is not None else auto_register_defaults
+        )
+        if should_register:
+            self._register_defaults()
+
+    def _register_defaults(self) -> None:
+        try:
+            from agent.harnesses.in_app_sdk import InAppSdkHarness  # noqa: PLC0415
+
+            self._harnesses["in_app_sdk"] = InAppSdkHarness()
+        except ImportError:
+            pass
 
     def register(self, harness_kind: str, harness: Harness) -> None:
         """Register an execution harness implementation."""

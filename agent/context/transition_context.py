@@ -11,12 +11,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from kanban.security.scrubber import scrub_text
 
 if TYPE_CHECKING:
     import random
+    from pathlib import Path
 
 __all__ = [
     "ContextDelimiterCollisionError",
@@ -66,6 +67,29 @@ class RepoContext(BaseModel):
     mount_path: str = "/workspace/repo"
     access: Literal["read-only"] = "read-only"
     head_commit: str
+    _mirror_path: str | Path | None = PrivateAttr(default=None)
+
+    def __init__(
+        self,
+        *,
+        mount_path: str = "/workspace/repo",
+        access: Literal["read-only"] = "read-only",
+        head_commit: str,
+        mirror_path: str | Path | None = None,
+        **kwargs: Any,  # noqa: ANN401
+    ) -> None:
+        """Initialize repository mount configuration."""
+        super().__init__(mount_path=mount_path, access=access, head_commit=head_commit, **kwargs)
+        self._mirror_path = mirror_path
+
+    @property
+    def mirror_path(self) -> Path | str | None:
+        """Bare git repository mirror path."""
+        return self._mirror_path
+
+    @mirror_path.setter
+    def mirror_path(self, val: Path | str | None) -> None:
+        self._mirror_path = val
 
 
 class McpAccess(BaseModel):
@@ -117,6 +141,8 @@ class RenderedContext:
     verdict_nonce: str
     ephemeral_token: bytearray
     allowed_mutable_fields: frozenset[str]
+    repo_context: RepoContext | None = None
+    mcp_access: McpAccess | None = None
 
     def destroy(self) -> None:
         """Securely zeroize ephemeral token bytes in mutable memory."""
@@ -289,6 +315,7 @@ def build_transition_context(  # noqa: C901, PLR0912, PLR0913, PLR0915
     else:
         agent_url = getattr(mcp_urls, "agent_url", "https://kanban.internal/mcp/agent")
         docs_url = getattr(mcp_urls, "docs_url", "https://kanban.internal/mcp/docs")
+    mcp_access = McpAccess(agent_url=agent_url, docs_url=docs_url)
 
     # Ephemeral token management (kept exclusively in bytearray)
     if ephemeral_token is None:
@@ -369,4 +396,6 @@ def build_transition_context(  # noqa: C901, PLR0912, PLR0913, PLR0915
         verdict_nonce=verdict_nonce,
         ephemeral_token=ephemeral_bytearray,
         allowed_mutable_fields=allowed_mutable,
+        repo_context=repo_context,
+        mcp_access=mcp_access,
     )

@@ -30,19 +30,19 @@ COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
     "properties": {
         "identifier": {
             "type": "string",
-            "description": "Issue key (e.g. 'KAN-142'), UUID, or 'help'",
+            "description": "Issue ref",
         },
         "summary_markdown": {
             "type": "string",
-            "description": "Comprehensive summary of completed work (1..65536 bytes)",
+            "description": "Summary",
         },
         "verification_proof": {
             "type": "object",
-            "description": "Structured VerificationProof object matching required schema",
+            "description": "Proof packet",
         },
         "to_state": {
             "type": "string",
-            "description": "Optional completed group state name or UUID",
+            "description": "Target state",
         },
     },
     "required": ["identifier", "summary_markdown", "verification_proof"],

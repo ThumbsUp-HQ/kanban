@@ -21,3 +21,26 @@
   --prop-row-h: 38px;             /* Uncramped property rows */
   --section-gap: 32px;            /* Clear vertical separation between sections */
 }
+
+/* Semantic Workflow State Colors (KB-UX-02) */
+:root:not([hidden]) {
+  --state-backlog-fg: #94a3b8;
+  --state-backlog-bg: rgba(148, 163, 184, 0.12);
+  --state-backlog-border: rgba(148, 163, 184, 0.28);
+
+  --state-unstarted-fg: #60a5fa;
+  --state-unstarted-bg: rgba(96, 165, 250, 0.12);
+  --state-unstarted-border: rgba(96, 165, 250, 0.28);
+
+  --state-started-fg: #f59e0b;
+  --state-started-bg: rgba(245, 158, 11, 0.12);
+  --state-started-border: rgba(245, 158, 11, 0.28);
+
+  --state-completed-fg: #10b981;
+  --state-completed-bg: rgba(16, 185, 129, 0.12);
+  --state-completed-border: rgba(16, 185, 129, 0.28);
+
+  --state-cancelled-fg: #ef4444;
+  --state-cancelled-bg: rgba(239, 68, 68, 0.12);
+  --state-cancelled-border: rgba(239, 68, 68, 0.28);
+}

@@ -14,9 +14,14 @@ import {
   reorderAdminAuthCard,
   testAuthCardHandshake,
   deleteAdminAuthCard,
+  fetchAdminPrincipals,
+  createLocalUser,
+  resetUserPassword,
+  updateUserRole,
   type AdminAuthCard,
   type CreateAuthCardPayload,
   type UpdateAuthCardPayload,
+  type AdminUserPrincipal,
 } from './adminAuthApi';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import type { MfaMethod } from '../auth/authApi';
@@ -47,13 +52,50 @@ function parseLockoutError(
   return null;
 }
 
+function getProviderBadgeClass(provider: string | undefined): string {
+  const norm = (provider ?? '').toUpperCase();
+  if (norm.includes('LOCAL')) return 'auth-badge-provider--local';
+  if (norm.includes('GOOGLE')) return 'auth-badge-provider--google';
+  if (norm.includes('GITHUB')) return 'auth-badge-provider--github';
+  if (norm.includes('DIRECTORY') || norm.includes('AD')) return 'auth-badge-provider--ad';
+  if (norm.includes('LDAP')) return 'auth-badge-provider--ldap';
+  return 'auth-badge-provider--oauth';
+}
+
 export function AuthStudioPage(): JSX.Element {
   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [isUserLoading, setIsUserLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
 
+  // Studio tab state
+  const [activeTab, setActiveTab] = useState<'cards' | 'users'>('cards');
+
+  // Cards state
   const [cards, setCards] = useState<AdminAuthCard[]>([]);
   const [isLoadingCards, setIsLoadingCards] = useState(true);
+
+  // Users state
+  const [users, setUsers] = useState<AdminUserPrincipal[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [userActionError, setUserActionError] = useState<string | null>(null);
+  const [userActionSuccess, setUserActionSuccess] = useState<string | null>(null);
+
+  // User Modals state
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [resetTargetUser, setResetTargetUser] = useState<AdminUserPrincipal | null>(null);
+
+  // New local user form state
+  const [newUserHandle, setNewUserHandle] = useState('');
+  const [newUserDisplayName, setNewUserDisplayName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('WORKSPACE_MEMBER');
+  const [isSubmittingUser, setIsSubmittingUser] = useState(false);
+
+  // Reset password form state
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
 
   // Drawer state
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -125,11 +167,32 @@ export function AuthStudioPage(): JSX.Element {
     }
   }, []);
 
+  // 3. Fetch principals if admin access confirmed
+  const loadUsers = useCallback(async () => {
+    setIsLoadingUsers(true);
+    setUserActionError(null);
+    try {
+      const principals = await fetchAdminPrincipals('USER');
+      setUsers(principals);
+    } catch (err: unknown) {
+      if (err instanceof ApiProblem && (err.status === 403 || err.status === 404)) {
+        setAccessDenied(true);
+      } else if (err instanceof Error) {
+        setUserActionError(err.message);
+      } else {
+        setUserActionError('Failed to load user principals.');
+      }
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!accessDenied && currentUser?.is_server_admin) {
       void loadCards();
+      void loadUsers();
     }
-  }, [accessDenied, currentUser, loadCards]);
+  }, [accessDenied, currentUser, loadCards, loadUsers]);
 
   // Sort cards: non-LOCAL_ADMIN sorted by sort_rank (COLLATE "C"), LOCAL_ADMIN pinned at end
   const externalCards = cards
@@ -161,7 +224,6 @@ export function AuthStudioPage(): JSX.Element {
 
     if (!mutation) return;
 
-    // Replay pending mutation
     if (mutation.type === 'toggle') {
       await handleToggleEnabled(mutation.card, Boolean(mutation.extra));
     } else if (mutation.type === 'delete') {
@@ -171,7 +233,6 @@ export function AuthStudioPage(): JSX.Element {
 
   // Toggle card enabled state
   const handleToggleEnabled = async (card: AdminAuthCard, enabled: boolean) => {
-    // Optimistic mutation
     const previousCards = [...cards];
     setCards((prev) =>
       prev.map((c) => (c.id === card.id ? { ...c, is_enabled: enabled } : c)),
@@ -183,7 +244,6 @@ export function AuthStudioPage(): JSX.Element {
       const updated = await toggleAdminAuthCardEnabled(card.id, enabled);
       setCards((prev) => prev.map((c) => (c.id === card.id ? updated : c)));
     } catch (err: unknown) {
-      // Rollback optimistic state
       setCards(previousCards);
 
       if (handleAal2Intercept(err, { type: 'toggle', card, extra: enabled })) {
@@ -218,9 +278,9 @@ export function AuthStudioPage(): JSX.Element {
           c.id === card.id
             ? {
                 ...c,
-                last_health_status: result.last_health_status,
+                last_health_status: (result.last_health_status ?? 'FAILED'),
                 latency_ms: result.latency_ms,
-                check_summary: result.check_summary,
+                check_summary: result.check_summary ?? null,
                 last_handshake_at: new Date().toISOString(),
               }
             : c,
@@ -276,7 +336,6 @@ export function AuthStudioPage(): JSX.Element {
     }
 
     const previousCards = [...cards];
-    // Optimistic reorder
     setCards((prev) =>
       prev.map((c) => (c.id === card.id ? { ...c, sort_rank: newRank } : c)),
     );
@@ -289,13 +348,11 @@ export function AuthStudioPage(): JSX.Element {
       });
       setCards((prev) => prev.map((c) => (c.id === card.id ? updated : c)));
     } catch {
-      // Rollback
       setCards(previousCards);
       setGeneralError('Failed to reorder card.');
     }
   };
 
-  // Drag and drop events
   const handleDragStart = (
     _e: React.DragEvent<HTMLLIElement>,
     index: number,
@@ -317,26 +374,24 @@ export function AuthStudioPage(): JSX.Element {
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const draggedCard = externalCards[draggedIndex]!;
+    const draggedCard = externalCards[draggedIndex];
+    if (!draggedCard) return;
 
     let newRank: string;
     let beforeId: string | null = null;
     let afterId: string | null = null;
 
     if (draggedIndex < dropIndex) {
-      // Moving down
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const afterCard = externalCards[dropIndex]!;
+      const afterCard = externalCards[dropIndex];
       const beforeCard = externalCards[dropIndex + 1];
+      if (!afterCard) return;
       newRank = midpointRank(afterCard.sort_rank, beforeCard ? beforeCard.sort_rank : null);
       afterId = afterCard.id;
       beforeId = beforeCard ? beforeCard.id : null;
     } else {
-      // Moving up
       const afterCard = externalCards[dropIndex - 1];
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const beforeCard = externalCards[dropIndex]!;
+      const beforeCard = externalCards[dropIndex];
+      if (!beforeCard) return;
       newRank = midpointRank(afterCard ? afterCard.sort_rank : null, beforeCard.sort_rank);
       afterId = afterCard ? afterCard.id : null;
       beforeId = beforeCard.id;
@@ -415,7 +470,81 @@ export function AuthStudioPage(): JSX.Element {
     }
   };
 
-  // Access denied / non-admin: render uniform "Not found or no access" state
+  // Handle role change for user
+  const handleRoleChange = async (userId: string, newRole: string, previousRole?: string) => {
+    setUserActionError(null);
+    setUserActionSuccess(null);
+    try {
+      await updateUserRole(userId, newRole, previousRole);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)),
+      );
+      setUserActionSuccess('User role updated successfully.');
+    } catch (err: unknown) {
+      setUserActionError(err instanceof Error ? err.message : 'Failed to update user role.');
+    }
+  };
+
+  // Handle Add Local User
+  const handleCreateLocalUserSubmit = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!newUserHandle || !newUserEmail || !newUserPassword) {
+      setUserActionError('Handle, email, and password are required.');
+      return;
+    }
+    setIsSubmittingUser(true);
+    setUserActionError(null);
+    setUserActionSuccess(null);
+
+    try {
+      await createLocalUser({
+        handle: newUserHandle.trim(),
+        display_name: (newUserDisplayName || newUserHandle).trim(),
+        email: newUserEmail.trim(),
+        password: newUserPassword,
+        role: newUserRole,
+      });
+      setUserActionSuccess(`Local user @${newUserHandle} created successfully.`);
+      setIsAddUserOpen(false);
+      setNewUserHandle('');
+      setNewUserDisplayName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('WORKSPACE_MEMBER');
+      await loadUsers();
+    } catch (err: unknown) {
+      setUserActionError(err instanceof Error ? err.message : 'Failed to create local user.');
+    } finally {
+      setIsSubmittingUser(false);
+    }
+  };
+
+  // Handle Reset Password Submit
+  const handleResetPasswordSubmit = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!resetTargetUser) return;
+    if (!newPassword || newPassword !== confirmPassword) {
+      setUserActionError('Passwords do not match or cannot be empty.');
+      return;
+    }
+    setIsSubmittingPassword(true);
+    setUserActionError(null);
+    setUserActionSuccess(null);
+
+    try {
+      await resetUserPassword(resetTargetUser.id, newPassword);
+      setUserActionSuccess(`Password reset successfully for @${resetTargetUser.handle ?? resetTargetUser.principal}.`);
+      setResetTargetUser(null);
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: unknown) {
+      setUserActionError(err instanceof Error ? err.message : 'Failed to reset password.');
+    } finally {
+      setIsSubmittingPassword(false);
+    }
+  };
+
+  // Access denied / non-admin: uniform empty state
   if (accessDenied) {
     return (
       <main className="auth-studio-page" data-testid="auth-studio-page">
@@ -449,17 +578,57 @@ export function AuthStudioPage(): JSX.Element {
           />
         </div>
 
+        {activeTab === 'cards' ? (
+          <button
+            type="button"
+            className="auth-studio-add-btn"
+            onClick={() => {
+              setEditingCard(null);
+              setIsDrawerOpen(true);
+            }}
+          >
+            + Add auth card
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="auth-studio-add-btn"
+            onClick={() => {
+              setUserActionError(null);
+              setUserActionSuccess(null);
+              setIsAddUserOpen(true);
+            }}
+          >
+            + Add Local User
+          </button>
+        )}
+      </header>
+
+      {/* Tabs Bar */}
+      <div className="auth-tabs-bar" role="tablist" aria-label="Authentication Studio Sections">
         <button
           type="button"
-          className="auth-studio-add-btn"
-          onClick={() => {
-            setEditingCard(null);
-            setIsDrawerOpen(true);
-          }}
+          role="tab"
+          id="tab-cards"
+          aria-selected={activeTab === 'cards'}
+          aria-controls="panel-cards"
+          className={`auth-tab-btn ${activeTab === 'cards' ? 'auth-tab-btn--active' : ''}`}
+          onClick={() => { setActiveTab('cards'); }}
         >
-          + Add auth card
+          Auth Provider Cards
         </button>
-      </header>
+        <button
+          type="button"
+          role="tab"
+          id="tab-users"
+          aria-selected={activeTab === 'users'}
+          aria-controls="panel-users"
+          className={`auth-tab-btn ${activeTab === 'users' ? 'auth-tab-btn--active' : ''}`}
+          onClick={() => { setActiveTab('users'); }}
+        >
+          Users &amp; Permissions
+        </button>
+      </div>
 
       {/* LOCKOUT_PREVENTED Alert Banner */}
       {lockoutError ? (
@@ -487,44 +656,162 @@ export function AuthStudioPage(): JSX.Element {
         </div>
       ) : null}
 
-      {/* Cards List */}
-      <ol className="auth-studio-list" role="list">
-        {sortedCards.map((card, idx) => (
-          <AuthCardRow
-            key={card.id}
-            card={card}
-            index={idx}
-            totalCards={sortedCards.length}
-            isPrimary={card.id === primaryCardId}
-            onMoveUp={() => {
-              void handleMove(card, 'up');
-            }}
-            onMoveDown={() => {
-              void handleMove(card, 'down');
-            }}
-            onToggleEnabled={(c, enabled) => {
-              void handleToggleEnabled(c, enabled);
-            }}
-            onTestHandshake={(c) => {
-              void handleTestHandshake(c);
-            }}
-            onEdit={(c) => {
-              setEditingCard(c);
-              setIsDrawerOpen(true);
-            }}
-            onDelete={(c) => {
-              void handleDeleteCard(c);
-            }}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDrop={(e, i) => {
-              void handleDrop(e, i);
-            }}
-            isTestingHandshake={testingCardIds.has(card.id)}
-            isToggling={togglingCardIds.has(card.id)}
-          />
-        ))}
-      </ol>
+      {/* User Action Error or Success Banners */}
+      {userActionError ? (
+        <div className="auth-lockout-banner" role="alert">
+          <div className="auth-lockout-header">
+            <span>{userActionError}</span>
+            <button
+              type="button"
+              className="auth-btn-secondary"
+              onClick={() => { setUserActionError(null); }}
+              aria-label="Dismiss error"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {userActionSuccess ? (
+        <div className="auth-success-banner" role="status">
+          <span>{userActionSuccess}</span>
+          <button
+            type="button"
+            className="auth-btn-secondary"
+            onClick={() => { setUserActionSuccess(null); }}
+            aria-label="Dismiss notification"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
+
+      {/* Tab Panels */}
+      {activeTab === 'cards' ? (
+        <div id="panel-cards" role="tabpanel" aria-labelledby="tab-cards">
+          {/* Cards List */}
+          <ol className="auth-studio-list" role="list">
+            {sortedCards.map((card, idx) => (
+              <AuthCardRow
+                key={card.id}
+                card={card}
+                index={idx}
+                totalCards={sortedCards.length}
+                isPrimary={card.id === primaryCardId}
+                onMoveUp={() => {
+                  void handleMove(card, 'up');
+                }}
+                onMoveDown={() => {
+                  void handleMove(card, 'down');
+                }}
+                onToggleEnabled={(c, enabled) => {
+                  void handleToggleEnabled(c, enabled);
+                }}
+                onTestHandshake={(c) => {
+                  void handleTestHandshake(c);
+                }}
+                onEdit={(c) => {
+                  setEditingCard(c);
+                  setIsDrawerOpen(true);
+                }}
+                onDelete={(c) => {
+                  void handleDeleteCard(c);
+                }}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDrop={(e, i) => {
+                  void handleDrop(e, i);
+                }}
+                isTestingHandshake={testingCardIds.has(card.id)}
+                isToggling={togglingCardIds.has(card.id)}
+              />
+            ))}
+          </ol>
+        </div>
+      ) : (
+        <div id="panel-users" role="tabpanel" aria-labelledby="tab-users">
+          {isLoadingUsers ? (
+            <p className="auth-card-subtext">Loading users and permission grants...</p>
+          ) : (
+            <div className="auth-users-container">
+              <table className="auth-users-table" data-testid="auth-users-table">
+                <thead>
+                  <tr>
+                    <th className="auth-users-th">User / Handle</th>
+                    <th className="auth-users-th">Email</th>
+                    <th className="auth-users-th">Provider</th>
+                    <th className="auth-users-th">Role Grant</th>
+                    <th className="auth-users-th">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="auth-users-td">
+                        No user principals found.
+                      </td>
+                    </tr>
+                  ) : (
+                    users.map((u) => (
+                      <tr key={u.id} className="auth-users-tr">
+                        <td className="auth-users-td">
+                          <div className="auth-user-name-cell">
+                            <span className="auth-user-display-name">
+                              {u.display_name || (u.handle ?? u.principal)}
+                            </span>
+                            <span className="auth-user-handle">@{u.handle ?? u.principal}</span>
+                          </div>
+                        </td>
+                        <td className="auth-users-td">
+                          <span className="auth-user-email">{u.email ?? '—'}</span>
+                        </td>
+                        <td className="auth-users-td">
+                          <span
+                            className={`auth-badge-provider ${getProviderBadgeClass(u.provider)}`}
+                          >
+                            {u.provider ?? 'LOCAL'}
+                          </span>
+                        </td>
+                        <td className="auth-users-td">
+                          <select
+                            className="auth-role-select"
+                            value={u.role ?? 'WORKSPACE_MEMBER'}
+                            onChange={(e) => {
+                              void handleRoleChange(u.id, e.target.value, u.role);
+                            }}
+                            aria-label={`Role for ${u.handle ?? u.principal}`}
+                          >
+                            <option value="SERVER_ADMIN">SERVER_ADMIN (Server Admin)</option>
+                            <option value="WORKSPACE_ADMIN">WORKSPACE_ADMIN (Workspace Admin)</option>
+                            <option value="WORKSPACE_MEMBER">WORKSPACE_MEMBER (Workspace Member)</option>
+                            <option value="WORKSPACE_GUEST">WORKSPACE_GUEST (Workspace Guest)</option>
+                          </select>
+                        </td>
+                        <td className="auth-users-td">
+                          <button
+                            type="button"
+                            className="auth-btn-secondary"
+                            onClick={() => {
+                              setUserActionError(null);
+                              setUserActionSuccess(null);
+                              setResetTargetUser(u);
+                              setNewPassword('');
+                              setConfirmPassword('');
+                            }}
+                          >
+                            Reset Password
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Create / Edit Drawer */}
       <AuthCardEditorDrawer
@@ -537,6 +824,213 @@ export function AuthStudioPage(): JSX.Element {
         }}
         onSave={handleSaveDrawer}
       />
+
+      {/* Add Local User Modal */}
+      {isAddUserOpen ? (
+        <div className="auth-modal-backdrop" role="presentation">
+          <div
+            className="auth-modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-user-modal-title"
+          >
+            <div className="auth-modal-header">
+              <h2 id="add-user-modal-title" className="auth-modal-title">
+                + Add Local User
+              </h2>
+              <button
+                type="button"
+                className="auth-btn-secondary"
+                onClick={() => { setIsAddUserOpen(false); }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={(e) => { void handleCreateLocalUserSubmit(e); }}>
+              <div className="auth-modal-body">
+                <div className="auth-editor-field">
+                  <label htmlFor="new-user-handle" className="auth-editor-label">
+                    Username / Handle <span className="auth-editor-required">*</span>
+                  </label>
+                  <input
+                    id="new-user-handle"
+                    type="text"
+                    className="auth-editor-input"
+                    value={newUserHandle}
+                    onChange={(e) => { setNewUserHandle(e.target.value); }}
+                    placeholder="e.g. jdoe"
+                    required
+                  />
+                </div>
+
+                <div className="auth-editor-field">
+                  <label htmlFor="new-user-display" className="auth-editor-label">
+                    Display Name
+                  </label>
+                  <input
+                    id="new-user-display"
+                    type="text"
+                    className="auth-editor-input"
+                    value={newUserDisplayName}
+                    onChange={(e) => { setNewUserDisplayName(e.target.value); }}
+                    placeholder="e.g. John Doe"
+                  />
+                </div>
+
+                <div className="auth-editor-field">
+                  <label htmlFor="new-user-email" className="auth-editor-label">
+                    Email Address <span className="auth-editor-required">*</span>
+                  </label>
+                  <input
+                    id="new-user-email"
+                    type="email"
+                    className="auth-editor-input"
+                    value={newUserEmail}
+                    onChange={(e) => { setNewUserEmail(e.target.value); }}
+                    placeholder="jdoe@example.com"
+                    required
+                  />
+                </div>
+
+                <div className="auth-editor-field">
+                  <label htmlFor="new-user-pwd" className="auth-editor-label">
+                    Password <span className="auth-editor-required">*</span>
+                  </label>
+                  <input
+                    id="new-user-pwd"
+                    type="password"
+                    className="auth-editor-input"
+                    value={newUserPassword}
+                    onChange={(e) => { setNewUserPassword(e.target.value); }}
+                    placeholder="Minimum 8 characters"
+                    required
+                    minLength={8}
+                  />
+                </div>
+
+                <div className="auth-editor-field">
+                  <label htmlFor="new-user-role" className="auth-editor-label">
+                    Initial Role Grant
+                  </label>
+                  <select
+                    id="new-user-role"
+                    className="auth-editor-select"
+                    value={newUserRole}
+                    onChange={(e) => { setNewUserRole(e.target.value); }}
+                  >
+                    <option value="WORKSPACE_MEMBER">WORKSPACE_MEMBER (Workspace Member)</option>
+                    <option value="WORKSPACE_ADMIN">WORKSPACE_ADMIN (Workspace Admin)</option>
+                    <option value="SERVER_ADMIN">SERVER_ADMIN (Server Admin)</option>
+                    <option value="WORKSPACE_GUEST">WORKSPACE_GUEST (Workspace Guest)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="auth-modal-footer">
+                <button
+                  type="button"
+                  className="auth-btn-secondary"
+                  onClick={() => { setIsAddUserOpen(false); }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="auth-studio-add-btn"
+                  disabled={isSubmittingUser}
+                >
+                  {isSubmittingUser ? 'Creating...' : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Reset Password Modal */}
+      {resetTargetUser ? (
+        <div className="auth-modal-backdrop" role="presentation">
+          <div
+            className="auth-modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-pwd-modal-title"
+          >
+            <div className="auth-modal-header">
+              <h2 id="reset-pwd-modal-title" className="auth-modal-title">
+                Reset Password: @{resetTargetUser.handle ?? resetTargetUser.principal}
+              </h2>
+              <button
+                type="button"
+                className="auth-btn-secondary"
+                onClick={() => { setResetTargetUser(null); }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={(e) => { void handleResetPasswordSubmit(e); }}>
+              <div className="auth-modal-body">
+                <p className="auth-card-subtext">
+                  Set a new password for{' '}
+                  <strong>{resetTargetUser.display_name || (resetTargetUser.handle ?? resetTargetUser.principal)}</strong> (
+                  {resetTargetUser.email ?? `@${resetTargetUser.handle ?? resetTargetUser.principal}`}).
+                </p>
+
+                <div className="auth-editor-field">
+                  <label htmlFor="reset-pwd-new" className="auth-editor-label">
+                    New Password <span className="auth-editor-required">*</span>
+                  </label>
+                  <input
+                    id="reset-pwd-new"
+                    type="password"
+                    className="auth-editor-input"
+                    value={newPassword}
+                    onChange={(e) => { setNewPassword(e.target.value); }}
+                    placeholder="Minimum 8 characters"
+                    required
+                    minLength={8}
+                  />
+                </div>
+
+                <div className="auth-editor-field">
+                  <label htmlFor="reset-pwd-confirm" className="auth-editor-label">
+                    Confirm New Password <span className="auth-editor-required">*</span>
+                  </label>
+                  <input
+                    id="reset-pwd-confirm"
+                    type="password"
+                    className="auth-editor-input"
+                    value={confirmPassword}
+                    onChange={(e) => { setConfirmPassword(e.target.value); }}
+                    placeholder="Re-enter password"
+                    required
+                    minLength={8}
+                  />
+                </div>
+              </div>
+
+              <div className="auth-modal-footer">
+                <button
+                  type="button"
+                  className="auth-btn-secondary"
+                  onClick={() => { setResetTargetUser(null); }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="auth-studio-add-btn"
+                  disabled={isSubmittingPassword}
+                >
+                  {isSubmittingPassword ? 'Resetting...' : 'Update Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {/* AAL2 Step-Up Modal Dialog */}
       {aal2Challenge ? (

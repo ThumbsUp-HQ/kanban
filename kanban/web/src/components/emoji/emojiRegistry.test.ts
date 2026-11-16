@@ -14,7 +14,7 @@ describe('emojiRegistry', () => {
     priorityUrgent: '🔥',
     priorityHigh: '⚡',
     priorityMedium: '🔹',
-    priorityLow: '💤',
+    priorityLow: '🔽',
     agent: '🤖',
     gatePending: '⏳🤖',
     gateVetoed: '🛑🤖',

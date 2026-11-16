@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import math
 import random
+import re
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -520,6 +521,11 @@ class FixtureCLIRunner:
         """Initialize CLI runner with one or more cassettes."""
         self.call_log: list[dict[str, Any]] = []
         self._cassettes: list[Cassette] = []
+        self.received_argv: tuple[str, ...] | None = None
+        self.received_stdin: bytes | None = None
+        self.received_env_keys: tuple[str, ...] | None = None
+        self.mount_spec: object | None = None
+        self.received_env: dict[str, str] | None = None
 
         items: Sequence[Cassette | Path | str] = (
             [cassettes] if isinstance(cassettes, (Cassette, Path, str)) else cassettes
@@ -556,8 +562,20 @@ class FixtureCLIRunner:
         msg = f"No cassette matched CLI request (argv={argv!r}, stdin_str={stdin_str!r})"
         raise CassetteMismatchError(msg)
 
-    async def run(self, req: CLIRunRequest) -> CLIRunResult:
+    async def run(
+        self,
+        req: CLIRunRequest,
+        *,
+        mount_spec: object = None,
+        env: dict[str, str] | None = None,
+    ) -> CLIRunResult:
         """Simulate CLI process execution without spawning subprocesses."""
+        self.received_argv = req.argv
+        self.received_stdin = req.stdin_bytes
+        self.received_env_keys = req.env_keys
+        self.mount_spec = mount_spec if mount_spec is not None else getattr(req, "mount_spec", None)
+        self.received_env = env
+
         stdin_str = req.stdin_bytes.decode("utf-8", errors="replace")
         cas = self._find_matching_cassette(argv=req.argv, stdin_str=stdin_str)
 
@@ -582,8 +600,18 @@ class FixtureCLIRunner:
                 )
 
         if cas.cli_result is not None:
+            stdout_text = cas.cli_result.stdout
+            if "verdict_nonce" in stdout_text or "{{nonce}}" in stdout_text:
+                nonce_match = re.search(r"verdict_nonce:\s*([0-9a-fA-F]+)", stdin_str)
+                if nonce_match:
+                    nonce = nonce_match.group(1)
+                    stdout_text = (
+                        stdout_text.replace("{{verdict_nonce}}", nonce)
+                        .replace("{{nonce}}", nonce)
+                        .replace("<verdict_nonce>", nonce)
+                    )
             return CLIRunResult(
-                stdout=cas.cli_result.stdout.encode("utf-8"),
+                stdout=stdout_text.encode("utf-8"),
                 stderr=cas.cli_result.stderr.encode("utf-8"),
                 exit_code=cas.cli_result.exit_code,
                 duration_ms=cas.cli_result.duration_ms,

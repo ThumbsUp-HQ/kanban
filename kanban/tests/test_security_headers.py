@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI, Response
 from starlette.types import Message, Receive, Scope, Send
 
+from deploy.standalone.entrypoint import build_uvicorn_command
 from kanban.app import create_app
 from kanban.security.headers import CSP_POLICY, SecurityHeadersMiddleware
 from kanban.settings import Settings
@@ -199,3 +200,161 @@ async def test_non_http_scope_passes_through(dummy_dist: Path) -> None:
     scope: Scope = {"type": "lifespan"}
     await mw(scope, dummy_receive, dummy_send)
     assert inner_called is True
+
+
+@pytest.mark.asyncio
+async def test_standalone_reverse_proxy_https_allowed(dummy_dist: Path) -> None:
+    """Test standalone mode permits external host access when terminated via HTTPS reverse proxy."""
+    settings = Settings(web_dist=dummy_dist, deployment_mode="standalone")
+    app = create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        ext_host = "xn--kanban-2e54e.hackedyour.info:8080"
+
+        # Baseline: Plain cleartext HTTP to external host is blocked
+        resp_blocked = await client.get("/api/v1/health", headers={"Host": ext_host})
+        assert resp_blocked.status_code == 403
+        assert resp_blocked.json()["title"] == "CLEARTEXT_HTTP_BLOCKED"
+
+        # X-Forwarded-Proto: https allows external host
+        resp_xfp = await client.get(
+            "/api/v1/health",
+            headers={"Host": ext_host, "X-Forwarded-Proto": "https"},
+        )
+        assert resp_xfp.status_code == 200
+
+        # X-Forwarded-Proto with proxy chain containing https
+        resp_chain = await client.get(
+            "/api/v1/health",
+            headers={"Host": ext_host, "X-Forwarded-Proto": "https, http"},
+        )
+        assert resp_chain.status_code == 200
+
+        # X-Forwarded-Scheme: https
+        resp_xfs = await client.get(
+            "/api/v1/health",
+            headers={"Host": ext_host, "X-Forwarded-Scheme": "https"},
+        )
+        assert resp_xfs.status_code == 200
+
+        # RFC 7239 Forwarded: proto=https
+        resp_fwd = await client.get(
+            "/api/v1/health",
+            headers={"Host": ext_host, "Forwarded": "proto=https"},
+        )
+        assert resp_fwd.status_code == 200
+
+        # RFC 7239 Forwarded: complex with quoted proto
+        resp_fwd_complex = await client.get(
+            "/api/v1/health",
+            headers={"Host": ext_host, "Forwarded": 'for=192.0.2.60;proto="https";by=203.0.113.43'},
+        )
+        assert resp_fwd_complex.status_code == 200
+
+        # X-Forwarded-Proto: http is still blocked
+        resp_http = await client.get(
+            "/api/v1/health",
+            headers={"Host": ext_host, "X-Forwarded-Proto": "http"},
+        )
+        assert resp_http.status_code == 403
+        assert resp_http.json()["title"] == "CLEARTEXT_HTTP_BLOCKED"
+
+
+@pytest.mark.asyncio
+async def test_standalone_reverse_proxy_scope_scheme_https(dummy_dist: Path) -> None:
+    """Test ASGI scope with scheme='https' passes directly without cleartext block."""
+    settings = Settings(web_dist=dummy_dist, deployment_mode="standalone")
+    app = create_app(settings)
+
+    response_status = 0
+
+    async def receive() -> Message:
+        return {"type": "http.request", "body": b""}
+
+    async def send(message: Message) -> None:
+        nonlocal response_status
+        if message["type"] == "http.response.start":
+            val = message["status"]
+            assert isinstance(val, int)
+            response_status = val
+
+    scope: Scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "path": "/api/v1/health",
+        "raw_path": b"/api/v1/health",
+        "query_string": b"",
+        "scheme": "https",
+        "headers": [(b"host", b"xn--kanban-2e54e.hackedyour.info:8080")],
+        "client": ("127.0.0.1", 12345),
+        "server": ("127.0.0.1", 8080),
+    }
+    await app(scope, receive, send)
+    assert response_status == 200
+
+
+@pytest.mark.asyncio
+async def test_standalone_idn_punycode_host_matching(dummy_dist: Path) -> None:
+    """Test IDN / Punycode host equivalence against standalone_cleartext_hosts."""
+    punycode_host = "xn--kanban-2e54e.hackedyour.info"
+    unicode_host = "👍kanban.hackedyour.info"
+
+    # Case 1: Configured with Punycode host
+    settings_puny = Settings(
+        web_dist=dummy_dist,
+        deployment_mode="standalone",
+        standalone_cleartext_hosts=frozenset({"localhost", punycode_host}),
+    )
+    app_puny = create_app(settings_puny)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app_puny), base_url="http://localhost"
+    ) as client:
+        # Both punycode and unicode Host headers must be accepted
+        r1 = await client.get("/api/v1/health", headers={"Host": f"{punycode_host}:8080"})
+        assert r1.status_code == 200
+
+        r2 = await client.get(
+            "/api/v1/health", headers=[(b"host", f"{unicode_host}:8080".encode())]
+        )
+        assert r2.status_code == 200
+
+        # Unconfigured host is blocked
+        r_blocked = await client.get(
+            "/api/v1/health", headers={"Host": "other.hackedyour.info:8080"}
+        )
+        assert r_blocked.status_code == 403
+
+    # Case 2: Configured with Unicode host
+    settings_uni = Settings(
+        web_dist=dummy_dist,
+        deployment_mode="standalone",
+        standalone_cleartext_hosts=frozenset({"localhost", unicode_host}),
+    )
+    app_uni = create_app(settings_uni)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app_uni), base_url="http://localhost"
+    ) as client:
+        # Both punycode and unicode Host headers must be accepted
+        r3 = await client.get("/api/v1/health", headers={"Host": f"{punycode_host}:8080"})
+        assert r3.status_code == 200
+
+        r4 = await client.get(
+            "/api/v1/health", headers=[(b"host", f"{unicode_host}:8080".encode())]
+        )
+        assert r4.status_code == 200
+
+
+def test_build_uvicorn_command_forwarded_allow_ips(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test build_uvicorn_command respects KB_FORWARDED_ALLOW_IPS environment variable."""
+    # Default is '*'
+    monkeypatch.delenv("KB_FORWARDED_ALLOW_IPS", raising=False)
+    cmd = build_uvicorn_command()
+    assert "--forwarded-allow-ips=*" in cmd
+
+    # Explicit override
+    monkeypatch.setenv("KB_FORWARDED_ALLOW_IPS", "127.0.0.1,10.0.0.1")
+    cmd_custom = build_uvicorn_command()
+    assert "--forwarded-allow-ips=127.0.0.1,10.0.0.1" in cmd_custom

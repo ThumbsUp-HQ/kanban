@@ -1,0 +1,2582 @@
+diff --git a/Dockerfile b/Dockerfile
+index 913c7aa..8f896f8 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -53,7 +53,21 @@ USER 65532:65532
+ ENTRYPOINT ["/usr/bin/tini", "--"]
+ CMD ["uvicorn", "kanban.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+ 
+-# Stage 4: standalone (default final stage: extends runtime-slim + PostgreSQL 16 + pgvector)
++# Stage 4: agent-runner (extends runtime-slim + git, USER 65532:65532, zero EXPOSE directives)
++FROM runtime-slim AS agent-runner
++USER root
++# hadolint ignore=DL3008
++RUN apt-get update && \
++    apt-get install -y --no-install-recommends \
++        git && \
++    rm -rf /var/lib/apt/lists/*
++RUN printf '#!/bin/sh\nexec /opt/kanban/.venv/bin/python -m agent.remote_runner.cli "$@"\n' > /usr/local/bin/kanban-agent-runner && \
++    chmod 0755 /usr/local/bin/kanban-agent-runner
++USER 65532:65532
++ENTRYPOINT ["/usr/bin/tini", "--", "kanban-agent-runner"]
++CMD ["run"]
++
++# Stage 5: standalone (default final stage: extends runtime-slim + PostgreSQL 16 + pgvector)
+ FROM runtime-slim AS standalone
+ # The standalone stage remains USER root only because the PID-1 entrypoint (KB-P0-08)
+ # must start PostgreSQL as postgres and drop Uvicorn to 65532 via setpriv.
+diff --git a/agent/GEMINI.md b/agent/GEMINI.md
+index 8bffe6f..72b3911 100644
+--- a/agent/GEMINI.md
++++ b/agent/GEMINI.md
+@@ -28,6 +28,64 @@ Top-level platform orchestration and workflow triggers (highest layer in workspa
+ - CLI runner subprocess failure or timeout marking transition gate failed.
+ - Model output schema validation error failing closed.
+ 
++## CLI Pipe Execution Harness & Confinement Contract (`cli_pipe`, KB-P5-21, S14.3)
++
++The `agent.runners.cli_pipe` and `agent.runners.repo_snapshot` modules implement the zero-shell, read-only `cli_pipe` execution harness for local CLI agents (`${context} | agy -p` and `codex -p -s read-only`):
++
++1. **Zero-Shell Direct `execve` Execution:**
++   - Subprocesses are spawned strictly with `shell=False` via `asyncio.create_subprocess_exec`, passing target arguments directly after an `nsjail` `--` separator.
++   - Untrusted ticket context (`kb-transition-context/v1`) is transmitted exclusively over child `FD 0 (stdin)` as a spotlighted YAML block scalar and closed with EOF. Untrusted ticket data NEVER enters `argv` or environment variables.
++
++2. **Runtime Policy Gate & Double-Validation:**
++   - Calls `assert_runtime_argv(agent_def)` immediately before spawn. Any banned CLI flag (`--yolo`, `--dangerously-*`, `--full-auto`, `--allow-all-tools`) or unpinned Codex sandbox overrides fail immediately with `CliPolicyError` (`BANNED_CLI_FLAG` or `CODEX_SANDBOX_OVERRIDE`) before touching `nsjail` or staging repo snapshots.
++
++3. **Linux User Namespace Probe & Fail-Closed Sandboxing:**
++   - Calls `probe_nsjail_userns()`. If unprivileged user namespaces (`CLONE_NEWUSER`) or the root-owned `/usr/bin/nsjail` binary are unavailable (e.g. standalone single-container deployments), execution fails closed with `SandboxUnavailableError("SANDBOX_UNAVAILABLE_IN_STANDALONE")` and never executes unsandboxed on the host.
++
++4. **4-Layer Read-Only Repository Confinement:**
++   - When `repo_access_mode == "ro_vfs_mount"`, `RoRepoSnapshotManager` materializes a detached snapshot of `repo_context.head_commit` from `mirror_path` via `git archive` extracted in Python `tarfile` with `filter="data"` (rejecting absolute links, `..`, devices, FIFOs, setuid bits, and outside symlinks).
++   - Generates an `nsjail` protobuf config mounting `/workspace/repo` with `MS_BIND | MS_REC | MS_RDONLY | MS_NODEV | MS_NOSUID | MS_NOEXEC` (`--bindmount_ro` with `noexec,nosuid,nodev`).
++   - Staging directories on the host are cleaned up unconditionally in `finally`.
++
++5. **0000 Secret & Hook Whiteout Overlays:**
++   - Automatically discovers all `.env*`, `*.pem`, `*.key`, `.git/config`, and `.git/hooks` paths across the repository tree.
++   - Overlays each discovered target with a `0000` empty tmpfs mount inside `/workspace/repo` prior to `pivot_root`.
++   - Capped at 256 whiteouts; repositories with > 256 secret files fail closed with `REPO_WHITEOUT_LIMIT_EXCEEDED` rather than leaving any secret unmasked.
++
++6. **Clean Environment & Ephemeral Token Scoping:**
++   - Employs `keep_env: false` to clear host environment. Configures only `PATH=/usr/local/bin:/usr/bin:/bin`, `HOME=/tmp`, `LANG=C.UTF-8`, and `KANBAN_EPHEMERAL_MCP_TOKEN`.
++   - Host secrets (`DATABASE_URL`, `MASTER_KEK`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) and `LD_PRELOAD` are guaranteed absent.
++   - Ephemeral token buffers are scrubbed/zeroed upon completion.
++
++7. **Caps, Timeouts & Failure Modes:**
++   - Stdout is capped at 1,048,576 bytes (1 MiB; exceeding kills child and raises `CLI_STDOUT_TOO_LARGE`).
++   - Stderr is capped at 262,144 bytes and scrubbed via `scrub_text`.
++   - Timeouts trigger process group `SIGKILL` and raise `GATE_TIMEOUT`.
++   - Non-zero exits without a valid `kb-transition-verdict/v1` payload on stdout raise `CliRunnerExitError` (`CLI_NONZERO_EXIT`).
++
++## Remote Agent Runner Contract (`agent.remote_runner`, KB-P5-22b, S14.2)
++
++The `agent.remote_runner` package implements the outbound-only mTLS WSS runner daemon (`kanban-agent-runner`) and executor:
++
++1. **Outbound TLS 1.3 mTLS Architecture:**
++   - Establishes outbound mTLS connection to `wss://.../api/v1/agent-runners/ws` with `minimum_version = TLSv1_3` and zero inbound listening ports.
++   - Requires client private key permissions of mode `0600` or `0400` (`(st_mode & 0o077) == 0`); refuses startup with `KeyPermissionsError` (`KEY_PERMISSIONS_TOO_OPEN`) if group or other permissions are set.
++   - Pinned CA bundle and client cert chain authentication with SPKI SHA-256 fingerprint tracking.
++
++2. **Read-Only Repository Confinement:**
++   - Pre-configured repo slugs mapped under `RunnerConfig.repo_mounts: Mapping[str, Path]`.
++   - Before executing jobs with `repo_access_mode != "none"`: verifies path resolves inside mount root without symlink traversal, and verifies filesystem is mounted read-only (`(os.statvfs.f_flag & ST_RDONLY) != 0`) for `ro_vfs_mount`.
++
++3. **Subprocess Sandboxing & CLI Policy Gate:**
++   - Server-frame defense-in-depth: runs `assert_runtime_argv` on `cli_pipe` specs prior to spawn, rejecting `--yolo` or `--dangerously-*` flags (`RUNNER_BANNED_CLI_FLAG`).
++   - Ephemeral MCP bearer tokens held in mutable memory `bytearray` and zeroed out in `finally`.
++
++4. **Lifecycle, Heartbeat & Revocation:**
++   - Maintains periodic 15s `HeartbeatFrame` loop.
++   - Concurrency bounded via `asyncio.Semaphore(max_concurrency)` (1..8).
++   - Cancels running task and child process within `< 250ms` upon receiving `job.cancel` or disconnect.
++   - Server close code `4003` terminates the daemon without reconnecting (exit code 78 `RUNNER_REVOKED`).
++
+ ## CLI Framework Contract (`kanban-agent`)
+ 
+ The `kanban-agent` command-line interface provides a typed, zero-shell manual validation workbench for local agent evaluation and testing:
+diff --git a/agent/pyproject.toml b/agent/pyproject.toml
+index 8e04111..8cd95a7 100644
+--- a/agent/pyproject.toml
++++ b/agent/pyproject.toml
+@@ -23,6 +23,7 @@ dependencies = [
+ 
+ [project.scripts]
+ kanban-agent = "agent.cli:main"
++kanban-agent-runner = "agent.remote_runner.cli:main"
+ 
+ [tool.hatch.build.targets.wheel.sources]
+ "" = "agent"
+diff --git a/deploy/runner/docker-compose.runner.example.yml b/deploy/runner/docker-compose.runner.example.yml
+new file mode 100644
+index 0000000..463b72a
+--- /dev/null
++++ b/deploy/runner/docker-compose.runner.example.yml
+@@ -0,0 +1,29 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# Reference docker-compose configuration for kanban-agent-runner daemon (KB-P5-22b, S14.2, S2.4).
++# Connects outbound over TLS 1.3 mTLS WSS with ZERO inbound listening ports.
++
++services:
++  agent-runner:
++    image: kanban:agent-runner
++    container_name: kanban-agent-runner
++    restart: unless-stopped
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - no-new-privileges:true
++    volumes:
++      # Certificates and configuration generated via `kanban-agent-runner enroll`
++      - /etc/kanban-runner:/etc/kanban-runner:ro
++      # Read-only source code repository mounts for transition gate verification
++      - /srv/kanban/repos:/workspace/repos:ro
++      # Ephemeral tmpfs for scratch operations
++      - type: tmpfs
++        target: /tmp
++        tmpfs:
++          size: 64M
++          mode: 1777
++    command: ["run", "--config", "/etc/kanban-runner/config.yaml"]
++    # Zero ports exposed (outbound WSS only)
+diff --git a/tests/deploy/test_dockerfile_agent_runner.py b/tests/deploy/test_dockerfile_agent_runner.py
+new file mode 100644
+index 0000000..ea35c70
+--- /dev/null
++++ b/tests/deploy/test_dockerfile_agent_runner.py
+@@ -0,0 +1,72 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for agent-runner Dockerfile stage and reference docker-compose (KB-P5-22b, S2.4)."""
++
++from __future__ import annotations
++
++from pathlib import Path
++
++import yaml
++
++
++def test_dockerfile_agent_runner_stage() -> None:
++    """Validate Dockerfile contains agent-runner stage with zero EXPOSE and non-root USER."""
++    dockerfile_path = Path("Dockerfile")
++    assert dockerfile_path.is_file(), "Dockerfile must exist at repo root"
++
++    content = dockerfile_path.read_text(encoding="utf-8")
++    assert "AS agent-runner" in content, "Dockerfile must define agent-runner stage"
++
++    # Extract the agent-runner stage
++    lines = content.splitlines()
++    in_runner_stage = False
++    runner_lines: list[str] = []
++
++    for line in lines:
++        stripped = line.strip()
++        if stripped.startswith("FROM ") and "AS agent-runner" in stripped:
++            in_runner_stage = True
++            runner_lines.append(stripped)
++            continue
++        if in_runner_stage and stripped.startswith("FROM "):
++            # Next stage encountered
++            break
++        if in_runner_stage:
++            runner_lines.append(stripped)
++
++    stage_content = "\n".join(runner_lines)
++    assert "USER 65532:65532" in stage_content, "agent-runner must run as non-root user 65532:65532"
++    assert "ENTRYPOINT" in stage_content
++    assert "kanban-agent-runner" in stage_content
++
++    # Strict security invariant: ZERO EXPOSE directives in agent-runner stage
++    for line in runner_lines:
++        assert not line.startswith("EXPOSE"), (
++            f"agent-runner stage must have ZERO inbound ports exposed, found: {line}"
++        )
++
++
++def test_docker_compose_runner_reference_spec() -> None:
++    """Validate deploy/runner/docker-compose.runner.example.yml configuration."""
++    compose_path = Path("deploy/runner/docker-compose.runner.example.yml")
++    assert compose_path.is_file(), "Reference compose file must exist"
++
++    data = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
++    assert "services" in data
++    assert "agent-runner" in data["services"]
++
++    svc = data["services"]["agent-runner"]
++    assert svc.get("read_only") is True, "Service must specify read_only: true"
++    assert svc.get("user") == "65532:65532", "Service must specify user: 65532:65532"
++    assert "ALL" in svc.get("cap_drop", []), "Service must drop ALL capabilities"
++
++    # Must not expose any inbound ports (outbound-only WSS daemon)
++    assert "ports" not in svc, "Runner service must have ZERO exposed host ports"
++
++    # Check volume mounts are read-only
++    volumes = svc.get("volumes", [])
++    found_ro_mount = False
++    for vol in volumes:
++        if isinstance(vol, str) and "/workspace/repos:ro" in vol:
++            found_ro_mount = True
++    assert found_ro_mount, "Must mount /workspace/repos as :ro"
+diff --git a/agent/remote_runner/cli.py b/agent/remote_runner/cli.py
+new file mode 100644
+index 0000000..438e2a4
+--- /dev/null
++++ b/agent/remote_runner/cli.py
+@@ -0,0 +1,272 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Command-line interface for kanban-agent-runner: enroll & run subcommands (KB-P5-22b)."""
++
++from __future__ import annotations
++
++import argparse
++import asyncio
++import contextlib
++import os
++import signal
++import socket
++import sys
++import tempfile
++from pathlib import Path
++from typing import Any, Final
++
++import httpx
++import yaml
++from cryptography import x509
++from cryptography.hazmat.primitives import hashes, serialization
++from cryptography.hazmat.primitives.asymmetric import ec
++from cryptography.x509.oid import NameOID
++
++from agent.remote_runner.config import (
++    KeyPermissionsError,
++    load_runner_config,
++    validate_key_permissions,
++)
++from agent.remote_runner.daemon import (
++    EXIT_CODE_REVOKED,
++    RunnerDaemon,
++    RunnerRevokedError,
++)
++
++__all__ = ["enroll_runner", "main", "run_daemon"]
++
++STATUS_CREATED: Final[int] = 201
++
++
++def _generate_ecdsa_key_and_csr(hostname: str) -> tuple[bytes, str]:
++    """Generate an ECDSA P-256 private key and PKCS#10 Certificate Signing Request."""
++    private_key = ec.generate_private_key(ec.SECP256R1())
++    key_pem = private_key.private_bytes(
++        encoding=serialization.Encoding.PEM,
++        format=serialization.PrivateFormat.PKCS8,
++        encryption_algorithm=serialization.NoEncryption(),
++    )
++
++    csr = (
++        x509.CertificateSigningRequestBuilder()
++        .subject_name(
++            x509.Name(
++                [
++                    x509.NameAttribute(NameOID.COMMON_NAME, hostname),
++                    x509.NameAttribute(NameOID.ORGANIZATION_NAME, "👍kanban Remote Runner Node"),
++                ]
++            )
++        )
++        .sign(private_key, hashes.SHA256())
++    )
++    csr_pem = csr.public_bytes(serialization.Encoding.PEM).decode("ascii")
++    return key_pem, csr_pem
++
++
++def _write_secure_file(path: Path, data: bytes | str, mode: int = 0o600) -> None:
++    """Atomically write file with strict POSIX permissions."""
++    path.parent.mkdir(parents=True, exist_ok=True)
++    fd, tmp_path_str = tempfile.mkstemp(dir=str(path.parent), prefix="tmp-key-", suffix=".tmp")
++    tmp_path = Path(tmp_path_str)
++    try:
++        tmp_path.chmod(mode)
++        with os.fdopen(fd, "wb") as f:
++            if isinstance(data, str):
++                f.write(data.encode("utf-8"))
++            else:
++                f.write(data)
++        tmp_path.replace(path)
++    except Exception:
++        if tmp_path.exists():
++            tmp_path.unlink()
++        raise
++
++
++def enroll_runner(  # noqa: PLR0913, PLR0917
++    server_url: str,
++    enrollment_token: str,
++    pool_slug: str,
++    state_dir: Path,
++    hostname: str | None = None,
++    ca_cert_path: Path | None = None,
++    client: httpx.Client | None = None,
++) -> Path:
++    """Execute single-use enrollment exchange and write certificates to state directory."""
++    token = enrollment_token.strip()
++    if not token:
++        msg = "Enrollment token is empty"
++        raise ValueError(msg)
++
++    host = hostname or socket.gethostname()
++    key_pem, csr_pem = _generate_ecdsa_key_and_csr(host)
++
++    state_dir.mkdir(parents=True, exist_ok=True)
++    key_path = state_dir / "client.key"
++    _write_secure_file(key_path, key_pem, mode=0o600)
++
++    # Submit CSR to enrollment endpoint
++    base_url = server_url.rstrip("/")
++    enroll_url = f"{base_url}/api/v1/agent-runners/enroll"
++
++    payload = {
++        "enrollment_token": token,
++        "csr_pem": csr_pem,
++        "hostname": host,
++        "capabilities": {"os": sys.platform, "python": sys.version.split()[0]},
++    }
++
++    verify: Any = str(ca_cert_path) if ca_cert_path and ca_cert_path.exists() else True
++    if client is not None:
++        resp = client.post(enroll_url, json=payload)
++    else:
++        with httpx.Client(verify=verify, timeout=30.0) as http_client:
++            resp = http_client.post(enroll_url, json=payload)
++
++    if resp.status_code != STATUS_CREATED:
++        msg = f"Enrollment failed with status {resp.status_code}: {resp.text}"
++        raise RuntimeError(msg)
++
++    data = resp.json()
++    client_cert_pem = data["client_cert_pem"]
++    ca_cert_pem = data["ca_cert_pem"]
++    wss_url = data["wss_url"]
++
++    cert_path = state_dir / "client.crt"
++    _write_secure_file(cert_path, client_cert_pem, mode=0o644)
++
++    ca_path = state_dir / "ca.crt"
++    _write_secure_file(ca_path, ca_cert_pem, mode=0o644)
++
++    # Generate initial config.yaml
++    config_dict = {
++        "server_url": server_url,
++        "pool_slug": pool_slug,
++        "client_cert_path": str(cert_path),
++        "client_key_path": str(key_path),
++        "ca_cert_path": str(ca_path),
++        "wss_url": wss_url,
++        "state_dir": str(state_dir),
++        "max_concurrency": 1,
++        "capabilities": {},
++        "repo_mounts": {},
++    }
++    config_path = state_dir / "config.yaml"
++    _write_secure_file(config_path, yaml.safe_dump(config_dict), mode=0o600)
++    return config_path
++
++
++def run_daemon(config_path: Path) -> int:
++    """Run RunnerDaemon from config file, handling graceful shutdown."""
++    config = load_runner_config(config_path)
++    validate_key_permissions(config.client_key_path)
++
++    daemon = RunnerDaemon(config)
++    loop = asyncio.new_event_loop()
++    asyncio.set_event_loop(loop)
++
++    def _sig_handler() -> None:
++        daemon.stop()
++
++    for sig in (signal.SIGINT, signal.SIGTERM):
++        with contextlib.suppress(NotImplementedError):
++            loop.add_signal_handler(sig, _sig_handler)
++
++    try:
++        loop.run_until_complete(daemon.run_forever())
++    except RunnerRevokedError:
++        return EXIT_CODE_REVOKED
++    except KeyboardInterrupt:
++        daemon.stop()
++        return 0
++    else:
++        return 0
++    finally:
++        loop.close()
++
++
++def main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
++    """Execute main CLI entrypoint for kanban-agent-runner."""
++    raw_args = list(argv if argv is not None else sys.argv[1:])
++
++    # Security check: reject passing --token on CLI arguments to protect /proc/cmdline
++    for arg in raw_args:
++        if arg == "--token" or arg.startswith("--token="):
++            sys.stderr.write(
++                "ERROR: Passing --token on CLI arguments is rejected for security. "
++                "Use --token-stdin to provide single-use enrollment tokens.\n"
++            )
++            return 2
++
++    parser = argparse.ArgumentParser(
++        prog="kanban-agent-runner",
++        description="Outbound mTLS WSS agent runner daemon for 👍kanban",
++    )
++    subparsers = parser.add_subparsers(dest="subcommand", required=True)
++
++    # Enroll subcommand
++    enroll_parser = subparsers.add_parser("enroll", help="Enroll runner with server using token")
++    enroll_parser.add_argument(
++        "--server-url", required=True, help="Base HTTPS URL of 👍kanban server"
++    )
++    enroll_parser.add_argument(
++        "--token-stdin",
++        action="store_true",
++        required=True,
++        help="Read single-use enrollment token from stdin",
++    )
++    enroll_parser.add_argument("--pool", required=True, dest="pool_slug", help="Pool slug")
++    enroll_parser.add_argument(
++        "--state-dir",
++        type=Path,
++        default=Path("/var/lib/kanban-runner"),
++        help="Directory to store certificates and config",
++    )
++    enroll_parser.add_argument("--hostname", help="Node hostname for CSR common name")
++    enroll_parser.add_argument(
++        "--ca-cert", type=Path, dest="ca_cert_path", help="Server CA bundle path"
++    )
++
++    # Run subcommand
++    run_parser = subparsers.add_parser("run", help="Start agent runner daemon")
++    run_parser.add_argument(
++        "--config",
++        type=Path,
++        default=Path("/etc/kanban-runner/config.yaml"),
++        help="Path to runner config.yaml",
++    )
++
++    args = parser.parse_args(raw_args)
++
++    if args.subcommand == "enroll":
++        token = sys.stdin.read().strip()
++        try:
++            cfg_path = enroll_runner(
++                server_url=args.server_url,
++                enrollment_token=token,
++                pool_slug=args.pool_slug,
++                state_dir=args.state_dir,
++                hostname=args.hostname,
++                ca_cert_path=args.ca_cert_path,
++            )
++            sys.stdout.write(f"Enrollment successful. Config written to {cfg_path}\n")
++        except Exception as exc:  # noqa: BLE001
++            sys.stderr.write(f"Enrollment error: {exc}\n")
++            return 1
++        else:
++            return 0
++
++    if args.subcommand == "run":
++        try:
++            return run_daemon(args.config)
++        except KeyPermissionsError as exc:
++            sys.stderr.write(f"Security error: {exc}\n")
++            return 1
++        except Exception as exc:  # noqa: BLE001
++            sys.stderr.write(f"Runner error: {exc}\n")
++            return 1
++
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/agent/remote_runner/config.py b/agent/remote_runner/config.py
+new file mode 100644
+index 0000000..265a6c4
+--- /dev/null
++++ b/agent/remote_runner/config.py
+@@ -0,0 +1,102 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Configuration model and key permission validation for remote runner (KB-P5-22b, S14.2)."""
++
++from __future__ import annotations
++
++import re
++import uuid  # noqa: TC003
++from pathlib import Path
++from typing import Any, Final
++
++import yaml
++from pydantic import BaseModel, ConfigDict, Field, field_validator
++
++__all__ = [
++    "KeyPermissionsError",
++    "RunnerConfig",
++    "load_runner_config",
++    "validate_key_permissions",
++    "validate_runner_config",
++]
++
++_POOL_SLUG_REGEX: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")
++
++
++class KeyPermissionsError(ValueError):
++    """Raised when client private key has overly permissive file permissions."""
++
++
++def validate_key_permissions(key_path: Path) -> None:
++    """Validate that private key file has strict permissions (0600, no group/other bits)."""
++    if not key_path.exists():
++        return
++    st_mode = key_path.stat().st_mode
++    if (st_mode & 0o077) != 0:
++        mode_octal = oct(st_mode & 0o777)
++        msg = (
++            f"KEY_PERMISSIONS_TOO_OPEN: Private key {key_path} permissions {mode_octal} "
++            f"are too open. Group and other permissions must be 000 (mode 0600 or 0400)."
++        )
++        raise KeyPermissionsError(msg)
++
++
++class RunnerConfig(BaseModel):
++    """Pydantic v2 configuration settings for kanban-agent-runner."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    server_url: str
++    pool_slug: str
++    client_cert_path: Path
++    client_key_path: Path
++    ca_cert_path: Path
++
++    runner_id: uuid.UUID | None = None
++    wss_url: str | None = None
++    state_dir: Path | None = None
++    max_concurrency: int = Field(default=1, ge=1, le=8)
++    capabilities: dict[str, Any] = Field(default_factory=dict)
++    repo_mounts: dict[str, Path] = Field(default_factory=dict)
++    https_proxy: str | None = None
++    heartbeat_interval_s: float = Field(default=15.0, ge=1.0, le=60.0)
++    nsjail_bin: Path = Path("/usr/bin/nsjail")
++
++    @field_validator("pool_slug")
++    @classmethod
++    def validate_pool_slug(cls, v: str) -> str:
++        """Validate that pool_slug conforms to alphanumeric-hyphen slug format."""
++        if not _POOL_SLUG_REGEX.match(v):
++            msg = f"Invalid pool_slug '{v}': must match ^[a-z0-9][a-z0-9-]{{1,62}}$"
++            raise ValueError(msg)
++        return v
++
++    def resolve_wss_url(self) -> str:
++        """Resolve full outbound WebSocket URL from server_url or explicit wss_url."""
++        if self.wss_url:
++            return self.wss_url
++        base = self.server_url.rstrip("/")
++        if base.startswith("http://"):
++            base = "ws://" + base[len("http://") :]
++        elif base.startswith("https://"):
++            base = "wss://" + base[len("https://") :]
++        elif not base.startswith(("ws://", "wss://")):
++            base = "wss://" + base
++        return f"{base}/api/v1/agent-runners/ws"
++
++
++def validate_runner_config(config: RunnerConfig) -> None:
++    """Validate key permissions and configuration paths."""
++    validate_key_permissions(config.client_key_path)
++
++
++def load_runner_config(config_path: Path) -> RunnerConfig:
++    """Load, parse, and validate RunnerConfig from YAML file."""
++    if not config_path.is_file():
++        msg = f"Runner config file not found: {config_path}"
++        raise FileNotFoundError(msg)
++    raw_content = config_path.read_text(encoding="utf-8")
++    data = yaml.safe_load(raw_content) or {}
++    config = RunnerConfig.model_validate(data)
++    validate_runner_config(config)
++    return config
+diff --git a/agent/remote_runner/daemon.py b/agent/remote_runner/daemon.py
+new file mode 100644
+index 0000000..f15bf3c
+--- /dev/null
++++ b/agent/remote_runner/daemon.py
+@@ -0,0 +1,271 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Outbound mTLS WSS runner daemon: heartbeat, concurrency, cancel & backoff (KB-P5-22b, S14.2)."""
++
++from __future__ import annotations
++
++import asyncio
++import contextlib
++import json
++import logging
++import random
++import ssl
++import time
++import uuid
++from typing import TYPE_CHECKING, Any, Final
++
++import websockets
++
++from agent.remote_runner.config import (
++    RunnerConfig,
++    validate_key_permissions,
++)
++from agent.remote_runner.executor import RunnerJobExecutor
++from kanban.runners.hub import (
++    HeartbeatFrame,
++    HelloAckFrame,
++    HelloFrame,
++    JobCancelFrame,
++    JobDispatchFrame,
++    JobResultFrame,
++    JobToolEventFrame,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Callable
++
++__all__ = [
++    "CLOSE_CODE_REVOKED",
++    "EXIT_CODE_REVOKED",
++    "RunnerDaemon",
++    "RunnerRevokedError",
++]
++
++logger = logging.getLogger(__name__)
++
++CLOSE_CODE_REVOKED: Final[int] = 4003
++EXIT_CODE_REVOKED: Final[int] = 78
++
++MIN_BACKOFF_S: Final[float] = 1.0
++MAX_BACKOFF_S: Final[float] = 60.0
++
++
++class RunnerRevokedError(Exception):
++    """Raised when runner certificate is revoked by server (close code 4003)."""
++
++    def __init__(self, message: str = "Runner revoked by server (close code 4003)") -> None:
++        """Initialize with message and standard exit code 78."""
++        super().__init__(message)
++        self.exit_code = EXIT_CODE_REVOKED
++
++
++class RunnerDaemon:
++    """Outbound-only TLS 1.3 mTLS WebSocket daemon executing transition jobs."""
++
++    def __init__(
++        self,
++        config: RunnerConfig,
++        *,
++        executor: RunnerJobExecutor | None = None,
++        ws_connector: Callable[..., Any] | None = None,
++        time_func: Callable[[], float] | None = None,
++        sleep_func: Callable[[float], Any] | None = None,
++    ) -> None:
++        """Initialize daemon with config, executor and optional test overrides."""
++        validate_key_permissions(config.client_key_path)
++        self.config = config
++        self.executor = executor or RunnerJobExecutor(config)
++        self.ws_connector = ws_connector or websockets.connect
++        self.time_func = time_func or time.monotonic
++        self.sleep_func = sleep_func or asyncio.sleep
++
++        self.runner_id: uuid.UUID = config.runner_id or uuid.uuid4()
++        self._stop_event = asyncio.Event()
++        self._running_tasks: dict[str, asyncio.Task[None]] = {}
++        self._active_jobs: set[str] = set()
++        self._semaphore = asyncio.Semaphore(config.max_concurrency)
++        self._ws: Any = None
++        self._reconnect_attempts = 0
++
++    def build_ssl_context(self) -> ssl.SSLContext:
++        """Build strict TLS 1.3 client SSLContext with pinned CA and client cert/key."""
++        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
++        ctx.minimum_version = ssl.TLSVersion.TLSv1_3
++        ctx.verify_mode = ssl.CERT_REQUIRED
++        ctx.check_hostname = True
++
++        if self.config.ca_cert_path.exists():
++            ctx.load_verify_locations(cafile=str(self.config.ca_cert_path))
++        if self.config.client_cert_path.exists() and self.config.client_key_path.exists():
++            ctx.load_cert_chain(
++                certfile=str(self.config.client_cert_path),
++                keyfile=str(self.config.client_key_path),
++            )
++        return ctx
++
++    def compute_backoff(self, attempt: int) -> float:
++        """Calculate full-jitter exponential backoff (1.0s .. 60.0s)."""
++        base_backoff = min(MAX_BACKOFF_S, MIN_BACKOFF_S * (2 ** min(attempt, 6)))
++        jitter = random.uniform(0.0, 1.0)  # noqa: S311
++        return float(max(MIN_BACKOFF_S, base_backoff * jitter))
++
++    def stop(self) -> None:
++        """Signal daemon to stop and cancel active work."""
++        self._stop_event.set()
++        for task in list(self._running_tasks.values()):
++            if not task.done():
++                task.cancel()
++        if self._ws is not None:
++            close_fn = getattr(self._ws, "close", None)
++            if callable(close_fn):
++                try:
++                    loop = asyncio.get_running_loop()
++                    close_task = loop.create_task(close_fn())
++                    _ = close_task
++                except RuntimeError:
++                    pass
++
++    async def run_forever(self) -> None:
++        """Run outbound daemon loop with auto-reconnect until stopped or revoked."""
++        validate_key_permissions(self.config.client_key_path)
++        ssl_ctx = self.build_ssl_context()
++        wss_url = self.config.resolve_wss_url()
++
++        while not self._stop_event.is_set():
++            try:
++                await self._connect_and_run(wss_url, ssl_ctx)
++                self._reconnect_attempts = 0
++            except RunnerRevokedError:
++                self.stop()
++                raise
++            except (TimeoutError, websockets.ConnectionClosed, OSError) as exc:
++                if self._stop_event.is_set():
++                    break
++                # Check for 4003 close code
++                rcvd = getattr(exc, "rcvd", None)
++                close_code = getattr(rcvd, "close_code", None) or getattr(rcvd, "code", None)
++                if close_code is None:
++                    close_code = getattr(exc, "close_code", None)
++                if close_code == CLOSE_CODE_REVOKED:
++                    self.stop()
++                    msg = "Runner revoked by server (close code 4003)"
++                    raise RunnerRevokedError(msg) from exc
++
++                self._reconnect_attempts += 1
++                backoff = self.compute_backoff(self._reconnect_attempts)
++                logger.warning(
++                    "WebSocket disconnected (%s). Reconnecting in %.2fs (attempt %d)",
++                    exc,
++                    backoff,
++                    self._reconnect_attempts,
++                )
++                await self.sleep_func(backoff)
++
++    async def _connect_and_run(self, wss_url: str, ssl_ctx: ssl.SSLContext) -> None:
++        """Establish mTLS WSS connection and handle messages until disconnected."""
++        async with self.ws_connector(
++            wss_url,
++            ssl=ssl_ctx,
++            max_size=1_310_720,
++        ) as ws:
++            self._ws = ws
++
++            # 1. Perform Hello handshake
++            hello = HelloFrame(
++                schema="kb-runner-ws/v1",
++                runner_id=self.runner_id,
++                max_concurrency=self.config.max_concurrency,
++                capabilities=self.config.capabilities,
++            )
++            await ws.send(hello.model_dump_json(by_alias=True))
++
++            raw_ack = await ws.recv()
++            if isinstance(raw_ack, bytes):
++                raw_ack = raw_ack.decode("utf-8")
++            data_ack = json.loads(raw_ack)
++            HelloAckFrame.model_validate(data_ack)
++
++            # 2. Launch background heartbeat task
++            heartbeat_task = asyncio.create_task(self._heartbeat_loop(ws))
++            try:
++                # 3. Main receive loop
++                async for raw_msg in ws:
++                    if self._stop_event.is_set():
++                        break
++                    decoded_msg = (
++                        raw_msg.decode("utf-8") if isinstance(raw_msg, bytes) else str(raw_msg)
++                    )
++                    msg_dict = json.loads(decoded_msg)
++                    msg_type = msg_dict.get("type")
++
++                    if msg_type == "job.dispatch":
++                        dispatch = JobDispatchFrame.model_validate(msg_dict)
++                        self._spawn_job(dispatch)
++                    elif msg_type == "job.cancel":
++                        cancel = JobCancelFrame.model_validate(msg_dict)
++                        self._cancel_job(cancel.job_id)
++            finally:
++                heartbeat_task.cancel()
++                with contextlib.suppress(asyncio.CancelledError):
++                    await heartbeat_task
++                self._ws = None
++
++    def _spawn_job(self, dispatch: JobDispatchFrame) -> None:
++        """Spawn concurrent job execution under semaphore guard."""
++        job_id = dispatch.job_id
++        self._active_jobs.add(job_id)
++
++        async def _job_wrapper() -> None:
++            async with self._semaphore:
++                try:
++                    result = await self.executor.execute_job(
++                        dispatch,
++                        on_tool_event=self._send_tool_event,
++                    )
++                except asyncio.CancelledError:
++                    result = JobResultFrame(
++                        job_id=job_id,
++                        status="error",
++                        error_code="RUNNER_JOB_CANCELLED",
++                    )
++                finally:
++                    self._active_jobs.discard(job_id)
++                    self._running_tasks.pop(job_id, None)
++
++                # Transmit result back over WebSocket if connected
++                if self._ws is not None:
++                    try:
++                        await self._ws.send(result.model_dump_json())
++                    except Exception:  # noqa: BLE001
++                        logger.warning("Failed to send job result for %s", job_id)
++
++        task = asyncio.create_task(_job_wrapper())
++        self._running_tasks[job_id] = task
++
++    def _cancel_job(self, job_id: str) -> None:
++        """Cancel running job within < 250ms."""
++        task = self._running_tasks.get(job_id)
++        if task is not None and not task.done():
++            task.cancel()
++
++    async def _send_tool_event(self, event: JobToolEventFrame) -> None:
++        """Send tool event progress frame to server hub."""
++        if self._ws is not None:
++            try:
++                await self._ws.send(event.model_dump_json())
++            except Exception:  # noqa: BLE001
++                logger.debug("Failed to send tool event for %s", event.job_id)
++
++    async def _heartbeat_loop(self, ws: Any) -> None:  # noqa: ANN401
++        """Periodically emit HeartbeatFrame every heartbeat_interval_s."""
++        interval = self.config.heartbeat_interval_s
++        while not self._stop_event.is_set():
++            await self.sleep_func(interval)
++            try:
++                hb = HeartbeatFrame(
++                    runner_id=self.runner_id,
++                    active_jobs=list(self._active_jobs),
++                )
++                await ws.send(hb.model_dump_json())
++            except Exception:  # noqa: BLE001
++                break
+diff --git a/agent/remote_runner/executor.py b/agent/remote_runner/executor.py
+new file mode 100644
+index 0000000..39578f9
+--- /dev/null
++++ b/agent/remote_runner/executor.py
+@@ -0,0 +1,221 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Runner job executor: safe local execution, :ro repo checks & CLI confinement (KB-P5-22b)."""
++
++from __future__ import annotations
++
++import base64
++import hashlib
++import os
++from pathlib import Path
++from typing import TYPE_CHECKING, Any, Final
++
++import yaml
++
++from agent.context.transition_context import (
++    McpAccess,
++    RenderedContext,
++    RepoContext,
++)
++from agent.harnesses.in_app_sdk import InAppSdkHarness
++from agent.runners.cli_pipe import CliPipeHarness
++from kanban.agents.cli_policy import CliPolicyError, assert_runtime_argv
++from kanban.runners.hub import (
++    JobDispatchFrame,
++    JobResultFrame,
++    JobToolEventFrame,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    from agent.remote_runner.config import RunnerConfig
++
++__all__ = ["RunnerJobExecutor"]
++
++CODE_REPO_NOT_MOUNTED: Final[str] = "RUNNER_REPO_NOT_MOUNTED"
++CODE_MOUNT_NOT_READONLY: Final[str] = "RUNNER_MOUNT_NOT_READONLY"
++CODE_BANNED_CLI_FLAG: Final[str] = "RUNNER_BANNED_CLI_FLAG"
++CODE_EXECUTION_FAILED: Final[str] = "RUNNER_EXECUTION_FAILED"
++
++
++class RunnerJobExecutor:
++    """Executes transition gate jobs locally on the remote runner with :ro confinement."""
++
++    def __init__(
++        self,
++        config: RunnerConfig,
++        *,
++        in_app_harness_factory: Callable[..., Any] | None = None,
++        cli_pipe_harness_factory: Callable[..., Any] | None = None,
++    ) -> None:
++        """Initialize executor with runner config and optional harness factories."""
++        self.config = config
++        self._in_app_harness_factory = in_app_harness_factory or InAppSdkHarness
++        self._cli_pipe_harness_factory = cli_pipe_harness_factory or CliPipeHarness
++
++    async def execute_job(  # noqa: C901, PLR0911, PLR0912, PLR0915
++        self,
++        dispatch: JobDispatchFrame,
++        *,
++        on_tool_event: Callable[[JobToolEventFrame], Awaitable[None]] | None = None,
++    ) -> JobResultFrame:
++        """Execute assigned job according to agent_spec, enforcing :ro repos and zero-shell."""
++        agent_spec = dispatch.agent_spec or {}
++        harness_kind = str(agent_spec.get("harness_kind") or "in_app_sdk")
++        repo_access_mode = str(agent_spec.get("repo_access_mode") or "none")
++
++        # 1. Ephemeral MCP token isolation in mutable bytearray (zeroed in finally)
++        token_ba = bytearray(dispatch.ephemeral_mcp_token.encode("ascii"))
++
++        # 2. Server-frame defense-in-depth: check CLI policy before touching any resources
++        if harness_kind == "cli_pipe":
++            # Normalize cli_args if sent as cli_args or cli_args_json
++            args_list = agent_spec.get("cli_args_json") or agent_spec.get("cli_args") or []
++            spec_copy = dict(agent_spec)
++            spec_copy["cli_args_json"] = args_list
++            try:
++                assert_runtime_argv(spec_copy)
++            except CliPolicyError:
++                return JobResultFrame(
++                    job_id=dispatch.job_id,
++                    status="error",
++                    error_code=CODE_BANNED_CLI_FLAG,
++                )
++
++        # 3. Read-only repo mount verification
++        resolved_repo_path: Path | None = None
++        if repo_access_mode != "none":
++            repo_slug = str(
++                agent_spec.get("repo_slug")
++                or (agent_spec.get("repo_context") or {}).get("slug")
++                or ""
++            )
++            if not repo_slug or repo_slug not in self.config.repo_mounts:
++                return JobResultFrame(
++                    job_id=dispatch.job_id,
++                    status="error",
++                    error_code=CODE_REPO_NOT_MOUNTED,
++                )
++
++            configured_path = Path(self.config.repo_mounts[repo_slug])
++            try:
++                resolved_repo_path = configured_path.resolve(strict=True)  # noqa: ASYNC240
++            except (OSError, ValueError):
++                return JobResultFrame(
++                    job_id=dispatch.job_id,
++                    status="error",
++                    error_code=CODE_REPO_NOT_MOUNTED,
++                )
++
++            # Prevent symlink traversal escapes
++            mount_root = configured_path.parent.resolve()
++            if not resolved_repo_path.is_relative_to(mount_root):
++                return JobResultFrame(
++                    job_id=dispatch.job_id,
++                    status="error",
++                    error_code=CODE_REPO_NOT_MOUNTED,
++                )
++
++            # For ro_vfs_mount, verify filesystem is strictly read-only
++            if repo_access_mode == "ro_vfs_mount":
++                try:
++                    stat_res = os.statvfs(str(resolved_repo_path))
++                    is_ro = (stat_res.f_flag & os.ST_RDONLY) != 0
++                except (OSError, AttributeError):
++                    is_ro = False
++                if not is_ro:
++                    return JobResultFrame(
++                        job_id=dispatch.job_id,
++                        status="error",
++                        error_code=CODE_MOUNT_NOT_READONLY,
++                    )
++
++        # 4. Context reconstitution
++        ctx: RenderedContext | None = None
++        try:
++            yaml_bytes = base64.b64decode(dispatch.context_yaml_b64)
++            parsed_ctx = yaml.safe_load(yaml_bytes) or {}
++            verdict_nonce = str(parsed_ctx.get("verdict_nonce") or "")
++            delimiter = str(
++                (parsed_ctx.get("ticket_snapshot") or {}).get("delimiter")
++                or "<<<UNTRUSTED_TICKET_DATA>>>"
++            )
++
++            repo_ctx_model: RepoContext | None = None
++            if resolved_repo_path is not None:
++                repo_ctx_model = RepoContext(
++                    mount_path=str(resolved_repo_path),
++                    access="read-only",
++                    head_commit=dispatch.head_commit or "HEAD",
++                )
++
++            mcp_access_dict = parsed_ctx.get("mcp_access") or {}
++            mcp_access_model = McpAccess(
++                agent_url=mcp_access_dict.get("agent_url") or "",
++                docs_url=mcp_access_dict.get("docs_url") or "",
++                ephemeral_bearer_env="KANBAN_EPHEMERAL_MCP_TOKEN",
++            )
++
++            ctx = RenderedContext(
++                yaml_bytes=yaml_bytes,
++                sha256=hashlib.sha256(yaml_bytes).hexdigest(),
++                delimiter=delimiter,
++                verdict_nonce=verdict_nonce,
++                ephemeral_token=token_ba,
++                allowed_mutable_fields=frozenset(),
++                repo_context=repo_ctx_model,
++                mcp_access=mcp_access_model,
++            )
++
++            # 5. Execution dispatch based on harness_kind
++            raw_output: bytes
++            if harness_kind == "cli_pipe":
++                cli_harness = self._cli_pipe_harness_factory()
++                repo_dict = (
++                    {
++                        "mirror_path": str(resolved_repo_path),
++                        "head_commit": dispatch.head_commit or "HEAD",
++                    }
++                    if resolved_repo_path is not None
++                    else None
++                )
++                raw_output = await cli_harness.run(
++                    ctx,
++                    agent_spec,
++                    repo_context=repo_dict,
++                )
++            else:
++                in_app_harness = self._in_app_harness_factory()
++                raw_output = await in_app_harness.run(ctx, agent_spec)
++
++                # Stream tool traces if on_tool_event callback provided
++                if on_tool_event is not None:
++                    for trace in getattr(in_app_harness, "last_tool_traces", []):
++                        await on_tool_event(
++                            JobToolEventFrame(
++                                job_id=dispatch.job_id,
++                                tool_name=trace.tool_name,
++                                duration_ms=int(trace.duration_ms),
++                                status=trace.status,
++                            )
++                        )
++
++            return JobResultFrame(
++                job_id=dispatch.job_id,
++                status="ok",
++                stdout_b64=base64.b64encode(raw_output).decode("ascii"),
++            )
++        except Exception:  # noqa: BLE001
++            return JobResultFrame(
++                job_id=dispatch.job_id,
++                status="error",
++                error_code=CODE_EXECUTION_FAILED,
++            )
++        finally:
++            # 6. Ephemeral secret zeroization
++            if ctx is not None:
++                ctx.destroy()
++            for i in range(len(token_ba)):
++                token_ba[i] = 0
++            del token_ba[:]
+diff --git a/agent/remote_runner/__init__.py b/agent/remote_runner/__init__.py
+new file mode 100644
+index 0000000..cdb5eb2
+--- /dev/null
++++ b/agent/remote_runner/__init__.py
+@@ -0,0 +1,31 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Remote agent runner package for outbound mTLS WSS execution (KB-P5-22b, S14.2)."""
++
++from __future__ import annotations
++
++from agent.remote_runner.config import (
++    KeyPermissionsError,
++    RunnerConfig,
++    load_runner_config,
++    validate_key_permissions,
++    validate_runner_config,
++)
++from agent.remote_runner.daemon import (
++    EXIT_CODE_REVOKED,
++    RunnerDaemon,
++    RunnerRevokedError,
++)
++from agent.remote_runner.executor import RunnerJobExecutor
++
++__all__ = [
++    "EXIT_CODE_REVOKED",
++    "KeyPermissionsError",
++    "RunnerConfig",
++    "RunnerDaemon",
++    "RunnerJobExecutor",
++    "RunnerRevokedError",
++    "load_runner_config",
++    "validate_key_permissions",
++    "validate_runner_config",
++]
+diff --git a/agent/remote_runner/__pycache__/cli.cpython-312.pyc b/agent/remote_runner/__pycache__/cli.cpython-312.pyc
+new file mode 100644
+index 0000000..82091ae
+Binary files /dev/null and b/agent/remote_runner/__pycache__/cli.cpython-312.pyc differ
+diff --git a/agent/remote_runner/__pycache__/config.cpython-312.pyc b/agent/remote_runner/__pycache__/config.cpython-312.pyc
+new file mode 100644
+index 0000000..846112e
+Binary files /dev/null and b/agent/remote_runner/__pycache__/config.cpython-312.pyc differ
+diff --git a/agent/remote_runner/__pycache__/daemon.cpython-312.pyc b/agent/remote_runner/__pycache__/daemon.cpython-312.pyc
+new file mode 100644
+index 0000000..ae80c38
+Binary files /dev/null and b/agent/remote_runner/__pycache__/daemon.cpython-312.pyc differ
+diff --git a/agent/remote_runner/__pycache__/executor.cpython-312.pyc b/agent/remote_runner/__pycache__/executor.cpython-312.pyc
+new file mode 100644
+index 0000000..12d4479
+Binary files /dev/null and b/agent/remote_runner/__pycache__/executor.cpython-312.pyc differ
+diff --git a/agent/remote_runner/__pycache__/__init__.cpython-312.pyc b/agent/remote_runner/__pycache__/__init__.cpython-312.pyc
+new file mode 100644
+index 0000000..06f3259
+Binary files /dev/null and b/agent/remote_runner/__pycache__/__init__.cpython-312.pyc differ
+diff --git a/agent/tests/remote_runner/__init__.py b/agent/tests/remote_runner/__init__.py
+new file mode 100644
+index 0000000..bd0c90a
+--- /dev/null
++++ b/agent/tests/remote_runner/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for remote runner daemon, executor, and CLI (KB-P5-22b)."""
+diff --git a/agent/tests/remote_runner/__pycache__/__init__.cpython-312.pyc b/agent/tests/remote_runner/__pycache__/__init__.cpython-312.pyc
+new file mode 100644
+index 0000000..8996fa9
+Binary files /dev/null and b/agent/tests/remote_runner/__pycache__/__init__.cpython-312.pyc differ
+diff --git a/agent/tests/remote_runner/__pycache__/test_config_and_enroll.cpython-312-pytest-9.2.0.pyc b/agent/tests/remote_runner/__pycache__/test_config_and_enroll.cpython-312-pytest-9.2.0.pyc
+new file mode 100644
+index 0000000..094296c
+Binary files /dev/null and b/agent/tests/remote_runner/__pycache__/test_config_and_enroll.cpython-312-pytest-9.2.0.pyc differ
+diff --git a/agent/tests/remote_runner/__pycache__/test_daemon_e2e.cpython-312-pytest-9.2.0.pyc b/agent/tests/remote_runner/__pycache__/test_daemon_e2e.cpython-312-pytest-9.2.0.pyc
+new file mode 100644
+index 0000000..0fb79b8
+Binary files /dev/null and b/agent/tests/remote_runner/__pycache__/test_daemon_e2e.cpython-312-pytest-9.2.0.pyc differ
+diff --git a/agent/tests/remote_runner/__pycache__/test_executor.cpython-312-pytest-9.2.0.pyc b/agent/tests/remote_runner/__pycache__/test_executor.cpython-312-pytest-9.2.0.pyc
+new file mode 100644
+index 0000000..d986d31
+Binary files /dev/null and b/agent/tests/remote_runner/__pycache__/test_executor.cpython-312-pytest-9.2.0.pyc differ
+diff --git a/agent/tests/remote_runner/test_config_and_enroll.py b/agent/tests/remote_runner/test_config_and_enroll.py
+new file mode 100644
+index 0000000..9e04cd0
+--- /dev/null
++++ b/agent/tests/remote_runner/test_config_and_enroll.py
+@@ -0,0 +1,401 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for RunnerConfig and kanban-agent-runner enroll CLI (KB-P5-22b, S14.2)."""
++
++from __future__ import annotations
++
++import io
++import json
++import sys
++from pathlib import Path
++
++import httpx
++import pytest
++import yaml
++
++from agent.remote_runner.cli import _write_secure_file, enroll_runner, main, run_daemon
++from agent.remote_runner.config import (
++    KeyPermissionsError,
++    RunnerConfig,
++    load_runner_config,
++    validate_key_permissions,
++)
++from agent.remote_runner.daemon import RunnerRevokedError
++
++
++def test_runner_config_defaults_and_validation(tmp_path: Path) -> None:
++    """Test RunnerConfig field defaults, extra=forbid, and pool_slug regex."""
++    cert_file = tmp_path / "client.crt"
++    key_file = tmp_path / "client.key"
++    ca_file = tmp_path / "ca.crt"
++
++    cert_file.write_text("cert")
++    key_file.write_text("key")
++    key_file.chmod(0o600)
++    ca_file.write_text("ca")
++
++    cfg = RunnerConfig(
++        server_url="https://kanban.example.com",
++        pool_slug="gpu-pool-1",
++        client_cert_path=cert_file,
++        client_key_path=key_file,
++        ca_cert_path=ca_file,
++    )
++    assert cfg.max_concurrency == 1
++    assert cfg.heartbeat_interval_s == 15.0
++    assert cfg.resolve_wss_url() == "wss://kanban.example.com/api/v1/agent-runners/ws"
++
++    # URL resolution variations
++    cfg_http = cfg.model_copy(update={"server_url": "http://localhost:8000"})
++    assert cfg_http.resolve_wss_url() == "ws://localhost:8000/api/v1/agent-runners/ws"
++
++    cfg_wss = cfg.model_copy(update={"wss_url": "wss://custom.internal/ws"})
++    assert cfg_wss.resolve_wss_url() == "wss://custom.internal/ws"
++
++    # Invalid pool slugs
++    with pytest.raises(ValueError, match="Invalid pool_slug"):
++        RunnerConfig(
++            server_url="https://kanban.example.com",
++            pool_slug="UPPERCASE_INVALID",
++            client_cert_path=cert_file,
++            client_key_path=key_file,
++            ca_cert_path=ca_file,
++        )
++
++    with pytest.raises(ValueError, match="Invalid pool_slug"):
++        RunnerConfig(
++            server_url="https://kanban.example.com",
++            pool_slug="invalid_underscores",
++            client_cert_path=cert_file,
++            client_key_path=key_file,
++            ca_cert_path=ca_file,
++        )
++
++    # Extra forbid
++    with pytest.raises(ValueError, match="extra_forbidden"):
++        RunnerConfig.model_validate(
++            {
++                "server_url": "https://kanban.example.com",
++                "pool_slug": "pool-a",
++                "client_cert_path": str(cert_file),
++                "client_key_path": str(key_file),
++                "ca_cert_path": str(ca_file),
++                "unauthorized_field": True,
++            }
++        )
++
++
++def test_key_permissions_validation(tmp_path: Path) -> None:
++    """Test validate_key_permissions rejects group/other permissions and accepts 0600/0400."""
++    key_file = tmp_path / "private.key"
++    key_file.write_text("test-secret-key")
++
++    # Mode 0600: valid
++    key_file.chmod(0o600)
++    validate_key_permissions(key_file)
++
++    # Mode 0400: valid
++    key_file.chmod(0o400)
++    validate_key_permissions(key_file)
++
++    # Mode 0644: invalid (world readable)
++    key_file.chmod(0o644)
++    with pytest.raises(KeyPermissionsError, match="KEY_PERMISSIONS_TOO_OPEN"):
++        validate_key_permissions(key_file)
++
++    # Mode 0660: invalid (group readable)
++    key_file.chmod(0o660)
++    with pytest.raises(KeyPermissionsError, match="KEY_PERMISSIONS_TOO_OPEN"):
++        validate_key_permissions(key_file)
++
++    # Non-existent file: passes (not yet created)
++    validate_key_permissions(tmp_path / "nonexistent.key")
++
++
++def test_load_runner_config(tmp_path: Path) -> None:
++    """Test loading and validating RunnerConfig from YAML file."""
++    cfg_file = tmp_path / "config.yaml"
++    key_file = tmp_path / "test.key"
++    key_file.write_text("key")
++    key_file.chmod(0o600)
++
++    cfg_dict = {
++        "server_url": "https://kanban.internal",
++        "pool_slug": "air-gap-nodes",
++        "client_cert_path": str(tmp_path / "test.crt"),
++        "client_key_path": str(key_file),
++        "ca_cert_path": str(tmp_path / "ca.crt"),
++        "max_concurrency": 4,
++    }
++    cfg_file.write_text(yaml.safe_dump(cfg_dict), encoding="utf-8")
++
++    loaded = load_runner_config(cfg_file)
++    assert loaded.max_concurrency == 4
++    assert loaded.pool_slug == "air-gap-nodes"
++
++    # Missing file
++    with pytest.raises(FileNotFoundError):
++        load_runner_config(tmp_path / "missing.yaml")
++
++
++def test_cli_token_cmdline_secrecy(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Test passing --token on argv is rejected to prevent exposure in /proc/cmdline."""
++    stderr_buf = io.StringIO()
++    monkeypatch.setattr(sys, "stderr", stderr_buf)
++
++    # Test --token
++    rc1 = main(["enroll", "--server-url", "https://kanban", "--token", "secret", "--pool", "p"])
++    assert rc1 == 2
++    assert "Passing --token on CLI arguments is rejected for security" in stderr_buf.getvalue()
++
++    # Test --token=
++    stderr_buf.truncate(0)
++    stderr_buf.seek(0)
++    rc2 = main(["enroll", "--server-url", "https://kanban", "--token=secret", "--pool", "p"])
++    assert rc2 == 2
++    assert "Use --token-stdin" in stderr_buf.getvalue()
++
++
++def test_enroll_runner_flow(tmp_path: Path) -> None:
++    """Test enroll_runner generates key, CSR, exchanges token, and writes secure files."""
++    state_dir = tmp_path / "runner-state"
++
++    def handler(request: httpx.Request) -> httpx.Response:
++        assert request.url.path == "/api/v1/agent-runners/enroll"
++        data = json.loads(request.content)
++        assert data["enrollment_token"] == "kb_rnr_enroll_test_token_123"
++        assert "-----BEGIN CERTIFICATE REQUEST-----" in data["csr_pem"]
++        assert data["hostname"] == "test-worker-1"
++
++        return httpx.Response(
++            status_code=201,
++            json={
++                "runner_id": "0196ed40-7b2a-7000-8000-112233445566",
++                "client_cert_pem": (
++                    "-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----"
++                ),
++                "ca_cert_pem": "-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----",
++                "wss_url": "wss://kanban.internal/api/v1/agent-runners/ws",
++            },
++        )
++
++    transport = httpx.MockTransport(handler)
++    client = httpx.Client(transport=transport)
++
++    cfg_path = enroll_runner(
++        server_url="https://kanban.internal",
++        enrollment_token="kb_rnr_enroll_test_token_123",  # noqa: S106
++        pool_slug="gpu-workers",
++        state_dir=state_dir,
++        hostname="test-worker-1",
++        client=client,
++    )
++
++    assert cfg_path.is_file()
++    key_path = state_dir / "client.key"
++    cert_path = state_dir / "client.crt"
++    ca_path = state_dir / "ca.crt"
++
++    assert key_path.is_file()
++    assert cert_path.is_file()
++    assert ca_path.is_file()
++
++    # Verify atomic 0600 mode on private key and config
++    assert (key_path.stat().st_mode & 0o077) == 0
++    assert (cfg_path.stat().st_mode & 0o077) == 0
++
++    # Verify config loads cleanly
++    cfg = load_runner_config(cfg_path)
++    assert cfg.pool_slug == "gpu-workers"
++    assert cfg.server_url == "https://kanban.internal"
++
++    # Empty token fails
++    with pytest.raises(ValueError, match="Enrollment token is empty"):
++        enroll_runner(
++            server_url="https://kanban.internal",
++            enrollment_token="   ",  # noqa: S106
++            pool_slug="gpu-workers",
++            state_dir=state_dir,
++            client=client,
++        )
++
++    # Non-201 response fails
++    def error_handler(_req: httpx.Request) -> httpx.Response:
++        return httpx.Response(status_code=401, text="Invalid token")
++
++    err_client = httpx.Client(transport=httpx.MockTransport(error_handler))
++    with pytest.raises(RuntimeError, match="Enrollment failed with status 401"):
++        enroll_runner(
++            server_url="https://kanban.internal",
++            enrollment_token="invalid_token",  # noqa: S106
++            pool_slug="gpu-workers",
++            state_dir=state_dir,
++            client=err_client,
++        )
++
++
++def test_cli_subcommands_dispatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    """Test main() CLI dispatching enroll and run subcommands."""
++    state_dir = tmp_path / "cli-state"
++
++    # 1. Enroll subcommand via stdin
++    def mock_handler(_req: httpx.Request) -> httpx.Response:
++        return httpx.Response(
++            status_code=201,
++            json={
++                "runner_id": "0196ed40-7b2a-7000-8000-112233445566",
++                "client_cert_pem": "client-cert",
++                "ca_cert_pem": "ca-cert",
++                "wss_url": "wss://kanban.internal/api/v1/agent-runners/ws",
++            },
++        )
++
++    orig_client = httpx.Client
++    monkeypatch.setattr(
++        httpx,
++        "Client",
++        lambda *_args, **_kwargs: orig_client(transport=httpx.MockTransport(mock_handler)),
++    )
++    monkeypatch.setattr(sys, "stdin", io.StringIO("kb_rnr_enroll_token_abc\n"))
++
++    stdout_buf = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", stdout_buf)
++
++    rc_enroll = main(
++        [
++            "enroll",
++            "--server-url",
++            "https://kanban.internal",
++            "--token-stdin",
++            "--pool",
++            "test-pool",
++            "--state-dir",
++            str(state_dir),
++        ]
++    )
++    assert rc_enroll == 0
++    assert "Enrollment successful" in stdout_buf.getvalue()
++
++    # 2. Run subcommand with key permissions error
++    key_file = state_dir / "client.key"
++    key_file.chmod(0o666)  # world writable/readable
++    stderr_buf = io.StringIO()
++    monkeypatch.setattr(sys, "stderr", stderr_buf)
++
++    rc_run = main(["run", "--config", str(state_dir / "config.yaml")])
++    assert rc_run == 1
++    assert "KEY_PERMISSIONS_TOO_OPEN" in stderr_buf.getvalue()
++
++
++def test_runner_config_url_without_scheme(tmp_path: Path) -> None:
++    """Test URL resolution when server_url lacks http/https prefix."""
++    key_file = tmp_path / "client.key"
++    key_file.write_text("key")
++    key_file.chmod(0o600)
++
++    cfg = RunnerConfig(
++        server_url="kanban.internal",
++        pool_slug="test-pool",
++        client_cert_path=tmp_path / "client.crt",
++        client_key_path=key_file,
++        ca_cert_path=tmp_path / "ca.crt",
++    )
++    assert cfg.resolve_wss_url() == "wss://kanban.internal/api/v1/agent-runners/ws"
++
++    with pytest.raises(FileNotFoundError):
++        load_runner_config(tmp_path / "missing.yaml")
++
++
++def test_write_secure_file_error_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    """Test _write_secure_file unlinks temporary file on write failure."""
++
++    def failing_replace(_src: Path, _dst: Path) -> None:
++        msg = "Disk error"
++        raise OSError(msg)
++
++    monkeypatch.setattr(Path, "replace", failing_replace)
++    target = tmp_path / "secure.txt"
++    with pytest.raises(OSError, match="Disk error"):
++        _write_secure_file(target, "secret-data")
++
++
++def test_run_daemon_lifecycle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    """Test run_daemon lifecycle for normal exit, revocation (78), and SIGINT."""
++    key_file = tmp_path / "client.key"
++    key_file.write_text("key")
++    key_file.chmod(0o600)
++    cfg_file = tmp_path / "config.yaml"
++    cfg = RunnerConfig(
++        server_url="https://kanban.internal",
++        pool_slug="test-pool",
++        client_cert_path=tmp_path / "client.crt",
++        client_key_path=key_file,
++        ca_cert_path=tmp_path / "ca.crt",
++    )
++    cfg_file.write_text(yaml.safe_dump(cfg.model_dump(mode="json")))
++
++    # 1. Normal run
++    async def mock_run_ok(_self: object) -> None:
++        pass
++
++    monkeypatch.setattr("agent.remote_runner.daemon.RunnerDaemon.run_forever", mock_run_ok)
++    assert run_daemon(cfg_file) == 0
++
++    # 2. Revoked run (exit code 78)
++    async def mock_run_revoked(_self: object) -> None:
++        msg = "Revoked"
++        raise RunnerRevokedError(msg)
++
++    monkeypatch.setattr("agent.remote_runner.daemon.RunnerDaemon.run_forever", mock_run_revoked)
++    assert run_daemon(cfg_file) == 78
++
++    # 3. KeyboardInterrupt run
++    async def mock_run_interrupt(_self: object) -> None:
++        raise KeyboardInterrupt
++
++    monkeypatch.setattr("agent.remote_runner.daemon.RunnerDaemon.run_forever", mock_run_interrupt)
++    assert run_daemon(cfg_file) == 0
++
++
++def test_main_cli_error_branches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    """Test main() error reporting for enrollment and daemon failures."""
++    # 1. Enroll failure
++    orig_client = httpx.Client
++    monkeypatch.setattr(
++        httpx,
++        "Client",
++        lambda *_args, **_kwargs: orig_client(
++            transport=httpx.MockTransport(lambda _req: httpx.Response(401, text="Invalid token"))
++        ),
++    )
++    monkeypatch.setattr(sys, "stdin", io.StringIO("invalid_token\n"))
++    stderr_buf = io.StringIO()
++    monkeypatch.setattr(sys, "stderr", stderr_buf)
++
++    rc_enroll = main(
++        [
++            "enroll",
++            "--server-url",
++            "https://kanban.internal",
++            "--token-stdin",
++            "--pool",
++            "test-pool",
++            "--state-dir",
++            str(tmp_path / "err-state"),
++        ]
++    )
++    assert rc_enroll == 1
++    assert "Enrollment error" in stderr_buf.getvalue()
++
++    # 2. Run generic exception failure
++    stderr_buf2 = io.StringIO()
++    monkeypatch.setattr(sys, "stderr", stderr_buf2)
++
++    def failing_run_daemon(_path: Path) -> int:
++        msg = "Unexpected daemon crash"
++        raise RuntimeError(msg)
++
++    monkeypatch.setattr("agent.remote_runner.cli.run_daemon", failing_run_daemon)
++    rc_run = main(["run", "--config", str(tmp_path / "dummy.yaml")])
++    assert rc_run == 1
++    assert "Runner error: Unexpected daemon crash" in stderr_buf2.getvalue()
+diff --git a/agent/tests/remote_runner/test_daemon_e2e.py b/agent/tests/remote_runner/test_daemon_e2e.py
+new file mode 100644
+index 0000000..5ad37c6
+--- /dev/null
++++ b/agent/tests/remote_runner/test_daemon_e2e.py
+@@ -0,0 +1,713 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""End-to-end tests for RunnerDaemon: mTLS loopback, TLS 1.3, revocation & cancel (KB-P5-22b)."""
++# ruff: noqa: SLF001, S106, ANN401, ARG001, ARG002, ARG005, PLC0415, RUF059, T201, PLR0915
++
++from __future__ import annotations
++
++import asyncio
++import base64
++import contextlib
++import ipaddress
++import json
++import ssl
++import subprocess
++import time
++import uuid
++from datetime import UTC, datetime, timedelta
++from pathlib import Path
++from typing import Any
++
++import pytest
++import websockets
++import yaml
++from cryptography import x509
++from cryptography.hazmat.primitives import hashes, serialization
++from cryptography.hazmat.primitives.asymmetric import ec
++from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
++
++from agent.harnesses.in_app_sdk import InAppSdkHarness
++from agent.remote_runner.config import KeyPermissionsError, RunnerConfig
++from agent.remote_runner.daemon import (
++    CLOSE_CODE_REVOKED,
++    EXIT_CODE_REVOKED,
++    RunnerDaemon,
++    RunnerRevokedError,
++)
++from agent.remote_runner.executor import RunnerJobExecutor
++from agent.runners.cli_pipe import CliPipeHarness
++from agent.testing.fixtures import FixtureCLIRunner, FixtureLLMProvider
++from kanban.runners.hub import (
++    HelloAckFrame,
++    HelloFrame,
++    JobCancelFrame,
++    RunnerWssHub,
++)
++
++
++class WsAdapter:
++    """Adapter wrapping websockets connection for RunnerWssHub."""
++
++    def __init__(self, ws: Any) -> None:
++        """Initialize adapter."""
++        self._ws = ws
++
++    async def send_text(self, text: str) -> None:
++        """Send text frame over WebSocket."""
++        await self._ws.send(text)
++
++    async def close(self, code: int = 1000, reason: str = "") -> None:
++        """Close WebSocket with status code and reason."""
++        await self._ws.close(code, reason)
++
++
++def _generate_test_pki(tmp_path: Path, runner_id: uuid.UUID) -> tuple[Path, Path, Path, Path, Path]:
++    """Generate in-memory / tmp_path CA, server, and client mTLS certificates."""
++    ca_key = ec.generate_private_key(ec.SECP256R1())
++    ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Test CA")])
++    ca_cert = (
++        x509.CertificateBuilder()
++        .subject_name(ca_name)
++        .issuer_name(ca_name)
++        .public_key(ca_key.public_key())
++        .serial_number(x509.random_serial_number())
++        .not_valid_before(datetime.now(UTC) - timedelta(days=1))
++        .not_valid_after(datetime.now(UTC) + timedelta(days=1))
++        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
++        .sign(ca_key, hashes.SHA256())
++    )
++    ca_file = tmp_path / "ca.crt"
++    ca_file.write_bytes(ca_cert.public_bytes(serialization.Encoding.PEM))
++
++    server_key = ec.generate_private_key(ec.SECP256R1())
++    server_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
++    server_cert = (
++        x509.CertificateBuilder()
++        .subject_name(server_name)
++        .issuer_name(ca_name)
++        .public_key(server_key.public_key())
++        .serial_number(x509.random_serial_number())
++        .not_valid_before(datetime.now(UTC) - timedelta(days=1))
++        .not_valid_after(datetime.now(UTC) + timedelta(days=1))
++        .add_extension(
++            x509.SubjectAlternativeName(
++                [x509.DNSName("localhost"), x509.IPAddress(ipaddress.IPv4Address("127.0.0.1"))]
++            ),
++            critical=False,
++        )
++        .sign(ca_key, hashes.SHA256())
++    )
++    server_crt_file = tmp_path / "server.crt"
++    server_key_file = tmp_path / "server.key"
++    server_crt_file.write_bytes(server_cert.public_bytes(serialization.Encoding.PEM))
++    server_key_file.write_bytes(
++        server_key.private_bytes(
++            serialization.Encoding.PEM,
++            serialization.PrivateFormat.PKCS8,
++            serialization.NoEncryption(),
++        )
++    )
++
++    client_key = ec.generate_private_key(ec.SECP256R1())
++    client_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "runner-client")])
++    client_cert = (
++        x509.CertificateBuilder()
++        .subject_name(client_name)
++        .issuer_name(ca_name)
++        .public_key(client_key.public_key())
++        .serial_number(x509.random_serial_number())
++        .not_valid_before(datetime.now(UTC) - timedelta(days=1))
++        .not_valid_after(datetime.now(UTC) + timedelta(days=1))
++        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]), critical=True)
++        .add_extension(
++            x509.SubjectAlternativeName(
++                [x509.UniformResourceIdentifier(f"urn:kanban:agent-runner:{runner_id}")]
++            ),
++            critical=False,
++        )
++        .sign(ca_key, hashes.SHA256())
++    )
++    client_crt_file = tmp_path / "client.crt"
++    client_key_file = tmp_path / "client.key"
++    client_crt_file.write_bytes(client_cert.public_bytes(serialization.Encoding.PEM))
++    client_key_file.write_bytes(
++        client_key.private_bytes(
++            serialization.Encoding.PEM,
++            serialization.PrivateFormat.PKCS8,
++            serialization.NoEncryption(),
++        )
++    )
++    client_key_file.chmod(0o600)
++
++    return ca_file, server_crt_file, server_key_file, client_crt_file, client_key_file
++
++
++def _create_bare_git_fixture(tmp_path: Path) -> tuple[Path, str]:
++    """Create a minimal bare Git repo fixture with database schema."""
++    workdir = tmp_path / "worktree"
++    workdir.mkdir()
++    subprocess.run(["git", "init", "-b", "main"], cwd=workdir, check=True, capture_output=True)
++    subprocess.run(["git", "config", "user.name", "Test Committer"], cwd=workdir, check=True)
++    subprocess.run(["git", "config", "user.email", "test@kanban.local"], cwd=workdir, check=True)
++
++    (workdir / "database").mkdir()
++    (workdir / "database" / "schema.sql").write_text("SELECT 1;\n", encoding="utf-8")
++
++    subprocess.run(["git", "add", "-A"], cwd=workdir, check=True, capture_output=True)
++    subprocess.run(
++        ["git", "commit", "-m", "init test repo"],
++        cwd=workdir,
++        check=True,
++        capture_output=True,
++    )
++
++    bare_dir = tmp_path / "mirror.git"
++    subprocess.run(
++        ["git", "clone", "--bare", str(workdir), str(bare_dir)],
++        check=True,
++        capture_output=True,
++    )
++
++    rev_proc = subprocess.run(
++        ["git", f"--git-dir={bare_dir}", "rev-parse", "HEAD"],
++        check=True,
++        capture_output=True,
++        text=True,
++    )
++    return bare_dir, rev_proc.stdout.strip()
++
++
++@pytest.mark.enable_socket
++@pytest.mark.asyncio
++async def test_daemon_e2e_mtls_loopback_and_dispatch(tmp_path: Path) -> None:
++    """Test positive loopback mTLS WSS connection, handshake, in-app SDK & CLI execution."""
++    runner_id = uuid.uuid4()
++    ca_file, server_crt, server_key, client_crt, client_key = _generate_test_pki(
++        tmp_path, runner_id
++    )
++    bare_dir, head_commit = _create_bare_git_fixture(tmp_path)
++
++    # Server TLS context
++    server_ssl = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
++    server_ssl.minimum_version = ssl.TLSVersion.TLSv1_3
++    server_ssl.verify_mode = ssl.CERT_REQUIRED
++    server_ssl.load_verify_locations(cafile=str(ca_file))
++    server_ssl.load_cert_chain(certfile=str(server_crt), keyfile=str(server_key))
++
++    hub = RunnerWssHub()
++    workspace_id = uuid.uuid4()
++    pool_slug = "default-pool"
++    runner_connected = asyncio.Event()
++
++    async def server_handler(ws: Any) -> None:
++        transport = getattr(ws, "transport", None)
++        if transport is not None:
++            raw_ssl = transport.get_extra_info("ssl_object")
++            if raw_ssl is not None:
++                print(f"\n[mTLS Server] Negotiated protocol: {raw_ssl.version()}")
++                print(f"[mTLS Server] Peer cert SAN: {raw_ssl.getpeercert().get('subjectAltName')}")
++        raw_hello = await ws.recv()
++        hello_data = json.loads(raw_hello)
++        hello = HelloFrame.model_validate(hello_data)
++        ack = HelloAckFrame()
++        await ws.send(ack.model_dump_json(by_alias=True))
++
++        adapter = WsAdapter(ws)
++        hub.register_runner(
++            runner_id=hello.runner_id,
++            workspace_id=workspace_id,
++            pool_slug=pool_slug,
++            hostname="test-host",
++            websocket=adapter,  # type: ignore[arg-type]
++            max_concurrency=hello.max_concurrency,
++            capabilities=hello.capabilities,
++        )
++        runner_connected.set()
++        try:
++            async for raw_msg in ws:
++                data = json.loads(raw_msg)
++                hub.handle_frame(hello.runner_id, data)
++        finally:
++            hub.unregister_runner(hello.runner_id)
++
++    server = await websockets.serve(server_handler, "localhost", 0, ssl=server_ssl)
++    port = server.sockets[0].getsockname()[1]
++
++    cfg = RunnerConfig(
++        server_url=f"https://localhost:{port}",
++        pool_slug=pool_slug,
++        client_cert_path=client_crt,
++        client_key_path=client_key,
++        ca_cert_path=ca_file,
++        runner_id=runner_id,
++        repo_mounts={"test-repo": bare_dir},
++        heartbeat_interval_s=1.0,
++    )
++
++    def make_in_app() -> InAppSdkHarness:
++        return InAppSdkHarness(
++            provider=FixtureLLMProvider(Path("tests/fixtures/ai/transition_rls_veto.yaml")),
++            mcp_transport=lambda url, tool, args: {"status": "ok"},
++        )
++
++    def make_cli() -> CliPipeHarness:
++        return CliPipeHarness(
++            runner=FixtureCLIRunner(Path("tests/fixtures/ai/cli_agy_approve.yaml"))
++        )
++
++    executor = RunnerJobExecutor(
++        cfg,
++        in_app_harness_factory=make_in_app,
++        cli_pipe_harness_factory=make_cli,
++    )
++    daemon = RunnerDaemon(cfg, executor=executor)
++
++    daemon_task = asyncio.create_task(daemon.run_forever())
++    await asyncio.wait_for(runner_connected.wait(), timeout=5.0)
++
++    # 1. Dispatch in_app_sdk job via hub
++    ctx_in_app = {
++        "execution_id": "0196ed40-7b2a-7000-8000-112233445566",
++        "ticket_id": "KAN-142",
++        "title": "Test ticket with auth_provider_cards changes",
++        "verdict_nonce": "nonce-1234",
++        "delimiter": "===TEST===",
++    }
++    res_in_app = await hub.dispatch_job(
++        workspace_id=workspace_id,
++        pool_slug=pool_slug,
++        job_spec={
++            "job_id": "job-e2e-in-app",
++            "execution_id": "0196ed40-7b2a-7000-8000-112233445566",
++            "agent_spec": {
++                "slug": "forensic-code-check",
++                "harness_kind": "in_app_sdk",
++                "repo_access_mode": "read-only",
++                "repo_slug": "test-repo",
++            },
++            "context_yaml_b64": base64.b64encode(yaml.safe_dump(ctx_in_app).encode("utf-8")).decode(
++                "ascii"
++            ),
++            "ephemeral_mcp_token": "secret-token-in-app",
++            "head_commit": head_commit,
++        },
++        timeout_s=5.0,
++    )
++    assert len(res_in_app) > 0
++    assert len(hub._tool_events) >= 2
++
++    # 2. Dispatch cli_pipe job via hub
++    ctx_cli = {
++        "schema": "kb-transition-context/v1",
++        "execution_id": "0196ed40-7b2a-7000-8000-112233445566",
++        "verdict_nonce": "nonce-1234",
++        "ticket_snapshot": {"identifier": "KAN-100", "title": "Test"},
++    }
++    res_cli = await hub.dispatch_job(
++        workspace_id=workspace_id,
++        pool_slug=pool_slug,
++        job_spec={
++            "job_id": "job-e2e-cli",
++            "execution_id": "0196ed40-7b2a-7000-8000-112233445566",
++            "agent_spec": {
++                "slug": "security-audit",
++                "harness_kind": "cli_pipe",
++                "repo_access_mode": "none",
++                "cli_binary_allowlist_id": "agy",
++                "cli_args_json": ["-p"],
++            },
++            "context_yaml_b64": base64.b64encode(yaml.safe_dump(ctx_cli).encode("utf-8")).decode(
++                "ascii"
++            ),
++            "ephemeral_mcp_token": "secret-token-cli",
++        },
++        timeout_s=5.0,
++    )
++    assert b"approve" in res_cli
++    tool_events_str = [e.get("tool_name") for e in hub._tool_events]
++    print(f"\n[mTLS Loopback] In-App SDK tool events: {tool_events_str}")
++    print(f"[mTLS Loopback] CLI Pipe verdict bytes received: {len(res_cli)} bytes")
++
++    daemon.stop()
++    await daemon_task
++    server.close()
++    await server.wait_closed()
++
++
++@pytest.mark.enable_socket
++@pytest.mark.asyncio
++async def test_daemon_tls12_server_rejected(tmp_path: Path) -> None:
++    """Test TLS 1.2-only server is rejected because client enforces minimum TLS 1.3."""
++    runner_id = uuid.uuid4()
++    ca_file, server_crt, server_key, client_crt, client_key = _generate_test_pki(
++        tmp_path, runner_id
++    )
++
++    # Server SSL context locked down to TLS 1.2 maximum
++    server_ssl = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
++    server_ssl.maximum_version = ssl.TLSVersion.TLSv1_2
++    server_ssl.verify_mode = ssl.CERT_REQUIRED
++    server_ssl.load_verify_locations(cafile=str(ca_file))
++    server_ssl.load_cert_chain(certfile=str(server_crt), keyfile=str(server_key))
++
++    async def dummy_handler(ws: Any) -> None:
++        pass
++
++    server = await websockets.serve(dummy_handler, "localhost", 0, ssl=server_ssl)
++    port = server.sockets[0].getsockname()[1]
++
++    cfg = RunnerConfig(
++        server_url=f"https://localhost:{port}",
++        pool_slug="pool-tls-reject",
++        client_cert_path=client_crt,
++        client_key_path=client_key,
++        ca_cert_path=ca_file,
++    )
++    daemon = RunnerDaemon(cfg)
++
++    # Handshake must fail
++    with pytest.raises((ssl.SSLError, OSError)):
++        async with daemon.ws_connector(
++            cfg.resolve_wss_url(),
++            ssl=daemon.build_ssl_context(),
++        ):
++            pass
++
++    server.close()
++    await server.wait_closed()
++
++
++@pytest.mark.enable_socket
++@pytest.mark.asyncio
++async def test_daemon_server_revocation_4003_halts_with_exit_code_78(tmp_path: Path) -> None:
++    """Test server closing WebSocket with 4003 causes daemon to exit with code 78."""
++    runner_id = uuid.uuid4()
++    ca_file, server_crt, server_key, client_crt, client_key = _generate_test_pki(
++        tmp_path, runner_id
++    )
++
++    server_ssl = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
++    server_ssl.minimum_version = ssl.TLSVersion.TLSv1_3
++    server_ssl.verify_mode = ssl.CERT_REQUIRED
++    server_ssl.load_verify_locations(cafile=str(ca_file))
++    server_ssl.load_cert_chain(certfile=str(server_crt), keyfile=str(server_key))
++
++    async def revoking_handler(ws: Any) -> None:
++        # Handshake
++        raw_hello = await ws.recv()
++        HelloFrame.model_validate(json.loads(raw_hello))
++        ack = HelloAckFrame()
++        await ws.send(ack.model_dump_json(by_alias=True))
++        # Immediately revoke runner
++        await ws.close(code=CLOSE_CODE_REVOKED, reason="runner certificate revoked")
++
++    server = await websockets.serve(revoking_handler, "localhost", 0, ssl=server_ssl)
++    port = server.sockets[0].getsockname()[1]
++
++    cfg = RunnerConfig(
++        server_url=f"https://localhost:{port}",
++        pool_slug="pool-revoke",
++        client_cert_path=client_crt,
++        client_key_path=client_key,
++        ca_cert_path=ca_file,
++    )
++    daemon = RunnerDaemon(cfg)
++
++    with pytest.raises(RunnerRevokedError) as exc_info:
++        await daemon.run_forever()
++
++    assert exc_info.value.exit_code == EXIT_CODE_REVOKED
++
++    server.close()
++    await server.wait_closed()
++
++
++@pytest.mark.enable_socket
++@pytest.mark.asyncio
++async def test_daemon_job_cancel_under_250ms(tmp_path: Path) -> None:
++    """Test job cancellation within < 250ms upon receiving job.cancel frame."""
++    runner_id = uuid.uuid4()
++    ca_file, server_crt, server_key, client_crt, client_key = _generate_test_pki(
++        tmp_path, runner_id
++    )
++
++    server_ssl = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
++    server_ssl.minimum_version = ssl.TLSVersion.TLSv1_3
++    server_ssl.verify_mode = ssl.CERT_REQUIRED
++    server_ssl.load_verify_locations(cafile=str(ca_file))
++    server_ssl.load_cert_chain(certfile=str(server_crt), keyfile=str(server_key))
++
++    job_result_future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
++    cancel_duration_ms: float = 0.0
++
++    async def handler(ws: Any) -> None:
++        # Handshake
++        raw_hello = await ws.recv()
++        HelloFrame.model_validate(json.loads(raw_hello))
++        ack = HelloAckFrame()
++        await ws.send(ack.model_dump_json(by_alias=True))
++
++        # Send long-running job dispatch
++        ctx = {"execution_id": "0196ed40-7b2a-7000-8000-112233445566"}
++        dispatch = {
++            "type": "job.dispatch",
++            "job_id": "job-cancel-test",
++            "execution_id": "0196ed40-7b2a-7000-8000-112233445566",
++            "agent_spec": {"slug": "test-agent", "harness_kind": "in_app_sdk"},
++            "context_yaml_b64": base64.b64encode(yaml.safe_dump(ctx).encode("utf-8")).decode(
++                "ascii"
++            ),
++            "ephemeral_mcp_token": "secret-token",
++        }
++        await ws.send(json.dumps(dispatch))
++
++        # Wait briefly for job to start running, then send cancel
++        await asyncio.sleep(0.05)
++        nonlocal cancel_duration_ms
++        t_cancel_sent = time.perf_counter()
++        cancel_frame = JobCancelFrame(job_id="job-cancel-test", reason="user requested")
++        await ws.send(cancel_frame.model_dump_json())
++
++        # Receive result frame
++        raw_result = await ws.recv()
++        cancel_duration_ms = (time.perf_counter() - t_cancel_sent) * 1000.0
++        job_result_future.set_result(json.loads(raw_result))
++
++    server = await websockets.serve(handler, "localhost", 0, ssl=server_ssl)
++    port = server.sockets[0].getsockname()[1]
++
++    cfg = RunnerConfig(
++        server_url=f"https://localhost:{port}",
++        pool_slug="pool-cancel",
++        client_cert_path=client_crt,
++        client_key_path=client_key,
++        ca_cert_path=ca_file,
++    )
++
++    class LongRunningHarness:
++        async def run(self, ctx: Any, agent_def: Any) -> bytes:
++            await asyncio.sleep(10.0)
++            return b"ok"
++
++    executor = RunnerJobExecutor(
++        cfg,
++        in_app_harness_factory=LongRunningHarness,
++    )
++    daemon = RunnerDaemon(cfg, executor=executor)
++    daemon_task = asyncio.create_task(daemon.run_forever())
++
++    res = await asyncio.wait_for(job_result_future, timeout=2.0)
++    print(f"\n[Job Cancel] Duration: {cancel_duration_ms:.2f}ms (< 250ms requirement)")
++    assert res.get("status") == "error"
++    assert res.get("error_code") == "RUNNER_JOB_CANCELLED"
++    assert cancel_duration_ms < 250.0, f"Cancellation took {cancel_duration_ms:.2f}ms (>= 250ms)"
++
++    daemon.stop()
++    await daemon_task
++    server.close()
++    await server.wait_closed()
++
++
++@pytest.mark.asyncio
++async def test_daemon_transient_disconnect_and_backoff(tmp_path: Path) -> None:
++    """Test transient disconnect triggers full-jitter backoff and reconnection."""
++    runner_id = uuid.uuid4()
++    ca_file, server_crt, server_key, client_crt, client_key = _generate_test_pki(
++        tmp_path, runner_id
++    )
++
++    cfg = RunnerConfig(
++        server_url="https://localhost:9999",
++        pool_slug="pool-backoff",
++        client_cert_path=client_crt,
++        client_key_path=client_key,
++        ca_cert_path=ca_file,
++    )
++
++    backoff_sleeps: list[float] = []
++
++    async def mock_sleep(seconds: float) -> None:
++        backoff_sleeps.append(seconds)
++        daemon.stop()
++
++    attempts = 0
++
++    class MockConnectContext:
++        async def __aenter__(self) -> Any:
++            nonlocal attempts
++            attempts += 1
++            msg = "Connection refused in test"
++            raise OSError(msg)
++
++        async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
++            pass
++
++    def mock_connector(url: str, **kwargs: Any) -> Any:
++        return MockConnectContext()
++
++    daemon = RunnerDaemon(cfg, ws_connector=mock_connector, sleep_func=mock_sleep)
++    await daemon.run_forever()
++
++    assert len(backoff_sleeps) == 1
++    assert 1.0 <= backoff_sleeps[0] <= 60.0
++
++    # Test backoff bounds
++    for i in range(10):
++        val = daemon.compute_backoff(i)
++        assert 1.0 <= val <= 60.0
++
++
++def test_daemon_key_permissions_refusal(tmp_path: Path) -> None:
++    """Test RunnerDaemon boot failure when private key permissions are too open."""
++    runner_id = uuid.uuid4()
++    ca_file, _, _, client_crt, client_key = _generate_test_pki(tmp_path, runner_id)
++
++    # Set key to 0644 (too open)
++    client_key.chmod(0o644)
++
++    cfg = RunnerConfig(
++        server_url="https://localhost:8000",
++        pool_slug="pool-open-perms",
++        client_cert_path=client_crt,
++        client_key_path=client_key,
++        ca_cert_path=ca_file,
++    )
++
++    with pytest.raises(KeyPermissionsError):
++        RunnerDaemon(cfg)
++
++
++def test_daemon_ssl_context_variations(tmp_path: Path) -> None:
++    """Test build_ssl_context when CA or client cert paths are missing."""
++    key_file = tmp_path / "client.key"
++    key_file.write_text("key")
++    key_file.chmod(0o600)
++
++    cfg_no_ca = RunnerConfig(
++        server_url="https://localhost:8000",
++        pool_slug="pool-no-ca",
++        client_cert_path=tmp_path / "missing_client.crt",
++        client_key_path=key_file,
++        ca_cert_path=tmp_path / "missing_ca.crt",
++    )
++    daemon_no_ca = RunnerDaemon(cfg_no_ca)
++    ctx = daemon_no_ca.build_ssl_context()
++    assert ctx.minimum_version == ssl.TLSVersion.TLSv1_3
++
++
++@pytest.mark.enable_socket
++@pytest.mark.asyncio
++async def test_daemon_internal_branches(tmp_path: Path) -> None:
++    """Test bytes frame handling, tool event send failures, and active task cancellations."""
++    runner_id = uuid.uuid4()
++    ca_file, server_crt, server_key, client_crt, client_key = _generate_test_pki(
++        tmp_path, runner_id
++    )
++
++    server_ssl = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
++    server_ssl.minimum_version = ssl.TLSVersion.TLSv1_3
++    server_ssl.verify_mode = ssl.CERT_REQUIRED
++    server_ssl.load_verify_locations(cafile=str(ca_file))
++    server_ssl.load_cert_chain(certfile=str(server_crt), keyfile=str(server_key))
++
++    async def binary_frame_handler(ws: Any) -> None:
++        # Handshake sending ACK as binary bytes
++        await ws.recv()
++        ack = HelloAckFrame()
++        await ws.send(ack.model_dump_json(by_alias=True).encode("utf-8"))
++
++        # Send unknown frame type
++        await ws.send(json.dumps({"type": "unknown_ignore"}).encode("utf-8"))
++
++        # Send dispatch as binary bytes
++        ctx = {"execution_id": "0196ed40-7b2a-7000-8000-112233445566"}
++        dispatch = {
++            "type": "job.dispatch",
++            "job_id": "job-bin-1",
++            "execution_id": "0196ed40-7b2a-7000-8000-112233445566",
++            "agent_spec": {"slug": "test-agent", "harness_kind": "in_app_sdk"},
++            "context_yaml_b64": base64.b64encode(yaml.safe_dump(ctx).encode("utf-8")).decode(
++                "ascii"
++            ),
++            "ephemeral_mcp_token": "secret-token",
++        }
++        await ws.send(json.dumps(dispatch).encode("utf-8"))
++
++        # Receive result frame
++        await ws.recv()
++
++    server = await websockets.serve(binary_frame_handler, "localhost", 0, ssl=server_ssl)
++    port = server.sockets[0].getsockname()[1]
++
++    cfg = RunnerConfig(
++        server_url=f"https://localhost:{port}",
++        pool_slug="pool-branches",
++        client_cert_path=client_crt,
++        client_key_path=client_key,
++        ca_cert_path=ca_file,
++    )
++
++    class FastHarness:
++        async def run(self, ctx: Any, agent_def: Any) -> bytes:
++            return b"fast-ok"
++
++    executor = RunnerJobExecutor(cfg, in_app_harness_factory=FastHarness)
++    daemon = RunnerDaemon(cfg, executor=executor)
++    daemon_task = asyncio.create_task(daemon.run_forever())
++
++    # Wait for execution to finish
++    await asyncio.sleep(0.3)
++
++    # Test _send_tool_event with broken ws
++    from kanban.runners.hub import JobDispatchFrame, JobToolEventFrame
++
++    class FailingWs:
++        async def send(self, data: Any) -> None:
++            msg = "Network failure"
++            raise ConnectionResetError(msg)
++
++        async def close(self) -> None:
++            pass
++
++    daemon._ws = FailingWs()
++    await daemon._send_tool_event(
++        JobToolEventFrame(
++            job_id="job-1",
++            tool_name="tool",
++            duration_ms=10,
++            status="ok",
++        )
++    )
++
++    # Test _heartbeat_loop success and exception break
++    async def fast_sleep(_s: float) -> None:
++        await asyncio.sleep(0.001)
++
++    daemon.sleep_func = fast_sleep
++    hb_task = asyncio.create_task(daemon._heartbeat_loop(FailingWs()))
++    await hb_task
++
++    # Test _spawn_job result send failure
++    dispatch_fail = JobDispatchFrame(
++        job_id="job-send-fail",
++        execution_id="0196ed40-7b2a-7000-8000-112233445566",
++        agent_spec={"slug": "test-agent", "harness_kind": "in_app_sdk"},
++        context_yaml_b64=base64.b64encode(yaml.safe_dump({"test": "data"}).encode("utf-8")).decode(
++            "ascii"
++        ),
++        ephemeral_mcp_token="secret",
++    )
++    daemon._spawn_job(dispatch_fail)
++    await asyncio.sleep(0.1)
++
++    # Test stop() cancelling active uncompleted tasks
++    blocked_task = asyncio.create_task(asyncio.sleep(10.0))
++    daemon._running_tasks["blocked"] = blocked_task
++    daemon.stop()
++    with contextlib.suppress(asyncio.CancelledError):
++        await blocked_task
++    assert blocked_task.cancelled()
++
++    await daemon_task
++    server.close()
++    await server.wait_closed()
+diff --git a/agent/tests/remote_runner/test_executor.py b/agent/tests/remote_runner/test_executor.py
+new file mode 100644
+index 0000000..5e2c9c6
+--- /dev/null
++++ b/agent/tests/remote_runner/test_executor.py
+@@ -0,0 +1,257 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for RunnerJobExecutor: :ro mounts, CLI defense-in-depth, token hygiene (KB-P5-22b)."""
++
++from __future__ import annotations
++
++import base64
++import os
++from pathlib import Path  # noqa: TC003
++
++import pytest  # noqa: TC002
++import yaml
++
++from agent.remote_runner.config import RunnerConfig
++from agent.remote_runner.executor import (
++    CODE_BANNED_CLI_FLAG,
++    CODE_MOUNT_NOT_READONLY,
++    CODE_REPO_NOT_MOUNTED,
++    RunnerJobExecutor,
++)
++from kanban.runners.hub import JobDispatchFrame, JobToolEventFrame
++
++
++def _sample_config(tmp_path: Path, mounts: dict[str, Path] | None = None) -> RunnerConfig:
++    key_file = tmp_path / "client.key"
++    key_file.write_text("key")
++    key_file.chmod(0o600)
++
++    return RunnerConfig(
++        server_url="https://kanban.internal",
++        pool_slug="test-pool",
++        client_cert_path=tmp_path / "client.crt",
++        client_key_path=key_file,
++        ca_cert_path=tmp_path / "ca.crt",
++        repo_mounts=mounts or {},
++    )
++
++
++def _make_dispatch(  # noqa: PLR0913, PLR0917
++    job_id: str = "job-1",
++    harness_kind: str = "in_app_sdk",
++    repo_access_mode: str = "none",
++    repo_slug: str | None = None,
++    cli_args: list[str] | None = None,
++    ephemeral_token: str = "kb_agt_eph_secret_token_12345",  # noqa: S107
++) -> JobDispatchFrame:
++    agent_spec: dict[str, object] = {
++        "slug": "test-agent",
++        "harness_kind": harness_kind,
++        "repo_access_mode": repo_access_mode,
++    }
++    if repo_slug:
++        agent_spec["repo_slug"] = repo_slug
++    if cli_args is not None:
++        agent_spec["cli_binary_allowlist_id"] = "agy"
++        agent_spec["cli_args_json"] = cli_args
++
++    ctx_dict = {
++        "execution_id": "0196ed40-7b2a-7000-8000-112233445566",
++        "verdict_nonce": "00112233445566778899aabbccddeeff",
++        "ticket_snapshot": {
++            "delimiter": "<<<UNTRUSTED_DELIM>>>",
++            "summary": "Sample ticket",
++        },
++        "mcp_access": {
++            "agent_url": "https://kanban.internal/mcp/agent",
++            "docs_url": "https://kanban.internal/mcp/docs",
++        },
++    }
++    ctx_yaml = yaml.safe_dump(ctx_dict).encode("utf-8")
++    b64_ctx = base64.b64encode(ctx_yaml).decode("ascii")
++
++    return JobDispatchFrame(
++        job_id=job_id,
++        execution_id="0196ed40-7b2a-7000-8000-112233445566",
++        agent_spec=agent_spec,
++        context_yaml_b64=b64_ctx,
++        ephemeral_mcp_token=ephemeral_token,
++    )
++
++
++async def test_executor_banned_cli_flag_defense_in_depth(tmp_path: Path) -> None:
++    """Test server-frame defense: banned CLI flag is blocked with RUNNER_BANNED_CLI_FLAG."""
++    cfg = _sample_config(tmp_path)
++    executor = RunnerJobExecutor(cfg)
++
++    # 1. Banned flag --yolo
++    dispatch_yolo = _make_dispatch(
++        harness_kind="cli_pipe",
++        cli_args=["-p", "--yolo"],
++    )
++    res_yolo = await executor.execute_job(dispatch_yolo)
++    assert res_yolo.status == "error"
++    assert res_yolo.error_code == CODE_BANNED_CLI_FLAG
++
++    # 2. Banned flag --dangerously-skip-permissions
++    dispatch_danger = _make_dispatch(
++        harness_kind="cli_pipe",
++        cli_args=["-p", "--dangerously-skip-permissions"],
++    )
++    res_danger = await executor.execute_job(dispatch_danger)
++    assert res_danger.status == "error"
++    assert res_danger.error_code == CODE_BANNED_CLI_FLAG
++
++
++async def test_executor_repo_mount_verification(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Test repo mount checks: unmapped slug, symlink traversal, and writable mount refusal."""
++    mount_root = tmp_path / "repos"
++    mount_root.mkdir()
++
++    repo_dir = mount_root / "my-repo"
++    repo_dir.mkdir()
++
++    cfg = _sample_config(tmp_path, mounts={"my-repo": repo_dir})
++    executor = RunnerJobExecutor(cfg)
++
++    # 1. Unmapped slug
++    dispatch_unmapped = _make_dispatch(
++        repo_access_mode="ro_vfs_mount",
++        repo_slug="unmapped-slug",
++    )
++    res_unmapped = await executor.execute_job(dispatch_unmapped)
++    assert res_unmapped.status == "error"
++    assert res_unmapped.error_code == CODE_REPO_NOT_MOUNTED
++
++    # 2. Writable mount refusal for ro_vfs_mount
++    class FakeStatVFS:
++        f_flag = 0  # ST_RDONLY is unset -> writable!
++
++    monkeypatch.setattr(os, "statvfs", lambda _path: FakeStatVFS())
++
++    dispatch_writable = _make_dispatch(
++        repo_access_mode="ro_vfs_mount",
++        repo_slug="my-repo",
++    )
++    res_writable = await executor.execute_job(dispatch_writable)
++    assert res_writable.status == "error"
++    assert res_writable.error_code == CODE_MOUNT_NOT_READONLY
++
++    # 3. statvfs raises OSError
++    def failing_statvfs(_path: str) -> None:
++        msg = "VFS error"
++        raise OSError(msg)
++
++    monkeypatch.setattr(os, "statvfs", failing_statvfs)
++    res_stat_err = await executor.execute_job(dispatch_writable)
++    assert res_stat_err.status == "error"
++    assert res_stat_err.error_code == CODE_MOUNT_NOT_READONLY
++
++    # 4. Unresolvable configured path (nonexistent)
++    cfg_nonexistent = _sample_config(tmp_path, mounts={"my-repo": mount_root / "does-not-exist"})
++    executor_nonexistent = RunnerJobExecutor(cfg_nonexistent)
++    res_missing_path = await executor_nonexistent.execute_job(dispatch_writable)
++    assert res_missing_path.status == "error"
++    assert res_missing_path.error_code == CODE_REPO_NOT_MOUNTED
++
++    # 5. Symlink traversal escape outside mount root
++    outside_dir = tmp_path / "outside"
++    outside_dir.mkdir()
++    symlink_repo = mount_root / "escaping-symlink"
++    symlink_repo.symlink_to(outside_dir)
++    cfg_escape = _sample_config(tmp_path, mounts={"my-repo": symlink_repo})
++    executor_escape = RunnerJobExecutor(cfg_escape)
++    res_escape = await executor_escape.execute_job(dispatch_writable)
++    assert res_escape.status == "error"
++    assert res_escape.error_code == CODE_REPO_NOT_MOUNTED
++
++    # 6. Read-only mount success
++    class FakeStatVFSRo:
++        f_flag = os.ST_RDONLY
++
++    monkeypatch.setattr(os, "statvfs", lambda _path: FakeStatVFSRo())
++
++    class MockHarness:
++        async def run(self, *_args: object, **_kwargs: object) -> bytes:
++            return b'{"schema":"kb-transition-verdict/v1","decision":"approve"}'
++
++    executor_ro = RunnerJobExecutor(cfg, in_app_harness_factory=MockHarness)
++    res_ro = await executor_ro.execute_job(dispatch_writable)
++    assert res_ro.status == "ok"
++    assert res_ro.stdout_b64 is not None
++
++
++async def test_executor_tool_event_streaming_and_token_zeroization(tmp_path: Path) -> None:
++    """Test tool events are streamed to callback and ephemeral token is wiped in finally."""
++    cfg = _sample_config(tmp_path)
++
++    class MockTrace:
++        tool_name = "repo_grep"
++        duration_ms = 42.5
++        status = "ok"
++
++    class MockInAppHarness:
++        def __init__(self) -> None:
++            self.last_tool_traces = [MockTrace()]
++
++        async def run(self, ctx: object, _agent_spec: object) -> bytes:
++            # Check ephemeral token is readable during execution
++            assert getattr(ctx, "ephemeral_token", None) == bytearray(b"kb_agt_eph_live_token")
++            return b'{"decision":"approve"}'
++
++    executor = RunnerJobExecutor(cfg, in_app_harness_factory=MockInAppHarness)
++
++    events: list[JobToolEventFrame] = []
++
++    async def on_event(ev: JobToolEventFrame) -> None:
++        events.append(ev)
++
++    dispatch = _make_dispatch(
++        job_id="job-event-1",
++        harness_kind="in_app_sdk",
++        ephemeral_token="kb_agt_eph_live_token",  # noqa: S106
++    )
++    res = await executor.execute_job(dispatch, on_tool_event=on_event)
++    assert res.status == "ok"
++    assert len(events) == 1
++    assert events[0].tool_name == "repo_grep"
++    assert events[0].duration_ms == 42
++
++
++async def test_executor_cli_pipe_invocation(tmp_path: Path) -> None:
++    """Test executor successfully dispatches to CliPipeHarness."""
++    cfg = _sample_config(tmp_path)
++
++    class MockCliPipeHarness:
++        async def run(self, _ctx: object, _agent_spec: object, **_kwargs: object) -> bytes:
++            return b'{"schema":"kb-transition-verdict/v1","decision":"approve"}'
++
++    executor = RunnerJobExecutor(cfg, cli_pipe_harness_factory=MockCliPipeHarness)
++
++    dispatch = _make_dispatch(
++        job_id="job-cli-1",
++        harness_kind="cli_pipe",
++        cli_args=["-p"],
++    )
++    res = await executor.execute_job(dispatch)
++    assert res.status == "ok"
++    decoded = base64.b64decode(res.stdout_b64 or "").decode("utf-8")
++    assert "kb-transition-verdict/v1" in decoded
++
++
++async def test_executor_execution_failure_error_code(tmp_path: Path) -> None:
++    """Test unexpected harness execution exception yields CODE_EXECUTION_FAILED."""
++    cfg = _sample_config(tmp_path)
++
++    class FailingHarness:
++        async def run(self, *_args: object, **_kwargs: object) -> bytes:
++            msg = "Harness crash"
++            raise RuntimeError(msg)
++
++    executor = RunnerJobExecutor(cfg, in_app_harness_factory=FailingHarness)
++    dispatch = _make_dispatch(job_id="job-fail-1")
++    res = await executor.execute_job(dispatch)
++    assert res.status == "error"
++    assert res.error_code == "RUNNER_EXECUTION_FAILED"

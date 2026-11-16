@@ -51,9 +51,16 @@ class McpIntrospectResponse(BaseModel):
     reason: str | None = None
     allowed_projects: list[uuid.UUID] | None = None
     allowed_tools: list[str] | None = None
+    disabled_tools: list[str] | None = None
     calls_used: int | None = None
     max_calls: int | None = None
     expires_at: str | None = None
+    owner_kind: str | None = None
+    scope_tier: str | None = None
+    allowed_workspace_ids: list[uuid.UUID] | None = None
+    allowed_project_ids: list[uuid.UUID] | None = None
+    capability_mask: int | None = None
+    allowed_cidrs: list[str] | None = None
 
 
 def verify_internal_auth(request: Request) -> None:
@@ -138,7 +145,14 @@ async def introspect_token(
         reason=result.reason,
         allowed_projects=result.allowed_projects,
         allowed_tools=result.allowed_tools,
+        disabled_tools=result.disabled_tools,
         calls_used=result.calls_used,
         max_calls=result.max_calls,
         expires_at=expires_str,
+        owner_kind=result.owner_kind,
+        scope_tier=result.scope_tier,
+        allowed_workspace_ids=result.allowed_workspace_ids,
+        allowed_project_ids=result.allowed_project_ids,
+        capability_mask=result.capability_mask,
+        allowed_cidrs=result.allowed_cidrs,
     )

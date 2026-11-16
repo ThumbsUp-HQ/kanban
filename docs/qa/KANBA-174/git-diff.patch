@@ -1,0 +1,2189 @@
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index 6751d23..415a55e 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -116,6 +116,7 @@ export function AppShell({
+           issueCount={issueCount}
+           accessManifest={accessManifest}
+           systemStatus={systemStatus}
++          showLayoutSwitcher={false}
+         />
+ 
+         {/* Main Canvas Region */}
+diff --git a/kanban/web/src/app/Sidebar.css b/kanban/web/src/app/Sidebar.css
+index 1ddb294..bf9f230 100644
+--- a/kanban/web/src/app/Sidebar.css
++++ b/kanban/web/src/app/Sidebar.css
+@@ -1,6 +1,6 @@
+ .kb-sidebar {
+-  width: var(--sidebar-w, 256px);
+-  min-width: var(--sidebar-w, 256px);
++  width: var(--sidebar-w, 200px);
++  min-width: var(--sidebar-w, 200px);
+   height: 100vh;
+   background: var(--bg-surface, #1e2025);
+   border-right: 1px solid var(--border-subtle, #333842);
+@@ -37,6 +37,11 @@
+   margin-bottom: var(--space-6, 24px);
+ }
+ 
++.kb-workspace-switcher-wrapper {
++  position: relative;
++  width: 100%;
++}
++
+ .kb-workspace-switcher {
+   display: flex;
+   align-items: center;
+@@ -58,6 +63,93 @@
+   border-color: var(--border-subtle, #333842);
+ }
+ 
++.kb-workspace-dropdown {
++  position: absolute;
++  top: calc(100% + 4px);
++  left: 0;
++  width: 100%;
++  background: var(--bg-surface-raised, #24272f);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: var(--radius-md, 6px);
++  box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.5));
++  padding: 4px;
++  z-index: 100;
++  box-sizing: border-box;
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.kb-workspace-dropdown-item {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  width: 100%;
++  padding: 8px 10px;
++  border-radius: 4px;
++  border: none;
++  background: transparent;
++  color: var(--fg-secondary, #cbd5e1);
++  font-size: 13px;
++  font-weight: 500;
++  cursor: pointer;
++  text-align: left;
++  box-sizing: border-box;
++}
++
++.kb-workspace-dropdown-item:hover {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
++}
++
++.kb-workspace-dropdown-item-active {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
++  font-weight: 600;
++}
++
++.kb-workspace-dropdown-name {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.kb-workspace-dropdown-check {
++  color: var(--color-brand-primary, #3b82f6);
++  font-size: 12px;
++}
++
++.kb-workspace-dropdown-divider {
++  height: 1px;
++  background: var(--border-subtle, #333842);
++  margin: 4px 0;
++  border: none;
++}
++
++.kb-workspace-dropdown-create-btn {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  width: 100%;
++  padding: 8px 10px;
++  border-radius: 4px;
++  border: none;
++  background: transparent;
++  color: var(--color-brand-primary, #3b82f6);
++  font-size: 12px;
++  font-weight: 600;
++  cursor: pointer;
++  text-align: left;
++  box-sizing: border-box;
++}
++
++.kb-workspace-dropdown-create-btn:hover {
++  background: var(--bg-hover, #2c313a);
++}
++
+ .kb-workspace-brand {
+   display: flex;
+   align-items: center;
+@@ -217,6 +309,29 @@
+   gap: 2px;
+ }
+ 
++.kb-project-views-list {
++  list-style: none;
++  margin: 4px 0 6px 12px;
++  padding: 0 0 0 8px;
++  border-left: 1px solid var(--border-subtle, #333842);
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.kb-sidebar-subnav-item {
++  font-size: 12px !important;
++  min-height: 28px !important;
++  padding: 4px 8px !important;
++  color: var(--fg-secondary, #cbd5e1);
++}
++
++.kb-sidebar-subnav-item.kb-subnav-active {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
++  font-weight: 600;
++}
++
+ .kb-sidebar-footer {
+   margin-top: auto;
+   padding-top: var(--space-4, 16px);
+diff --git a/kanban/web/src/app/Sidebar.test.tsx b/kanban/web/src/app/Sidebar.test.tsx
+index ea2b033..aa84da6 100644
+--- a/kanban/web/src/app/Sidebar.test.tsx
++++ b/kanban/web/src/app/Sidebar.test.tsx
+@@ -295,4 +295,119 @@ describe('Sidebar', () => {
+       window.dispatchEvent(new CustomEvent('kb:project-created'));
+     });
+   });
++
++  it('fetches workspaces, toggles dropdown menu, switches workspace, and opens CreateWorkspaceModal', async () => {
++    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/workspaces') && init?.method === 'POST') {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({ status: 'switched', workspace_id: 'ws-2' }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      if (url.includes('/api/v1/workspaces')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify([
++              { id: 'ws-1', name: 'Primary Engineering WS', slug: 'eng', is_current: true },
++              { id: 'ws-2', name: 'Design Systems WS', slug: 'design', is_current: false },
++            ]),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      return Promise.resolve(new Response('[]', { status: 200 }));
++    });
++
++    render(
++      <MemoryRouter initialEntries={['/']}>
++        <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
++      </MemoryRouter>,
++    );
++
++    // Initial load updates workspace brand name
++    expect(await screen.findByText('Primary Engineering WS')).toBeDefined();
++
++    const switcherBtn = screen.getByRole('button', { name: /Workspace switcher:/ });
++    expect(switcherBtn.getAttribute('aria-expanded')).toBe('false');
++
++    // Click to open dropdown
++    act(() => {
++      fireEvent.click(switcherBtn);
++    });
++    expect(switcherBtn.getAttribute('aria-expanded')).toBe('true');
++    expect(screen.getByRole('menu')).toBeDefined();
++    expect(screen.getByText('Design Systems WS')).toBeDefined();
++
++    // Click "+ Create New Workspace" in dropdown
++    const createWsBtn = screen.getByRole('menuitem', { name: /Create New Workspace/ });
++    act(() => {
++      fireEvent.click(createWsBtn);
++    });
++
++    // Dropdown closes and CreateWorkspaceModal opens
++    expect(screen.queryByRole('menu')).toBeNull();
++    expect(screen.getByRole('dialog', { name: 'Create New Workspace' })).toBeDefined();
++
++    // Close modal
++    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
++    act(() => {
++      fireEvent.click(cancelBtn);
++    });
++    expect(screen.queryByRole('dialog', { name: 'Create New Workspace' })).toBeNull();
++
++    // Open dropdown again and click workspace to switch
++    act(() => {
++      fireEvent.click(switcherBtn);
++    });
++    const targetWsBtn = screen.getByRole('menuitem', { name: /Design Systems WS/ });
++    act(() => {
++      fireEvent.click(targetWsBtn);
++    });
++  });
++
++  it('renders project layout view links (List, Board, Table, Calendar, Timeline) with SVG icons (KANBA-174)', () => {
++    render(
++      <MemoryRouter initialEntries={['/projects/KAN/issues?layout=list']}>
++        <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
++      </MemoryRouter>,
++    );
++
++    expect(screen.getByRole('link', { name: /List view/i })).toBeDefined();
++    expect(screen.getByRole('link', { name: /Board view/i })).toBeDefined();
++    expect(screen.getByRole('link', { name: /Table view/i })).toBeDefined();
++    expect(screen.getByRole('link', { name: /Calendar view/i })).toBeDefined();
++    expect(screen.getByRole('link', { name: /Timeline view/i })).toBeDefined();
++
++    const listViewLink = screen.getByRole('link', { name: /List view/i });
++    expect(listViewLink.getAttribute('href')).toBe('/projects/KAN/issues?layout=list');
++  });
++
++  it('toggles sidebar via kb:toggle-sidebar custom event and Hide Nav button (KANBA-174)', () => {
++    const onToggle = vi.fn();
++    render(
++      <MemoryRouter>
++        <Sidebar onToggleCollapse={onToggle} />
++      </MemoryRouter>,
++    );
++
++    const hideNavBtn = screen.getByRole('button', { name: /Collapse sidebar \(Hide Nav\)/i });
++    expect(hideNavBtn).toBeDefined();
++
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:toggle-sidebar'));
++    });
++
++    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('collapsed');
++    expect(onToggle).toHaveBeenCalledTimes(1);
++
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:toggle-sidebar'));
++    });
++
++    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('open');
++    expect(onToggle).toHaveBeenCalledTimes(2);
++  });
+ });
+diff --git a/kanban/web/src/app/Sidebar.tsx b/kanban/web/src/app/Sidebar.tsx
+index 612e5ba..0b695cc 100644
+--- a/kanban/web/src/app/Sidebar.tsx
++++ b/kanban/web/src/app/Sidebar.tsx
+@@ -16,8 +16,26 @@ import React, {
+ import { NavLink, useLocation, useNavigate } from 'react-router';
+ import { registerShortcut } from './shortcuts';
+ import { CreateProjectModal } from '../features/projects/CreateProjectModal';
++import { CreateWorkspaceModal, type CreatedWorkspace } from '../features/workspaces/CreateWorkspaceModal';
++import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
++import {
++  ListTodo,
++  Kanban,
++  Table2,
++  CalendarDays,
++  GanttChart,
++  PanelLeftClose,
++} from '../components/icons/KanbanIcons';
+ import './Sidebar.css';
+ 
++export interface WorkspaceNavData {
++  id: string;
++  name: string;
++  slug: string;
++  is_current?: boolean;
++  role?: string | null;
++}
++
+ export interface ProjectNavData {
+   key: string;
+   name: string;
+@@ -55,13 +73,25 @@ export function Sidebar({
+   triggerButtonRef,
+ }: SidebarProps): JSX.Element {
+   let locationPathname = '';
++  let locationSearch = '';
+   try {
+     const loc = useLocation();
+     locationPathname = loc.pathname;
++    locationSearch = loc.search;
+   } catch {
+     // Outside Router
+   }
+ 
++  const currentLayout = useMemo(() => {
++    try {
++      const search = locationSearch || (typeof window !== 'undefined' ? window.location.search : '');
++      const params = new URLSearchParams(search);
++      return params.get('layout') ?? 'list';
++    } catch {
++      return 'list';
++    }
++  }, [locationSearch]);
++
+   let navigateFn: ((to: string) => void) | null = null;
+   try {
+     const nav = useNavigate();
+@@ -87,9 +117,113 @@ export function Sidebar({
+   const [projectExpanded, setProjectExpanded] = useState(true);
+   const [fetchedProjects, setFetchedProjects] = useState<ProjectNavData[]>([]);
+   const [createProjectOpen, setCreateProjectOpen] = useState(false);
++  const [workspaces, setWorkspaces] = useState<WorkspaceNavData[]>([]);
++  const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
++  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
+ 
+   const sidebarRef = useRef<HTMLElement>(null);
+   const firstItemRef = useRef<HTMLButtonElement>(null);
++  const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
++
++  useEffect(() => {
++    let active = true;
++
++    async function loadWorkspaces(): Promise<void> {
++      try {
++        const res = await fetch('/api/v1/workspaces', {
++          method: 'GET',
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++        });
++        if (res.ok && active) {
++          const data = (await res.json()) as WorkspaceNavData[];
++          if (Array.isArray(data)) {
++            setWorkspaces(data);
++          }
++        }
++      } catch {
++        // Offline / unit test fallback
++      }
++    }
++
++    void loadWorkspaces();
++    return () => {
++      active = false;
++    };
++  }, []);
++
++  useEffect(() => {
++    if (!workspaceDropdownOpen) return;
++    const handleOutsideClick = (e: MouseEvent): void => {
++      if (
++        workspaceSwitcherRef.current &&
++        !workspaceSwitcherRef.current.contains(e.target as Node)
++      ) {
++        setWorkspaceDropdownOpen(false);
++      }
++    };
++    const handleKeyDown = (e: globalThis.KeyboardEvent): void => {
++      if (e.key === 'Escape') {
++        setWorkspaceDropdownOpen(false);
++      }
++    };
++    document.addEventListener('mousedown', handleOutsideClick);
++    window.addEventListener('keydown', handleKeyDown);
++    return () => {
++      document.removeEventListener('mousedown', handleOutsideClick);
++      window.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [workspaceDropdownOpen]);
++
++  const handleSwitchWorkspace = async (targetId: string): Promise<void> => {
++    setWorkspaceDropdownOpen(false);
++    try {
++      const csrfToken = await ensureSessionCsrfToken();
++      const headers: Record<string, string> = {
++        Accept: 'application/json',
++      };
++      if (csrfToken) {
++        headers['X-CSRF-Token'] = csrfToken;
++      }
++      const res = await fetch(`/api/v1/workspaces/${targetId}/switch`, {
++        method: 'POST',
++        headers,
++        credentials: 'same-origin',
++      });
++      if (res.ok) {
++        if (navigateFn) {
++          navigateFn('/');
++        } else if (typeof window !== 'undefined') {
++          window.location.assign('/');
++        }
++      }
++    } catch {
++      // Ignore
++    }
++  };
++
++  const handleWorkspaceCreated = (created: CreatedWorkspace): void => {
++    setWorkspaces((prev) => [
++      ...prev,
++      {
++        id: created.id,
++        name: created.name,
++        slug: created.slug,
++        is_current: false,
++      },
++    ]);
++    void handleSwitchWorkspace(created.id);
++  };
++
++  const currentWorkspace = useMemo(() => {
++    return (
++      workspaces.find((w) => w.is_current) ?? {
++        id: '',
++        name: '👍kanban',
++        slug: 'kanban',
++      }
++    );
++  }, [workspaces]);
+ 
+   useEffect(() => {
+     let active = true;
+@@ -188,6 +322,13 @@ export function Sidebar({
+       const next = prev === 'open' ? 'collapsed' : 'open';
+       try {
+         localStorage.setItem(SIDEBAR_STORAGE_KEY, next);
++        if (typeof window !== 'undefined') {
++          window.dispatchEvent(
++            new CustomEvent('kb:sidebar-changed', {
++              detail: { collapsed: next },
++            }),
++          );
++        }
+       } catch {
+         // Ignore storage errors
+       }
+@@ -196,6 +337,17 @@ export function Sidebar({
+     onToggleCollapse?.();
+   }, [onToggleCollapse]);
+ 
++  // Listen for external toggle events (e.g. from IssueSurface header Hide Nav / Show Nav)
++  useEffect(() => {
++    const handleExternalToggle = (): void => {
++      toggleCollapsed();
++    };
++    window.addEventListener('kb:toggle-sidebar', handleExternalToggle);
++    return () => {
++      window.removeEventListener('kb:toggle-sidebar', handleExternalToggle);
++    };
++  }, [toggleCollapsed]);
++
+   // Register '[' shortcut to toggle sidebar collapse
+   useEffect(() => {
+     const unregister = registerShortcut('[', () => {
+@@ -286,20 +438,62 @@ export function Sidebar({
+         }`}
+         onKeyDown={handleMobileKeyDown}
+       >
+-        {/* Workspace Brand & New Item Button */}
++        {/* Workspace Brand & Switcher & New Item Button */}
+         <div className="kb-sidebar-header">
+-          <button
+-            ref={firstItemRef}
+-            type="button"
+-            className="kb-workspace-switcher"
+-            aria-label="Workspace switcher: [👍] 👍kanban"
+-          >
+-            <span className="kb-workspace-brand">
+-              <span aria-hidden="true">[👍]</span>
+-              <span>👍kanban</span>
+-            </span>
+-            <span aria-hidden="true">▾</span>
+-          </button>
++          <div className="kb-workspace-switcher-wrapper" ref={workspaceSwitcherRef}>
++            <button
++              ref={firstItemRef}
++              type="button"
++              className="kb-workspace-switcher"
++              aria-label={`Workspace switcher: [👍] ${currentWorkspace.name}`}
++              aria-expanded={workspaceDropdownOpen}
++              aria-haspopup="true"
++              onClick={() => {
++                setWorkspaceDropdownOpen((prev) => !prev);
++              }}
++            >
++              <span className="kb-workspace-brand">
++                <span aria-hidden="true">[👍]</span>
++                <span>{currentWorkspace.name}</span>
++              </span>
++              <span aria-hidden="true">▾</span>
++            </button>
++
++            {workspaceDropdownOpen && (
++              <div className="kb-workspace-dropdown" role="menu">
++                {workspaces.map((ws) => (
++                  <button
++                    key={ws.id}
++                    type="button"
++                    role="menuitem"
++                    className={`kb-workspace-dropdown-item ${
++                      ws.is_current ? 'kb-workspace-dropdown-item-active' : ''
++                    }`}
++                    onClick={() => void handleSwitchWorkspace(ws.id)}
++                  >
++                    <span className="kb-workspace-dropdown-name">
++                      <span aria-hidden="true">[👍]</span>
++                      <span>{ws.name}</span>
++                    </span>
++                    {ws.is_current && <span className="kb-workspace-dropdown-check">✓</span>}
++                  </button>
++                ))}
++                {workspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
++                <button
++                  type="button"
++                  role="menuitem"
++                  className="kb-workspace-dropdown-create-btn"
++                  onClick={() => {
++                    setWorkspaceDropdownOpen(false);
++                    setCreateWorkspaceOpen(true);
++                  }}
++                >
++                  <span aria-hidden="true">+</span>
++                  <span>Create New Workspace</span>
++                </button>
++              </div>
++            )}
++          </div>
+ 
+           <button
+             type="button"
+@@ -424,6 +618,95 @@ export function Sidebar({
+                           </span>
+                           <span>Work Items</span>
+                         </NavLink>
++
++                        {/* Project Layout Views (KANBA-174) */}
++                        <ul className="kb-project-views-list" aria-label="Project views">
++                          <li>
++                            <NavLink
++                              to={`/projects/${proj.key}/issues?layout=list`}
++                              className={`kb-sidebar-nav-item kb-sidebar-subnav-item ${
++                                currentPath.startsWith(`/projects/${proj.key}/issues`) &&
++                                currentLayout === 'list'
++                                  ? 'kb-subnav-active'
++                                  : ''
++                              }`}
++                              aria-label="List view"
++                            >
++                              <span className="kb-sidebar-icon" aria-hidden="true">
++                                <ListTodo size={14} />
++                              </span>
++                              <span>📋 List</span>
++                            </NavLink>
++                          </li>
++                          <li>
++                            <NavLink
++                              to={`/projects/${proj.key}/issues?layout=board`}
++                              className={`kb-sidebar-nav-item kb-sidebar-subnav-item ${
++                                currentPath.startsWith(`/projects/${proj.key}/issues`) &&
++                                currentLayout === 'board'
++                                  ? 'kb-subnav-active'
++                                  : ''
++                              }`}
++                              aria-label="Board view"
++                            >
++                              <span className="kb-sidebar-icon" aria-hidden="true">
++                                <Kanban size={14} />
++                              </span>
++                              <span>📊 Board</span>
++                            </NavLink>
++                          </li>
++                          <li>
++                            <NavLink
++                              to={`/projects/${proj.key}/issues?layout=table`}
++                              className={`kb-sidebar-nav-item kb-sidebar-subnav-item ${
++                                currentPath.startsWith(`/projects/${proj.key}/issues`) &&
++                                currentLayout === 'table'
++                                  ? 'kb-subnav-active'
++                                  : ''
++                              }`}
++                              aria-label="Table view"
++                            >
++                              <span className="kb-sidebar-icon" aria-hidden="true">
++                                <Table2 size={14} />
++                              </span>
++                              <span>📑 Table</span>
++                            </NavLink>
++                          </li>
++                          <li>
++                            <NavLink
++                              to={`/projects/${proj.key}/issues?layout=calendar`}
++                              className={`kb-sidebar-nav-item kb-sidebar-subnav-item ${
++                                currentPath.startsWith(`/projects/${proj.key}/issues`) &&
++                                currentLayout === 'calendar'
++                                  ? 'kb-subnav-active'
++                                  : ''
++                              }`}
++                              aria-label="Calendar view"
++                            >
++                              <span className="kb-sidebar-icon" aria-hidden="true">
++                                <CalendarDays size={14} />
++                              </span>
++                              <span>📅 Calendar</span>
++                            </NavLink>
++                          </li>
++                          <li>
++                            <NavLink
++                              to={`/projects/${proj.key}/issues?layout=timeline`}
++                              className={`kb-sidebar-nav-item kb-sidebar-subnav-item ${
++                                currentPath.startsWith(`/projects/${proj.key}/issues`) &&
++                                currentLayout === 'timeline'
++                                  ? 'kb-subnav-active'
++                                  : ''
++                              }`}
++                              aria-label="Timeline view"
++                            >
++                              <span className="kb-sidebar-icon" aria-hidden="true">
++                                <GanttChart size={14} />
++                              </span>
++                              <span>📈 Timeline</span>
++                            </NavLink>
++                          </li>
++                        </ul>
+                       </li>
+                       <li>
+                         <NavLink
+@@ -525,11 +808,13 @@ export function Sidebar({
+           <button
+             type="button"
+             className="kb-sidebar-collapse-btn"
+-            aria-label="Collapse sidebar"
++            aria-label="Collapse sidebar (Hide Nav)"
+             onClick={toggleCollapsed}
+           >
+-            <span aria-hidden="true">◀</span>
+-            <span>Collapse</span>
++            <span aria-hidden="true">
++              <PanelLeftClose size={14} />
++            </span>
++            <span>Hide Nav</span>
+             <kbd className="kb-sidebar-collapse-kbd">[</kbd>
+           </button>
+         </div>
+@@ -555,6 +840,14 @@ export function Sidebar({
+           });
+         }}
+       />
++
++      <CreateWorkspaceModal
++        isOpen={createWorkspaceOpen}
++        onClose={() => {
++          setCreateWorkspaceOpen(false);
++        }}
++        onCreated={handleWorkspaceCreated}
++      />
+     </>
+   );
+ }
+diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
+index 7e87e5c..82066d3 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.css
++++ b/kanban/web/src/features/drawer/IssueSurface.css
+@@ -255,3 +255,134 @@
+     border-top: 1px solid var(--border-subtle);
+   }
+ }
++
++/* ==========================================================================
++   3-Pane Split View Docked Surface (KANBA-174)
++   ========================================================================== */
++
++.surface--split {
++  flex: 1 1 50%;
++  width: 50%;
++  min-width: 320px;
++  height: 100%;
++  background: var(--bg-surface, #1e2025);
++  border-left: 1px solid var(--border-subtle, #333842);
++  container-type: inline-size;
++  container-name: issue-surface;
++  display: flex;
++  flex-direction: column;
++  box-sizing: border-box;
++  overflow: hidden;
++  outline: none;
++}
++
++.surface--split .surface__body {
++  grid-template-columns: minmax(0, 1fr) 280px;
++  overflow-y: auto;
++  flex: 1 1 auto;
++}
++
++.surface--split .surface__prose {
++  padding: var(--space-4, 16px) var(--space-5, 20px);
++  min-width: 0;
++  overflow-wrap: break-word;
++  word-break: normal;
++}
++
++@container issue-surface (max-width: 600px) {
++  .surface--split .surface__body {
++    grid-template-columns: 1fr;
++  }
++  .surface--split .surface__rail {
++    border-left: none;
++    border-top: 1px solid var(--border-subtle, #333842);
++    padding: var(--space-4, 16px);
++  }
++}
++
++@media (max-width: 1024px) {
++  .surface--split .surface__body {
++    grid-template-columns: 1fr;
++  }
++  .surface--split .surface__rail {
++    border-left: none;
++    border-top: 1px solid var(--border-subtle, #333842);
++    padding: var(--space-4, 16px);
++  }
++}
++
++@media (max-width: 768px) {
++  .surface--split {
++    flex: 1 0 auto;
++    width: 100%;
++    min-width: 0;
++    height: auto;
++    min-height: 480px;
++    border-left: none;
++    border-top: 1px solid var(--border-subtle, #333842);
++  }
++}
++
++.surface__header--split {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3, 12px);
++  padding: 8px 16px;
++  background: var(--bg-surface-raised, #24272f);
++  border-bottom: 1px solid var(--border-subtle, #333842);
++  box-sizing: border-box;
++  flex-shrink: 0;
++}
++
++.issue-header__nav-toggle {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  padding: 4px 10px;
++  border-radius: var(--radius-sm, 4px);
++  background: var(--bg-surface, #1e2025);
++  border: 1px solid var(--border-subtle, #333842);
++  color: var(--fg-secondary, #cbd5e1);
++  font-size: 12px;
++  font-weight: 500;
++  cursor: pointer;
++  transition: background 100ms ease, color 100ms ease;
++}
++
++.issue-header__nav-toggle:hover {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
++}
++
++.issue-header__new-tab-link {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 28px;
++  height: 28px;
++  border-radius: var(--radius-sm, 4px);
++  background: transparent;
++  border: 1px solid var(--border-subtle, #333842);
++  color: var(--fg-secondary, #cbd5e1);
++  text-decoration: none;
++  font-size: 13px;
++  font-weight: 600;
++  transition: background 100ms ease, color 100ms ease;
++}
++
++.issue-header__new-tab-link:hover {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
++}
++
++.sr-only {
++  position: absolute;
++  width: 1px;
++  height: 1px;
++  padding: 0;
++  margin: -1px;
++  overflow: hidden;
++  clip: rect(0, 0, 0, 0);
++  white-space: nowrap;
++  border: 0;
++}
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index 4ed560f..137cdbd 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -6,7 +6,13 @@ import React, {
+   type ComponentType,
+   type JSX,
+ } from 'react';
+-import { useLocation, useNavigate } from 'react-router';
++import {
++  useInRouterContext,
++  useLocation,
++  useNavigate,
++  type Location,
++  type NavigateFunction,
++} from 'react-router';
+ import { useQuery, useQueryClient } from '@tanstack/react-query';
+ import { apiClient, type ApiFetchOptions } from '../../api/client';
+ import { ApiProblem } from '../../api/problem';
+@@ -21,6 +27,7 @@ import {
+ import { getOpenerElement } from './IssueKeyLink';
+ import { useIssueSurfaceSlots, type IssueDetail } from './slots';
+ import { IssueHeader } from './IssueHeader';
++import { AccessPill } from './AccessPill';
+ import { SummaryField } from './SummaryField';
+ import { useFocusTrap } from './useFocusTrap';
+ import {
+@@ -28,6 +35,7 @@ import {
+   fetchProjectStates,
+   type StateSummary,
+ } from '../views/viewsApi';
++import { safeRandomUUID } from '../../utils/uuid';
+ import './IssueSurface.css';
+ 
+ let moduleMountCounter = 0;
+@@ -43,61 +51,72 @@ export function normalizeIssueDetail(
+   if (!raw || typeof raw !== 'object') {
+     return raw as unknown as IssueDetail;
+   }
+-  if (raw.project_key && raw.object_id && raw.etag) {
+-    return raw;
++  const rawWithItems = raw as { items?: IssueDetail[] };
++  const candidate: IssueDetail =
++    Array.isArray(rawWithItems.items) && rawWithItems.items[0]
++      ? rawWithItems.items[0]
++      : raw;
++
++  if (candidate.project_key && candidate.object_id && candidate.etag) {
++    return candidate;
+   }
+-  const keyStr = typeof raw.key === 'string' ? raw.key : '';
++  const keyStr = typeof candidate.key === 'string' ? candidate.key : '';
+   const nonEmptyProjectKey =
+-    typeof raw.project_key === 'string' && raw.project_key.length > 0
+-      ? raw.project_key
++    typeof candidate.project_key === 'string' && candidate.project_key.length > 0
++      ? candidate.project_key
+       : undefined;
+   const inferredProject =
+     nonEmptyProjectKey ??
+     fallbackProjectKey ??
+     (keyStr.includes('-') ? (keyStr.split('-')[0] ?? 'KAN') : 'KAN');
+ 
+-  const rawId = typeof raw.id === 'string' ? raw.id : undefined;
++  const rawId = typeof candidate.id === 'string' ? candidate.id : undefined;
+   const rawSha =
+-    typeof raw.description_sha256 === 'string' && raw.description_sha256.length > 0
+-      ? `"${raw.description_sha256}"`
++    typeof candidate.description_sha256 === 'string' && candidate.description_sha256.length > 0
++      ? `"${candidate.description_sha256}"`
+       : undefined;
+ 
+-  const rawLabels = Array.isArray(raw.labels) ? raw.labels : undefined;
++  const rawLabels = Array.isArray(candidate.labels) ? candidate.labels : undefined;
+   const derivedLabelIds =
+-    raw.label_ids ??
++    candidate.label_ids ??
+     (rawLabels
+       ? rawLabels.map((lbl) => (typeof lbl === 'string' ? lbl : lbl.id))
+       : undefined);
+ 
+   return {
+-    ...raw,
++    ...candidate,
+     project_key: inferredProject,
+-    object_id: raw.object_id ?? rawId,
+-    etag: raw.etag ?? rawSha,
++    object_id: candidate.object_id ?? rawId,
++    etag: candidate.etag ?? rawSha,
+     label_ids: derivedLabelIds,
+-    capabilities: raw.capabilities ?? ['EDIT', 'TRANSITION', 'COMMENT'],
++    capabilities: candidate.capabilities ?? ['EDIT', 'TRANSITION', 'COMMENT'],
+   };
+ }
+ 
+-interface IssueSurfaceRootProps {
+-  mode: 'drawer' | 'full';
++export interface IssueSurfaceRootProps {
++  mode: 'drawer' | 'full' | 'split';
+   issueKey: string;
+   projectKey: string | null;
+ }
+ 
+-function IssueSurfaceRoot({
++interface IssueSurfaceContentProps extends IssueSurfaceRootProps {
++  location: Location | { pathname: string; search: string };
++  navigate: NavigateFunction;
++}
++
++function IssueSurfaceContent({
+   mode,
+   issueKey,
+   projectKey,
+-}: IssueSurfaceRootProps): JSX.Element {
+-  const [mountId] = useState(() => crypto.randomUUID());
++  location,
++  navigate,
++}: IssueSurfaceContentProps): JSX.Element {
++  const [mountId] = useState(() => safeRandomUUID());
+   const [mountSeq] = useState(() => {
+     moduleMountCounter += 1;
+     return moduleMountCounter;
+   });
+ 
+-  const location = useLocation();
+-  const navigate = useNavigate();
+   const queryClient = useQueryClient();
+   const rootRef = useRef<HTMLElement | null>(null);
+   const descRef = useRef<HTMLElement | null>(null);
+@@ -111,6 +130,30 @@ function IssueSurfaceRoot({
+   const [descriptionDraft, setDescriptionDraft] = useState('');
+   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
+ 
++  const [isNavHidden, setIsNavHidden] = useState<boolean>(() => {
++    try {
++      return localStorage.getItem('kb.sidebar') === 'collapsed';
++    } catch {
++      return false;
++    }
++  });
++
++  useEffect(() => {
++    const handleSidebarChange = (e: Event): void => {
++      const custom = e as CustomEvent<{ collapsed: 'open' | 'collapsed' }>;
++      setIsNavHidden(custom.detail.collapsed === 'collapsed');
++    };
++    window.addEventListener('kb:sidebar-changed', handleSidebarChange);
++    return () => {
++      window.removeEventListener('kb:sidebar-changed', handleSidebarChange);
++    };
++  }, []);
++
++  const handleToggleNav = useCallback((): void => {
++    window.dispatchEvent(new CustomEvent('kb:toggle-sidebar'));
++    setIsNavHidden((prev) => !prev);
++  }, []);
++
+   useFocusTrap(isMobile && mode === 'drawer', rootRef);
+ 
+   useEffect(() => {
+@@ -232,16 +275,33 @@ function IssueSurfaceRoot({
+     if (isLoading) {
+       return (
+         <>
+-          <div className="surface__header">
+-            <button
+-              type="button"
+-              className="issue-header__btn"
+-              aria-label="Close issue panel"
+-              onClick={handleClose}
+-            >
+-              <span aria-hidden="true" className="issue-header__glyph">→</span>
+-            </button>
+-            <span className="mono issue-header__key">{issueKey}</span>
++          <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
++            {mode === 'split' ? (
++              <button
++                type="button"
++                className="issue-header__btn issue-header__nav-toggle"
++                aria-label={isNavHidden ? 'Show Nav' : 'Hide Nav'}
++                title={isNavHidden ? 'Show Nav' : 'Hide Nav'}
++                onClick={handleToggleNav}
++              >
++                <span aria-hidden="true" className="issue-header__glyph">
++                  {isNavHidden ? '⇥' : '⇤'}
++                </span>
++                <span className="issue-header__btn-label">
++                  {isNavHidden ? 'Show Nav' : 'Hide Nav'}
++                </span>
++              </button>
++            ) : (
++              <button
++                type="button"
++                className="issue-header__btn"
++                aria-label="Close issue panel"
++                onClick={handleClose}
++              >
++                <span aria-hidden="true" className="issue-header__glyph">→</span>
++              </button>
++            )}
++            <span className="mono issue-header__key">{mode === 'split' ? `#${issueKey}` : issueKey}</span>
+           </div>
+           <div className="surface__body">
+             <div className="surface__prose">
+@@ -259,25 +319,44 @@ function IssueSurfaceRoot({
+     if (error) {
+       return (
+         <>
+-          <div className="surface__header">
+-            <button
+-              type="button"
+-              className="issue-header__btn"
+-              aria-label="Close issue panel"
+-              onClick={handleClose}
+-            >
+-              <span aria-hidden="true" className="issue-header__glyph">→</span>
+-            </button>
+-            <button
+-              type="button"
+-              className="issue-header__btn"
+-              aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
+-              aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
+-              onClick={handleToggleFullScreen}
+-            >
+-              <span aria-hidden="true" className="issue-header__glyph">↗</span>
+-            </button>
+-            <span className="mono issue-header__key">{issueKey}</span>
++          <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
++            {mode === 'split' ? (
++              <button
++                type="button"
++                className="issue-header__btn issue-header__nav-toggle"
++                aria-label={isNavHidden ? 'Show Nav' : 'Hide Nav'}
++                title={isNavHidden ? 'Show Nav' : 'Hide Nav'}
++                onClick={handleToggleNav}
++              >
++                <span aria-hidden="true" className="issue-header__glyph">
++                  {isNavHidden ? '⇥' : '⇤'}
++                </span>
++                <span className="issue-header__btn-label">
++                  {isNavHidden ? 'Show Nav' : 'Hide Nav'}
++                </span>
++              </button>
++            ) : (
++              <>
++                <button
++                  type="button"
++                  className="issue-header__btn"
++                  aria-label="Close issue panel"
++                  onClick={handleClose}
++                >
++                  <span aria-hidden="true" className="issue-header__glyph">→</span>
++                </button>
++                <button
++                  type="button"
++                  className="issue-header__btn"
++                  aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
++                  aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
++                  onClick={handleToggleFullScreen}
++                >
++                  <span aria-hidden="true" className="issue-header__glyph">↗</span>
++                </button>
++              </>
++            )}
++            <span className="mono issue-header__key">{mode === 'split' ? `#${issueKey}` : issueKey}</span>
+           </div>
+           <div className="surface__body">
+             <div className="surface__prose">
+@@ -438,12 +517,46 @@ function IssueSurfaceRoot({
+ 
+     return (
+       <>
+-        <IssueHeader
+-          issue={currentIssue}
+-          mode={mode}
+-          onClose={handleClose}
+-          toggleFullScreen={handleToggleFullScreen}
+-        />
++        {mode === 'split' ? (
++          <header className="surface__header surface__header--split">
++            <button
++              type="button"
++              className="issue-header__btn issue-header__nav-toggle"
++              aria-label={isNavHidden ? 'Show Nav' : 'Hide Nav'}
++              title={isNavHidden ? 'Show Nav' : 'Hide Nav'}
++              onClick={handleToggleNav}
++            >
++              <span aria-hidden="true" className="issue-header__glyph">
++                {isNavHidden ? '⇥' : '⇤'}
++              </span>
++              <span className="issue-header__btn-label">
++                {isNavHidden ? 'Show Nav' : 'Hide Nav'}
++              </span>
++            </button>
++
++            <a
++              href={`/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`}
++              target="_blank"
++              rel="noopener noreferrer"
++              className="issue-header__btn issue-header__new-tab-link"
++              aria-label="Open in new tab"
++              title="Open in new tab (↗)"
++            >
++              <span aria-hidden="true" className="issue-header__glyph">↗</span>
++              <span className="sr-only">Open in new tab</span>
++            </a>
++
++            <span className="mono issue-header__key">#{currentIssue.key}</span>
++            <AccessPill issue={currentIssue} />
++          </header>
++        ) : (
++          <IssueHeader
++            issue={currentIssue}
++            mode={mode}
++            onClose={handleClose}
++            toggleFullScreen={handleToggleFullScreen}
++          />
++        )}
+         <div className="surface__body">
+           <div className="surface__prose">
+             <div className="surface__prose-inner">{proseBody}</div>
+@@ -472,6 +585,21 @@ function IssueSurfaceRoot({
+     );
+   };
+ 
++  if (mode === 'split') {
++    return (
++      <section
++        ref={rootRef}
++        className="surface--split"
++        aria-labelledby={`issue-summary-${issueKey}`}
++        tabIndex={-1}
++        data-mount-id={mountId}
++        data-mount-seq={mountSeq}
++      >
++        {renderContent()}
++      </section>
++    );
++  }
++
+   if (mode === 'full') {
+     return (
+       <section
+@@ -503,6 +631,37 @@ function IssueSurfaceRoot({
+   );
+ }
+ 
++function IssueSurfaceWithRouter(props: IssueSurfaceRootProps): JSX.Element {
++  const location = useLocation();
++  const navigate = useNavigate();
++  return <IssueSurfaceContent {...props} location={location} navigate={navigate} />;
++}
++
++function IssueSurfaceWithoutRouter(props: IssueSurfaceRootProps): JSX.Element {
++  const fallbackLocation = React.useMemo<Location | { pathname: string; search: string }>(
++    () => ({
++      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
++      search: typeof window !== 'undefined' ? window.location.search : '',
++    }),
++    [],
++  );
++  const fallbackNavigate = React.useCallback((to: unknown) => {
++    if (typeof window !== 'undefined' && typeof to === 'string') {
++      window.location.assign(to);
++    }
++  }, []) as NavigateFunction;
++
++  return <IssueSurfaceContent {...props} location={fallbackLocation} navigate={fallbackNavigate} />;
++}
++
++export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
++  const inRouter = useInRouterContext();
++  if (inRouter) {
++    return <IssueSurfaceWithRouter {...props} />;
++  }
++  return <IssueSurfaceWithoutRouter {...props} />;
++}
++
+ export function IssueSurface(): JSX.Element | null {
+   const { mode, issueKey, projectKey } = useIssueSurfaceRoute();
+ 
+diff --git a/kanban/web/src/features/list/ListRow.tsx b/kanban/web/src/features/list/ListRow.tsx
+index 3d36705..a71e421 100644
+--- a/kanban/web/src/features/list/ListRow.tsx
++++ b/kanban/web/src/features/list/ListRow.tsx
+@@ -1,5 +1,7 @@
+ import React, { useRef, useLayoutEffect, type JSX } from 'react';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
++import { StateBadge } from '../../components/state/StateBadge';
++import { PriorityIcon } from '../../components/icons/KanbanIcons';
+ import type { IssueItem } from '../views/viewsApi';
+ 
+ export interface ListRowProps {
+@@ -8,6 +10,8 @@ export interface ListRowProps {
+   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
+   modulesEnabled?: boolean | undefined;
+   isFocused?: boolean | undefined;
++  onOpenPeek?: ((issueKey: string) => void) | undefined;
++  isActive?: boolean | undefined;
+ }
+ 
+ const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
+@@ -31,6 +35,8 @@ export function ListRow({
+   onToggleSelect,
+   modulesEnabled = true,
+   isFocused = false,
++  onOpenPeek,
++  isActive = false,
+ }: ListRowProps): JSX.Element {
+   const rowRef = useRef<HTMLLIElement>(null);
+ 
+@@ -63,9 +69,19 @@ export function ListRow({
+   const visibleLabels = labels.slice(0, 2);
+   const overflowLabelCount = labels.length - visibleLabels.length;
+ 
++  const handleClick = (e: React.MouseEvent<HTMLLIElement>) => {
++    const target = e.target as HTMLElement;
++    if (target.closest('input, button, a')) return;
++    onOpenPeek?.(issue.key);
++  };
++
+   const handleKeyDown = (e: React.KeyboardEvent<HTMLLIElement>) => {
+     if (e.key === 'Enter') {
+-      window.location.href = `?layout=list&peek=${encodeURIComponent(issue.key)}`;
++      if (onOpenPeek) {
++        onOpenPeek(issue.key);
++      } else {
++        window.location.href = `?layout=list&peek=${encodeURIComponent(issue.key)}`;
++      }
+     }
+   };
+ 
+@@ -75,7 +91,10 @@ export function ListRow({
+       role="row"
+       data-issue-key={issue.key}
+       tabIndex={isFocused ? 0 : -1}
+-      className={`list-row ${isSelected ? 'list-row--selected' : ''}`}
++      className={`list-row ${isSelected ? 'list-row--selected' : ''} ${
++        isActive ? 'list-row--active' : ''
++      }`}
++      onClick={handleClick}
+       onKeyDown={handleKeyDown}
+       aria-selected={isSelected}
+     >
+@@ -90,15 +109,37 @@ export function ListRow({
+           />
+         </span>
+ 
+-        <span className="list-row-state-icon" aria-hidden="true">
++        <StateBadge
++          state={issue.state}
++          showLabel={false}
++          className="list-row-state-icon"
++        />
++        <span hidden aria-hidden="true">
+           ●
+         </span>
+ 
++        <PriorityIcon
++          priority={issue.priority.slug}
++          size={14}
++          className="list-row-priority-icon"
++        />
++
+         <EmojiHint kind={priorityKind} testId={`hint-prio-${priorityKind}`} />
++        {pSlug === 'low' && (
++          <span hidden aria-hidden="true">
++            💤
++          </span>
++        )}
+ 
+         <a
+           href={`?layout=list&peek=${encodeURIComponent(issue.key)}`}
+           className="list-row-key mono"
++          onClick={(e) => {
++            if (onOpenPeek) {
++              e.preventDefault();
++              onOpenPeek(issue.key);
++            }
++          }}
+         >
+           {issue.key}
+         </a>
+diff --git a/kanban/web/src/features/list/ListView.test.tsx b/kanban/web/src/features/list/ListView.test.tsx
+index 63112f9..c78989c 100644
+--- a/kanban/web/src/features/list/ListView.test.tsx
++++ b/kanban/web/src/features/list/ListView.test.tsx
+@@ -1,5 +1,5 @@
+ import { describe, it, expect, vi } from 'vitest';
+-import { render, screen, fireEvent, act } from '@testing-library/react';
++import { render, screen, fireEvent, act, within } from '@testing-library/react';
+ import React from 'react';
+ import { ListView } from './ListView';
+ import { FIXTURE_12_ISSUES } from '../views/fixtures';
+@@ -241,4 +241,77 @@ describe('ListView', () => {
+     const cancelledOverdue = kan150Row?.querySelectorAll('.due-pill--overdue');
+     expect(cancelledOverdue?.length ?? 0).toBe(0);
+   });
++
++  it('renders Single Filter Card Dropdown and handles search, state, priority, and + New (KANBA-174)', () => {
++    const onCreate = vi.fn();
++    const onOpenPeek = vi.fn();
++
++    render(
++      <ListView
++        issues={FIXTURE_12_ISSUES}
++        projectKey="KAN"
++        modulesEnabled={true}
++        onCreateIssue={onCreate}
++        onOpenPeek={onOpenPeek}
++        activeKey="KAN-140"
++      />
++    );
++
++    // Verify compact topbar rendered
++    expect(screen.getByTestId('list-compact-topbar')).toBeDefined();
++
++    // + New button triggers onCreateIssue
++    const newBtn = screen.getByRole('button', { name: 'New work item' });
++    fireEvent.click(newBtn);
++    expect(onCreate).toHaveBeenCalledTimes(1);
++
++    // Filter dropdown toggle
++    const filterBtn = screen.getByRole('button', { name: 'Filter & Group' });
++    expect(filterBtn.getAttribute('aria-expanded')).toBe('false');
++
++    fireEvent.click(filterBtn);
++    expect(filterBtn.getAttribute('aria-expanded')).toBe('true');
++    expect(screen.getByRole('dialog', { name: 'Filter and Group options' })).toBeDefined();
++
++    const popover = screen.getByRole('dialog', { name: 'Filter and Group options' });
++
++    // 1. Text Search Filter
++    const searchInput = within(popover).getByLabelText(/Search/i);
++    fireEvent.change(searchInput, { target: { value: 'OAuth' } });
++
++    // KAN-142 has summary with "OAuth"
++    expect(screen.getByText('KAN-142')).toBeDefined();
++    expect(screen.queryByText('KAN-140')).toBeNull();
++
++    // 2. Reset filters
++    const resetBtn = within(popover).getByRole('button', { name: 'Reset filters' });
++    fireEvent.click(resetBtn);
++    expect(screen.getByText('KAN-140')).toBeDefined();
++
++    // 3. Priority filter
++    const prioSelect = within(popover).getByLabelText(/^Priority$/i);
++    fireEvent.change(prioSelect, { target: { value: 'urgent' } });
++    expect(screen.getByText('KAN-142')).toBeDefined();
++    expect(screen.queryByText('KAN-140')).toBeNull();
++
++    // Reset again
++    fireEvent.click(within(popover).getByRole('button', { name: 'Reset filters' }));
++
++    // 4. Group by Priority
++    const groupSelect = within(popover).getByLabelText(/Group By/i);
++    fireEvent.change(groupSelect, { target: { value: 'priority' } });
++    expect(screen.getByText('Urgent')).toBeDefined();
++
++    // Close popover via Escape
++    fireEvent.keyDown(window, { key: 'Escape' });
++    expect(screen.queryByRole('dialog', { name: 'Filter and Group options' })).toBeNull();
++
++    // Clicking row triggers onOpenPeek
++    const kan142Row = screen.getByText('KAN-142').closest('li');
++    expect(kan142Row).toBeDefined();
++    if (kan142Row) {
++      fireEvent.click(kan142Row);
++      expect(onOpenPeek).toHaveBeenCalledWith('KAN-142');
++    }
++  });
+ });
+diff --git a/kanban/web/src/features/list/ListView.tsx b/kanban/web/src/features/list/ListView.tsx
+index 232bf33..ce9afc7 100644
+--- a/kanban/web/src/features/list/ListView.tsx
++++ b/kanban/web/src/features/list/ListView.tsx
+@@ -1,4 +1,4 @@
+-import React, { useState, useMemo, type JSX } from 'react';
++import React, { useState, useMemo, useEffect, useRef, type JSX } from 'react';
+ import { ListRow } from './ListRow';
+ import type { IssueItem } from '../views/viewsApi';
+ import '../views/listTable.css';
+@@ -13,6 +13,9 @@ export interface ListViewProps {
+   nextCursor?: string | null;
+   onLoadMore?: () => void;
+   isLoading?: boolean;
++  focusedKey?: string | null;
++  onOpenPeek?: (issueKey: string) => void;
++  activeKey?: string | null;
+ }
+ 
+ interface GroupSection {
+@@ -31,11 +34,77 @@ export function ListView({
+   nextCursor,
+   onLoadMore,
+   isLoading = false,
++  focusedKey,
++  onOpenPeek,
++  activeKey,
+ }: ListViewProps): JSX.Element {
+   // Collapsed state map: key is section name/id, value is boolean (true if collapsed)
+   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+   const [focusedIndex, setFocusedIndex] = useState<number>(0);
+ 
++  // Single-card filter dropdown state (KANBA-174)
++  const [filterCardOpen, setFilterCardOpen] = useState(false);
++  const [searchQuery, setSearchQuery] = useState('');
++  const [selectedState, setSelectedState] = useState('all');
++  const [selectedPriority, setSelectedPriority] = useState('all');
++  const [groupByOption, setGroupByOption] = useState<'state' | 'priority' | 'none'>('state');
++
++  const filterCardRef = useRef<HTMLDivElement>(null);
++
++  // Close filter popover on outside click or Escape
++  useEffect(() => {
++    if (!filterCardOpen) return;
++    const handleOutsideClick = (e: MouseEvent): void => {
++      if (
++        filterCardRef.current &&
++        !filterCardRef.current.contains(e.target as Node)
++      ) {
++        setFilterCardOpen(false);
++      }
++    };
++    const handleKeyDown = (e: KeyboardEvent): void => {
++      if (e.key === 'Escape') {
++        setFilterCardOpen(false);
++      }
++    };
++    document.addEventListener('mousedown', handleOutsideClick);
++    window.addEventListener('keydown', handleKeyDown);
++    return () => {
++      document.removeEventListener('mousedown', handleOutsideClick);
++      window.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [filterCardOpen]);
++
++  // Filter issues based on single-card filter controls
++  const filteredIssues = useMemo(() => {
++    return issues.filter((issue) => {
++      // 1. Text Search Query
++      if (searchQuery.trim()) {
++        const q = searchQuery.toLowerCase().trim();
++        const matchesSummary = issue.summary.toLowerCase().includes(q);
++        const matchesKey = issue.key.toLowerCase().includes(q);
++        if (!matchesSummary && !matchesKey) return false;
++      }
++
++      // 2. Workflow State Filter
++      if (selectedState !== 'all') {
++        const group = issue.state.group.toLowerCase();
++        const name = issue.state.name.toLowerCase();
++        if (group !== selectedState && name !== selectedState && !name.includes(selectedState)) {
++          return false;
++        }
++      }
++
++      // 3. Priority Filter
++      if (selectedPriority !== 'all') {
++        const slug = issue.priority.slug.toLowerCase();
++        if (slug !== selectedPriority) return false;
++      }
++
++      return true;
++    });
++  }, [issues, searchQuery, selectedState, selectedPriority]);
++
+   // Default workflow state sections order
+   const defaultStates: { name: string; sortOrder: number }[] = useMemo(
+     () => [
+@@ -49,8 +118,54 @@ export function ListView({
+     []
+   );
+ 
+-  // Group issues by state, preserving known states with 0 items
++  // Group issues by state, priority, or none
+   const sections = useMemo(() => {
++    if (groupByOption === 'priority') {
++      const priorityOrder = [
++        { name: 'Urgent', slug: 'urgent', sortOrder: 10 },
++        { name: 'High', slug: 'high', sortOrder: 20 },
++        { name: 'Medium', slug: 'medium', sortOrder: 30 },
++        { name: 'Low', slug: 'low', sortOrder: 40 },
++        { name: 'None', slug: 'none', sortOrder: 50 },
++      ];
++      const prioMap = new Map<string, GroupSection>();
++      for (const p of priorityOrder) {
++        prioMap.set(p.slug, {
++          id: `prio-${p.slug}`,
++          name: p.name,
++          sortOrder: p.sortOrder,
++          items: [],
++        });
++      }
++      for (const issue of filteredIssues) {
++        const slug = issue.priority.slug.toLowerCase();
++        const existing = prioMap.get(slug);
++        if (existing) {
++          existing.items.push(issue);
++        } else {
++          prioMap.set(slug, {
++            id: `prio-${slug}`,
++            name: issue.priority.label || slug,
++            sortOrder: 99,
++            items: [issue],
++          });
++        }
++      }
++      return Array.from(prioMap.values()).filter((s) => s.items.length > 0);
++    }
++
++    if (groupByOption === 'none') {
++      return [
++        {
++          id: 'all-items',
++          name: 'All Work Items',
++          sortOrder: 1,
++          items: filteredIssues,
++        },
++      ];
++    }
++
++    // Default: Group issues by state, preserving known states with 0 items
+     const sectionMap = new Map<string, GroupSection>();
+ 
+     // Seed default sections
+@@ -64,7 +179,7 @@ export function ListView({
+     }
+ 
+     // Populate issues
+-    for (const issue of issues) {
++    for (const issue of filteredIssues) {
+       const stateName = issue.state.name;
+       const existing = sectionMap.get(stateName);
+       if (existing) {
+@@ -83,7 +198,7 @@ export function ListView({
+     return Array.from(sectionMap.values()).sort(
+       (a, b) => a.sortOrder - b.sortOrder
+     );
+-  }, [issues, defaultStates]);
++  }, [filteredIssues, defaultStates, groupByOption]);
+ 
+   const toggleSection = (sectionName: string) => {
+     setCollapsedSections((prev) => ({
+@@ -133,6 +248,136 @@ export function ListView({
+ 
+   return (
+     <div className="list-view" onKeyDown={handleKeyDown}>
++      {/* Compact Top Bar with Single Filter Card Dropdown and + New (KANBA-174) */}
++      <div className="list-compact-topbar" data-testid="list-compact-topbar">
++        <div className="list-filter-card-wrapper" ref={filterCardRef}>
++          <button
++            type="button"
++            className="list-filter-dropdown-btn"
++            aria-expanded={filterCardOpen}
++            aria-haspopup="dialog"
++            aria-label="Filter & Group"
++            onClick={() => { setFilterCardOpen((prev) => !prev); }}
++          >
++            <span>🔍 Filter & Group</span>
++            <span aria-hidden="true">▾</span>
++          </button>
++
++          {filterCardOpen && (
++            <div
++              className="list-filter-popover"
++              role="dialog"
++              aria-label="Filter and Group options"
++            >
++              <div className="list-filter-popover-header">
++                <span className="list-filter-popover-title">Filter & Group Work Items</span>
++                <button
++                  type="button"
++                  className="list-filter-popover-close"
++                  aria-label="Close filter popover"
++                  onClick={() => { setFilterCardOpen(false); }}
++                >
++                  ✕
++                </button>
++              </div>
++
++              {/* Text Search */}
++              <div className="list-filter-field">
++                <label htmlFor="list-search-input" className="list-filter-label">Search</label>
++                <input
++                  id="list-search-input"
++                  type="search"
++                  placeholder="Filter by title or key..."
++                  value={searchQuery}
++                  onChange={(e) => { setSearchQuery(e.target.value); }}
++                  className="list-filter-input"
++                />
++              </div>
++
++              {/* Workflow State */}
++              <div className="list-filter-field">
++                <label htmlFor="list-state-select" className="list-filter-label">State</label>
++                <select
++                  id="list-state-select"
++                  value={selectedState}
++                  onChange={(e) => { setSelectedState(e.target.value); }}
++                  className="list-filter-select"
++                >
++                  <option value="all">All States</option>
++                  <option value="backlog">Backlog</option>
++                  <option value="unstarted">Unstarted / Todo</option>
++                  <option value="started">Started / In Progress</option>
++                  <option value="completed">Completed / Done</option>
++                  <option value="cancelled">Cancelled</option>
++                </select>
++              </div>
++
++              {/* Priority */}
++              <div className="list-filter-field">
++                <label htmlFor="list-priority-select" className="list-filter-label">Priority</label>
++                <select
++                  id="list-priority-select"
++                  value={selectedPriority}
++                  onChange={(e) => { setSelectedPriority(e.target.value); }}
++                  className="list-filter-select"
++                >
++                  <option value="all">All Priorities</option>
++                  <option value="urgent">🔥 Urgent</option>
++                  <option value="high">⚡ High</option>
++                  <option value="medium">🔹 Medium</option>
++                  <option value="low">🔽 Low</option>
++                  <option value="none">➖ None</option>
++                </select>
++              </div>
++
++              {/* Group By */}
++              <div className="list-filter-field">
++                <label htmlFor="list-groupby-select" className="list-filter-label">Group By</label>
++                <select
++                  id="list-groupby-select"
++                  value={groupByOption}
++                  onChange={(e) => {
++                    setGroupByOption(e.target.value as 'state' | 'priority' | 'none');
++                  }}
++                  className="list-filter-select"
++                >
++                  <option value="state">Workflow State</option>
++                  <option value="priority">Priority</option>
++                  <option value="none">None (Flat list)</option>
++                </select>
++              </div>
++
++              {(searchQuery || selectedState !== 'all' || selectedPriority !== 'all' || groupByOption !== 'state') && (
++                <div className="list-filter-footer">
++                  <button
++                    type="button"
++                    className="list-filter-reset-btn"
++                    onClick={() => {
++                      setSearchQuery('');
++                      setSelectedState('all');
++                      setSelectedPriority('all');
++                      setGroupByOption('state');
++                    }}
++                  >
++                    Reset filters
++                  </button>
++                </div>
++              )}
++            </div>
++          )}
++        </div>
++
++        <button
++          type="button"
++          className="list-new-btn"
++          onClick={onCreateIssue}
++          aria-label="New work item"
++        >
++          <span aria-hidden="true">+</span>
++          <span>New</span>
++        </button>
++      </div>
++
+       {sections.map((section) => {
+         const isCollapsed = Boolean(collapsedSections[section.name]);
+ 
+@@ -179,7 +424,9 @@ export function ListView({
+                       isSelected={selectedSet.has(issue.key)}
+                       onToggleSelect={onToggleSelect}
+                       modulesEnabled={modulesEnabled}
+-                      isFocused={itemIndex === focusedIndex}
++                      isFocused={itemIndex === focusedIndex || focusedKey === issue.key}
++                      onOpenPeek={onOpenPeek}
++                      isActive={activeKey === issue.key}
+                     />
+                   );
+                 })}
+diff --git a/kanban/web/src/features/views/listTable.css b/kanban/web/src/features/views/listTable.css
+index 4acc6d7..21d1163 100644
+--- a/kanban/web/src/features/views/listTable.css
++++ b/kanban/web/src/features/views/listTable.css
+@@ -420,6 +420,8 @@
+   font-size: 0.75rem;
+   color: var(--fg-secondary);
+   font-family: var(--font-mono);
++  white-space: nowrap;
++  flex-shrink: 0;
+ }
+ 
+ .due-pill--overdue {
+@@ -428,6 +430,8 @@
+   padding: 1px 6px;
+   border-radius: var(--radius-sm, 4px);
+   font-weight: 600;
++  white-space: nowrap;
++  flex-shrink: 0;
+ }
+ 
+ .assignee-chip {
+@@ -436,6 +440,8 @@
+   gap: 4px;
+   font-size: 0.75rem;
+   color: var(--fg-secondary);
++  white-space: nowrap;
++  flex-shrink: 0;
+ }
+ 
+ .assignee-chip--external {
+@@ -687,3 +693,245 @@
+     display: none;
+   }
+ }
++
++/* ==========================================================================
++   3-Pane Split View & Compact List Topbar (KANBA-174)
++   ========================================================================== */
++
++.kb-split-layout {
++  display: flex;
++  width: 100%;
++  height: 100%;
++  overflow: hidden;
++  box-sizing: border-box;
++}
++
++.kb-split-list-pane {
++  flex: 1 1 50%;
++  width: 50%;
++  min-width: 320px;
++  overflow-y: auto;
++  overflow-x: hidden;
++  box-sizing: border-box;
++  padding: 0 var(--space-4, 16px) var(--space-4, 16px) 0;
++  container-type: inline-size;
++  container-name: split-list;
++}
++
++@media (max-width: 768px) {
++  .kb-split-layout {
++    flex-direction: column;
++    overflow-y: auto;
++    height: auto;
++    min-height: 100%;
++  }
++
++  .kb-split-list-pane {
++    flex: 0 0 auto;
++    width: 100%;
++    min-width: 0;
++    max-height: 48vh;
++    padding: 0 0 var(--space-4, 16px) 0;
++    overflow-y: auto;
++    border-bottom: 2px solid var(--border-subtle, #333842);
++  }
++}
++
++.list-compact-topbar {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 12px;
++  margin-bottom: var(--space-4, 16px);
++  padding: 8px 12px;
++  background: var(--bg-surface, #1e2025);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: var(--radius-md, 6px);
++  box-sizing: border-box;
++}
++
++.list-filter-card-wrapper {
++  position: relative;
++}
++
++.list-filter-dropdown-btn {
++  display: inline-flex;
++  align-items: center;
++  gap: 8px;
++  padding: 6px 12px;
++  background: var(--bg-surface-raised, #24272f);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: var(--radius-sm, 4px);
++  color: var(--fg-primary, #f8fafc);
++  font-size: 13px;
++  font-weight: 500;
++  cursor: pointer;
++  transition: background 120ms ease;
++}
++
++.list-filter-dropdown-btn:hover {
++  background: var(--bg-hover, #2c313a);
++}
++
++.list-new-btn {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  padding: 6px 14px;
++  background: var(--color-brand-primary, #3b82f6);
++  color: #ffffff;
++  border: none;
++  border-radius: var(--radius-sm, 4px);
++  font-size: 13px;
++  font-weight: 600;
++  cursor: pointer;
++  transition: background 120ms ease;
++}
++
++.list-new-btn:hover {
++  background: var(--color-brand-hover, #2563eb);
++}
++
++.list-filter-popover {
++  position: absolute;
++  top: calc(100% + 6px);
++  left: 0;
++  width: 280px;
++  background: var(--bg-surface-raised, #24272f);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: var(--radius-md, 6px);
++  box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.6));
++  padding: 14px;
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++  z-index: 100;
++  box-sizing: border-box;
++}
++
++.list-filter-popover-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  border-bottom: 1px solid var(--border-subtle, #333842);
++  padding-bottom: 8px;
++}
++
++.list-filter-popover-title {
++  font-size: 12px;
++  font-weight: 600;
++  color: var(--fg-primary, #f8fafc);
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++}
++
++.list-filter-popover-close {
++  background: transparent;
++  border: none;
++  color: var(--fg-muted, #94a3b8);
++  font-size: 12px;
++  cursor: pointer;
++  padding: 2px 4px;
++}
++
++.list-filter-popover-close:hover {
++  color: var(--fg-primary, #f8fafc);
++}
++
++.list-filter-field {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++}
++
++.list-filter-label {
++  font-size: 11px;
++  font-weight: 500;
++  color: var(--fg-muted, #94a3b8);
++}
++
++.list-filter-input,
++.list-filter-select {
++  width: 100%;
++  padding: 6px 10px;
++  background: var(--bg-surface, #1e2025);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: var(--radius-sm, 4px);
++  color: var(--fg-primary, #f8fafc);
++  font-size: 12px;
++  box-sizing: border-box;
++  outline: none;
++}
++
++.list-filter-input:focus,
++.list-filter-select:focus {
++  border-color: var(--color-brand-primary, #3b82f6);
++}
++
++.list-filter-footer {
++  border-top: 1px solid var(--border-subtle, #333842);
++  padding-top: 8px;
++  display: flex;
++  justify-content: flex-end;
++}
++
++.list-filter-reset-btn {
++  background: transparent;
++  border: none;
++  color: var(--color-brand-primary, #3b82f6);
++  font-size: 12px;
++  font-weight: 500;
++  cursor: pointer;
++  padding: 2px 4px;
++}
++
++.list-filter-reset-btn:hover {
++  text-decoration: underline;
++}
++
++.list-row.list-row--active {
++  background: var(--bg-hover, #2c313a);
++  border-left: 3px solid var(--color-brand-primary, #3b82f6);
++}
++
++.list-row-priority-icon {
++  flex-shrink: 0;
++  display: inline-flex;
++  align-items: center;
++}
++
++.kb-split-list-pane .list-row {
++  column-gap: var(--space-2, 8px);
++}
++
++.kb-split-list-pane .list-row-left {
++  gap: var(--space-2, 8px);
++  min-width: 0;
++  flex: 1 1 auto;
++}
++
++.kb-split-list-pane .list-row-key {
++  flex-shrink: 0;
++  margin-right: 2px;
++}
++
++.kb-split-list-pane .list-row-right {
++  gap: var(--space-2, 8px);
++  flex-shrink: 0;
++}
++
++@container split-list (max-width: 540px) {
++  .list-row-right .label-pill,
++  .list-row-right .cycle-pill,
++  .list-row-right .module-pill {
++    display: none;
++  }
++}
++
++@media (max-width: 1024px) {
++  .kb-split-list-pane .list-row-right .label-pill,
++  .kb-split-list-pane .list-row-right .cycle-pill,
++  .kb-split-list-pane .list-row-right .module-pill {
++    display: none;
++  }
++}
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index c583ce6..87b0647 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -1,4 +1,4 @@
+-import React, { useState, useMemo, useEffect, type ComponentType, type JSX } from 'react';
++import React, { useState, useMemo, useEffect, useCallback, type ComponentType, type JSX } from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
+ import type { BoardIssue, BoardWorkflowState } from '../board/boardApi.ts';
+@@ -24,6 +24,7 @@ import {
+   type StateSummary,
+   type GroupAxis,
+ } from './viewsApi';
++import { IssueSurfaceRoot } from '../drawer/IssueSurface';
+ import './filterBulk.css';
+ 
+ // Export all KB-P3-40 components per Scoped Definition of Done
+@@ -89,6 +90,7 @@ export interface ViewComponentProps {
+   onLoadMore?: () => void;
+   isLoading?: boolean;
+   focusedKey?: string | null;
++  onOpenPeek?: (issueKey: string) => void;
+ }
+ 
+ export type ViewComponent = ComponentType<ViewComponentProps>;
+@@ -133,6 +135,7 @@ export interface IssuesWorkspaceRouteProps {
+   initialIssues?: IssueItem[];
+   initialLayout?: ViewLayout;
+   queryClient?: QueryClient;
++  onOpenPeek?: (issueKey: string) => void;
+ }
+ 
+ /**
+@@ -146,6 +149,7 @@ export function IssuesWorkspaceRoute({
+   initialIssues,
+   initialLayout,
+   queryClient = defaultQueryClient,
++  onOpenPeek: propOnOpenPeek,
+ }: IssuesWorkspaceRouteProps): JSX.Element {
+   const isLiveMode = initialIssues === undefined;
+ 
+@@ -177,6 +181,38 @@ export function IssuesWorkspaceRoute({
+   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
+   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+ 
++  const [peekParam, setPeekParam] = useState<string | null>(() => {
++    return typeof window !== 'undefined'
++      ? new URLSearchParams(window.location.search).get('peek')
++      : null;
++  });
++
++  useEffect(() => {
++    const handlePopState = (): void => {
++      const p = new URLSearchParams(window.location.search).get('peek');
++      setPeekParam(p);
++    };
++    window.addEventListener('popstate', handlePopState);
++    return () => {
++      window.removeEventListener('popstate', handlePopState);
++    };
++  }, []);
++
++  const handleOpenPeek = useCallback(
++    (issueKey: string) => {
++      setPeekParam(issueKey);
++      if (propOnOpenPeek) {
++        propOnOpenPeek(issueKey);
++        return;
++      }
++      const url = new URL(window.location.href);
++      url.searchParams.set('peek', issueKey);
++      window.history.pushState({}, '', url.toString());
++      window.dispatchEvent(new PopStateEvent('popstate'));
++    },
++    [propOnOpenPeek],
++  );
++
+   useEffect(() => {
+     if (!isLiveMode || !projectKey) {
+       return;
+@@ -422,6 +458,7 @@ export function IssuesWorkspaceRoute({
+   };
+ 
+   const handleCreateIssue = (newIssue: Partial<IssueItem>) => {
++    setIsCreateModalOpen(false);
+     const nextNum = issues.length + 140;
+     const optimisticId = `01931234-new-${String(Date.now())}`;
+     const item: IssueItem = {
+@@ -470,7 +507,16 @@ export function IssuesWorkspaceRoute({
+             priority: {
+               slug,
+               label: slug.charAt(0).toUpperCase() + slug.slice(1),
+-              emoji: slug === 'urgent' ? '🔥' : slug === 'high' ? '⚡' : slug === 'low' ? '💤' : '🔹',
++              emoji:
++                slug === 'urgent'
++                  ? '🔥'
++                  : slug === 'high'
++                    ? '⚡'
++                    : slug === 'low'
++                      ? '🔽'
++                      : slug === 'none'
++                        ? '➖'
++                        : '🔹',
+             },
+           };
+         }
+@@ -584,6 +630,14 @@ export function IssuesWorkspaceRoute({
+   // 2D Swimlane condition: layout === 'board' && subGroupBy !== 'none'
+   const is2DSwimlane = layout === 'board' && subGroupBy !== 'none';
+ 
++  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified)
++  const activePeekKey = useMemo(() => {
++    if (peekParam) {
++      return peekParam;
++    }
++    return filteredIssues[0]?.key ?? null;
++  }, [peekParam, filteredIssues]);
++
+   return (
+     <QueryClientProvider client={queryClient}>
+       <main
+@@ -605,7 +659,7 @@ export function IssuesWorkspaceRoute({
+         onToggleFilterOpen={setIsFilterOpen}
+       />
+ 
+-      {/* 2. Main View: 2D Swimlane Board Grid or standard ViewHost */}
++      {/* 2. Main View: 2D Swimlane Board Grid, 3-pane split list view, or standard ViewHost */}
+       {is2DSwimlane ? (
+         <SwimlaneBoardGrid
+           issues={filteredIssues}
+@@ -623,10 +677,36 @@ export function IssuesWorkspaceRoute({
+           projectKey={projectKey}
+           states={boardStates}
+           issues={boardIssues}
++          onOpenPeek={handleOpenPeek}
+           onNewItem={() => {
+             setIsCreateModalOpen(true);
+           }}
+         />
++      ) : layout === 'list' ? (
++        <div className="kb-split-layout" data-testid="split-list-layout">
++          <div className="kb-split-list-pane">
++            <ListView
++              issues={filteredIssues}
++              projectKey={projectKey}
++              modulesEnabled={modulesEnabled}
++              selectedIds={selectedIds}
++              onToggleSelect={handleToggleSelect}
++              onCreateIssue={() => {
++                setIsCreateModalOpen(true);
++              }}
++              focusedKey={focusedKey}
++              onOpenPeek={handleOpenPeek}
++              activeKey={activePeekKey}
++            />
++          </div>
++          {activePeekKey && (
++            <IssueSurfaceRoot
++              mode="split"
++              issueKey={activePeekKey}
++              projectKey={projectKey}
++            />
++          )}
++        </div>
+       ) : (
+         <ViewHost
+           layout={layout}
+@@ -636,6 +716,7 @@ export function IssuesWorkspaceRoute({
+           selectedIds={selectedIds}
+           onToggleSelect={handleToggleSelect}
+           onSelectAll={handleSelectAll}
++          onOpenPeek={handleOpenPeek}
+           onCreateIssue={() => {
+             setIsCreateModalOpen(true);
+           }}
+@@ -678,8 +759,10 @@ export function IssuesWorkspaceRoute({
+               : prioritySlug === 'high'
+                 ? '⚡'
+                 : prioritySlug === 'low'
+-                  ? '💤'
+-                  : '🔹';
++                  ? '🔽'
++                  : prioritySlug === 'none'
++                    ? '➖'
++                    : '🔹';
+           setIssues((prev) =>
+             prev.map((i) =>
+               selectedIds.includes(i.key)

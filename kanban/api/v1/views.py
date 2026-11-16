@@ -38,7 +38,7 @@ async def list_project_views(
     caller: Caller,
     session: Session,
 ) -> ViewList:
-    """List all saved views in a project visible to the caller under RLS."""
+    """List all saved views configured for a project visible to the caller under RLS."""
     async with timing_floor(floor_ms=25.0):
         return await svc.list_project_views(session, caller, project_ref)
 
@@ -55,7 +55,7 @@ async def create_view(
     caller: Caller,
     session: Session,
 ) -> ViewResponse:
-    """Create a new saved view in a project."""
+    """Create a new saved view in a project with layout mode, grouping axes, and filter criteria."""
     async with timing_floor(floor_ms=25.0):
         return await svc.create_view(session, caller, project_ref, body)
 
@@ -70,7 +70,7 @@ async def get_view(
     caller: Caller,
     session: Session,
 ) -> ViewResponse:
-    """Retrieve a saved view by its ID."""
+    """Retrieve an existing saved view definition by its unique identifier under RLS."""
     async with timing_floor(floor_ms=25.0):
         view = await svc.get_view_or_404(session, caller, view_id)
         return await svc.serialize_view(session, caller, view)
@@ -87,7 +87,7 @@ async def update_view(
     caller: Caller,
     session: Session,
 ) -> ViewResponse:
-    """Update an existing saved view."""
+    """Update mutable properties of an existing saved view including layout, filters, and limits."""
     async with timing_floor(floor_ms=25.0):
         return await svc.update_view(session, caller, view_id, body)
 
@@ -103,7 +103,7 @@ async def delete_view(
     caller: Caller,
     session: Session,
 ) -> Response:
-    """Delete a saved view."""
+    """Permanently delete a saved view definition from the owning project."""
     async with timing_floor(floor_ms=25.0):
         await svc.delete_view(session, caller, view_id)
         return Response(status_code=204)
@@ -121,7 +121,7 @@ async def query_view_issues_get(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> ViewQueryResponse:
-    """Execute query for a saved view using its configuration."""
+    """Execute a 2D structured query for a saved view using its configuration and pagination."""
     async with timing_floor(floor_ms=25.0):
         return await svc.query_view_issues(session, caller, view_id, cursor=cursor, limit=limit)
 
@@ -143,7 +143,7 @@ async def query_view_issues_post(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> ViewQueryResponse:
-    """Execute query for a saved view via POST."""
+    """Execute query for a saved view via POST to avoid client URL length limitations."""
     async with timing_floor(floor_ms=25.0):
         return await svc.query_view_issues(session, caller, view_id, cursor=cursor, limit=limit)
 
@@ -165,6 +165,6 @@ async def query_project_issues_adhoc(
     caller: Caller,
     session: Session,
 ) -> ViewQueryResponse:
-    """Execute an ad-hoc query against issues in a project."""
+    """Execute an ad-hoc 2D structured query against project issues without saving a view."""
     async with timing_floor(floor_ms=25.0):
         return await svc.query_project_issues_adhoc(session, caller, project_ref, body)

@@ -43,6 +43,7 @@ export type AssigneeItem = PrincipalAssignee | FreeTextAssignee;
 export interface ProjectModule {
   id: string;
   name: string;
+  emoji?: string;
   description?: string | null;
   status?: string;
 }

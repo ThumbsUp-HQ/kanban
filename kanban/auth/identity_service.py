@@ -35,6 +35,76 @@ __all__ = [
 ]
 
 
+def _evaluate_card_access(  # noqa: C901, PLR0911
+    card_row: RowMapping | Mapping[str, Any] | None,
+    assertion: ExternalIdentityAssertion,
+) -> tuple[bool, bool]:
+    """Evaluate whether assertion meets card allowlist policy. Returns (is_allowed, is_admin)."""
+    if card_row is None:
+        return True, False
+
+    pub_cfg = card_row.get("public_config", {}) if hasattr(card_row, "get") else {}
+    if not isinstance(pub_cfg, dict):
+        pub_cfg = {}
+
+    # LDAP Group policy
+    access_mode = pub_cfg.get("access_mode", "any_user")
+    admin_groups: list[str] = pub_cfg.get("admin_groups") or []
+    user_groups: list[str] = pub_cfg.get("user_groups") or []
+
+    assertion_groups_lower = {g.strip().lower() for g in assertion.groups}
+    in_ldap_admin = any(ag.strip().lower() in assertion_groups_lower for ag in admin_groups)
+    in_ldap_user = any(ug.strip().lower() in assertion_groups_lower for ug in user_groups)
+
+    if in_ldap_admin:
+        return True, True
+    if in_ldap_user:
+        return True, False
+    if access_mode == "group_restricted" and (admin_groups or user_groups):
+        return False, False
+
+    # OIDC/OAuth allowlist policy
+    admin_allowlist: list[str] = pub_cfg.get("admin_allowlist") or []
+    user_allowlist: list[str] = pub_cfg.get("user_allowlist") or []
+
+    is_admin = "SERVER_ADMIN" in assertion.groups
+    if not admin_allowlist and not user_allowlist:
+        return True, is_admin
+
+    user_candidates: set[str] = set()
+    if assertion.email:
+        user_candidates.add(assertion.email.lower())
+        user_candidates.add(assertion.email.split("@")[0].lower())
+    if assertion.subject:
+        user_candidates.add(assertion.subject.lower())
+    if assertion.display_name:
+        user_candidates.add(assertion.display_name.lower())
+
+    in_admin = any(ag.strip().lower() in user_candidates for ag in admin_allowlist)
+    in_user = any(ug.strip().lower() in user_candidates for ug in user_allowlist)
+
+    if in_admin:
+        return True, True
+    if in_user:
+        return True, False
+
+    return False, False
+
+
+async def _ensure_server_admin_role(
+    db_session: AsyncSession,
+    workspace_id: uuid.UUID,
+    principal_id: uuid.UUID,
+) -> None:
+    """Grant SERVER_ADMIN role binding if not already present."""
+    stmt = text(
+        "INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type) "
+        "VALUES (uuidv7(), :ws_id, :pid, 'SERVER_ADMIN', 'server') "
+        "ON CONFLICT DO NOTHING"
+    )
+    await db_session.execute(stmt, {"ws_id": workspace_id, "pid": principal_id})
+
+
 class DatabaseIdentityResolver:
     """Production identity resolver binding IdP assertions to user principals (KB-P2-08).
 
@@ -223,6 +293,28 @@ class DatabaseIdentityResolver:
                 detail="Account is disabled",
             )
 
+        # Check card allowlist policy if configured
+        card_res = await db_session.execute(
+            text(
+                "SELECT id, workspace_id, provider_kind, public_config "
+                "FROM kb_auth.card_get_by_id(:id)"
+            ),
+            {"id": assertion.card_id},
+        )
+        card_row = card_res.mappings().first()
+        is_allowed, is_admin_card = _evaluate_card_access(card_row, assertion)
+        if not is_allowed:
+            raise ProblemException(
+                code="IDENTITY_NOT_PROVISIONED",
+                status=403,
+                title="Access Denied",
+                detail="User is not in the authorized access list",
+            )
+        if is_admin_card:
+            await _ensure_server_admin_role(
+                db_session, identity_row["workspace_id"], identity_row["principal_id"]
+            )
+
         # Record login timestamp
         await db_session.execute(
             text("SELECT kb_auth.identity_record_login(:id)"),
@@ -297,7 +389,8 @@ class DatabaseIdentityResolver:
         """Handle login when identity is unbound, auto-provisioning if allowed."""
         card_res = await db_session.execute(
             text(
-                "SELECT id, workspace_id, is_enabled, auto_provision_users, allowed_email_domains "
+                "SELECT id, workspace_id, is_enabled, auto_provision_users, allowed_email_domains, "
+                "       provider_kind, public_config "
                 "FROM kb_auth.card_get_by_id(:id)"
             ),
             {"id": assertion.card_id},
@@ -346,11 +439,44 @@ class DatabaseIdentityResolver:
         # Validate email and domain allowlist
         self._validate_assertion_email(card_row, assertion)
 
+        # Check OAuth/OIDC admin and user allowlists if configured
+        is_allowed, is_admin_user = _evaluate_card_access(card_row, assertion)
+        if not is_allowed:
+            raise ProblemException(
+                code="IDENTITY_NOT_PROVISIONED",
+                status=403,
+                title="Access Denied",
+                detail="User is not in the authorized access list",
+            )
+
         if effective_ws_id is None:
             msg = "No target workspace found for user auto-provisioning"
             raise RuntimeError(msg)
 
-        # Zero Email Auto-Merge Invariant: never auto-merge if email already exists
+        await self._check_existing_email_merge(db_session, effective_ws_id, assertion)
+
+        # Provision new user atomically
+        new_principal_id = await self._provision_user(db_session, effective_ws_id, assertion)
+
+        # Bind SERVER_ADMIN role if user qualified as admin
+        if is_admin_user:
+            await _ensure_server_admin_role(db_session, effective_ws_id, new_principal_id)
+            await db_session.commit()
+
+        return ResolvedLogin(
+            principal_id=new_principal_id,
+            workspace_id=effective_ws_id,
+            aal_level=1,
+            mfa_pending=is_admin_user,
+        )
+
+    @staticmethod
+    async def _check_existing_email_merge(
+        db_session: AsyncSession,
+        effective_ws_id: uuid.UUID,
+        assertion: ExternalIdentityAssertion,
+    ) -> None:
+        """Prevent auto-merging external assertion into existing user email."""
         user_check_stmt = text(
             "SELECT id FROM users WHERE workspace_id = :ws_id AND lower(email) = lower(:email)"
         )
@@ -386,16 +512,6 @@ class DatabaseIdentityResolver:
                     "and link this provider in settings."
                 ),
             )
-
-        # Provision new user atomically
-        new_principal_id = await self._provision_user(db_session, effective_ws_id, assertion)
-
-        return ResolvedLogin(
-            principal_id=new_principal_id,
-            workspace_id=effective_ws_id,
-            aal_level=1,
-            mfa_pending=False,
-        )
 
     @staticmethod
     async def _provision_user(

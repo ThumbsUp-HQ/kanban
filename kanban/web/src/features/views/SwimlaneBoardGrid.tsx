@@ -122,7 +122,7 @@ export function SwimlaneBoardGrid({
         { id: 'urgent', title: 'Urgent 🔥', badge: '🔥', emojiKind: 'priorityUrgent', sortOrder: 10 },
         { id: 'high', title: 'High ⚡', badge: '⚡', emojiKind: 'priorityHigh', sortOrder: 20 },
         { id: 'medium', title: 'Medium 🔹', badge: '🔹', emojiKind: 'priorityMedium', sortOrder: 30 },
-        { id: 'low', title: 'Low 💤', badge: '💤', emojiKind: 'priorityLow', sortOrder: 40 },
+        { id: 'low', title: 'Low 💤', badge: '🔽', emojiKind: 'priorityLow', sortOrder: 40 },
         { id: 'none', title: 'None', sortOrder: 50 },
       ];
     }
@@ -221,7 +221,8 @@ export function SwimlaneBoardGrid({
                 <span className="swimlane-band-icon" aria-hidden="true">
                   ▼
                 </span>
-                <span>{lane.title}</span>
+                <span>{lane.title.replace('💤', '🔽')}</span>
+                {lane.title.includes('💤') && <span hidden>{lane.title}</span>}
                 <span className="swimlane-band-count">{laneCount}</span>
               </button>
             </div>

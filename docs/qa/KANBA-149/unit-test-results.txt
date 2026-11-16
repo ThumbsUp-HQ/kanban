@@ -1,0 +1,32 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p5-147-35c2e283
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 62 items
+
+kanban/tests/workflows/test_dry_run.py .......                           [ 11%]
+kanban/tests/workflows/test_manifest.py ....                             [ 17%]
+kanban/tests/workflows/test_mutations.py ...                             [ 22%]
+kanban/tests/workflows/test_transition_engine.py ................        [ 48%]
+kanban/tests/workflows/test_workflow_hooks_api.py ...............        [ 72%]
+mcp/tests/admin/test_manage_workflow_interceptors.py ..............      [ 95%]
+database/tests/test_workflow_hooks_ddl.py ...                            [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                              Stmts   Miss Branch BrPart  Cover
+-----------------------------------------------------------------------------------
+kanban/workflows/__init__.py                          6      0      0      0   100%
+kanban/workflows/dry_run.py                         200      7     46      5    95%
+kanban/workflows/engine.py                          250     10     62     10    94%
+kanban/workflows/gate_types.py                       23      0      0      0   100%
+kanban/workflows/hooks_service.py                   395     14    112     12    95%
+kanban/workflows/manifest.py                         17      0      4      0   100%
+kanban/workflows/mutations.py                       140      0     66      4    98%
+mcp/admin/tools/manage_workflow_interceptors.py     228     11    112      7    95%
+-----------------------------------------------------------------------------------
+TOTAL                                              1259     42    402     38    95%
+============================= 62 passed in 25.99s ==============================

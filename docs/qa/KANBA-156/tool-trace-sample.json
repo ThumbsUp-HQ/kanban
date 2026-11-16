@@ -1,0 +1,42 @@
+{
+  "scenario": "transition_rls_veto.yaml replay",
+  "harness": "in_app_sdk",
+  "report": {
+    "decision": "reject",
+    "total_latency_ms": 4.001,
+    "prompt_tokens": 0,
+    "completion_tokens": 0
+  },
+  "tool_call_count": 2,
+  "tool_traces": [
+    {
+      "tool_name": "read_ticket",
+      "args_redacted": {
+        "identifier": "KAN-100"
+      },
+      "duration_ms": 0.085,
+      "status": "ok",
+      "output_bytes": 59
+    },
+    {
+      "tool_name": "repo_grep",
+      "args_redacted": {
+        "pattern": "FORCE ROW LEVEL SECURITY",
+        "path": "database/"
+      },
+      "duration_ms": 3.726,
+      "status": "ok",
+      "output_bytes": 0
+    }
+  ],
+  "final_verdict_payload": {
+    "schema": "kb-transition-verdict/v1",
+    "decision": "reject",
+    "reason_markdown": "Missing `FORCE ROW LEVEL SECURITY` on `auth_card_group_mappings` migration.",
+    "field_updates": {},
+    "add_labels": [
+      "qa-needs-work"
+    ],
+    "nonce": "162ccee2e9c769572a64e0d65f25a8f9"
+  }
+}

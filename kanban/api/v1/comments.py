@@ -19,7 +19,14 @@ from kanban.api.v1.schemas.comments import (
     CommentResponse,
     ReactionResponse,
 )
+from kanban.security.read_taint import (
+    TaintGuard,
+    TaintRecorder,
+    get_taint_guard,
+    get_taint_recorder,
+)
 from kanban.services import comments as svc
+from kanban.services.issue_keys import resolve_issue_ref
 
 __all__ = [
     "comments_router",
@@ -35,15 +42,18 @@ comments_router: Final[APIRouter] = router
     response_model=CommentList,
     summary="List comments on an issue with nested replies",
 )
-async def list_issue_comments(
+async def list_issue_comments(  # noqa: PLR0913, PLR0917
     issue_ref: str,
     caller: Annotated[PrincipalContext, Depends(get_principal)],
     session: Annotated[AsyncSession, Depends(get_rls_session)],
+    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
     cursor: Annotated[str | None, Query(max_length=128)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> CommentList:
     """Return top-level comments ordered created_at ASC with up to 200 inlined replies."""
     async with timing_floor(floor_ms=25.0):
+        issue = await resolve_issue_ref(session, caller, issue_ref)
+        await taint_recorder.record_project_ids([issue.project_id])
         return await svc.list_comments(
             session=session,
             caller=caller,
@@ -59,15 +69,18 @@ async def list_issue_comments(
     status_code=status.HTTP_201_CREATED,
     summary="Create a top-level comment or depth-1 reply on an issue",
 )
-async def create_issue_comment(
+async def create_issue_comment(  # noqa: PLR0913, PLR0917
     issue_ref: str,
     body: CommentCreate,
     caller: Annotated[PrincipalContext, Depends(get_principal)],
     session: Annotated[AsyncSession, Depends(get_rls_session)],
     response: Response,
+    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
 ) -> CommentResponse:
     """Create comment after normalization, check mention access, and emit activity."""
     async with timing_floor(floor_ms=25.0):
+        issue = await resolve_issue_ref(session, caller, issue_ref)
+        await taint_guard.check_write(issue.project_id, tool_name="add_comment")
         result, etag = await svc.create_comment(
             session=session,
             caller=caller,

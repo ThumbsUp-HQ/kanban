@@ -1,0 +1,27 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 15 tests using 10 workers
+
+  -   2 [tablet] › e2e/workflow-studio.spec.ts:421:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 04-non-admin-404: renders NotFoundView without leaking studio controls for non-admin callers
+  -   7 [tablet] › e2e/workflow-studio.spec.ts:277:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 02-attach-agent-hook: opens AttachHookDialog with agent selector and mutable fields chips
+  ✓   3 [desktop] › e2e/workflow-studio.spec.ts:421:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 04-non-admin-404: renders NotFoundView without leaking studio controls for non-admin callers (1.5s)
+  ✓   5 [tablet] › e2e/workflow-studio.spec.ts:463:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 05-reorder-and-toggle: supports keyboard reordering, toggle switch, and 422 error rollback (1.7s)
+  ✓   6 [desktop] › e2e/workflow-studio.spec.ts:463:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 05-reorder-and-toggle: supports keyboard reordering, toggle switch, and 422 error rollback (1.8s)
+  ✓   1 [tablet] › e2e/workflow-studio.spec.ts:219:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 01-studio-pipeline: renders S14.4 wireframe card with 3 hooks and open EmojiHint popover (2.2s)
+  ✓   9 [desktop] › e2e/workflow-studio.spec.ts:219:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 01-studio-pipeline: renders S14.4 wireframe card with 3 hooks and open EmojiHint popover (2.1s)
+  ✓   4 [desktop] › e2e/workflow-studio.spec.ts:277:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 02-attach-agent-hook: opens AttachHookDialog with agent selector and mutable fields chips (2.4s)
+  ✓  10 [desktop] › e2e/workflow-studio.spec.ts:349:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 03-dry-run-results: executes sample-ticket dry-run and displays rejected validator with copyable CLI command (2.2s)
+  ✓   8 [tablet] › e2e/workflow-studio.spec.ts:349:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 03-dry-run-results: executes sample-ticket dry-run and displays rejected validator with copyable CLI command (2.3s)
+  -  14 [mobile] › e2e/workflow-studio.spec.ts:421:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 04-non-admin-404: renders NotFoundView without leaking studio controls for non-admin callers
+  ✓  11 [mobile] › e2e/workflow-studio.spec.ts:219:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 01-studio-pipeline: renders S14.4 wireframe card with 3 hooks and open EmojiHint popover (1.8s)
+  ✓  12 [mobile] › e2e/workflow-studio.spec.ts:277:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 02-attach-agent-hook: opens AttachHookDialog with agent selector and mutable fields chips (1.8s)
+  ✓  15 [mobile] › e2e/workflow-studio.spec.ts:463:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 05-reorder-and-toggle: supports keyboard reordering, toggle switch, and 422 error rollback (1.1s)
+  ✓  13 [mobile] › e2e/workflow-studio.spec.ts:349:3 › Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158) › 03-dry-run-results: executes sample-ticket dry-run and displays rejected validator with copyable CLI command (1.5s)
+
+  3 skipped
+  12 passed (22.7s)
+E2E EXIT: 0

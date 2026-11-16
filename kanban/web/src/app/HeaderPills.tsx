@@ -3,7 +3,7 @@
  * Renders Warning, Air-Gap, and Access EmojiHints with full hover elaboration.
  */
 
-import React, { type JSX } from 'react';
+import React, { useState, type JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { EmojiHint } from '../components/emoji/EmojiHint';
 import { qk } from '../api/queryKeys';
@@ -35,6 +35,8 @@ export interface HeaderPillsProps {
   projectName?: string | undefined;
 }
 
+export const STANDALONE_DISMISS_KEY = 'kb_dismiss_standalone_warning';
+
 export function HeaderPills({
   systemStatus: statusOverride,
   accessManifest: accessOverride,
@@ -44,6 +46,26 @@ export function HeaderPills({
   const { openPanel } = useShellPanels();
   const queryStatus = useSystemStatus();
   const status = statusOverride !== undefined ? statusOverride : queryStatus.data;
+
+  const [isDismissed, setIsDismissed] = useState<boolean>(() => {
+    try {
+      return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(STANDALONE_DISMISS_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismissStandalone = (e: React.MouseEvent<HTMLButtonElement>): void => {
+    e.stopPropagation();
+    setIsDismissed(true);
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem(STANDALONE_DISMISS_KEY, 'true');
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  };
 
   const accessQuery = useQuery({
     queryKey: qk.access(projectId ?? 'current'),
@@ -93,35 +115,40 @@ export function HeaderPills({
     'Project';
 
   return (
-    <div
-      className="kb-header-pills"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-2, 8px)',
-      }}
-    >
+    <div className="kb-header-pills">
       {/* 1. Standalone warning pill */}
-      {isStandalone && (
-        <EmojiHint
-          kind="warning"
-          variant="interactive"
-          label="Standalone mode warning"
-          activateLabel="Open standalone status"
-          onActivate={() => { openPanel('standalone'); }}
-          content={
-            <div className="kb-pill-content">
-              <div>
-                Standalone Single-Container Mode (Not Recommended for Production) - Click for volume status, encrypted backup, & 1-click docker-compose.yml export
-              </div>
-              {!status.persistent_volume && (
+      {isStandalone && !isDismissed && (
+        <span className="kb-standalone-pill-group">
+          <EmojiHint
+            kind="warning"
+            variant="interactive"
+            label="Standalone mode warning"
+            activateLabel="Open standalone status"
+            onAction={() => { openPanel('standalone'); }}
+            onActivate={() => { openPanel('standalone'); }}
+            content={
+              <div className="kb-pill-content">
                 <div>
-                  Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
+                  Standalone Single-Container Mode (Not Recommended for Production) - Click for volume status, encrypted backup, & 1-click docker-compose.yml export
                 </div>
-              )}
-            </div>
-          }
-        />
+                {!status.persistent_volume && (
+                  <div>
+                    Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
+                  </div>
+                )}
+              </div>
+            }
+          />
+          <button
+            type="button"
+            className="kb-pill-dismiss-btn"
+            aria-label="Dismiss standalone warning"
+            data-testid="standalone-dismiss-btn"
+            onClick={handleDismissStandalone}
+          >
+            ✕
+          </button>
+        </span>
       )}
 
       {/* 2. Air-gap mode pill */}

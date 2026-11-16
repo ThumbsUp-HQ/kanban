@@ -42,7 +42,7 @@ async def list_states(
     caller: Caller,
     session: Session,
 ) -> list[StateResponse]:
-    """List workflow states ordered by sort_order."""
+    """List workflow states configured for a project ordered by execution sort_order."""
     async with timing_floor(floor_ms=25.0):
         return await svc.list_states(session, caller, project_ref)
 
@@ -57,7 +57,7 @@ async def create_state(
     session: Session,
     response: Response,
 ) -> StateResponse:
-    """Create a workflow state (project ADMIN only)."""
+    """Create a new workflow state within a project (project ADMIN capability required)."""
     async with timing_floor(floor_ms=25.0):
         result = await svc.create_state(session, caller, project_ref, body)
         response.headers["Location"] = f"/api/v1/projects/{project_ref}/states/{result.id}"
@@ -72,7 +72,10 @@ async def patch_state(
     caller: Caller,
     session: Session,
 ) -> StateResponse:
-    """Update a workflow state (project ADMIN only)."""
+    """Update mutable properties of a workflow state including name and color.
+
+    Requires project ADMIN role.
+    """
     async with timing_floor(floor_ms=25.0):
         return await svc.update_state(session, caller, project_ref, state_id, body)
 
@@ -85,7 +88,10 @@ async def delete_state(
     session: Session,
     migrate_to: Annotated[uuid.UUID | None, Query()] = None,
 ) -> None:
-    """Delete a workflow state, optionally migrating issues (project ADMIN only)."""
+    """Delete a workflow state with optional migration of associated issues.
+
+    Optionally migrates associated issues to a replacement state (project ADMIN only).
+    """
     async with timing_floor(floor_ms=25.0):
         await svc.delete_state(session, caller, project_ref, state_id, migrate_to=migrate_to)
 
@@ -101,7 +107,7 @@ async def list_priorities(
     caller: Caller,
     session: Session,
 ) -> list[PriorityResponse]:
-    """List priorities for a project ordered by sort_order."""
+    """List custom priorities configured for a project ordered by priority rank and sort_order."""
     async with timing_floor(floor_ms=25.0):
         return await svc.list_priorities(session, caller, project_ref)
 
@@ -116,7 +122,10 @@ async def create_priority(
     session: Session,
     response: Response,
 ) -> PriorityResponse:
-    """Create a custom project priority (project ADMIN only)."""
+    """Create a custom project priority with label and semantic emoji.
+
+    Requires project ADMIN capability.
+    """
     async with timing_floor(floor_ms=25.0):
         result = await svc.create_priority(session, caller, project_ref, body)
         response.headers["Location"] = f"/api/v1/projects/{project_ref}/priorities/{result.id}"
@@ -133,7 +142,10 @@ async def patch_priority(
     caller: Caller,
     session: Session,
 ) -> PriorityResponse:
-    """Update mutable priority fields (project ADMIN only)."""
+    """Update mutable priority fields including label and emoji.
+
+    Requires project ADMIN capability.
+    """
     async with timing_floor(floor_ms=25.0):
         return await svc.update_priority(session, caller, project_ref, priority_id, body)
 
@@ -146,7 +158,10 @@ async def delete_priority(
     session: Session,
     migrate_to: Annotated[uuid.UUID | None, Query()] = None,
 ) -> None:
-    """Delete a custom priority, optionally migrating issues (project ADMIN only)."""
+    """Delete a custom priority with optional issue migration.
+
+    Optionally migrates associated issues to a replacement priority (project ADMIN only).
+    """
     async with timing_floor(floor_ms=25.0):
         await svc.delete_priority(session, caller, project_ref, priority_id, migrate_to=migrate_to)
 
@@ -162,7 +177,7 @@ async def list_labels(
     caller: Caller,
     session: Session,
 ) -> list[LabelResponse]:
-    """List labels for a project ordered by name."""
+    """List project labels available for tagging issues ordered alphabetically by name."""
     async with timing_floor(floor_ms=25.0):
         return await svc.list_labels(session, caller, project_ref)
 
@@ -175,7 +190,7 @@ async def create_label(
     session: Session,
     response: Response,
 ) -> LabelResponse:
-    """Create a project label (project EDIT or ADMIN allowed)."""
+    """Create a new project label with name and hex color token (project EDIT or ADMIN allowed)."""
     async with timing_floor(floor_ms=25.0):
         result = await svc.create_label(session, caller, project_ref, body)
         response.headers["Location"] = f"/api/v1/projects/{project_ref}/labels/{result.id}"
@@ -190,7 +205,7 @@ async def patch_label(
     caller: Caller,
     session: Session,
 ) -> LabelResponse:
-    """Update a project label (project ADMIN only)."""
+    """Update a project label name or color code (project ADMIN capability required)."""
     async with timing_floor(floor_ms=25.0):
         return await svc.update_label(session, caller, project_ref, label_id, body)
 
@@ -202,6 +217,9 @@ async def delete_label(
     caller: Caller,
     session: Session,
 ) -> None:
-    """Delete a project label and detach from issues (project ADMIN only)."""
+    """Permanently delete a project label, removing it from all tagged issues.
+
+    Requires project ADMIN role.
+    """
     async with timing_floor(floor_ms=25.0):
         await svc.delete_label(session, caller, project_ref, label_id)

@@ -84,7 +84,7 @@ export const EMOJI_REGISTRY: Readonly<Record<EmojiKey, EmojiEntry>> = Object.fre
       'Displays project-customizable priority name, SLA target window, and sort weight (P to change).',
   }),
   priorityLow: Object.freeze({
-    glyph: '💤',
+    glyph: '🔽',
     domain: 'Priority (Low)',
     ariaLabel: 'Priority: Low',
     defaultHint:

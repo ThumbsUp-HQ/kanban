@@ -1,0 +1,102 @@
+{
+  "system_status": {
+    "version": "1.0.0",
+    "deployment_mode": "standalone",
+    "airgapped": false,
+    "allow_unlimited_mcp_keys": true
+  },
+  "mint_personal_key_request_unlimited_with_narrowing": {
+    "surface": "agent",
+    "label": "CI Automation Runner",
+    "expiry_days": 60,
+    "unlimited": true,
+    "confirm_unlimited": true,
+    "disabled_tools": ["complete_work", "transition_ticket"],
+    "allowed_cidrs": ["10.0.0.0/8", "192.168.1.50/32"]
+  },
+  "mint_personal_key_response": {
+    "token": "kb_agt_87f91c94b3c4f6e1a0b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5_x7k9",
+    "key": {
+      "id": "018f6c32-9428-7010-8b1a-09d5718a29b4",
+      "workspace_id": "018f6c30-1000-7000-8000-000000000001",
+      "principal_id": "018f6c30-2000-7000-8000-000000000002",
+      "surface": "agent",
+      "display_hint": "x7k9",
+      "scopes": ["agent:read", "agent:write"],
+      "created_at": "2026-11-15T19:00:00Z",
+      "expires_at": null,
+      "revoked_at": null,
+      "label": "CI Automation Runner",
+      "scope_tier": "workspace",
+      "owner_kind": "personal_user",
+      "project_id": null,
+      "capability_mask": 7,
+      "allowed_tools": null,
+      "disabled_tools": ["complete_work", "transition_ticket"],
+      "allowed_cidrs": ["10.0.0.0/8", "192.168.1.50/32"]
+    }
+  },
+  "mint_admin_global_key_request": {
+    "surface": "admin",
+    "label": "Cross-Workspace Enterprise Orchestrator",
+    "scope_tier": "global",
+    "owner_kind": "service_bot",
+    "capability_mask": 7,
+    "expiry_days": 90,
+    "unlimited": false,
+    "confirm_unlimited": false,
+    "allowed_cidrs": ["127.0.0.1/32"]
+  },
+  "introspect_token_payload": {
+    "active": true,
+    "sub": "018f6c30-2000-7000-8000-000000000002",
+    "token_id": "018f6c32-9428-7010-8b1a-09d5718a29b4",
+    "workspace_id": "018f6c30-1000-7000-8000-000000000001",
+    "surface": "agent",
+    "scopes": ["agent:read", "agent:write"],
+    "created_at": "2026-11-15T19:00:00Z",
+    "expires_at": null,
+    "revoked_at": null,
+    "last_used_at": "2026-11-15T19:05:00Z",
+    "scope_tier": "workspace",
+    "owner_kind": "personal_user",
+    "project_id": null,
+    "allowed_workspace_ids": null,
+    "allowed_project_ids": null,
+    "capability_mask": 7,
+    "allowed_tools": null,
+    "disabled_tools": ["complete_work", "transition_ticket"],
+    "allowed_cidrs": ["10.0.0.0/8", "192.168.1.50/32"],
+    "label": "CI Automation Runner"
+  },
+  "error_unlimited_key_forbidden": {
+    "detail": {
+      "code": "UNLIMITED_KEY_FORBIDDEN",
+      "message": "Creation of unlimited lifetime MCP API keys is disabled by server security policy."
+    }
+  },
+  "error_unlimited_confirmation_required": {
+    "detail": {
+      "code": "UNLIMITED_CONFIRMATION_REQUIRED",
+      "message": "Explicit confirmation (confirm_unlimited=True) is required to mint an unlimited lifetime key."
+    }
+  },
+  "error_cidr_forbidden": {
+    "error": {
+      "code": -32000,
+      "message": "Client IP 198.51.100.5 is not in allowed CIDRs for this API key: ['10.0.0.0/8', '192.168.1.50/32']",
+      "data": {
+        "error_code": "FORBIDDEN_CIDR"
+      }
+    }
+  },
+  "error_tool_disabled_narrowing": {
+    "error": {
+      "code": -32003,
+      "message": "Tool 'complete_work' is disabled on this API key by granular narrowing policy.",
+      "data": {
+        "error_code": "INSUFFICIENT_SCOPE"
+      }
+    }
+  }
+}

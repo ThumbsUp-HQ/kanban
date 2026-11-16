@@ -1,0 +1,125 @@
+{
+  "ticket": "KANBA-181",
+  "title": "Dual-Track CI with Neutered Public GitHub Actions and Preserved Self-Hosted Dash CI",
+  "github_actions": {
+    "file": ".github/workflows/ci.yml",
+    "name": "ci",
+    "triggers": [
+      "push",
+      "pull_request"
+    ],
+    "permissions": {
+      "contents": "read"
+    },
+    "concurrency": {
+      "group": "ci-${{ github.ref }}",
+      "cancel-in-progress": true
+    },
+    "jobs": {
+      "lint-and-syntax": {
+        "runs_on": "ubuntu-latest",
+        "timeout_minutes": 15,
+        "needs": [],
+        "if_condition": null,
+        "step_count": 6,
+        "step_names": [
+          "Checkout repository",
+          "Set up Python",
+          "Install uv",
+          "Sync dependencies",
+          "Lint and syntax checks",
+          "Fast smoke unit tests"
+        ],
+        "actions_used": [
+          "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
+          "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+          "astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86"
+        ],
+        "secret_guards": []
+      },
+      "web-smoke": {
+        "runs_on": "ubuntu-latest",
+        "timeout_minutes": 15,
+        "needs": [],
+        "if_condition": null,
+        "step_count": 7,
+        "step_names": [
+          "Checkout repository",
+          "Set up pnpm",
+          "Set up Node",
+          "Install web dependencies",
+          "Lint web application",
+          "Typecheck",
+          "Build web application"
+        ],
+        "actions_used": [
+          "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
+          "pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320",
+          "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020"
+        ],
+        "secret_guards": []
+      },
+      "docker-smoke": {
+        "runs_on": "ubuntu-latest",
+        "timeout_minutes": 20,
+        "needs": [],
+        "if_condition": null,
+        "step_count": 5,
+        "step_names": [
+          "Checkout repository",
+          "Set up Docker Buildx",
+          "Build runtime-slim image",
+          "Build standalone image",
+          "Verify built images"
+        ],
+        "actions_used": [
+          "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
+          "docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f"
+        ],
+        "secret_guards": []
+      },
+      "docker-publish": {
+        "runs_on": "ubuntu-latest",
+        "timeout_minutes": 20,
+        "needs": [
+          "lint-and-syntax",
+          "web-smoke",
+          "docker-smoke"
+        ],
+        "if_condition": "github.ref == 'refs/heads/main' && github.event_name == 'push'",
+        "step_count": 5,
+        "step_names": [
+          "Checkout repository",
+          "Set up Docker Buildx",
+          "Check Docker Hub credentials",
+          "Log in to Docker Hub",
+          "Build and push Docker image"
+        ],
+        "actions_used": [
+          "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
+          "docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f",
+          "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
+          "docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25"
+        ],
+        "secret_guards": [
+          "${{ secrets.DOCKERHUB_USERNAME }}",
+          "${{ secrets.DOCKERHUB_TOKEN }}"
+        ]
+      }
+    }
+  },
+  "forgejo_ci": {
+    "file": ".forgejo/workflows/ci.yml",
+    "name": "build-test-push",
+    "jobs_count": 8,
+    "runner_target": "inferrence1",
+    "dash_reporting": true
+  },
+  "security_invariants": {
+    "zero_rfc1918_private_ips": true,
+    "zero_inferrence1_in_github_actions": true,
+    "zero_dash_secrets_in_github_actions": true,
+    "all_github_jobs_target_ubuntu_latest": true,
+    "dash_upload_graceful_fallback": true
+  }
+}

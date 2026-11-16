@@ -4,6 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useState, type JSX } from 'react';
+import { safeCopyToClipboard } from '../../utils/uuid';
 
 export interface ComposeExportData {
   readonly filename: string;
@@ -91,11 +92,15 @@ export function ComposeExportTab({
       if (!exportData) {
         return;
       }
-      await navigator.clipboard.writeText(exportData.env_template);
-      setCopiedEnv(true);
-      setTimeout(() => {
-        setCopiedEnv(false);
-      }, 2000);
+      const success = await safeCopyToClipboard(exportData.env_template);
+      if (success) {
+        setCopiedEnv(true);
+        setTimeout(() => {
+          setCopiedEnv(false);
+        }, 2000);
+      } else {
+        setError('Failed to copy');
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to copy';
       setError(msg);

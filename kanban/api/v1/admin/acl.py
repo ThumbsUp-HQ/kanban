@@ -34,10 +34,26 @@ class GrantAclEntryRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    object_id: str | uuid.UUID
-    principal_id: str | uuid.UUID
-    effect: Literal["ALLOW", "DENY"]
-    capabilities: list[str] = Field(min_length=1, max_length=8)
+    object_id: str | uuid.UUID = Field(
+        description="Target object UUID or canonical reference to which the ACL entry applies"
+    )
+    principal_id: str | uuid.UUID = Field(
+        description=(
+            "Subject principal UUID (user, group, or agent) receiving the capability grant or"
+            " denial"
+        )
+    )
+    effect: Literal["ALLOW", "DENY"] = Field(
+        description=(
+            "Access control decision effect: ALLOW to grant capabilities, DENY to explicitly"
+            " override"
+        )
+    )
+    capabilities: list[str] = Field(
+        min_length=1,
+        max_length=8,
+        description="List of 1 to 8 capability tokens to grant or deny (e.g. READ, WRITE, ADMIN)",
+    )
 
 
 class RevokeAclEntryRequest(BaseModel):
@@ -45,18 +61,28 @@ class RevokeAclEntryRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    object_id: str | uuid.UUID
-    principal_id: str | uuid.UUID
-    effect: Literal["ALLOW", "DENY"]
+    object_id: str | uuid.UUID = Field(
+        description="Target object UUID or canonical reference from which the ACL entry is revoked"
+    )
+    principal_id: str | uuid.UUID = Field(
+        description="Subject principal UUID whose capability entry is being removed"
+    )
+    effect: Literal["ALLOW", "DENY"] = Field(
+        description="Effect filter matching the entry to revoke: ALLOW or DENY"
+    )
 
 
-@router.post("", status_code=status.HTTP_200_OK)
+@router.post(
+    "",
+    status_code=status.HTTP_200_OK,
+    summary="Grant or replace ACL entry",
+)
 async def grant_acl_entry_endpoint(
     body: GrantAclEntryRequest,
     caller: Caller,
     session: Session,
 ) -> dict[str, object]:
-    """Grant or replace an ALLOW/DENY ACL entry for an object."""
+    """Grant or replace an ALLOW or DENY capability access control entry on a target object."""
     return await acl_service.grant_acl_entry(
         session,
         caller.workspace_id,
@@ -68,13 +94,17 @@ async def grant_acl_entry_endpoint(
     )
 
 
-@router.delete("", status_code=status.HTTP_200_OK)
+@router.delete(
+    "",
+    status_code=status.HTTP_200_OK,
+    summary="Revoke ACL entry",
+)
 async def revoke_acl_entry_endpoint(
     body: RevokeAclEntryRequest,
     caller: Caller,
     session: Session,
 ) -> dict[str, object]:
-    """Revoke an ALLOW/DENY ACL entry for an object."""
+    """Revoke an explicit ALLOW or DENY capability access control entry on a target object."""
     return await acl_service.revoke_acl_entry(
         session,
         caller.workspace_id,
@@ -85,13 +115,17 @@ async def revoke_acl_entry_endpoint(
     )
 
 
-@router.get("/{object_id}/manifest", response_model=AccessManifest)
+@router.get(
+    "/{object_id}/manifest",
+    response_model=AccessManifest,
+    summary="Inspect object access manifest",
+)
 async def inspect_manifest_endpoint(
     object_id: str,
     caller: Caller,
     session: Session,
 ) -> AccessManifest:
-    """Inspect access manifest for an object enforcing anti-enumeration."""
+    """Inspect the full S3.4 access manifest for an object and anti-enumeration masking."""
     return await acl_service.inspect_access_manifest(
         session,
         caller,

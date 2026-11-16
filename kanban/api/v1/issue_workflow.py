@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.timing import timing_floor
 from kanban.issues.workflow_service import begin_work, complete_work, transition_ticket
+from kanban.security.read_taint import TaintGuard, get_taint_guard
 from kanban.services import issues as svc
 
 router = APIRouter(tags=["issue-workflow"])
@@ -60,10 +61,16 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
     caller: Caller,
     session: Session,
     response: Response,
+    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
-    """Initiate work on an issue in a single atomic transaction."""
+    """Initiate work on an issue in a single atomic transaction.
+
+    Moves workflow state, assigns caller as assignee, and records execution plan.
+    """
     async with timing_floor(floor_ms=25.0):
+        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
+        await taint_guard.check_write(pre_issue.project_id, tool_name="begin_work")
         issue, from_state, started_state, comment_ref, gate_hold = await begin_work(
             session,
             caller,
@@ -118,10 +125,13 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
     caller: Caller,
     session: Session,
     response: Response,
+    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
     """Transition an issue state under concurrency and gate hook evaluation."""
     async with timing_floor(floor_ms=25.0):
+        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
+        await taint_guard.check_write(pre_issue.project_id, tool_name="transition_ticket")
         issue, from_state, target_state, gate_hold = await transition_ticket(
             session,
             caller,
@@ -177,10 +187,13 @@ async def api_complete_work(  # noqa: PLR0913, PLR0917
     caller: Caller,
     session: Session,
     response: Response,
+    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
     """Verify preconditions, complete issue workflow, and record WORK_COMPLETED activity."""
     async with timing_floor(floor_ms=25.0):
+        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
+        await taint_guard.check_write(pre_issue.project_id, tool_name="complete_work")
         issue, from_state, target_state, proof, comment_ref, gate_hold = await complete_work(
             session,
             caller,

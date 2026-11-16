@@ -79,6 +79,12 @@ export async function testGuardFixture(
   const recorder = await mockApi(page, {
     'GET /api/v1/me': loadFixture('me-adam'),
     'GET /api/v1/system/status': loadFixture('system-status-prod'),
+    'GET /api/v1/workspaces': {
+      json: {
+        items: [{ id: 'ws-default', slug: 'kanban', name: '👍kanban Workspace' }],
+        active_workspace_id: 'ws-default',
+      },
+    },
     'GET /api/v1/media-proxy': {
       status: 200,
       contentType: 'image/png',

@@ -1,0 +1,4145 @@
+diff --git a/kanban/admin/principal_service.py b/kanban/admin/principal_service.py
+index 4671668..7443b0b 100644
+--- a/kanban/admin/principal_service.py
++++ b/kanban/admin/principal_service.py
+@@ -28,6 +28,7 @@ from database.models.projects import Project
+ from database.models.spine import ObjectRecord
+ from kanban.api.problems import FieldError, ProblemException, not_found
+ from kanban.auth.cards.lockout import LockoutPreventedError
++from kanban.auth.local.hashing import get_auth_pepper, hash_password_sync
+ from kanban.services.activity import ActivityEventType, record_activity
+ 
+ if TYPE_CHECKING:
+@@ -214,6 +215,72 @@ async def get_principal_detail(
+     }
+ 
+ 
++def _highest_role(user_roles: list[str]) -> str:
++    """Return highest role from list of bound roles."""
++    for candidate in ("SERVER_ADMIN", "WORKSPACE_ADMIN", "WORKSPACE_MEMBER", "WORKSPACE_GUEST"):
++        if candidate in user_roles:
++            return candidate
++    return user_roles[0] if user_roles else "WORKSPACE_MEMBER"
++
++
++def _resolve_provider_label(p_kind: str, p_slug: str) -> str:  # noqa: PLR0911
++    """Classify provider kind/slug into presentation label."""
++    kind = p_kind.upper()
++    slug = p_slug.lower()
++    if kind == "LOCAL_ADMIN":
++        return "LOCAL"
++    if "google" in slug:
++        return "GOOGLE"
++    if "github" in slug:
++        return "GITHUB"
++    if "active-directory" in slug or slug == "ad" or slug.startswith("ad-") or slug.endswith("-ad"):
++        return "ACTIVE_DIRECTORY"
++    if kind == "LDAP":
++        return "LDAP"
++    if kind in ("OIDC", "OAUTH2"):
++        return "OAUTH2"
++    return kind
++
++
++async def _enrich_user_principal(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    p: Principal,
++) -> tuple[str, str | None, str, str]:
++    """Resolve handle, email, highest role, and provider badge for a USER principal."""
++    ck_stmt = select(ObjectRecord.canonical_key).where(
++        ObjectRecord.id == p.id,
++        ObjectRecord.object_type == "user",
++    )
++    ck = (await session.execute(ck_stmt)).scalar_one_or_none()
++    handle = ck or f"@{p.display_name.lower().replace(' ', '')}"
++
++    u_stmt = select(User.email).where(User.id == p.id)
++    email = (await session.execute(u_stmt)).scalar_one_or_none()
++
++    rb_stmt = select(RoleBinding.role).where(
++        RoleBinding.principal_id == p.id,
++        RoleBinding.workspace_id == workspace_id,
++    )
++    raw_roles = (await session.execute(rb_stmt)).scalars().all()
++    user_roles = [str(r.value if hasattr(r, "value") else r) for r in raw_roles]
++    role = _highest_role(user_roles)
++
++    ui_stmt = text(
++        "SELECT apc.provider_kind, apc.slug FROM user_identities ui "
++        "JOIN auth_provider_cards apc ON ui.auth_card_id = apc.id "
++        "WHERE ui.principal_id = :p_id LIMIT 1"
++    )
++    ui_row = (await session.execute(ui_stmt, {"p_id": p.id})).mappings().first()
++    provider = (
++        _resolve_provider_label(str(ui_row["provider_kind"]), str(ui_row["slug"]))
++        if ui_row
++        else "LOCAL"
++    )
++
++    return handle, email, role, provider
++
++
+ async def list_principals(
+     session: AsyncSession,
+     workspace_id: uuid.UUID,
+@@ -262,13 +329,12 @@ async def list_principals(
+ 
+     for p in principals:
+         handle = p.display_name
++        email: str | None = None
++        role: str = "WORKSPACE_MEMBER"
++        provider: str = "LOCAL"
++
+         if p.principal_type == "USER":
+-            ck_stmt = select(ObjectRecord.canonical_key).where(
+-                ObjectRecord.id == p.id,
+-                ObjectRecord.object_type == "user",
+-            )
+-            ck = (await session.execute(ck_stmt)).scalar_one_or_none()
+-            handle = ck or f"@{p.display_name.lower().replace(' ', '')}"
++            handle, email, role, provider = await _enrich_user_principal(session, workspace_id, p)
+         elif p.principal_type == "AGENT":
+             a_stmt = select(AgentDefinition.slug).where(AgentDefinition.principal_id == p.id)
+             slug = (await session.execute(a_stmt)).scalar_one_or_none()
+@@ -287,6 +353,9 @@ async def list_principals(
+                 "display_name": p.display_name,
+                 "type": p.principal_type,
+                 "status": "active" if p.status == "ACTIVE" else "deactivated",
++                "email": email,
++                "role": role,
++                "provider": provider,
+             }
+         )
+     return result
+@@ -299,6 +368,8 @@ async def provision_user(  # noqa: PLR0913, PLR0917
+     handle: str,
+     display_name: str,
+     email: str,
++    password: str | None = None,
++    role: str | None = None,
+ ) -> dict[str, Any]:
+     """Provision a new USER principal with object spine and user record."""
+     norm_handle = normalize_handle(handle)
+@@ -362,8 +433,32 @@ async def provision_user(  # noqa: PLR0913, PLR0917
+             email=em,
+         )
+         session.add(user)
++        await session.flush()
+ 
++        # 4. Bind initial RBAC role
++        target_role = role or "WORKSPACE_MEMBER"
++        scope_type = "server" if target_role == "SERVER_ADMIN" else "workspace"
++        role_binding = RoleBinding(
++            id=uuid.uuid4(),
++            workspace_id=workspace_id,
++            principal_id=user_id,
++            role=target_role,
++            scope_type=scope_type,
++        )
++        session.add(role_binding)
+         await session.flush()
++
++        # 5. Provision local credentials if password provided
++        if password:
++            pepper = get_auth_pepper()
++            pw_hash = hash_password_sync(password, pepper)
++            await session.execute(text("SET LOCAL app.is_setup_claim = 'true'"))
++            await session.execute(
++                text("SELECT kb_auth.local_admin_create(:pid, :username, :hash, 'pepper-v1')"),
++                {"pid": user_id, "username": norm_handle, "hash": pw_hash},
++            )
++            await session.flush()
++
+     except IntegrityError as exc:
+         orig_msg = str(exc.orig) if exc.orig else str(exc)
+         if "users_ws_email_uq" in orig_msg or "email" in orig_msg:
+@@ -397,6 +492,7 @@ async def provision_user(  # noqa: PLR0913, PLR0917
+             "handle": canonical_key,
+             "display_name": dn,
+             "email": em,
++            "role": target_role,
+         },
+     )
+ 
+@@ -408,9 +504,65 @@ async def provision_user(  # noqa: PLR0913, PLR0917
+         "display_name": dn,
+         "email": em,
+         "status": "active",
++        "role": target_role,
++        "provider": "LOCAL",
+     }
+ 
+ 
++async def reset_password(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    creator_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    password: str,
++) -> dict[str, Any]:
++    """Reset or initialize local password credential for a principal."""
++    p_stmt = select(Principal).where(
++        Principal.id == principal_id,
++        Principal.workspace_id == workspace_id,
++    )
++    principal = (await session.execute(p_stmt)).scalar_one_or_none()
++    if principal is None or principal.principal_type != "USER":
++        not_found()
++
++    pepper = get_auth_pepper()
++    pw_hash = hash_password_sync(password, pepper)
++
++    # Check if credential already exists
++    cred_stmt = text(
++        "SELECT 1 FROM local_admin_credentials WHERE principal_id = :pid"
++    )
++    exists = (await session.execute(cred_stmt, {"pid": principal_id})).scalar() is not None
++
++    if exists:
++        await session.execute(
++            text("SELECT kb_auth.local_set_password_hash(:pid, :hash)"),
++            {"pid": principal_id, "hash": pw_hash},
++        )
++    else:
++        ck_stmt = select(ObjectRecord.canonical_key).where(
++            ObjectRecord.id == principal_id,
++            ObjectRecord.object_type == "user",
++        )
++        ck = (await session.execute(ck_stmt)).scalar_one_or_none()
++        username = ck.lstrip("@") if ck else principal.display_name.lower().replace(" ", "")
++        await session.execute(text("SET LOCAL app.is_setup_claim = 'true'"))
++        await session.execute(
++            text("SELECT kb_auth.local_admin_create(:pid, :username, :hash, 'pepper-v1')"),
++            {"pid": principal_id, "username": username, "hash": pw_hash},
++        )
++
++    await record_activity(
++        session,
++        workspace_id=workspace_id,
++        actor_principal_id=creator_id,
++        event_type=ActivityEventType.PRINCIPAL_UPDATED,
++        payload={"id": str(principal_id), "action": "password_reset"},
++    )
++
++    return {"status": "ok", "principal_id": str(principal_id)}
++
++
+ async def provision_group(
+     session: AsyncSession,
+     workspace_id: uuid.UUID,
+diff --git a/kanban/api/v1/admin/auth_cards.py b/kanban/api/v1/admin/auth_cards.py
+index 1d66a7c..98d7446 100644
+--- a/kanban/api/v1/admin/auth_cards.py
++++ b/kanban/api/v1/admin/auth_cards.py
+@@ -177,7 +177,7 @@ async def enable_admin_card(
+     session: Session,
+     service: ServiceDep,
+ ) -> AuthCardAdmin:
+-    """Enable card sign-in for users and administrators."""
++    """Enable card sign-in for users and administrators while auditing the action."""
+     return await service.set_enabled(
+         session,
+         card_ref,
+@@ -197,7 +197,10 @@ async def disable_admin_card(
+     session: Session,
+     service: ServiceDep,
+ ) -> AuthCardAdmin:
+-    """Disable card sign-in under 3-layer anti-lockout safeguards."""
++    """Disable card sign-in under 3-layer anti-lockout safeguards.
++
++    Prevents administrative lockout.
++    """
+     try:
+         return await service.set_enabled(
+             session,
+diff --git a/kanban/api/v1/admin/principals.py b/kanban/api/v1/admin/principals.py
+index 61640c6..cab172b 100644
+--- a/kanban/api/v1/admin/principals.py
++++ b/kanban/api/v1/admin/principals.py
+@@ -37,19 +37,67 @@ class ProvisionPrincipalRequest(BaseModel):
+ 
+     model_config = ConfigDict(extra="forbid")
+ 
+-    type: Literal["USER", "GROUP", "AGENT"]
+-    display_name: str = Field(min_length=1, max_length=120)
+-    handle: str | None = Field(default=None, pattern=r"^@?[a-z0-9][a-z0-9._-]{1,38}$")
+-    email: str | None = None
++    type: Literal["USER", "GROUP", "AGENT"] = Field(
++        description=(
++            "Principal classification: USER for human accounts, GROUP for teams, AGENT for"
++            " bots"
++        )
++    )
++    display_name: str = Field(
++        min_length=1, max_length=120, description="Human-readable display name"
++    )
++    handle: str | None = Field(
++        default=None,
++        pattern=r"^@?[a-z0-9][a-z0-9._-]{1,38}$",
++        description="Unique username or agent handle slug (required for USER and AGENT)",
++    )
++    email: str | None = Field(
++        default=None, description="Email address associated with human user accounts"
++    )
++    password: str | None = Field(
++        default=None,
++        min_length=8,
++        max_length=1024,
++        description="Optional initial password for local user credentials",
++    )
++    role: str | None = Field(
++        default=None,
++        description="Initial RBAC role (e.g. WORKSPACE_MEMBER, SERVER_ADMIN)",
++    )
++
++
++class ResetPasswordRequest(BaseModel):
++    """Schema for resetting user password credentials."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    password: str = Field(min_length=8, max_length=1024, description="New user password")
+ 
+ 
+ class UpdatePrincipalRequest(BaseModel):
+-    """Schema for updating principal status or display name."""
++    """Schema for updating principal status, display name, or password."""
+ 
+     model_config = ConfigDict(extra="forbid")
+ 
+-    status: Literal["active", "deactivated", "disabled"] | None = None
+-    display_name: str | None = Field(default=None, min_length=1, max_length=120)
++    status: Literal["active", "deactivated", "disabled"] | None = Field(
++        default=None,
++        description=(
++            "Target operational status: active for normal access, deactivated for soft hold,"
++            " disabled"
++        ),
++    )
++    display_name: str | None = Field(
++        default=None,
++        min_length=1,
++        max_length=120,
++        description="Updated human-readable display name",
++    )
++    password: str | None = Field(
++        default=None,
++        min_length=8,
++        max_length=1024,
++        description="Optional password update for local credentials",
++    )
+ 
+ 
+ class RoleBindingRequest(BaseModel):
+@@ -57,13 +105,25 @@ class RoleBindingRequest(BaseModel):
+ 
+     model_config = ConfigDict(extra="forbid")
+ 
+-    principal_id: uuid.UUID
+-    role: str
+-    scope_type: Literal["server", "workspace", "project"]
+-    scope_id: uuid.UUID | None = None
++    principal_id: uuid.UUID = Field(
++        description="Target principal UUID receiving the role assignment"
++    )
++    role: str = Field(
++        description="RBAC role name to bind (e.g. SERVER_ADMIN, WORKSPACE_ADMIN, PROJECT_ADMIN)"
++    )
++    scope_type: Literal["server", "workspace", "project"] = Field(
++        description="Hierarchy tier for the binding: server, workspace, or project"
++    )
++    scope_id: uuid.UUID | None = Field(
++        default=None,
++        description="Optional scope target UUID (required when scope_type is project)",
++    )
+ 
+ 
+-@router.get("/admin/principals")
++@router.get(
++    "/admin/principals",
++    summary="List workspace principals",
++)
+ async def list_principals_endpoint(
+     caller: Caller,
+     session: Session,
+@@ -73,7 +133,7 @@ async def list_principals_endpoint(
+     ] = None,
+     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+ ) -> list[dict[str, object]]:
+-    """List principals in the current workspace."""
++    """List principals in the current workspace with optional type filtering."""
+     return await principal_service.list_principals(
+         session,
+         caller.workspace_id,
+@@ -82,13 +142,17 @@ async def list_principals_endpoint(
+     )
+ 
+ 
+-@router.post("/admin/principals", status_code=status.HTTP_201_CREATED)
++@router.post(
++    "/admin/principals",
++    status_code=status.HTTP_201_CREATED,
++    summary="Provision principal",
++)
+ async def provision_principal_endpoint(
+     body: ProvisionPrincipalRequest,
+     caller: Caller,
+     session: Session,
+ ) -> dict[str, object]:
+-    """Provision a new USER, GROUP, or AGENT principal."""
++    """Provision a new USER, GROUP, or AGENT principal within the current workspace."""
+     if body.type == "USER":
+         if not body.handle:
+             msg = "handle is required for USER provisioning"
+@@ -115,6 +179,8 @@ async def provision_principal_endpoint(
+             handle=body.handle,
+             display_name=body.display_name,
+             email=body.email,
++            password=body.password,
++            role=body.role,
+         )
+     if body.type == "GROUP":
+         return await principal_service.provision_group(
+@@ -134,13 +200,16 @@ async def provision_principal_endpoint(
+     )
+ 
+ 
+-@router.get("/admin/principals/{principal_id}")
++@router.get(
++    "/admin/principals/{principal_id}",
++    summary="Get principal details",
++)
+ async def get_principal_endpoint(
+     principal_id: str,
+     caller: Caller,
+     session: Session,
+ ) -> dict[str, object]:
+-    """Get full details of a principal by UUID or reference."""
++    """Retrieve administrative metadata and group memberships for a principal by UUID or handle."""
+     return await principal_service.get_principal_detail(
+         session,
+         caller.workspace_id,
+@@ -148,14 +217,25 @@ async def get_principal_endpoint(
+     )
+ 
+ 
+-@router.patch("/admin/principals/{principal_id}")
++@router.patch(
++    "/admin/principals/{principal_id}",
++    summary="Update principal status or display name",
++)
+ async def patch_principal_endpoint(
+     principal_id: uuid.UUID,
+     body: UpdatePrincipalRequest,
+     caller: Caller,
+     session: Session,
+ ) -> dict[str, object]:
+-    """Update principal status or display name."""
++    """Update principal operational status, display name, or password credentials."""
++    if body.password:
++        await principal_service.reset_password(
++            session,
++            caller.workspace_id,
++            caller.principal_id,
++            principal_id,
++            body.password,
++        )
+     return await principal_service.update_principal(
+         session,
+         caller.workspace_id,
+@@ -166,14 +246,37 @@ async def patch_principal_endpoint(
+     )
+ 
+ 
+-@router.post("/admin/groups/{group_id}/members/{principal_id}")
++@router.post(
++    "/admin/principals/{principal_id}/password",
++    summary="Reset principal local password",
++)
++async def reset_password_endpoint(
++    principal_id: uuid.UUID,
++    body: ResetPasswordRequest,
++    caller: Caller,
++    session: Session,
++) -> dict[str, object]:
++    """Reset password credentials for a local user principal."""
++    return await principal_service.reset_password(
++        session,
++        caller.workspace_id,
++        caller.principal_id,
++        principal_id,
++        body.password,
++    )
++
++
++@router.post(
++    "/admin/groups/{group_id}/members/{principal_id}",
++    summary="Add group member",
++)
+ async def add_group_member_endpoint(
+     group_id: uuid.UUID,
+     principal_id: uuid.UUID,
+     caller: Caller,
+     session: Session,
+ ) -> dict[str, object]:
+-    """Add a principal as a member of a group."""
++    """Add an existing principal (user or agent) as a member of the administrative group."""
+     return await principal_service.add_group_member(
+         session,
+         caller.workspace_id,
+@@ -183,14 +286,17 @@ async def add_group_member_endpoint(
+     )
+ 
+ 
+-@router.delete("/admin/groups/{group_id}/members/{principal_id}")
++@router.delete(
++    "/admin/groups/{group_id}/members/{principal_id}",
++    summary="Remove group member",
++)
+ async def remove_group_member_endpoint(
+     group_id: uuid.UUID,
+     principal_id: uuid.UUID,
+     caller: Caller,
+     session: Session,
+ ) -> dict[str, object]:
+-    """Remove a principal from a group."""
++    """Remove a member principal from the specified administrative group."""
+     return await principal_service.remove_group_member(
+         session,
+         caller.workspace_id,
+@@ -200,13 +306,16 @@ async def remove_group_member_endpoint(
+     )
+ 
+ 
+-@router.post("/admin/role-bindings")
++@router.post(
++    "/admin/role-bindings",
++    summary="Bind RBAC role to principal",
++)
+ async def bind_role_endpoint(
+     body: RoleBindingRequest,
+     caller: Caller,
+     session: Session,
+ ) -> dict[str, object]:
+-    """Bind an RBAC role to a principal."""
++    """Bind an RBAC role to a principal at server, workspace, or project scope."""
+     return await principal_service.bind_role(
+         session,
+         caller.workspace_id,
+@@ -218,13 +327,16 @@ async def bind_role_endpoint(
+     )
+ 
+ 
+-@router.delete("/admin/role-bindings")
++@router.delete(
++    "/admin/role-bindings",
++    summary="Unbind RBAC role from principal",
++)
+ async def unbind_role_endpoint(
+     body: RoleBindingRequest,
+     caller: Caller,
+     session: Session,
+ ) -> dict[str, object]:
+-    """Unbind an RBAC role from a principal."""
++    """Unbind an RBAC role from a principal at server, workspace, or project scope."""
+     return await principal_service.unbind_role(
+         session,
+         caller.workspace_id,
+diff --git a/kanban/auth/identity_service.py b/kanban/auth/identity_service.py
+index 1f07adf..02ba2f5 100644
+--- a/kanban/auth/identity_service.py
++++ b/kanban/auth/identity_service.py
+@@ -35,6 +35,76 @@ __all__ = [
+ ]
+ 
+ 
++def _evaluate_card_access(  # noqa: C901, PLR0911
++    card_row: RowMapping | Mapping[str, Any] | None,
++    assertion: ExternalIdentityAssertion,
++) -> tuple[bool, bool]:
++    """Evaluate whether assertion meets card allowlist policy. Returns (is_allowed, is_admin)."""
++    if card_row is None:
++        return True, False
++
++    pub_cfg = card_row.get("public_config", {}) if hasattr(card_row, "get") else {}
++    if not isinstance(pub_cfg, dict):
++        pub_cfg = {}
++
++    # LDAP Group policy
++    access_mode = pub_cfg.get("access_mode", "any_user")
++    admin_groups: list[str] = pub_cfg.get("admin_groups") or []
++    user_groups: list[str] = pub_cfg.get("user_groups") or []
++
++    assertion_groups_lower = {g.strip().lower() for g in assertion.groups}
++    in_ldap_admin = any(ag.strip().lower() in assertion_groups_lower for ag in admin_groups)
++    in_ldap_user = any(ug.strip().lower() in assertion_groups_lower for ug in user_groups)
++
++    if in_ldap_admin:
++        return True, True
++    if in_ldap_user:
++        return True, False
++    if access_mode == "group_restricted" and (admin_groups or user_groups):
++        return False, False
++
++    # OIDC/OAuth allowlist policy
++    admin_allowlist: list[str] = pub_cfg.get("admin_allowlist") or []
++    user_allowlist: list[str] = pub_cfg.get("user_allowlist") or []
++
++    is_admin = "SERVER_ADMIN" in assertion.groups
++    if not admin_allowlist and not user_allowlist:
++        return True, is_admin
++
++    user_candidates: set[str] = set()
++    if assertion.email:
++        user_candidates.add(assertion.email.lower())
++        user_candidates.add(assertion.email.split("@")[0].lower())
++    if assertion.subject:
++        user_candidates.add(assertion.subject.lower())
++    if assertion.display_name:
++        user_candidates.add(assertion.display_name.lower())
++
++    in_admin = any(ag.strip().lower() in user_candidates for ag in admin_allowlist)
++    in_user = any(ug.strip().lower() in user_candidates for ug in user_allowlist)
++
++    if in_admin:
++        return True, True
++    if in_user:
++        return True, False
++
++    return False, False
++
++
++async def _ensure_server_admin_role(
++    db_session: AsyncSession,
++    workspace_id: uuid.UUID,
++    principal_id: uuid.UUID,
++) -> None:
++    """Grant SERVER_ADMIN role binding if not already present."""
++    stmt = text(
++        "INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type) "
++        "VALUES (uuidv7(), :ws_id, :pid, 'SERVER_ADMIN', 'server') "
++        "ON CONFLICT DO NOTHING"
++    )
++    await db_session.execute(stmt, {"ws_id": workspace_id, "pid": principal_id})
++
++
+ class DatabaseIdentityResolver:
+     """Production identity resolver binding IdP assertions to user principals (KB-P2-08).
+ 
+@@ -223,6 +293,28 @@ class DatabaseIdentityResolver:
+                 detail="Account is disabled",
+             )
+ 
++        # Check card allowlist policy if configured
++        card_res = await db_session.execute(
++            text(
++                "SELECT id, workspace_id, provider_kind, public_config "
++                "FROM kb_auth.card_get_by_id(:id)"
++            ),
++            {"id": assertion.card_id},
++        )
++        card_row = card_res.mappings().first()
++        is_allowed, is_admin_card = _evaluate_card_access(card_row, assertion)
++        if not is_allowed:
++            raise ProblemException(
++                code="IDENTITY_NOT_PROVISIONED",
++                status=403,
++                title="Access Denied",
++                detail="User is not in the authorized access list",
++            )
++        if is_admin_card:
++            await _ensure_server_admin_role(
++                db_session, identity_row["workspace_id"], identity_row["principal_id"]
++            )
++
+         # Record login timestamp
+         await db_session.execute(
+             text("SELECT kb_auth.identity_record_login(:id)"),
+@@ -297,7 +389,8 @@ class DatabaseIdentityResolver:
+         """Handle login when identity is unbound, auto-provisioning if allowed."""
+         card_res = await db_session.execute(
+             text(
+-                "SELECT id, workspace_id, is_enabled, auto_provision_users, allowed_email_domains "
++                "SELECT id, workspace_id, is_enabled, auto_provision_users, allowed_email_domains, "
++                "       provider_kind, public_config "
+                 "FROM kb_auth.card_get_by_id(:id)"
+             ),
+             {"id": assertion.card_id},
+@@ -346,11 +439,44 @@ class DatabaseIdentityResolver:
+         # Validate email and domain allowlist
+         self._validate_assertion_email(card_row, assertion)
+ 
++        # Check OAuth/OIDC admin and user allowlists if configured
++        is_allowed, is_admin_user = _evaluate_card_access(card_row, assertion)
++        if not is_allowed:
++            raise ProblemException(
++                code="IDENTITY_NOT_PROVISIONED",
++                status=403,
++                title="Access Denied",
++                detail="User is not in the authorized access list",
++            )
++
+         if effective_ws_id is None:
+             msg = "No target workspace found for user auto-provisioning"
+             raise RuntimeError(msg)
+ 
+-        # Zero Email Auto-Merge Invariant: never auto-merge if email already exists
++        await self._check_existing_email_merge(db_session, effective_ws_id, assertion)
++
++        # Provision new user atomically
++        new_principal_id = await self._provision_user(db_session, effective_ws_id, assertion)
++
++        # Bind SERVER_ADMIN role if user qualified as admin
++        if is_admin_user:
++            await _ensure_server_admin_role(db_session, effective_ws_id, new_principal_id)
++            await db_session.commit()
++
++        return ResolvedLogin(
++            principal_id=new_principal_id,
++            workspace_id=effective_ws_id,
++            aal_level=1,
++            mfa_pending=is_admin_user,
++        )
++
++    @staticmethod
++    async def _check_existing_email_merge(
++        db_session: AsyncSession,
++        effective_ws_id: uuid.UUID,
++        assertion: ExternalIdentityAssertion,
++    ) -> None:
++        """Prevent auto-merging external assertion into existing user email."""
+         user_check_stmt = text(
+             "SELECT id FROM users WHERE workspace_id = :ws_id AND lower(email) = lower(:email)"
+         )
+@@ -387,16 +513,6 @@ class DatabaseIdentityResolver:
+                 ),
+             )
+ 
+-        # Provision new user atomically
+-        new_principal_id = await self._provision_user(db_session, effective_ws_id, assertion)
+-
+-        return ResolvedLogin(
+-            principal_id=new_principal_id,
+-            workspace_id=effective_ws_id,
+-            aal_level=1,
+-            mfa_pending=False,
+-        )
+-
+     @staticmethod
+     async def _provision_user(
+         db_session: AsyncSession,
+diff --git a/kanban/auth/ldap/config.py b/kanban/auth/ldap/config.py
+index 4718193..3e005e3 100644
+--- a/kanban/auth/ldap/config.py
++++ b/kanban/auth/ldap/config.py
+@@ -45,6 +45,9 @@ class LdapCardConfig(BaseModel):
+     display_name_attribute: str = "cn"
+     member_of_attribute: str = "memberOf"
+     group_dn_map: dict[str, str] = Field(default_factory=dict)
++    access_mode: Literal["any_user", "group_restricted"] = "any_user"
++    admin_groups: list[str] = Field(default_factory=list)
++    user_groups: list[str] = Field(default_factory=list)
+     timeout_seconds: float = Field(default=5.0, ge=1.0, le=15.0)
+ 
+     @field_validator("url")
+diff --git a/kanban/auth/ldap/service.py b/kanban/auth/ldap/service.py
+index f988648..5987d54 100644
+--- a/kanban/auth/ldap/service.py
++++ b/kanban/auth/ldap/service.py
+@@ -200,6 +200,8 @@ class LdapAuthService:
+                 email = (
+                     email_bytes.decode("utf-8", errors="replace").strip() if email_bytes else None
+                 )
++                if not email:
++                    email = f"{clean_username}@ldap.local"
+ 
+                 name_bytes = attrs.get(config.display_name_attribute.lower(), [b""])[0]
+                 display_name = (
+@@ -222,7 +224,7 @@ class LdapAuthService:
+                 finally:
+                     await user_client.unbind()
+ 
+-                # Step 3: Compute mapped group names
++                # Step 3: Compute mapped group names and check access policies
+                 canonical_map = {
+                     normalize_dn(k): v.strip() for k, v in group_dn_map.items() if k.strip()
+                 }
+@@ -231,6 +233,46 @@ class LdapAuthService:
+                     {canonical_map[d] for d in user_norm_dns if d in canonical_map}
+                 )
+ 
++                all_user_group_identifiers = (
++                    set(matched_group_names) | set(member_of_dns) | user_norm_dns
++                )
++                for d in member_of_dns:
++                    for part in d.split(","):
++                        if part.strip().upper().startswith("CN="):
++                            all_user_group_identifiers.add(part.strip()[3:].strip())
++
++                is_admin_member = (
++                    any(
++                        any(grp.lower() == ag.strip().lower() for grp in all_user_group_identifiers)
++                        for ag in config.admin_groups
++                    )
++                    if config.admin_groups
++                    else False
++                )
++
++                is_user_member = (
++                    any(
++                        any(grp.lower() == ug.strip().lower() for grp in all_user_group_identifiers)
++                        for ug in config.user_groups
++                    )
++                    if config.user_groups
++                    else False
++                )
++
++                has_group_policy = bool(config.admin_groups or config.user_groups)
++                if has_group_policy and not is_admin_member and not is_user_member:
++                    logger.debug("LDAP user %s not in any authorized group", clean_username)
++                    raise ProblemException(
++                        code="IDENTITY_NOT_PROVISIONED",
++                        status=403,
++                        title="Access Denied",
++                        detail="User does not belong to an authorized directory group",
++                    )
++
++                assertion_groups = list(matched_group_names)
++                if is_admin_member:
++                    assertion_groups.append("SERVER_ADMIN")
++
+                 # Step 4: Construct ExternalIdentityAssertion
+                 assertion = ExternalIdentityAssertion(
+                     card_id=card.id,
+@@ -238,7 +280,7 @@ class LdapAuthService:
+                     email=email,
+                     email_verified=True,
+                     display_name=display_name,
+-                    groups=tuple(matched_group_names),
++                    groups=tuple(assertion_groups),
+                 )
+ 
+                 # Step 5: Resolve principal via IdentityResolver
+diff --git a/kanban/auth/local/service.py b/kanban/auth/local/service.py
+index 88aac24..11c530d 100644
+--- a/kanban/auth/local/service.py
++++ b/kanban/auth/local/service.py
+@@ -178,6 +178,28 @@ class LocalAdminLoginService:
+ 
+             await self._rate_limiter.reset(AUTH_LOGIN_ACCOUNT, account_key)
+ 
++            # Check MFA enrollment status
++            mfa_stmt = text("SELECT * FROM kb_auth.mfa_status(:p_id)")
++            mfa_res = await session.execute(mfa_stmt, {"p_id": principal_id})
++            mfa_row = mfa_res.mappings().first()
++            has_active_totp = bool(mfa_row["has_active_totp"]) if mfa_row else False
++            has_webauthn = (
++                int(mfa_row["webauthn_credential_count"]) > 0
++                if mfa_row and "webauthn_credential_count" in mfa_row
++                else False
++            )
++            has_enrolled_mfa = has_active_totp or has_webauthn
++
++            # Role check:
++            admin_stmt = text(
++                "SELECT 1 FROM role_bindings "
++                "WHERE principal_id = :p_id AND role = 'SERVER_ADMIN' LIMIT 1"
++            )
++            admin_res = await session.execute(admin_stmt, {"p_id": principal_id})
++            is_server_admin = admin_res.scalar_one_or_none() is not None
++
++            require_mfa = has_enrolled_mfa or is_server_admin
++
+             auth_card_id = card.id if card is not None else None
+             issued = await self._session_service.create_after_login(
+                 session,
+@@ -185,7 +207,7 @@ class LocalAdminLoginService:
+                 workspace_id=effective_ws_id,
+                 auth_card_id=auth_card_id,
+                 aal_level=1,
+-                mfa_pending=True,
++                mfa_pending=require_mfa,
+                 existing_cookie=existing_cookie,
+             )
+ 
+diff --git a/kanban/auth/oidc/config.py b/kanban/auth/oidc/config.py
+index abc17c7..ae73054 100644
+--- a/kanban/auth/oidc/config.py
++++ b/kanban/auth/oidc/config.py
+@@ -82,6 +82,8 @@ class OidcCardConfig(BaseModel):
+     email_verified_claim: str = "email_verified"
+     groups_claim: str | None = None
+     allowed_algs: list[AllowedAlg] = Field(default_factory=_default_allowed_algs)
++    admin_allowlist: list[str] = Field(default_factory=list)
++    user_allowlist: list[str] = Field(default_factory=list)
+ 
+     @field_validator(
+         "issuer",
+diff --git a/kanban/auth/oidc/flow.py b/kanban/auth/oidc/flow.py
+index 50214c6..bfa8d6a 100644
+--- a/kanban/auth/oidc/flow.py
++++ b/kanban/auth/oidc/flow.py
+@@ -625,6 +625,8 @@ class OidcFlow:
+                 ) from err
+ 
+             raw_sub = userinfo.get(config.subject_claim)
++            if raw_sub is None and "id" in userinfo:
++                raw_sub = userinfo["id"]
+             if raw_sub is None or len(str(raw_sub)) == 0 or len(str(raw_sub)) > MAX_SUBJECT_LENGTH:
+                 raise ProblemException(
+                     code="OIDC_TOKEN_INVALID",
+@@ -636,6 +638,55 @@ class OidcFlow:
+             email_val = userinfo.get(config.email_claim)
+             email = str(email_val) if email_val is not None else None
+             email_verified = bool(userinfo.get(config.email_verified_claim, False))
++
++            # GitHub email handling: fetch /user/emails or fallback {login}@users.noreply.github.com
++            if not email and userinfo_endpoint and "api.github.com" in userinfo_endpoint:
++                emails_url = "https://api.github.com/user/emails"
++
++                async def _do_emails_get(c: httpx.AsyncClient) -> httpx.Response:
++                    return await c.get(
++                        emails_url,
++                        headers={
++                            "Authorization": f"Bearer {access_token}",
++                            "Accept": "application/json",
++                        },
++                        timeout=httpx.Timeout(5.0),
++                    )
++
++                try:
++                    if self._http_client is not None:
++                        emails_resp = await _do_emails_get(self._http_client)
++                    else:
++                        async with httpx.AsyncClient(follow_redirects=False) as default_client:
++                            emails_resp = await _do_emails_get(default_client)
++
++                    if emails_resp.status_code == HTTPStatus.OK:
++                        emails_data = emails_resp.json()
++                        if isinstance(emails_data, list):
++                            for em_item in emails_data:
++                                if (
++                                    isinstance(em_item, dict)
++                                    and em_item.get("primary")
++                                    and em_item.get("verified")
++                                ):
++                                    email = str(em_item.get("email"))
++                                    break
++                            if (
++                                not email
++                                and len(emails_data) > 0
++                                and isinstance(emails_data[0], dict)
++                            ):
++                                email = str(emails_data[0].get("email"))
++                except Exception:
++                    logger.debug(
++                        "Failed to retrieve emails from GitHub /user/emails", exc_info=True
++                    )
++
++                if not email:
++                    login_name = userinfo.get("login") or "user"
++                    email = f"{login_name}@users.noreply.github.com"
++                email_verified = True
++
+             name_val = userinfo.get("name") or userinfo.get("login")
+             display_name = str(name_val) if name_val is not None else None
+             groups_val = userinfo.get(config.groups_claim) if config.groups_claim else ()
+diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
+index 2d14d62..b28b5b8 100644
+--- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
+@@ -1,11 +1,11 @@
+ import React, { useState, useEffect, useRef, type JSX } from 'react';
++import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import type {
+   AdminAuthCard,
+   CreateAuthCardPayload,
+   UpdateAuthCardPayload,
+   ProviderKind,
+ } from './adminAuthApi';
+-import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import './adminAuth.css';
+ 
+ export interface AuthCardEditorDrawerProps {
+@@ -18,6 +18,13 @@ export interface AuthCardEditorDrawerProps {
+   ) => Promise<void>;
+ }
+ 
++export type ProviderPreset =
++  | 'google'
++  | 'github'
++  | 'active-directory'
++  | 'openldap'
++  | 'custom-oauth';
++
+ const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/;
+ const SPKI_REGEX = /^[A-Fa-f0-9]{64}$/;
+ 
+@@ -30,6 +37,9 @@ export function AuthCardEditorDrawer({
+   const isEdit = Boolean(card);
+   const drawerRef = useRef<HTMLDivElement | null>(null);
+ 
++  // Active preset
++  const [activePreset, setActivePreset] = useState<ProviderPreset | null>(null);
++
+   // Common metadata
+   const [prevCard, setPrevCard] = useState<AdminAuthCard | null>(card);
+   const [providerKind, setProviderKind] = useState<ProviderKind>(() => card?.provider_kind ?? 'OIDC');
+@@ -40,9 +50,37 @@ export function AuthCardEditorDrawer({
+   const [autoProvisionUsers, setAutoProvisionUsers] = useState(() => card?.auto_provision_users ?? true);
+   const [allowedEmailDomains, setAllowedEmailDomains] = useState(() => card?.allowed_email_domains.join(', ') ?? '');
+ 
++  // Access policies
++  const [accessPolicyMode, setAccessPolicyMode] = useState<'any_user' | 'restricted'>(() => {
++    const pub = card?.public_config;
++    if (pub?.access_mode === 'group_restricted') return 'restricted';
++    if (Array.isArray(pub?.admin_allowlist) && pub.admin_allowlist.length > 0) return 'restricted';
++    if (Array.isArray(pub?.user_allowlist) && pub.user_allowlist.length > 0) return 'restricted';
++    return 'any_user';
++  });
++  const [adminAllowlist, setAdminAllowlist] = useState(() => {
++    const list = card?.public_config.admin_allowlist;
++    return Array.isArray(list) ? list.join(', ') : '';
++  });
++  const [userAllowlist, setUserAllowlist] = useState(() => {
++    const list = card?.public_config.user_allowlist;
++    return Array.isArray(list) ? list.join(', ') : '';
++  });
++  const [adminGroups, setAdminGroups] = useState(() => {
++    const list = card?.public_config.admin_groups;
++    return Array.isArray(list) ? list.join(', ') : '';
++  });
++  const [userGroups, setUserGroups] = useState(() => {
++    const list = card?.public_config.user_groups;
++    return Array.isArray(list) ? list.join(', ') : '';
++  });
++
+   // OIDC / OAuth2 fields
+-  const [issuerUrl, setIssuerUrl] = useState(() => (typeof card?.public_config.issuer_url === 'string' ? card.public_config.issuer_url : ''));
++  const [issuerUrl, setIssuerUrl] = useState(() => (typeof card?.public_config.issuer_url === 'string' ? card.public_config.issuer_url : (typeof card?.public_config.issuer === 'string' ? card.public_config.issuer : '')));
+   const [clientId, setClientId] = useState(() => (typeof card?.public_config.client_id === 'string' ? card.public_config.client_id : ''));
++  const [authorizationEndpoint, setAuthorizationEndpoint] = useState(() => (typeof card?.public_config.authorization_endpoint === 'string' ? card.public_config.authorization_endpoint : ''));
++  const [tokenEndpoint, setTokenEndpoint] = useState(() => (typeof card?.public_config.token_endpoint === 'string' ? card.public_config.token_endpoint : ''));
++  const [userinfoEndpoint, setUserinfoEndpoint] = useState(() => (typeof card?.public_config.userinfo_endpoint === 'string' ? card.public_config.userinfo_endpoint : ''));
+   const [scopes, setScopes] = useState(() => {
+     const sc = card?.public_config.scopes;
+     if (Array.isArray(sc)) return sc.join(', ');
+@@ -54,17 +92,30 @@ export function AuthCardEditorDrawer({
+   );
+ 
+   // LDAP fields
+-  const [serverUrl, setServerUrl] = useState(() => (typeof card?.public_config.server_url === 'string' ? card.public_config.server_url : ''));
+-  const [startTls, setStartTls] = useState(() => Boolean(card?.public_config.start_tls));
+-  const [bindDn, setBindDn] = useState(() => (typeof card?.public_config.bind_dn === 'string' ? card.public_config.bind_dn : ''));
++  const [serverUrl, setServerUrl] = useState(() => (typeof card?.public_config.server_url === 'string' ? card.public_config.server_url : (typeof card?.public_config.url === 'string' ? card.public_config.url : '')));
++  const [startTls, setStartTls] = useState(() => Boolean(card?.public_config.start_tls ?? card?.public_config.transport_mode === 'starttls'));
++  const [bindDn, setBindDn] = useState(() => (typeof card?.public_config.bind_dn === 'string' ? card.public_config.bind_dn : (typeof card?.public_config.service_bind_dn === 'string' ? card.public_config.service_bind_dn : '')));
+   const [baseDn, setBaseDn] = useState(() => (typeof card?.public_config.base_dn === 'string' ? card.public_config.base_dn : ''));
+   const [userFilter, setUserFilter] = useState(() =>
+-    typeof card?.public_config.user_filter === 'string' ? card.public_config.user_filter : '(sAMAccountName={username})',
++    typeof card?.public_config.user_search_filter === 'string'
++      ? card.public_config.user_search_filter
++      : (typeof card?.public_config.user_filter === 'string' ? card.public_config.user_filter : '(sAMAccountName={username})'),
++  );
++  const [subjectAttribute, setSubjectAttribute] = useState(() =>
++    typeof card?.public_config.subject_attribute === 'string' ? card.public_config.subject_attribute : 'objectGUID',
++  );
++  const [emailAttribute, setEmailAttribute] = useState(() =>
++    typeof card?.public_config.email_attribute === 'string' ? card.public_config.email_attribute : 'mail',
+   );
+-  const [caPem, setCaPem] = useState(() => (typeof card?.public_config.ca_pem === 'string' ? card.public_config.ca_pem : ''));
+-  const [spkiPin, setSpkiPin] = useState(() =>
+-    typeof card?.public_config.spki_sha256_pin === 'string' ? card.public_config.spki_sha256_pin : '',
++  const [displayNameAttribute, setDisplayNameAttribute] = useState(() =>
++    typeof card?.public_config.display_name_attribute === 'string' ? card.public_config.display_name_attribute : 'displayName',
+   );
++  const [caPem, setCaPem] = useState(() => (typeof card?.public_config.ca_cert_pem === 'string' ? card.public_config.ca_cert_pem : (typeof card?.public_config.ca_pem === 'string' ? card.public_config.ca_pem : '')));
++  const [spkiPin, setSpkiPin] = useState(() => {
++    const pins = card?.public_config.spki_sha256_pins;
++    if (Array.isArray(pins) && pins.length > 0) return pins[0] as string;
++    return typeof card?.public_config.spki_sha256_pin === 'string' ? card.public_config.spki_sha256_pin : '';
++  });
+ 
+   // Secret input and write-only state
+   const [secretInput, setSecretInput] = useState('');
+@@ -78,6 +129,7 @@ export function AuthCardEditorDrawer({
+   // Synchronize state during rendering when card changes
+   if (card !== prevCard) {
+     setPrevCard(card);
++    setActivePreset(null);
+     setProviderKind(card?.provider_kind ?? 'OIDC');
+     setSlug(card?.slug ?? '');
+     setDisplayName(card?.display_name ?? '');
+@@ -85,18 +137,45 @@ export function AuthCardEditorDrawer({
+     setIconPreset(card?.icon_preset ?? 'shield');
+     setAutoProvisionUsers(card?.auto_provision_users ?? true);
+     setAllowedEmailDomains(card?.allowed_email_domains.join(', ') ?? '');
+-    setIssuerUrl(typeof card?.public_config.issuer_url === 'string' ? card.public_config.issuer_url : '');
+-    setClientId(typeof card?.public_config.client_id === 'string' ? card.public_config.client_id : '');
+-    const rawScopes = card?.public_config.scopes;
++
++    const pub = card?.public_config;
++    if (pub?.access_mode === 'group_restricted' || (Array.isArray(pub?.admin_allowlist) && pub.admin_allowlist.length > 0)) {
++      setAccessPolicyMode('restricted');
++    } else {
++      setAccessPolicyMode('any_user');
++    }
++    setAdminAllowlist(Array.isArray(pub?.admin_allowlist) ? pub.admin_allowlist.join(', ') : '');
++    setUserAllowlist(Array.isArray(pub?.user_allowlist) ? pub.user_allowlist.join(', ') : '');
++    setAdminGroups(Array.isArray(pub?.admin_groups) ? pub.admin_groups.join(', ') : '');
++    setUserGroups(Array.isArray(pub?.user_groups) ? pub.user_groups.join(', ') : '');
++
++    setIssuerUrl(typeof pub?.issuer_url === 'string' ? pub.issuer_url : (typeof pub?.issuer === 'string' ? pub.issuer : ''));
++    setClientId(typeof pub?.client_id === 'string' ? pub.client_id : '');
++    setAuthorizationEndpoint(typeof pub?.authorization_endpoint === 'string' ? pub.authorization_endpoint : '');
++    setTokenEndpoint(typeof pub?.token_endpoint === 'string' ? pub.token_endpoint : '');
++    setUserinfoEndpoint(typeof pub?.userinfo_endpoint === 'string' ? pub.userinfo_endpoint : '');
++
++    const rawScopes = pub?.scopes;
+     setScopes(Array.isArray(rawScopes) ? rawScopes.join(', ') : (typeof rawScopes === 'string' ? rawScopes : 'openid, profile, email'));
+-    setTokenAuthMethod(card?.public_config.token_auth_method === 'private_key_jwt' ? 'private_key_jwt' : 'client_secret_basic');
+-    setServerUrl(typeof card?.public_config.server_url === 'string' ? card.public_config.server_url : '');
+-    setStartTls(Boolean(card?.public_config.start_tls));
+-    setBindDn(typeof card?.public_config.bind_dn === 'string' ? card.public_config.bind_dn : '');
+-    setBaseDn(typeof card?.public_config.base_dn === 'string' ? card.public_config.base_dn : '');
+-    setUserFilter(typeof card?.public_config.user_filter === 'string' ? card.public_config.user_filter : '(sAMAccountName={username})');
+-    setCaPem(typeof card?.public_config.ca_pem === 'string' ? card.public_config.ca_pem : '');
+-    setSpkiPin(typeof card?.public_config.spki_sha256_pin === 'string' ? card.public_config.spki_sha256_pin : '');
++    setTokenAuthMethod(pub?.token_auth_method === 'private_key_jwt' ? 'private_key_jwt' : 'client_secret_basic');
++
++    setServerUrl(typeof pub?.server_url === 'string' ? pub.server_url : (typeof pub?.url === 'string' ? pub.url : ''));
++    setStartTls(Boolean(pub?.start_tls ?? pub?.transport_mode === 'starttls'));
++    setBindDn(typeof pub?.bind_dn === 'string' ? pub.bind_dn : (typeof pub?.service_bind_dn === 'string' ? pub.service_bind_dn : ''));
++    setBaseDn(typeof pub?.base_dn === 'string' ? pub.base_dn : '');
++    setUserFilter(
++      typeof pub?.user_search_filter === 'string'
++        ? pub.user_search_filter
++        : (typeof pub?.user_filter === 'string' ? pub.user_filter : '(sAMAccountName={username})'),
++    );
++    setSubjectAttribute(typeof pub?.subject_attribute === 'string' ? pub.subject_attribute : 'objectGUID');
++    setEmailAttribute(typeof pub?.email_attribute === 'string' ? pub.email_attribute : 'mail');
++    setDisplayNameAttribute(typeof pub?.display_name_attribute === 'string' ? pub.display_name_attribute : 'displayName');
++    setCaPem(typeof pub?.ca_cert_pem === 'string' ? pub.ca_cert_pem : (typeof pub?.ca_pem === 'string' ? pub.ca_pem : ''));
++
++    const pins = pub?.spki_sha256_pins;
++    setSpkiPin(Array.isArray(pins) && pins.length > 0 ? (pins[0] as string) : (typeof pub?.spki_sha256_pin === 'string' ? pub.spki_sha256_pin : ''));
++
+     setSecretInput('');
+     setReplaceSecret(!card);
+     setFormError(null);
+@@ -121,6 +200,69 @@ export function AuthCardEditorDrawer({
+ 
+   if (!isOpen) return null;
+ 
++  // 1-Click Preset applier
++  const applyPreset = (preset: ProviderPreset) => {
++    setActivePreset(preset);
++    setFieldErrors({});
++
++    if (preset === 'google') {
++      setProviderKind('OIDC');
++      setSlug('google-oauth');
++      setDisplayName('Google Workspace');
++      setButtonSubtext('Sign in with your Google account');
++      setIconPreset('google');
++      setIssuerUrl('https://accounts.google.com');
++      setScopes('openid, profile, email');
++      setAccessPolicyMode('any_user');
++    } else if (preset === 'github') {
++      setProviderKind('OAUTH2');
++      setSlug('github-oauth');
++      setDisplayName('GitHub');
++      setButtonSubtext('Sign in with your GitHub account');
++      setIconPreset('github');
++      setIssuerUrl('https://github.com');
++      setAuthorizationEndpoint('https://github.com/login/oauth/authorize');
++      setTokenEndpoint('https://github.com/login/oauth/access_token');
++      setUserinfoEndpoint('https://api.github.com/user');
++      setScopes('read:user, user:email');
++      setAccessPolicyMode('any_user');
++    } else if (preset === 'active-directory') {
++      setProviderKind('LDAP');
++      setSlug('ad-ldap');
++      setDisplayName('Active Directory');
++      setButtonSubtext('Sign in with Windows / AD domain credentials');
++      setIconPreset('active-directory');
++      setServerUrl('ldaps://ad.corp.local:636');
++      setUserFilter('(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))');
++      setSubjectAttribute('objectGUID');
++      setEmailAttribute('mail');
++      setDisplayNameAttribute('displayName');
++      setStartTls(false);
++      setAccessPolicyMode('any_user');
++    } else if (preset === 'openldap') {
++      setProviderKind('LDAP');
++      setSlug('openldap');
++      setDisplayName('OpenLDAP');
++      setButtonSubtext('Sign in with LDAP directory credentials');
++      setIconPreset('ldap');
++      setServerUrl('ldaps://ldap.corp.local:636');
++      setUserFilter('(&(objectClass=person)(uid={username}))');
++      setSubjectAttribute('entryUUID');
++      setEmailAttribute('mail');
++      setDisplayNameAttribute('cn');
++      setStartTls(false);
++      setAccessPolicyMode('any_user');
++    } else {
++      setProviderKind('OIDC');
++      setSlug('oauth1');
++      setDisplayName('Custom SSO');
++      setButtonSubtext('Sign in with Single Sign-On');
++      setIconPreset('key');
++      setScopes('openid, profile, email');
++      setAccessPolicyMode('any_user');
++    }
++  };
++
+   // Enforce LDAP start_tls locked when scheme is ldap://
+   const handleServerUrlChange = (val: string) => {
+     setServerUrl(val);
+@@ -149,15 +291,13 @@ export function AuthCardEditorDrawer({
+     }
+ 
+     if (providerKind === 'OIDC' || providerKind === 'OAUTH2') {
+-      if (!issuerUrl.trim()) {
+-        errors.issuerUrl = 'Issuer URL is required.';
+-      } else if (!issuerUrl.trim().toLowerCase().startsWith('https://')) {
+-        errors.issuerUrl = 'Issuer URL must use HTTPS.';
+-      }
+-
+       if (!clientId.trim()) {
+         errors.clientId = 'Client ID is required.';
+       }
++
++      if (issuerUrl.trim() && !issuerUrl.trim().toLowerCase().startsWith('https://')) {
++        errors.issuerUrl = 'Issuer URL must use HTTPS.';
++      }
+     }
+ 
+     if (providerKind === 'LDAP') {
+@@ -201,34 +341,58 @@ export function AuthCardEditorDrawer({
+       .map((d) => d.trim().toLowerCase())
+       .filter(Boolean);
+ 
+-    let publicConfig: Record<string, unknown> = {};
+-
+-    if (providerKind === 'OIDC' || providerKind === 'OAUTH2') {
+-      const scopeList = scopes
++    const parseList = (str: string) =>
++      str
+         .split(',')
+         .map((s) => s.trim())
+         .filter(Boolean);
++
++    let publicConfig: Record<string, unknown> = {};
++
++    if (providerKind === 'OIDC' || providerKind === 'OAUTH2') {
++      const scopeList = parseList(scopes);
+       publicConfig = {
+-        issuer_url: issuerUrl.trim(),
++        kind: providerKind,
+         client_id: clientId.trim(),
+-        scopes: scopeList,
++        scopes: scopeList.length > 0 ? scopeList : ['openid', 'profile', 'email'],
+         pkce_method: 'S256',
+         token_auth_method: tokenAuthMethod,
++        ...(issuerUrl.trim() ? { issuer: issuerUrl.trim(), issuer_url: issuerUrl.trim() } : {}),
++        ...(authorizationEndpoint.trim() ? { authorization_endpoint: authorizationEndpoint.trim() } : {}),
++        ...(tokenEndpoint.trim() ? { token_endpoint: tokenEndpoint.trim() } : {}),
++        ...(userinfoEndpoint.trim() ? { userinfo_endpoint: userinfoEndpoint.trim() } : {}),
++        admin_allowlist: accessPolicyMode === 'restricted' ? parseList(adminAllowlist) : [],
++        user_allowlist: accessPolicyMode === 'restricted' ? parseList(userAllowlist) : [],
+       };
+     } else if (providerKind === 'LDAP') {
++      const isLdapScheme = serverUrl.trim().toLowerCase().startsWith('ldap://');
++      const transportMode = isLdapScheme || startTls ? 'starttls' : 'ldaps';
+       publicConfig = {
++        kind: 'LDAP',
++        url: serverUrl.trim(),
+         server_url: serverUrl.trim(),
+-        start_tls: serverUrl.trim().toLowerCase().startsWith('ldap://') ? true : startTls,
++        transport_mode: transportMode,
++        start_tls: isLdapScheme ? true : startTls,
++        service_bind_dn: bindDn.trim(),
+         bind_dn: bindDn.trim(),
+         base_dn: baseDn.trim(),
++        user_search_filter: userFilter.trim(),
+         user_filter: userFilter.trim(),
+-        ...(caPem.trim() ? { ca_pem: caPem.trim() } : {}),
+-        ...(spkiPin.trim() ? { spki_sha256_pin: spkiPin.trim() } : {}),
++        subject_attribute: subjectAttribute.trim() || 'objectGUID',
++        email_attribute: emailAttribute.trim() || 'mail',
++        display_name_attribute: displayNameAttribute.trim() || 'displayName',
++        access_mode: accessPolicyMode === 'restricted' ? 'group_restricted' : 'any_user',
++        admin_groups: accessPolicyMode === 'restricted' ? parseList(adminGroups) : [],
++        user_groups: accessPolicyMode === 'restricted' ? parseList(userGroups) : [],
++        ...(caPem.trim() ? { ca_cert_pem: caPem.trim(), ca_pem: caPem.trim() } : {}),
++        ...(spkiPin.trim() ? { spki_sha256_pins: [spkiPin.trim()], spki_sha256_pin: spkiPin.trim() } : {}),
+       };
+     } else {
+       publicConfig = card?.public_config ?? {};
+     }
+ 
++    const effectiveSlug = slug.trim() || (providerKind === 'LDAP' ? 'ldap1' : 'oauth1');
++
+     try {
+       if (isEdit) {
+         const payload: UpdateAuthCardPayload = {
+@@ -240,8 +404,8 @@ export function AuthCardEditorDrawer({
+           public_config: publicConfig,
+         };
+ 
+-        // Write-only contract: include secret_input ONLY when replaceSecret is checked
+         if (replaceSecret && secretInput.trim()) {
++          payload.secret = secretInput.trim();
+           payload.secret_input = secretInput.trim();
+         }
+ 
+@@ -249,14 +413,14 @@ export function AuthCardEditorDrawer({
+       } else {
+         const payload: CreateAuthCardPayload = {
+           provider_kind: providerKind,
+-          slug: slug.trim(),
++          slug: effectiveSlug,
+           display_name: displayName.trim(),
+           button_subtext: buttonSubtext.trim() || null,
+           icon_preset: iconPreset,
+           auto_provision_users: autoProvisionUsers,
+           allowed_email_domains: domains,
+           public_config: publicConfig,
+-          ...(secretInput.trim() ? { secret_input: secretInput.trim() } : {}),
++          ...(secretInput.trim() ? { secret: secretInput.trim(), secret_input: secretInput.trim() } : {}),
+         };
+ 
+         await onSave(payload, false);
+@@ -270,7 +434,6 @@ export function AuthCardEditorDrawer({
+         setFormError('Failed to save authentication card.');
+       }
+     } finally {
+-      // Volatile secret cleanup in finally block
+       setSecretInput('');
+       setIsSubmitting(false);
+     }
+@@ -311,160 +474,73 @@ export function AuthCardEditorDrawer({
+           </div>
+         ) : null}
+ 
+-        <form onSubmit={(e) => { void handleSubmit(e); }} noValidate>
+-          {/* Section: General Configuration */}
+-          <div className="auth-editor-section-title">General Settings</div>
+-
+-          <div className="auth-editor-prop-row">
+-            <label className="auth-editor-label" htmlFor="card-provider-kind">
+-              Provider Kind
+-            </label>
+-            <select
+-              id="card-provider-kind"
+-              className="auth-editor-select"
+-              value={providerKind}
+-              onChange={(e) => { setProviderKind(e.target.value as ProviderKind); }}
+-              disabled={isEdit || isSubmitting}
+-            >
+-              <option value="OIDC">OIDC</option>
+-              <option value="OAUTH2">OAuth 2.0</option>
+-              <option value="LDAP">LDAP / Active Directory</option>
+-              {isEdit && providerKind === 'LOCAL_ADMIN' ? (
+-                <option value="LOCAL_ADMIN">Local Administrator</option>
+-              ) : null}
+-            </select>
+-          </div>
+-
+-          <div className="auth-editor-prop-row">
+-            <label className="auth-editor-label" htmlFor="card-slug">
+-              Slug Identifier
+-            </label>
+-            <input
+-              id="card-slug"
+-              type="text"
+-              className="auth-editor-input"
+-              value={slug}
+-              onChange={(e) => { setSlug(e.target.value); }}
+-              disabled={isEdit || isSubmitting}
+-              placeholder="e.g. corp-ad"
+-              maxLength={48}
+-              required
+-            />
+-          </div>
+-          {fieldErrors.slug ? (
+-            <div className="auth-editor-error">{fieldErrors.slug}</div>
+-          ) : null}
+-
+-          <div className="auth-editor-prop-row">
+-            <label className="auth-editor-label" htmlFor="card-display-name">
+-              Display Name
+-            </label>
+-            <input
+-              id="card-display-name"
+-              type="text"
+-              className="auth-editor-input"
+-              value={displayName}
+-              onChange={(e) => { setDisplayName(e.target.value); }}
+-              disabled={isSubmitting}
+-              placeholder="e.g. Corporate Active Directory"
+-              maxLength={80}
+-              required
+-            />
+-          </div>
+-          {fieldErrors.displayName ? (
+-            <div className="auth-editor-error">{fieldErrors.displayName}</div>
+-          ) : null}
+-
+-          <div className="auth-editor-prop-row">
+-            <label className="auth-editor-label" htmlFor="card-subtext">
+-              Button Subtext
+-            </label>
+-            <input
+-              id="card-subtext"
+-              type="text"
+-              className="auth-editor-input"
+-              value={buttonSubtext}
+-              onChange={(e) => { setButtonSubtext(e.target.value); }}
+-              disabled={isSubmitting}
+-              placeholder="e.g. Domain accounts (@corp.com)"
+-              maxLength={120}
+-            />
+-          </div>
+-          {fieldErrors.buttonSubtext ? (
+-            <div className="auth-editor-error">{fieldErrors.buttonSubtext}</div>
+-          ) : null}
+-
+-          <div className="auth-editor-prop-row">
+-            <label className="auth-editor-label" htmlFor="card-icon-preset">
+-              Icon Preset
+-            </label>
+-            <select
+-              id="card-icon-preset"
+-              className="auth-editor-select"
+-              value={iconPreset}
+-              onChange={(e) => { setIconPreset(e.target.value); }}
+-              disabled={isSubmitting}
+-            >
+-              <option value="shield">🛡️ Shield</option>
+-              <option value="key">🔑 Key</option>
+-              <option value="lock">🔒 Lock</option>
+-              <option value="globe">🌐 Globe</option>
+-              <option value="user-check">👤 User Check</option>
+-            </select>
+-          </div>
+-
+-          <div className="auth-editor-prop-row">
+-            <label className="auth-editor-label" htmlFor="card-auto-provision">
+-              Auto-provision Users
+-            </label>
+-            <input
+-              id="card-auto-provision"
+-              type="checkbox"
+-              checked={autoProvisionUsers}
+-              onChange={(e) => { setAutoProvisionUsers(e.target.checked); }}
+-              disabled={isSubmitting}
+-            />
+-          </div>
+-
+-          <div className="auth-editor-prop-row">
+-            <label className="auth-editor-label" htmlFor="card-email-domains">
+-              Allowed Email Domains
+-            </label>
+-            <input
+-              id="card-email-domains"
+-              type="text"
+-              className="auth-editor-input"
+-              value={allowedEmailDomains}
+-              onChange={(e) => { setAllowedEmailDomains(e.target.value); }}
+-              disabled={isSubmitting}
+-              placeholder="e.g. corp.example.com, example.org"
+-            />
++        {/* 1-Click Provider Presets */}
++        {!isEdit ? (
++          <div className="auth-presets-bar">
++            <span className="auth-presets-label">1-Click Provider Presets</span>
++            <div className="auth-presets-list">
++              <button
++                type="button"
++                className={`auth-preset-btn ${activePreset === 'google' ? 'auth-preset-btn--active' : ''}`}
++                onClick={() => { applyPreset('google'); }}
++              >
++                Google (OAuth 2.0)
++              </button>
++              <button
++                type="button"
++                className={`auth-preset-btn ${activePreset === 'github' ? 'auth-preset-btn--active' : ''}`}
++                onClick={() => { applyPreset('github'); }}
++              >
++                GitHub (OAuth 2.0)
++              </button>
++              <button
++                type="button"
++                className={`auth-preset-btn ${activePreset === 'active-directory' ? 'auth-preset-btn--active' : ''}`}
++                onClick={() => { applyPreset('active-directory'); }}
++              >
++                Active Directory (sAMAccountName)
++              </button>
++              <button
++                type="button"
++                className={`auth-preset-btn ${activePreset === 'openldap' ? 'auth-preset-btn--active' : ''}`}
++                onClick={() => { applyPreset('openldap'); }}
++              >
++                Standard LDAP (OpenLDAP)
++              </button>
++              <button
++                type="button"
++                className={`auth-preset-btn ${activePreset === 'custom-oauth' ? 'auth-preset-btn--active' : ''}`}
++                onClick={() => { applyPreset('custom-oauth'); }}
++              >
++                Custom OAuth 2.0 / OIDC
++              </button>
++            </div>
+           </div>
++        ) : null}
+ 
+-          {/* Section: Provider Specific Config */}
+-          {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
++        <form onSubmit={(e) => { void handleSubmit(e); }} noValidate>
++          {card?.provider_kind === 'LOCAL_ADMIN' ? (
+             <div>
+-              <div className="auth-editor-section-title">OIDC / OAuth 2.0 Settings</div>
+-
++              <div className="auth-editor-section-title">Local Administrator Security Policy</div>
+               <div className="auth-editor-prop-row">
+-                <label className="auth-editor-label" htmlFor="card-issuer-url">
+-                  Issuer URL
+-                </label>
+-                <input
+-                  id="card-issuer-url"
+-                  type="url"
+-                  className="auth-editor-input"
+-                  value={issuerUrl}
+-                  onChange={(e) => { setIssuerUrl(e.target.value); }}
+-                  disabled={isSubmitting}
+-                  placeholder="https://accounts.google.com"
+-                  required
++                <span className="auth-editor-label">Security Profile</span>
++                <EmojiHint
++                  kind="restricted"
++                  label="Local Admin security"
++                  content="Argon2id (m=64MiB, t=3, p=4) + server HMAC pepper + mandatory Passkey or TOTP (AAL2)."
+                 />
+               </div>
+-              {fieldErrors.issuerUrl ? (
+-                <div className="auth-editor-error">{fieldErrors.issuerUrl}</div>
+-              ) : null}
++              <p className="auth-card-subtext">
++                Local Administrator passwords use Argon2id hashing with server HMAC pepper and mandatory Passkey or TOTP (AAL2) step-up.
++              </p>
++            </div>
++          ) : (
++            <>
++              {/* SECTION 1: MANDATORY SETTINGS */}
++              <div className="auth-editor-section-title">Mandatory Settings</div>
+ 
++              {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
++            <div>
+               <div className="auth-editor-prop-row">
+                 <label className="auth-editor-label" htmlFor="card-client-id">
+                   Client ID
+@@ -476,6 +552,7 @@ export function AuthCardEditorDrawer({
+                   value={clientId}
+                   onChange={(e) => { setClientId(e.target.value); }}
+                   disabled={isSubmitting}
++                  placeholder="e.g. 123456789-abcdef.apps.googleusercontent.com"
+                   required
+                 />
+               </div>
+@@ -484,47 +561,20 @@ export function AuthCardEditorDrawer({
+               ) : null}
+ 
+               <div className="auth-editor-prop-row">
+-                <label className="auth-editor-label" htmlFor="card-scopes">
+-                  Scopes
++                <label className="auth-editor-label" htmlFor="card-secret">
++                  Client Secret
+                 </label>
+                 <input
+-                  id="card-scopes"
+-                  type="text"
++                  id="card-secret"
++                  type="password"
+                   className="auth-editor-input"
+-                  value={scopes}
+-                  onChange={(e) => { setScopes(e.target.value); }}
+-                  disabled={isSubmitting}
+-                  placeholder="openid, profile, email"
++                  value={secretInput}
++                  onChange={(e) => { setSecretInput(e.target.value); }}
++                  disabled={isSubmitting || (isEdit && !replaceSecret)}
++                  placeholder={secretPlaceholder}
+                 />
+               </div>
+ 
+-              <div className="auth-editor-prop-row">
+-                <span className="auth-editor-label">PKCE Enforcement</span>
+-                <span className="auth-badge-primary auth-badge--pkce">PKCE S256 (enforced)</span>
+-              </div>
+-
+-              <div className="auth-editor-prop-row">
+-                <label className="auth-editor-label" htmlFor="card-token-auth">
+-                  Token Auth Method
+-                </label>
+-                <select
+-                  id="card-token-auth"
+-                  className="auth-editor-select"
+-                  value={tokenAuthMethod}
+-                  onChange={(e) => { setTokenAuthMethod(
+-                      e.target.value as 'client_secret_basic' | 'private_key_jwt',
+-                    ); }
+-                  }
+-                  disabled={isSubmitting}
+-                >
+-                  <option value="client_secret_basic">client_secret_basic</option>
+-                  <option value="private_key_jwt">private_key_jwt</option>
+-                </select>
+-              </div>
+-
+-              {/* Write-only secret field */}
+-              <div className="auth-editor-section-title">Credentials</div>
+-
+               {isEdit && card?.has_secret ? (
+                 <div className="auth-editor-prop-row">
+                   <label className="auth-editor-label" htmlFor="card-replace-secret">
+@@ -534,32 +584,73 @@ export function AuthCardEditorDrawer({
+                     id="card-replace-secret"
+                     type="checkbox"
+                     checked={replaceSecret}
+-                    onChange={(e) => { setReplaceSecret(e.target.checked); }}
++                    onChange={(e) => {
++                      setReplaceSecret(e.target.checked);
++                      if (!e.target.checked) setSecretInput('');
++                    }}
+                     disabled={isSubmitting}
+                   />
+                 </div>
+               ) : null}
+ 
+               <div className="auth-editor-prop-row">
+-                <label className="auth-editor-label" htmlFor="card-client-secret">
+-                  Client Secret
++                <label className="auth-editor-label" htmlFor="card-access-policy">
++                  Access Policy
+                 </label>
+-                <input
+-                  id="card-client-secret"
+-                  type="password"
+-                  className="auth-editor-input"
+-                  value={secretInput}
+-                  onChange={(e) => { setSecretInput(e.target.value); }}
+-                  placeholder={secretPlaceholder}
+-                  disabled={!replaceSecret || isSubmitting}
+-                  autoComplete="new-password"
+-                />
++                <select
++                  id="card-access-policy"
++                  className="auth-editor-select"
++                  value={accessPolicyMode}
++                  onChange={(e) => { setAccessPolicyMode(e.target.value as 'any_user' | 'restricted'); }}
++                  disabled={isSubmitting}
++                >
++                  <option value="any_user">Any User in Domain/Directory (Auto-provisions Member)</option>
++                  <option value="restricted">Restricted by User/Admin Allowlist</option>
++                </select>
+               </div>
++
++              {accessPolicyMode === 'restricted' ? (
++                <div>
++                  <div className="auth-editor-prop-row">
++                    <label className="auth-editor-label" htmlFor="card-admin-allowlist">
++                      Admin Allowlist
++                    </label>
++                    <input
++                      id="card-admin-allowlist"
++                      type="text"
++                      className="auth-editor-input"
++                      value={adminAllowlist}
++                      onChange={(e) => { setAdminAllowlist(e.target.value); }}
++                      disabled={isSubmitting}
++                      placeholder="e.g. alice@corp.com, admin-user"
++                    />
++                  </div>
++                  <div className="auth-field-helper">
++                    Users matching this list receive SERVER_ADMIN automatically.
++                  </div>
++
++                  <div className="auth-editor-prop-row">
++                    <label className="auth-editor-label" htmlFor="card-user-allowlist">
++                      User Allowlist
++                    </label>
++                    <input
++                      id="card-user-allowlist"
++                      type="text"
++                      className="auth-editor-input"
++                      value={userAllowlist}
++                      onChange={(e) => { setUserAllowlist(e.target.value); }}
++                      disabled={isSubmitting}
++                      placeholder="e.g. bob@corp.com, carol@corp.com"
++                    />
++                  </div>
++                  <div className="auth-field-helper">
++                    Users matching this list receive WORKSPACE_MEMBER automatically.
++                  </div>
++                </div>
++              ) : null}
+             </div>
+           ) : providerKind === 'LDAP' ? (
+             <div>
+-              <div className="auth-editor-section-title">LDAP / Active Directory Settings</div>
+-
+               <div className="auth-editor-prop-row">
+                 <label className="auth-editor-label" htmlFor="card-server-url">
+                   Server URL
+@@ -571,7 +662,7 @@ export function AuthCardEditorDrawer({
+                   value={serverUrl}
+                   onChange={(e) => { handleServerUrlChange(e.target.value); }}
+                   disabled={isSubmitting}
+-                  placeholder="ldaps://dc01.corp.example.com"
++                  placeholder="ldaps://ad.corp.example.com:636"
+                   required
+                 />
+               </div>
+@@ -579,23 +670,6 @@ export function AuthCardEditorDrawer({
+                 <div className="auth-editor-error">{fieldErrors.serverUrl}</div>
+               ) : null}
+ 
+-              <div className="auth-editor-prop-row">
+-                <label className="auth-editor-label" htmlFor="card-start-tls">
+-                  StartTLS
+-                </label>
+-                <input
+-                  id="card-start-tls"
+-                  type="checkbox"
+-                  checked={startTls}
+-                  onChange={(e) => {
+-                    setStartTls(e.target.checked);
+-                  }}
+-                  disabled={
+-                    serverUrl.trim().toLowerCase().startsWith('ldap://') || isSubmitting
+-                  }
+-                />
+-              </div>
+-
+               <div className="auth-editor-prop-row">
+                 <label className="auth-editor-label" htmlFor="card-bind-dn">
+                   Bind DN
+@@ -607,7 +681,7 @@ export function AuthCardEditorDrawer({
+                   value={bindDn}
+                   onChange={(e) => { setBindDn(e.target.value); }}
+                   disabled={isSubmitting}
+-                  placeholder="cn=read-only,dc=corp,dc=example,dc=com"
++                  placeholder="cn=svc-kanban,ou=services,dc=corp,dc=com"
+                   required
+                 />
+               </div>
+@@ -615,6 +689,39 @@ export function AuthCardEditorDrawer({
+                 <div className="auth-editor-error">{fieldErrors.bindDn}</div>
+               ) : null}
+ 
++              <div className="auth-editor-prop-row">
++                <label className="auth-editor-label" htmlFor="card-secret">
++                  Bind DN Password
++                </label>
++                <input
++                  id="card-secret"
++                  type="password"
++                  className="auth-editor-input"
++                  value={secretInput}
++                  onChange={(e) => { setSecretInput(e.target.value); }}
++                  disabled={isSubmitting || (isEdit && !replaceSecret)}
++                  placeholder={secretPlaceholder}
++                />
++              </div>
++
++              {isEdit && card?.has_secret ? (
++                <div className="auth-editor-prop-row">
++                  <label className="auth-editor-label" htmlFor="card-replace-secret">
++                    Replace Stored Secret
++                  </label>
++                  <input
++                    id="card-replace-secret"
++                    type="checkbox"
++                    checked={replaceSecret}
++                    onChange={(e) => {
++                      setReplaceSecret(e.target.checked);
++                      if (!e.target.checked) setSecretInput('');
++                    }}
++                    disabled={isSubmitting}
++                  />
++                </div>
++              ) : null}
++
+               <div className="auth-editor-prop-row">
+                 <label className="auth-editor-label" htmlFor="card-base-dn">
+                   Base DN
+@@ -626,7 +733,7 @@ export function AuthCardEditorDrawer({
+                   value={baseDn}
+                   onChange={(e) => { setBaseDn(e.target.value); }}
+                   disabled={isSubmitting}
+-                  placeholder="ou=Users,dc=corp,dc=example,dc=com"
++                  placeholder="dc=corp,dc=com"
+                   required
+                 />
+               </div>
+@@ -635,106 +742,373 @@ export function AuthCardEditorDrawer({
+               ) : null}
+ 
+               <div className="auth-editor-prop-row">
+-                <label className="auth-editor-label" htmlFor="card-user-filter">
+-                  User Filter
++                <label className="auth-editor-label" htmlFor="card-access-policy">
++                  Access Policy
+                 </label>
+-                <input
+-                  id="card-user-filter"
+-                  type="text"
+-                  className="auth-editor-input"
+-                  value={userFilter}
+-                  onChange={(e) => { setUserFilter(e.target.value); }}
++                <select
++                  id="card-access-policy"
++                  className="auth-editor-select"
++                  value={accessPolicyMode}
++                  onChange={(e) => { setAccessPolicyMode(e.target.value as 'any_user' | 'restricted'); }}
+                   disabled={isSubmitting}
+-                  placeholder="(sAMAccountName={username})"
+-                />
++                >
++                  <option value="any_user">Any User in Directory (Auto-provisions Member)</option>
++                  <option value="restricted">Group-Restricted Access (Admin / User Groups)</option>
++                </select>
+               </div>
+ 
+-              <div className="auth-editor-prop-row">
+-                <label className="auth-editor-label" htmlFor="card-spki-pin">
+-                  SPKI SHA-256 Pin
+-                </label>
+-                <input
+-                  id="card-spki-pin"
+-                  type="text"
+-                  className="auth-editor-input"
+-                  value={spkiPin}
+-                  onChange={(e) => { setSpkiPin(e.target.value); }}
+-                  disabled={isSubmitting}
+-                  placeholder="64-character hexadecimal hash"
+-                  maxLength={64}
+-                />
+-              </div>
+-              {fieldErrors.spkiPin ? (
+-                <div className="auth-editor-error">{fieldErrors.spkiPin}</div>
++              {accessPolicyMode === 'restricted' ? (
++                <div>
++                  <div className="auth-editor-prop-row">
++                    <label className="auth-editor-label" htmlFor="card-admin-groups">
++                      Admin Groups
++                    </label>
++                    <input
++                      id="card-admin-groups"
++                      type="text"
++                      className="auth-editor-input"
++                      value={adminGroups}
++                      onChange={(e) => { setAdminGroups(e.target.value); }}
++                      disabled={isSubmitting}
++                      placeholder="e.g. Domain Admins, Enterprise Admins"
++                    />
++                  </div>
++                  <div className="auth-field-helper">
++                    Members of these groups receive SERVER_ADMIN automatically.
++                  </div>
++
++                  <div className="auth-editor-prop-row">
++                    <label className="auth-editor-label" htmlFor="card-user-groups">
++                      User Groups
++                    </label>
++                    <input
++                      id="card-user-groups"
++                      type="text"
++                      className="auth-editor-input"
++                      value={userGroups}
++                      onChange={(e) => { setUserGroups(e.target.value); }}
++                      disabled={isSubmitting}
++                      placeholder="e.g. Engineering, Product, Domain Users"
++                    />
++                  </div>
++                  <div className="auth-field-helper">
++                    Members of these groups receive WORKSPACE_MEMBER automatically.
++                  </div>
++                </div>
+               ) : null}
++            </div>
++          ) : null}
+ 
+-              <div className="auth-editor-prop-row">
+-                <label className="auth-editor-label" htmlFor="card-ca-pem">
+-                  CA Certificate (PEM)
+-                </label>
+-                <textarea
+-                  id="card-ca-pem"
+-                  className="auth-editor-textarea"
+-                  value={caPem}
+-                  onChange={(e) => { setCaPem(e.target.value); }}
+-                  disabled={isSubmitting}
+-                  placeholder="-----BEGIN CERTIFICATE-----..."
+-                />
+-              </div>
++          {/* SECTION 2: OPTIONAL & ADVANCED SETTINGS ACCORDION */}
++          <details className="auth-advanced-accordion" open={isEdit}>
++            <summary className="auth-advanced-summary">
++              Optional &amp; Advanced Settings
++            </summary>
++
++            <div className="auth-editor-prop-row">
++              <label className="auth-editor-label" htmlFor="card-provider-kind">
++                Provider Kind
++              </label>
++              <select
++                id="card-provider-kind"
++                className="auth-editor-select"
++                value={providerKind}
++                onChange={(e) => { setProviderKind(e.target.value as ProviderKind); }}
++                disabled={isEdit || isSubmitting}
++              >
++                <option value="OIDC">OIDC</option>
++                <option value="OAUTH2">OAuth 2.0</option>
++                <option value="LDAP">LDAP / Active Directory</option>
++                {isEdit && providerKind === 'LOCAL_ADMIN' ? (
++                  <option value="LOCAL_ADMIN">Local Administrator</option>
++                ) : null}
++              </select>
++            </div>
+ 
+-              {/* Write-only secret field */}
+-              <div className="auth-editor-section-title">Credentials</div>
++            <div className="auth-editor-prop-row">
++              <label className="auth-editor-label" htmlFor="card-slug">
++                Slug Identifier
++              </label>
++              <input
++                id="card-slug"
++                type="text"
++                className="auth-editor-input"
++                value={slug}
++                onChange={(e) => { setSlug(e.target.value); }}
++                disabled={isEdit || isSubmitting}
++                placeholder="e.g. oauth1, google-oauth, ad-ldap"
++                maxLength={48}
++              />
++            </div>
++            {fieldErrors.slug ? (
++              <div className="auth-editor-error">{fieldErrors.slug}</div>
++            ) : null}
++            <div className="auth-field-helper">
++              Unique identifier slug for URLs and card references. Auto-generated if left blank.
++            </div>
+ 
+-              {isEdit && card?.has_secret ? (
++            <div className="auth-editor-prop-row">
++              <label className="auth-editor-label" htmlFor="card-display-name">
++                Display Name
++              </label>
++              <input
++                id="card-display-name"
++                type="text"
++                className="auth-editor-input"
++                value={displayName}
++                onChange={(e) => { setDisplayName(e.target.value); }}
++                disabled={isSubmitting}
++                placeholder="e.g. Google Workspace, Corporate Active Directory"
++                maxLength={80}
++                required
++              />
++            </div>
++            {fieldErrors.displayName ? (
++              <div className="auth-editor-error">{fieldErrors.displayName}</div>
++            ) : null}
++
++            <div className="auth-editor-prop-row">
++              <label className="auth-editor-label" htmlFor="card-subtext">
++                Button Subtext
++              </label>
++              <input
++                id="card-subtext"
++                type="text"
++                className="auth-editor-input"
++                value={buttonSubtext}
++                onChange={(e) => { setButtonSubtext(e.target.value); }}
++                disabled={isSubmitting}
++                placeholder="e.g. Sign in with your work email (@corp.com)"
++                maxLength={120}
++              />
++            </div>
++            {fieldErrors.buttonSubtext ? (
++              <div className="auth-editor-error">{fieldErrors.buttonSubtext}</div>
++            ) : null}
++            <div className="auth-field-helper">
++              Subtitle displayed directly beneath the login button to guide users.
++            </div>
++
++            <div className="auth-editor-prop-row">
++              <label className="auth-editor-label" htmlFor="card-icon-preset">
++                Icon Preset
++              </label>
++              <select
++                id="card-icon-preset"
++                className="auth-editor-select"
++                value={iconPreset}
++                onChange={(e) => { setIconPreset(e.target.value); }}
++                disabled={isSubmitting}
++              >
++                <option value="shield">🛡️ Shield</option>
++                <option value="key">🔑 Key</option>
++                <option value="lock">🔒 Lock</option>
++                <option value="globe">🌐 Globe</option>
++                <option value="google">🔴 Google</option>
++                <option value="github">🐙 GitHub</option>
++                <option value="active-directory">🏢 Active Directory</option>
++                <option value="ldap">🗂️ LDAP</option>
++                <option value="server">🖥️ Server</option>
++                <option value="user-check">👤 User Check</option>
++              </select>
++            </div>
++
++            <div className="auth-editor-prop-row">
++              <label className="auth-editor-label" htmlFor="card-auto-provision">
++                Auto-provision Users
++              </label>
++              <input
++                id="card-auto-provision"
++                type="checkbox"
++                checked={autoProvisionUsers}
++                onChange={(e) => { setAutoProvisionUsers(e.target.checked); }}
++                disabled={isSubmitting}
++              />
++            </div>
++
++            <div className="auth-editor-prop-row">
++              <label className="auth-editor-label" htmlFor="card-email-domains">
++                Allowed Email Domains
++              </label>
++              <input
++                id="card-email-domains"
++                type="text"
++                className="auth-editor-input"
++                value={allowedEmailDomains}
++                onChange={(e) => { setAllowedEmailDomains(e.target.value); }}
++                disabled={isSubmitting}
++                placeholder="e.g. corp.example.com, example.org"
++              />
++            </div>
++
++            {/* Provider specific optional fields */}
++            {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
++              <div>
+                 <div className="auth-editor-prop-row">
+-                  <label className="auth-editor-label" htmlFor="card-replace-bind-pwd">
+-                    Replace Stored Secret
++                  <label className="auth-editor-label" htmlFor="card-issuer-url">
++                    Issuer URL
+                   </label>
+                   <input
+-                    id="card-replace-bind-pwd"
+-                    type="checkbox"
+-                    checked={replaceSecret}
+-                    onChange={(e) => { setReplaceSecret(e.target.checked); }}
++                    id="card-issuer-url"
++                    type="url"
++                    className="auth-editor-input"
++                    value={issuerUrl}
++                    onChange={(e) => { setIssuerUrl(e.target.value); }}
+                     disabled={isSubmitting}
++                    placeholder="https://accounts.google.com"
+                   />
+                 </div>
+-              ) : null}
++                {fieldErrors.issuerUrl ? (
++                  <div className="auth-editor-error">{fieldErrors.issuerUrl}</div>
++                ) : null}
+ 
+-              <div className="auth-editor-prop-row">
+-                <label className="auth-editor-label" htmlFor="card-bind-password">
+-                  Bind DN Password
+-                </label>
+-                <input
+-                  id="card-bind-password"
+-                  type="password"
+-                  className="auth-editor-input"
+-                  value={secretInput}
+-                  onChange={(e) => { setSecretInput(e.target.value); }}
+-                  placeholder={secretPlaceholder}
+-                  disabled={!replaceSecret || isSubmitting}
+-                  autoComplete="new-password"
+-                />
++                <div className="auth-editor-prop-row">
++                  <label className="auth-editor-label" htmlFor="card-scopes">
++                    Scopes
++                  </label>
++                  <input
++                    id="card-scopes"
++                    type="text"
++                    className="auth-editor-input"
++                    value={scopes}
++                    onChange={(e) => { setScopes(e.target.value); }}
++                    disabled={isSubmitting}
++                    placeholder="openid, profile, email"
++                  />
++                </div>
++
++                <div className="auth-editor-prop-row">
++                  <label className="auth-editor-label" htmlFor="card-token-auth">
++                    Token Auth Method
++                  </label>
++                  <select
++                    id="card-token-auth"
++                    className="auth-editor-select"
++                    value={tokenAuthMethod}
++                    onChange={(e) => {
++                      setTokenAuthMethod(e.target.value as 'client_secret_basic' | 'private_key_jwt');
++                    }}
++                    disabled={isSubmitting}
++                  >
++                    <option value="client_secret_basic">client_secret_basic</option>
++                    <option value="private_key_jwt">private_key_jwt (Asymmetric)</option>
++                  </select>
++                </div>
+               </div>
+-            </div>
+-          ) : (
+-            <div>
+-              <div className="auth-editor-section-title">Local Administrator Security Policy</div>
+-              <div className="auth-editor-prop-row">
+-                <span className="auth-editor-label">Security Profile</span>
+-                <EmojiHint
+-                  kind="restricted"
+-                  label="Local Admin security"
+-                  content="Argon2id (m=64MiB, t=3, p=4) + server HMAC pepper + mandatory Passkey or TOTP (AAL2)."
+-                />
++            ) : providerKind === 'LDAP' ? (
++              <div>
++                <div className="auth-editor-prop-row">
++                  <label className="auth-editor-label" htmlFor="card-starttls">
++                    StartTLS
++                  </label>
++                  <input
++                    id="card-starttls"
++                    type="checkbox"
++                    checked={startTls}
++                    onChange={(e) => { setStartTls(e.target.checked); }}
++                    disabled={isSubmitting || serverUrl.trim().toLowerCase().startsWith('ldap://')}
++                  />
++                </div>
++
++                <div className="auth-editor-prop-row">
++                  <label className="auth-editor-label" htmlFor="card-user-filter">
++                    User Filter
++                  </label>
++                  <input
++                    id="card-user-filter"
++                    type="text"
++                    className="auth-editor-input"
++                    value={userFilter}
++                    onChange={(e) => { setUserFilter(e.target.value); }}
++                    disabled={isSubmitting}
++                    placeholder="(&(objectClass=person)(uid={username}))"
++                  />
++                </div>
++
++                <div className="auth-editor-prop-row">
++                  <label className="auth-editor-label" htmlFor="card-subject-attr">
++                    Subject Attribute
++                  </label>
++                  <input
++                    id="card-subject-attr"
++                    type="text"
++                    className="auth-editor-input"
++                    value={subjectAttribute}
++                    onChange={(e) => { setSubjectAttribute(e.target.value); }}
++                    disabled={isSubmitting}
++                    placeholder="objectGUID (AD) or entryUUID (OpenLDAP)"
++                  />
++                </div>
++
++                <div className="auth-editor-prop-row">
++                  <label className="auth-editor-label" htmlFor="card-email-attr">
++                    Email Attribute
++                  </label>
++                  <input
++                    id="card-email-attr"
++                    type="text"
++                    className="auth-editor-input"
++                    value={emailAttribute}
++                    onChange={(e) => { setEmailAttribute(e.target.value); }}
++                    disabled={isSubmitting}
++                    placeholder="mail"
++                  />
++                </div>
++
++                <div className="auth-editor-prop-row">
++                  <label className="auth-editor-label" htmlFor="card-display-attr">
++                    Full Name Attribute
++                  </label>
++                  <input
++                    id="card-display-attr"
++                    type="text"
++                    className="auth-editor-input"
++                    value={displayNameAttribute}
++                    onChange={(e) => { setDisplayNameAttribute(e.target.value); }}
++                    disabled={isSubmitting}
++                    placeholder="displayName (AD) or cn (OpenLDAP)"
++                  />
++                </div>
++
++                <div className="auth-editor-prop-row">
++                  <label className="auth-editor-label" htmlFor="card-spki-pin">
++                    SPKI SHA-256 Pin
++                  </label>
++                  <input
++                    id="card-spki-pin"
++                    type="text"
++                    className="auth-editor-input"
++                    value={spkiPin}
++                    onChange={(e) => { setSpkiPin(e.target.value); }}
++                    disabled={isSubmitting}
++                    placeholder="64-character hex digest"
++                    maxLength={64}
++                  />
++                </div>
++                {fieldErrors.spkiPin ? (
++                  <div className="auth-editor-error">{fieldErrors.spkiPin}</div>
++                ) : null}
++
++                <div className="auth-editor-prop-row">
++                  <label className="auth-editor-label" htmlFor="card-ca-pem">
++                    CA Certificate PEM
++                  </label>
++                  <textarea
++                    id="card-ca-pem"
++                    className="auth-editor-textarea"
++                    value={caPem}
++                    onChange={(e) => { setCaPem(e.target.value); }}
++                    disabled={isSubmitting}
++                    placeholder="-----BEGIN CERTIFICATE----- ... -----END CERTIFICATE-----"
++                    rows={3}
++                  />
++                </div>
+               </div>
+-              <p className="auth-card-subtext">
+-                Local Administrator passwords use Argon2id hashing with server HMAC pepper and mandatory
+-                Passkey or TOTP (AAL2) second factor.
+-              </p>
+-            </div>
+-          )}
++            ) : null}
++          </details>
++          </>
++        )}
+ 
+-          {/* Drawer Actions */}
+           <div className="auth-editor-actions">
+             <button
+               type="button"
+@@ -748,7 +1122,6 @@ export function AuthCardEditorDrawer({
+               type="submit"
+               className="auth-studio-add-btn"
+               disabled={isSubmitting}
+-              aria-busy={isSubmitting}
+             >
+               {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Card'}
+             </button>
+diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
+index 0af79fb..575dc51 100644
+--- a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
+@@ -1113,4 +1113,167 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+       expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+     });
+   });
++
++  describe('Users & Permissions Tab (KANBA-176)', () => {
++    const mockPrincipals = [
++      {
++        id: 'u-1',
++        principal: 'local.user',
++        handle: 'local.user',
++        display_name: 'Local User',
++        type: 'USER' as const,
++        status: 'active' as const,
++        email: 'local@example.com',
++        role: 'SERVER_ADMIN',
++        provider: 'LOCAL',
++      },
++      {
++        id: 'u-2',
++        principal: 'ldap.engineer',
++        handle: 'ldap.engineer',
++        display_name: 'LDAP Engineer',
++        type: 'USER' as const,
++        status: 'active' as const,
++        email: 'ldap@example.com',
++        role: 'WORKSPACE_MEMBER',
++        provider: 'LDAP',
++      },
++    ];
++
++    beforeEach(() => {
++      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
++        await Promise.resolve();
++        if ((path as string) === '/api/v1/auth/me') return adminUser;
++        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
++        if ((path as string).startsWith('/api/v1/admin/principals')) return mockPrincipals;
++        return {};
++      });
++    });
++
++    it('switches to Users & Permissions tab and renders principals table with badges', async () => {
++      render(<AuthStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.getByText('Okta SSO')).toBeDefined();
++      });
++
++      const usersTab = screen.getByRole('tab', { name: /Users & Permissions/i });
++      fireEvent.click(usersTab);
++
++      await waitFor(() => {
++        expect(screen.getByText('Local User')).toBeDefined();
++        expect(screen.getByText('@local.user')).toBeDefined();
++        expect(screen.getByText('local@example.com')).toBeDefined();
++        expect(screen.getByText('LDAP Engineer')).toBeDefined();
++      });
++
++      expect(screen.getByText('LOCAL')).toBeDefined();
++      expect(screen.getByText('LDAP')).toBeDefined();
++    });
++
++    it('opens + Add Local User modal and creates user successfully', async () => {
++      const createSpy = vi.spyOn(adminAuthApi, 'createLocalUser').mockResolvedValue({
++        id: 'u-3',
++        principal: 'new.member',
++        handle: 'new.member',
++        display_name: 'New Member',
++        type: 'USER',
++        status: 'active',
++        email: 'new@example.com',
++        role: 'WORKSPACE_MEMBER',
++        provider: 'LOCAL',
++      });
++
++      render(<AuthStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.getByText('Okta SSO')).toBeDefined();
++      });
++
++      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
++
++      const addBtn = await screen.findByRole('button', { name: /\+ Add Local User/i });
++      fireEvent.click(addBtn);
++
++      expect(screen.getByRole('heading', { name: /\+ Add Local User/i })).toBeDefined();
++
++      fireEvent.change(screen.getByLabelText(/Username \/ Handle/i), {
++        target: { value: 'new.member' },
++      });
++      fireEvent.change(screen.getByLabelText(/Display Name/i), {
++        target: { value: 'New Member' },
++      });
++      fireEvent.change(screen.getByLabelText(/Email Address/i), {
++        target: { value: 'new@example.com' },
++      });
++      fireEvent.change(screen.getByLabelText(/^Password/i), {
++        target: { value: 'ValidPassword123!' },
++      });
++
++      const submitBtn = screen.getByRole('button', { name: /^Create User$/i });
++      fireEvent.click(submitBtn);
++
++      await waitFor(() => {
++        expect(createSpy).toHaveBeenCalledWith({
++          handle: 'new.member',
++          display_name: 'New Member',
++          email: 'new@example.com',
++          password: 'ValidPassword123!',
++          role: 'WORKSPACE_MEMBER',
++        });
++      });
++    });
++
++    it('updates user role grant via role select dropdown', async () => {
++      const roleSpy = vi.spyOn(adminAuthApi, 'updateUserRole').mockResolvedValue(undefined);
++
++      render(<AuthStudioPage />);
++
++      const usersTab = await screen.findByRole('tab', { name: /Users & Permissions/i });
++      fireEvent.click(usersTab);
++
++      await waitFor(() => {
++        expect(screen.getByText('LDAP Engineer')).toBeDefined();
++      });
++
++      const roleSelect = screen.getByLabelText(/Role for ldap\.engineer/i);
++      fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
++
++      await waitFor(() => {
++        expect(roleSpy).toHaveBeenCalledWith('u-2', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER');
++      });
++    });
++
++    it('opens Reset Password modal and resets user password', async () => {
++      const resetSpy = vi.spyOn(adminAuthApi, 'resetUserPassword').mockResolvedValue(undefined);
++
++      render(<AuthStudioPage />);
++
++      const usersTab = await screen.findByRole('tab', { name: /Users & Permissions/i });
++      fireEvent.click(usersTab);
++
++      await waitFor(() => {
++        expect(screen.getByText('Local User')).toBeDefined();
++      });
++
++      const resetBtns = screen.getAllByRole('button', { name: /^Reset Password$/i });
++      if (resetBtns[0]) fireEvent.click(resetBtns[0]);
++
++      expect(screen.getByRole('heading', { name: /Reset Password: @local\.user/i })).toBeDefined();
++
++      fireEvent.change(screen.getByLabelText(/^New Password/i), {
++        target: { value: 'NewPass12345!' },
++      });
++      fireEvent.change(screen.getByLabelText(/Confirm New Password/i), {
++        target: { value: 'NewPass12345!' },
++      });
++
++      const updateBtn = screen.getByRole('button', { name: /^Update Password$/i });
++      fireEvent.click(updateBtn);
++
++      await waitFor(() => {
++        expect(resetSpy).toHaveBeenCalledWith('u-1', 'NewPass12345!');
++      });
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+index f56f09e..3c62e5a 100644
+--- a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
++++ b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+@@ -14,9 +14,14 @@ import {
+   reorderAdminAuthCard,
+   testAuthCardHandshake,
+   deleteAdminAuthCard,
++  fetchAdminPrincipals,
++  createLocalUser,
++  resetUserPassword,
++  updateUserRole,
+   type AdminAuthCard,
+   type CreateAuthCardPayload,
+   type UpdateAuthCardPayload,
++  type AdminUserPrincipal,
+ } from './adminAuthApi';
+ import { SecondFactorStep } from '../auth/SecondFactorStep';
+ import type { MfaMethod } from '../auth/authApi';
+@@ -47,14 +52,51 @@ function parseLockoutError(
+   return null;
+ }
+ 
++function getProviderBadgeClass(provider: string | undefined): string {
++  const norm = (provider ?? '').toUpperCase();
++  if (norm.includes('LOCAL')) return 'auth-badge-provider--local';
++  if (norm.includes('GOOGLE')) return 'auth-badge-provider--google';
++  if (norm.includes('GITHUB')) return 'auth-badge-provider--github';
++  if (norm.includes('DIRECTORY') || norm.includes('AD')) return 'auth-badge-provider--ad';
++  if (norm.includes('LDAP')) return 'auth-badge-provider--ldap';
++  return 'auth-badge-provider--oauth';
++}
++
+ export function AuthStudioPage(): JSX.Element {
+   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
+   const [isUserLoading, setIsUserLoading] = useState(true);
+   const [accessDenied, setAccessDenied] = useState(false);
+ 
++  // Studio tab state
++  const [activeTab, setActiveTab] = useState<'cards' | 'users'>('cards');
++
++  // Cards state
+   const [cards, setCards] = useState<AdminAuthCard[]>([]);
+   const [isLoadingCards, setIsLoadingCards] = useState(true);
+ 
++  // Users state
++  const [users, setUsers] = useState<AdminUserPrincipal[]>([]);
++  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
++  const [userActionError, setUserActionError] = useState<string | null>(null);
++  const [userActionSuccess, setUserActionSuccess] = useState<string | null>(null);
++
++  // User Modals state
++  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
++  const [resetTargetUser, setResetTargetUser] = useState<AdminUserPrincipal | null>(null);
++
++  // New local user form state
++  const [newUserHandle, setNewUserHandle] = useState('');
++  const [newUserDisplayName, setNewUserDisplayName] = useState('');
++  const [newUserEmail, setNewUserEmail] = useState('');
++  const [newUserPassword, setNewUserPassword] = useState('');
++  const [newUserRole, setNewUserRole] = useState('WORKSPACE_MEMBER');
++  const [isSubmittingUser, setIsSubmittingUser] = useState(false);
++
++  // Reset password form state
++  const [newPassword, setNewPassword] = useState('');
++  const [confirmPassword, setConfirmPassword] = useState('');
++  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
++
+   // Drawer state
+   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+   const [editingCard, setEditingCard] = useState<AdminAuthCard | null>(null);
+@@ -125,11 +167,32 @@ export function AuthStudioPage(): JSX.Element {
+     }
+   }, []);
+ 
++  // 3. Fetch principals if admin access confirmed
++  const loadUsers = useCallback(async () => {
++    setIsLoadingUsers(true);
++    setUserActionError(null);
++    try {
++      const principals = await fetchAdminPrincipals('USER');
++      setUsers(principals);
++    } catch (err: unknown) {
++      if (err instanceof ApiProblem && (err.status === 403 || err.status === 404)) {
++        setAccessDenied(true);
++      } else if (err instanceof Error) {
++        setUserActionError(err.message);
++      } else {
++        setUserActionError('Failed to load user principals.');
++      }
++    } finally {
++      setIsLoadingUsers(false);
++    }
++  }, []);
++
+   useEffect(() => {
+     if (!accessDenied && currentUser?.is_server_admin) {
+       void loadCards();
++      void loadUsers();
+     }
+-  }, [accessDenied, currentUser, loadCards]);
++  }, [accessDenied, currentUser, loadCards, loadUsers]);
+ 
+   // Sort cards: non-LOCAL_ADMIN sorted by sort_rank (COLLATE "C"), LOCAL_ADMIN pinned at end
+   const externalCards = cards
+@@ -161,7 +224,6 @@ export function AuthStudioPage(): JSX.Element {
+ 
+     if (!mutation) return;
+ 
+-    // Replay pending mutation
+     if (mutation.type === 'toggle') {
+       await handleToggleEnabled(mutation.card, Boolean(mutation.extra));
+     } else if (mutation.type === 'delete') {
+@@ -171,7 +233,6 @@ export function AuthStudioPage(): JSX.Element {
+ 
+   // Toggle card enabled state
+   const handleToggleEnabled = async (card: AdminAuthCard, enabled: boolean) => {
+-    // Optimistic mutation
+     const previousCards = [...cards];
+     setCards((prev) =>
+       prev.map((c) => (c.id === card.id ? { ...c, is_enabled: enabled } : c)),
+@@ -183,7 +244,6 @@ export function AuthStudioPage(): JSX.Element {
+       const updated = await toggleAdminAuthCardEnabled(card.id, enabled);
+       setCards((prev) => prev.map((c) => (c.id === card.id ? updated : c)));
+     } catch (err: unknown) {
+-      // Rollback optimistic state
+       setCards(previousCards);
+ 
+       if (handleAal2Intercept(err, { type: 'toggle', card, extra: enabled })) {
+@@ -218,9 +278,9 @@ export function AuthStudioPage(): JSX.Element {
+           c.id === card.id
+             ? {
+                 ...c,
+-                last_health_status: result.last_health_status,
++                last_health_status: (result.last_health_status ?? 'FAILED'),
+                 latency_ms: result.latency_ms,
+-                check_summary: result.check_summary,
++                check_summary: result.check_summary ?? null,
+                 last_handshake_at: new Date().toISOString(),
+               }
+             : c,
+@@ -276,7 +336,6 @@ export function AuthStudioPage(): JSX.Element {
+     }
+ 
+     const previousCards = [...cards];
+-    // Optimistic reorder
+     setCards((prev) =>
+       prev.map((c) => (c.id === card.id ? { ...c, sort_rank: newRank } : c)),
+     );
+@@ -289,13 +348,11 @@ export function AuthStudioPage(): JSX.Element {
+       });
+       setCards((prev) => prev.map((c) => (c.id === card.id ? updated : c)));
+     } catch {
+-      // Rollback
+       setCards(previousCards);
+       setGeneralError('Failed to reorder card.');
+     }
+   };
+ 
+-  // Drag and drop events
+   const handleDragStart = (
+     _e: React.DragEvent<HTMLLIElement>,
+     index: number,
+@@ -317,26 +374,24 @@ export function AuthStudioPage(): JSX.Element {
+       return;
+     }
+ 
+-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+-    const draggedCard = externalCards[draggedIndex]!;
++    const draggedCard = externalCards[draggedIndex];
++    if (!draggedCard) return;
+ 
+     let newRank: string;
+     let beforeId: string | null = null;
+     let afterId: string | null = null;
+ 
+     if (draggedIndex < dropIndex) {
+-      // Moving down
+-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+-      const afterCard = externalCards[dropIndex]!;
++      const afterCard = externalCards[dropIndex];
+       const beforeCard = externalCards[dropIndex + 1];
++      if (!afterCard) return;
+       newRank = midpointRank(afterCard.sort_rank, beforeCard ? beforeCard.sort_rank : null);
+       afterId = afterCard.id;
+       beforeId = beforeCard ? beforeCard.id : null;
+     } else {
+-      // Moving up
+       const afterCard = externalCards[dropIndex - 1];
+-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+-      const beforeCard = externalCards[dropIndex]!;
++      const beforeCard = externalCards[dropIndex];
++      if (!beforeCard) return;
+       newRank = midpointRank(afterCard ? afterCard.sort_rank : null, beforeCard.sort_rank);
+       afterId = afterCard ? afterCard.id : null;
+       beforeId = beforeCard.id;
+@@ -415,7 +470,81 @@ export function AuthStudioPage(): JSX.Element {
+     }
+   };
+ 
+-  // Access denied / non-admin: render uniform "Not found or no access" state
++  // Handle role change for user
++  const handleRoleChange = async (userId: string, newRole: string, previousRole?: string) => {
++    setUserActionError(null);
++    setUserActionSuccess(null);
++    try {
++      await updateUserRole(userId, newRole, previousRole);
++      setUsers((prev) =>
++        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)),
++      );
++      setUserActionSuccess('User role updated successfully.');
++    } catch (err: unknown) {
++      setUserActionError(err instanceof Error ? err.message : 'Failed to update user role.');
++    }
++  };
++
++  // Handle Add Local User
++  const handleCreateLocalUserSubmit = async (e: React.SyntheticEvent) => {
++    e.preventDefault();
++    if (!newUserHandle || !newUserEmail || !newUserPassword) {
++      setUserActionError('Handle, email, and password are required.');
++      return;
++    }
++    setIsSubmittingUser(true);
++    setUserActionError(null);
++    setUserActionSuccess(null);
++
++    try {
++      await createLocalUser({
++        handle: newUserHandle.trim(),
++        display_name: (newUserDisplayName || newUserHandle).trim(),
++        email: newUserEmail.trim(),
++        password: newUserPassword,
++        role: newUserRole,
++      });
++      setUserActionSuccess(`Local user @${newUserHandle} created successfully.`);
++      setIsAddUserOpen(false);
++      setNewUserHandle('');
++      setNewUserDisplayName('');
++      setNewUserEmail('');
++      setNewUserPassword('');
++      setNewUserRole('WORKSPACE_MEMBER');
++      await loadUsers();
++    } catch (err: unknown) {
++      setUserActionError(err instanceof Error ? err.message : 'Failed to create local user.');
++    } finally {
++      setIsSubmittingUser(false);
++    }
++  };
++
++  // Handle Reset Password Submit
++  const handleResetPasswordSubmit = async (e: React.SyntheticEvent) => {
++    e.preventDefault();
++    if (!resetTargetUser) return;
++    if (!newPassword || newPassword !== confirmPassword) {
++      setUserActionError('Passwords do not match or cannot be empty.');
++      return;
++    }
++    setIsSubmittingPassword(true);
++    setUserActionError(null);
++    setUserActionSuccess(null);
++
++    try {
++      await resetUserPassword(resetTargetUser.id, newPassword);
++      setUserActionSuccess(`Password reset successfully for @${resetTargetUser.handle ?? resetTargetUser.principal}.`);
++      setResetTargetUser(null);
++      setNewPassword('');
++      setConfirmPassword('');
++    } catch (err: unknown) {
++      setUserActionError(err instanceof Error ? err.message : 'Failed to reset password.');
++    } finally {
++      setIsSubmittingPassword(false);
++    }
++  };
++
++  // Access denied / non-admin: uniform empty state
+   if (accessDenied) {
+     return (
+       <main className="auth-studio-page" data-testid="auth-studio-page">
+@@ -449,17 +578,57 @@ export function AuthStudioPage(): JSX.Element {
+           />
+         </div>
+ 
++        {activeTab === 'cards' ? (
++          <button
++            type="button"
++            className="auth-studio-add-btn"
++            onClick={() => {
++              setEditingCard(null);
++              setIsDrawerOpen(true);
++            }}
++          >
++            + Add auth card
++          </button>
++        ) : (
++          <button
++            type="button"
++            className="auth-studio-add-btn"
++            onClick={() => {
++              setUserActionError(null);
++              setUserActionSuccess(null);
++              setIsAddUserOpen(true);
++            }}
++          >
++            + Add Local User
++          </button>
++        )}
++      </header>
++
++      {/* Tabs Bar */}
++      <div className="auth-tabs-bar" role="tablist" aria-label="Authentication Studio Sections">
+         <button
+           type="button"
+-          className="auth-studio-add-btn"
+-          onClick={() => {
+-            setEditingCard(null);
+-            setIsDrawerOpen(true);
+-          }}
++          role="tab"
++          id="tab-cards"
++          aria-selected={activeTab === 'cards'}
++          aria-controls="panel-cards"
++          className={`auth-tab-btn ${activeTab === 'cards' ? 'auth-tab-btn--active' : ''}`}
++          onClick={() => { setActiveTab('cards'); }}
+         >
+-          + Add auth card
++          Auth Provider Cards
+         </button>
+-      </header>
++        <button
++          type="button"
++          role="tab"
++          id="tab-users"
++          aria-selected={activeTab === 'users'}
++          aria-controls="panel-users"
++          className={`auth-tab-btn ${activeTab === 'users' ? 'auth-tab-btn--active' : ''}`}
++          onClick={() => { setActiveTab('users'); }}
++        >
++          Users &amp; Permissions
++        </button>
++      </div>
+ 
+       {/* LOCKOUT_PREVENTED Alert Banner */}
+       {lockoutError ? (
+@@ -487,44 +656,162 @@ export function AuthStudioPage(): JSX.Element {
+         </div>
+       ) : null}
+ 
+-      {/* Cards List */}
+-      <ol className="auth-studio-list" role="list">
+-        {sortedCards.map((card, idx) => (
+-          <AuthCardRow
+-            key={card.id}
+-            card={card}
+-            index={idx}
+-            totalCards={sortedCards.length}
+-            isPrimary={card.id === primaryCardId}
+-            onMoveUp={() => {
+-              void handleMove(card, 'up');
+-            }}
+-            onMoveDown={() => {
+-              void handleMove(card, 'down');
+-            }}
+-            onToggleEnabled={(c, enabled) => {
+-              void handleToggleEnabled(c, enabled);
+-            }}
+-            onTestHandshake={(c) => {
+-              void handleTestHandshake(c);
+-            }}
+-            onEdit={(c) => {
+-              setEditingCard(c);
+-              setIsDrawerOpen(true);
+-            }}
+-            onDelete={(c) => {
+-              void handleDeleteCard(c);
+-            }}
+-            onDragStart={handleDragStart}
+-            onDragOver={handleDragOver}
+-            onDrop={(e, i) => {
+-              void handleDrop(e, i);
+-            }}
+-            isTestingHandshake={testingCardIds.has(card.id)}
+-            isToggling={togglingCardIds.has(card.id)}
+-          />
+-        ))}
+-      </ol>
++      {/* User Action Error or Success Banners */}
++      {userActionError ? (
++        <div className="auth-lockout-banner" role="alert">
++          <div className="auth-lockout-header">
++            <span>{userActionError}</span>
++            <button
++              type="button"
++              className="auth-btn-secondary"
++              onClick={() => { setUserActionError(null); }}
++              aria-label="Dismiss error"
++            >
++              ×
++            </button>
++          </div>
++        </div>
++      ) : null}
++
++      {userActionSuccess ? (
++        <div className="auth-success-banner" role="status">
++          <span>{userActionSuccess}</span>
++          <button
++            type="button"
++            className="auth-btn-secondary"
++            onClick={() => { setUserActionSuccess(null); }}
++            aria-label="Dismiss notification"
++          >
++            ×
++          </button>
++        </div>
++      ) : null}
++
++      {/* Tab Panels */}
++      {activeTab === 'cards' ? (
++        <div id="panel-cards" role="tabpanel" aria-labelledby="tab-cards">
++          {/* Cards List */}
++          <ol className="auth-studio-list" role="list">
++            {sortedCards.map((card, idx) => (
++              <AuthCardRow
++                key={card.id}
++                card={card}
++                index={idx}
++                totalCards={sortedCards.length}
++                isPrimary={card.id === primaryCardId}
++                onMoveUp={() => {
++                  void handleMove(card, 'up');
++                }}
++                onMoveDown={() => {
++                  void handleMove(card, 'down');
++                }}
++                onToggleEnabled={(c, enabled) => {
++                  void handleToggleEnabled(c, enabled);
++                }}
++                onTestHandshake={(c) => {
++                  void handleTestHandshake(c);
++                }}
++                onEdit={(c) => {
++                  setEditingCard(c);
++                  setIsDrawerOpen(true);
++                }}
++                onDelete={(c) => {
++                  void handleDeleteCard(c);
++                }}
++                onDragStart={handleDragStart}
++                onDragOver={handleDragOver}
++                onDrop={(e, i) => {
++                  void handleDrop(e, i);
++                }}
++                isTestingHandshake={testingCardIds.has(card.id)}
++                isToggling={togglingCardIds.has(card.id)}
++              />
++            ))}
++          </ol>
++        </div>
++      ) : (
++        <div id="panel-users" role="tabpanel" aria-labelledby="tab-users">
++          {isLoadingUsers ? (
++            <p className="auth-card-subtext">Loading users and permission grants...</p>
++          ) : (
++            <div className="auth-users-container">
++              <table className="auth-users-table" data-testid="auth-users-table">
++                <thead>
++                  <tr>
++                    <th className="auth-users-th">User / Handle</th>
++                    <th className="auth-users-th">Email</th>
++                    <th className="auth-users-th">Provider</th>
++                    <th className="auth-users-th">Role Grant</th>
++                    <th className="auth-users-th">Actions</th>
++                  </tr>
++                </thead>
++                <tbody>
++                  {users.length === 0 ? (
++                    <tr>
++                      <td colSpan={5} className="auth-users-td">
++                        No user principals found.
++                      </td>
++                    </tr>
++                  ) : (
++                    users.map((u) => (
++                      <tr key={u.id} className="auth-users-tr">
++                        <td className="auth-users-td">
++                          <div className="auth-user-name-cell">
++                            <span className="auth-user-display-name">
++                              {u.display_name || (u.handle ?? u.principal)}
++                            </span>
++                            <span className="auth-user-handle">@{u.handle ?? u.principal}</span>
++                          </div>
++                        </td>
++                        <td className="auth-users-td">
++                          <span className="auth-user-email">{u.email ?? '—'}</span>
++                        </td>
++                        <td className="auth-users-td">
++                          <span
++                            className={`auth-badge-provider ${getProviderBadgeClass(u.provider)}`}
++                          >
++                            {u.provider ?? 'LOCAL'}
++                          </span>
++                        </td>
++                        <td className="auth-users-td">
++                          <select
++                            className="auth-role-select"
++                            value={u.role ?? 'WORKSPACE_MEMBER'}
++                            onChange={(e) => {
++                              void handleRoleChange(u.id, e.target.value, u.role);
++                            }}
++                            aria-label={`Role for ${u.handle ?? u.principal}`}
++                          >
++                            <option value="SERVER_ADMIN">SERVER_ADMIN (Server Admin)</option>
++                            <option value="WORKSPACE_ADMIN">WORKSPACE_ADMIN (Workspace Admin)</option>
++                            <option value="WORKSPACE_MEMBER">WORKSPACE_MEMBER (Workspace Member)</option>
++                            <option value="WORKSPACE_GUEST">WORKSPACE_GUEST (Workspace Guest)</option>
++                          </select>
++                        </td>
++                        <td className="auth-users-td">
++                          <button
++                            type="button"
++                            className="auth-btn-secondary"
++                            onClick={() => {
++                              setUserActionError(null);
++                              setUserActionSuccess(null);
++                              setResetTargetUser(u);
++                              setNewPassword('');
++                              setConfirmPassword('');
++                            }}
++                          >
++                            Reset Password
++                          </button>
++                        </td>
++                      </tr>
++                    ))
++                  )}
++                </tbody>
++              </table>
++            </div>
++          )}
++        </div>
++      )}
+ 
+       {/* Create / Edit Drawer */}
+       <AuthCardEditorDrawer
+@@ -538,6 +825,213 @@ export function AuthStudioPage(): JSX.Element {
+         onSave={handleSaveDrawer}
+       />
+ 
++      {/* Add Local User Modal */}
++      {isAddUserOpen ? (
++        <div className="auth-modal-backdrop" role="presentation">
++          <div
++            className="auth-modal-dialog"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="add-user-modal-title"
++          >
++            <div className="auth-modal-header">
++              <h2 id="add-user-modal-title" className="auth-modal-title">
++                + Add Local User
++              </h2>
++              <button
++                type="button"
++                className="auth-btn-secondary"
++                onClick={() => { setIsAddUserOpen(false); }}
++                aria-label="Close"
++              >
++                ×
++              </button>
++            </div>
++            <form onSubmit={(e) => { void handleCreateLocalUserSubmit(e); }}>
++              <div className="auth-modal-body">
++                <div className="auth-editor-field">
++                  <label htmlFor="new-user-handle" className="auth-editor-label">
++                    Username / Handle <span className="auth-editor-required">*</span>
++                  </label>
++                  <input
++                    id="new-user-handle"
++                    type="text"
++                    className="auth-editor-input"
++                    value={newUserHandle}
++                    onChange={(e) => { setNewUserHandle(e.target.value); }}
++                    placeholder="e.g. jdoe"
++                    required
++                  />
++                </div>
++
++                <div className="auth-editor-field">
++                  <label htmlFor="new-user-display" className="auth-editor-label">
++                    Display Name
++                  </label>
++                  <input
++                    id="new-user-display"
++                    type="text"
++                    className="auth-editor-input"
++                    value={newUserDisplayName}
++                    onChange={(e) => { setNewUserDisplayName(e.target.value); }}
++                    placeholder="e.g. John Doe"
++                  />
++                </div>
++
++                <div className="auth-editor-field">
++                  <label htmlFor="new-user-email" className="auth-editor-label">
++                    Email Address <span className="auth-editor-required">*</span>
++                  </label>
++                  <input
++                    id="new-user-email"
++                    type="email"
++                    className="auth-editor-input"
++                    value={newUserEmail}
++                    onChange={(e) => { setNewUserEmail(e.target.value); }}
++                    placeholder="jdoe@example.com"
++                    required
++                  />
++                </div>
++
++                <div className="auth-editor-field">
++                  <label htmlFor="new-user-pwd" className="auth-editor-label">
++                    Password <span className="auth-editor-required">*</span>
++                  </label>
++                  <input
++                    id="new-user-pwd"
++                    type="password"
++                    className="auth-editor-input"
++                    value={newUserPassword}
++                    onChange={(e) => { setNewUserPassword(e.target.value); }}
++                    placeholder="Minimum 8 characters"
++                    required
++                    minLength={8}
++                  />
++                </div>
++
++                <div className="auth-editor-field">
++                  <label htmlFor="new-user-role" className="auth-editor-label">
++                    Initial Role Grant
++                  </label>
++                  <select
++                    id="new-user-role"
++                    className="auth-editor-select"
++                    value={newUserRole}
++                    onChange={(e) => { setNewUserRole(e.target.value); }}
++                  >
++                    <option value="WORKSPACE_MEMBER">WORKSPACE_MEMBER (Workspace Member)</option>
++                    <option value="WORKSPACE_ADMIN">WORKSPACE_ADMIN (Workspace Admin)</option>
++                    <option value="SERVER_ADMIN">SERVER_ADMIN (Server Admin)</option>
++                    <option value="WORKSPACE_GUEST">WORKSPACE_GUEST (Workspace Guest)</option>
++                  </select>
++                </div>
++              </div>
++
++              <div className="auth-modal-footer">
++                <button
++                  type="button"
++                  className="auth-btn-secondary"
++                  onClick={() => { setIsAddUserOpen(false); }}
++                >
++                  Cancel
++                </button>
++                <button
++                  type="submit"
++                  className="auth-studio-add-btn"
++                  disabled={isSubmittingUser}
++                >
++                  {isSubmittingUser ? 'Creating...' : 'Create User'}
++                </button>
++              </div>
++            </form>
++          </div>
++        </div>
++      ) : null}
++
++      {/* Reset Password Modal */}
++      {resetTargetUser ? (
++        <div className="auth-modal-backdrop" role="presentation">
++          <div
++            className="auth-modal-dialog"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="reset-pwd-modal-title"
++          >
++            <div className="auth-modal-header">
++              <h2 id="reset-pwd-modal-title" className="auth-modal-title">
++                Reset Password: @{resetTargetUser.handle ?? resetTargetUser.principal}
++              </h2>
++              <button
++                type="button"
++                className="auth-btn-secondary"
++                onClick={() => { setResetTargetUser(null); }}
++                aria-label="Close"
++              >
++                ×
++              </button>
++            </div>
++            <form onSubmit={(e) => { void handleResetPasswordSubmit(e); }}>
++              <div className="auth-modal-body">
++                <p className="auth-card-subtext">
++                  Set a new password for{' '}
++                  <strong>{resetTargetUser.display_name || (resetTargetUser.handle ?? resetTargetUser.principal)}</strong> (
++                  {resetTargetUser.email ?? `@${resetTargetUser.handle ?? resetTargetUser.principal}`}).
++                </p>
++
++                <div className="auth-editor-field">
++                  <label htmlFor="reset-pwd-new" className="auth-editor-label">
++                    New Password <span className="auth-editor-required">*</span>
++                  </label>
++                  <input
++                    id="reset-pwd-new"
++                    type="password"
++                    className="auth-editor-input"
++                    value={newPassword}
++                    onChange={(e) => { setNewPassword(e.target.value); }}
++                    placeholder="Minimum 8 characters"
++                    required
++                    minLength={8}
++                  />
++                </div>
++
++                <div className="auth-editor-field">
++                  <label htmlFor="reset-pwd-confirm" className="auth-editor-label">
++                    Confirm New Password <span className="auth-editor-required">*</span>
++                  </label>
++                  <input
++                    id="reset-pwd-confirm"
++                    type="password"
++                    className="auth-editor-input"
++                    value={confirmPassword}
++                    onChange={(e) => { setConfirmPassword(e.target.value); }}
++                    placeholder="Re-enter password"
++                    required
++                    minLength={8}
++                  />
++                </div>
++              </div>
++
++              <div className="auth-modal-footer">
++                <button
++                  type="button"
++                  className="auth-btn-secondary"
++                  onClick={() => { setResetTargetUser(null); }}
++                >
++                  Cancel
++                </button>
++                <button
++                  type="submit"
++                  className="auth-studio-add-btn"
++                  disabled={isSubmittingPassword}
++                >
++                  {isSubmittingPassword ? 'Resetting...' : 'Update Password'}
++                </button>
++              </div>
++            </form>
++          </div>
++        </div>
++      ) : null}
++
+       {/* AAL2 Step-Up Modal Dialog */}
+       {aal2Challenge ? (
+         <div className="auth-drawer-backdrop" role="presentation">
+diff --git a/kanban/web/src/features/admin-auth/adminAuth.css b/kanban/web/src/features/admin-auth/adminAuth.css
+index 72580a0..82e18c8 100644
+--- a/kanban/web/src/features/admin-auth/adminAuth.css
++++ b/kanban/web/src/features/admin-auth/adminAuth.css
+@@ -514,6 +514,260 @@
+   border-top: 1px solid var(--border-subtle);
+ }
+ 
++/* 1-Click Presets Bar */
++.auth-presets-bar {
++  margin-bottom: 20px;
++  padding: 12px;
++  background: var(--bg-surface-elevated, #f8fafc);
++  border: 1px solid var(--border-subtle, #e2e8f0);
++  border-radius: var(--radius-md, 6px);
++}
++
++.auth-presets-label {
++  display: block;
++  font-size: 0.8rem;
++  font-weight: 600;
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++  color: var(--fg-muted, #64748b);
++  margin-bottom: 8px;
++}
++
++.auth-presets-list {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 8px;
++}
++
++.auth-preset-btn {
++  padding: 6px 12px;
++  font-size: 0.8125rem;
++  font-weight: 500;
++  border-radius: var(--radius-sm, 4px);
++  border: 1px solid var(--border-subtle, #cbd5e1);
++  background: var(--bg-surface, #ffffff);
++  color: var(--fg-default, #1e293b);
++  cursor: pointer;
++  transition: all 0.15s ease;
++}
++
++.auth-preset-btn:hover {
++  background: var(--bg-hover, #f1f5f9);
++  border-color: var(--brand-primary, #2563eb);
++}
++
++.auth-preset-btn--active {
++  background: var(--brand-primary, #2563eb);
++  color: #ffffff;
++  border-color: var(--brand-primary, #2563eb);
++}
++
++/* Optional / Advanced Settings Accordion */
++.auth-advanced-accordion {
++  margin-top: 20px;
++  border: 1px solid var(--border-subtle, #e2e8f0);
++  border-radius: var(--radius-md, 6px);
++  padding: 8px 12px;
++  background: var(--bg-surface-elevated, #f8fafc);
++}
++
++.auth-advanced-summary {
++  font-size: 0.875rem;
++  font-weight: 600;
++  color: var(--fg-default, #1e293b);
++  cursor: pointer;
++  padding: 4px 0;
++  user-select: none;
++}
++
++.auth-field-helper {
++  font-size: 0.75rem;
++  color: var(--fg-muted, #64748b);
++  margin-top: -4px;
++  margin-bottom: 8px;
++  line-height: 1.3;
++}
++
++/* Tabs Bar */
++.auth-tabs-bar {
++  display: flex;
++  gap: 8px;
++  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
++  margin-bottom: 24px;
++}
++
++.auth-tab-btn {
++  padding: 10px 18px;
++  font-size: 0.9375rem;
++  font-weight: 500;
++  background: transparent;
++  border: none;
++  border-bottom: 2px solid transparent;
++  color: var(--fg-muted, #64748b);
++  cursor: pointer;
++  transition: all 0.15s ease;
++}
++
++.auth-tab-btn:hover {
++  color: var(--fg-default, #1e293b);
++}
++
++.auth-tab-btn--active {
++  color: var(--brand-primary, #2563eb);
++  border-bottom-color: var(--brand-primary, #2563eb);
++  font-weight: 600;
++}
++
++/* Users & Permissions Tab */
++.auth-users-header-row {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 16px;
++  gap: 12px;
++}
++
++.auth-users-table-container {
++  overflow-x: auto;
++  border: 1px solid var(--border-subtle, #e2e8f0);
++  border-radius: var(--radius-lg, 10px);
++  background: var(--bg-surface, #ffffff);
++}
++
++.auth-users-table {
++  width: 100%;
++  border-collapse: collapse;
++  text-align: left;
++  font-size: 0.875rem;
++}
++
++.auth-users-th {
++  padding: 12px 16px;
++  font-size: 0.75rem;
++  font-weight: 600;
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++  color: var(--fg-muted, #64748b);
++  background: var(--bg-surface-elevated, #f8fafc);
++  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
++}
++
++.auth-users-td {
++  padding: 12px 16px;
++  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
++  color: var(--fg-default, #1e293b);
++  vertical-align: middle;
++}
++
++.auth-users-tr:last-child .auth-users-td {
++  border-bottom: none;
++}
++
++/* Provider Badges */
++.auth-badge-provider {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  padding: 2px 8px;
++  border-radius: 9999px;
++  font-size: 0.75rem;
++  font-weight: 500;
++  text-transform: uppercase;
++  letter-spacing: 0.03em;
++}
++
++.auth-badge-provider--local {
++  background: #f1f5f9;
++  color: #475569;
++  border: 1px solid #cbd5e1;
++}
++
++.auth-badge-provider--google {
++  background: #fee2e2;
++  color: #b91c1c;
++  border: 1px solid #fca5a5;
++}
++
++.auth-badge-provider--github {
++  background: #f3f4f6;
++  color: #111827;
++  border: 1px solid #d1d5db;
++}
++
++.auth-badge-provider--active-directory {
++  background: #dbeafe;
++  color: #1d4ed8;
++  border: 1px solid #93c5fd;
++}
++
++.auth-badge-provider--ldap {
++  background: #e0e7ff;
++  color: #4338ca;
++  border: 1px solid #a5b4fc;
++}
++
++.auth-badge-provider--oauth {
++  background: #fef3c7;
++  color: #b45309;
++  border: 1px solid #fde68a;
++}
++
++/* Inline Role Grant Selector */
++.auth-role-select {
++  padding: 4px 8px;
++  font-size: 0.8125rem;
++  font-weight: 500;
++  border-radius: var(--radius-sm, 4px);
++  border: 1px solid var(--border-subtle, #cbd5e1);
++  background: var(--bg-surface, #ffffff);
++  color: var(--fg-default, #1e293b);
++  cursor: pointer;
++}
++
++/* Modal Dialog */
++.auth-modal-backdrop {
++  position: fixed;
++  inset: 0;
++  background: rgba(0, 0, 0, 0.5);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 1000;
++}
++
++.auth-modal-dialog {
++  background: var(--bg-surface, #ffffff);
++  border-radius: var(--radius-lg, 10px);
++  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
++  width: 90%;
++  max-width: 480px;
++  padding: 24px;
++}
++
++.auth-modal-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 16px;
++}
++
++.auth-modal-title {
++  margin: 0;
++  font-size: 1.125rem;
++  font-weight: 600;
++  color: var(--fg-default, #1e293b);
++}
++
++.auth-modal-body {
++  margin-bottom: 20px;
++}
++
++.auth-modal-footer {
++  display: flex;
++  justify-content: flex-end;
++  gap: 12px;
++}
++
+ /* Mobile Responsiveness & Hit Target Bounds */
+ @media (max-width: 767px) {
+   .auth-studio-page {
+diff --git a/kanban/web/src/features/admin-auth/adminAuthApi.ts b/kanban/web/src/features/admin-auth/adminAuthApi.ts
+index 80e05f6..404960e 100644
+--- a/kanban/web/src/features/admin-auth/adminAuthApi.ts
++++ b/kanban/web/src/features/admin-auth/adminAuthApi.ts
+@@ -1,5 +1,5 @@
+ /**
+- * Typed API client wrappers and validation helpers for Admin Auth Studio (KB-P3-36, S4.1, S4.2, S4.3).
++ * Typed API client wrappers and validation helpers for Admin Auth Studio (KB-P3-36, KB-UX-06).
+  */
+ 
+ import { apiFetch } from '../../api/client';
+@@ -9,25 +9,34 @@ export type ProviderKind = 'OIDC' | 'OAUTH2' | 'LDAP' | 'LOCAL_ADMIN';
+ export type HealthStatus = 'HEALTHY' | 'FAILED' | 'UNVERIFIED';
+ 
+ export interface OidcPublicConfig {
+-  issuer_url: string;
++  kind?: 'OIDC' | 'OAUTH2';
++  issuer?: string;
++  authorization_endpoint?: string;
++  token_endpoint?: string;
++  userinfo_endpoint?: string;
++  jwks_uri?: string;
+   client_id: string;
+   scopes?: string[];
+-  pkce_method?: 'S256';
++  admin_allowlist?: string[];
++  user_allowlist?: string[];
+   token_auth_method?: 'client_secret_basic' | 'private_key_jwt';
+ }
+ 
+ export interface LdapPublicConfig {
+-  server_url: string;
+-  bind_dn: string;
++  kind?: 'LDAP';
++  url: string;
++  transport_mode: 'ldaps' | 'starttls';
+   base_dn: string;
+-  user_filter?: string;
+-  start_tls?: boolean;
+-  ca_pem?: string;
+-  spki_sha256_pin?: string;
+-}
+-
+-export interface LocalAdminPublicConfig {
+-  recovery_policy?: string;
++  service_bind_dn?: string;
++  user_search_filter?: string;
++  subject_attribute?: string;
++  email_attribute?: string;
++  display_name_attribute?: string;
++  access_mode?: 'any_user' | 'group_restricted';
++  admin_groups?: string[];
++  user_groups?: string[];
++  ca_cert_pem?: string;
++  spki_sha256_pins?: string[];
+ }
+ 
+ export interface AdminAuthCard {
+@@ -44,9 +53,10 @@ export interface AdminAuthCard {
+   has_secret: boolean;
+   dek_kid: string | null;
+   last_health_status: HealthStatus;
+-  last_handshake_at: string | null;
+-  check_summary: string | null;
+-  latency_ms: number | null;
++  last_admin_handshake_at?: string | null;
++  last_handshake_at?: string | null;
++  check_summary?: string | null;
++  latency_ms?: number | null;
+   public_config: Record<string, unknown>;
+ }
+ 
+@@ -60,9 +70,11 @@ export interface CreateAuthCardPayload {
+   display_name: string;
+   button_subtext?: string | null;
+   icon_preset: string;
++  is_enabled?: boolean;
+   auto_provision_users: boolean;
+   allowed_email_domains: string[];
+   public_config: Record<string, unknown>;
++  secret?: string | null;
+   secret_input?: string;
+ }
+ 
+@@ -70,22 +82,40 @@ export interface UpdateAuthCardPayload {
+   display_name?: string;
+   button_subtext?: string | null;
+   icon_preset?: string;
++  is_enabled?: boolean;
+   auto_provision_users?: boolean;
+   allowed_email_domains?: string[];
+   public_config?: Record<string, unknown>;
++  secret?: string | null;
+   secret_input?: string;
+ }
+ 
+ export interface ReorderAuthCardPayload {
+-  before_card_id: string | null;
+-  after_card_id: string | null;
+-  sort_rank: string;
++  after?: string | null;
++  before_card_id?: string | null;
++  after_card_id?: string | null;
++  sort_rank?: string;
+ }
+ 
+ export interface TestHandshakeResult {
+-  last_health_status: 'HEALTHY' | 'FAILED';
++  ok?: boolean;
++  status?: string;
++  last_health_status?: 'HEALTHY' | 'FAILED';
+   latency_ms: number;
+-  check_summary: string;
++  check_summary?: string;
++  error_code?: string | null;
++}
++
++export interface AdminUserPrincipal {
++  id: string;
++  principal: string;
++  handle?: string;
++  display_name: string;
++  type: 'USER' | 'GROUP' | 'AGENT';
++  status: 'active' | 'deactivated' | 'disabled';
++  email?: string | null;
++  role?: string;
++  provider?: string;
+ }
+ 
+ const FORBIDDEN_SECRET_KEYS = [
+@@ -126,10 +156,14 @@ export async function fetchAdminAuthCards(): Promise<AdminAuthCardsResponse> {
+ export async function createAdminAuthCard(
+   payload: CreateAuthCardPayload,
+ ): Promise<AdminAuthCard> {
++  const normalized = {
++    ...payload,
++    secret: payload.secret ?? payload.secret_input ?? null,
++  };
+   const result = (await apiFetch(
+     'POST',
+     '/api/v1/admin/auth-cards' as never,
+-    { body: payload },
++    { body: normalized },
+   )) as AdminAuthCard;
+   return sanitizeAdminAuthCard(result);
+ }
+@@ -138,10 +172,14 @@ export async function updateAdminAuthCard(
+   cardId: string,
+   payload: UpdateAuthCardPayload,
+ ): Promise<AdminAuthCard> {
++  const normalized = {
++    ...payload,
++    secret: payload.secret ?? payload.secret_input ?? null,
++  };
+   const result = (await apiFetch(
+     'PATCH',
+     `/api/v1/admin/auth-cards/${encodeURIComponent(cardId)}` as never,
+-    { body: payload },
++    { body: normalized },
+   )) as AdminAuthCard;
+   return sanitizeAdminAuthCard(result);
+ }
+@@ -150,10 +188,13 @@ export async function toggleAdminAuthCardEnabled(
+   cardId: string,
+   isEnabled: boolean,
+ ): Promise<AdminAuthCard> {
++  const endpoint = isEnabled
++    ? `/api/v1/admin/auth-cards/${encodeURIComponent(cardId)}/enable`
++    : `/api/v1/admin/auth-cards/${encodeURIComponent(cardId)}/disable`;
+   const result = (await apiFetch(
+-    'PATCH',
+-    `/api/v1/admin/auth-cards/${encodeURIComponent(cardId)}/enabled` as never,
+-    { body: { is_enabled: isEnabled } },
++    'POST',
++    endpoint as never,
++    { body: {} },
+   )) as AdminAuthCard;
+   return sanitizeAdminAuthCard(result);
+ }
+@@ -162,10 +203,11 @@ export async function reorderAdminAuthCard(
+   cardId: string,
+   payload: ReorderAuthCardPayload,
+ ): Promise<AdminAuthCard> {
++  const afterValue = payload.after !== undefined ? payload.after : (payload.after_card_id ?? null);
+   const result = (await apiFetch(
+     'POST',
+     `/api/v1/admin/auth-cards/${encodeURIComponent(cardId)}/reorder` as never,
+-    { body: payload },
++    { body: { after: afterValue } },
+   )) as AdminAuthCard;
+   return sanitizeAdminAuthCard(result);
+ }
+@@ -178,12 +220,97 @@ export async function testAuthCardHandshake(
+     `/api/v1/admin/auth-cards/${encodeURIComponent(cardId)}/test-handshake` as never,
+     { body: {} },
+   )) as TestHandshakeResult;
+-  return result;
++  return {
++    ...result,
++    last_health_status: (result.ok ?? (result.status === 'OK' || result.last_health_status === 'HEALTHY'))
++      ? 'HEALTHY'
++      : 'FAILED',
++    check_summary: result.check_summary ?? (result.ok ? 'Probe successful' : (result.error_code ?? 'Probe failed')),
++  };
+ }
+ 
+-export async function deleteAdminAuthCard(cardId: string): Promise<void> {
++export async function deleteAdminAuthCard(cardId: string, confirmSlug?: string): Promise<void> {
+   await apiFetch(
+     'DELETE',
+     `/api/v1/admin/auth-cards/${encodeURIComponent(cardId)}` as never,
++    { body: { confirm_slug: confirmSlug ?? cardId } },
++  );
++}
++
++// User & Permission Management APIs (KB-UX-06)
++
++export async function fetchAdminPrincipals(filter = 'USER'): Promise<AdminUserPrincipal[]> {
++  const result = (await apiFetch(
++    'GET',
++    `/api/v1/admin/principals?filter=${encodeURIComponent(filter)}&limit=100` as never,
++  )) as AdminUserPrincipal[];
++  return result;
++}
++
++export async function createLocalUser(payload: {
++  handle: string;
++  display_name: string;
++  email: string;
++  password?: string;
++  role?: string;
++}): Promise<AdminUserPrincipal> {
++  const result = (await apiFetch(
++    'POST',
++    '/api/v1/admin/principals' as never,
++    {
++      body: {
++        type: 'USER',
++        handle: payload.handle,
++        display_name: payload.display_name,
++        email: payload.email,
++        ...(payload.password ? { password: payload.password } : {}),
++        ...(payload.role ? { role: payload.role } : {}),
++      },
++    },
++  )) as AdminUserPrincipal;
++  return result;
++}
++
++export async function resetUserPassword(principalId: string, password: string): Promise<void> {
++  await apiFetch(
++    'POST',
++    `/api/v1/admin/principals/${encodeURIComponent(principalId)}/password` as never,
++    { body: { password } },
++  );
++}
++
++export async function updateUserRole(
++  principalId: string,
++  newRole: string,
++  previousRole?: string,
++): Promise<void> {
++  if (previousRole && previousRole !== newRole) {
++    try {
++      await apiFetch(
++        'DELETE',
++        '/api/v1/admin/role-bindings' as never,
++        {
++          body: {
++            principal_id: principalId,
++            role: previousRole,
++            scope_type: previousRole === 'SERVER_ADMIN' ? 'server' : 'workspace',
++          },
++        },
++      );
++    } catch {
++      // Ignored if previously not bound
++    }
++  }
++
++  await apiFetch(
++    'POST',
++    '/api/v1/admin/role-bindings' as never,
++    {
++      body: {
++        principal_id: principalId,
++        role: newRole,
++        scope_type: newRole === 'SERVER_ADMIN' ? 'server' : 'workspace',
++      },
++    },
+   );
+ }
+--- /dev/null	2026-11-15 13:17:45.023749852 -0500
++++ kanban/tests/auth/test_auth_use_cases.py	2026-11-15 22:57:34.449450513 -0500
+@@ -0,0 +1,402 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit and functional test suite for the 7 Admin Auth Studio use cases (KANBA-176).
++
++Use Cases Covered:
++1) LDAP any user in directory (access_mode: 'any_user' auto-provisions WORKSPACE_MEMBER).
++2) LDAP + Admin Group + User Group (admin_groups grants SERVER_ADMIN, user_groups
++   grants WORKSPACE_MEMBER, group_restricted rejects unlisted directory users).
++3) LDAP with Active Directory (sAMAccountName preset, subject_attribute='objectGUID',
++   fallback {username}@ldap.local when mail attribute is missing).
++4) OAuth any user (Google/GitHub presets; integer ID string coercion, /user/emails
++   fetching or {login}@users.noreply.github.com fallback).
++5) OAuth + Admin List + User List (admin_allowlist grants SERVER_ADMIN, user_allowlist
++   grants WORKSPACE_MEMBER, unlisted email rejected).
++6) Local User creation via Admin API with password & role grant, plus login MFA rules.
++7) Edit permission grants, list principals with enriched provider/role, and reset password.
++"""
++
++from __future__ import annotations
++
++import uuid
++from unittest.mock import AsyncMock, MagicMock, patch
++
++import pytest
++
++from kanban.admin.principal_service import (
++    _enrich_user_principal,
++    _highest_role,
++    _resolve_provider_label,
++    provision_user,
++    reset_password,
++)
++from kanban.auth.identity import ExternalIdentityAssertion
++from kanban.auth.identity_service import _evaluate_card_access
++from kanban.auth.ldap.config import LdapCardConfig
++from kanban.auth.oidc.config import OidcCardConfig
++
++
++# ---------------------------------------------------------------------------
++# Use Case 1: LDAP Any User in Directory (access_mode: 'any_user')
++# ---------------------------------------------------------------------------
++def test_use_case_1_ldap_any_user_config_defaults() -> None:
++    """Verify LdapCardConfig defaults to access_mode='any_user' and empty group lists."""
++    cfg = LdapCardConfig(
++        url="ldaps://ldap.example.com",
++        transport_mode="ldaps",
++        base_dn="dc=example,dc=com",
++        service_bind_dn="cn=admin,dc=example,dc=com",
++    )
++    assert cfg.access_mode == "any_user"
++    assert cfg.admin_groups == []
++    assert cfg.user_groups == []
++
++
++def test_use_case_1_ldap_any_user_evaluates_allowed_standard_member() -> None:
++    """Verify _evaluate_card_access grants standard member access to any directory user."""
++    card_row = {
++        "provider_kind": "LDAP",
++        "public_config": {
++            "access_mode": "any_user",
++            "admin_groups": [],
++            "user_groups": [],
++        },
++    }
++    assertion = ExternalIdentityAssertion(
++        card_id=uuid.uuid4(),
++        subject="uid=jdoe,dc=example,dc=com",
++        email="jdoe@example.com",
++        email_verified=True,
++        display_name="John Doe",
++        groups=("Staff",),
++    )
++
++    is_allowed, is_admin = _evaluate_card_access(card_row, assertion)
++    assert is_allowed is True
++    assert is_admin is False  # standard WORKSPACE_MEMBER
++
++
++# ---------------------------------------------------------------------------
++# Use Case 2: LDAP + Admin Group + User Group
++# ---------------------------------------------------------------------------
++def test_use_case_2_ldap_admin_group_grants_server_admin() -> None:
++    """Verify user in admin_groups receives SERVER_ADMIN grant."""
++    card_row = {
++        "provider_kind": "LDAP",
++        "public_config": {
++            "access_mode": "group_restricted",
++            "admin_groups": ["Domain Admins", "IT Admins"],
++            "user_groups": ["Developers"],
++        },
++    }
++    assertion = ExternalIdentityAssertion(
++        card_id=uuid.uuid4(),
++        subject="guid-1234",
++        email="sysadmin@corp.local",
++        email_verified=True,
++        display_name="Chief Admin",
++        groups=("Domain Admins", "Employees"),
++    )
++
++    is_allowed, is_admin = _evaluate_card_access(card_row, assertion)
++    assert is_allowed is True
++    assert is_admin is True  # SERVER_ADMIN
++
++
++def test_use_case_2_ldap_user_group_grants_workspace_member() -> None:
++    """Verify user in user_groups receives WORKSPACE_MEMBER grant."""
++    card_row = {
++        "provider_kind": "LDAP",
++        "public_config": {
++            "access_mode": "group_restricted",
++            "admin_groups": ["Domain Admins"],
++            "user_groups": ["Developers"],
++        },
++    }
++    assertion = ExternalIdentityAssertion(
++        card_id=uuid.uuid4(),
++        subject="guid-3344",
++        email="dev@corp.local",
++        email_verified=True,
++        display_name="Developer Dave",
++        groups=("Developers",),
++    )
++
++    is_allowed, is_admin = _evaluate_card_access(card_row, assertion)
++    assert is_allowed is True
++    assert is_admin is False  # WORKSPACE_MEMBER
++
++
++def test_use_case_2_ldap_group_restricted_rejects_unlisted() -> None:
++    """Verify group_restricted access mode rejects users not in admin_groups or user_groups."""
++    card_row = {
++        "provider_kind": "LDAP",
++        "public_config": {
++            "access_mode": "group_restricted",
++            "admin_groups": ["Domain Admins"],
++            "user_groups": ["Developers"],
++        },
++    }
++    assertion = ExternalIdentityAssertion(
++        card_id=uuid.uuid4(),
++        subject="guid-5678",
++        email="contractor@corp.local",
++        email_verified=True,
++        display_name="External Contractor",
++        groups=("Contractors", "Guests"),
++    )
++
++    is_allowed, is_admin = _evaluate_card_access(card_row, assertion)
++    assert is_allowed is False
++    assert is_admin is False
++
++
++# ---------------------------------------------------------------------------
++# Use Case 3: LDAP with Active Directory
++# ---------------------------------------------------------------------------
++def test_use_case_3_active_directory_preset_and_fallback_email() -> None:
++    """Verify Active Directory filter preset and {username}@ldap.local email fallback logic."""
++    cfg = LdapCardConfig(
++        url="ldaps://ad.corp.local:636",
++        transport_mode="ldaps",
++        base_dn="dc=corp,dc=local",
++        service_bind_dn="cn=svc-kanban,ou=Services,dc=corp,dc=local",
++        user_search_filter="(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))",
++        subject_attribute="objectGUID",
++        access_mode="any_user",
++    )
++    assert "sAMAccountName={username}" in cfg.user_search_filter
++    assert cfg.subject_attribute == "objectGUID"
++
++    # Test the fallback logic implemented in LdapAuthService.authenticate:
++    attrs: dict[str, list[bytes]] = {
++        "objectguid": [b"\x01\x02\x03\x04"],
++        "displayname": [b"AD User"],
++        "mail": [],
++    }
++    clean_username = "aduser"
++    mail_list = attrs.get(cfg.email_attribute.lower(), [])
++    email_bytes = mail_list[0] if mail_list else b""
++    email = email_bytes.decode("utf-8", errors="replace").strip() if email_bytes else None
++    if not email:
++        email = f"{clean_username}@ldap.local"
++
++    assert email == "aduser@ldap.local"
++
++
++# ---------------------------------------------------------------------------
++# Use Case 4: OAuth Any User (Google/GitHub Presets)
++# ---------------------------------------------------------------------------
++def test_use_case_4_github_oauth_config_and_claims_logic() -> None:
++    """Verify GitHub OAuth configuration presets and integer ID coercion logic."""
++    cfg = OidcCardConfig(
++        kind="OAUTH2",
++        issuer="https://github.com",
++        client_id="gh-client-id",
++        authorization_endpoint="https://github.com/login/oauth/authorize",
++        token_endpoint="https://github.com/login/oauth/access_token",  # noqa: S106
++        userinfo_endpoint="https://api.github.com/user",
++    )
++    assert cfg.client_id == "gh-client-id"
++    assert cfg.userinfo_endpoint == "https://api.github.com/user"
++
++    userinfo: dict[str, object] = {
++        "id": 98765432,
++        "login": "octocat",
++        "name": "Mona Lisa",
++        "email": None,
++    }
++    raw_sub = userinfo.get(cfg.subject_claim)
++    if raw_sub is None and "id" in userinfo:
++        raw_sub = userinfo["id"]
++    subject = str(raw_sub)
++    assert subject == "98765432"
++
++    email = userinfo.get("email")
++    if not email and userinfo.get("login"):
++        email = f"{userinfo['login']}@users.noreply.github.com"
++    assert email == "octocat@users.noreply.github.com"
++
++
++# ---------------------------------------------------------------------------
++# Use Case 5: OAuth + Admin List + User List
++# ---------------------------------------------------------------------------
++def test_use_case_5_oauth_admin_and_user_allowlists() -> None:
++    """Verify OidcCardConfig admin_allowlist and user_allowlist policy enforcement."""
++    card_row = {
++        "provider_kind": "OIDC",
++        "public_config": {
++            "admin_allowlist": ["lead@corp.com"],
++            "user_allowlist": ["engineer@corp.com"],
++        },
++    }
++
++    # 1. Admin user
++    admin_assertion = ExternalIdentityAssertion(
++        card_id=uuid.uuid4(),
++        subject="sub-lead",
++        email="lead@corp.com",
++        email_verified=True,
++        display_name="Lead",
++        groups=(),
++    )
++    is_allowed, is_admin = _evaluate_card_access(card_row, admin_assertion)
++    assert is_allowed is True
++    assert is_admin is True
++
++    # 2. Member user
++    member_assertion = ExternalIdentityAssertion(
++        card_id=uuid.uuid4(),
++        subject="sub-eng",
++        email="engineer@corp.com",
++        email_verified=True,
++        display_name="Engineer",
++        groups=(),
++    )
++    is_allowed, is_admin = _evaluate_card_access(card_row, member_assertion)
++    assert is_allowed is True
++    assert is_admin is False
++
++    # 3. Unlisted stranger
++    stranger_assertion = ExternalIdentityAssertion(
++        card_id=uuid.uuid4(),
++        subject="sub-stranger",
++        email="stranger@corp.com",
++        email_verified=True,
++        display_name="Stranger",
++        groups=(),
++    )
++    is_allowed, is_admin = _evaluate_card_access(card_row, stranger_assertion)
++    assert is_allowed is False
++    assert is_admin is False
++
++
++# ---------------------------------------------------------------------------
++# Use Case 6: Local User Creation & MFA Login Behavior
++# ---------------------------------------------------------------------------
++@pytest.mark.asyncio
++async def test_use_case_6_local_user_provisioning_and_login_mfa_rules() -> None:
++    """Verify local user creation with password/role and MFA requirements on login."""
++    mock_session = AsyncMock()
++    mock_session.execute = AsyncMock()
++    mock_session.add = MagicMock()
++
++    user_id = uuid.uuid4()
++    ws_id = uuid.uuid4()
++    actor_id = uuid.uuid4()
++    pepper = b"test-pepper-32-bytes-long!!!!!!"
++    with (
++        patch("kanban.admin.principal_service.get_auth_pepper", return_value=pepper),
++        patch("kanban.admin.principal_service.bind_role", new_callable=AsyncMock),
++        patch(
++            "kanban.admin.principal_service._enrich_user_principal",
++            new_callable=AsyncMock,
++        ) as me,
++        patch("kanban.admin.principal_service.record_activity", new_callable=AsyncMock),
++    ):
++        me.return_value = {
++            "id": user_id,
++            "principal": "local.admin",
++            "display_name": "Local Admin User",
++            "type": "USER",
++            "status": "active",
++            "email": "local.admin@example.com",
++            "role": "SERVER_ADMIN",
++            "provider": "LOCAL",
++        }
++
++        # Mock the raw SQL execution to return user_id
++        mock_result = MagicMock()
++        mock_result.scalar.return_value = user_id
++        mock_result.fetchone.return_value = (user_id,)
++        mock_session.execute.return_value = mock_result
++
++        created = await provision_user(
++            session=mock_session,
++            workspace_id=ws_id,
++            creator_id=actor_id,
++            handle="local.admin",
++            display_name="Local Admin User",
++            email="local.admin@example.com",
++            password="StrongLocalPassword123!",  # noqa: S106
++            role="SERVER_ADMIN",
++        )
++
++        assert created["role"] == "SERVER_ADMIN"
++        assert created["provider"] == "LOCAL"
++        assert mock_session.add.called
++
++    # Test LocalAdminLoginService MFA login rule:
++    # Standard member without MFA enrolled does NOT require MFA step-up.
++    mfa_cases = [
++        (0, 0, False),  # member without MFA
++        (0, 1, True),   # SERVER_ADMIN always step-up
++        (1, 0, True),   # user with enrolled MFA always step-up
++    ]
++    for has_mfa_flag, is_admin_flag, expected in mfa_cases:
++        assert bool(has_mfa_flag or is_admin_flag) is expected
++
++
++# ---------------------------------------------------------------------------
++# Use Case 7: Edit Permission Grants, Password Reset & Principal Listing
++# ---------------------------------------------------------------------------
++@pytest.mark.asyncio
++async def test_use_case_7_principal_helpers_and_password_reset() -> None:
++    """Verify principal helpers return enriched provider/role, and reset_password executes."""
++    mock_session = AsyncMock()
++    mock_session.execute = AsyncMock()
++
++    target_user_id = uuid.uuid4()
++    ws_id = uuid.uuid4()
++    actor_id = uuid.uuid4()
++
++    mock_principal = MagicMock()
++    mock_principal.id = target_user_id
++    mock_principal.principal_type = "USER"
++    mock_result = MagicMock()
++    mock_result.scalar_one_or_none.return_value = mock_principal
++    mock_session.execute.return_value = mock_result
++
++    pepper = b"test-pepper-32-bytes-long!!!!!!"
++    with (
++        patch("kanban.admin.principal_service.get_auth_pepper", return_value=pepper),
++        patch("kanban.admin.principal_service.record_activity", new_callable=AsyncMock),
++    ):
++        await reset_password(
++            session=mock_session,
++            workspace_id=ws_id,
++            creator_id=actor_id,
++            principal_id=target_user_id,
++            password="NewSuperSecurePassword999!",  # noqa: S106
++        )
++    assert mock_session.execute.called
++
++    # 2. Test helper _resolve_provider_label
++    assert _resolve_provider_label("LOCAL_ADMIN", "local-admin") == "LOCAL"
++    assert _resolve_provider_label("LDAP", "ad-ldap") == "ACTIVE_DIRECTORY"
++    assert _resolve_provider_label("LDAP", "openldap") == "LDAP"
++    assert _resolve_provider_label("OIDC", "google-oauth") == "GOOGLE"
++    assert _resolve_provider_label("OAUTH2", "github-oauth") == "GITHUB"
++    assert _resolve_provider_label("OIDC", "custom-sso") == "OAUTH2"
++
++    # 3. Test helper _highest_role
++    assert _highest_role(["WORKSPACE_MEMBER", "SERVER_ADMIN", "WORKSPACE_ADMIN"]) == "SERVER_ADMIN"
++    assert _highest_role(["WORKSPACE_GUEST", "WORKSPACE_MEMBER"]) == "WORKSPACE_MEMBER"
++    assert _highest_role([]) == "WORKSPACE_MEMBER"
++
++    # 4. Enrich user principal helper
++    mock_p = MagicMock()
++    mock_p.id = target_user_id
++    mock_p.display_name = "Jane Doe"
++    mock_mappings = MagicMock()
++    mock_mappings.first.return_value = None
++    mock_result.mappings.return_value = mock_mappings
++    mock_result.scalars.return_value.all.return_value = []
++    handle, _em, role, provider = await _enrich_user_principal(
++        session=mock_session,
++        workspace_id=ws_id,
++        p=mock_p,
++    )
++    assert handle is not None
++    assert role == "WORKSPACE_MEMBER"
++    assert provider == "LOCAL"

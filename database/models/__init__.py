@@ -44,6 +44,7 @@ from database.models.issues import (
 from database.models.knowledge import Doc, Page, PageVersion, Sticky
 from database.models.mcp_api_key import McpApiKey
 from database.models.mcp_ephemeral_token import McpEphemeralToken
+from database.models.mcp_read_taint import McpReadTaint
 from database.models.notifications import Notification
 from database.models.oauth import (
     OAuthAuthorizationCode,
@@ -75,6 +76,8 @@ from database.models.projects import (
     WorkflowState,
 )
 from database.models.ratelimit import RateLimitBucket
+from database.models.remote_runner import RemoteRunner, RemoteRunnerEnrollmentToken
+from database.models.repo_binding import ProjectRepoBinding
 from database.models.spine import (
     InvalidObjectLinkAudit,
     LinkTypeMatrix,
@@ -83,6 +86,11 @@ from database.models.spine import (
     Workspace,
 )
 from database.models.wasm_module import ApprovedWasmModule
+from database.models.workflow import (
+    WorkflowHookInvocation,
+    WorkflowTransitionExecution,
+    WorkflowTransitionHook,
+)
 from database.models.workspace_settings import WorkspaceSettings
 
 __all__ = [
@@ -121,6 +129,7 @@ __all__ = [
     "LtreeType",
     "McpApiKey",
     "McpEphemeralToken",
+    "McpReadTaint",
     "Module",
     "Notification",
     "OAuthAuthorizationCode",
@@ -144,9 +153,12 @@ __all__ = [
     "ProjectLabel",
     "ProjectModuleDefault",
     "ProjectPriority",
+    "ProjectRepoBinding",
     "RateLimitBucket",
     "RbacRole",
     "RecoveryCode",
+    "RemoteRunner",
+    "RemoteRunnerEnrollmentToken",
     "ResourceAclEntry",
     "RoleBinding",
     "SetupClaimToken",
@@ -159,7 +171,10 @@ __all__ = [
     "ViewLayout",
     "WebauthnChallenge",
     "WebauthnCredential",
+    "WorkflowHookInvocation",
     "WorkflowState",
+    "WorkflowTransitionExecution",
+    "WorkflowTransitionHook",
     "Workspace",
     "WorkspaceSettings",
 ]

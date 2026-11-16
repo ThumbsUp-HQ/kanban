@@ -1113,4 +1113,167 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
     });
   });
+
+  describe('Users & Permissions Tab (KANBA-176)', () => {
+    const mockPrincipals = [
+      {
+        id: 'u-1',
+        principal: 'local.user',
+        handle: 'local.user',
+        display_name: 'Local User',
+        type: 'USER' as const,
+        status: 'active' as const,
+        email: 'local@example.com',
+        role: 'SERVER_ADMIN',
+        provider: 'LOCAL',
+      },
+      {
+        id: 'u-2',
+        principal: 'ldap.engineer',
+        handle: 'ldap.engineer',
+        display_name: 'LDAP Engineer',
+        type: 'USER' as const,
+        status: 'active' as const,
+        email: 'ldap@example.com',
+        role: 'WORKSPACE_MEMBER',
+        provider: 'LDAP',
+      },
+    ];
+
+    beforeEach(() => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).startsWith('/api/v1/admin/principals')) return mockPrincipals;
+        return {};
+      });
+    });
+
+    it('switches to Users & Permissions tab and renders principals table with badges', async () => {
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      const usersTab = screen.getByRole('tab', { name: /Users & Permissions/i });
+      fireEvent.click(usersTab);
+
+      await waitFor(() => {
+        expect(screen.getByText('Local User')).toBeDefined();
+        expect(screen.getByText('@local.user')).toBeDefined();
+        expect(screen.getByText('local@example.com')).toBeDefined();
+        expect(screen.getByText('LDAP Engineer')).toBeDefined();
+      });
+
+      expect(screen.getByText('LOCAL')).toBeDefined();
+      expect(screen.getByText('LDAP')).toBeDefined();
+    });
+
+    it('opens + Add Local User modal and creates user successfully', async () => {
+      const createSpy = vi.spyOn(adminAuthApi, 'createLocalUser').mockResolvedValue({
+        id: 'u-3',
+        principal: 'new.member',
+        handle: 'new.member',
+        display_name: 'New Member',
+        type: 'USER',
+        status: 'active',
+        email: 'new@example.com',
+        role: 'WORKSPACE_MEMBER',
+        provider: 'LOCAL',
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
+
+      const addBtn = await screen.findByRole('button', { name: /\+ Add Local User/i });
+      fireEvent.click(addBtn);
+
+      expect(screen.getByRole('heading', { name: /\+ Add Local User/i })).toBeDefined();
+
+      fireEvent.change(screen.getByLabelText(/Username \/ Handle/i), {
+        target: { value: 'new.member' },
+      });
+      fireEvent.change(screen.getByLabelText(/Display Name/i), {
+        target: { value: 'New Member' },
+      });
+      fireEvent.change(screen.getByLabelText(/Email Address/i), {
+        target: { value: 'new@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText(/^Password/i), {
+        target: { value: 'ValidPassword123!' },
+      });
+
+      const submitBtn = screen.getByRole('button', { name: /^Create User$/i });
+      fireEvent.click(submitBtn);
+
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith({
+          handle: 'new.member',
+          display_name: 'New Member',
+          email: 'new@example.com',
+          password: 'ValidPassword123!',
+          role: 'WORKSPACE_MEMBER',
+        });
+      });
+    });
+
+    it('updates user role grant via role select dropdown', async () => {
+      const roleSpy = vi.spyOn(adminAuthApi, 'updateUserRole').mockResolvedValue(undefined);
+
+      render(<AuthStudioPage />);
+
+      const usersTab = await screen.findByRole('tab', { name: /Users & Permissions/i });
+      fireEvent.click(usersTab);
+
+      await waitFor(() => {
+        expect(screen.getByText('LDAP Engineer')).toBeDefined();
+      });
+
+      const roleSelect = screen.getByLabelText(/Role for ldap\.engineer/i);
+      fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
+
+      await waitFor(() => {
+        expect(roleSpy).toHaveBeenCalledWith('u-2', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER');
+      });
+    });
+
+    it('opens Reset Password modal and resets user password', async () => {
+      const resetSpy = vi.spyOn(adminAuthApi, 'resetUserPassword').mockResolvedValue(undefined);
+
+      render(<AuthStudioPage />);
+
+      const usersTab = await screen.findByRole('tab', { name: /Users & Permissions/i });
+      fireEvent.click(usersTab);
+
+      await waitFor(() => {
+        expect(screen.getByText('Local User')).toBeDefined();
+      });
+
+      const resetBtns = screen.getAllByRole('button', { name: /^Reset Password$/i });
+      if (resetBtns[0]) fireEvent.click(resetBtns[0]);
+
+      expect(screen.getByRole('heading', { name: /Reset Password: @local\.user/i })).toBeDefined();
+
+      fireEvent.change(screen.getByLabelText(/^New Password/i), {
+        target: { value: 'NewPass12345!' },
+      });
+      fireEvent.change(screen.getByLabelText(/Confirm New Password/i), {
+        target: { value: 'NewPass12345!' },
+      });
+
+      const updateBtn = screen.getByRole('button', { name: /^Update Password$/i });
+      fireEvent.click(updateBtn);
+
+      await waitFor(() => {
+        expect(resetSpy).toHaveBeenCalledWith('u-1', 'NewPass12345!');
+      });
+    });
+  });
 });

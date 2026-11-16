@@ -28,6 +28,13 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
     "search_tickets": {"query": "str", "project": "KAN", "lod": "summary | standard | full"},
     "begin_work": {"identifier": "KAN-142 | uuid"},
     "transition_ticket": {"identifier": "KAN-142 | uuid", "state": "str"},
+    "add_comment": {"identifier": "KAN-142 | uuid", "body_markdown": "str", "ack_mentions": "bool"},
+    "link_objects": {
+        "source": "KAN-142 | uuid",
+        "target": "KAN-150 | uuid",
+        "link_type": "blocks | blocked_by | relates_to | duplicates | duplicated_by",
+        "action": "add | remove",
+    },
     "ping_agent": {"action": "ping | help | echo", "message": "str"},
     "configure_workspace": {"action": "get | update | help", "settings": "object"},
     "manage_auth_cards": {
@@ -74,6 +81,10 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
         "principal": "@handle | group | agent | uuid",
         "effect": "ALLOW | DENY",
         "capabilities": "[VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]",
+    },
+    "manage_workflow_interceptors": {
+        "action": "help | list | attach | update | reorder | enable | disable | detach | dry_run",
+        "project": "KAN | uuid",
     },
 }
 

@@ -4,10 +4,11 @@
 # Usage: upload_dash_log.sh <job-name>
 #
 # Environment:
-#   DASH_TOKEN   API bearer token (never echoed). Missing token => skip, exit 0.
-#   DASH_URL     Base URL (default https://dash.hackedyour.info).
-#   GITHUB_SHA   Commit SHA used to pin the log to this build (Dash `sha` parameter).
-#   CI_LOG_DIR   Log dir to read (default ci-logs/<job-name>).
+#   DASH_TOKEN      API bearer token (never echoed). Missing token => skip, exit 0.
+#   DASH_ENDPOINT   Base URL (default: https://dash.hackedyour.info, or DASH_URL).
+#   DASH_URL        Legacy alias for DASH_ENDPOINT.
+#   GITHUB_SHA      Commit SHA used to pin the log to this build (Dash `sha` parameter).
+#   CI_LOG_DIR      Log dir to read (default ci-logs/<job-name>).
 #
 # Contract:
 #   - Always exits 0: a Dash outage must never turn a green job red.
@@ -22,8 +23,10 @@ if ! [[ "$job" =~ ^[a-z0-9-]+$ ]]; then
   exit 64
 fi
 
-if [ -z "${DASH_TOKEN:-}" ]; then
-  echo "Notice: DASH_TOKEN missing; skipping Dash upload"
+DASH_ENDPOINT="${DASH_ENDPOINT:-${DASH_URL:-https://dash.hackedyour.info}}"
+
+if [ -z "${DASH_TOKEN:-}" ] || [ -z "${DASH_ENDPOINT:-}" ]; then
+  echo "Notice: DASH_TOKEN missing - Notice: DASH_TOKEN or DASH_ENDPOINT missing; skipping Dash upload"
   exit 0
 fi
 
@@ -35,7 +38,7 @@ if [ "${#logs[@]}" -eq 0 ]; then
   exit 0
 fi
 
-dash_url="${DASH_URL:-https://dash.hackedyour.info}"
+dash_url="$DASH_ENDPOINT"
 query="provider=forgejo&owner=AI&repo=thumbs-up-kanban"
 if [ -n "${GITHUB_SHA:-}" ]; then
   query="$query&sha=${GITHUB_SHA}"

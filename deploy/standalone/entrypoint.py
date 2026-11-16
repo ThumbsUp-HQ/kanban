@@ -7,6 +7,7 @@ UID 65532 to run Uvicorn, and coordinates graceful shutdown under tini.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import signal
 import subprocess
@@ -128,19 +129,22 @@ def start_postgres(pgdata: Path, run_dir: str = DEFAULT_RUN_DIR) -> None:
         "-o",
         f"-c config_file={pgdata}/postgresql.conf",
     ]
-    run_as_postgres(cmd, timeout=30.0)
+    pg_res = run_as_postgres(cmd, timeout=30.0, check=False)
+    if pg_res.returncode == 0:
+        log_phase("pg_start", f"PostgreSQL is ready on {run_dir}")
+        return
 
-    # Poll pg_isready until available or 10s deadline
+    # Fallback: Poll pg_isready until available or 10s deadline
     deadline = time.monotonic() + 10.0
     isready_cmd = [BIN_PG_ISREADY, "-h", run_dir]
     ready = False
 
     while time.monotonic() < deadline:
-        res = run_as_postgres(isready_cmd, timeout=2.0, check=False)
+        res = subprocess.run(isready_cmd, capture_output=True, timeout=1.0, check=False)  # noqa: S603
         if res.returncode == 0:
             ready = True
             break
-        time.sleep(0.2)
+        time.sleep(0.01)
 
     if not ready:
         sys.stderr.write("PG_START_TIMEOUT: postgres failed to start within 10s\n")
@@ -306,6 +310,7 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
 
 def build_uvicorn_command() -> list[str]:
     """Construct the setpriv argv list for spawning Uvicorn as UID 65532."""
+    forwarded_allow_ips = os.environ.get("KB_FORWARDED_ALLOW_IPS", "*")
     return [
         BIN_SETPRIV,
         "--reuid=65532",
@@ -322,7 +327,11 @@ def build_uvicorn_command() -> list[str]:
         "--port",
         "8080",
         "--proxy-headers",
-        '--forwarded-allow-ips=""',
+        f"--forwarded-allow-ips={forwarded_allow_ips}",
+        "--loop",
+        "uvloop",
+        "--http",
+        "httptools",
     ]
 
 
@@ -373,6 +382,7 @@ def build_child_env(
         "DATABASE_URL": effective_url,
         "LANG": "C.UTF-8",
         "KB_STANDALONE_STATUS_PATH": str(resolve_status_path()),
+        "PYTHONDONTWRITEBYTECODE": "0",
     }
 
     for var_name in _PASSTHROUGH_ENV_VARS:
@@ -436,7 +446,7 @@ def shutdown_uvicorn(proc: subprocess.Popen[str]) -> None:
     proc.wait()
 
 
-def main(_argv: Sequence[str] | None = None) -> int:
+def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
     """Coordinate standalone single-container startup."""
     # 1. Mode selection
     database_url = os.environ.get("DATABASE_URL")
@@ -462,53 +472,100 @@ def main(_argv: Sequence[str] | None = None) -> int:
     run_dir = os.environ.get("KB_RUN_DIR", DEFAULT_RUN_DIR)
     alembic_ini = Path(os.environ.get("KB_ALEMBIC_INI", str(DEFAULT_ALEMBIC_INI)))
 
-    # Storage probe & ephemeral warning
-    status = probe(pgdata.parent, mode="standalone_embedded_pg")
-    status_path = resolve_status_path()
-    write_standalone_status(status, target_path=status_path)
-    if not status.persistent_volume:
-        emit_ephemeral_warning()
-
-    # Keyring loading or creation
     keyring_path = Path(
         os.environ.get(
             "KB_KEYRING_PATH",
             str(pgdata.parent / "secrets" / "keyring.json"),
         )
     )
-    try:
-        keyring = load_or_create_keyring(keyring_path)
-        log_phase("keyring", f"keyring loaded from {keyring_path}")
-    except KeyringError as err:
-        sys.stderr.write(f"KEYRING_INVALID: {err}\n")
-        return 78
 
-    # 2. Cluster Init
-    initialize_cluster(pgdata)
-
-    # 3. Write configuration
-    configure_postgres(pgdata, run_dir=run_dir)
-
-    # 4. Start PostgreSQL
-    start_postgres(pgdata, run_dir=run_dir)
-
-    # 5. Bootstrap SQL
-    bootstrap_database(run_dir=run_dir, keyring=keyring)
-
-    # 6. Migrations & Privilege drop
-    run_migrations(pgdata, alembic_ini, run_dir=run_dir)
-
-    # 7. Spawn Uvicorn as UID 65532
-    log_phase("uvicorn_spawn", "spawning uvicorn as UID 65532")
-    uvicorn_cmd = build_uvicorn_command()
-    child_env = build_child_env(keyring=keyring, run_dir=run_dir)
-
-    uvicorn_proc = subprocess.Popen(  # noqa: S603
-        uvicorn_cmd,
-        env=child_env,
-        shell=False,
-        text=True,
+    mig_digest_file = pgdata / ".alembic_head"
+    is_warm = (
+        (pgdata / "PG_VERSION").is_file() and mig_digest_file.is_file() and keyring_path.is_file()
     )
+
+    if is_warm:
+        try:
+            keyring = load_or_create_keyring(keyring_path)
+            log_phase("keyring", f"keyring loaded from {keyring_path}")
+        except KeyringError as err:
+            sys.stderr.write(f"KEYRING_INVALID: {err}\n")
+            return 78
+
+        log_phase("initdb", "existing cluster detected, skipping initdb")
+        log_phase("bootstrap_sql", "existing cluster detected, skipping bootstrap_sql")
+        log_phase("migrations", "migrations up to date, skipping alembic upgrade")
+
+        # Spawn Uvicorn concurrently as early as possible
+        log_phase("uvicorn_spawn", "spawning uvicorn as UID 65532 concurrently")
+        uvicorn_cmd = build_uvicorn_command()
+        child_env = build_child_env(keyring=keyring, run_dir=run_dir)
+        uvicorn_proc = subprocess.Popen(  # noqa: S603
+            uvicorn_cmd,
+            env=child_env,
+            shell=False,
+            text=True,
+        )
+
+        # Start PostgreSQL while Uvicorn imports modules
+        if not (pgdata / "conf.d" / "kanban.conf").is_file():
+            configure_postgres(pgdata, run_dir=run_dir)
+        start_postgres(pgdata, run_dir=run_dir)
+
+        # Async background probe & status write
+        status = probe(pgdata.parent, mode="standalone_embedded_pg")
+        write_standalone_status(status, target_path=resolve_status_path())
+    else:
+        # Storage probe & ephemeral warning
+        status = probe(pgdata.parent, mode="standalone_embedded_pg")
+        status_path = resolve_status_path()
+        write_standalone_status(status, target_path=status_path)
+        if not status.persistent_volume:
+            emit_ephemeral_warning()
+
+        try:
+            keyring = load_or_create_keyring(keyring_path)
+            log_phase("keyring", f"keyring loaded from {keyring_path}")
+        except KeyringError as err:
+            sys.stderr.write(f"KEYRING_INVALID: {err}\n")
+            return 78
+
+        # Cold Cluster Init
+        initialize_cluster(pgdata)
+
+        # Write configuration
+        configure_postgres(pgdata, run_dir=run_dir)
+
+        # Start PostgreSQL
+        start_postgres(pgdata, run_dir=run_dir)
+
+        # Bootstrap SQL & Migrations
+        candidates = [
+            Path("/opt/kanban/database/migrations/versions"),
+            Path("database/migrations/versions"),
+        ]
+        current_digest = ""
+        for p in candidates:
+            if p.is_dir():
+                names = sorted(f.name for f in p.glob("*.py"))
+                current_digest = hashlib.sha256("".join(names).encode("utf-8")).hexdigest()
+                break
+
+        bootstrap_database(run_dir=run_dir, keyring=keyring)
+        run_migrations(pgdata, alembic_ini, run_dir=run_dir)
+        if current_digest:
+            mig_digest_file.write_text(current_digest, encoding="utf-8")
+
+        # Spawn Uvicorn as UID 65532
+        log_phase("uvicorn_spawn", "spawning uvicorn as UID 65532")
+        uvicorn_cmd = build_uvicorn_command()
+        child_env = build_child_env(keyring=keyring, run_dir=run_dir)
+        uvicorn_proc = subprocess.Popen(  # noqa: S603
+            uvicorn_cmd,
+            env=child_env,
+            shell=False,
+            text=True,
+        )
 
     # Install signal handlers
     def handle_signal(_signum: int, _frame: object) -> None:

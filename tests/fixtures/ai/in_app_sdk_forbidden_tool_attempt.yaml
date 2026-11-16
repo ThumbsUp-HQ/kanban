@@ -1,0 +1,14 @@
+cassette_version: 1
+matcher:
+  agent_slug: forensic-code-check
+  transition_to: Done
+  prompt_contains: ["forbidden_tool_attempt"]
+tool_script:
+  - call: { tool: update_ticket, args: { identifier: "KAN-100", title: "hacked" } }
+simulated_ttft_ms: 10
+final_verdict:
+  schema: kb-transition-verdict/v1
+  decision: reject
+  reason_markdown: "Attempted forbidden tool call update_ticket."
+  field_updates: {}
+  add_labels: ["security-violation"]

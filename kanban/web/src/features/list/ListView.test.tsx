@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import React from 'react';
 import { ListView } from './ListView';
 import { FIXTURE_12_ISSUES } from '../views/fixtures';
@@ -240,5 +240,78 @@ describe('ListView', () => {
     expect(kan150Row).toBeDefined();
     const cancelledOverdue = kan150Row?.querySelectorAll('.due-pill--overdue');
     expect(cancelledOverdue?.length ?? 0).toBe(0);
+  });
+
+  it('renders Single Filter Card Dropdown and handles search, state, priority, and + New (KANBA-174)', () => {
+    const onCreate = vi.fn();
+    const onOpenPeek = vi.fn();
+
+    render(
+      <ListView
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        modulesEnabled={true}
+        onCreateIssue={onCreate}
+        onOpenPeek={onOpenPeek}
+        activeKey="KAN-140"
+      />
+    );
+
+    // Verify compact topbar rendered
+    expect(screen.getByTestId('list-compact-topbar')).toBeDefined();
+
+    // + New button triggers onCreateIssue
+    const newBtn = screen.getByRole('button', { name: 'New work item' });
+    fireEvent.click(newBtn);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+
+    // Filter dropdown toggle
+    const filterBtn = screen.getByRole('button', { name: 'Filter & Group' });
+    expect(filterBtn.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(filterBtn);
+    expect(filterBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('dialog', { name: 'Filter and Group options' })).toBeDefined();
+
+    const popover = screen.getByRole('dialog', { name: 'Filter and Group options' });
+
+    // 1. Text Search Filter
+    const searchInput = within(popover).getByLabelText(/Search/i);
+    fireEvent.change(searchInput, { target: { value: 'OAuth' } });
+
+    // KAN-142 has summary with "OAuth"
+    expect(screen.getByText('KAN-142')).toBeDefined();
+    expect(screen.queryByText('KAN-140')).toBeNull();
+
+    // 2. Reset filters
+    const resetBtn = within(popover).getByRole('button', { name: 'Reset filters' });
+    fireEvent.click(resetBtn);
+    expect(screen.getByText('KAN-140')).toBeDefined();
+
+    // 3. Priority filter
+    const prioSelect = within(popover).getByLabelText(/^Priority$/i);
+    fireEvent.change(prioSelect, { target: { value: 'urgent' } });
+    expect(screen.getByText('KAN-142')).toBeDefined();
+    expect(screen.queryByText('KAN-140')).toBeNull();
+
+    // Reset again
+    fireEvent.click(within(popover).getByRole('button', { name: 'Reset filters' }));
+
+    // 4. Group by Priority
+    const groupSelect = within(popover).getByLabelText(/Group By/i);
+    fireEvent.change(groupSelect, { target: { value: 'priority' } });
+    expect(screen.getByText('Urgent')).toBeDefined();
+
+    // Close popover via Escape
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Filter and Group options' })).toBeNull();
+
+    // Clicking row triggers onOpenPeek
+    const kan142Row = screen.getByText('KAN-142').closest('li');
+    expect(kan142Row).toBeDefined();
+    if (kan142Row) {
+      fireEvent.click(kan142Row);
+      expect(onOpenPeek).toHaveBeenCalledWith('KAN-142');
+    }
   });
 });

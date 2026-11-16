@@ -1,0 +1,187 @@
+================================================================================
+👍kanban MCP Security Protocol Transcript: Hierarchical & Narrowed Keys
+Ticket: KB-P4-14 / KANBA-106
+Key: kb_agt_87f91c94b3c4f6e1a0b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5_x7k9
+Configuration:
+  Scope Tier: workspace
+  Owner Kind: personal_user
+  Disabled Tools: ["complete_work", "transition_ticket"]
+  Allowed CIDRs: ["10.0.0.0/8", "192.168.1.50/32"]
+  Expires At: NULL (Unlimited with explicit friction confirmation)
+================================================================================
+
+--- 1. Client connects via SSE transport and initializes ---
+CLIENT -> SERVER:
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {},
+    "clientInfo": {
+      "name": "kanban-ci-runner",
+      "version": "1.0.0"
+    }
+  }
+}
+
+SERVER -> CLIENT:
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {
+      "tools": { "listChanged": true }
+    },
+    "serverInfo": {
+      "name": "thumbs-up-kanban-mcp-agent",
+      "version": "1.0.0"
+    }
+  }
+}
+
+--- 2. tools/list: Verifying disabled tools ("complete_work", "transition_ticket") are omitted ---
+CLIENT -> SERVER:
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list",
+  "params": {}
+}
+
+SERVER -> CLIENT:
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [
+      {
+        "name": "ping_agent",
+        "description": "Probe health and identity of the agent surface",
+        "inputSchema": { "type": "object", "properties": {} }
+      },
+      {
+        "name": "search_tickets",
+        "description": "Search tickets by query or filters",
+        "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } } }
+      },
+      {
+        "name": "read_ticket",
+        "description": "Read full details of a ticket",
+        "inputSchema": { "type": "object", "properties": { "ticket_id": { "type": "string" } }, "required": ["ticket_id"] }
+      },
+      {
+        "name": "create_ticket",
+        "description": "Create a new ticket in the active project",
+        "inputSchema": { "type": "object", "properties": { "title": { "type": "string" } }, "required": ["title"] }
+      },
+      {
+        "name": "update_ticket",
+        "description": "Update fields on an existing ticket",
+        "inputSchema": { "type": "object", "properties": { "ticket_id": { "type": "string" } }, "required": ["ticket_id"] }
+      },
+      {
+        "name": "begin_work",
+        "description": "Assign and move a ticket into In Progress",
+        "inputSchema": { "type": "object", "properties": { "ticket_id": { "type": "string" } }, "required": ["ticket_id"] }
+      },
+      {
+        "name": "add_comment",
+        "description": "Add a comment to an issue thread",
+        "inputSchema": { "type": "object", "properties": { "ticket_id": { "type": "string" }, "comment": { "type": "string" } }, "required": ["ticket_id", "comment"] }
+      },
+      {
+        "name": "link_objects",
+        "description": "Create typed link between objects",
+        "inputSchema": { "type": "object", "properties": { "source_id": { "type": "string" }, "target_id": { "type": "string" }, "link_kind": { "type": "string" } }, "required": ["source_id", "target_id", "link_kind"] }
+      }
+    ]
+  }
+}
+[NOTE: Notice 'complete_work' and 'transition_ticket' are completely pruned from the list]
+
+--- 3. Allowed tool call: "read_ticket" succeeds ---
+CLIENT -> SERVER:
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "read_ticket",
+    "arguments": {
+      "ticket_id": "KANBA-106"
+    }
+  }
+}
+
+SERVER -> CLIENT:
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "ticket_id: KANBA-106\ntitle: Hierarchical Scopable Keys\nstatus: in_progress\nassignee: p4-106\n"
+      }
+    ]
+  }
+}
+
+--- 4. Denied tool call: "complete_work" is disabled on this key ---
+CLIENT -> SERVER:
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "complete_work",
+    "arguments": {
+      "ticket_id": "KANBA-106",
+      "summary": "Completed ticket implementation"
+    }
+  }
+}
+
+SERVER -> CLIENT:
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "error": {
+    "code": -32003,
+    "message": "Tool 'complete_work' is disabled on this API key by granular narrowing policy.",
+    "data": {
+      "error_code": "INSUFFICIENT_SCOPE",
+      "disabled_tools": ["complete_work", "transition_ticket"]
+    }
+  }
+}
+
+--- 5. Denied tool call: Client IP 198.51.100.5 outside allowed CIDR (10.0.0.0/8, 192.168.1.50/32) ---
+CLIENT (IP: 198.51.100.5) -> SERVER:
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "name": "read_ticket",
+    "arguments": {
+      "ticket_id": "KANBA-106"
+    }
+  }
+}
+
+SERVER -> CLIENT:
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "error": {
+    "code": -32000,
+    "message": "Client IP 198.51.100.5 is not in allowed CIDRs for this API key: ['10.0.0.0/8', '192.168.1.50/32']",
+    "data": {
+      "error_code": "FORBIDDEN_CIDR"
+    }
+  }
+}

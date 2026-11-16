@@ -9,8 +9,10 @@ import uuid  # noqa: TC003
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, Response, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
+from database.models import ObjectRecord
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session, get_settings
 from kanban.api.problems import not_found
 from kanban.api.timing import timing_floor
@@ -19,8 +21,15 @@ from kanban.api.v1.schemas.links import (
     LinkCreateRequest,
     LinksListResponse,
     OutboundLinkOut,
+    UnrestrictedEndpointOut,
 )
 from kanban.security.permissions import Capability, evaluate_capabilities
+from kanban.security.read_taint import (
+    TaintGuard,
+    TaintRecorder,
+    get_taint_guard,
+    get_taint_recorder,
+)
 from kanban.services.links import (
     build_canonical_url,
     create_object_link,
@@ -44,6 +53,7 @@ async def get_object_links_endpoint(
     object_ref: str,
     caller: Annotated[PrincipalContext, Depends(get_principal)],
     session: Annotated[AsyncSession, Depends(get_rls_session)],
+    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
 ) -> LinksListResponse:
     """List directed links for an object, masking unreadable far endpoints."""
     async with timing_floor(floor_ms=25.0):
@@ -55,7 +65,34 @@ async def get_object_links_endpoint(
         if Capability.VIEW not in caps:
             not_found()
 
-        return await list_object_links(session, caller, obj)
+        links_res = await list_object_links(session, caller, obj)
+        proj_ids: set[uuid.UUID] = set()
+        if obj.project_id:
+            proj_ids.add(obj.project_id)
+        elif obj.object_type.value == "project":
+            proj_ids.add(obj.id)
+
+        visible_ids = {
+            link.target.id
+            for link in links_res.outbound
+            if isinstance(link.target, UnrestrictedEndpointOut)
+        } | {
+            link.source.id
+            for link in links_res.inbound
+            if isinstance(link.source, UnrestrictedEndpointOut)
+        }
+        if visible_ids:
+            stmt = select(ObjectRecord.id, ObjectRecord.project_id, ObjectRecord.object_type).where(
+                ObjectRecord.id.in_(visible_ids)
+            )
+            for r in (await session.execute(stmt)).all():
+                if r[1]:
+                    proj_ids.add(r[1])
+                elif r[2].value == "project":
+                    proj_ids.add(r[0])
+        if proj_ids:
+            await taint_recorder.record_project_ids(proj_ids)
+        return links_res
 
 
 @router.post(
@@ -69,12 +106,24 @@ async def create_object_link_endpoint(
     req: LinkCreateRequest,
     caller: Annotated[PrincipalContext, Depends(get_principal)],
     session: Annotated[AsyncSession, Depends(get_rls_session)],
+    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
 ) -> OutboundLinkOut:
     """Validate and insert a typed link between two Universal Object Graph nodes."""
     async with timing_floor(floor_ms=25.0):
         source = await resolve_object_ref(session, object_ref)
         if source is None:
             not_found()
+
+        target = await resolve_object_ref(session, req.target)
+        source_proj = source.project_id or (
+            source.id if source.object_type.value == "project" else None
+        )
+        target_proj = (target.project_id if target else None) or (
+            target.id if (target and target.object_type.value == "project") else None
+        )
+        check_projs = [p for p in (source_proj, target_proj) if p is not None]
+        if check_projs:
+            await taint_guard.check_write(check_projs, tool_name="link_objects")
 
         return await create_object_link(session, caller, source, req)
 

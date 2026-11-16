@@ -295,4 +295,119 @@ describe('Sidebar', () => {
       window.dispatchEvent(new CustomEvent('kb:project-created'));
     });
   });
+
+  it('fetches workspaces, toggles dropdown menu, switches workspace, and opens CreateWorkspaceModal', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/workspaces') && init?.method === 'POST') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ status: 'switched', workspace_id: 'ws-2' }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/api/v1/workspaces')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              { id: 'ws-1', name: 'Primary Engineering WS', slug: 'eng', is_current: true },
+              { id: 'ws-2', name: 'Design Systems WS', slug: 'design', is_current: false },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    // Initial load updates workspace brand name
+    expect(await screen.findByText('Primary Engineering WS')).toBeDefined();
+
+    const switcherBtn = screen.getByRole('button', { name: /Workspace switcher:/ });
+    expect(switcherBtn.getAttribute('aria-expanded')).toBe('false');
+
+    // Click to open dropdown
+    act(() => {
+      fireEvent.click(switcherBtn);
+    });
+    expect(switcherBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('menu')).toBeDefined();
+    expect(screen.getByText('Design Systems WS')).toBeDefined();
+
+    // Click "+ Create New Workspace" in dropdown
+    const createWsBtn = screen.getByRole('menuitem', { name: /Create New Workspace/ });
+    act(() => {
+      fireEvent.click(createWsBtn);
+    });
+
+    // Dropdown closes and CreateWorkspaceModal opens
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Create New Workspace' })).toBeDefined();
+
+    // Close modal
+    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    act(() => {
+      fireEvent.click(cancelBtn);
+    });
+    expect(screen.queryByRole('dialog', { name: 'Create New Workspace' })).toBeNull();
+
+    // Open dropdown again and click workspace to switch
+    act(() => {
+      fireEvent.click(switcherBtn);
+    });
+    const targetWsBtn = screen.getByRole('menuitem', { name: /Design Systems WS/ });
+    act(() => {
+      fireEvent.click(targetWsBtn);
+    });
+  });
+
+  it('renders project layout view links (List, Board, Table, Calendar, Timeline) with SVG icons (KANBA-174)', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/KAN/issues?layout=list']}>
+        <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: /List view/i })).toBeDefined();
+    expect(screen.getByRole('link', { name: /Board view/i })).toBeDefined();
+    expect(screen.getByRole('link', { name: /Table view/i })).toBeDefined();
+    expect(screen.getByRole('link', { name: /Calendar view/i })).toBeDefined();
+    expect(screen.getByRole('link', { name: /Timeline view/i })).toBeDefined();
+
+    const listViewLink = screen.getByRole('link', { name: /List view/i });
+    expect(listViewLink.getAttribute('href')).toBe('/projects/KAN/issues?layout=list');
+  });
+
+  it('toggles sidebar via kb:toggle-sidebar custom event and Hide Nav button (KANBA-174)', () => {
+    const onToggle = vi.fn();
+    render(
+      <MemoryRouter>
+        <Sidebar onToggleCollapse={onToggle} />
+      </MemoryRouter>,
+    );
+
+    const hideNavBtn = screen.getByRole('button', { name: /Collapse sidebar \(Hide Nav\)/i });
+    expect(hideNavBtn).toBeDefined();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:toggle-sidebar'));
+    });
+
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('collapsed');
+    expect(onToggle).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:toggle-sidebar'));
+    });
+
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('open');
+    expect(onToggle).toHaveBeenCalledTimes(2);
+  });
 });

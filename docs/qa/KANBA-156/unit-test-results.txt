@@ -1,0 +1,51 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p5-156-31a13501/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p5-156-31a13501
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 28 items
+
+agent/tests/tools/test_mcp_read_tools.py::test_mcp_read_tools_allowed_execution PASSED [  3%]
+agent/tests/tools/test_mcp_read_tools.py::test_mcp_read_tools_write_and_undeclared_forbidden PASSED [  7%]
+agent/tests/tools/test_mcp_read_tools.py::test_mcp_read_tools_call_limit_exceeded PASSED [ 10%]
+agent/tests/tools/test_mcp_read_tools.py::test_mcp_read_tools_secret_scrubbing PASSED [ 14%]
+agent/tests/tools/test_mcp_read_tools.py::test_mcp_read_tools_http_client_and_bearer_types PASSED [ 17%]
+agent/tests/tools/test_mcp_read_tools.py::test_mcp_read_tools_unimplemented_tool PASSED [ 21%]
+agent/tests/tools/test_repo_path_guard.py::test_normalize_repo_relpath_valid PASSED [ 25%]
+agent/tests/tools/test_repo_path_guard.py::test_normalize_repo_relpath_traversal_rejected PASSED [ 28%]
+agent/tests/tools/test_repo_path_guard.py::test_normalize_repo_relpath_option_injection_rejected PASSED [ 32%]
+agent/tests/tools/test_repo_path_guard.py::test_normalize_repo_relpath_absolute_paths_rejected PASSED [ 35%]
+agent/tests/tools/test_repo_path_guard.py::test_normalize_repo_relpath_invalid_characters PASSED [ 39%]
+agent/tests/tools/test_repo_path_guard.py::test_normalize_repo_relpath_oversize_and_types PASSED [ 42%]
+agent/tests/tools/test_repo_path_guard.py::test_is_secret_repo_path_detection PASSED [ 46%]
+agent/tests/tools/test_repo_path_guard.py::test_is_secret_repo_path_non_secret PASSED [ 50%]
+agent/tests/tools/test_repo_path_guard.py::test_repo_tool_policy_error_formatting PASSED [ 53%]
+agent/tests/tools/test_repo_tools.py::test_repo_toolkit_positive_tools PASSED [ 57%]
+agent/tests/tools/test_repo_tools.py::test_repo_toolkit_security_traversal_and_injection PASSED [ 60%]
+agent/tests/tools/test_repo_tools.py::test_repo_toolkit_secret_masking_and_scrubbing PASSED [ 64%]
+agent/tests/tools/test_repo_tools.py::test_repo_toolkit_binary_and_boundary_checks PASSED [ 67%]
+agent/tests/tools/test_repo_tools.py::test_repo_toolkit_initialization_validation PASSED [ 71%]
+agent/tests/tools/test_repo_tools.py::test_repo_toolkit_error_branches_and_edge_cases PASSED [ 75%]
+agent/tests/harnesses/test_in_app_sdk.py::test_in_app_sdk_positive_replay_veto PASSED [ 78%]
+agent/tests/harnesses/test_in_app_sdk.py::test_in_app_sdk_positive_approve_with_diff PASSED [ 82%]
+agent/tests/harnesses/test_in_app_sdk.py::test_in_app_sdk_security_forbidden_tool_attempt PASSED [ 85%]
+agent/tests/harnesses/test_in_app_sdk.py::test_in_app_sdk_security_repo_none_blocks_repo_tools PASSED [ 89%]
+agent/tests/harnesses/test_in_app_sdk.py::test_in_app_sdk_boundary_tool_loop_exceeded PASSED [ 92%]
+agent/tests/harnesses/test_in_app_sdk.py::test_in_app_sdk_generic_provider_and_arg_redaction PASSED [ 96%]
+agent/tests/harnesses/test_in_app_sdk.py::test_in_app_sdk_invalid_repo_and_undeclared_tools PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+agent/harnesses/in_app_sdk.py      156      3     34      3    97%   160-162, 265->315, 291->303
+agent/tools/__init__.py              5      0      0      0   100%
+agent/tools/mcp_read_tools.py       88      1     32      2    98%   128->147, 144
+agent/tools/repo_path_guard.py      80      1     36      1    98%   159
+agent/tools/repo_tools.py          194      6     72      7    95%   96, 106, 112, 116, 295, 301->306, 376
+----------------------------------------------------------------------------
+TOTAL                              523     11    174     13    97%
+Required test coverage of 95% reached. Total coverage: 96.56%
+============================== 28 passed in 4.83s ==============================

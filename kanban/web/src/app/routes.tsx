@@ -6,6 +6,7 @@
 
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -39,19 +40,23 @@ import { RailStory } from '../dev/RailStory';
 import { DrawerActionsStory } from '../dev/DrawerActionsStory';
 import { DocsWorkspaceView } from '../features/docs/DocsWorkspaceView';
 import { StickiesStory } from '../dev/StickiesStory';
+import { IconStory } from '../dev/IconStory';
 import { ProjectOverviewView } from '../features/stickies/ProjectOverviewView';
 import { WorkspaceStickiesView } from '../features/stickies/WorkspaceStickiesView';
 import ProjectCustomFieldsSettingsRoute from '../routes/projects/settings/custom-fields';
 import { apiClient } from '../api/client';
+import { RouteErrorBoundary } from '../components/error/AppErrorModal';
 import type { IssueDetail } from '../features/drawer/slots';
 import { LoginPage } from '../features/auth/LoginPage';
 import { SetupClaimPage } from '../features/auth/SetupClaimPage';
 import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
 import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
 import { McpAccessStudio } from '../features/settings/McpAccessStudio';
+import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
 import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
 import { useSessionGuard } from '../features/auth/useSessionGuard';
+import { useDrafts, deleteDraft, type IssueDraft } from '../features/drafts/draftsStore';
 
 export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
 
@@ -106,8 +111,17 @@ export function ProjectIssuesRoute(): JSX.Element {
   const { projectKey: paramKey } = useParams<{ projectKey: string }>();
   const ctx = useContext(ProjectRouteContext);
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  const handleOpenPeek = useCallback(
+    (issueKey: string) => {
+      const next = new URLSearchParams(searchParams);
+      next.set('peek', issueKey);
+      setSearchParams(next);
+    },
+    [searchParams, setSearchParams],
+  );
 
   const resolvedProjectKey = paramKey ?? ctx.projectKey;
   const rawLayout = searchParams.get('layout');
@@ -165,6 +179,7 @@ export function ProjectIssuesRoute(): JSX.Element {
         modulesEnabled={modulesEnabled}
         initialLayout={normalizedLayout}
         queryClient={queryClient}
+        onOpenPeek={handleOpenPeek}
       />
     </div>
   );
@@ -346,11 +361,116 @@ export function WorkspaceHomeView(): JSX.Element {
 }
 
 export function DraftsWorkspaceView(): JSX.Element {
+  const drafts = useDrafts();
+  const navigate = useNavigate();
+
+  const handlePublishOrResume = async (draft: IssueDraft): Promise<void> => {
+    try {
+      const payload: Record<string, unknown> = {
+        summary: draft.summary,
+      };
+      if (draft.description) {
+        payload.description_markdown = draft.description;
+      }
+      if (draft.stateId) {
+        payload.state_id = draft.stateId;
+      }
+      if (draft.prioritySlug) {
+        payload.priority_slug = draft.prioritySlug;
+      }
+      if (draft.moduleIds && draft.moduleIds.length > 0) {
+        payload.module_ids = draft.moduleIds;
+      }
+
+      const res = await fetch(`/api/v1/projects/${draft.projectKey}/issues`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        deleteDraft(draft.id);
+        void navigate(`/projects/${draft.projectKey}/issues`);
+        return;
+      }
+    } catch {
+      // Fallback on network error
+    }
+
+    deleteDraft(draft.id);
+    void navigate(`/projects/${draft.projectKey}/issues?create=1`);
+  };
+
+  const handleDelete = (id: string): void => {
+    deleteDraft(id);
+  };
+
   return (
     <section data-testid="drafts-view" className="kb-workspace-section">
-      <h1>Drafts</h1>
-      <p>Work item drafts saved before publishing to a project.</p>
-      <Link to="/projects/KAN/issues?create=1">Create a new work item →</Link>
+      <div className="kb-workspace-section-header">
+        <h1>Drafts</h1>
+        <p>Work item drafts saved before publishing to a project.</p>
+      </div>
+
+      {drafts.length === 0 ? (
+        <div data-testid="drafts-empty" className="drafts-empty-notice">
+          <p>No work item drafts found.</p>
+          <Link to="/projects/KAN/issues?create=1">Create a new work item →</Link>
+        </div>
+      ) : (
+        <div className="drafts-grid" data-testid="drafts-list">
+          {drafts.map((draft) => (
+            <div key={draft.id} className="draft-card" data-testid="draft-card">
+              <div className="draft-card-header">
+                <span className="mono draft-project-badge">{draft.projectKey}</span>
+                <span className="draft-timestamp">
+                  {new Date(draft.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+              <h3 className="draft-card-title">{draft.summary}</h3>
+              {draft.description && (
+                <p className="draft-card-desc">{draft.description}</p>
+              )}
+              <div className="draft-card-meta">
+                {draft.prioritySlug && (
+                  <span className="draft-meta-pill">
+                    Priority: {draft.prioritySlug}
+                  </span>
+                )}
+                {draft.stateId && (
+                  <span className="draft-meta-pill">State: {draft.stateId}</span>
+                )}
+              </div>
+              <div className="draft-card-actions">
+                <button
+                  type="button"
+                  className="quick-create-btn-submit draft-resume-btn"
+                  data-testid="draft-resume-btn"
+                  onClick={() => {
+                    void handlePublishOrResume(draft);
+                  }}
+                >
+                  Resume / Publish to Board
+                </button>
+                <button
+                  type="button"
+                  className="quick-create-btn-cancel draft-delete-btn"
+                  data-testid="draft-delete-btn"
+                  onClick={() => {
+                    handleDelete(draft.id);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -469,6 +589,7 @@ export function DevStoryRoute(): JSX.Element {
   if (loc.pathname === '/__dev/drawer-rail' || loc.pathname === '/__dev/rail') return <RailStory />;
   if (loc.pathname === '/__dev/drawer-actions') return <DrawerActionsStory />;
   if (loc.pathname === '/__dev/stickies') return <StickiesStory />;
+  if (loc.pathname === '/__dev/icons') return <IconStory />;
   return <NotFoundView />;
 }
 
@@ -533,6 +654,7 @@ export function RootShellLayout(): JSX.Element {
 export const appRoutes: RouteObject[] = [
   {
     path: '/',
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         path: 'projects/:projectKey',
@@ -577,6 +699,10 @@ export const appRoutes: RouteObject[] = [
           {
             path: 'settings/custom-fields',
             element: <ProjectCustomFieldsSettingsRoute />,
+          },
+          {
+            path: 'settings/workflows',
+            element: <WorkflowStudioPage />,
           },
         ],
       },

@@ -1,0 +1,284 @@
+{
+  "ticket": "KANBA-158",
+  "feature": "Admin Workflow Transition Studio UI",
+  "wireframe_reference": "ARCHITECTURE_AND_PRODUCT_SPEC.md Section 14.4",
+  "exchanges": [
+    {
+      "name": "list_workflow_hooks_200",
+      "description": "Lists configured transition rules with ordered sync Wasm and agent interceptor hooks for project KAN",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/projects/KAN/workflow-hooks",
+        "headers": {
+          "host": "kanban.hackedyour.info",
+          "accept": "application/json",
+          "cookie": "<session-token>"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "rules": [
+            {
+              "from_state": "In Review",
+              "to_state": "Done",
+              "active_hook_count": 3,
+              "hooks": [
+                {
+                  "id": "hook-1",
+                  "name": "require-qa-proof-link",
+                  "from_state": "In Review",
+                  "to_state": "Done",
+                  "hook_kind": "sync_validator",
+                  "sort_rank": "0000000000000001",
+                  "failure_policy": "fail_closed",
+                  "manifest_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "is_enabled": true,
+                  "wasm_module_name": "qa-proof-validator",
+                  "wasm_module_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "target_latency_budget": "<2ms",
+                  "description": "Ensures description or comments include `docs/qa/KAN-*/` proof bundle before invoking AI."
+                },
+                {
+                  "id": "hook-2",
+                  "name": "forensic-code-check",
+                  "from_state": "In Review",
+                  "to_state": "Done",
+                  "hook_kind": "agent_interceptor",
+                  "sort_rank": "0000000000000002",
+                  "failure_policy": "fail_closed",
+                  "manifest_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                  "is_enabled": true,
+                  "agent_slug": "forensic-code-check",
+                  "agent_display_name": "Forensic Code Check",
+                  "harness_kind": "cli_pipe",
+                  "cli_binary_allowlist_id": "agy",
+                  "cli_args": ["-p"],
+                  "timeout_ms": 60000,
+                  "repo_binding_slug": "kanban-main",
+                  "repo_access_mode": "ro_vfs_mount",
+                  "mcp_access_summary": "Read-Only (KAN)",
+                  "allowed_mutable_fields": ["labels"],
+                  "description": "Repo: `kanban-main` (:ro mount) | MCP: Read-Only (`KAN`) | Mutable Fields: `[labels]`"
+                },
+                {
+                  "id": "hook-3",
+                  "name": "sec-invariant-scan",
+                  "from_state": "In Review",
+                  "to_state": "Done",
+                  "hook_kind": "agent_interceptor",
+                  "sort_rank": "0000000000000003",
+                  "failure_policy": "fail_closed",
+                  "manifest_sha256": "7b52009b64fd0a2a49e6d8a939753077792b055425eee527861182c611383145",
+                  "is_enabled": true,
+                  "agent_slug": "sec-invariant-scan",
+                  "agent_display_name": "Security Invariant Scanner",
+                  "harness_kind": "in_app_sdk",
+                  "provider_kind": "ollama",
+                  "model_id": "ollama/qwen2.5-coder",
+                  "timeout_ms": 30000,
+                  "repo_binding_slug": "kanban-main",
+                  "repo_access_mode": "ro_vfs_mount",
+                  "mcp_access_summary": "Read-Only (KAN)",
+                  "allowed_mutable_fields": [],
+                  "description": "Verifies RLS policy tests & zero new unapproved dependencies in `uv.lock` / `pnpm-lock.yaml`."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "attach_agent_hook_201",
+      "description": "Attaches a new CLI pipe agent interceptor hook to a transition with restricted mutable fields universe",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/KAN/workflow-hooks",
+        "headers": {
+          "host": "kanban.hackedyour.info",
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-csrf-token": "<csrf-token>",
+          "cookie": "<session-token>"
+        },
+        "body": {
+          "name": "audit-gate-reviewer",
+          "from_state": "In Review",
+          "to_state": "Done",
+          "hook_kind": "agent_interceptor",
+          "failure_policy": "fail_closed",
+          "agent_slug": "forensic-code-check",
+          "harness_kind": "cli_pipe",
+          "cli_binary_allowlist_id": "agy",
+          "cli_args": ["-p"],
+          "timeout_ms": 60000,
+          "repo_binding_slug": "kanban-main",
+          "repo_access_mode": "ro_vfs_mount",
+          "allowed_mutable_fields": ["labels"]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "hook-new-987",
+          "name": "audit-gate-reviewer",
+          "from_state": "In Review",
+          "to_state": "Done",
+          "hook_kind": "agent_interceptor",
+          "sort_rank": "0000000000000004",
+          "failure_policy": "fail_closed",
+          "manifest_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "is_enabled": true,
+          "agent_slug": "forensic-code-check",
+          "agent_display_name": "Forensic Code Check",
+          "harness_kind": "cli_pipe",
+          "cli_binary_allowlist_id": "agy",
+          "cli_args": ["-p"],
+          "timeout_ms": 60000,
+          "repo_binding_slug": "kanban-main",
+          "repo_access_mode": "ro_vfs_mount",
+          "allowed_mutable_fields": ["labels"]
+        }
+      }
+    },
+    {
+      "name": "reorder_workflow_hooks_200",
+      "description": "Atomically reorders hooks in a transition rule pipeline using explicit ordered array of hook IDs",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/KAN/workflow-hooks/reorder",
+        "headers": {
+          "host": "kanban.hackedyour.info",
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-csrf-token": "<csrf-token>",
+          "cookie": "<session-token>"
+        },
+        "body": {
+          "from_state": "In Review",
+          "to_state": "Done",
+          "ordered_hook_ids": [
+            "hook-2",
+            "hook-1",
+            "hook-3"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "ok": true,
+          "reordered_count": 3
+        }
+      }
+    },
+    {
+      "name": "dry_run_transition_sample_ticket_200",
+      "description": "Executes dry-run pipeline against a sample ticket, demonstrating sync rejection and copyable CLI command for async agent gates",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/KAN/workflow-hooks/dry-run",
+        "headers": {
+          "host": "kanban.hackedyour.info",
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-csrf-token": "<csrf-token>",
+          "cookie": "<session-token>"
+        },
+        "body": {
+          "from_state": "In Review",
+          "to_state": "Done",
+          "sample_ticket": {
+            "summary": "Fix auth token refresh expiration race condition",
+            "description_markdown": "Patched mutex in token refresher. Tests added in auth/test_refresh.py.",
+            "priority": "high",
+            "labels": ["security", "auth"]
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "steps": [
+            {
+              "order": 1,
+              "name": "require-qa-proof-link",
+              "hook_kind": "sync_validator",
+              "result": "rejected",
+              "reason": "Missing required docs/qa/ proof bundle",
+              "duration_us": 1200
+            },
+            {
+              "order": 2,
+              "name": "forensic-code-check",
+              "hook_kind": "agent_interceptor",
+              "result": "skipped_async",
+              "duration_us": 200,
+              "cli_command": "uv run kanban-agent validate-transition --project KAN --issue KAN-123 --transition \"In Review->Done\" --agent forensic-code-check"
+            },
+            {
+              "order": 3,
+              "name": "sec-invariant-scan",
+              "hook_kind": "agent_interceptor",
+              "result": "skipped_async",
+              "duration_us": 150,
+              "cli_command": "uv run kanban-agent validate-transition --project KAN --issue KAN-123 --transition \"In Review->Done\" --agent sec-invariant-scan"
+            }
+          ],
+          "would_commit": false
+        }
+      }
+    },
+    {
+      "name": "reorder_workflow_hooks_403_aal2_required",
+      "description": "Standard S3.3 / KB-P2-05a step-up challenge requiring WebAuthn/TOTP elevation before mutating workflow interceptors",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/KAN/workflow-hooks/reorder",
+        "headers": {
+          "host": "kanban.hackedyour.info",
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-csrf-token": "<csrf-token>",
+          "cookie": "<session-token>"
+        },
+        "body": {
+          "from_state": "In Review",
+          "to_state": "Done",
+          "ordered_hook_ids": [
+            "hook-2",
+            "hook-1"
+          ]
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-type": "application/problem+json"
+        },
+        "body": {
+          "code": "AAL2_REQUIRED",
+          "message": "Admin elevation required: reordering transition hooks requires AAL2 authentication.",
+          "data": {
+            "challenge_id": "aal2-chall-908123",
+            "methods": ["webauthn", "totp"]
+          }
+        }
+      }
+    }
+  ]
+}

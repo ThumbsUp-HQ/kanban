@@ -188,6 +188,7 @@ export function TimelineView({
   initialStartDate,
   today,
   links,
+  onOpenPeek,
 }: TimelineViewProps): JSX.Element {
   const todayDate = useMemo(() => {
     return today ?? new Date().toISOString().slice(0, 10);
@@ -295,6 +296,17 @@ export function TimelineView({
       let label = dayNum;
       if (zoomScale === 'day') {
         label = d.slice(5); // MM-DD
+      } else if (zoomScale === 'quarter') {
+        // Grouped headers in quarter mode (16px per cell) so dates never run together
+        if (dayNum === '01') {
+          const monthNum = parseInt(d.slice(5, 7), 10);
+          const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          label = monthNames[monthNum] ?? dayNum;
+        } else if (parseInt(dayNum, 10) % 7 === 1) {
+          label = dayNum;
+        } else {
+          label = '';
+        }
       }
       cells.push({ date: d, label, isToday });
     }
@@ -607,11 +619,22 @@ export function TimelineView({
                   className="timeline-left-row"
                   data-issue-key={issue.key}
                   data-testid={`timeline-left-row-${issue.key}`}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement | null;
+                    if (target?.closest('a, button, input')) return;
+                    onOpenPeek?.(issue.key);
+                  }}
                 >
                   <EmojiHint kind={priorityKind} />
                   <a
                     href={`?layout=timeline&peek=${encodeURIComponent(issue.key)}`}
                     className="timeline-left-row-key"
+                    onClick={(e) => {
+                      if (onOpenPeek) {
+                        e.preventDefault();
+                        onOpenPeek(issue.key);
+                      }
+                    }}
                   >
                     {issue.key}
                   </a>
@@ -635,13 +658,13 @@ export function TimelineView({
 
         {/* Right Scrollable Timeline Canvas */}
         <div ref={canvasWrapperRef} className="timeline-right-canvas-wrapper">
-          <div ref={canvasRef} className="timeline-right-canvas">
+          <div ref={canvasRef} className={`timeline-right-canvas timeline-right-canvas--${zoomScale}`}>
             {/* Scale Header Row */}
             <div className="timeline-scale-header" role="row">
               {scaleCells.map((c) => (
                 <div
                   key={c.date}
-                  className={`timeline-scale-cell ${c.isToday ? 'timeline-scale-cell--today' : ''}`}
+                  className={`timeline-scale-cell timeline-scale-cell--${zoomScale} ${c.isToday ? 'timeline-scale-cell--today' : ''}`}
                   role="columnheader"
                   title={c.date}
                   data-date={c.date}

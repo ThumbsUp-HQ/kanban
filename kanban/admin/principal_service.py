@@ -28,6 +28,7 @@ from database.models.projects import Project
 from database.models.spine import ObjectRecord
 from kanban.api.problems import FieldError, ProblemException, not_found
 from kanban.auth.cards.lockout import LockoutPreventedError
+from kanban.auth.local.hashing import get_auth_pepper, hash_password_sync
 from kanban.services.activity import ActivityEventType, record_activity
 
 if TYPE_CHECKING:
@@ -214,6 +215,72 @@ async def get_principal_detail(
     }
 
 
+def _highest_role(user_roles: list[str]) -> str:
+    """Return highest role from list of bound roles."""
+    for candidate in ("SERVER_ADMIN", "WORKSPACE_ADMIN", "WORKSPACE_MEMBER", "WORKSPACE_GUEST"):
+        if candidate in user_roles:
+            return candidate
+    return user_roles[0] if user_roles else "WORKSPACE_MEMBER"
+
+
+def _resolve_provider_label(p_kind: str, p_slug: str) -> str:  # noqa: PLR0911
+    """Classify provider kind/slug into presentation label."""
+    kind = p_kind.upper()
+    slug = p_slug.lower()
+    if kind == "LOCAL_ADMIN":
+        return "LOCAL"
+    if "google" in slug:
+        return "GOOGLE"
+    if "github" in slug:
+        return "GITHUB"
+    if "active-directory" in slug or slug == "ad" or slug.startswith("ad-") or slug.endswith("-ad"):
+        return "ACTIVE_DIRECTORY"
+    if kind == "LDAP":
+        return "LDAP"
+    if kind in ("OIDC", "OAUTH2"):
+        return "OAUTH2"
+    return kind
+
+
+async def _enrich_user_principal(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    p: Principal,
+) -> tuple[str, str | None, str, str]:
+    """Resolve handle, email, highest role, and provider badge for a USER principal."""
+    ck_stmt = select(ObjectRecord.canonical_key).where(
+        ObjectRecord.id == p.id,
+        ObjectRecord.object_type == "user",
+    )
+    ck = (await session.execute(ck_stmt)).scalar_one_or_none()
+    handle = ck or f"@{p.display_name.lower().replace(' ', '')}"
+
+    u_stmt = select(User.email).where(User.id == p.id)
+    email = (await session.execute(u_stmt)).scalar_one_or_none()
+
+    rb_stmt = select(RoleBinding.role).where(
+        RoleBinding.principal_id == p.id,
+        RoleBinding.workspace_id == workspace_id,
+    )
+    raw_roles = (await session.execute(rb_stmt)).scalars().all()
+    user_roles = [str(r.value if hasattr(r, "value") else r) for r in raw_roles]
+    role = _highest_role(user_roles)
+
+    ui_stmt = text(
+        "SELECT apc.provider_kind, apc.slug FROM user_identities ui "
+        "JOIN auth_provider_cards apc ON ui.auth_card_id = apc.id "
+        "WHERE ui.principal_id = :p_id LIMIT 1"
+    )
+    ui_row = (await session.execute(ui_stmt, {"p_id": p.id})).mappings().first()
+    provider = (
+        _resolve_provider_label(str(ui_row["provider_kind"]), str(ui_row["slug"]))
+        if ui_row
+        else "LOCAL"
+    )
+
+    return handle, email, role, provider
+
+
 async def list_principals(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -262,13 +329,12 @@ async def list_principals(
 
     for p in principals:
         handle = p.display_name
+        email: str | None = None
+        role: str = "WORKSPACE_MEMBER"
+        provider: str = "LOCAL"
+
         if p.principal_type == "USER":
-            ck_stmt = select(ObjectRecord.canonical_key).where(
-                ObjectRecord.id == p.id,
-                ObjectRecord.object_type == "user",
-            )
-            ck = (await session.execute(ck_stmt)).scalar_one_or_none()
-            handle = ck or f"@{p.display_name.lower().replace(' ', '')}"
+            handle, email, role, provider = await _enrich_user_principal(session, workspace_id, p)
         elif p.principal_type == "AGENT":
             a_stmt = select(AgentDefinition.slug).where(AgentDefinition.principal_id == p.id)
             slug = (await session.execute(a_stmt)).scalar_one_or_none()
@@ -287,6 +353,9 @@ async def list_principals(
                 "display_name": p.display_name,
                 "type": p.principal_type,
                 "status": "active" if p.status == "ACTIVE" else "deactivated",
+                "email": email,
+                "role": role,
+                "provider": provider,
             }
         )
     return result
@@ -299,6 +368,8 @@ async def provision_user(  # noqa: PLR0913, PLR0917
     handle: str,
     display_name: str,
     email: str,
+    password: str | None = None,
+    role: str | None = None,
 ) -> dict[str, Any]:
     """Provision a new USER principal with object spine and user record."""
     norm_handle = normalize_handle(handle)
@@ -362,8 +433,32 @@ async def provision_user(  # noqa: PLR0913, PLR0917
             email=em,
         )
         session.add(user)
-
         await session.flush()
+
+        # 4. Bind initial RBAC role
+        target_role = role or "WORKSPACE_MEMBER"
+        scope_type = "server" if target_role == "SERVER_ADMIN" else "workspace"
+        role_binding = RoleBinding(
+            id=uuid.uuid4(),
+            workspace_id=workspace_id,
+            principal_id=user_id,
+            role=target_role,
+            scope_type=scope_type,
+        )
+        session.add(role_binding)
+        await session.flush()
+
+        # 5. Provision local credentials if password provided
+        if password:
+            pepper = get_auth_pepper()
+            pw_hash = hash_password_sync(password, pepper)
+            await session.execute(text("SET LOCAL app.is_setup_claim = 'true'"))
+            await session.execute(
+                text("SELECT kb_auth.local_admin_create(:pid, :username, :hash, 'pepper-v1')"),
+                {"pid": user_id, "username": norm_handle, "hash": pw_hash},
+            )
+            await session.flush()
+
     except IntegrityError as exc:
         orig_msg = str(exc.orig) if exc.orig else str(exc)
         if "users_ws_email_uq" in orig_msg or "email" in orig_msg:
@@ -397,6 +492,7 @@ async def provision_user(  # noqa: PLR0913, PLR0917
             "handle": canonical_key,
             "display_name": dn,
             "email": em,
+            "role": target_role,
         },
     )
 
@@ -408,7 +504,61 @@ async def provision_user(  # noqa: PLR0913, PLR0917
         "display_name": dn,
         "email": em,
         "status": "active",
+        "role": target_role,
+        "provider": "LOCAL",
     }
+
+
+async def reset_password(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    creator_id: uuid.UUID,
+    principal_id: uuid.UUID,
+    password: str,
+) -> dict[str, Any]:
+    """Reset or initialize local password credential for a principal."""
+    p_stmt = select(Principal).where(
+        Principal.id == principal_id,
+        Principal.workspace_id == workspace_id,
+    )
+    principal = (await session.execute(p_stmt)).scalar_one_or_none()
+    if principal is None or principal.principal_type != "USER":
+        not_found()
+
+    pepper = get_auth_pepper()
+    pw_hash = hash_password_sync(password, pepper)
+
+    # Check if credential already exists
+    cred_stmt = text("SELECT 1 FROM local_admin_credentials WHERE principal_id = :pid")
+    exists = (await session.execute(cred_stmt, {"pid": principal_id})).scalar() is not None
+
+    if exists:
+        await session.execute(
+            text("SELECT kb_auth.local_set_password_hash(:pid, :hash)"),
+            {"pid": principal_id, "hash": pw_hash},
+        )
+    else:
+        ck_stmt = select(ObjectRecord.canonical_key).where(
+            ObjectRecord.id == principal_id,
+            ObjectRecord.object_type == "user",
+        )
+        ck = (await session.execute(ck_stmt)).scalar_one_or_none()
+        username = ck.lstrip("@") if ck else principal.display_name.lower().replace(" ", "")
+        await session.execute(text("SET LOCAL app.is_setup_claim = 'true'"))
+        await session.execute(
+            text("SELECT kb_auth.local_admin_create(:pid, :username, :hash, 'pepper-v1')"),
+            {"pid": principal_id, "username": username, "hash": pw_hash},
+        )
+
+    await record_activity(
+        session,
+        workspace_id=workspace_id,
+        actor_principal_id=creator_id,
+        event_type=ActivityEventType.PRINCIPAL_UPDATED,
+        payload={"id": str(principal_id), "action": "password_reset"},
+    )
+
+    return {"status": "ok", "principal_id": str(principal_id)}
 
 
 async def provision_group(

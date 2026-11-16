@@ -1,0 +1,69 @@
+=== Unit Test Suite: tests/perf/test_perf_budget_gate_unit.py ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/4fcdb6af-4e9b-4854-9de1-0ed2cfb0f997/swarm-p5-156-31a13501
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 28 items
+
+tests/perf/test_perf_budget_gate_unit.py::test_synthetic_passing_report_exits_0 PASSED [  3%]
+tests/perf/test_perf_budget_gate_unit.py::test_single_sla_breach_exits_2[drag_p95-12.0-drag_p95] PASSED [  7%]
+tests/perf/test_perf_budget_gate_unit.py::test_single_sla_breach_exits_2[drag_p95-15.5-drag_p95] PASSED [ 10%]
+tests/perf/test_perf_budget_gate_unit.py::test_single_sla_breach_exits_2[sparkle_p95-150.0-sparkle_p95] PASSED [ 14%]
+tests/perf/test_perf_budget_gate_unit.py::test_single_sla_breach_exits_2[sparkle_p95-180.2-sparkle_p95] PASSED [ 17%]
+tests/perf/test_perf_budget_gate_unit.py::test_single_sla_breach_exits_2[sync_hooks_p95-25.0-sync_hooks_p95] PASSED [ 21%]
+tests/perf/test_perf_budget_gate_unit.py::test_single_sla_breach_exits_2[sync_hooks_p95-30.1-sync_hooks_p95] PASSED [ 25%]
+tests/perf/test_perf_budget_gate_unit.py::test_single_sla_breach_exits_2[clean_db_1000_s-10.0-clean_db_1000_s] PASSED [ 28%]
+tests/perf/test_perf_budget_gate_unit.py::test_single_sla_breach_exits_2[clean_db_1000_s-12.4-clean_db_1000_s] PASSED [ 32%]
+tests/perf/test_perf_budget_gate_unit.py::test_single_sla_breach_exits_2[warm_boot_s-3.0-warm_boot_s] PASSED [ 35%]
+tests/perf/test_perf_budget_gate_unit.py::test_single_sla_breach_exits_2[warm_boot_s-3.5-warm_boot_s] PASSED [ 39%]
+tests/perf/test_perf_budget_gate_unit.py::test_missing_metric_exits_2[drag_p95] PASSED [ 42%]
+tests/perf/test_perf_budget_gate_unit.py::test_missing_metric_exits_2[sparkle_p95] PASSED [ 46%]
+tests/perf/test_perf_budget_gate_unit.py::test_missing_metric_exits_2[sync_hooks_p95] PASSED [ 50%]
+tests/perf/test_perf_budget_gate_unit.py::test_missing_metric_exits_2[clean_db_1000_s] PASSED [ 53%]
+tests/perf/test_perf_budget_gate_unit.py::test_missing_metric_exits_2[warm_boot_s] PASSED [ 57%]
+tests/perf/test_perf_budget_gate_unit.py::test_extract_metric_value_variants PASSED [ 60%]
+tests/perf/test_perf_budget_gate_unit.py::test_evaluate_raw_metrics_invalid_data PASSED [ 64%]
+tests/perf/test_perf_budget_gate_unit.py::test_load_evaluation_data_directory_with_report PASSED [ 67%]
+tests/perf/test_perf_budget_gate_unit.py::test_load_evaluation_data_individual_jsons PASSED [ 71%]
+tests/perf/test_perf_budget_gate_unit.py::test_load_evaluation_data_missing_path PASSED [ 75%]
+tests/perf/test_perf_budget_gate_unit.py::test_generate_markdown_summary PASSED [ 78%]
+tests/perf/test_perf_budget_gate_unit.py::test_run_pytest_benchmark PASSED [ 82%]
+tests/perf/test_perf_budget_gate_unit.py::test_run_pytest_benchmark_failures PASSED [ 85%]
+tests/perf/test_perf_budget_gate_unit.py::test_run_clean_db_benchmark PASSED [ 89%]
+tests/perf/test_perf_budget_gate_unit.py::test_run_board_drag_benchmark PASSED [ 92%]
+tests/perf/test_perf_budget_gate_unit.py::test_run_all_benchmarks PASSED [ 96%]
+tests/perf/test_perf_budget_gate_unit.py::test_main_runtime_error_exits_1 PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                          Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------
+scripts/perf_budget_gate.py     212      2     64      4    98%   322, 459->452, 463->466, 536
+-------------------------------------------------------------------------
+TOTAL                           212      2     64      4    98%
+Required test coverage of 95% reached. Total coverage: 97.83%
+============================== 28 passed in 0.24s ==============================
+
+=== Live Gate Benchmark Run: scripts/perf_budget_gate.py ===
+[1/5] Running Sparkle FIM benchmark...
+[2/5] Running Sync Wasm Hooks benchmark...
+[3/5] Running 1,000 Clean-DB SAVEPOINT benchmark...
+[4/5] Running Board Drag Playwright benchmark...
+[5/5] Running Standalone Warm Boot benchmark...
+### Automated SLA Performance Budget Gate Report
+
+**Status:** `PASS` | **Timestamp:** `2026-11-15T20:42:36.104278+00:00`
+
+| Metric | SLA Ceiling | Observed | Samples | Status |
+| :--- | :---: | :---: | :---: | :---: |
+| Board Optimistic Drag Frame (p95) | < 12.0 ms | 0.00 ms | 20 | PASS |
+| Sparkle FIM Latency (p95) | < 150.0 ms | 4.27 ms | 200 | PASS |
+| Sync Wasm Workflow Hooks (p95) | < 25.0 ms | 1.47 ms | 200 | PASS |
+| 1,000 Clean-DB SAVEPOINT Tests | < 10.0 s | 5.29 s | 1000 | PASS |
+| Standalone Container Warm Boot (max) | < 3.0 s | 2.97 s | 3 | PASS |
+
+
+[PERF BUDGET GATE]: ALL 5 SLA BUDGETS SATISFIED (PASS)

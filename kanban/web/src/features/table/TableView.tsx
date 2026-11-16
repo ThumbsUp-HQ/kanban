@@ -7,6 +7,7 @@ import {
   parseTableColumns,
 } from './tableColumns';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { StateBadge } from '../../components/state/StateBadge';
 import type { IssueItem, SortDirection } from '../views/viewsApi';
 import '../views/listTable.css';
 
@@ -21,6 +22,7 @@ export interface TableViewProps {
   nextCursor?: string | null;
   onLoadMore?: () => void;
   isLoading?: boolean;
+  onOpenPeek?: (issueKey: string) => void;
 }
 
 export function TableView({
@@ -34,6 +36,7 @@ export function TableView({
   nextCursor,
   onLoadMore,
   isLoading = false,
+  onOpenPeek,
 }: TableViewProps): JSX.Element {
   // Load saved columns from localStorage
   const [columns, setColumns] = useState<TableColumnId[]>(() => {
@@ -247,6 +250,17 @@ export function TableView({
                   key={issue.id || issue.key}
                   data-issue-key={issue.key}
                   className={`table-row ${isSelected ? 'table-row--selected' : ''}`.trim()}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement | null;
+                    if (
+                      target?.closest(
+                        'button, input, select, textarea, a, [role="button"]',
+                      )
+                    ) {
+                      return;
+                    }
+                    onOpenPeek?.(issue.key);
+                  }}
                 >
                   <td className="sticky-col">
                     <div className="table-key-cell-content">
@@ -259,6 +273,12 @@ export function TableView({
                       <a
                         href={`?layout=table&peek=${encodeURIComponent(issue.key)}`}
                         className="mono table-key-link"
+                        onClick={(e) => {
+                          if (onOpenPeek) {
+                            e.preventDefault();
+                            onOpenPeek(issue.key);
+                          }
+                        }}
                       >
                         {issue.key}
                       </a>
@@ -274,7 +294,7 @@ export function TableView({
                       if (colId === 'state') {
                         return (
                           <td key={colId}>
-                            <span className="status-pill">{issue.state.name}</span>
+                            <StateBadge state={issue.state} className="status-pill" />
                           </td>
                         );
                       }

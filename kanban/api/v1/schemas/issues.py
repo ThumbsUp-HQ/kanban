@@ -9,18 +9,28 @@ from __future__ import annotations
 
 import uuid  # noqa: TC003  # Required at runtime by Pydantic field resolution
 from datetime import date, datetime  # noqa: TC003  # Required at runtime by Pydantic
+from typing import TYPE_CHECKING, cast
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    GetJsonSchemaHandler,
     SerializerFunctionWrapHandler,
     field_validator,
     model_serializer,
 )
 
+if TYPE_CHECKING:
+    from pydantic.json_schema import JsonSchemaValue
+    from pydantic_core import core_schema
+
 from kanban.api.v1.schemas.assignees import AssigneeResponse  # noqa: TC001
 from kanban.api.v1.schemas.issue_provenance import IssueProvenance  # noqa: TC001
+from kanban.issues.serializers import (  # noqa: TC001
+    LatestGateVerdictSummary,
+    PendingGateSummary,
+)
 from kanban.security.access_manifest import AccessManifest  # noqa: TC001  # Pydantic runtime type
 
 
@@ -29,8 +39,8 @@ class NormalParentSummary(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    key: str
-    summary: str
+    key: str = Field(description="Canonical project-qualified issue key (e.g. KAN-142)")
+    summary: str = Field(description="Issue summary title")
 
 
 class RestrictedParentSummary(BaseModel):
@@ -38,8 +48,11 @@ class RestrictedParentSummary(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    restricted: bool = True
-    label: str = "🔒 Restricted Parent Issue"
+    restricted: bool = Field(default=True, description="Always true for restricted parent issues")
+    label: str = Field(
+        default="🔒 Restricted Parent Issue",
+        description="Masked placeholder label for parent issue outside caller visibility",
+    )
 
 
 class StateSummary(BaseModel):
@@ -47,9 +60,11 @@ class StateSummary(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: uuid.UUID
-    name: str
-    group: str
+    id: uuid.UUID = Field(description="Workflow state UUID")
+    name: str = Field(description="Workflow state display name")
+    group: str = Field(
+        description="Workflow state group: backlog, unstarted, started, completed, or cancelled",
+    )
 
 
 class PrioritySummary(BaseModel):
@@ -57,9 +72,9 @@ class PrioritySummary(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    slug: str
-    label: str
-    emoji: str | None = None
+    slug: str = Field(description="Priority slug identifier (e.g. urgent, high, medium, low, none)")
+    label: str = Field(description="Human-readable priority display label")
+    emoji: str | None = Field(default=None, description="Optional single semantic priority emoji")
 
 
 class LabelSummary(BaseModel):
@@ -67,9 +82,9 @@ class LabelSummary(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: uuid.UUID
-    name: str
-    color_hex: str
+    id: uuid.UUID = Field(description="Label UUID")
+    name: str = Field(description="Label text name")
+    color_hex: str = Field(description="Hexadecimal color code (e.g. #FF5733)")
 
 
 class IssueCreate(BaseModel):
@@ -77,16 +92,29 @@ class IssueCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    summary: str
-    description_markdown: str = ""
-    priority: str | uuid.UUID | None = None
-    state_id: uuid.UUID | None = None
-    start_date: date | None = None
-    due_date: date | None = None
-    cycle_id: uuid.UUID | None = None
-    parent: str | uuid.UUID | None = None
-    label_ids: list[uuid.UUID] | None = None
-    module_ids: list[uuid.UUID] | None = None
+    summary: str = Field(description="Issue summary title")
+    description_markdown: str = Field(
+        default="", description="Issue description body in canonical Markdown"
+    )
+    priority: str | uuid.UUID | None = Field(
+        default=None, description="Priority slug or UUID identifier"
+    )
+    state: str | uuid.UUID | None = Field(
+        default=None, description="Workflow state name or UUID identifier"
+    )
+    state_id: uuid.UUID | None = Field(default=None, description="Workflow state UUID identifier")
+    start_date: date | None = Field(default=None, description="Scheduled start date (YYYY-MM-DD)")
+    due_date: date | None = Field(
+        default=None, description="Target completion due date (YYYY-MM-DD)"
+    )
+    cycle_id: uuid.UUID | None = Field(default=None, description="Optional sprint cycle UUID")
+    parent: str | uuid.UUID | None = Field(default=None, description="Parent issue key or UUID")
+    label_ids: list[uuid.UUID] | None = Field(
+        default=None, description="List of label UUIDs to attach"
+    )
+    module_ids: list[uuid.UUID] | None = Field(
+        default=None, description="List of module UUIDs to assign"
+    )
 
     @field_validator("label_ids", mode="after")
     @classmethod
@@ -120,16 +148,31 @@ class IssuePatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    summary: str | None = None
-    description_markdown: str | None = None
-    priority: str | uuid.UUID | None = None
-    state_id: uuid.UUID | None = None
-    start_date: date | None = None
-    due_date: date | None = None
-    cycle_id: uuid.UUID | None = None
-    parent: str | uuid.UUID | None = None
-    label_ids: list[uuid.UUID] | None = None
-    module_ids: list[uuid.UUID] | None = None
+    summary: str | None = Field(default=None, description="Updated issue summary title")
+    description_markdown: str | None = Field(
+        default=None, description="Updated issue description body in canonical Markdown"
+    )
+    priority: str | uuid.UUID | None = Field(
+        default=None, description="Updated priority slug or UUID identifier"
+    )
+    state: str | uuid.UUID | None = Field(
+        default=None, description="Updated workflow state name or UUID identifier"
+    )
+    state_id: uuid.UUID | None = Field(
+        default=None, description="Updated workflow state UUID identifier"
+    )
+    start_date: date | None = Field(default=None, description="Updated scheduled start date")
+    due_date: date | None = Field(default=None, description="Updated target completion due date")
+    cycle_id: uuid.UUID | None = Field(default=None, description="Updated sprint cycle UUID")
+    parent: str | uuid.UUID | None = Field(
+        default=None, description="Updated parent issue key or UUID"
+    )
+    label_ids: list[uuid.UUID] | None = Field(
+        default=None, description="Updated list of attached label UUIDs"
+    )
+    module_ids: list[uuid.UUID] | None = Field(
+        default=None, description="Updated list of assigned module UUIDs"
+    )
 
     @field_validator("label_ids", mode="after")
     @classmethod
@@ -163,8 +206,10 @@ class ArchiveEligibility(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    allowed: bool
-    reason: str | None = None
+    allowed: bool = Field(description="Whether the issue is currently eligible for archiving")
+    reason: str | None = Field(
+        default=None, description="Explanatory reason if archiving is prohibited"
+    )
 
 
 class IssueResponse(BaseModel):
@@ -172,28 +217,58 @@ class IssueResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: uuid.UUID
-    key: str
-    summary: str
-    description_markdown: str
-    description_sha256: str
-    state: StateSummary
-    priority: PrioritySummary
-    start_date: date | None = None
-    due_date: date | None = None
-    cycle_id: uuid.UUID | None = None
-    parent: NormalParentSummary | RestrictedParentSummary | None = None
-    labels: list[LabelSummary] = Field(default_factory=list)
-    module_ids: list[uuid.UUID] | None = Field(default=None)
-    assignees: list[AssigneeResponse] = Field(default_factory=list)
-    board_rank: str
-    created_by_id: uuid.UUID
-    provenance: IssueProvenance
-    access_manifest: AccessManifest
-    capabilities: list[str]
-    archived_at: datetime | None = None
-    archive_eligibility: ArchiveEligibility
-    note: str | None = None
+    id: uuid.UUID = Field(description="Unique issue UUID identifier")
+    key: str = Field(description="Canonical issue key (e.g. KAN-101)")
+    summary: str = Field(description="Issue summary title")
+    description_markdown: str = Field(description="Canonical UTF-8 Markdown description body")
+    description_sha256: str = Field(
+        description="Hex-encoded SHA-256 digest of description_markdown for ETag concurrency"
+    )
+    state: StateSummary = Field(description="Workflow state metadata")
+    priority: PrioritySummary = Field(description="Priority metadata")
+    start_date: date | None = Field(default=None, description="Scheduled start date (YYYY-MM-DD)")
+    due_date: date | None = Field(
+        default=None, description="Target completion due date (YYYY-MM-DD)"
+    )
+    cycle_id: uuid.UUID | None = Field(default=None, description="Sprint cycle UUID if assigned")
+    parent: NormalParentSummary | RestrictedParentSummary | None = Field(
+        default=None, description="Parent issue summary or masked restricted placeholder"
+    )
+    labels: list[LabelSummary] = Field(
+        default_factory=list, description="List of attached project labels"
+    )
+    module_ids: list[uuid.UUID] | None = Field(
+        default=None, description="List of assigned module UUIDs"
+    )
+    assignees: list[AssigneeResponse] = Field(
+        default_factory=list, description="List of principal or free-text assignees"
+    )
+    board_rank: str = Field(description="Fractional indexing board order rank")
+    created_by_id: uuid.UUID = Field(description="UUID of the principal who created this issue")
+    provenance: IssueProvenance = Field(
+        description="Creator provenance and administrative override tracking"
+    )
+    access_manifest: AccessManifest = Field(
+        description="Anti-enumeration access manifest metadata (S3.4)"
+    )
+    capabilities: list[str] = Field(
+        description="Effective capabilities held by the calling principal on this issue"
+    )
+    archived_at: datetime | None = Field(
+        default=None, description="Timestamp when the issue was archived, if archived"
+    )
+    archive_eligibility: ArchiveEligibility = Field(
+        description="Archiving eligibility status and reason"
+    )
+    note: str | None = Field(
+        default=None, description="Optional contextual note or transition reason"
+    )
+    pending_gate: PendingGateSummary | None = Field(
+        default=None, description="Active asynchronous agent gate hold metadata, if pending"
+    )
+    latest_gate_verdict: LatestGateVerdictSummary | None = Field(
+        default=None, description="Latest completed agent transition gate verdict, if any"
+    )
 
     @model_serializer(mode="wrap")
     def _strip_module_ids_if_none(
@@ -204,11 +279,27 @@ class IssueResponse(BaseModel):
             data.pop("module_ids", None)
         return data
 
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, cs: core_schema.CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Preserve full field schema in OpenAPI serialization mode despite wrap serializer."""
+        if cs.get("serialization"):
+            stripped_cs = dict(cs)
+            stripped_cs.pop("serialization", None)
+            cs = cast("core_schema.CoreSchema", stripped_cs)
+        schema = handler(cs)
+        if cls.__doc__ and "description" not in schema:
+            schema["description"] = cls.__doc__.strip()
+        return schema
+
 
 class IssueList(BaseModel):
     """Keyset-paginated issue listing."""
 
     model_config = ConfigDict(extra="forbid")
 
-    items: list[IssueResponse]
-    next_cursor: str | None = None
+    items: list[IssueResponse] = Field(description="List of issue responses matching query")
+    next_cursor: str | None = Field(
+        default=None, description="Opaque keyset cursor for fetching next page"
+    )
