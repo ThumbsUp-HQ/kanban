@@ -56,7 +56,7 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
     # workspace_settings, ai_provider_configs, ai_token_ledgers, oauth_device_codes,
     # destructive_confirmation_tokens, approved_wasm_modules)
     assert orm_tables == pg_tables
-    assert len(orm_tables) == 69
+    assert len(orm_tables) == 76
 
 
 async def _setup_test_project_spine(

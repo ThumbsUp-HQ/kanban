@@ -102,13 +102,39 @@ async def test_inner_app_headers_replaced_never_duplicated() -> None:
 
 
 @pytest.mark.asyncio
-async def test_standalone_cleartext_host_blocking(dummy_dist: Path) -> None:
-    """Test standalone mode allows loopbacks, blocks non-loopback IPs unless configured."""
+async def test_standalone_allows_cleartext_http_by_default(dummy_dist: Path) -> None:
+    """Test standalone mode allows cleartext HTTP on any host by default (availability first)."""
+    settings = Settings(
+        web_dist=dummy_dist,
+        deployment_mode="standalone",
+    )
+    assert settings.block_cleartext_http is False
+    app = create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        for host in (
+            "localhost:8080",
+            "192.168.1.101:8921",
+            "k.hackedyour.info",
+            "xn--kanban-2e54e.hackedyour.info:8080",
+        ):
+            resp = await client.get("/api/v1/health", headers={"Host": host})
+            assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_standalone_cleartext_host_blocking(
+    dummy_dist: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test standalone mode blocks non-loopback IPs when KB_BLOCK_CLEARTEXT_HTTP is set."""
+    monkeypatch.setenv("KB_BLOCK_CLEARTEXT_HTTP", "true")
     settings = Settings(
         web_dist=dummy_dist,
         deployment_mode="standalone",
         standalone_cleartext_hosts=frozenset({"localhost", "127.0.0.1", "[::1]"}),
     )
+    assert settings.block_cleartext_http is True
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
@@ -130,6 +156,7 @@ async def test_standalone_cleartext_host_blocking(dummy_dist: Path) -> None:
     custom_settings = Settings(
         web_dist=dummy_dist,
         deployment_mode="standalone",
+        block_cleartext_http=True,
         standalone_cleartext_hosts=frozenset({"localhost", "192.168.1.20"}),
     )
     app_custom = create_app(custom_settings)
@@ -148,8 +175,12 @@ async def test_standalone_cleartext_host_blocking(dummy_dist: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_standalone_missing_host_header(dummy_dist: Path) -> None:
-    """Test standalone mode returns 400 when Host header is missing."""
-    settings = Settings(web_dist=dummy_dist, deployment_mode="standalone")
+    """Test standalone mode returns 400 when Host header is missing and cleartext block is on."""
+    settings = Settings(
+        web_dist=dummy_dist,
+        deployment_mode="standalone",
+        block_cleartext_http=True,
+    )
     app = create_app(settings)
 
     # Use pure ASGI scope without host header in headers list
@@ -205,7 +236,11 @@ async def test_non_http_scope_passes_through(dummy_dist: Path) -> None:
 @pytest.mark.asyncio
 async def test_standalone_reverse_proxy_https_allowed(dummy_dist: Path) -> None:
     """Test standalone mode permits external host access when terminated via HTTPS reverse proxy."""
-    settings = Settings(web_dist=dummy_dist, deployment_mode="standalone")
+    settings = Settings(
+        web_dist=dummy_dist,
+        deployment_mode="standalone",
+        block_cleartext_http=True,
+    )
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
@@ -306,6 +341,7 @@ async def test_standalone_idn_punycode_host_matching(dummy_dist: Path) -> None:
     settings_puny = Settings(
         web_dist=dummy_dist,
         deployment_mode="standalone",
+        block_cleartext_http=True,
         standalone_cleartext_hosts=frozenset({"localhost", punycode_host}),
     )
     app_puny = create_app(settings_puny)
@@ -331,6 +367,7 @@ async def test_standalone_idn_punycode_host_matching(dummy_dist: Path) -> None:
     settings_uni = Settings(
         web_dist=dummy_dist,
         deployment_mode="standalone",
+        block_cleartext_http=True,
         standalone_cleartext_hosts=frozenset({"localhost", unicode_host}),
     )
     app_uni = create_app(settings_uni)

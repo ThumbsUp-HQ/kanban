@@ -129,22 +129,19 @@ def start_postgres(pgdata: Path, run_dir: str = DEFAULT_RUN_DIR) -> None:
         "-o",
         f"-c config_file={pgdata}/postgresql.conf",
     ]
-    pg_res = run_as_postgres(cmd, timeout=30.0, check=False)
-    if pg_res.returncode == 0:
-        log_phase("pg_start", f"PostgreSQL is ready on {run_dir}")
-        return
+    run_as_postgres(cmd, timeout=30.0)
 
-    # Fallback: Poll pg_isready until available or 10s deadline
+    # Poll pg_isready until available or 10s deadline
     deadline = time.monotonic() + 10.0
     isready_cmd = [BIN_PG_ISREADY, "-h", run_dir]
     ready = False
 
     while time.monotonic() < deadline:
-        res = subprocess.run(isready_cmd, capture_output=True, timeout=1.0, check=False)  # noqa: S603
+        res = run_as_postgres(isready_cmd, timeout=2.0, check=False)
         if res.returncode == 0:
             ready = True
             break
-        time.sleep(0.01)
+        time.sleep(0.05)
 
     if not ready:
         sys.stderr.write("PG_START_TIMEOUT: postgres failed to start within 10s\n")
@@ -345,7 +342,12 @@ def resolve_status_path() -> Path:
 
 
 _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
+    "KB_BLOCK_CLEARTEXT_HTTP",
+    "KANBAN_BLOCK_CLEARTEXT_HTTP",
+    "KB_ENFORCE_HTTPS",
+    "KANBAN_ENFORCE_HTTPS",
     "KB_STANDALONE_CLEARTEXT_HOSTS",
+    "KB_FORWARDED_ALLOW_IPS",
     "KB_PUBLIC_ORIGIN",
     "KANBAN_PUBLIC_ORIGIN",
     "KB_PUBLIC_BASE_URL",
@@ -382,7 +384,6 @@ def build_child_env(
         "DATABASE_URL": effective_url,
         "LANG": "C.UTF-8",
         "KB_STANDALONE_STATUS_PATH": str(resolve_status_path()),
-        "PYTHONDONTWRITEBYTECODE": "0",
     }
 
     for var_name in _PASSTHROUGH_ENV_VARS:
@@ -554,6 +555,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
         bootstrap_database(run_dir=run_dir, keyring=keyring)
         run_migrations(pgdata, alembic_ini, run_dir=run_dir)
         if current_digest:
+            mig_digest_file.parent.mkdir(parents=True, exist_ok=True)
             mig_digest_file.write_text(current_digest, encoding="utf-8")
 
         # Spawn Uvicorn as UID 65532

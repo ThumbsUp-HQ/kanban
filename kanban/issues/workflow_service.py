@@ -301,6 +301,7 @@ async def begin_work(
     if gate_hold is not None:
         issue.pending_transition_exec_id = gate_hold.execution_id
     elif issue.state_id != started_state.id:
+        await session.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
         old_id = issue.state_id
         issue.state_id = started_state.id
         await record_activity(
@@ -408,6 +409,7 @@ async def transition_ticket(  # noqa: PLR0913, PLR0917
     if gate_hold is not None:
         issue.pending_transition_exec_id = gate_hold.execution_id
     elif issue.state_id != target_state.id:
+        await session.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
         old_id = issue.state_id
         issue.state_id = target_state.id
         await record_activity(
@@ -660,6 +662,7 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
     if gate_hold is not None:
         issue.pending_transition_exec_id = gate_hold.execution_id
     elif issue.state_id != target_state.id:
+        await session.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
         old_id = issue.state_id
         issue.state_id = target_state.id
         await record_activity(

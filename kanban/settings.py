@@ -36,6 +36,16 @@ class Settings(BaseSettings):
         ),
     )
     web_dist: Path = Path("kanban/web/dist")
+    block_cleartext_http: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "KB_BLOCK_CLEARTEXT_HTTP",
+            "KANBAN_BLOCK_CLEARTEXT_HTTP",
+            "KB_ENFORCE_HTTPS",
+            "KANBAN_ENFORCE_HTTPS",
+            "block_cleartext_http",
+        ),
+    )
     standalone_cleartext_hosts: Annotated[frozenset[str], NoDecode] = frozenset(
         {"localhost", "127.0.0.1", "[::1]"}
     )
@@ -138,7 +148,11 @@ class Settings(BaseSettings):
         parsed = urlparse(url)
         if self.deployment_mode == "standalone":
             is_allowed = (parsed.scheme == "https") or (
-                parsed.scheme == "http" and parsed.hostname in self.standalone_cleartext_hosts
+                parsed.scheme == "http"
+                and (
+                    not self.block_cleartext_http
+                    or parsed.hostname in self.standalone_cleartext_hosts
+                )
             )
             if not is_allowed:
                 msg = (
@@ -169,7 +183,7 @@ class Settings(BaseSettings):
             if self.deployment_mode != "standalone":
                 msg = f"Insecure HTTP origin '{origin}' is forbidden outside standalone mode"
                 raise ValueError(msg)
-            if host not in self.standalone_cleartext_hosts:
+            if self.block_cleartext_http and host not in self.standalone_cleartext_hosts:
                 msg = f"HTTP origin host '{host}' is not in standalone_cleartext_hosts"
                 raise ValueError(msg)
         elif scheme != "https":

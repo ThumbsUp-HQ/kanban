@@ -847,8 +847,13 @@ async def test_case_8_agent_hook_default_dispatcher(
     make_project: Callable[..., Awaitable[uuid.UUID]],
     as_principal: Callable[..., httpx.AsyncClient],
     contract_recorder: ContractRecorder,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Case 8: Agent hook present with default dispatcher -> 409 AGENT_GATE_NOT_CONFIGURED."""
+    """Case 8: Agent hook present with fail-closed fallback dispatcher -> 409 AGENT_GATE_NOT_CONFIGURED."""
+    import kanban.workflows.async_gate as async_gate_mod
+    from kanban.workflows.engine import FailClosedAsyncGateDispatcher
+
+    monkeypatch.setattr(async_gate_mod, "AgentGateDispatcher", FailClosedAsyncGateDispatcher)
     admin = await make_user("t8_admin", workspace_role="WORKSPACE_ADMIN")
     proj_id = await make_project("T8P", created_by=admin, roles={admin: "PROJECT_ADMIN"})
     client = as_principal(admin)

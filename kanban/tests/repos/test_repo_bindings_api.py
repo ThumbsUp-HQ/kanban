@@ -262,18 +262,12 @@ async def test_delete_returns_409_when_in_use_by_hook(
     assert create_resp.status_code == 201
     binding_id = create_resp.json()["id"]
 
-    # Create dummy workflow_transition_hooks table if it doesn't exist
-    await api_env.seed.execute(
-        text(
-            "CREATE TABLE IF NOT EXISTS workflow_transition_hooks ("
-            "  id UUID PRIMARY KEY DEFAULT uuidv7(),"
-            "  project_id UUID NOT NULL,"
-            "  agent_definition_id UUID NOT NULL,"
-            "  is_enabled BOOLEAN NOT NULL DEFAULT TRUE"
-            ")"
+    state_row = (
+        await api_env.seed.execute(
+            text("SELECT id FROM workflow_states WHERE project_id = :pid LIMIT 1"),
+            {"pid": project_id},
         )
-    )
-    await api_env.seed.execute(text("GRANT ALL ON workflow_transition_hooks TO kanban_app"))
+    ).scalar_one()
     agent_id = uuid.uuid4()
     # Insert valid agent definition with repo_access_mode != 'none'
     await api_env.seed.execute(
@@ -290,10 +284,21 @@ async def test_delete_returns_409_when_in_use_by_hook(
     )
     await api_env.seed.execute(
         text(
-            "INSERT INTO workflow_transition_hooks (project_id, agent_definition_id, is_enabled) "
-            "VALUES (:pid, :aid, TRUE)"
+            "INSERT INTO workflow_transition_hooks ("
+            "  workspace_id, project_id, name, to_state_id, hook_kind, "
+            "  sort_rank, agent_definition_id, is_enabled, manifest_sha256"
+            ") VALUES ("
+            "  :ws, :pid, 'repo-hook', :stid, 'agent_interceptor', "
+            "  '10', :aid, TRUE, :msha"
+            ")"
         ),
-        {"pid": project_id, "aid": agent_id},
+        {
+            "ws": admin.workspace_id,
+            "pid": project_id,
+            "stid": state_row,
+            "aid": agent_id,
+            "msha": b"\x11" * 32,
+        },
     )
     await api_env.seed.commit()
 

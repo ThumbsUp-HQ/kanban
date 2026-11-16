@@ -48,7 +48,7 @@ _SEED_PATH = _REPO_ROOT / "examples" / "sparkle" / "seed_rls_demo.sql"
 @pytest.fixture(scope="session")
 def demo_db_url() -> str:
     """Ensure kanban_demo test database is created and seeded with seed_rls_demo.sql."""
-    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock-21")
+    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
 
     async def _setup() -> None:
         admin_conn = await asyncpg.connect(user="kanban_test", database="postgres", host=sock)
@@ -78,7 +78,7 @@ def demo_db_url() -> str:
 @pytest.fixture(scope="session")
 def superuser_db_url() -> str:
     """Provide database URL connecting as superuser kanban_test."""
-    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock-21")
+    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     return f"postgresql+asyncpg://kanban_test@/kanban_demo?host={sock}"
 
 

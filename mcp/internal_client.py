@@ -181,18 +181,21 @@ class KanbanApiClient:
         from mcp.context import get_current_mcp_context  # noqa: PLC0415
 
         ctx = get_current_mcp_context()
-        if ctx is not None and ctx.connection_scope is not None:
-            scope = ctx.connection_scope
-            if scope.workspace_slug or scope.workspace_id:
-                req_headers.setdefault(
-                    "X-KB-Scope-Workspace", str(scope.workspace_slug or scope.workspace_id)
-                )
-            if scope.project_key or scope.project_id:
-                req_headers.setdefault(
-                    "X-KB-Scope-Project", str(scope.project_key or scope.project_id)
-                )
-            if scope.is_global:
-                req_headers.setdefault("X-KB-Scope-Global", "true")
+        if ctx is not None:
+            if ctx.session_id and "X-KB-MCP-Session" not in req_headers:
+                req_headers["X-KB-MCP-Session"] = ctx.session_id
+            if ctx.connection_scope is not None:
+                scope = ctx.connection_scope
+                if scope.workspace_slug or scope.workspace_id:
+                    req_headers.setdefault(
+                        "X-KB-Scope-Workspace", str(scope.workspace_slug or scope.workspace_id)
+                    )
+                if scope.project_key or scope.project_id:
+                    req_headers.setdefault(
+                        "X-KB-Scope-Project", str(scope.project_key or scope.project_id)
+                    )
+                if scope.is_global:
+                    req_headers.setdefault("X-KB-Scope-Global", "true")
 
         try:
             req = self._client.build_request(

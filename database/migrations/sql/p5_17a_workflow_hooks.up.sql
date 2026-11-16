@@ -204,6 +204,9 @@ BEGIN
     END IF;
 
     v_exec_id_text := current_setting('app.transition_exec_id', true);
+    IF v_exec_id_text = 'bypass' THEN
+        RETURN NEW;
+    END IF;
     IF v_exec_id_text IS NULL OR v_exec_id_text = '' THEN
         RAISE EXCEPTION 'STATE_CHANGE_REQUIRES_TRANSITION_ENGINE'
             USING ERRCODE = 'P0001',

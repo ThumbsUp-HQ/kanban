@@ -182,16 +182,23 @@ class CsrfMiddleware(BaseHTTPMiddleware):
 
         origin = request.headers.get("origin")
         if origin:
-            public_origin = os.environ.get("KANBAN_PUBLIC_ORIGIN")
+            clean_origin = origin.strip().rstrip("/")
+            host = request.headers.get("host")
+            allowed_origins: set[str] = set()
+            public_origin = os.environ.get("KANBAN_PUBLIC_ORIGIN") or os.environ.get(
+                "KB_PUBLIC_ORIGIN"
+            )
             if public_origin:
-                if origin.strip().rstrip("/") != public_origin.strip().rstrip("/"):
+                allowed_origins.add(public_origin.strip().rstrip("/"))
+            if host:
+                clean_host = host.strip()
+                allowed_origins.add(f"{request.url.scheme}://{clean_host}")
+                allowed_origins.add(f"https://{clean_host}")
+                allowed_origins.add(f"http://{clean_host}")
+            if allowed_origins and clean_origin not in allowed_origins:
+                if public_origin:
                     return "Origin does not match configured public origin"
-            else:
-                host = request.headers.get("host")
-                if host:
-                    expected_origin = f"{request.url.scheme}://{host}"
-                    if origin.strip().rstrip("/") != expected_origin.strip().rstrip("/"):
-                        return "Origin does not match request host"
+                return "Origin does not match request host"
         return None
 
     async def _resolve_session_id(self, request: Request) -> uuid.UUID:

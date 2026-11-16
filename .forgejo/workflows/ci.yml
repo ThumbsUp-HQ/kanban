@@ -91,7 +91,7 @@ jobs:
         run: |
           mkdir -p reports
           scripts/ci/run_and_log.sh pytest -- \
-            uv run pytest -m "not container" \
+            uv run pytest -m "not container and not perf" \
               --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts \
               --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml \
               --cov-fail-under=95 --junitxml=reports/pytest.xml
@@ -379,7 +379,7 @@ jobs:
         shell: bash
         run: |
           scripts/ci/run_and_log.sh perf-budgets -- \
-            uv run python scripts/perf_budget_gate.py --report-out docs/qa/KANBA-151/perf-report.json
+            bash -c 'uv run pytest tests/perf/test_perf_sparkle_sla.py tests/perf/test_perf_sync_hooks_sla.py tests/perf/test_perf_budget_gate_unit.py -q && uv run python scripts/perf_budget_gate.py --evaluate-only docs/qa/KANBA-151 --report-out docs/qa/KANBA-151/perf-report.json'
 
       - name: Stop test database
         if: always()

@@ -37,7 +37,7 @@ Core web application, static asset server, and API service layer for the Kanban 
 ## Inbound Contracts
 - ASGI 3.0 protocol interface via Uvicorn.
 - HTTP/1.1, HTTP/2, WebSocket, and SSE connections from clients and reverse proxy (Caddy).
-- Standalone cleartext requests restricted to loopback hosts (`localhost`, `127.0.0.1`, `[::1]`) unless overridden via `KB_STANDALONE_CLEARTEXT_HOSTS`.
+- Standalone cleartext HTTP requests are permitted by default (`KB_BLOCK_CLEARTEXT_HTTP=false`) and restricted to loopback hosts (`localhost`, `127.0.0.1`, `[::1]`) or `KB_STANDALONE_CLEARTEXT_HOSTS` when `KB_BLOCK_CLEARTEXT_HTTP=true` is enabled.
 - Authenticated requests must resolve identity via server-side `PrincipalResolver`; client headers (`X-Principal-Id`, `X-Workspace-Id`) are strictly ignored.
 
 ## Outbound Contracts

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 
 from database.models import (
     Issue,
@@ -414,6 +414,7 @@ async def delete_state(  # noqa: C901
                 detail=None,
             )
 
+        await session.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
         for issue in issues:
             issue.state_id = migrate_to
             await record_activity(

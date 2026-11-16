@@ -305,6 +305,7 @@ async def test_case_4_rollover_on_complete(
         issue_ids.append(resp.json()["id"])
 
     # Mark issues 4 and 5 as Done
+    await api_env.seed.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
     await api_env.seed.execute(
         text("UPDATE issues SET state_id = :st WHERE id IN (:id4, :id5)"),
         {"st": done_state.id, "id4": issue_ids[3], "id5": issue_ids[4]},

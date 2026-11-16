@@ -267,9 +267,8 @@ async def _enrich_user_principal(
     role = _highest_role(user_roles)
 
     ui_stmt = text(
-        "SELECT apc.provider_kind, apc.slug FROM user_identities ui "
-        "JOIN auth_provider_cards apc ON ui.auth_card_id = apc.id "
-        "WHERE ui.principal_id = :p_id LIMIT 1"
+        "SELECT provider_kind, card_slug AS slug "
+        "FROM kb_auth.identity_list_for_principal(:p_id) LIMIT 1"
     )
     ui_row = (await session.execute(ui_stmt, {"p_id": p.id})).mappings().first()
     provider = (

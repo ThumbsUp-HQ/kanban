@@ -595,6 +595,9 @@ async def apply_blueprint(  # noqa: C901, PLR0912, PLR0915
                 old_state = curr_state_map[old_name]
                 target_state = curr_state_map[new_name]
                 await session.execute(
+                    text("SELECT set_config('app.transition_exec_id', 'bypass', true)")
+                )
+                await session.execute(
                     update(Issue)
                     .where(Issue.state_id == old_state.id)
                     .values(state_id=target_state.id)

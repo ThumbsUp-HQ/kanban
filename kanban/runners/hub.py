@@ -139,7 +139,8 @@ class JobResultFrame(BaseModel):
 
     type: Literal["job.result"] = "job.result"
     job_id: str
-    status: Literal["ok", "error"]
+    status: Literal["ok", "error"] | None = None
+    exit_code: int | None = None
     stdout_b64: str | None = None
     error_code: str | None = None
 
@@ -411,11 +412,11 @@ class RunnerWssHub:
             self._job_to_runner.pop(job_id, None)
 
         status = result.get("status")
-        if status == "ok":
+        exit_code = result.get("exit_code")
+        if status == "ok" or (status is None and exit_code == 0):
             stdout_b64 = result.get("stdout_b64") or ""
             return base64.b64decode(stdout_b64.encode("ascii"))
         error_code = result.get("error_code") or "REMOTE_RUNNER_ERROR"
-        exit_code = result.get("exit_code")
         stdout_b64 = result.get("stdout_b64")
         stdout_bytes = base64.b64decode(stdout_b64.encode("ascii")) if stdout_b64 else None
         raise RemoteRunnerExecutionError(

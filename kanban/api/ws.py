@@ -77,8 +77,22 @@ class PongFrame(BaseModel):
     op: Literal["pong"]
 
 
-def is_origin_allowed(origin: str | None, settings: Settings) -> bool:
-    """Validate Origin header against PUBLIC_BASE_URL and standalone cleartext hosts."""
+def _extract_ws_host(raw_host: str | None) -> str:
+    """Normalize a Host header to lowercase hostname without port."""
+    if not raw_host:
+        return ""
+    clean = raw_host.strip().lower()
+    if not clean.startswith("[") and ":" in clean:
+        return clean.rsplit(":", 1)[0]
+    return clean
+
+
+def is_origin_allowed(
+    origin: str | None,
+    settings: Settings,
+    request_host: str | None = None,
+) -> bool:
+    """Validate Origin header against PUBLIC_BASE_URL, request Host, and cleartext hosts."""
     if not origin:
         return True
 
@@ -88,20 +102,28 @@ def is_origin_allowed(origin: str | None, settings: Settings) -> bool:
     except (ValueError, TypeError, AttributeError):
         return False
 
+    origin_scheme = parsed_origin.scheme.lower()
     origin_host = (parsed_origin.hostname or "").lower()
-    if not origin_host:
+    if origin_scheme not in ("http", "https") or not origin_host:
         return False
 
     if origin_host in settings.standalone_cleartext_hosts or origin_host == "testserver":
         return True
 
-    base_host = (parsed_base.hostname or "").lower()
-    if origin_host != base_host:
-        return False
+    req_host = _extract_ws_host(request_host)
+    if (
+        req_host
+        and settings.deployment_mode == "standalone"
+        and origin_host == req_host
+        and (not settings.block_cleartext_http or origin_scheme == "https")
+    ):
+        return True
 
-    return (
-        settings.deployment_mode != "production"
-        or parsed_origin.scheme.lower() == parsed_base.scheme.lower()
+    target_url = settings.public_origin or settings.public_base_url
+    parsed_target = urlsplit(target_url) if settings.public_origin else parsed_base
+    base_host = (parsed_target.hostname or "").lower()
+    return origin_host == base_host and (
+        settings.deployment_mode != "production" or origin_scheme == parsed_target.scheme.lower()
     )
 
 
@@ -150,7 +172,7 @@ async def handle_ws_connection(websocket: WebSocket) -> None:  # noqa: C901, PLR
 
     # 1. Enforce strict Origin allowlist before accept
     origin = websocket.headers.get("origin")
-    if not is_origin_allowed(origin, settings):
+    if not is_origin_allowed(origin, settings, request_host=websocket.headers.get("host")):
         await websocket.close(code=WS_CLOSE_ORIGIN_MISMATCH, reason="ORIGIN_MISMATCH")
         return
 

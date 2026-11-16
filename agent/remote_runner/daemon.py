@@ -87,6 +87,7 @@ class RunnerDaemon:
         self._active_jobs: set[str] = set()
         self._semaphore = asyncio.Semaphore(config.max_concurrency)
         self._ws: Any = None
+        self._close_task: asyncio.Task[Any] | None = None
         self._reconnect_attempts = 0
 
     def build_ssl_context(self) -> ssl.SSLContext:
@@ -117,6 +118,11 @@ class RunnerDaemon:
         for task in list(self._running_tasks.values()):
             if not task.done():
                 task.cancel()
+        ws = self._ws
+        if ws is not None:
+            with contextlib.suppress(RuntimeError):
+                loop = asyncio.get_running_loop()
+                self._close_task = loop.create_task(ws.close())
 
     async def run_forever(self) -> None:
         """Run outbound daemon loop with auto-reconnect until stopped or revoked."""

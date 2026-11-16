@@ -216,11 +216,8 @@ async def test_case_4_mcp_surface_binding_rejection(admin_env: AdminTestEnv) -> 
 
 @pytest.mark.asyncio
 async def test_case_8_fault_action_not_available(admin_env: AdminTestEnv) -> None:
-    """Test Case 8: Reserved actions return ACTION_NOT_AVAILABLE.
-
-    mint_runner_enrollment_token, upsert/list_agent_definitions return ACTION_NOT_AVAILABLE.
-    """
-    # 1. mint_runner_enrollment_token
+    """Test Case 8: Runner and agent definition actions validate required parameters."""
+    # 1. mint_runner_enrollment_token without pool_slug -> VALIDATION_FAILED
     res_mint = await _call_manage_ai_and_agent_runners(
         admin_env,
         {"action": "mint_runner_enrollment_token"},
@@ -228,26 +225,25 @@ async def test_case_8_fault_action_not_available(admin_env: AdminTestEnv) -> Non
     )
     text_mint = res_mint["result"]["content"][0]["text"]
     parsed_mint = yaml.safe_load(text_mint)
-    assert parsed_mint["error"] == "ACTION_NOT_AVAILABLE"
-    assert "reserved" in parsed_mint["message"].lower()
+    assert parsed_mint["error"]["code"] == "VALIDATION_FAILED"
 
-    # 2. upsert_agent_definition
+    # 2. upsert_agent_definition without slug -> VALIDATION_FAILED
     res_up_agt = await _call_manage_ai_and_agent_runners(
         admin_env,
         {"action": "upsert_agent_definition"},
         subject_token=admin_env.token_server_admin_full,
     )
     payload_up_agt = yaml.safe_load(res_up_agt["result"]["content"][0]["text"])
-    assert payload_up_agt["error"] == "ACTION_NOT_AVAILABLE"
+    assert payload_up_agt["error"]["code"] == "VALIDATION_FAILED"
 
-    # 3. list_agent_definitions
+    # 3. list_agent_definitions returns agent_definitions list
     res_list_agt = await _call_manage_ai_and_agent_runners(
         admin_env,
         {"action": "list_agent_definitions"},
         subject_token=admin_env.token_server_admin_full,
     )
     payload_list_agt = yaml.safe_load(res_list_agt["result"]["content"][0]["text"])
-    assert payload_list_agt["error"] == "ACTION_NOT_AVAILABLE"
+    assert isinstance(payload_list_agt, list)
 
 
 @pytest.mark.asyncio

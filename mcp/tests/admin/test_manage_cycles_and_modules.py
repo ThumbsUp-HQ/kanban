@@ -561,12 +561,12 @@ async def test_manage_views_lifecycle(admin_env: AdminTestEnv) -> None:
 
 
 def test_contract_no_bind_or_delete_actions() -> None:
-    """Invariant: tool must NOT expose bind_project_repo or any delete action."""
+    """Invariant: tool exposes repo binding actions and zero delete actions."""
     action_enum = MANAGE_CYCLES_AND_MODULES_SCHEMA["properties"]["action"]["enum"]
-    assert "bind_project_repo" not in action_enum
+    assert "bind_project_repo" in action_enum
     for action in action_enum:
         assert "delete" not in action.lower(), f"Unexpected delete action found: {action}"
-    assert len(action_enum) == 13
+    assert len(action_enum) == 17
 
 
 @pytest.mark.asyncio

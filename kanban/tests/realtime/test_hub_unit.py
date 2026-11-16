@@ -610,6 +610,25 @@ def test_ws_origin_allowed_unit() -> None:
     # 7. TypeError on non-string origin (hits urlsplit exception)
     assert is_origin_allowed(12345, settings) is False  # type: ignore[arg-type]
 
+    # 8. Standalone same-host origin allowed when block_cleartext_http is False
+    standalone_settings = Settings(deployment_mode="standalone")
+    assert (
+        is_origin_allowed(
+            "https://k.hackedyour.info",
+            standalone_settings,
+            request_host="k.hackedyour.info:443",
+        )
+        is True
+    )
+    assert (
+        is_origin_allowed(
+            "http://192.168.1.101:8921",
+            standalone_settings,
+            request_host="192.168.1.101:8921",
+        )
+        is True
+    )
+
 
 @pytest.mark.asyncio
 async def test_session_resolution_edge_cases(

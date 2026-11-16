@@ -8,7 +8,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DOCKERFILE_PATH = REPO_ROOT / "Dockerfile"
 DOCKERIGNORE_PATH = REPO_ROOT / ".dockerignore"
 
-REQUIRED_STAGES = ["web-builder", "py-builder", "runtime-slim", "standalone"]
+REQUIRED_STAGES = ["web-builder", "py-builder", "runtime-slim", "agent-runner", "standalone"]
 REQUIRED_DOCKERIGNORE_ENTRIES = [
     ".git",
     ".venv",
@@ -110,7 +110,9 @@ def test_dockerfile_stages_and_sha256_pinning() -> None:
     )
 
     stages = parse_dockerfile_stages(content)
-    assert len(stages) == 4, f"Expected exactly 4 stages, found {len(stages)}"
+    assert len(stages) == len(REQUIRED_STAGES), (
+        f"Expected exactly {len(REQUIRED_STAGES)} stages, found {len(stages)}"
+    )
 
     stage_names = [s["name"] for s in stages]
     assert stage_names == REQUIRED_STAGES, (

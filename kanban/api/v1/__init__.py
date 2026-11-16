@@ -28,6 +28,7 @@ from kanban.api.v1.auth_cards_public import router as auth_cards_public_router
 from kanban.api.v1.auth_identities import router as auth_identities_router
 from kanban.api.v1.auth_ldap import auth_ldap_router
 from kanban.api.v1.auth_local import router as auth_local_router
+from kanban.api.v1.auth_mcp_keys import router as auth_mcp_keys_router
 from kanban.api.v1.auth_mfa import router as auth_mfa_router
 from kanban.api.v1.auth_oidc import router as auth_oidc_router
 from kanban.api.v1.auth_session import router as auth_session_router
@@ -60,6 +61,13 @@ from kanban.api.v1.oauth import oauth_v1_router
 from kanban.api.v1.objects_access import router as objects_access_router
 from kanban.api.v1.project_config import router as project_config_router
 from kanban.api.v1.projects import router as projects_router
+from kanban.api.v1.remote_runners import (
+    admin_router as admin_remote_runners_router,
+)
+from kanban.api.v1.remote_runners import (
+    router as remote_runners_router,
+)
+from kanban.api.v1.repo_bindings import router as repo_bindings_router
 from kanban.api.v1.resolve import router as resolve_router
 from kanban.api.v1.search import router as search_router
 from kanban.api.v1.stickies import router as stickies_router
@@ -100,6 +108,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(auth_session_router)
     v1.include_router(auth_identities_router)
     v1.include_router(auth_local_router)
+    v1.include_router(auth_mcp_keys_router)
     v1.include_router(auth_oidc_router)
     v1.include_router(auth_mfa_router)
     v1.include_router(auth_ldap_router)
@@ -134,6 +143,9 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(notifications_router)
     v1.include_router(search_router)
     v1.include_router(custom_field_approvals_router)
+    v1.include_router(repo_bindings_router)
+    v1.include_router(remote_runners_router)
+    v1.include_router(admin_remote_runners_router)
     v1.include_router(workspaces_router)
     v1.include_router(system_router)
     v1.include_router(admin_standalone_router)

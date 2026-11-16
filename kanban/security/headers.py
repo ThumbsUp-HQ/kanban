@@ -132,8 +132,8 @@ class SecurityHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Check standalone cleartext block
-        if self.settings.deployment_mode == "standalone":
+        # Check standalone cleartext block only when explicitly enabled via KB_BLOCK_CLEARTEXT_HTTP
+        if self.settings.deployment_mode == "standalone" and self.settings.block_cleartext_http:
             headers = Headers(scope=scope)
             if not _is_https_request(scope, headers):
                 host_header = headers.get("host")
