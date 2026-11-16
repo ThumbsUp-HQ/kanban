@@ -16,7 +16,7 @@ A kanban is just a kanban until you start digging deeper. On the surface, every 
 ## 1. Security, Identity, Audit & Deployment
 
 | Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | Permissive FOSS License | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
 | On-Prem Multi-Container | ✅ | ❌ | ✅ | 💰 | ❌ | ❌ | 💰 |
 | Single-Container Run | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
@@ -33,7 +33,7 @@ Vibe Kanban is permissive `Apache-2.0` (`✅`) as a single-user local CLI, where
 ## 2. Agentic Tasks, MCP, AI & Workflow Gates
 
 | Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | MCP Server | ✅ | 🆓🔌 | 🆓🔌 | 🆓🔌 | ✅ | ❌ | ❌ |
 | Low-Token Scoped MCP | ✅ | ❌ | ❌ | ❌ | 🔐 | ❌ | ❌ |
 | 2-Stage MCP Delete Gate | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -50,7 +50,7 @@ Jira, Plane, and GitHub ship MCP through separate external connectors or package
 ## 3. Issue Tracker & Kanban Board
 
 | Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | Free Forever Tier | ✅ | 🔐 | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Core Kanban & Issues | ✅ | 🔐 | ✅ | ✅ | 🔐 | ✅ | ✅ |
 | Five Native Views | ✅ | 🔐 | 🔐 | 🔐 | ❌ | ✅ | ✅ |
@@ -71,7 +71,7 @@ Jira caps free boards at 10 users and gates cross-project Gantt plans, deep hier
 ## 4. Docs, Stickies, Markdown & Object Graph
 
 | Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | Project Docs / Wiki | ✅ | 💸 | 🔐 | 🔐 | ❌ | ❌ | ✅ |
 | Project Stickies | ✅ | 💸 | ✅ | ❌ | ❌ | ✅ | ❌ |
 | Smart Sticky -> Doc Promo | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
