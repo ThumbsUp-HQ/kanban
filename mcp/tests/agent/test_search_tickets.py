@@ -383,4 +383,6 @@ async def test_tools_list_agent_surface(agent_test_env: AgentTestEnv) -> None:
         "begin_work",
         "transition_ticket",
         "complete_work",
+        "add_comment",
+        "link_objects",
     ]

@@ -922,6 +922,7 @@ async def test_full_branch_coverage_and_404_preconditions(  # noqa: PLR0915
         )
     ).scalar_one()
 
+    await api_env.seed.execute(text("SET LOCAL session_replication_role = 'replica'"))
     await api_env.seed.execute(
         text("UPDATE projects SET issue_seq_counter = 2000 WHERE id = :p"),
         {"p": proj_uuid},
@@ -941,9 +942,9 @@ async def test_full_branch_coverage_and_404_preconditions(  # noqa: PLR0915
         text(
             "INSERT INTO issues "
             "(id, workspace_id, project_id, sequence_id, summary, state_id, "
-            "priority_id, created_by_id, original_created_by_id, board_rank) "
+            "priority_id, created_by_id, original_created_by_id, board_rank, ancestry_path) "
             "SELECT o.id, :ws, :p, (1000 + i), 'Bulk ' || i, :st, :pr, "
-            ":creator, :creator, '0|hzzzzz:' "
+            ":creator, :creator, '0|hzzzzz:', 'top'::ltree "
             "FROM generate_series(1, 501) AS i "
             "JOIN objects o ON o.canonical_key = :pref || '-' || (1000 + i) "
             "AND o.project_id = :p"
@@ -956,6 +957,11 @@ async def test_full_branch_coverage_and_404_preconditions(  # noqa: PLR0915
             "pr": uuid.UUID(pr_overflow["id"]),
             "creator": admin.id,
         },
+    )
+    await api_env.seed.execute(text("SET LOCAL session_replication_role = 'origin'"))
+    await api_env.seed.execute(
+        text("SELECT rebuild_effective_access_for_workspace(:ws)"),
+        {"ws": ws_id},
     )
     await api_env.seed.commit()
 

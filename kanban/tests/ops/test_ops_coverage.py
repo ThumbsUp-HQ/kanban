@@ -549,7 +549,7 @@ def test_cli_main_subcommand_dispatch(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_inspect_db_metadata_no_alembic() -> None:
     """Test _inspect_db_metadata against a database without alembic_version table."""
-    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock-21")
+    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     admin_url = f"postgresql+asyncpg://kanban_test@/postgres?host={sock}"
     pg_ver, rev = await _inspect_db_metadata(admin_url)
     assert "PostgreSQL" in pg_ver

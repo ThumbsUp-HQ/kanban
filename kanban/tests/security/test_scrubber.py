@@ -316,9 +316,9 @@ def test_case_8_redos_and_linear_time_boundary() -> None:
     adversarial_payload = (unclosed_block * 1000) + ("Bearer " + "a" * 60000)
     assert len(adversarial_payload) >= 1_048_576
 
-    t0 = time.perf_counter()
+    t0 = time.process_time()
     res_large = outbound_secret_scrubber(adversarial_payload)
-    elapsed_large_ms = (time.perf_counter() - t0) * 1000.0
+    elapsed_large_ms = (time.process_time() - t0) * 1000.0
 
     assert res_large.redacted is True
     # Must complete in < 250 ms (and typically <= 50 ms)

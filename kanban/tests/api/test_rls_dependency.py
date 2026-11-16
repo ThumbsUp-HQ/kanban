@@ -183,13 +183,14 @@ async def test_case_2_positive_rls_session_context_binding(
 @pytest.mark.asyncio
 async def test_case_4_security_context_leak_and_pool_isolation(
     request: pytest.FixtureRequest,
+    pg_worker_db: AsyncEngine,
 ) -> None:
     """Test Case 4: Sequential requests with different principals on pooled connection.
 
     Second request sees only its own principal; pool connection has app.principal_id cleared.
     """
     worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
-    db_name = f"kanban_test_{worker_id}"
+    db_name = pg_worker_db.url.database or f"kanban_test_{worker_id}"
     socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     user = os.environ.get("KB_TEST_PGUSER", "kanban_test")
     dsn = build_dsn(database=db_name, host=socket_dir, user=user)

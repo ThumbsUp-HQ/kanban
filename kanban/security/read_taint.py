@@ -97,7 +97,7 @@ class TaintRecorder:
 
     async def record_project_ids(self, project_refs: Iterable[uuid.UUID | str]) -> None:
         """Record read-taint for all distinct project IDs returned in a response."""
-        if not self.session_id:
+        if not self.session_id or self.caller.read_only:
             return
 
         session_key = hashlib.sha256(self.session_id.encode("utf-8")).digest()

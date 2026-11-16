@@ -65,7 +65,7 @@ def _verify_password_with_pepper(hash_str: str, password: str, pepper: bytes) ->
 
 async def _create_test_db(db_name: str, *, from_template: bool) -> str:
     """Create test database on local socket, optionally cloned from kanban_template."""
-    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock-21")
+    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     admin_dsn = build_dsn("template1", host=sock)
     engine = create_async_engine(admin_dsn, isolation_level="AUTOCOMMIT")
     async with engine.connect() as conn:
@@ -80,7 +80,7 @@ async def _create_test_db(db_name: str, *, from_template: bool) -> str:
 
 async def _drop_test_db(db_name: str) -> None:
     """Drop test database."""
-    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock-21")
+    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     admin_dsn = build_dsn("template1", host=sock)
     engine = create_async_engine(admin_dsn, isolation_level="AUTOCOMMIT")
     async with engine.connect() as conn:
@@ -558,7 +558,7 @@ async def test_restore_non_empty_database_safety(
     await _seed_source_database(src_url)
 
     # Initialize dst_database with tables
-    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock-21")
+    sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     admin_dsn = build_dsn("template1", host=sock)
     engine = create_async_engine(admin_dsn, isolation_level="AUTOCOMMIT")
     async with engine.connect() as conn:

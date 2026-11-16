@@ -404,7 +404,7 @@ class TransitionEngine:
                 duration_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
                 err_code = (
                     "SYNC_HOOK_BUDGET_EXCEEDED"
-                    if ex.code == "SCRIPT_TIMEOUT"
+                    if ex.code in ("SCRIPT_TIMEOUT", "SCRIPT_FUEL_EXHAUSTED")
                     else "SYNC_HOOK_OUTPUT_INVALID"
                 )
                 await self._handle_hook_failure(

@@ -347,7 +347,7 @@ async def handle_validate_sparkle(  # noqa: C901, PLR0911, PLR0912, PLR0915
     )
     if not db_url:
         # Default test socket connection if host socket exists
-        test_sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock-21")  # noqa: S108
+        test_sock = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")  # noqa: S108
         db_url = f"postgresql+asyncpg://kanban_app@/kanban_demo?host={test_sock}"
 
     try:

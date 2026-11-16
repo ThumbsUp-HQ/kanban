@@ -72,10 +72,12 @@ jobs:
       - name: Install system dependencies
         shell: bash
         run: |
-          if command -v sudo >/dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends postgresql-client
-          elif command -v apt-get >/dev/null 2>&1; then
-            apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-client
+          if ! command -v pg_dump >/dev/null 2>&1; then
+            if command -v sudo >/dev/null 2>&1; then
+              sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends postgresql-client
+            elif command -v apt-get >/dev/null 2>&1; then
+              apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-client
+            fi
           fi
 
       - name: Sync Python dependencies
@@ -91,7 +93,9 @@ jobs:
         run: |
           mkdir -p reports
           scripts/ci/run_and_log.sh pytest -- \
-            uv run pytest -m "not container and not perf" \
+            uv run pytest \
+              --ignore=tests/perf \
+              --ignore=tests/deploy/test_standalone_container.py \
               --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts \
               --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml \
               --cov-fail-under=95 --junitxml=reports/pytest.xml
@@ -148,10 +152,12 @@ jobs:
       - name: Install system dependencies
         shell: bash
         run: |
-          if command -v sudo >/dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends postgresql-client
-          elif command -v apt-get >/dev/null 2>&1; then
-            apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-client
+          if ! command -v pg_dump >/dev/null 2>&1; then
+            if command -v sudo >/dev/null 2>&1; then
+              sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends postgresql-client
+            elif command -v apt-get >/dev/null 2>&1; then
+              apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-client
+            fi
           fi
 
       - name: Sync Python dependencies
@@ -379,7 +385,7 @@ jobs:
         shell: bash
         run: |
           scripts/ci/run_and_log.sh perf-budgets -- \
-            bash -c 'uv run pytest tests/perf/test_perf_sparkle_sla.py tests/perf/test_perf_sync_hooks_sla.py tests/perf/test_perf_budget_gate_unit.py -q && uv run python scripts/perf_budget_gate.py --evaluate-only docs/qa/KANBA-151 --report-out docs/qa/KANBA-151/perf-report.json'
+            bash -c 'uv run pytest tests/perf/test_perf_sparkle_sla.py tests/perf/test_perf_sync_hooks_sla.py tests/perf/test_perf_budget_gate_unit.py tests/perf/test_perf_clean_db_1000.py -q && uv run python scripts/perf_budget_gate.py --evaluate-only docs/qa/KANBA-151 --report-out docs/qa/KANBA-151/perf-report.json'
 
       - name: Stop test database
         if: always()
