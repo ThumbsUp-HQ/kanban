@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Cached CI base image containing Python 3.12, uv, Node 22, pnpm, postgresql-client,
+# Cached CI base image containing Python 3.12, uv, Node 22, pnpm, postgresql-client-16,
 # pre-populated Python virtualenv (/opt/ci-venv) + wheel cache (/opt/ci-cache/uv),
 # and pre-fetched pnpm store (/opt/ci-cache/pnpm-store).
 
@@ -17,9 +17,13 @@ RUN ln -sf /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/
         ca-certificates \
         curl \
         git \
+        gnupg \
         make \
-        postgresql-client \
         procps && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/apt.postgresql.org.gpg && \
+    echo "deb [signed-by=/etc/apt/trusted.gpg.d/apt.postgresql.org.gpg] http://apt.postgresql.org/pub/repos/apt/ bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends postgresql-client-16 && \
     rm -rf /var/lib/apt/lists/*
 
 ENV UV_CACHE_DIR=/opt/ci-cache/uv \

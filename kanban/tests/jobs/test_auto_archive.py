@@ -104,7 +104,7 @@ async def test_case_4_job_boundary(  # noqa: PLR0915
     done_null_state_id = done_null_row[0]
 
     client = as_principal(admin)
-    ref_now = datetime(2026, 11, 15, 12, 0, 0, tzinfo=UTC)
+    ref_now = datetime.now(UTC).replace(microsecond=0)
     t_exact_7d = ref_now - timedelta(days=7)
     t_6d23h = ref_now - timedelta(days=6, hours=23)
 
@@ -267,7 +267,7 @@ async def test_case_4_job_boundary(  # noqa: PLR0915
     # Naive now and now=None parameter handling
     r_naive = await run_auto_archive(
         api_env.seed,
-        now=datetime(2026, 11, 15, 12, 0, 0),  # noqa: DTZ001
+        now=ref_now.replace(tzinfo=None),
     )
     assert r_naive.issues_archived == 0
     r_none = await run_auto_archive(api_env.seed, now=None)

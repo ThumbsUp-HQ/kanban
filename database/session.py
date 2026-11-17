@@ -126,6 +126,9 @@ class RLSAsyncSession(AsyncSession):
 
 def _do_orm_execute(orm_execute_state: ORMExecuteState) -> None:
     session = orm_execute_state.session
+    if session.info.get("rls_managed_session", False):
+        session.info["rls_bound"] = True
+        return
     if not session.info.get("rls_bound", False) and not session.info.get(
         "_binding_in_progress", False
     ):
@@ -217,6 +220,7 @@ class RLSSessionFactory:
     async def session(self, ctx: RLSContext) -> AsyncIterator[RLSAsyncSession]:
         """Async context manager yielding an RLS-bound session inside a transaction."""
         sess = self._sessionmaker()
+        sess.info["rls_managed_session"] = True
 
         def _rebind_on_begin(sync_sess: Session, _trans: SessionTransaction, _conn: object) -> None:
             sync_sess.info["rls_bound"] = True
@@ -237,6 +241,7 @@ class RLSSessionFactory:
                     await sess.commit()
         finally:
             event.remove(sess.sync_session, "after_begin", _rebind_on_begin)
+            sess.info.pop("rls_managed_session", None)
             sess.info.pop("rls_bound", None)
             sess.info.pop("rls_context", None)
             await sess.close()
