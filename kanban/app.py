@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import importlib
 import logging
-import os
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
@@ -42,6 +41,7 @@ from kanban.auth.sessions.service import SessionService
 from kanban.auth.setup import mint_setup_token_if_uninitialized
 from kanban.jobs import JobScheduler
 from kanban.jobs import registry as jobs_registry
+from kanban.logging import configure_logging
 from kanban.sandbox.nsjail_runner import TierBNsjailRunner
 from kanban.security.envelope import StaticKekProvider
 from kanban.security.headers import SecurityHeadersMiddleware
@@ -191,28 +191,12 @@ def _mount_mcp_surfaces(app: FastAPI, mcp_settings: McpSettings | None = None) -
     app.mount("/mcp", proxy)
 
 
-def _configure_application_logging() -> None:
-    """Configure application loggers (kanban, mcp, database, agent) to emit INFO+ logs."""
-    log_level_name = os.environ.get("KB_LOG_LEVEL", "INFO").upper()
-    log_level = getattr(logging, log_level_name, logging.INFO)
-    root_logger = logging.getLogger()
-    if not root_logger.handlers:
-        logging.basicConfig(
-            level=log_level,
-            format="%(levelname)s:     [%(name)s] %(message)s",
-        )
-    for pkg_name in ("kanban", "mcp", "database", "agent"):
-        pkg_logger = logging.getLogger(pkg_name)
-        if pkg_logger.level == logging.NOTSET or pkg_logger.level > log_level:
-            pkg_logger.setLevel(log_level)
-
-
 def create_app(
     settings: Settings | None = None,
     mcp_settings: McpSettings | None = None,
 ) -> FastAPI:
     """Create and configure the canonical Kanban ASGI FastAPI application."""
-    _configure_application_logging()
+    configure_logging()
     if settings is None:
         settings = Settings()
 

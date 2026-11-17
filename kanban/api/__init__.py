@@ -1,5 +1,7 @@
 """Kanban API package: routing, problems, request context, and security dependencies."""
 
+from typing import Any
+
 from kanban.api.deps import (
     DenyAllResolver,
     PrincipalContext,
@@ -20,7 +22,6 @@ from kanban.api.problems import (
 )
 from kanban.api.request_id import RequestIdFilter, RequestIdMiddleware, get_request_id
 from kanban.api.timing import TimingFloor, load_or_404, timing_floor
-from kanban.api.v1 import build_v1_router
 
 __all__ = [
     "PROBLEM_MEDIA_TYPE",
@@ -45,3 +46,12 @@ __all__ = [
     "unhandled_exception_handler",
     "validation_exception_handler",
 ]
+
+
+def __getattr__(name: str) -> Any:  # noqa: ANN401
+    if name == "build_v1_router":
+        from kanban.api.v1 import build_v1_router  # noqa: PLC0415
+
+        return build_v1_router
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)

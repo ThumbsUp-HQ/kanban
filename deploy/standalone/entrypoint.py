@@ -53,10 +53,15 @@ SHUTDOWN_TIMEOUT_SEC: float = 10.0
 START_TIME: float = time.monotonic()
 
 
-def log_phase(phase: str, message: str) -> None:
+def log_phase(phase: str, message: str, *, level: str = "INFO") -> None:
     """Log a phase transition with monotonic elapsed milliseconds."""
     elapsed_ms = int((time.monotonic() - START_TIME) * 1000)
-    sys.stdout.write(f"[kanban-standalone] [{elapsed_ms:05d}ms] {phase}: {message}\n")
+    icon = (
+        "⛔"
+        if level.upper() == "WARNING"
+        else ("❌" if level.upper() in ("ERROR", "CRITICAL") else "👍")
+    )
+    sys.stdout.write(f"{icon} [kanban-standalone] [{elapsed_ms:05d}ms] {phase}: {message}\n")
     sys.stdout.flush()
 
 
@@ -109,7 +114,7 @@ def initialize_cluster(pgdata: Path) -> None:
     try:
         run_as_postgres(cmd, timeout=60.0)
     except subprocess.CalledProcessError as exc:
-        sys.stderr.write(f"INITDB_FAILED: {exc.stderr}\n")
+        sys.stderr.write(f"❌ INITDB_FAILED: {exc.stderr}\n")
         raise
 
 
@@ -144,7 +149,7 @@ def start_postgres(pgdata: Path, run_dir: str = DEFAULT_RUN_DIR) -> None:
         time.sleep(0.05)
 
     if not ready:
-        sys.stderr.write("PG_START_TIMEOUT: postgres failed to start within 10s\n")
+        sys.stderr.write("❌ PG_START_TIMEOUT: postgres failed to start within 10s\n")
         stop_postgres(pgdata, mode="immediate")
         sys.exit(70)
 
@@ -275,7 +280,7 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
 
     res = run_as_postgres(cmd, timeout=120.0, check=False, env=mig_env)
     if res.returncode != 0:
-        sys.stderr.write(f"MIGRATION_FAILED: {res.stderr}\n")
+        sys.stderr.write(f"❌ MIGRATION_FAILED: {res.stderr}\n")
         stop_postgres(pgdata, mode="fast")
         sys.exit(70)
 
@@ -358,6 +363,7 @@ _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
     "KANBAN_WEBAUTHN_RP_NAME",
     "KB_AIR_GAP_MODE",
     "KB_TRASH_RETENTION_DAYS",
+    "KB_LOG_LEVEL",
 )
 
 
@@ -420,7 +426,7 @@ def supervisor_loop(
             status_cmd = [BIN_PG_CTL, "-D", str(pgdata), "status"]
             res = run_as_postgres(status_cmd, timeout=5.0, check=False)
             if res.returncode != 0:
-                sys.stderr.write("PG_DIED: postgres postmaster process died\n")
+                sys.stderr.write("❌ PG_DIED: postgres postmaster process died\n")
                 shutdown_uvicorn(uvicorn_proc)
                 return 70
 
@@ -491,7 +497,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     # Check root UID
     if os.getuid() != 0:
         sys.stderr.write(
-            "STANDALONE_REQUIRES_ROOT_ENTRYPOINT: Standalone mode requires UID 0 entrypoint\n"
+            "❌ STANDALONE_REQUIRES_ROOT_ENTRYPOINT: Standalone mode requires UID 0 entrypoint\n"
         )
         return 78
 
@@ -521,7 +527,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
             keyring = load_or_create_keyring(keyring_path)
             log_phase("keyring", f"keyring loaded from {keyring_path}")
         except KeyringError as err:
-            sys.stderr.write(f"KEYRING_INVALID: {err}\n")
+            sys.stderr.write(f"❌ KEYRING_INVALID: {err}\n")
             return 78
 
         log_phase("initdb", "existing cluster detected, skipping initdb")
@@ -559,7 +565,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
             keyring = load_or_create_keyring(keyring_path)
             log_phase("keyring", f"keyring loaded from {keyring_path}")
         except KeyringError as err:
-            sys.stderr.write(f"KEYRING_INVALID: {err}\n")
+            sys.stderr.write(f"❌ KEYRING_INVALID: {err}\n")
             return 78
 
         # Cold Cluster Init

@@ -7,6 +7,7 @@ import contextlib
 import logging
 import os
 import signal
+import sys
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -148,14 +149,32 @@ class OutboxRelay:
                     logger.debug("Error closing relay listener connection", exc_info=True)
 
 
+class _DatabaseOutboxFormatter(logging.Formatter):
+    """Stdlib-only log formatter attaching semantic status icons without upward imports."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        icon = (
+            "👍"
+            if record.levelno < logging.WARNING
+            else ("⛔" if record.levelno < logging.ERROR else "❌")
+        )
+        msg = super().format(record)
+        if not msg.startswith(("👍", "⛔", "❌")):
+            return f"{icon} {msg}"
+        return msg
+
+
 async def main(stop_event: asyncio.Event | None = None) -> None:
     """CLI entrypoint for running outbox relay as standalone service."""
     from database.testing.pg_harness import build_dsn  # noqa: PLC0415
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        _DatabaseOutboxFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     )
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
 
     pg_dsn = os.environ.get("DATABASE_URL")
     if not pg_dsn:

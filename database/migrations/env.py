@@ -1,6 +1,7 @@
 """Async Alembic migration environment configuration."""
 
 import asyncio
+import logging
 import os
 from logging.config import fileConfig
 
@@ -11,8 +12,32 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 config = context.config
 
+
+class _AlembicSemanticFormatter(logging.Formatter):
+    """Semantic icon formatter for Alembic migrations without upward imports."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        icon = (
+            "👍"
+            if record.levelno < logging.WARNING
+            else ("⛔" if record.levelno < logging.ERROR else "❌")
+        )
+        msg = super().format(record)
+        if not msg.startswith(("👍", "⛔", "❌")):
+            return f"{icon} {msg}"
+        return msg
+
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
+    for h in logging.getLogger().handlers:
+        if isinstance(h, logging.StreamHandler):
+            h.setFormatter(
+                _AlembicSemanticFormatter(
+                    fmt="%(levelname)-5.5s [%(name)s] %(message)s",
+                    datefmt="%H:%M:%S",
+                )
+            )
 
 target_metadata = None
 

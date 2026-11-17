@@ -39,6 +39,7 @@ from agent.cli_report import (
     ValidationReport,
     render_report,
 )
+from kanban.logging import configure_logging
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -192,6 +193,7 @@ def main(
     scrubber: ContextScrubber | None = None,
 ) -> int:
     """Run kanban-agent CLI entry point synchronously."""
+    configure_logging()
     return asyncio.run(_async_main(argv, scrubber=scrubber))
 
 

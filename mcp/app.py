@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Final
 from starlette.applications import Starlette
 from starlette.routing import Mount, Route
 
+from kanban.logging import configure_logging
 from mcp.auth import McpAuthMiddleware
 from mcp.internal_client import KanbanApiClient
 from mcp.metadata import protected_resource_metadata_endpoint
@@ -65,6 +66,7 @@ def create_mcp_app(  # noqa: PLR0913
         - /mcp/docs (Global, /w/{workspace_slug}, and /w/{workspace_slug}/p/{project_key})
         - /mcp/admin (Global, /w/{workspace_slug}, and /w/{workspace_slug}/p/{project_key})
     """
+    configure_logging()
     active_settings: Final[McpSettings] = settings or McpSettings()
 
     # Shared session store across mounts

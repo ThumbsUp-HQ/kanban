@@ -19,6 +19,7 @@ from kanban.cli.ops import (
     register_ops_subparsers,
 )
 from kanban.cli.verify_cutover import register_cutover_subparsers
+from kanban.logging import configure_logging
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Execute kanban-ctl root CLI."""
+    configure_logging()
     raw_argv = list(sys.argv[1:] if argv is None else argv)
 
     if check_forbidden_secret_args(raw_argv):

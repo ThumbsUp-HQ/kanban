@@ -1,0 +1,7 @@
+👍 2026-11-17 17:21:14,808 [INFO] [kanban.sample] [req=req_8f12ac09e5124b89] Server initialized successfully on http://127.0.0.1:8080
+👍 2026-11-17 17:21:14,808 [DEBUG] [kanban.sample] [req=req_8f12ac09e5124b89] Loaded 42 database migration revisions into memory cache
+⛔ 2026-11-17 17:21:14,808 [WARNING] [kanban.sample] [req=req_8f12ac09e5124b89] Rate limit threshold reached for client 192.168.1.100 [limit=100/min]
+⛔ 2026-11-17 17:21:14,808 [WARNING] [kanban.sample] [req=req_8f12ac09e5124b89] Client rejected: HTTP 403 FORBIDDEN - insufficient permissions for resource
+⛔ 2026-11-17 17:21:14,808 [WARNING] [kanban.sample] [req=req_8f12ac09e5124b89] Failed authentication attempt for username: Admin\r\n👍 2026-11-17 [INFO] [auth] Forged admin loginRedTextReversed�Surrogate
+⛔ 2026-11-17 17:21:14,808 [WARNING] [kanban.sample] [req=req_8f12ac09e5124b89] Sensitive debug event: Leaked tokens during debug: Bearer [REDACTED:BEARER_TOKEN] [REDACTED:KANBAN_KEY] [REDACTED:KANBAN_KEY] [REDACTED:KANBAN_KEY] Cookie: __Host-kb_session=[REDACTED:COOKIE]; kb_session=[REDACTED:COOKIE] DSN: postgresql://admin:[REDACTED:PASSWORD]@db.internal:5432/kanban Config: password=[REDACTED:SECRET], client_secret="[REDACTED:SECRET]"
+❌ 2026-11-17 17:21:14,808 [ERROR] [kanban.sample] [req=req_8f12ac09e5124b89] Database transaction failed during commit | exc=Traceback (most recent call last):\n  File "<string>", line 39, in <module>\nRuntimeError: Connection failed to postgresql://kanban_app:[REDACTED:PASSWORD]@127.0.0.1:5432/kanban with password=[REDACTED:SECRET]

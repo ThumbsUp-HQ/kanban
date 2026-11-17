@@ -34,6 +34,7 @@ from agent.remote_runner.daemon import (
     RunnerDaemon,
     RunnerRevokedError,
 )
+from kanban.logging import configure_logging
 
 __all__ = ["enroll_runner", "main", "run_daemon"]
 
@@ -187,6 +188,7 @@ def run_daemon(config_path: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """Execute the main CLI entrypoint for kanban-agent-runner."""
+    configure_logging()
     raw_args = list(argv if argv is not None else sys.argv[1:])
 
     # Security check: reject passing --token on CLI arguments to protect /proc/cmdline

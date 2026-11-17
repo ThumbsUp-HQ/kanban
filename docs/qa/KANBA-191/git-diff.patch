@@ -1,0 +1,1114 @@
+diff --git a/agent/cli.py b/agent/cli.py
+index 1f9e100..2b372f1 100644
+--- a/agent/cli.py
++++ b/agent/cli.py
+@@ -39,6 +39,7 @@ from agent.cli_report import (
+     ValidationReport,
+     render_report,
+ )
++from kanban.logging import configure_logging
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Awaitable, Callable, Mapping, Sequence
+@@ -192,6 +193,7 @@ def main(
+     scrubber: ContextScrubber | None = None,
+ ) -> int:
+     """Run kanban-agent CLI entry point synchronously."""
++    configure_logging()
+     return asyncio.run(_async_main(argv, scrubber=scrubber))
+ 
+ 
+diff --git a/agent/remote_runner/cli.py b/agent/remote_runner/cli.py
+index bb97d35..362b81d 100644
+--- a/agent/remote_runner/cli.py
++++ b/agent/remote_runner/cli.py
+@@ -34,6 +34,7 @@ from agent.remote_runner.daemon import (
+     RunnerDaemon,
+     RunnerRevokedError,
+ )
++from kanban.logging import configure_logging
+ 
+ __all__ = ["enroll_runner", "main", "run_daemon"]
+ 
+@@ -187,6 +188,7 @@ def run_daemon(config_path: Path) -> int:
+ 
+ def main(argv: list[str] | None = None) -> int:
+     """Execute the main CLI entrypoint for kanban-agent-runner."""
++    configure_logging()
+     raw_args = list(argv if argv is not None else sys.argv[1:])
+ 
+     # Security check: reject passing --token on CLI arguments to protect /proc/cmdline
+diff --git a/database/migrations/env.py b/database/migrations/env.py
+index c37b712..9f05fe9 100644
+--- a/database/migrations/env.py
++++ b/database/migrations/env.py
+@@ -1,6 +1,7 @@
+ """Async Alembic migration environment configuration."""
+ 
+ import asyncio
++import logging
+ import os
+ from logging.config import fileConfig
+ 
+@@ -11,8 +12,32 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
+ 
+ config = context.config
+ 
++
++class _AlembicSemanticFormatter(logging.Formatter):
++    """Semantic icon formatter for Alembic migrations without upward imports."""
++
++    def format(self, record: logging.LogRecord) -> str:
++        icon = (
++            "👍"
++            if record.levelno < logging.WARNING
++            else ("⛔" if record.levelno < logging.ERROR else "❌")
++        )
++        msg = super().format(record)
++        if not msg.startswith(("👍", "⛔", "❌")):
++            return f"{icon} {msg}"
++        return msg
++
++
+ if config.config_file_name is not None:
+     fileConfig(config.config_file_name, disable_existing_loggers=False)
++    for h in logging.getLogger().handlers:
++        if isinstance(h, logging.StreamHandler):
++            h.setFormatter(
++                _AlembicSemanticFormatter(
++                    fmt="%(levelname)-5.5s [%(name)s] %(message)s",
++                    datefmt="%H:%M:%S",
++                )
++            )
+ 
+ target_metadata = None
+ 
+diff --git a/database/outbox/relay.py b/database/outbox/relay.py
+index 8e7ccaa..83db1bb 100644
+--- a/database/outbox/relay.py
++++ b/database/outbox/relay.py
+@@ -7,6 +7,7 @@ import contextlib
+ import logging
+ import os
+ import signal
++import sys
+ from typing import TYPE_CHECKING
+ from uuid import UUID
+ 
+@@ -148,14 +149,32 @@ class OutboxRelay:
+                     logger.debug("Error closing relay listener connection", exc_info=True)
+ 
+ 
++class _DatabaseOutboxFormatter(logging.Formatter):
++    """Stdlib-only log formatter attaching semantic status icons without upward imports."""
++
++    def format(self, record: logging.LogRecord) -> str:
++        icon = (
++            "👍"
++            if record.levelno < logging.WARNING
++            else ("⛔" if record.levelno < logging.ERROR else "❌")
++        )
++        msg = super().format(record)
++        if not msg.startswith(("👍", "⛔", "❌")):
++            return f"{icon} {msg}"
++        return msg
++
++
+ async def main(stop_event: asyncio.Event | None = None) -> None:
+     """CLI entrypoint for running outbox relay as standalone service."""
+     from database.testing.pg_harness import build_dsn  # noqa: PLC0415
+ 
+-    logging.basicConfig(
+-        level=logging.INFO,
+-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
++    handler = logging.StreamHandler(sys.stderr)
++    handler.setFormatter(
++        _DatabaseOutboxFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+     )
++    root = logging.getLogger()
++    root.setLevel(logging.INFO)
++    root.addHandler(handler)
+ 
+     pg_dsn = os.environ.get("DATABASE_URL")
+     if not pg_dsn:
+diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
+index 9e39526..ae70704 100644
+--- a/deploy/standalone/entrypoint.py
++++ b/deploy/standalone/entrypoint.py
+@@ -53,10 +53,15 @@ SHUTDOWN_TIMEOUT_SEC: float = 10.0
+ START_TIME: float = time.monotonic()
+ 
+ 
+-def log_phase(phase: str, message: str) -> None:
++def log_phase(phase: str, message: str, *, level: str = "INFO") -> None:
+     """Log a phase transition with monotonic elapsed milliseconds."""
+     elapsed_ms = int((time.monotonic() - START_TIME) * 1000)
+-    sys.stdout.write(f"[kanban-standalone] [{elapsed_ms:05d}ms] {phase}: {message}\n")
++    icon = (
++        "⛔"
++        if level.upper() == "WARNING"
++        else ("❌" if level.upper() in ("ERROR", "CRITICAL") else "👍")
++    )
++    sys.stdout.write(f"{icon} [kanban-standalone] [{elapsed_ms:05d}ms] {phase}: {message}\n")
+     sys.stdout.flush()
+ 
+ 
+@@ -109,7 +114,7 @@ def initialize_cluster(pgdata: Path) -> None:
+     try:
+         run_as_postgres(cmd, timeout=60.0)
+     except subprocess.CalledProcessError as exc:
+-        sys.stderr.write(f"INITDB_FAILED: {exc.stderr}\n")
++        sys.stderr.write(f"❌ INITDB_FAILED: {exc.stderr}\n")
+         raise
+ 
+ 
+@@ -144,7 +149,7 @@ def start_postgres(pgdata: Path, run_dir: str = DEFAULT_RUN_DIR) -> None:
+         time.sleep(0.05)
+ 
+     if not ready:
+-        sys.stderr.write("PG_START_TIMEOUT: postgres failed to start within 10s\n")
++        sys.stderr.write("❌ PG_START_TIMEOUT: postgres failed to start within 10s\n")
+         stop_postgres(pgdata, mode="immediate")
+         sys.exit(70)
+ 
+@@ -275,7 +280,7 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
+ 
+     res = run_as_postgres(cmd, timeout=120.0, check=False, env=mig_env)
+     if res.returncode != 0:
+-        sys.stderr.write(f"MIGRATION_FAILED: {res.stderr}\n")
++        sys.stderr.write(f"❌ MIGRATION_FAILED: {res.stderr}\n")
+         stop_postgres(pgdata, mode="fast")
+         sys.exit(70)
+ 
+@@ -358,6 +363,7 @@ _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
+     "KANBAN_WEBAUTHN_RP_NAME",
+     "KB_AIR_GAP_MODE",
+     "KB_TRASH_RETENTION_DAYS",
++    "KB_LOG_LEVEL",
+ )
+ 
+ 
+@@ -420,7 +426,7 @@ def supervisor_loop(
+             status_cmd = [BIN_PG_CTL, "-D", str(pgdata), "status"]
+             res = run_as_postgres(status_cmd, timeout=5.0, check=False)
+             if res.returncode != 0:
+-                sys.stderr.write("PG_DIED: postgres postmaster process died\n")
++                sys.stderr.write("❌ PG_DIED: postgres postmaster process died\n")
+                 shutdown_uvicorn(uvicorn_proc)
+                 return 70
+ 
+@@ -491,7 +497,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
+     # Check root UID
+     if os.getuid() != 0:
+         sys.stderr.write(
+-            "STANDALONE_REQUIRES_ROOT_ENTRYPOINT: Standalone mode requires UID 0 entrypoint\n"
++            "❌ STANDALONE_REQUIRES_ROOT_ENTRYPOINT: Standalone mode requires UID 0 entrypoint\n"
+         )
+         return 78
+ 
+@@ -521,7 +527,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
+             keyring = load_or_create_keyring(keyring_path)
+             log_phase("keyring", f"keyring loaded from {keyring_path}")
+         except KeyringError as err:
+-            sys.stderr.write(f"KEYRING_INVALID: {err}\n")
++            sys.stderr.write(f"❌ KEYRING_INVALID: {err}\n")
+             return 78
+ 
+         log_phase("initdb", "existing cluster detected, skipping initdb")
+@@ -559,7 +565,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
+             keyring = load_or_create_keyring(keyring_path)
+             log_phase("keyring", f"keyring loaded from {keyring_path}")
+         except KeyringError as err:
+-            sys.stderr.write(f"KEYRING_INVALID: {err}\n")
++            sys.stderr.write(f"❌ KEYRING_INVALID: {err}\n")
+             return 78
+ 
+         # Cold Cluster Init
+diff --git a/kanban/GEMINI.md b/kanban/GEMINI.md
+index 4ae56e3..e18f16f 100644
+--- a/kanban/GEMINI.md
++++ b/kanban/GEMINI.md
+@@ -25,6 +25,7 @@ Core web application, static asset server, and API service layer for the Kanban
+ - Out-of-sandbox Unix-socket token-injecting egress proxy (`kanban.sandbox.egress_proxy.TokenInjectingEgressProxy`, `EgressProxyPolicy`) over 0600 stream socket in 0700 runtime directory, enforcing TTL <= 15s, <= 10 GET requests, allowlisted `/api/v1/...` routes, header scrubbing, and mutable bytearray zeroing in finally.
+ - Script recursion depth guard middleware (`kanban.api.middleware.script_depth.ScriptDepthGuardMiddleware`) rejecting `X-Kanban-Script-Depth` >= 1 on custom field execution, transitions, and MCP endpoints with HTTP 409 `SCRIPT_RECURSION_BLOCKED`.
+ - Startup Linux user namespace isolation probe (`kanban.sandbox.probe.probe_nsjail_userns`, `SandboxProbeResult`, `SandboxUnavailableError`) verifying nsjail binary UID 0 ownership, non-writable permissions, and dry self-test, failing closed with `SANDBOX_UNAVAILABLE_IN_STANDALONE`.
++- Standardized semantic emoji logging system (`kanban.logging`): prefixes all application, MCP, agent, database, and standalone log lines with semantic status icons (`👍` for DEBUG/INFO, `⛔` for WARNING policy blocks and rate limits, `❌` for ERROR/CRITICAL exceptions), single-line log formatting with CRLF/ANSI control sanitization, UTF-16 surrogate escaping, request ID correlation, and credential scrubbing (`Bearer`, `kb_pat_*`, `kb_runner_*`, `kb_setup_*`, `__Host-kb_session`, database DSN passwords, and key-value secrets).
+ - Test harness: `kanban.tests.contract.ContractRecorder` (`KB_CONTRACT_OUT`, `KB_TICKET_ID`, credential header redaction) and `kanban/tests/api/conftest.py` fixtures `api_env`, `as_principal`, `make_user`, `make_project`, `make_module`, `contract_recorder`.
+ 
+ ## Depends On
+diff --git a/kanban/__init__.py b/kanban/__init__.py
+index 38973fe..409a5ff 100644
+--- a/kanban/__init__.py
++++ b/kanban/__init__.py
+@@ -1,7 +1,16 @@
+ """Kanban core web application, REST/WS APIs, auth, and state machines."""
+ 
+-from kanban.app import create_app
++from typing import Any
+ 
+ __version__: str = "0.0.0"
+ 
+ __all__ = ["create_app"]
++
++
++def __getattr__(name: str) -> Any:  # noqa: ANN401
++    if name == "create_app":
++        from kanban.app import create_app  # noqa: PLC0415
++
++        return create_app
++    msg = f"module {__name__!r} has no attribute {name!r}"
++    raise AttributeError(msg)
+diff --git a/kanban/api/__init__.py b/kanban/api/__init__.py
+index e90942c..6047991 100644
+--- a/kanban/api/__init__.py
++++ b/kanban/api/__init__.py
+@@ -1,5 +1,7 @@
+ """Kanban API package: routing, problems, request context, and security dependencies."""
+ 
++from typing import Any
++
+ from kanban.api.deps import (
+     DenyAllResolver,
+     PrincipalContext,
+@@ -20,7 +22,6 @@ from kanban.api.problems import (
+ )
+ from kanban.api.request_id import RequestIdFilter, RequestIdMiddleware, get_request_id
+ from kanban.api.timing import TimingFloor, load_or_404, timing_floor
+-from kanban.api.v1 import build_v1_router
+ 
+ __all__ = [
+     "PROBLEM_MEDIA_TYPE",
+@@ -45,3 +46,12 @@ __all__ = [
+     "unhandled_exception_handler",
+     "validation_exception_handler",
+ ]
++
++
++def __getattr__(name: str) -> Any:  # noqa: ANN401
++    if name == "build_v1_router":
++        from kanban.api.v1 import build_v1_router  # noqa: PLC0415
++
++        return build_v1_router
++    msg = f"module {__name__!r} has no attribute {name!r}"
++    raise AttributeError(msg)
+diff --git a/kanban/api/problems.py b/kanban/api/problems.py
+index 5b7dbbb..0c59619 100644
+--- a/kanban/api/problems.py
++++ b/kanban/api/problems.py
+@@ -291,6 +291,23 @@ async def starlette_http_exception_handler(
+     code, default_title = code_map.get(exc.status_code, (f"HTTP_{exc.status_code}", "HTTP Error"))
+     detail = None if exc.status_code in (401, 404) else (str(exc.detail) if exc.detail else None)
+ 
++    if exc.status_code >= 500:  # noqa: PLR2004
++        logger.error(
++            "HTTP %d %s [req=%s]: %s",
++            exc.status_code,
++            code,
++            req_id,
++            detail or default_title,
++        )
++    elif exc.status_code >= 400:  # noqa: PLR2004
++        logger.warning(
++            "HTTP %d %s [req=%s]: %s",
++            exc.status_code,
++            code,
++            req_id,
++            detail or default_title,
++        )
++
+     problem = Problem(
+         type=f"urn:kanban:problem:{code}",
+         title=default_title,
+diff --git a/kanban/app.py b/kanban/app.py
+index 0cefc01..957f605 100644
+--- a/kanban/app.py
++++ b/kanban/app.py
+@@ -8,7 +8,6 @@ from __future__ import annotations
+ 
+ import importlib
+ import logging
+-import os
+ from contextlib import asynccontextmanager
+ from typing import TYPE_CHECKING
+ 
+@@ -42,6 +41,7 @@ from kanban.auth.sessions.service import SessionService
+ from kanban.auth.setup import mint_setup_token_if_uninitialized
+ from kanban.jobs import JobScheduler
+ from kanban.jobs import registry as jobs_registry
++from kanban.logging import configure_logging
+ from kanban.sandbox.nsjail_runner import TierBNsjailRunner
+ from kanban.security.envelope import StaticKekProvider
+ from kanban.security.headers import SecurityHeadersMiddleware
+@@ -191,28 +191,12 @@ def _mount_mcp_surfaces(app: FastAPI, mcp_settings: McpSettings | None = None) -
+     app.mount("/mcp", proxy)
+ 
+ 
+-def _configure_application_logging() -> None:
+-    """Configure application loggers (kanban, mcp, database, agent) to emit INFO+ logs."""
+-    log_level_name = os.environ.get("KB_LOG_LEVEL", "INFO").upper()
+-    log_level = getattr(logging, log_level_name, logging.INFO)
+-    root_logger = logging.getLogger()
+-    if not root_logger.handlers:
+-        logging.basicConfig(
+-            level=log_level,
+-            format="%(levelname)s:     [%(name)s] %(message)s",
+-        )
+-    for pkg_name in ("kanban", "mcp", "database", "agent"):
+-        pkg_logger = logging.getLogger(pkg_name)
+-        if pkg_logger.level == logging.NOTSET or pkg_logger.level > log_level:
+-            pkg_logger.setLevel(log_level)
+-
+-
+ def create_app(
+     settings: Settings | None = None,
+     mcp_settings: McpSettings | None = None,
+ ) -> FastAPI:
+     """Create and configure the canonical Kanban ASGI FastAPI application."""
+-    _configure_application_logging()
++    configure_logging()
+     if settings is None:
+         settings = Settings()
+ 
+diff --git a/kanban/cli/ctl.py b/kanban/cli/ctl.py
+index b737c8a..4bb6d59 100644
+--- a/kanban/cli/ctl.py
++++ b/kanban/cli/ctl.py
+@@ -19,6 +19,7 @@ from kanban.cli.ops import (
+     register_ops_subparsers,
+ )
+ from kanban.cli.verify_cutover import register_cutover_subparsers
++from kanban.logging import configure_logging
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Sequence
+@@ -26,6 +27,7 @@ if TYPE_CHECKING:
+ 
+ def main(argv: Sequence[str] | None = None) -> int:
+     """Execute kanban-ctl root CLI."""
++    configure_logging()
+     raw_argv = list(sys.argv[1:] if argv is None else argv)
+ 
+     if check_forbidden_secret_args(raw_argv):
+diff --git a/kanban/logging.py b/kanban/logging.py
+new file mode 100644
+index 0000000..2f38260
+--- /dev/null
++++ b/kanban/logging.py
+@@ -0,0 +1,300 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Standardized semantic emoji logging system (👍 / ⛔ / ❌) for the Kanban platform.
++
++Provides log-injection sanitization, credential scrubbing, request correlation,
++and single-line log formatting across application, MCP, agent, database, and CLI runtimes.
++"""
++
++from __future__ import annotations
++
++import logging
++import os
++import re
++import sys
++from typing import TYPE_CHECKING, Any, Final, cast
++
++from kanban.api.request_id import _REQUEST_ID_CTX
++from kanban.security.scrubber import scrub_text
++
++if TYPE_CHECKING:
++    from typing import TextIO
++
++__all__ = [
++    "STATUS_BLOCKED",
++    "STATUS_ERROR",
++    "STATUS_OK",
++    "KanbanLogFilter",
++    "KanbanLogFormatter",
++    "KanbanStreamHandler",
++    "configure_logging",
++    "log_blocked",
++    "log_error",
++    "log_ok",
++    "sanitize_log_text",
++    "scrub_log_secrets",
++    "status_symbol_for_level",
++]
++
++STATUS_OK: Final[str] = "👍"
++STATUS_BLOCKED: Final[str] = "⛔"
++STATUS_ERROR: Final[str] = "❌"
++
++_STATUS_ICONS: Final[tuple[str, ...]] = (STATUS_OK, STATUS_BLOCKED, STATUS_ERROR)
++
++# Sanitization regex patterns
++_RE_SURROGATES: Final[re.Pattern[str]] = re.compile(r"[\ud800-\udfff]")
++_RE_ANSI_OSC: Final[re.Pattern[str]] = re.compile(r"\x1b\].*?(?:\x07|\x1b\\)")
++_RE_ANSI_CSI_1: Final[re.Pattern[str]] = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
++_RE_ANSI_CSI_2: Final[re.Pattern[str]] = re.compile(r"\x9b[0-?]*[ -/]*[@-~]")
++_RE_BIDI_SPOOF: Final[re.Pattern[str]] = re.compile(r"[\u202a-\u202e\u2066-\u2069]")
++_RE_C0_C1_CONTROL: Final[re.Pattern[str]] = re.compile(r"[\x00-\x1f\x7f-\x9f]")
++
++# Credential scrubbing patterns for log entries
++_RE_COOKIES: Final[re.Pattern[str]] = re.compile(
++    r"\b(__Host-kb_session|kb_session|kb_csrf)=(?!\[REDACTED:)([^;\s&]+)"
++)
++_RE_DSN_PASSWORD: Final[re.Pattern[str]] = re.compile(
++    r"(?i)\b(postgres(?:ql)?(?:\+[a-z0-9_]+)?://[^:]+:)(?!\[REDACTED:)([^@\s]+)(@)"
++)
++_RE_KV_SECRETS: Final[re.Pattern[str]] = re.compile(
++    r"(?i)\b(password|client_secret|secret)\s*([=:]\s*(?:\\*['\"])?)"
++    r"(?!\[REDACTED:)([^;'\"\s,]+)((?:\\*['\"])?)"
++)
++
++_PACKAGE_LOGGERS: Final[tuple[str, ...]] = (
++    "kanban",
++    "mcp",
++    "database",
++    "agent",
++    "uvicorn",
++    "uvicorn.error",
++    "uvicorn.access",
++    "alembic",
++)
++
++
++def status_symbol_for_level(levelno: int) -> str:
++    """Return the semantic status symbol for a numeric log level.
++
++    - DEBUG and INFO: 👍
++    - WARNING: ⛔
++    - ERROR and CRITICAL: ❌
++    """
++    if levelno < logging.WARNING:
++        return STATUS_OK
++    if levelno < logging.ERROR:
++        return STATUS_BLOCKED
++    return STATUS_ERROR
++
++
++def scrub_log_secrets(text: str) -> str:
++    """Scrub sensitive credentials, tokens, session cookies, and database DSN passwords."""
++    if not text:
++        return text
++
++    # Pass through primary secret scrubber (API keys, JWT, Bearer, kb_* keys, PEM)
++    text = scrub_text(text)
++
++    # Redact session cookies
++    text = _RE_COOKIES.sub(r"\g<1>=[REDACTED:COOKIE]", text)
++
++    # Redact PostgreSQL DSN credentials
++    text = _RE_DSN_PASSWORD.sub(r"\g<1>[REDACTED:PASSWORD]\g<3>", text)
++
++    # Redact key-value password and secret assignments
++    return _RE_KV_SECRETS.sub(r"\g<1>\g<2>[REDACTED:SECRET]\g<4>", text)
++
++
++def sanitize_log_text(text: str) -> str:
++    """Sanitize log text against injection, lone surrogates, ANSI, and secrets.
++
++    Ensures no user input can forge a new log line or break terminal escape sequences.
++    """
++    if not text:
++        return text
++
++    # 1. Replace UTF-16 lone surrogates with replacement character
++    text = _RE_SURROGATES.sub("\ufffd", text)
++
++    # 2. Strip ANSI OSC escape sequences
++    text = _RE_ANSI_OSC.sub("", text)
++
++    # 3. Strip ANSI CSI escape sequences
++    text = _RE_ANSI_CSI_1.sub("", text)
++    text = _RE_ANSI_CSI_2.sub("", text)
++
++    # 4. Strip BiDi and zero-width direction overrides
++    text = _RE_BIDI_SPOOF.sub("", text)
++
++    # 5. Escape raw line breaks and tabs to prevent multi-line log forging
++    text = text.replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
++    text = text.replace("\u0085", "\\n").replace("\u2028", "\\n").replace("\u2029", "\\n")
++
++    # 6. Strip remaining C0/C1 control characters
++    text = _RE_C0_C1_CONTROL.sub("", text)
++
++    # 7. Redact sensitive credentials
++    return scrub_log_secrets(text)
++
++
++class KanbanLogFilter(logging.Filter):
++    """Logging filter that attaches the semantic status icon and active request_id."""
++
++    def filter(self, record: logging.LogRecord) -> bool:
++        """Inject status_icon and request_id attributes into record."""
++        record.status_icon = status_symbol_for_level(record.levelno)
++        req_id = getattr(record, "request_id", None)
++        if not req_id or req_id == "-":
++            ctx_id = _REQUEST_ID_CTX.get()
++            record.request_id = ctx_id or "-"
++        return True
++
++
++class KanbanLogFormatter(logging.Formatter):
++    """Standardized single-line log formatter with semantic status icons."""
++
++    def format(self, record: logging.LogRecord) -> str:
++        """Format record into a single sanitized line prefixed with status icon."""
++        record.message = record.getMessage()
++        sanitized_msg = sanitize_log_text(record.message)
++
++        # Deduplicate leading status icons if already present in message
++        for icon in _STATUS_ICONS:
++            if sanitized_msg.startswith(icon):
++                sanitized_msg = sanitized_msg[len(icon) :].lstrip()
++                break
++
++        status_icon = getattr(record, "status_icon", None) or status_symbol_for_level(
++            record.levelno
++        )
++        req_id = getattr(record, "request_id", None)
++        if not req_id or req_id == "-":
++            ctx_id = _REQUEST_ID_CTX.get()
++            req_id = ctx_id or "-"
++
++        ts = self.formatTime(record, self.datefmt)
++        prefix = f"{status_icon} {ts} [{record.levelname}] [{record.name}] [req={req_id}]"
++        line = f"{prefix} {sanitized_msg}"
++
++        if record.exc_info and not record.exc_text:
++            record.exc_text = self.formatException(record.exc_info)
++        if record.exc_text:
++            sanitized_exc = sanitize_log_text(record.exc_text)
++            line += f" | exc={sanitized_exc}"
++
++        if record.stack_info:
++            sanitized_stack = sanitize_log_text(self.formatStack(record.stack_info))
++            line += f" | stack={sanitized_stack}"
++
++        return line
++
++
++class KanbanStreamHandler(logging.StreamHandler[Any]):
++    """Managed StreamHandler recognized by configure_logging."""
++
++    is_kanban_managed: bool = True
++
++
++def _resolve_log_level(level: str | int | None) -> int:
++    """Resolve configured log level from argument or environment."""
++    if level is None:
++        level_name = os.environ.get("KB_LOG_LEVEL", "INFO").upper()
++        return int(getattr(logging, level_name, logging.INFO))
++    if isinstance(level, str):
++        return int(getattr(logging, level.upper(), logging.INFO))
++    return int(level)
++
++
++def _find_or_create_handler(
++    root_logger: logging.Logger,
++    stream: TextIO | None,
++) -> logging.StreamHandler[Any]:
++    """Find existing managed handler or wrap pre-existing non-pytest stream handler."""
++    for h in list(root_logger.handlers):
++        if getattr(h, "is_kanban_managed", False):
++            return cast("logging.StreamHandler[Any]", h)
++        if type(h).__name__ == "LogCaptureHandler" or h.__class__.__module__.startswith("_pytest"):
++            continue
++        if isinstance(h, logging.StreamHandler):
++            return h
++
++    target_stream = stream if stream is not None else sys.stderr
++    handler = KanbanStreamHandler(target_stream)
++    root_logger.addHandler(handler)
++    return handler
++
++
++def configure_logging(
++    *,
++    level: str | int | None = None,
++    stream: TextIO | None = None,
++) -> None:
++    """Configure unified semantic emoji logging across application and root loggers."""
++    resolved_level = _resolve_log_level(level)
++
++    root_logger = logging.getLogger()
++    root_logger.setLevel(resolved_level)
++
++    managed_handler = _find_or_create_handler(root_logger, stream)
++    if stream is not None:
++        managed_handler.setStream(stream)
++
++    managed_handler.setLevel(resolved_level)
++    managed_handler.setFormatter(KanbanLogFormatter())
++    if not any(isinstance(f, KanbanLogFilter) for f in managed_handler.filters):
++        managed_handler.addFilter(KanbanLogFilter())
++
++    # Standardize package loggers to propagate through root handler without duplicate handlers
++    for pkg_name in _PACKAGE_LOGGERS:
++        pkg_logger = logging.getLogger(pkg_name)
++        pkg_logger.setLevel(resolved_level)
++        pkg_logger.propagate = True
++        for h in list(pkg_logger.handlers):
++            if (
++                not getattr(h, "is_kanban_managed", False)
++                and type(h).__name__ != "LogCaptureHandler"
++            ):
++                pkg_logger.removeHandler(h)
++
++
++def log_ok(
++    logger_or_msg: logging.Logger | str,
++    *args: object,
++    **kwargs: Any,  # noqa: ANN401
++) -> None:
++    """Log an operational success or normal progress message (👍 / INFO)."""
++    if isinstance(logger_or_msg, logging.Logger):
++        msg = args[0] if args else ""
++        rem_args = args[1:]
++        logger_or_msg.info(msg, *rem_args, **kwargs)
++    else:
++        logging.getLogger("kanban").info(logger_or_msg, *args, **kwargs)
++
++
++def log_blocked(
++    logger_or_msg: logging.Logger | str,
++    *args: object,
++    **kwargs: Any,  # noqa: ANN401
++) -> None:
++    """Log a policy block, client rejection, rate limit, or degraded state (⛔ / WARNING)."""
++    if isinstance(logger_or_msg, logging.Logger):
++        msg = args[0] if args else ""
++        rem_args = args[1:]
++        logger_or_msg.warning(msg, *rem_args, **kwargs)
++    else:
++        logging.getLogger("kanban").warning(logger_or_msg, *args, **kwargs)
++
++
++def log_error(
++    logger_or_msg: logging.Logger | str,
++    *args: object,
++    **kwargs: Any,  # noqa: ANN401
++) -> None:
++    """Log a system error, unhandled exception, or fatal failure (❌ / ERROR)."""
++    if isinstance(logger_or_msg, logging.Logger):
++        msg = args[0] if args else ""
++        rem_args = args[1:]
++        logger_or_msg.error(msg, *rem_args, **kwargs)
++    else:
++        logging.getLogger("kanban").error(logger_or_msg, *args, **kwargs)
+diff --git a/kanban/security/scrubber.py b/kanban/security/scrubber.py
+index ec21a92..45acd96 100644
+--- a/kanban/security/scrubber.py
++++ b/kanban/security/scrubber.py
+@@ -23,7 +23,7 @@ _PEM_HEADER_CHARS: Final[set[str]] = set(
+ 
+ # Deterministic regular expressions compiled at module load time
+ _RE_KANBAN_KEY: Final[re.Pattern[str]] = re.compile(
+-    r"\bkb_(?:agt_eph|agt|doc|adm|setup)_[A-Za-z0-9_-]{16,128}(?![A-Za-z0-9_-])"
++    r"\bkb_(?:agt_eph|agt|doc|adm|setup|pat|runner)_[A-Za-z0-9_-]{16,128}(?![A-Za-z0-9_-])"
+ )
+ _RE_GITHUB_TOKEN: Final[re.Pattern[str]] = re.compile(
+     r"\b(?:(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})\b"
+diff --git a/kanban/tests/test_logging_standard.py b/kanban/tests/test_logging_standard.py
+new file mode 100644
+index 0000000..12d15d3
+--- /dev/null
++++ b/kanban/tests/test_logging_standard.py
+@@ -0,0 +1,378 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit tests for the standardized semantic emoji logging system (KB-LOG-STD)."""
++
++from __future__ import annotations
++
++import io
++import logging
++from unittest.mock import AsyncMock, MagicMock
++
++import pytest
++from starlette.exceptions import HTTPException as StarletteHTTPException
++
++from deploy.standalone.entrypoint import build_child_env, log_phase
++from kanban.api.problems import starlette_http_exception_handler
++from kanban.api.request_id import _REQUEST_ID_CTX
++from kanban.auth.setup import SetupBootstrapService
++from kanban.logging import (
++    STATUS_BLOCKED,
++    STATUS_ERROR,
++    STATUS_OK,
++    KanbanLogFilter,
++    KanbanLogFormatter,
++    configure_logging,
++    log_blocked,
++    log_error,
++    log_ok,
++    sanitize_log_text,
++    scrub_log_secrets,
++    status_symbol_for_level,
++)
++from kanban.security.keys import KeyMaterial
++
++
++# -----------------------------------------------------------------------------
++# Case 1: Positive Formatting & Semantic Icons
++# -----------------------------------------------------------------------------
++def test_status_symbol_mapping() -> None:
++    """Verify numeric log levels map to canonical status emojis."""
++    assert status_symbol_for_level(logging.DEBUG) == STATUS_OK
++    assert status_symbol_for_level(logging.INFO) == STATUS_OK
++    assert status_symbol_for_level(logging.WARNING) == STATUS_BLOCKED
++    assert status_symbol_for_level(logging.ERROR) == STATUS_ERROR
++    assert status_symbol_for_level(logging.CRITICAL) == STATUS_ERROR
++
++
++def test_positive_formatting_and_deduplication() -> None:
++    """Verify log lines are formatted with status emoji, level, req_id, and no duplicate emoji."""
++    stream = io.StringIO()
++    handler = logging.StreamHandler(stream)
++    formatter = KanbanLogFormatter()
++    log_filter = KanbanLogFilter()
++    handler.setFormatter(formatter)
++    handler.addFilter(log_filter)
++
++    logger = logging.getLogger("test_pos_logger")
++    logger.setLevel(logging.DEBUG)
++    logger.handlers.clear()
++    logger.addHandler(handler)
++    logger.propagate = False
++
++    # Outside HTTP context: req=-
++    logger.info("Normal startup message")
++    logger.warning("Rate limit approaching")
++    logger.error("Database connection dropped")
++
++    # Already prefixed with semantic emojis: should not be duplicated
++    logger.info("👍 Already contains ok icon")
++    logger.warning("⛔ Already contains blocked icon")
++    logger.error("❌ Already contains error icon")
++
++    lines = [line for line in stream.getvalue().splitlines() if line]
++    assert len(lines) == 6
++
++    # Verify line prefixes and contents
++    assert lines[0].startswith("👍 ")
++    assert "[INFO]" in lines[0]
++    assert "[req=-]" in lines[0]
++    assert "Normal startup message" in lines[0]
++
++    assert lines[1].startswith("⛔ ")
++    assert "[WARNING]" in lines[1]
++    assert "Rate limit approaching" in lines[1]
++
++    assert lines[2].startswith("❌ ")
++    assert "[ERROR]" in lines[2]
++    assert "Database connection dropped" in lines[2]
++
++    # Verify deduplication
++    assert lines[3].startswith("👍 ")
++    assert "👍 👍" not in lines[3]
++    assert "Already contains ok icon" in lines[3]
++
++    assert lines[4].startswith("⛔ ")
++    assert "⛔ ⛔" not in lines[4]
++    assert "Already contains blocked icon" in lines[4]
++
++    assert lines[5].startswith("❌ ")
++    assert "❌ ❌" not in lines[5]
++    assert "Already contains error icon" in lines[5]
++
++
++def test_request_id_correlation() -> None:
++    """Verify active request_id contextvar is injected into formatted records."""
++    token = _REQUEST_ID_CTX.set("req_deadbeef1234")
++    try:
++        stream = io.StringIO()
++        handler = logging.StreamHandler(stream)
++        handler.setFormatter(KanbanLogFormatter())
++        handler.addFilter(KanbanLogFilter())
++
++        logger = logging.getLogger("test_req_logger")
++        logger.setLevel(logging.INFO)
++        logger.handlers.clear()
++        logger.addHandler(handler)
++        logger.propagate = False
++
++        logger.info("Request correlated event")
++        out = stream.getvalue()
++        assert "[req=req_deadbeef1234]" in out
++        assert "Request correlated event" in out
++    finally:
++        _REQUEST_ID_CTX.reset(token)
++
++
++def test_semantic_helper_functions() -> None:
++    """Verify log_ok, log_blocked, and log_error helper functions."""
++    stream = io.StringIO()
++    handler = logging.StreamHandler(stream)
++    handler.setFormatter(KanbanLogFormatter())
++    handler.addFilter(KanbanLogFilter())
++
++    test_logger = logging.getLogger("test_helpers")
++    test_logger.setLevel(logging.DEBUG)
++    test_logger.handlers.clear()
++    test_logger.addHandler(handler)
++    test_logger.propagate = False
++
++    log_ok(test_logger, "Success step: %s", "done")
++    log_blocked(test_logger, "Blocked step: %s", "denied")
++    log_error(test_logger, "Failure step: %s", "crashed")
++
++    lines = [line for line in stream.getvalue().splitlines() if line]
++    assert len(lines) == 3
++    assert lines[0].startswith("👍 ")
++    assert "Success step: done" in lines[0]
++    assert lines[1].startswith("⛔ ")
++    assert "Blocked step: denied" in lines[1]
++    assert lines[2].startswith("❌ ")
++    assert "Failure step: crashed" in lines[2]
++
++
++# -----------------------------------------------------------------------------
++# Case 2: Negative & Security (Sanitization & Secret Redaction)
++# -----------------------------------------------------------------------------
++def test_direct_sanitization_and_scrubbing_apis() -> None:
++    """Verify direct sanitize_log_text and scrub_log_secrets functions."""
++    raw = "test\r\nline2\x1b[31mred\x1b[0m password=supersecret postgresql://a:b@h/db"
++    sanitized = sanitize_log_text(raw)
++    assert "\r" not in sanitized
++    assert "\n" not in sanitized
++    assert "\\r\\n" in sanitized
++    assert "\x1b" not in sanitized
++    assert "supersecret" not in sanitized
++    assert "[REDACTED:SECRET]" in sanitized
++    assert "[REDACTED:PASSWORD]" in sanitized
++
++    raw_secret = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.abc"
++    scrubbed = scrub_log_secrets(raw_secret)
++    assert "[REDACTED:BEARER_TOKEN]" in scrubbed
++
++
++def test_log_injection_neutralization() -> None:
++    """Verify CRLF, ANSI, BiDi, and surrogates cannot forge log lines or crash."""
++    forged_input = (
++        "User entered text\r\n👍 2026-11-17 12:00:00 [INFO] [auth] [req=none] Forged admin login"
++        "\u2028Second forged line\u2029Third forged line\x1b[31;1mRed text\x1b[0m"
++        "\x9b2J\u202eBiDiSpoof\ud800LoneSurrogate"
++    )
++
++    stream = io.StringIO()
++    handler = logging.StreamHandler(stream)
++    handler.setFormatter(KanbanLogFormatter())
++    handler.addFilter(KanbanLogFilter())
++
++    logger = logging.getLogger("test_injection_logger")
++    logger.setLevel(logging.INFO)
++    logger.handlers.clear()
++    logger.addHandler(handler)
++    logger.propagate = False
++
++    # This MUST NOT raise UnicodeEncodeError and MUST emit exactly ONE log line
++    logger.info("Hostile payload: %s", forged_input)
++    raw_output = stream.getvalue()
++
++    # Must be strictly 1 newline terminating the single record
++    assert raw_output.count("\n") == 1
++    assert "\r" not in raw_output
++    assert "\u2028" not in raw_output
++    assert "\u2029" not in raw_output
++    assert "\x1b" not in raw_output
++    assert "\x9b" not in raw_output
++    assert "\u202e" not in raw_output
++    # Surrogate replaced
++    assert "\ufffd" in raw_output
++    # CRLF was escaped
++    assert "\\r\\n" in raw_output
++
++
++def test_credential_scrubbing_in_message_and_tracebacks() -> None:
++    """Verify Bearer tokens, platform keys, cookies, DSN passwords, and secrets are redacted."""
++    sensitive_msg = (
++        "Credentials leaked: Bearer "
++        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiYWRtaW4ifQ.signature "
++        "kb_pat_0123456789abcdef0123456789 "
++        "kb_runner_9876543210fedcba9876543210 "
++        "kb_setup_abcdef0123456789abcdef0123 "
++        "Cookie: __Host-kb_session=sess_tok_12345; "
++        "kb_session=legacy_tok_67890; kb_csrf=csrf_tok_abc "
++        "Database DSN: postgresql://admin:super_secret_db_pass@db.local:5432/kanban "
++        "Config: password=my_plain_pass, "
++        'client_secret="quoted_client_secret", '
++        "secret='single_quoted'"
++    )
++
++    stream = io.StringIO()
++    handler = logging.StreamHandler(stream)
++    handler.setFormatter(KanbanLogFormatter())
++    handler.addFilter(KanbanLogFilter())
++
++    logger = logging.getLogger("test_scrub_logger")
++    logger.setLevel(logging.ERROR)
++    logger.handlers.clear()
++    logger.addHandler(handler)
++    logger.propagate = False
++
++    try:
++        msg = "postgresql://kanban_app:vault_secret@127.0.0.1/kanban and password=exc_pass"
++        raise ValueError(msg)  # noqa: TRY301
++    except Exception:
++        logger.error(sensitive_msg, exc_info=True)  # noqa: G201
++
++    out = stream.getvalue()
++
++    # Must be a single line record despite carrying a traceback
++    assert out.count("\n") == 1
++    assert " | exc=" in out
++
++    # Verify redactions in log message
++    assert "super_secret_db_pass" not in out
++    assert "sess_tok_12345" not in out
++    assert "legacy_tok_67890" not in out
++    assert "csrf_tok_abc" not in out
++    assert "my_plain_pass" not in out
++    assert "quoted_client_secret" not in out
++    assert "single_quoted" not in out
++    assert "0123456789abcdef0123456789" not in out
++    assert "9876543210fedcba9876543210" not in out
++    assert "abcdef0123456789abcdef0123" not in out
++
++    # Verify redactions in exception traceback
++    assert "vault_secret" not in out
++    assert "exc_pass" not in out
++    assert "[REDACTED:PASSWORD]" in out
++    assert "[REDACTED:SECRET]" in out
++    assert "[REDACTED:COOKIE]" in out
++
++
++# -----------------------------------------------------------------------------
++# Case 3: Boundary & Integration
++# -----------------------------------------------------------------------------
++def test_configure_logging_integration(caplog: pytest.LogCaptureFixture) -> None:
++    """Verify configure_logging configures root and package loggers while preserving caplog."""
++    stream = io.StringIO()
++    configure_logging(level="DEBUG", stream=stream)
++
++    # Logging through kanban and uvicorn packages
++    kanban_log = logging.getLogger("kanban.test")
++    uvicorn_log = logging.getLogger("uvicorn.error")
++
++    kanban_log.info("Kanban info event")
++    uvicorn_log.warning("Uvicorn warning event")
++
++    out = stream.getvalue()
++    assert "👍 " in out
++    assert "[kanban.test]" in out
++    assert "Kanban info event" in out
++    assert "⛔ " in out
++    assert "[uvicorn.error]" in out
++    assert "Uvicorn warning event" in out
++
++    # Verify caplog captured the records without interference
++    assert any(r.name == "kanban.test" for r in caplog.records)
++    assert any(r.name == "uvicorn.error" for r in caplog.records)
++
++
++@pytest.mark.asyncio
++async def test_first_boot_setup_url_preserves_stdout() -> None:
++    """Verify SetupBootstrapService outputs First-boot setup URL to stdout unredacted."""
++    mock_session = AsyncMock()
++    mock_res = MagicMock()
++    mock_res.scalar_one.return_value = True
++    mock_session.execute.return_value = mock_res
++
++    mock_factory = MagicMock()
++    mock_ctx = AsyncMock()
++    mock_ctx.__aenter__.return_value = mock_session
++    mock_ctx.__aexit__.return_value = None
++    mock_factory.session.return_value = mock_ctx
++
++    km = KeyMaterial(
++        master_kek=b"0" * 32,
++        auth_pepper=b"1" * 32,
++        session_hmac_key=b"2" * 32,
++    )
++    svc = SetupBootstrapService(mock_factory, key_material=km)
++    out_buf = io.StringIO()
++    token = await svc.mint_token_if_uninitialized(stdout=out_buf)
++
++    assert token is not None
++    assert token.startswith("kb_setup_")
++    rendered = out_buf.getvalue()
++    assert f"First-boot setup URL: http://localhost:8080/setup?token={token}\n" == rendered
++
++
++def test_standalone_entrypoint_log_level_and_phase_formatting(
++    capsys: pytest.CaptureFixture[str],
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Verify deploy/standalone/entrypoint.py forwards KB_LOG_LEVEL and formats log_phase."""
++    monkeypatch.setenv("KB_LOG_LEVEL", "DEBUG")
++    child_env = build_child_env()
++    assert child_env.get("KB_LOG_LEVEL") == "DEBUG"
++
++    log_phase("initdb", "initializing cluster", level="INFO")
++    log_phase("storage", "ephemeral warning", level="WARNING")
++    log_phase("crash", "fatal error", level="ERROR")
++
++    captured = capsys.readouterr()
++    lines = [line for line in captured.out.splitlines() if line]
++    assert any(line.startswith("👍 ") and "initdb: initializing cluster" in line for line in lines)
++    assert any(line.startswith("⛔ ") and "storage: ephemeral warning" in line for line in lines)
++    assert any(line.startswith("❌ ") and "crash: fatal error" in line for line in lines)
++
++
++@pytest.mark.asyncio
++async def test_problem_exception_logging() -> None:
++    """Verify starlette_http_exception_handler logs 4xx at WARNING and 5xx at ERROR."""
++    stream = io.StringIO()
++    handler = logging.StreamHandler(stream)
++    handler.setFormatter(KanbanLogFormatter())
++    handler.addFilter(KanbanLogFilter())
++
++    prob_logger = logging.getLogger("kanban.api.problems")
++    prob_logger.setLevel(logging.DEBUG)
++    prob_logger.handlers.clear()
++    prob_logger.addHandler(handler)
++    prob_logger.propagate = False
++
++    req = object()  # dummy request
++
++    # 404 Not Found -> WARNING (⛔)
++    exc_404 = StarletteHTTPException(status_code=404, detail="Entity missing")
++    resp_404 = await starlette_http_exception_handler(req, exc_404)  # type: ignore[arg-type]
++    assert resp_404.status_code == 404
++
++    # 500 Internal Error -> ERROR (❌)
++    exc_500 = StarletteHTTPException(status_code=500, detail="Database dead")
++    resp_500 = await starlette_http_exception_handler(req, exc_500)  # type: ignore[arg-type]
++    assert resp_500.status_code == 500
++
++    out = stream.getvalue()
++    lines = [line for line in out.splitlines() if line]
++    assert len(lines) == 2
++    assert lines[0].startswith("⛔ ")
++    assert "HTTP 404 NOT_FOUND" in lines[0]
++    assert lines[1].startswith("❌ ")
++    assert "HTTP 500 INTERNAL_ERROR" in lines[1]
+diff --git a/mcp/app.py b/mcp/app.py
+index 2a3ad1e..c2c0e5e 100644
+--- a/mcp/app.py
++++ b/mcp/app.py
+@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Final
+ from starlette.applications import Starlette
+ from starlette.routing import Mount, Route
+ 
++from kanban.logging import configure_logging
+ from mcp.auth import McpAuthMiddleware
+ from mcp.internal_client import KanbanApiClient
+ from mcp.metadata import protected_resource_metadata_endpoint
+@@ -65,6 +66,7 @@ def create_mcp_app(  # noqa: PLR0913
+         - /mcp/docs (Global, /w/{workspace_slug}, and /w/{workspace_slug}/p/{project_key})
+         - /mcp/admin (Global, /w/{workspace_slug}, and /w/{workspace_slug}/p/{project_key})
+     """
++    configure_logging()
+     active_settings: Final[McpSettings] = settings or McpSettings()
+ 
+     # Shared session store across mounts

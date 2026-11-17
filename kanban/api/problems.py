@@ -291,6 +291,23 @@ async def starlette_http_exception_handler(
     code, default_title = code_map.get(exc.status_code, (f"HTTP_{exc.status_code}", "HTTP Error"))
     detail = None if exc.status_code in (401, 404) else (str(exc.detail) if exc.detail else None)
 
+    if exc.status_code >= 500:  # noqa: PLR2004
+        logger.error(
+            "HTTP %d %s [req=%s]: %s",
+            exc.status_code,
+            code,
+            req_id,
+            detail or default_title,
+        )
+    elif exc.status_code >= 400:  # noqa: PLR2004
+        logger.warning(
+            "HTTP %d %s [req=%s]: %s",
+            exc.status_code,
+            code,
+            req_id,
+            detail or default_title,
+        )
+
     problem = Problem(
         type=f"urn:kanban:problem:{code}",
         title=default_title,
